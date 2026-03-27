@@ -1,0 +1,43 @@
+services:
+  agency-hub:
+    image: node:18-bullseye-slim
+    container_name: agency-hub
+    working_dir: /app
+    command: node src/index.js
+    restart: unless-stopped
+    volumes:
+      - /var/www/agency-hub:/app
+    env_file:
+      - .env
+    networks:
+      - coolify
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.agency-hub.rule=Host(`hub.ashbi.ca`)"
+      - "traefik.http.routers.agency-hub.entrypoints=https"
+      - "traefik.http.routers.agency-hub.tls=true"
+      - "traefik.http.routers.agency-hub.tls.certresolver=letsencrypt"
+      - "traefik.http.services.agency-hub.loadbalancer.server.port=3002"
+      - "traefik.http.routers.agency-hub-http.rule=Host(`hub.ashbi.ca`)"
+      - "traefik.http.routers.agency-hub-http.entrypoints=http"
+      - "traefik.http.routers.agency-hub-http.middlewares=redirect-https@docker"
+      - "coolify.managed=true"
+
+  agency-hub-worker:
+    image: node:18-bullseye-slim
+    container_name: agency-hub-worker
+    working_dir: /app
+    command: node src/jobs/worker.js
+    restart: unless-stopped
+    volumes:
+      - /var/www/agency-hub:/app
+    env_file:
+      - .env
+    networks:
+      - coolify
+    depends_on:
+      - agency-hub
+
+networks:
+  coolify:
+    external: true

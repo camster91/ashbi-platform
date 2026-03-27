@@ -1,0 +1,136 @@
+name: AI PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    branches: [main]
+
+jobs:
+  review:
+    name: Claude Code Review
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get PR diff
+        id: diff
+        run: |
+          DIFF=$(git diff origin/main...HEAD)
+          CHAR_COUNT=${#DIFF}
+          TRUNCATED="false"
+
+          if [ "$CHAR_COUNT" -gt 15000 ]; then
+            DIFF="${DIFF:0:15000}"
+            TRUNCATED="true"
+          fi
+
+          # Write to file to avoid shell escaping issues
+          echo "$DIFF" > /tmp/pr_diff.txt
+          echo "truncated=$TRUNCATED" >> "$GITHUB_OUTPUT"
+          echo "char_count=$CHAR_COUNT" >> "$GITHUB_OUTPUT"
+
+      - name: Run Claude review
+        id: review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          DIFF=$(cat /tmp/pr_diff.txt)
+          TRUNCATED="${{ steps.diff.outputs.truncated }}"
+
+          TRUNCATION_NOTE=""
+          if [ "$TRUNCATED" = "true" ]; then
+            TRUNCATION_NOTE="NOTE: The diff was truncated to 15,000 characters (original: ${{ steps.diff.outputs.char_count }} chars). Some changes may not be reviewed."
+          fi
+
+          # Build the JSON payload
+          PROMPT=$(cat <<'PROMPT_EOF'
+          You are a code reviewer for Agency Hub, an AI-powered client request management system.
+
+          Review the following PR diff against these project conventions:
+
+          1. **ESM Modules**: All imports/exports must use ESM syntax (import/export). Flag any use of require() or module.exports.
+          2. **Prisma ORM**: Database access must use Prisma. Flag any raw SQL queries.
+          3. **React Components**: Must be functional components with hooks. Flag any class components.
+          4. **Security**: Check for authentication gaps, injection vulnerabilities, exposed secrets/keys, missing input validation.
+          5. **Styling**: Must use shadcn/ui components + Tailwind CSS classes. Flag any inline styles.
+          6. **Async Jobs**: Background/async work must use BullMQ. Flag any ad-hoc setTimeout/setInterval for job processing.
+          7. **General**: Look for bugs, logic errors, race conditions, unhandled errors, and other code quality issues.
+
+          If you find issues, format your response as a markdown list grouped by category. Include the file name and line context for each issue.
+
+          If the code looks good with no issues, respond with a brief LGTM message.
+          PROMPT_EOF
+          )
+
+          # Escape diff content for JSON
+          ESCAPED_DIFF=$(echo "$DIFF" | jq -Rs .)
+          ESCAPED_PROMPT=$(echo "$PROMPT" | jq -Rs .)
+          ESCAPED_NOTE=$(echo "$TRUNCATION_NOTE" | jq -Rs .)
+
+          PAYLOAD=$(jq -n \
+            --argjson prompt "$ESCAPED_PROMPT" \
+            --argjson diff "$ESCAPED_DIFF" \
+            --argjson note "$ESCAPED_NOTE" \
+            '{
+              model: "claude-sonnet-4-5-20250514",
+              max_tokens: 4096,
+              messages: [
+                {
+                  role: "user",
+                  content: ($prompt + "\n\n" + $note + "\n\nDIFF:\n```\n" + $diff + "\n```")
+                }
+              ]
+            }')
+
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            https://api.anthropic.com/v1/messages \
+            -H "Content-Type: application/json" \
+            -H "x-api-key: $ANTHROPIC_API_KEY" \
+            -H "anthropic-version: 2023-06-01" \
+            -d "$PAYLOAD")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Anthropic API returned HTTP $HTTP_CODE"
+            echo "$BODY"
+            REVIEW_TEXT="⚠️ AI review failed (HTTP $HTTP_CODE). Please review manually."
+          else
+            REVIEW_TEXT=$(echo "$BODY" | jq -r '.content[0].text')
+          fi
+
+          # Write review to file for the comment step
+          echo "$REVIEW_TEXT" > /tmp/review_result.txt
+
+      - name: Post PR comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          REVIEW=$(cat /tmp/review_result.txt)
+
+          COMMENT_BODY=$(cat <<EOF
+          ## 🤖 AI Code Review
+
+          $REVIEW
+
+          ---
+          *Automated review by Claude — not a substitute for human review.*
+          EOF
+          )
+
+          # Post comment via GitHub API
+          jq -n --arg body "$COMMENT_BODY" '{"body": $body}' | \
+            curl -s -X POST \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/comments" \
+              -d @-

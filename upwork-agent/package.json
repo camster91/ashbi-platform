@@ -1,0 +1,17 @@
+{
+  "name": "upwork-agent",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Upwork automation agent for Agency Hub - freelancer, agency, and client modes",
+  "scripts": {
+    "feed": "node agent.js feed",
+    "messages": "node agent.js messages",
+    "proposals": "node agent.js proposals",
+    "hiring": "node agent.js hiring",
+    "all": "node agent.js all"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "node-fetch": "^3.3.2"
+  }
+}
