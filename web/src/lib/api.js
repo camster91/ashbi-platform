@@ -175,12 +175,42 @@ export const api = {
     request('/ai/ask', { method: 'POST', body: { question, ...context } }),
   aiChat: (data) =>
     request('/ai/chat', { method: 'POST', body: data }),
+  chatWithAI: (data) =>
+    request('/ai/chat', { method: 'POST', body: data }),
   generateProposal: (data) =>
     request('/ai/generate-proposal', { method: 'POST', body: data }),
   getClientHealth: () =>
     request('/ai/client-health', { method: 'POST' }),
   triageInbox: () =>
     request('/ai/triage-inbox', { method: 'POST' }),
+  summarizeProject: (data) =>
+    request('/ai/summarize-project', { method: 'POST', body: data }),
+  draftAIUpdate: (data) =>
+    request('/ai/draft-update', { method: 'POST', body: data }),
+
+  // AI Team
+  getAIAgents: () =>
+    request('/ai-team/agents'),
+  chatWithAIAgent: (data) =>
+    request('/ai-team/chat', { method: 'POST', body: data }),
+  getAIAgentHistory: (agentRole) =>
+    request(`/ai-team/history/${agentRole}`),
+
+  // OpenClaw Integration
+  getOpenClawHealth: () =>
+    request('/openclaw/health'),
+  sendOpenClawMessage: (data) =>
+    request('/openclaw/message', { method: 'POST', body: data }),
+  executeOpenClawCommand: (data) =>
+    request('/openclaw/command', { method: 'POST', body: data }),
+  spawnOpenClawSpecialist: (data) =>
+    request('/openclaw/spawn', { method: 'POST', body: data }),
+  getOpenClawSpecialists: () =>
+    request('/openclaw/specialists'),
+  queryOpenClaw: (data) =>
+    request('/openclaw/query', { method: 'POST', body: data }),
+  getOpenClawSessions: () =>
+    request('/openclaw/sessions'),
 
   // Notifications
   getNotifications: () =>

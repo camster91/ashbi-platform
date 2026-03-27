@@ -88,6 +88,7 @@ import integrationsHostingerRoutes from './routes/integrations.hostinger.routes.
 import integrationsNotionRoutes from './routes/integrations.notion.routes.js';
 import agentsRoutes from './routes/integrations.agents.routes.js';
 import commandCenterRoutes from './routes/integrations.command-center.routes.js';
+import openclawRoutes from './routes/openclaw.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -188,6 +189,7 @@ await fastify.register(outreachRoutes, { prefix: '/api/outreach' });
 await fastify.register(socialRoutes, { prefix: '/api/social' });
 await fastify.register(blogRoutes, { prefix: '/api/blog' });
 await fastify.register(aiTeamRoutes, { prefix: '/api/ai-team' });
+await fastify.register(openclawRoutes, { prefix: '/api/openclaw' });
 // AI Employee Suite
 await fastify.register(emailTriageRoutes, { prefix: '/api/email-triage' });
 await fastify.register(contentWriterRoutes, { prefix: '/api/content-writer' });

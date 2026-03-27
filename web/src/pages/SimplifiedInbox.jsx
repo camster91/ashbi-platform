@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   Inbox as InboxIcon,
   CheckCircle,
@@ -8,48 +8,26 @@ import {
   User,
   FolderOpen,
   MessageSquare,
-  Filter,
-  MoreHorizontal,
   Sparkles,
   Loader2,
   AlertCircle,
   Flame,
-  ChevronRight,
-  Plus,
-  Calendar,
-  Tag,
-  Archive,
   Reply,
-  Timer,
-  FileText,
   Eye,
   EyeOff,
-  Grid,
-  List,
-  ChevronDown,
-  ChevronUp,
-  Search,
-  X,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import {
   formatRelativeTime,
   truncate,
-  getPriorityColor,
-  getStatusColor,
-  getSentimentIcon,
   cn,
 } from '../lib/utils';
-import { Button, Badge, Card, EmptyState } from '../components/ui';
+import { Button, Badge, EmptyState } from '../components/ui';
 
 export default function SimplifiedInbox() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [viewMode, setViewMode] = useState('priority'); // 'priority', 'all', 'unread'
   const [showCompleted, setShowCompleted] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [expandedThreads, setExpandedThreads] = useState({});
-  const [selectedThreads, setSelectedThreads] = useState([]);
 
   const { data: inboxData, isLoading } = useQuery({
     queryKey: ['inbox'],
@@ -57,29 +35,8 @@ export default function SimplifiedInbox() {
     refetchInterval: 30000,
   });
 
-  const { data: stats } = useQuery({
-    queryKey: ['inbox-stats'],
-    queryFn: api.getInboxStats,
-  });
-
-  const markAsReadMutation = useMutation({
-    mutationFn: (threadId) => api.updateThread(threadId, { read: true }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['inbox'] });
-      queryClient.invalidateQueries({ queryKey: ['inbox-stats'] });
-    },
-  });
-
   const resolveThreadMutation = useMutation({
     mutationFn: (threadId) => api.resolveThread(threadId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['inbox'] });
-      queryClient.invalidateQueries({ queryKey: ['inbox-stats'] });
-    },
-  });
-
-  const assignThreadMutation = useMutation({
-    mutationFn: ({ threadId, assigneeId }) => api.assignThread(threadId, { assigneeId }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inbox'] });
     },
@@ -91,11 +48,6 @@ export default function SimplifiedInbox() {
         <div className="max-w-6xl mx-auto">
           <div className="animate-pulse space-y-6">
             <div className="h-10 w-48 bg-muted rounded" />
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="h-32 bg-muted rounded-xl" />
-              <div className="h-32 bg-muted rounded-xl" />
-              <div className="h-32 bg-muted rounded-xl" />
-            </div>
             <div className="space-y-3">
               {[1, 2, 3, 4, 5].map(i => (
                 <div key={i} className="h-20 bg-muted rounded-lg" />
@@ -120,22 +72,10 @@ export default function SimplifiedInbox() {
     return new Date(b.createdAt) - new Date(a.createdAt);
   });
 
-  // Filter threads based on view mode
+  // Filter out completed threads unless showCompleted is true
   let filteredThreads = sortedThreads;
-  if (viewMode === 'unread') {
-    filteredThreads = sortedThreads.filter(t => !t.read);
-  }
-  
   if (!showCompleted) {
     filteredThreads = filteredThreads.filter(t => t.status !== 'RESOLVED');
-  }
-  
-  if (searchQuery) {
-    filteredThreads = filteredThreads.filter(t => 
-      t.subject?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.from?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.body?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
   }
 
   // Group by priority for visual organization
@@ -144,39 +84,13 @@ export default function SimplifiedInbox() {
   const normalThreads = filteredThreads.filter(t => t.priority === 'NORMAL');
   const lowThreads = filteredThreads.filter(t => t.priority === 'LOW');
 
-  const toggleThreadExpansion = (threadId) => {
-    setExpandedThreads(prev => ({
-      ...prev,
-      [threadId]: !prev[threadId]
-    }));
-  };
-
-  const toggleThreadSelection = (threadId) => {
-    setSelectedThreads(prev => 
-      prev.includes(threadId)
-        ? prev.filter(id => id !== threadId)
-        : [...prev, threadId]
-    );
-  };
-
   const handleQuickAction = (threadId, action) => {
     switch (action) {
-      case 'read':
-        markAsReadMutation.mutate(threadId);
-        break;
-      case 'resolve':
-        resolveThreadMutation.mutate(threadId);
-        break;
       case 'reply':
         navigate(`/thread/${threadId}`);
         break;
-      case 'assign':
-        // In a real implementation, this would open an assign modal
-        console.log('Assign thread', threadId);
-        break;
-      case 'snooze':
-        // In a real implementation, this would open a snooze modal
-        console.log('Snooze thread', threadId);
+      case 'resolve':
+        resolveThreadMutation.mutate(threadId);
         break;
     }
   };
@@ -198,10 +112,6 @@ export default function SimplifiedInbox() {
             <ThreadCard
               key={thread.id}
               thread={thread}
-              isExpanded={expandedThreads[thread.id]}
-              isSelected={selectedThreads.includes(thread.id)}
-              onToggleExpand={() => toggleThreadExpansion(thread.id)}
-              onToggleSelect={() => toggleThreadSelection(thread.id)}
               onQuickAction={handleQuickAction}
             />
           ))}
@@ -224,14 +134,6 @@ export default function SimplifiedInbox() {
               <Button
                 variant="outline"
                 size="sm"
-                leftIcon={<Plus className="w-4 h-4" />}
-                onClick={() => navigate('/projects?create=true')}
-              >
-                New Task
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
                 leftIcon={<Sparkles className="w-4 h-4" />}
                 onClick={() => navigate('/ai-chat')}
               >
@@ -240,94 +142,19 @@ export default function SimplifiedInbox() {
             </div>
           </div>
 
-          {/* Stats Overview */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <Card className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Total</p>
-                  <p className="text-2xl font-bold text-foreground">{threads.length}</p>
-                </div>
-                <InboxIcon className="w-8 h-8 text-primary" />
-              </div>
-            </Card>
-            <Card className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Needs Response</p>
-                  <p className="text-2xl font-bold text-foreground">{stats?.needsResponse || 0}</p>
-                </div>
-                <MessageSquare className="w-8 h-8 text-amber-500" />
-              </div>
-            </Card>
-            <Card className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Critical</p>
-                  <p className="text-2xl font-bold text-foreground">{criticalThreads.length}</p>
-                </div>
-                <AlertCircle className="w-8 h-8 text-red-500" />
-              </div>
-            </Card>
-          </div>
-
-          {/* Controls */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 p-4 bg-card rounded-xl border border-border">
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <input
-                  type="text"
-                  placeholder="Search threads..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 pr-4 py-2 text-sm bg-background border border-border rounded-lg w-full md:w-64 focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2"
-                  >
-                    <X className="w-4 h-4 text-muted-foreground" />
-                  </button>
-                )}
-              </div>
+          {/* Simple Controls */}
+          <div className="flex items-center justify-between gap-4 mb-6 p-4 bg-card rounded-xl border border-border">
+            <div className="text-sm text-muted-foreground">
+              {filteredThreads.length} thread{filteredThreads.length !== 1 ? 's' : ''} needing attention
             </div>
-            
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
-                <Button
-                  variant={viewMode === 'priority' ? 'primary' : 'ghost'}
-                  size="sm"
-                  onClick={() => setViewMode('priority')}
-                >
-                  Priority
-                </Button>
-                <Button
-                  variant={viewMode === 'all' ? 'primary' : 'ghost'}
-                  size="sm"
-                  onClick={() => setViewMode('all')}
-                >
-                  All
-                </Button>
-                <Button
-                  variant={viewMode === 'unread' ? 'primary' : 'ghost'}
-                  size="sm"
-                  onClick={() => setViewMode('unread')}
-                >
-                  Unread
-                </Button>
-              </div>
-              
-              <Button
-                variant="ghost"
-                size="sm"
-                leftIcon={showCompleted ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                onClick={() => setShowCompleted(!showCompleted)}
-              >
-                {showCompleted ? 'Hide Completed' : 'Show Completed'}
-              </Button>
-            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              leftIcon={showCompleted ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              onClick={() => setShowCompleted(!showCompleted)}
+            >
+              {showCompleted ? 'Hide Completed' : 'Show Completed'}
+            </Button>
           </div>
         </div>
 
@@ -341,13 +168,9 @@ export default function SimplifiedInbox() {
               action={
                 <Button
                   variant="outline"
-                  onClick={() => {
-                    setViewMode('all');
-                    setShowCompleted(true);
-                    setSearchQuery('');
-                  }}
+                  onClick={() => setShowCompleted(true)}
                 >
-                  View all threads
+                  Show completed threads
                 </Button>
               }
             />
@@ -388,7 +211,7 @@ export default function SimplifiedInbox() {
   );
 }
 
-function ThreadCard({ thread, isExpanded, isSelected, onToggleExpand, onToggleSelect, onQuickAction }) {
+function ThreadCard({ thread, onQuickAction }) {
   const priorityConfig = {
     CRITICAL: { color: 'text-red-600', bg: 'bg-red-100 dark:bg-red-900/30', label: 'Critical' },
     HIGH: { color: 'text-orange-600', bg: 'bg-orange-100 dark:bg-orange-900/30', label: 'High' },
@@ -404,20 +227,10 @@ function ThreadCard({ thread, isExpanded, isSelected, onToggleExpand, onToggleSe
     <div className={cn(
       'bg-card rounded-xl border border-border overflow-hidden transition-all duration-200',
       isCritical && 'border-l-4 border-l-red-500',
-      isUnread && 'ring-1 ring-primary/20',
-      isSelected && 'ring-2 ring-primary'
+      isUnread && 'ring-1 ring-primary/20'
     )}>
       <div className="p-4">
         <div className="flex items-start gap-3">
-          <div className="flex items-center mt-1">
-            <input
-              type="checkbox"
-              checked={isSelected}
-              onChange={onToggleSelect}
-              className="w-4 h-4 rounded border-border text-primary focus:ring-primary"
-            />
-          </div>
-          
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-2">
               {isUnread && (
@@ -437,23 +250,13 @@ function ThreadCard({ thread, isExpanded, isSelected, onToggleExpand, onToggleSe
               </span>
             </div>
             
-            <div className="flex items-center gap-3 mb-2">
+            <div className="mb-2">
               <h3 className={cn(
-                'font-medium text-foreground flex-1 truncate',
+                'font-medium text-foreground',
                 isUnread && 'font-semibold'
               )}>
                 {thread.subject || 'No subject'}
               </h3>
-              <button
-                onClick={onToggleExpand}
-                className="p-1 hover:bg-muted rounded"
-              >
-                {isExpanded ? (
-                  <ChevronUp className="w-4 h-4 text-muted-foreground" />
-                ) : (
-                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                )}
-              </button>
             </div>
             
             <div className="flex items-center gap-4 text-sm text-muted-foreground mb-3">
@@ -461,103 +264,30 @@ function ThreadCard({ thread, isExpanded, isSelected, onToggleExpand, onToggleSe
                 <User className="w-3 h-3" />
                 <span className="truncate">{thread.from || 'Unknown sender'}</span>
               </div>
-              {thread.assignee && (
-                <div className="flex items-center gap-1">
-                  <span className="text-xs">Assigned to</span>
-                  <span className="font-medium">{thread.assignee.name}</span>
-                </div>
-              )}
             </div>
             
-            {isExpanded && (
-              <div className="mt-3 pt-3 border-t border-border">
-                <p className="text-sm text-muted-foreground mb-4">
-                  {truncate(thread.body || 'No content', 200)}
-                </p>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    leftIcon={<Reply className="w-3 h-3" />}
-                    onClick={() => onQuickAction(thread.id, 'reply')}
-                  >
-                    Reply
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    leftIcon={<CheckCircle className="w-3 h-3" />}
-                    onClick={() => onQuickAction(thread.id, 'resolve')}
-                  >
-                    Complete
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    leftIcon={<User className="w-3 h-3" />}
-                    onClick={() => onQuickAction(thread.id, 'assign')}
-                  >
-                    Assign
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    leftIcon={<Timer className="w-3 h-3" />}
-                    onClick={() => onQuickAction(thread.id, 'snooze')}
-                  >
-                    Snooze
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    leftIcon={<FileText className="w-3 h-3" />}
-                    onClick={() => onQuickAction(thread.id, 'read')}
-                  >
-                    {thread.read ? 'Mark Unread' : 'Mark Read'}
-                  </Button>
-                </div>
-              </div>
-            )}
+            <p className="text-sm text-muted-foreground mb-4">
+              {truncate(thread.body || 'No content', 120)}
+            </p>
             
-            {!isExpanded && (
-              <div className="flex items-center gap-2 mt-3">
-                <button
-                  onClick={() => onQuickAction(thread.id, 'reply')}
-                  className="p-2 hover:bg-muted rounded text-muted-foreground hover:text-foreground"
-                  title="Reply"
-                >
-                  <Reply className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => onQuickAction(thread.id, 'resolve')}
-                  className="p-2 hover:bg-muted rounded text-muted-foreground hover:text-foreground"
-                  title="Complete"
-                >
-                  <CheckCircle className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => onQuickAction(thread.id, 'assign')}
-                  className="p-2 hover:bg-muted rounded text-muted-foreground hover:text-foreground"
-                  title="Assign"
-                >
-                  <User className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => onQuickAction(thread.id, 'snooze')}
-                  className="p-2 hover:bg-muted rounded text-muted-foreground hover:text-foreground"
-                  title="Snooze"
-                >
-                  <Timer className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => onQuickAction(thread.id, 'read')}
-                  className="p-2 hover:bg-muted rounded text-muted-foreground hover:text-foreground"
-                  title={thread.read ? 'Mark Unread' : 'Mark Read'}
-                >
-                  <FileText className="w-4 h-4" />
-                </button>
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                leftIcon={<Reply className="w-3 h-3" />}
+                onClick={() => onQuickAction(thread.id, 'reply')}
+              >
+                Reply
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                leftIcon={<CheckCircle className="w-3 h-3" />}
+                onClick={() => onQuickAction(thread.id, 'resolve')}
+              >
+                Complete
+              </Button>
+            </div>
           </div>
         </div>
       </div>
