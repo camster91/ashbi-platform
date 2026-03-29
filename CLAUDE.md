@@ -6,28 +6,31 @@
 
 ```bash
 # Development
-npm install                    # Install dependencies
-npx prisma generate           # Generate Prisma client
-npm run dev                   # Backend (Fastify on :3000, hot reload)
-npm run dev:web               # Frontend (Vite on :5173, proxies /api to :3000)
-npm run dev:worker            # BullMQ job worker
+npm install --legacy-peer-deps  # Install dependencies (legacy-peer-deps required)
+npx prisma generate             # Generate Prisma client
+npm run dev                     # Backend (Fastify on :3000, hot reload)
+npm run dev:web                 # Frontend (Vite on :5173, proxies /api to :3000)
+npm run dev:worker              # BullMQ job worker
 
 # Database
-npx prisma db push            # Push schema to DB
-npx prisma migrate dev        # Run migrations
-npx prisma db seed            # Seed data (node prisma/seed.js)
-npx prisma studio             # Visual DB editor
+npx prisma db push              # Push schema to DB
+npx prisma migrate dev          # Run migrations
+npx prisma db seed              # Seed data (node prisma/seed.js)
+npx prisma studio               # Visual DB editor
 
 # Build & Deploy
-npm run build                 # Full build (Prisma generate + Vite build)
-npm start                     # Production server
-pm2 start ecosystem.config.js # PM2 managed processes
+npm run build                   # Full build (Prisma generate + Vite build)
+npm start                       # Production server
+pm2 start ecosystem.config.js   # PM2 managed processes
 
 # Quality
-npm run lint                  # ESLint (src/)
-npm run lint:fix              # ESLint autofix
-npm test                      # Node.js native test runner
-npm run test:watch            # Watch mode
+npm run lint                    # ESLint (src/)
+npm run lint:fix                # ESLint autofix
+npm test                        # Node.js native test runner
+npm run test:watch              # Watch mode
+
+# Security
+node scripts/security-audit.js  # Verify admin users & security posture
 ```
 
 ---
@@ -46,15 +49,16 @@ npm run test:watch            # Watch mode
 | Frontend | React | ^18.3.1 | Functional components + hooks |
 | Bundler | Vite | ^6.0.1 | Path alias `@` -> `web/src` |
 | Router | React Router | ^7.0.1 | Client-side SPA routing |
-| Styling | Tailwind CSS | ^3.4.15 | Class-based dark mode |
+| Styling | Tailwind CSS | ^3.4.15 | Class-based dark mode, Inter + Plus Jakarta Sans fonts |
 | Components | shadcn/ui + Radix UI | - | Unstyled accessible primitives |
 | Icons | Lucide React | ^0.460.0 | SVG icon library |
 | Server State | TanStack Query | ^5.60.2 | Data fetching/caching |
 | Real-time | Socket.IO | ^4.8.1 | WebSocket notifications |
-| Auth | JWT | fastify-jwt | Cookie-based sessions |
+| Auth | JWT + bcrypt | fastify-jwt | Cookie-based sessions, 12-round bcrypt |
 | Payments | Stripe | ^20.4.1 | Invoicing & subscriptions |
 | Email | Mailgun | ^10.2.2 | Outbound email delivery |
 | Validation | Zod | ^3.23.8 | Schema validation |
+| Security | Helmet + CSRF | @fastify/* | CSP, rate limiting, CSRF tokens |
 | Process Mgmt | PM2 | - | API + worker processes |
 | Deployment | Docker + Traefik | - | Coolify-managed on Hostinger VPS |
 | CI/CD | GitHub Actions | - | Auto-deploy on push to main |
@@ -69,7 +73,7 @@ npm run test:watch            # Watch mode
 Forwarded Email (webhook) -> AI Parse & Match -> AI Analyze -> Auto-Assign -> AI Replan Project -> AI Draft Response -> Human Review & Approve
 ```
 
-### Backend Architecture (`src/`)
+### Backend (`src/`)
 
 ```
 src/
@@ -89,30 +93,67 @@ src/
 │       ├── replanProject.js    # Project replanning prompt
 │       └── draftResponse.js    # Response drafting prompt
 ├── routes/                     # Fastify route handlers (*.routes.js)
+│   ├── auth.routes.js          # Login, logout, password reset
+│   ├── inbox.routes.js         # Inbox management
+│   ├── client.routes.js        # Client CRUD
+│   ├── project.routes.js       # Project management
+│   ├── thread.routes.js        # Thread handling
+│   ├── response.routes.js      # Response approval workflow
+│   ├── task.routes.js          # Task management
+│   ├── team.routes.js          # Team management
+│   ├── ai.routes.js            # AI operations (draft, refine, ask)
+│   ├── bot.routes.js           # Bot API for external agents
+│   ├── invoice.routes.js       # Invoicing
+│   ├── webhook.routes.js       # Email webhooks
+│   ├── client-portal.routes.js # Client-facing portal
+│   └── [agent].routes.js       # Agent-specific routes (wordpress, shopify, etc.)
 ├── services/                   # Business logic layer (*.service.js)
+│   ├── assignment.service.js   # Auto-assignment logic
+│   ├── pipeline.service.js     # Email processing pipeline
+│   ├── project.service.js      # Project operations
+│   ├── stripe.service.js       # Payment processing
+│   └── weeklyReport.service.js # Weekly reporting
 ├── jobs/
 │   ├── queue.js                # BullMQ queue setup
 │   ├── worker.js               # Job processor (separate process)
 │   └── processEmail.job.js     # Email processing pipeline
 ├── events/
-│   └── hub-events.js           # Event bus/emitter
-├── webhooks/                   # External webhook handlers
+│   └── hub-events.js           # Event bus -> Discord, OpenClaw, Socket.IO
+├── webhooks/
+│   ├── discord.js              # Discord webhook posting
+│   └── openclaw.js             # OpenClaw messaging
 ├── utils/                      # Pure utility functions
 └── tests/                      # Integration tests
 ```
 
-### Frontend Architecture (`web/src/`)
+### Frontend (`web/src/`)
 
 ```
 web/src/
 ├── App.jsx                     # React Router configuration
 ├── main.jsx                    # Entry point
 ├── pages/                      # Route-level page components (55+)
+│   ├── Dashboard.jsx           # Main dashboard
+│   ├── SimplifiedDashboard.jsx # Simplified UX variant
+│   ├── Inbox.jsx               # Full inbox
+│   ├── SimplifiedInbox.jsx     # Simplified inbox variant
+│   ├── Thread.jsx              # Thread detail
+│   ├── Projects.jsx / Project.jsx
+│   ├── Clients.jsx / Client.jsx
+│   ├── TaskKanban.jsx          # Kanban board
+│   ├── Invoices.jsx / Proposals.jsx / Contracts.jsx
+│   ├── AgentTeamDashboard.jsx  # AI agent management
+│   └── [Agent]Dashboard.jsx    # Per-agent pages
 ├── components/
 │   ├── ui/                     # shadcn/ui components (Button, Card, Badge, etc.)
 │   │   └── index.js            # Barrel exports
 │   ├── project/                # Project-specific components
-│   └── [feature].jsx           # Feature components
+│   │   ├── ProjectContext.jsx  # Project context provider
+│   │   └── ProjectCommunications.jsx
+│   ├── AIChatPanel.jsx         # Floating AI chat
+│   ├── TaskAIChat.jsx          # Task-specific AI chat
+│   ├── AIActions.jsx           # Quick AI action buttons
+│   └── KanbanBoard.jsx         # Task board
 ├── hooks/
 │   ├── useAuth.jsx             # Auth context + provider
 │   └── useSocket.js            # Socket.IO connection
@@ -127,41 +168,56 @@ web/src/
 
 ### User Roles
 
-- **ADMIN** (Cameron): Full access. Approves all external communications, manages team, overrides AI decisions.
+- **ADMIN** (Cameron, Bianca): Full access. Approves all external communications, manages team, overrides AI decisions.
 - **TEAM_MEMBER**: Views assigned work, drafts responses (submitted for approval), adds internal notes, marks tasks complete.
 
 ### AI Pipeline
 
-The system uses a 5-step AI pipeline for email processing:
-1. **Parse & Match** - Extract sender, fuzzy match to client/project, confidence scoring
+5-step AI pipeline for email processing:
+1. **Parse & Match** - Extract sender, fuzzy match to client/project, confidence scoring (>85% = auto-route)
 2. **Analyze** - Classify intent, urgency, sentiment, extract action items
 3. **Auto-Assign** - Skill-based routing, workload balancing, escalation
 4. **Replan Project** - Update project summary, regenerate task plan, flag risks
 5. **Draft Response** - Generate 2-3 response options matching client tone
 
-AI provider is pluggable (`AI_PROVIDER=claude|gemini`) via the factory in `src/ai/providers/`.
+AI provider is pluggable (`AI_PROVIDER=claude|gemini`) via factory in `src/ai/providers/`.
 
 ### Core Modules
 
 1. **Smart Inbox** - Email webhook processing, fuzzy matching, triage queue
 2. **Project Command Center** - Health indicators, AI-generated plans, risk tracking
-3. **Client 360** - Profiles, contacts, knowledge bases, satisfaction signals
-4. **Response Studio** - AI drafts, approval workflow, templates
+3. **Client 360** - Profiles, contacts, knowledge bases, satisfaction signals (NPS)
+4. **Response Studio** - AI drafts, approval workflow (DRAFT->PENDING_APPROVAL->APPROVED->SENT)
 5. **Team Workboard** - Workload dashboard, assignment rules
 6. **Notification Engine** - SLA tracking, escalation rules (4h/8h/24h)
 7. **Analytics** - Response times, volume trends, team performance
 8. **Search & Knowledge** - Global search, AI-powered recall
+9. **Proposals** - AI-assisted scope writing, client approval links, PDF export
+10. **Contracts** - Templates (retainer, project, NDA), digital signatures
+11. **Invoices** - Line items, Stripe payment links, auto-reminders
+12. **Client Portal** - Token-authenticated views for clients (projects, invoices, approvals)
 
-### Additional Agent Systems
+### Agent Systems
 
-- **Email Triage Agent** - Automated email categorization
-- **WordPress Agent** - WordPress site management
-- **Shopify Agent** - E-commerce integration
-- **Sales Agent** - Lead qualification
-- **LinkedIn Outreach** - Connection campaigns
-- **Cold Email** - Outreach sequences
-- **SEO Blog** - Content generation
-- **Social Content** - Multi-platform posting
+| Agent | Route Prefix | Purpose |
+|-------|-------------|---------|
+| Email Triage | `/api/email-triage` | Automated email categorization |
+| WordPress | `/api/wordpress-agent` | WordPress site management |
+| Shopify | `/api/shopify-agent` | E-commerce integration |
+| Sales | `/api/sales-agent` | Lead qualification |
+| LinkedIn | `/api/linkedin-outreach` | Connection campaigns |
+| Cold Email | `/api/cold-email` | Outreach sequences |
+| SEO Blog | `/api/seo-blog` | Content generation |
+| Social Content | `/api/social-content` | Multi-platform posting |
+| Upwork | `upwork-agent/` | Job scraping, proposals, messages (Playwright) |
+
+### Integrations
+
+- **Discord** - Real-time event notifications to `#agency-hub`, `#alerts`, `#deployments` channels
+- **OpenClaw** - AI specialist spawning (coding, SEO, deploy, email, content, research, analytics agents)
+- **Stripe** - Payment links on invoices, recurring billing for retainers
+- **Mailgun** - Outbound email delivery
+- **Google APIs** - Gmail draft creation, Google Drive
 
 ---
 
@@ -206,6 +262,7 @@ AI provider is pluggable (`AI_PROVIDER=claude|gemini`) via the factory in `src/a
 - All routes under `/api/` prefix
 - JWT authentication via `fastify.authenticate` decorator
 - Admin-only routes check `user.role === 'ADMIN'`
+- Bot API uses `BOT_SECRET` header auth
 - Response format: `{ data: ... }` on success, `{ error: "message" }` on failure
 - Route files export a function receiving the Fastify instance
 
@@ -217,6 +274,8 @@ AI provider is pluggable (`AI_PROVIDER=claude|gemini`) via the factory in `src/a
 - TanStack Query for server state management
 - Path alias: `@/` resolves to `web/src/`
 - UI components: `web/src/components/ui/` (shadcn/ui pattern)
+- Button variants: `primary|secondary|outline|ghost|danger|success|warning`
+- Button sizes: `xs|sm|md|lg|xl`
 
 ---
 
@@ -226,173 +285,50 @@ AI provider is pluggable (`AI_PROVIDER=claude|gemini`) via the factory in `src/a
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `User` | Team members | role (ADMIN/TEAM), skills (JSON), capacity |
-| `Client` | Client companies | domain, tier (T1/T2/T3), status, knowledgeBase (JSON) |
-| `Project` | Client projects | status, health, healthScore, aiSummary, aiPlan (JSON) |
-| `Thread` | Communication threads | priority, intent, sentiment, matchConfidence, needsTriage |
-| `Message` | Individual messages | direction (INBOUND/OUTBOUND), bodyText, aiExtracted (JSON) |
+| `User` | Team members | role (ADMIN/TEAM), skills (JSON), capacity, hourlyRate |
+| `Client` | Client companies | domain, tier (T1/T2/T3), status, knowledgeBase (JSON), satisfactionSignals |
+| `Project` | Client projects | status, health, healthScore, aiSummary, aiPlan (JSON), budget |
+| `Thread` | Communication threads | priority, intent, sentiment, matchConfidence, needsTriage, slaDeadline |
+| `Message` | Individual messages | direction (INBOUND/OUTBOUND), bodyText, rawEmail, aiExtracted (JSON) |
 | `Response` | Draft responses | status (DRAFT->PENDING_APPROVAL->APPROVED->SENT), aiGenerated |
-| `Task` | Project tasks | status, priority, category, position (Kanban), parentId (hierarchy) |
-| `TimeEntry` | Time tracking | duration (minutes), billable, invoiced |
+| `Task` | Project tasks | status, priority, category, position (Kanban), parentId (subtasks), content (JSON blocks) |
+| `TimeEntry` | Time tracking | duration (minutes), billable, invoiced, invoiceId |
 | `Invoice` | Client invoices | status, subtotal, tax, total, viewToken |
-| `Proposal` | Client proposals | status (DRAFT->SENT->APPROVED), lineItems, viewToken |
+| `Proposal` | Client proposals | status (DRAFT->SENT->VIEWED->APPROVED->DECLINED), lineItems, viewToken |
 | `Contract` | Client contracts | status, signedAt, templateType |
+| `ProjectContext` | AI rolling summary | aiSummary, humanNotes, compactionVersion, emailCount |
+| `ProjectCommunication` | Email log per project | gmailMessageId, direction, summary, actionItems |
+| `ClientEmailMapping` | Email-to-client matching | emailAddress, emailDomain, contactName |
 
 ### Supporting Models
 
-`Contact`, `Notification`, `AssignmentRule`, `Template`, `UnmatchedEmail`, `ChatMessage`, `Note`, `Milestone`, `Attachment`, `Activity`, `CalendarEvent`, `RetainerPlan`, `Report`, `RevisionRound`, `Credential`, `Expense`
+`Contact`, `Notification`, `AssignmentRule`, `Template`, `UnmatchedEmail`, `ChatMessage`, `ChatReaction`, `Note`, `Milestone`, `Attachment`, `Activity`, `CalendarEvent`, `EventAttendee`, `RetainerPlan`, `Report`, `RevisionRound`, `Credential`, `Expense`, `AiTeamMessage`, `RevenueSnapshot`, `Approval`, `SurveyResponse`
 
 ---
 
-## API Routes (Primary)
+## Security
 
-```
-# Auth
-POST   /api/auth/login
-POST   /api/auth/logout
-GET    /api/auth/me
+### Implemented Controls
 
-# Webhooks
-POST   /api/webhooks/email
+- **Password hashing**: bcrypt with 12 salt rounds (replaced SHA-256)
+- **Rate limiting**: 5 login attempts per 15 minutes per IP
+- **CSRF protection**: `@fastify/csrf-protection` with secure cookies
+- **Security headers**: Helmet.js (CSP, X-Frame-Options, HSTS, etc.)
+- **Cookie security**: httpOnly, secure (prod), sameSite: strict
+- **JWT**: Token in cookie only (not response body), 7-day expiry
+- **Input validation**: Zod schemas, Prisma parameterized queries
+- **Admin controls**: Self-demotion prevention, audit endpoints
 
-# Inbox
-GET    /api/inbox
-GET    /api/inbox/unmatched
-POST   /api/inbox/unmatched/:id/assign
-POST   /api/inbox/unmatched/:id/ignore
+### Authorized Admins
 
-# Clients
-GET    /api/clients
-POST   /api/clients
-GET    /api/clients/:id
-PUT    /api/clients/:id
-GET    /api/clients/:id/contacts
-POST   /api/clients/:id/contacts
-GET    /api/clients/:id/insights
+- cameron@ashbi.ca (Primary)
+- bianca@ashbi.ca (Secondary)
 
-# Projects
-GET    /api/projects
-POST   /api/projects
-GET    /api/projects/:id
-PUT    /api/projects/:id
-GET    /api/projects/:id/plan
-POST   /api/projects/:id/plan/refresh
-GET    /api/projects/:id/tasks
-POST   /api/projects/:id/tasks
+### Security Maintenance
 
-# Threads
-GET    /api/threads
-GET    /api/threads/:id
-PUT    /api/threads/:id
-POST   /api/threads/:id/assign
-POST   /api/threads/:id/snooze
-POST   /api/threads/:id/resolve
-POST   /api/threads/:id/messages
-POST   /api/threads/:id/analyze
-
-# Responses & Approval
-GET    /api/responses/pending
-POST   /api/threads/:id/responses
-PUT    /api/responses/:id
-POST   /api/responses/:id/submit
-POST   /api/responses/:id/approve
-POST   /api/responses/:id/reject
-
-# Tasks
-GET    /api/tasks
-GET    /api/tasks/my
-PUT    /api/tasks/:id
-POST   /api/tasks/:id/complete
-
-# Team
-GET    /api/team
-POST   /api/team
-GET    /api/team/:id
-PUT    /api/team/:id
-GET    /api/team/workload
-
-# AI
-POST   /api/ai/draft-response
-POST   /api/ai/refine-response
-POST   /api/ai/ask
-
-# Notifications
-GET    /api/notifications
-POST   /api/notifications/read/:id
-POST   /api/notifications/read-all
-
-# Search
-GET    /api/search
-GET    /api/search/similar/:threadId
-
-# Analytics
-GET    /api/analytics/overview
-GET    /api/analytics/response-times
-GET    /api/analytics/team
-
-# Invoicing, Proposals, Contracts (full CRUD)
-# Agent routes (email-triage, wordpress, shopify, sales, linkedin, cold-email, seo-blog, social)
-# Client Portal (public, token-authenticated)
-```
-
----
-
-## Environment Variables
-
-See `.env.example` for all variables. Critical ones:
-
-```env
-# Required
-DATABASE_URL="file:./dev.db"          # PostgreSQL URL in production
-PORT=3000
-NODE_ENV=development
-JWT_SECRET=your-secret-key
-ANTHROPIC_API_KEY=your-api-key
-REDIS_URL=redis://localhost:6379
-
-# Email
-WEBHOOK_SECRET=your-webhook-secret
-MAILGUN_API_KEY=your-mailgun-api-key
-MAILGUN_DOMAIN=your-domain
-
-# AI Provider Selection
-AI_PROVIDER=claude                     # or 'gemini'
-GEMINI_API_KEY=your-gemini-key         # if using gemini
-
-# Integrations (optional)
-STRIPE_SECRET_KEY=...
-GITHUB_TOKEN=...
-NOTION_TOKEN=...
-HUNTER_API_KEY=...
-```
-
-Production requires: `JWT_SECRET`, `ANTHROPIC_API_KEY`, `WEBHOOK_SECRET` (validated in `src/config/env.js`).
-
----
-
-## Testing
-
-- **Framework**: Node.js native test runner (`node --test`)
-- **Assertions**: `node:assert/strict`
-- **Pattern**: Fastify injection (`fastify.inject()`) for HTTP tests
-- **Test files**: `src/tests/*.test.js`
-- **Setup/teardown**: `before()`/`after()` hooks with Prisma cleanup (`deleteMany`)
-
-Example test structure:
-```javascript
-import { describe, test, before, after } from 'node:test';
-import assert from 'node:assert/strict';
-
-describe('Feature', () => {
-  before(async () => { /* setup fastify, seed data */ });
-  after(async () => { /* cleanup, close server */ });
-
-  test('should do something', async () => {
-    const res = await fastify.inject({ method: 'GET', url: '/api/...' });
-    assert.equal(res.statusCode, 200);
-  });
-});
-```
+- Run `node scripts/security-audit.js` monthly
+- Run with `--fix` to remediate unauthorized admin accounts
+- Rotate `JWT_SECRET` if breach suspected, then restart to invalidate all sessions
 
 ---
 
@@ -422,6 +358,121 @@ Triggered on PRs to `main`:
 - AI code review using Claude Sonnet
 - Checks: ESM compliance, Prisma usage, React patterns, security, shadcn/ui styling, BullMQ for async jobs
 
+### Production Environment Variables
+
+```env
+# Required (validated in src/config/env.js)
+DATABASE_URL=postgresql://...       # PostgreSQL connection string
+JWT_SECRET=<strong-random-secret>   # openssl rand -base64 32
+ANTHROPIC_API_KEY=<api-key>
+WEBHOOK_SECRET=<strong-secret>
+CREDENTIALS_KEY=<strong-secret>     # For credential encryption
+NODE_ENV=production
+CORS_ORIGIN=https://hub.ashbi.ca
+REDIS_URL=redis://localhost:6379
+
+# Email
+MAILGUN_API_KEY=<key>
+MAILGUN_DOMAIN=<domain>
+MAILGUN_SIGNING_KEY=<key>
+
+# AI Provider
+AI_PROVIDER=claude                  # or 'gemini'
+GEMINI_API_KEY=<key>                # if using gemini
+
+# Integrations (optional)
+STRIPE_SECRET_KEY=<key>
+GITHUB_TOKEN=<token>
+NOTION_TOKEN=<token>
+HUNTER_API_KEY=<key>
+BOT_SECRET=<secret>                 # For bot API auth
+```
+
+---
+
+## Event System
+
+Hub events flow through `src/events/hub-events.js` to three destinations:
+
+```
+Hub Event -> Discord webhooks (notifications)
+          -> OpenClaw gateway (specialist spawning)
+          -> Socket.IO (frontend real-time updates)
+```
+
+Events: `project_created`, `task_assigned`, `task_completed`, `message_received`, `approval_needed`, `response_sent`, `alert`
+
+---
+
+## Upwork Agent (`upwork-agent/`)
+
+Standalone Playwright-based automation for Upwork:
+
+```bash
+cd upwork-agent
+npm install
+npm run messages    # Scrape unread messages
+npm run feed        # Find job listings
+npm run proposals   # Track proposal statuses
+npm run hiring      # Client hiring mode
+npm run all         # Run everything
+```
+
+- Uses Chrome Profile 4 (cameron@ashbi.ca session)
+- Syncs to Hub via bot API as tagged tasks
+- 10-15x faster than previous Claude CLI approach
+
+---
+
+## Testing
+
+- **Framework**: Node.js native test runner (`node --test`)
+- **Assertions**: `node:assert/strict`
+- **Pattern**: Fastify injection (`fastify.inject()`) for HTTP tests
+- **Test files**: `src/tests/*.test.js`
+- **Setup/teardown**: `before()`/`after()` hooks with Prisma cleanup (`deleteMany`)
+
+```javascript
+import { describe, test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+
+describe('Feature', () => {
+  before(async () => { /* setup fastify, seed data */ });
+  after(async () => { /* cleanup, close server */ });
+
+  test('should do something', async () => {
+    const res = await fastify.inject({ method: 'GET', url: '/api/...' });
+    assert.equal(res.statusCode, 200);
+  });
+});
+```
+
+---
+
+## Key Algorithms
+
+### Project Health Scoring
+
+```javascript
+let score = 100;
+if (criticalOpenThreads > 0) score -= 30;
+if (threadsNeedingResponse > 2) score -= 15;
+if (staleThreads > 0) score -= (10 * count);
+if (longClientWaits > 0) score -= 5;
+// ON_TRACK (>=80) | NEEDS_ATTENTION (>=50) | AT_RISK (<50)
+```
+
+### Assignment Algorithm
+
+Priority order for auto-assignment:
+1. **Critical -> Admin** - Always escalate critical priority
+2. **Project default owner** - If set and has capacity
+3. **Client routing rule** - Specific client -> specific member
+4. **Skill matching** - Match intent to skill (bug -> dev)
+5. **Thread continuity** - Keep same handler for ongoing thread
+6. **Load balancing** - Assign to least loaded member
+7. **Escalate** - If no capacity, escalate to admin
+
 ---
 
 ## Key Design Decisions
@@ -436,33 +487,8 @@ Triggered on PRs to `main`:
 8. **BullMQ for async work** - Email processing, report generation run as background jobs
 9. **shadcn/ui pattern** - Components in `web/src/components/ui/`, customized via Tailwind
 10. **Dual-process architecture** - API server and job worker run as separate Node.js processes
-
----
-
-## Project Health Scoring
-
-```javascript
-let score = 100;
-if (criticalOpenThreads > 0) score -= 30;
-if (threadsNeedingResponse > 2) score -= 15;
-if (staleThreads > 0) score -= (10 * count);
-if (longClientWaits > 0) score -= 5;
-
-// ON_TRACK (>=80) | NEEDS_ATTENTION (>=50) | AT_RISK (<50)
-```
-
----
-
-## Assignment Algorithm
-
-Priority order for auto-assignment:
-1. **Critical -> Admin** - Always escalate critical priority
-2. **Project default owner** - If set and has capacity
-3. **Client routing rule** - Specific client -> specific member
-4. **Skill matching** - Match intent to skill (bug -> dev)
-5. **Thread continuity** - Keep same handler for ongoing thread
-6. **Load balancing** - Assign to least loaded member
-7. **Escalate** - If no capacity, escalate to admin
+11. **Bot API for agents** - External agents (Upwork, email-triage) communicate via `BOT_SECRET`-authenticated endpoints
+12. **ProjectContext compaction** - Rolling AI summaries instead of dumping full history (token efficiency)
 
 ---
 
@@ -475,3 +501,6 @@ Priority order for auto-assignment:
 - Fastify serves static files from `dist/` in production (SPA fallback for React Router)
 - The `server.js` at root is the Hostinger-specific entry point
 - No git hooks are configured - linting is manual or CI-enforced
+- `ProjectCommunication.gmailMessageId` is unique - use upsert to prevent duplicate email imports
+- Credential encryption uses `CREDENTIALS_KEY` env var - rotating it invalidates stored credentials
+- CSRF tokens required on all state-changing requests in production
