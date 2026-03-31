@@ -2,7 +2,7 @@
 
 **The central portfolio and main web presence for Ashbi Design, a digital agency specializing in high-performance web applications, bespoke software, and AI integration.**
 
-As part of the **Nexus AI / GlowOS Master Plan**, the Ashbi Design digital storefront demonstrates our ability to bridge beautiful front-end aesthetics with deep, agentic automation. This repository serves as the professional face of our consulting and development services.
+Ashbi Design is the digital storefront demonstrating our ability to bridge beautiful front-end aesthetics with deep, agentic automation. This repository serves as the professional face of our consulting and development services, available at [Hub.ashbi.ca](http://Hub.ashbi.ca).
 
 ## 🚀 Vision: AI-First Consulting
 
@@ -43,4 +43,4 @@ Visit `http://localhost:3000`.
 - Update the overarching service offerings to emphasize "Automated Agent Integration" alongside traditional web design.
 
 ---
-*Designed & Developed by Cameron Ashley / Ashbi Design & Nexus AI.*
+*Designed & Developed by Cameron Ashley / Ashbi Design.*
