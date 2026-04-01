@@ -35,13 +35,17 @@ import {
   Linkedin,
   MailPlus,
   Activity,
+  MessageSquare,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { Download } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
 import NotificationsDropdown from './NotificationsDropdown';
 import { Button } from './ui';
+import { useInstallPrompt } from '../hooks/useInstallPrompt';
+import { usePushNotifications } from '../hooks/usePushNotifications';
 
 export default function Layout({ children }) {
   const location = useLocation();
@@ -50,7 +54,16 @@ export default function Layout({ children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
-  const [simplifiedView, setSimplifiedView] = useState(true);
+  const { isInstallable, install } = useInstallPrompt();
+  const { permission, subscribed, subscribe } = usePushNotifications();
+  const [installDismissed, setInstallDismissed] = useState(false);
+
+  // Auto-subscribe to push on login if permission already granted
+  useEffect(() => {
+    if (user && permission === 'granted' && !subscribed) {
+      subscribe();
+    }
+  }, [user, permission, subscribed, subscribe]);
 
   const isAdmin = user?.role === 'ADMIN';
 
@@ -82,20 +95,13 @@ export default function Layout({ children }) {
   ).length || 0;
 
   // Navigation sections
-  const simplifiedWorkNav = [
+  const workNav = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard, exact: true },
-    { name: 'Inbox', href: '/inbox/simple', icon: Inbox, badge: stats?.needsResponse },
-    { name: 'Projects', href: '/projects', icon: FolderOpen, badge: activeProjectCount > 0 ? activeProjectCount : null },
-    { name: 'Clients', href: '/clients', icon: Users },
-  ];
-  
-  const fullWorkNav = [
-    { name: 'Dashboard', href: '/', icon: LayoutDashboard, exact: true },
-    { name: 'Inbox (Simple)', href: '/inbox/simple', icon: Inbox, badge: stats?.needsResponse },
-    { name: 'Inbox (Full)', href: '/inbox', icon: Inbox, badge: stats?.needsResponse },
+    { name: 'Inbox', href: '/inbox', icon: Inbox, badge: stats?.needsResponse },
     ...(isAdmin ? [{ name: 'Approvals', href: '/approvals', icon: CheckCircle, badge: pendingCount }] : []),
     { name: 'Projects', href: '/projects', icon: FolderOpen, badge: activeProjectCount > 0 ? activeProjectCount : null },
     { name: 'Clients', href: '/clients', icon: Users },
+    { name: 'Activity', href: '/activity', icon: Activity },
   ];
 
   const financeNav = [
@@ -107,6 +113,7 @@ export default function Layout({ children }) {
   const growthNav = [
     { name: 'Upwork', href: '/upwork', icon: Briefcase },
     { name: 'Contracts', href: '/upwork-contracts', icon: ScrollText },
+    { name: 'Chat with Ash', href: '/chat', icon: MessageSquare },
     { name: 'AI Chat', href: '/ai-chat', icon: Bot },
     { name: 'AI Team', href: '/ai-team', icon: UsersRound },
   ];
@@ -246,32 +253,13 @@ export default function Layout({ children }) {
 
           {/* Navigation */}
           <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto">
-            {renderNavSection('Work', simplifiedView ? simplifiedWorkNav : fullWorkNav)}
-            
-            {!simplifiedView && (
-              <>
-                {renderNavSection('Finance', financeNav)}
-                {renderNavSection('Growth', growthNav)}
-                {renderNavSection('Marketing', marketingNav)}
-                {renderNavSection('Agents', agentsNav)}
-                {renderNavSection('AI Employees', aiEmployeesNav)}
-                {renderNavSection('Admin', adminNav)}
-              </>
-            )}
-            
-            {/* Simplified view toggle */}
-            <div className="px-3 pt-4 border-t border-border">
-              <button
-                onClick={() => setSimplifiedView(!simplifiedView)}
-                className="flex items-center justify-between w-full p-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
-              >
-                <span>{simplifiedView ? 'Show all sections' : 'Simplify view'}</span>
-                <ChevronRight className={cn(
-                  'w-4 h-4 transition-transform',
-                  !simplifiedView && 'rotate-90'
-                )} />
-              </button>
-            </div>
+            {renderNavSection('Work', workNav)}
+            {renderNavSection('Finance', financeNav)}
+            {renderNavSection('Growth', growthNav)}
+            {renderNavSection('Marketing', marketingNav)}
+            {renderNavSection('Agents', agentsNav)}
+            {renderNavSection('AI Employees', aiEmployeesNav)}
+            {renderNavSection('Admin', adminNav)}
 
             {/* Quick Actions */}
             <div className="space-y-1">
@@ -376,6 +364,49 @@ export default function Layout({ children }) {
             <NotificationsDropdown />
           </div>
         </header>
+
+        {/* Install App Banner */}
+        {isInstallable && !installDismissed && (
+          <div className="mx-4 mt-4 lg:mx-6 flex items-center justify-between rounded-lg bg-blue-600/10 border border-blue-500/20 px-4 py-3">
+            <div className="flex items-center gap-3">
+              <Download className="h-5 w-5 text-blue-400" />
+              <span className="text-sm text-blue-200">Install Ashbi Hub as an app for quick access</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                onClick={async () => {
+                  await install();
+                  if (permission !== 'granted') subscribe();
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1"
+              >
+                Install
+              </Button>
+              <button
+                onClick={() => setInstallDismissed(true)}
+                className="text-slate-400 hover:text-slate-300 text-xs"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Push notification prompt */}
+        {user && permission === 'default' && !subscribed && (
+          <div className="mx-4 mt-2 lg:mx-6 flex items-center justify-between rounded-lg bg-slate-800/50 border border-slate-700/50 px-4 py-2">
+            <span className="text-sm text-slate-300">Enable push notifications to stay updated</span>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={subscribe}
+              className="text-blue-400 hover:text-blue-300 text-xs"
+            >
+              Enable
+            </Button>
+          </div>
+        )}
 
         {/* Page content */}
         <div className="flex-1 p-4 lg:p-6 animate-fade-in overflow-auto">

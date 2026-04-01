@@ -7,23 +7,32 @@ import {
   AlertTriangle,
   Plus,
   Receipt,
-  ClipboardList,
   ArrowRight,
   Clock,
+  Bell,
+  Activity,
+  TrendingUp,
+  ShieldAlert,
+  Users,
+  Zap,
+  Eye,
+  CircleDot,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
+import { useSocket } from '../hooks/useSocket';
 import { Card } from '../components/ui';
 import { formatRelativeTime, cn } from '../lib/utils';
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { notifications: liveNotifications } = useSocket();
 
-  const { data: dashboard, isLoading } = useQuery({
-    queryKey: ['dashboard'],
-    queryFn: () => api.getDashboard(),
-    refetchInterval: 60000,
+  const { data: stats, isLoading } = useQuery({
+    queryKey: ['dashboard-stats'],
+    queryFn: () => api.getDashboardStats(),
+    refetchInterval: 30000,
   });
 
   const { data: myTasks = [] } = useQuery({
@@ -37,7 +46,12 @@ export default function Dashboard() {
         <div className="h-8 w-48 bg-muted rounded animate-pulse" />
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map(i => (
-            <div key={i} className="h-24 bg-muted rounded-xl animate-pulse" />
+            <div key={i} className="h-28 bg-muted rounded-xl animate-pulse" />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {[1, 2].map(i => (
+            <div key={i} className="h-80 bg-muted rounded-xl animate-pulse" />
           ))}
         </div>
       </div>
@@ -47,6 +61,12 @@ export default function Dashboard() {
   const isAdmin = user?.role === 'ADMIN';
   const greeting = getGreeting(user?.name?.split(' ')[0] || 'there');
 
+  // Merge live WebSocket notifications with server-fetched ones
+  const allNotifications = mergeNotifications(
+    stats?.unreadNotifications || [],
+    liveNotifications
+  );
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -54,173 +74,120 @@ export default function Dashboard() {
         <div>
           <h1 className="text-2xl font-heading font-bold text-foreground">{greeting}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Here's what's happening across your projects
+            Agency command center — everything at a glance
           </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate('/projects?create=true')}
+            className="flex items-center gap-1.5 px-3 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" /> New Project
+          </button>
+          {isAdmin && (
+            <button
+              onClick={() => navigate('/invoices?create=true')}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm bg-card border border-border text-foreground rounded-lg hover:bg-muted transition-colors"
+            >
+              <Receipt className="w-3.5 h-3.5" /> New Invoice
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* ─── Row 1: Live Numbers ─── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card
-          className="p-4 cursor-pointer hover:border-primary/30 transition-colors"
-          onClick={() => navigate('/projects')}
-        >
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-              <FolderOpen className="w-5 h-5 text-blue-600" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Active Projects</p>
-              <p className="text-xl font-semibold">{dashboard?.activeProjects || 0}</p>
-            </div>
-          </div>
-        </Card>
-
+        {/* MRR */}
         {isAdmin && (
-          <Card
-            className="p-4 cursor-pointer hover:border-primary/30 transition-colors"
+          <StatCard
+            icon={TrendingUp}
+            iconColor="text-emerald-600"
+            iconBg="bg-emerald-100 dark:bg-emerald-900/30"
+            label="MRR"
+            value={`$${(stats?.mrr || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}
+            onClick={() => navigate('/revenue')}
+          />
+        )}
+
+        {/* Outstanding Invoices */}
+        {isAdmin && (
+          <StatCard
+            icon={DollarSign}
+            iconColor={stats?.overdueCount > 0 ? 'text-red-600' : 'text-green-600'}
+            iconBg={stats?.overdueCount > 0 ? 'bg-red-100 dark:bg-red-900/30' : 'bg-green-100 dark:bg-green-900/30'}
+            label="Outstanding"
+            value={`$${(stats?.totalOutstanding || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}
+            subtitle={stats?.overdueCount > 0 ? (
+              <span className="text-xs text-red-500 flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3" />
+                {stats.overdueCount} overdue (${(stats.overdueAmount || 0).toLocaleString()})
+              </span>
+            ) : null}
             onClick={() => navigate('/invoices')}
-          >
-            <div className="flex items-center gap-3">
-              <div className={cn(
-                'p-2 rounded-lg',
-                dashboard?.overdueCount > 0
-                  ? 'bg-red-100 dark:bg-red-900/30'
-                  : 'bg-green-100 dark:bg-green-900/30'
-              )}>
-                <DollarSign className={cn(
-                  'w-5 h-5',
-                  dashboard?.overdueCount > 0 ? 'text-red-600' : 'text-green-600'
-                )} />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Outstanding</p>
-                <p className="text-xl font-semibold">
-                  ${(dashboard?.totalOutstanding || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                </p>
-                {dashboard?.overdueCount > 0 && (
-                  <p className="text-xs text-red-500 flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3" />
-                    {dashboard.overdueCount} overdue
-                  </p>
-                )}
-              </div>
-            </div>
-          </Card>
+          />
         )}
 
-        <Card className="p-4 cursor-pointer hover:border-primary/30 transition-colors">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-900/30">
-              <CheckSquare className="w-5 h-5 text-orange-600" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Tasks Due This Week</p>
-              <p className="text-xl font-semibold">{dashboard?.tasksDueThisWeek || 0}</p>
-            </div>
-          </div>
-        </Card>
+        {/* Active Projects */}
+        <StatCard
+          icon={FolderOpen}
+          iconColor="text-blue-600"
+          iconBg="bg-blue-100 dark:bg-blue-900/30"
+          label="Active Projects"
+          value={stats?.activeProjects || 0}
+          onClick={() => navigate('/projects')}
+        />
 
+        {/* Pending Approvals */}
+        <StatCard
+          icon={ShieldAlert}
+          iconColor={stats?.pendingApprovals > 0 ? 'text-red-600' : 'text-gray-500'}
+          iconBg={stats?.pendingApprovals > 0 ? 'bg-red-100 dark:bg-red-900/30' : 'bg-gray-100 dark:bg-gray-800/30'}
+          label="Pending Approvals"
+          value={stats?.pendingApprovals || 0}
+          badge={stats?.pendingApprovals > 0 ? stats.pendingApprovals : null}
+          onClick={() => navigate('/approvals')}
+        />
+
+        {/* Tasks (non-admin gets 2 extra cards) */}
         {!isAdmin && (
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
-                <ClipboardList className="w-5 h-5 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">My Tasks</p>
-                <p className="text-xl font-semibold">{myTasks.length}</p>
-              </div>
-            </div>
-          </Card>
-        )}
-
-        {isAdmin && (
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
-                <ClipboardList className="w-5 h-5 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">My Tasks</p>
-                <p className="text-xl font-semibold">{myTasks.length}</p>
-              </div>
-            </div>
-          </Card>
+          <>
+            <StatCard
+              icon={CheckSquare}
+              iconColor="text-orange-600"
+              iconBg="bg-orange-100 dark:bg-orange-900/30"
+              label="My Tasks"
+              value={myTasks.length}
+              onClick={() => navigate('/inbox')}
+            />
+            <StatCard
+              icon={Bell}
+              iconColor="text-purple-600"
+              iconBg="bg-purple-100 dark:bg-purple-900/30"
+              label="Notifications"
+              value={allNotifications.length}
+              badge={allNotifications.length > 0 ? allNotifications.length : null}
+            />
+          </>
         )}
       </div>
 
-      {/* Quick Actions */}
-      <div className="flex flex-wrap gap-2">
-        <button
-          onClick={() => navigate('/projects?create=true')}
-          className="flex items-center gap-1.5 px-3 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-        >
-          <Plus className="w-3.5 h-3.5" /> New Project
-        </button>
-        {isAdmin && (
-          <button
-            onClick={() => navigate('/invoices?create=true')}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm bg-card border border-border text-foreground rounded-lg hover:bg-muted transition-colors"
-          >
-            <Receipt className="w-3.5 h-3.5" /> New Invoice
-          </button>
-        )}
-      </div>
-
-      {/* Two Column Layout */}
+      {/* ─── Row 2: Activity Feed + Notification Center ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* My Tasks */}
+        {/* Activity Feed */}
         <Card>
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-            <h2 className="font-semibold text-foreground">My Tasks</h2>
-            <Link to="/inbox" className="text-xs text-primary hover:underline flex items-center gap-1">
+            <div className="flex items-center gap-2">
+              <Activity className="w-4 h-4 text-primary" />
+              <h2 className="font-semibold text-foreground">Activity Feed</h2>
+            </div>
+            <Link to="/activity" className="text-xs text-primary hover:underline flex items-center gap-1">
               View all <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
-          {myTasks.length > 0 ? (
-            <ul className="divide-y divide-border">
-              {myTasks.slice(0, 8).map(task => (
-                <li key={task.id}>
-                  <Link
-                    to={`/task/${task.id}`}
-                    className="flex items-center justify-between px-4 py-3 hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{task.title}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {task.project?.name || 'No project'}
-                      </p>
-                    </div>
-                    {task.dueDate && (
-                      <span className={cn(
-                        'text-xs ml-2 flex items-center gap-1',
-                        new Date(task.dueDate) < new Date() ? 'text-red-500' : 'text-muted-foreground'
-                      )}>
-                        <Clock className="w-3 h-3" />
-                        {new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                      </span>
-                    )}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="p-8 text-center text-muted-foreground text-sm">
-              No tasks assigned to you
-            </div>
-          )}
-        </Card>
-
-        {/* Recent Activity */}
-        <Card>
-          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-            <h2 className="font-semibold text-foreground">Recent Activity</h2>
-          </div>
-          {dashboard?.recentActivity?.length > 0 ? (
-            <ul className="divide-y divide-border">
-              {dashboard.recentActivity.slice(0, 8).map(activity => (
-                <li key={activity.id} className="px-4 py-3">
+          {stats?.recentActivity?.length > 0 ? (
+            <ul className="divide-y divide-border max-h-[400px] overflow-y-auto">
+              {stats.recentActivity.map(activity => (
+                <li key={activity.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
                   <div className="flex items-start gap-3">
                     <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
                       <span className="text-xs font-semibold text-primary">
@@ -231,11 +198,14 @@ export default function Dashboard() {
                       <p className="text-sm text-foreground">
                         <span className="font-medium">{activity.user?.name}</span>{' '}
                         <span className="text-muted-foreground">{formatActivityAction(activity.action)}</span>
+                        {activity.entityName && (
+                          <span className="text-foreground font-medium"> {activity.entityName}</span>
+                        )}
                       </p>
                       {activity.project && (
                         <p className="text-xs text-muted-foreground mt-0.5">
                           {activity.project.name}
-                          {activity.project.client ? ` - ${activity.project.client.name}` : ''}
+                          {activity.project.client ? ` · ${activity.project.client.name}` : ''}
                         </p>
                       )}
                       <p className="text-xs text-muted-foreground mt-0.5">
@@ -252,11 +222,213 @@ export default function Dashboard() {
             </div>
           )}
         </Card>
+
+        {/* Notification Center */}
+        <Card>
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Bell className="w-4 h-4 text-primary" />
+              <h2 className="font-semibold text-foreground">Notifications</h2>
+              {allNotifications.length > 0 && (
+                <span className="bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                  {allNotifications.length}
+                </span>
+              )}
+            </div>
+          </div>
+          {allNotifications.length > 0 ? (
+            <ul className="divide-y divide-border max-h-[400px] overflow-y-auto">
+              {allNotifications.map(notif => (
+                <li key={notif.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
+                  <div className="flex items-start gap-3">
+                    <NotificationIcon type={notif.type} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground">{notif.title}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{notif.message}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {formatRelativeTime(notif.createdAt)}
+                      </p>
+                    </div>
+                    {!notif.read && (
+                      <CircleDot className="w-3 h-3 text-blue-500 flex-shrink-0 mt-1" />
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="p-8 text-center text-muted-foreground text-sm">
+              All caught up — no unread notifications
+            </div>
+          )}
+        </Card>
       </div>
+
+      {/* ─── Row 3: Client Health Grid ─── */}
+      {isAdmin && stats?.clientHealth?.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-4">
+            <Users className="w-5 h-5 text-primary" />
+            <h2 className="text-lg font-semibold text-foreground">Client Health</h2>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {stats.clientHealth.map(client => (
+              <ClientHealthCard key={client.id} client={client} navigate={navigate} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ─── Row 4: My Tasks (compact) ─── */}
+      {myTasks.length > 0 && (
+        <Card>
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CheckSquare className="w-4 h-4 text-orange-500" />
+              <h2 className="font-semibold text-foreground">My Tasks</h2>
+            </div>
+            <Link to="/inbox" className="text-xs text-primary hover:underline flex items-center gap-1">
+              View all <ArrowRight className="w-3 h-3" />
+            </Link>
+          </div>
+          <ul className="divide-y divide-border">
+            {myTasks.slice(0, 6).map(task => (
+              <li key={task.id}>
+                <Link
+                  to={`/task/${task.id}`}
+                  className="flex items-center justify-between px-4 py-3 hover:bg-muted/50 transition-colors"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{task.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {task.project?.name || 'No project'}
+                    </p>
+                  </div>
+                  {task.dueDate && (
+                    <span className={cn(
+                      'text-xs ml-2 flex items-center gap-1',
+                      new Date(task.dueDate) < new Date() ? 'text-red-500' : 'text-muted-foreground'
+                    )}>
+                      <Clock className="w-3 h-3" />
+                      {new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </span>
+                  )}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
     </div>
   );
 }
 
+/* ─── Stat Card Component ─── */
+function StatCard({ icon: Icon, iconColor, iconBg, label, value, subtitle, badge, onClick }) {
+  return (
+    <Card
+      className={cn(
+        'p-4 transition-colors relative',
+        onClick && 'cursor-pointer hover:border-primary/30'
+      )}
+      onClick={onClick}
+    >
+      {badge && (
+        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center shadow-sm">
+          {badge}
+        </span>
+      )}
+      <div className="flex items-center gap-3">
+        <div className={cn('p-2 rounded-lg', iconBg)}>
+          <Icon className={cn('w-5 h-5', iconColor)} />
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">{label}</p>
+          <p className="text-xl font-semibold">{value}</p>
+          {subtitle}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/* ─── Client Health Card ─── */
+function ClientHealthCard({ client, navigate }) {
+  const healthColors = {
+    ON_TRACK: 'border-l-emerald-500',
+    NEEDS_ATTENTION: 'border-l-amber-500',
+    AT_RISK: 'border-l-red-500',
+  };
+
+  const retainerBadge = {
+    ACTIVE: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+    AT_RISK: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+    PAUSED: 'bg-gray-100 text-gray-600 dark:bg-gray-800/30 dark:text-gray-400',
+    CANCELLED: 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400',
+  };
+
+  return (
+    <Card
+      className={cn(
+        'p-4 border-l-4 cursor-pointer hover:border-primary/30 transition-colors',
+        healthColors[client.healthStatus] || 'border-l-gray-300'
+      )}
+      onClick={() => navigate(`/clients/${client.id}`)}
+    >
+      <div className="flex items-start justify-between mb-2">
+        <h3 className="font-semibold text-sm text-foreground truncate flex-1">{client.name}</h3>
+        <span className="text-lg font-bold ml-2" title="Health Score">
+          {client.healthScore}
+        </span>
+      </div>
+
+      <div className="space-y-1.5">
+        {client.retainerStatus && (
+          <span className={cn(
+            'inline-block text-xs px-2 py-0.5 rounded-full font-medium',
+            retainerBadge[client.retainerStatus] || 'bg-gray-100 text-gray-600'
+          )}>
+            {client.retainerStatus.replace('_', ' ')}
+            {client.monthlyAmount > 0 && ` · $${client.monthlyAmount.toLocaleString()}/mo`}
+          </span>
+        )}
+
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span>{client.activeProjects} active project{client.activeProjects !== 1 ? 's' : ''}</span>
+          {client.lastActivity && (
+            <span className="flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              {formatRelativeTime(client.lastActivity)}
+            </span>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/* ─── Notification Icon ─── */
+function NotificationIcon({ type }) {
+  const config = {
+    APPROVAL_NEEDED: { icon: ShieldAlert, color: 'text-amber-600', bg: 'bg-amber-100 dark:bg-amber-900/30' },
+    ALERT: { icon: AlertTriangle, color: 'text-red-600', bg: 'bg-red-100 dark:bg-red-900/30' },
+    TASK_OVERDUE: { icon: Clock, color: 'text-red-600', bg: 'bg-red-100 dark:bg-red-900/30' },
+    THREAD_ASSIGNED: { icon: Eye, color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30' },
+    PAYMENT_RECEIVED: { icon: DollarSign, color: 'text-emerald-600', bg: 'bg-emerald-100 dark:bg-emerald-900/30' },
+  };
+
+  const { icon: Icon, color, bg } = config[type] || {
+    icon: Zap, color: 'text-primary', bg: 'bg-primary/10'
+  };
+
+  return (
+    <div className={cn('w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5', bg)}>
+      <Icon className={cn('w-3.5 h-3.5', color)} />
+    </div>
+  );
+}
+
+/* ─── Helpers ─── */
 function getGreeting(name) {
   const hour = new Date().getHours();
   if (hour < 12) return `Good morning, ${name}`;
@@ -269,6 +441,7 @@ function formatActivityAction(action) {
     TASK_CREATED: 'created a task',
     TASK_COMPLETED: 'completed a task',
     TASK_UPDATED: 'updated a task',
+    TASK_STARTED: 'started a task',
     CHAT_MESSAGE: 'sent a message',
     NOTE_CREATED: 'added a note',
     REVISION_CREATED: 'started a revision round',
@@ -280,6 +453,20 @@ function formatActivityAction(action) {
     RESPONSE_SENT: 'sent a response',
     MILESTONE_CREATED: 'created a milestone',
     MILESTONE_COMPLETED: 'completed a milestone',
+    INFO: 'logged',
+    ERROR: 'reported an error',
   };
   return map[action] || action?.toLowerCase().replace(/_/g, ' ') || '';
+}
+
+function mergeNotifications(serverNotifs, liveNotifs) {
+  const ids = new Set(serverNotifs.map(n => n.id));
+  const merged = [...serverNotifs];
+  for (const n of liveNotifs) {
+    if (n.id && !ids.has(n.id)) {
+      merged.unshift(n);
+      ids.add(n.id);
+    }
+  }
+  return merged.slice(0, 20);
 }

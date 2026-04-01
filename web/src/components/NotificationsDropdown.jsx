@@ -1,14 +1,16 @@
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Bell, Check, CheckCheck, X } from 'lucide-react';
+import { Bell, Check, CheckCheck } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatRelativeTime, cn } from '../lib/utils';
+import useSocket from '../hooks/useSocket';
 
 export default function NotificationsDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
   const queryClient = useQueryClient();
+  const { socket } = useSocket();
 
   const { data: notifications } = useQuery({
     queryKey: ['notifications'],
@@ -43,6 +45,25 @@ export default function NotificationsDropdown() {
     },
   });
 
+  // Real-time WebSocket notifications
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleNewNotification = () => {
+      // Refetch notifications and unread count immediately
+      queryClient.invalidateQueries(['notifications']);
+      queryClient.invalidateQueries(['notifications-unread']);
+    };
+
+    socket.on('notification', handleNewNotification);
+    socket.on('notification:new', handleNewNotification);
+
+    return () => {
+      socket.off('notification', handleNewNotification);
+      socket.off('notification:new', handleNewNotification);
+    };
+  }, [socket, queryClient]);
+
   // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event) {
@@ -57,17 +78,21 @@ export default function NotificationsDropdown() {
 
   const getNotificationLink = (notification) => {
     const data = notification.data;
-    if (!data) return null;
 
     switch (notification.type) {
+      case 'APPROVAL_NEEDED':
+        return data?.approvalId ? `/approvals/${data.approvalId}` : '/approvals';
       case 'THREAD_ASSIGNED':
       case 'CLIENT_REPLIED':
-        return data.threadId ? `/thread/${data.threadId}` : null;
       case 'RESPONSE_APPROVED':
       case 'RESPONSE_REJECTED':
-        return data.threadId ? `/thread/${data.threadId}` : null;
+        return data?.threadId ? `/thread/${data.threadId}` : null;
       case 'PROJECT_HEALTH_CHANGED':
-        return data.projectId ? `/project/${data.projectId}` : null;
+        return data?.projectId ? `/project/${data.projectId}` : null;
+      case 'TASK_COMMENT':
+        return data?.taskId ? `/task/${data.taskId}` : null;
+      case 'MENTION':
+        return data?.projectId ? `/project/${data.projectId}` : null;
       default:
         return null;
     }
@@ -75,6 +100,8 @@ export default function NotificationsDropdown() {
 
   const getNotificationIcon = (type) => {
     switch (type) {
+      case 'APPROVAL_NEEDED':
+        return '🔐';
       case 'THREAD_ASSIGNED':
         return '📥';
       case 'RESPONSE_APPROVED':
@@ -91,9 +118,21 @@ export default function NotificationsDropdown() {
         return '🚨';
       case 'ESCALATION':
         return '🔺';
+      case 'TASK_COMMENT':
+        return '💬';
+      case 'MENTION':
+        return '📣';
       default:
         return '🔔';
     }
+  };
+
+  const handleNotificationClick = (notification) => {
+    // Mark as read on click
+    if (!notification.read) {
+      markReadMutation.mutate(notification.id);
+    }
+    setIsOpen(false);
   };
 
   return (
@@ -104,7 +143,7 @@ export default function NotificationsDropdown() {
       >
         <Bell className="w-5 h-5" />
         {unreadCount?.count > 0 && (
-          <span className="absolute top-0.5 right-0.5 min-w-[18px] h-[18px] flex items-center justify-center px-1 text-xs font-medium text-white bg-red-500 rounded-full">
+          <span className="absolute top-0.5 right-0.5 min-w-[18px] h-[18px] flex items-center justify-center px-1 text-xs font-medium text-white bg-red-500 rounded-full animate-pulse">
             {unreadCount.count > 9 ? '9+' : unreadCount.count}
           </span>
         )}
@@ -137,15 +176,18 @@ export default function NotificationsDropdown() {
                   const content = (
                     <div
                       className={cn(
-                        'flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors',
-                        !notification.read && 'bg-blue-50/50'
+                        'flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors cursor-pointer',
+                        !notification.read && 'bg-blue-50/50 border-l-2 border-l-blue-500'
                       )}
                     >
-                      <span className="text-lg">
+                      <span className="text-lg flex-shrink-0">
                         {getNotificationIcon(notification.type)}
                       </span>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900">
+                        <p className={cn(
+                          'text-sm text-gray-900',
+                          !notification.read && 'font-semibold'
+                        )}>
                           {notification.title}
                         </p>
                         <p className="text-sm text-gray-500 truncate">
@@ -162,7 +204,7 @@ export default function NotificationsDropdown() {
                             e.stopPropagation();
                             markReadMutation.mutate(notification.id);
                           }}
-                          className="p-1 text-gray-400 hover:text-gray-600 rounded"
+                          className="p-1 text-gray-400 hover:text-blue-600 rounded flex-shrink-0"
                           title="Mark as read"
                         >
                           <Check className="w-4 h-4" />
@@ -172,9 +214,9 @@ export default function NotificationsDropdown() {
                   );
 
                   return (
-                    <li key={notification.id}>
+                    <li key={notification.id} onClick={() => handleNotificationClick(notification)}>
                       {link ? (
-                        <Link to={link} onClick={() => setIsOpen(false)}>
+                        <Link to={link}>
                           {content}
                         </Link>
                       ) : (

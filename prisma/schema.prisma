@@ -45,6 +45,7 @@ model User {
   proposals         Proposal[]       @relation("ProposalCreator")
   contracts         Contract[]       @relation("ContractCreator")
   invoices          Invoice[]        @relation("InvoiceCreator")
+  pushSubscriptions PushSubscription[]
 
   @@map("users")
 }
@@ -57,7 +58,7 @@ model Client {
   domain              String?   @unique
   status              String    @default("ACTIVE") // ACTIVE, PAUSED, CHURNED
   communicationPrefs  String    @default("{}") // JSON: tone, frequency, etc.
-  satisfactionSignals String    @default("{}") // JSON: NPS history, current score, category (PROMOTER/PASSIVE/DETRACTOR), trend
+  satisfactionSignals String    @default("{}") // JSON: sentiment trends
   slaOverrides        String?   // JSON: custom SLA rules
   knowledgeBase       String    @default("[]") // JSON: brand guidelines, specs, etc.
 
@@ -142,13 +143,6 @@ model Project {
   endDate         DateTime?
   completedAt     DateTime?
   isRetainer      Boolean   @default(false)
-  
-  // NPS Survey tracking
-  surveySent      Boolean   @default(false)
-  surveySentAt    DateTime?
-  targetNpsScore  Int?      @range(0, 10) // Optional target score
-  achievedNpsScore Int?     @range(0, 10) // Actual score if survey completed
-  
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -170,7 +164,6 @@ model Project {
   approvals      Approval[]
   communications ProjectCommunication[]
   context        ProjectContext?
-  surveyResponses SurveyResponse[] // New relation
 
   @@map("projects")
 }
@@ -220,6 +213,9 @@ model Task {
 
   @@index([parentId])
   @@index([projectId, parentId])
+  @@index([status])
+  @@index([priority])
+  @@index([dueDate])
   @@map("tasks")
 }
 
@@ -277,6 +273,8 @@ model Message {
   // Relations
   thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
 
+  @@index([threadId])
+  @@index([receivedAt])
   @@map("messages")
 }
 
@@ -1310,44 +1308,42 @@ model ClientEmailMapping {
   @@map("client_email_mappings")
 }
 
-// ==================== CLIENT FEEDBACK & NPS SURVEYS ====================
+// ==================== PUSH SUBSCRIPTIONS ====================
 
-model SurveyResponse {
-  id                String   @id @default(cuid())
-  
-  // Core survey data
-  npsScore          Int      // 0-10 NPS rating
-  communicationScore Int?    // Optional 1-5 communication rating
-  feedback          String?  // Free-text feedback
-  submittedAt       DateTime @default(now())
-  
-  // Channel & delivery info
-  channel           String   @default("EMAIL") // EMAIL, SMS, WHATSAPP
-  surveySentAt      DateTime // When survey was sent
-  responseTimeHours Float?   // Hours between sent and response
-  
-  // Relationships
-  clientId          String
-  client            Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  
-  projectId         String?
-  project           Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  
-  // Follow-up tracking
-  followUpStatus    String   @default("PENDING") // PENDING, SENT, COMPLETED
-  followUpSentAt    DateTime?
-  testimonialCaptured Boolean @default(false)
-  recoveryActionTaken Boolean @default(false)
-  
-  // Metadata
-  ipAddress         String?
-  userAgent         String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  
-  @@index([clientId])
-  @@index([projectId])
-  @@index([submittedAt])
-  @@index([npsScore])
-  @@map("survey_responses")
+model PushSubscription {
+  id        String   @id @default(cuid())
+  endpoint  String   @unique
+  keys      String   // JSON: { p256dh, auth }
+  userId    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("push_subscriptions")
+}
+
+// ==================== ASH AI CHAT ====================
+
+model AshConversation {
+  id        String           @id @default(cuid())
+  title     String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  messages  AshChatMessage[]
+
+  @@map("ash_conversations")
+}
+
+model AshChatMessage {
+  id             String          @id @default(cuid())
+  conversationId String
+  conversation   AshConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String          // "user" | "assistant"
+  content        String          @db.Text
+  createdAt      DateTime        @default(now())
+
+  @@map("ash_chat_messages")
+}
+_chat_messages")
 }

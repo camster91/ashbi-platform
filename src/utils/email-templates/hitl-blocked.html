@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Task Blocked — Ashbi Hub</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; margin: 0; padding: 20px; }
+  .container { max-width: 600px; margin: 0 auto; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+  .header { background: #b71c1c; color: #fff; padding: 24px 32px; }
+  .header h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  .header p { margin: 4px 0 0; opacity: 0.7; font-size: 13px; }
+  .badge { display: inline-block; background: #e53935; color: #fff; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px; text-transform: uppercase; margin-bottom: 8px; }
+  .body { padding: 32px; }
+  .meta-row { display: flex; margin-bottom: 8px; }
+  .meta-label { color: #888; font-size: 13px; width: 120px; flex-shrink: 0; }
+  .meta-value { color: #1a1a2e; font-size: 13px; font-weight: 500; }
+  .blocked-box { background: #fff8f8; border-left: 3px solid #e53935; padding: 16px 20px; margin: 24px 0; border-radius: 0 4px 4px 0; }
+  .blocked-box p { margin: 0; color: #333; font-size: 14px; line-height: 1.6; }
+  .reply-note { font-size: 13px; color: #666; text-align: center; }
+  .divider { border: none; border-top: 1px solid #e0e0e0; margin: 24px 0; }
+  .cta { text-align: center; margin: 24px 0; }
+  .cta a { display: inline-block; background: #e53935; color: #fff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-size: 14px; font-weight: 600; }
+  .footer { background: #f5f5f5; padding: 16px 32px; text-align: center; }
+  .footer p { margin: 0; color: #999; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="badge">blocked</div>
+    <h1>🚫 Task Blocked</h1>
+    <p>Ashbi Hub — Needs Your Attention</p>
+  </div>
+  <div class="body">
+    <div class="meta-row"><span class="meta-label">Task:</span><span class="meta-value">{{title}}</span></div>
+    <div class="meta-row"><span class="meta-label">Project:</span><span class="meta-value">{{projectName}}</span></div>
+
+    <div class="blocked-box">
+      <p><strong>Blocked because:</strong> {{blockedReason}}</p>
+    </div>
+
+    <hr class="divider">
+
+    <p class="reply-note"><strong>Reply to this email</strong> with instructions to unblock this task.<br>Your reply will be logged automatically in Hub.</p>
+
+    <div class="cta">
+      <a href="https://hub.ashbi.ca/tasks/{{taskId}}">View Task in Hub →</a>
+    </div>
+  </div>
+  <div class="footer">
+    <p>Ashbi Design · <a href="https://hub.ashbi.ca" style="color:#999;">hub.ashbi.ca</a></p>
+  </div>
+</div>
+</body>
+</html>

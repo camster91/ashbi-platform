@@ -3,6 +3,7 @@ import { useAuth, AuthProvider } from './hooks/useAuth';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 // Client Portal
+import ClientPortal from './pages/ClientPortal';
 import ClientLogin from './pages/ClientLogin';
 import ClientSignup from './pages/ClientSignup';
 import ClientDashboard from './pages/ClientDashboard';
@@ -21,9 +22,7 @@ import AgentTeamDashboard from './pages/AgentTeamDashboard';
 import SkillsCatalog from './pages/SkillsCatalog';
 import IntegrationDashboard from './pages/IntegrationDashboard';
 import Dashboard from './pages/Dashboard';
-import SimplifiedDashboard from './pages/SimplifiedDashboard';
 import Inbox from './pages/Inbox';
-import SimplifiedInbox from './pages/SimplifiedInbox';
 import Thread from './pages/Thread';
 import Projects from './pages/Projects';
 import Project from './pages/Project';
@@ -41,6 +40,7 @@ import Invoices from './pages/Invoices';
 import InvoiceDetail from './pages/InvoiceDetail';
 import Upwork from './pages/Upwork';
 import AiChat from './pages/AiChat';
+import Chat from './pages/Chat';
 import Credentials from './pages/Credentials';
 import Portal from './pages/Portal';
 import Outreach from './pages/Outreach';
@@ -59,6 +59,7 @@ import SeoBlog from './pages/SeoBlog';
 import AiContextSettings from './pages/AiContextSettings';
 import UpworkContracts from './pages/UpworkContracts';
 import CommandCenter from './pages/CommandCenter';
+import ActivityFeed from './pages/ActivityFeed';
 
 function PrivateRoute({ children }) {
   const { user, isLoading } = useAuth();
@@ -97,6 +98,7 @@ function AppRoutes() {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/portal/:token" element={<Portal />} />
+      <Route path="/client-portal" element={<ClientPortal />} />
       {/* Client Portal Routes */}
       <Route path="/client/login" element={<ClientLogin />} />
       <Route path="/client/invite" element={<ClientSignup />} />
@@ -108,10 +110,8 @@ function AppRoutes() {
           <PrivateRoute>
             <Layout>
               <Routes>
-                <Route path="/" element={<SimplifiedDashboard />} />
-                <Route path="/dashboard/full" element={<Dashboard />} />
+                <Route path="/" element={<Dashboard />} />
                 <Route path="/inbox" element={<Inbox />} />
-                <Route path="/inbox/simple" element={<SimplifiedInbox />} />
                 <Route path="/thread/:id" element={<Thread />} />
                 <Route path="/projects" element={<Projects />} />
                 <Route path="/project/:id" element={<Project />} />
@@ -131,6 +131,7 @@ function AppRoutes() {
                 <Route path="/invoices/:id" element={<InvoiceDetail />} />
                 <Route path="/upwork" element={<Upwork />} />
                 <Route path="/ai-chat" element={<AIQuery />} />
+                <Route path="/chat" element={<Chat />} />
                 <Route path="/credentials" element={<AdminRoute><Credentials /></AdminRoute>} />
                 <Route path="/outreach" element={<Outreach />} />
                 <Route path="/social" element={<Social />} />
@@ -155,6 +156,7 @@ function AppRoutes() {
                 <Route path="/wordpress" element={<WordPressDashboard />} />
                 <Route path="/client-success" element={<AgentTeamDashboard />} />
                 <Route path="/integrations" element={<IntegrationDashboard />} />
+                <Route path="/activity" element={<ActivityFeed />} />
               </Routes>
             </Layout>
           </PrivateRoute>

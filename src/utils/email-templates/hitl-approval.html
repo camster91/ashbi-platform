@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Approval Needed — Ashbi Hub</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f5f5; margin: 0; padding: 20px; }
+  .container { max-width: 600px; margin: 0 auto; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+  .header { background: #1b5e20; color: #fff; padding: 24px 32px; }
+  .header h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  .header p { margin: 4px 0 0; opacity: 0.7; font-size: 13px; }
+  .badge { display: inline-block; background: #43a047; color: #fff; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 4px; text-transform: uppercase; margin-bottom: 8px; }
+  .body { padding: 32px; }
+  .meta-row { display: flex; margin-bottom: 8px; }
+  .meta-label { color: #888; font-size: 13px; width: 100px; flex-shrink: 0; }
+  .meta-value { color: #1a1a2e; font-size: 13px; font-weight: 500; }
+  .content-preview { background: #f5f5f5; border: 1px solid #e0e0e0; border-radius: 6px; padding: 16px; margin: 24px 0; }
+  .content-preview h4 { margin: 0 0 8px; color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+  .content-preview pre { margin: 0; font-size: 13px; color: #333; white-space: pre-wrap; font-family: inherit; line-height: 1.5; }
+  .action-box { background: #e8f5e9; border: 1px solid #a5d6a7; border-radius: 6px; padding: 16px; margin: 16px 0; text-align: center; }
+  .action-box p { margin: 0 0 4px; font-weight: 600; color: #2e7d32; }
+  .action-box small { color: #558b2f; font-size: 12px; }
+  .divider { border: none; border-top: 1px solid #e0e0e0; margin: 24px 0; }
+  .cta { text-align: center; margin: 24px 0; }
+  .cta a { display: inline-block; background: #43a047; color: #fff; text-decoration: none; padding: 12px 28px; border-radius: 6px; font-size: 14px; font-weight: 600; }
+  .footer { background: #f5f5f5; padding: 16px 32px; text-align: center; }
+  .footer p { margin: 0; color: #999; font-size: 12px; }
+  .expires { color: #e53935; font-size: 12px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="badge">approval needed</div>
+    <h1>✅ Approval Required</h1>
+    <p>Ashbi Hub — Pending Your Review</p>
+  </div>
+  <div class="body">
+    <div class="meta-row"><span class="meta-label">Title:</span><span class="meta-value">{{title}}</span></div>
+    <div class="meta-row"><span class="meta-label">Type:</span><span class="meta-value">{{type}}</span></div>
+    <div class="meta-row"><span class="meta-label">Client:</span><span class="meta-value">{{clientName}}</span></div>
+    <div class="meta-row"><span class="meta-label">Created by:</span><span class="meta-value">{{createdBy}} agent</span></div>
+
+    <div class="content-preview">
+      <h4>Content Preview</h4>
+      <pre>{{contentPreview}}</pre>
+    </div>
+
+    <div class="action-box">
+      <p>Reply APPROVED or REJECTED</p>
+      <small>You can include an optional note after your decision. e.g. "APPROVED — looks great!"</small>
+    </div>
+
+    <hr class="divider">
+
+    <div class="cta">
+      <a href="https://hub.ashbi.ca/approvals/{{approvalId}}">Review in Hub →</a>
+    </div>
+
+    <p class="expires">⏰ This approval expires in 48 hours if not actioned.</p>
+  </div>
+  <div class="footer">
+    <p>Ashbi Design · <a href="https://hub.ashbi.ca" style="color:#999;">hub.ashbi.ca</a></p>
+  </div>
+</div>
+</body>
+</html>

@@ -1,6 +1,7 @@
 // Agency Hub - Main Entry Point
 
 import Fastify from 'fastify';
+import compress from '@fastify/compress';
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
 import jwt from '@fastify/jwt';
@@ -31,6 +32,7 @@ import notificationRoutes from './routes/notification.routes.js';
 import settingsRoutes from './routes/settings.routes.js';
 // New feature routes
 import chatRoutes from './routes/chat.routes.js';
+import ashChatRoutes from './routes/ash-chat.routes.js';
 import noteRoutes from './routes/note.routes.js';
 import milestoneRoutes from './routes/milestone.routes.js';
 import timeRoutes from './routes/time.routes.js';
@@ -41,7 +43,9 @@ import calendarRoutes from './routes/calendar.routes.js';
 import revisionRoutes from './routes/revision.routes.js';
 import messageRoutes from './routes/message.routes.js';
 import mailgunRoutes from './routes/mailgun.routes.js';
+import mailgunHitlRoutes from './routes/mailgun-hitl.routes.js';
 import approvalRoutes from './routes/approvals.routes.js';
+import dashboardRoutes from './routes/dashboard.routes.js';
 import botRoutes from './routes/bot.routes.js';
 import onboardingRoutes from './routes/onboarding.routes.js';
 import retainerRoutes from './routes/retainer.routes.js';
@@ -87,8 +91,9 @@ import integrationsVpsRoutes from './routes/integrations.vps.routes.js';
 import integrationsHostingerRoutes from './routes/integrations.hostinger.routes.js';
 import integrationsNotionRoutes from './routes/integrations.notion.routes.js';
 import agentsRoutes from './routes/integrations.agents.routes.js';
+import pushRoutes from './routes/push.routes.js';
+import { initVapid } from './utils/web-push.js';
 import commandCenterRoutes from './routes/integrations.command-center.routes.js';
-import openclawRoutes from './routes/openclaw.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -103,6 +108,7 @@ const fastify = Fastify({
 });
 
 // Register plugins
+await fastify.register(compress, { global: true });
 await fastify.register(cors, {
   origin: env.isDev ? true : env.corsOrigins,
   credentials: true
@@ -161,11 +167,13 @@ await fastify.register(teamRoutes, { prefix: '/api/team' });
 await fastify.register(taskRoutes, { prefix: '/api/tasks' });
 await fastify.register(searchRoutes, { prefix: '/api/search' });
 await fastify.register(analyticsRoutes, { prefix: '/api/analytics' });
+await fastify.register(dashboardRoutes, { prefix: '/api/dashboard' });
 await fastify.register(aiRoutes, { prefix: '/api/ai' });
 await fastify.register(notificationRoutes, { prefix: '/api/notifications' });
 await fastify.register(settingsRoutes, { prefix: '/api/settings' });
 // New feature routes
 await fastify.register(chatRoutes, { prefix: '/api/chat' });
+await fastify.register(ashChatRoutes, { prefix: '/api/ash-chat' });
 await fastify.register(noteRoutes, { prefix: '/api' });
 await fastify.register(milestoneRoutes, { prefix: '/api' });
 await fastify.register(timeRoutes, { prefix: '/api' });
@@ -176,6 +184,7 @@ await fastify.register(calendarRoutes, { prefix: '/api' });
 await fastify.register(revisionRoutes, { prefix: '/api' });
 await fastify.register(messageRoutes, { prefix: '/api' });
 await fastify.register(mailgunRoutes, { prefix: '/api/mailgun' });
+await fastify.register(mailgunHitlRoutes, { prefix: '/api/mailgun' });
 await fastify.register(approvalRoutes, { prefix: '/api' });
 await fastify.register(botRoutes, { prefix: '/api/bot' });
 await fastify.register(onboardingRoutes, { prefix: '/api/onboarding' });
@@ -189,7 +198,6 @@ await fastify.register(outreachRoutes, { prefix: '/api/outreach' });
 await fastify.register(socialRoutes, { prefix: '/api/social' });
 await fastify.register(blogRoutes, { prefix: '/api/blog' });
 await fastify.register(aiTeamRoutes, { prefix: '/api/ai-team' });
-await fastify.register(openclawRoutes, { prefix: '/api/openclaw' });
 // AI Employee Suite
 await fastify.register(emailTriageRoutes, { prefix: '/api/email-triage' });
 await fastify.register(contentWriterRoutes, { prefix: '/api/content-writer' });
@@ -224,6 +232,7 @@ await fastify.register(integrationsHostingerRoutes, { prefix: '/api/integrations
 await fastify.register(integrationsNotionRoutes, { prefix: '/api/integrations/notion' });
 await fastify.register(agentsRoutes, { prefix: '/api/agents' });
 await fastify.register(commandCenterRoutes, { prefix: '/api/command-center' });
+await fastify.register(pushRoutes, { prefix: '/api/push' });
 
 // Serve static frontend in production
 if (!env.isDev) {
@@ -308,6 +317,9 @@ fastify.decorate('notify', (userId, type, data) => {
 // Start server
 const start = async () => {
   try {
+    // Initialize VAPID keys for web push
+    try { initVapid(); } catch (e) { console.warn('Web push init failed:', e.message); }
+
     await fastify.listen({ port: env.port, host: '0.0.0.0' });
     console.log(`🚀 Agency Hub running at http://localhost:${env.port}`);
     console.log(`   Environment: ${env.nodeEnv}`);

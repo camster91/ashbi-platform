@@ -1,0 +1,14 @@
+{
+  "appId": "ca.ashbi.hub",
+  "appName": "Ashbi Hub",
+  "webDir": "dist",
+  "server": {
+    "url": "https://hub.ashbi.ca",
+    "cleartext": false
+  },
+  "plugins": {
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    }
+  }
+}

@@ -86,6 +86,14 @@ export default function InvoiceDetail() {
     onSuccess: () => navigate('/invoices'),
   });
 
+  const [copyLinkMsg, setCopyLinkMsg] = useState('');
+  const generatePaymentLinkMutation = useMutation({
+    mutationFn: () => api.generateInvoicePaymentLink(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invoice', id] });
+    },
+  });
+
   const startEdit = () => {
     setEditForm({
       title: invoice.title || '',
@@ -217,12 +225,42 @@ export default function InvoiceDetail() {
             onClick={handlePrint}>
             Print / PDF
           </Button>
-          {invoice.stripePaymentLink && (
-            <a href={invoice.stripePaymentLink} target="_blank" rel="noopener noreferrer">
-              <Button variant="outline" size="sm" leftIcon={<CreditCard className="w-4 h-4" />}>
-                Pay via Stripe
+          <a
+            href={`/api/invoices/${id}/pdf`}
+            download={`${invoice.invoiceNumber || 'invoice'}.pdf`}
+          >
+            <Button variant="outline" size="sm" leftIcon={<FileText className="w-4 h-4" />}>
+              Download PDF
+            </Button>
+          </a>
+          {invoice.stripePaymentLink ? (
+            <div className="flex items-center gap-1">
+              <span className="inline-flex items-center gap-1 text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-2 py-1 rounded-full">
+                <CheckCircle className="w-3 h-3" /> Payment Link Active
+              </span>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(invoice.stripePaymentLink);
+                  setCopyLinkMsg('Copied!');
+                  setTimeout(() => setCopyLinkMsg(''), 2000);
+                }}
+                className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded border border-border"
+                title="Copy payment link"
+              >
+                {copyLinkMsg || 'Copy Link'}
+              </button>
+            </div>
+          ) : (
+            invoice.status !== 'VOID' && invoice.status !== 'PAID' && (
+              <Button
+                variant="outline" size="sm"
+                leftIcon={<CreditCard className="w-4 h-4" />}
+                onClick={() => generatePaymentLinkMutation.mutate()}
+                disabled={generatePaymentLinkMutation.isPending}
+              >
+                {generatePaymentLinkMutation.isPending ? 'Generating…' : 'Generate Payment Link'}
               </Button>
-            </a>
+            )
           )}
           {invoice.viewToken && (
             <button

@@ -1,8 +1,32 @@
-// Bot API routes - external bot integration with bearer token auth
+// Bot API routes - external bot integration with ultra-fast caching
 
 import { onboardClient } from '../services/onboarding.service.js';
 import { generateWeeklyReport } from '../services/weeklyReport.service.js';
 import { weeklyDigestQueue } from '../jobs/queue.js';
+import { sendWebhookNotification } from '../utils/webhook.js';
+
+// Ultra-fast in-memory cache for AI requests
+const aiCache = {
+  store: new Map(),
+  ttl: 60 * 1000, // 60 seconds
+  get(key) {
+    const item = this.store.get(key);
+    if (!item) return null;
+    if (Date.now() > item.expiry) {
+      this.store.delete(key);
+      return null;
+    }
+    return item.data;
+  },
+  set(key, data) {
+    this.store.set(key, { data, expiry: Date.now() + this.ttl });
+  },
+  invalidate(prefix) {
+    for (const key of this.store.keys()) {
+      if (key.startsWith(prefix)) this.store.delete(key);
+    }
+  }
+};
 
 export default async function botRoutes(fastify) {
   const BOT_SECRET = process.env.BOT_SECRET;
@@ -32,8 +56,44 @@ export default async function botRoutes(fastify) {
     return { token };
   });
 
+  // GET /sync — ULTRA-DENSE snapshot for AI context windows
+  fastify.get('/sync', { preHandler: requireBotAuth }, async (request) => {
+    const cacheKey = 'sync_dense';
+    const cached = aiCache.get(cacheKey);
+    if (cached) return cached;
+
+    const [projects, tasks, clients] = await Promise.all([
+      fastify.prisma.project.findMany({
+        where: { status: 'ACTIVE' },
+        select: { id: true, name: true, health: true, hourlyBudget: true, client: { select: { name: true } } }
+      }),
+      fastify.prisma.task.findMany({
+        where: { status: { not: 'COMPLETED' } },
+        select: { id: true, title: true, priority: true, status: true, project: { select: { name: true } } }
+      }),
+      fastify.prisma.client.findMany({
+        where: { status: 'ACTIVE' },
+        select: { id: true, name: true, tier: true }
+      })
+    ]);
+
+    const result = {
+      timestamp: new Date().toISOString(),
+      activeProjects: projects.map(p => ({ id: p.id, name: p.name, client: p.client?.name, health: p.health, budget: p.hourlyBudget })),
+      pendingTasks: tasks.map(t => ({ id: t.id, title: t.title, priority: t.priority, status: t.status, project: t.project?.name })),
+      activeClients: clients.map(c => ({ id: c.id, name: c.name, tier: c.tier }))
+    };
+
+    aiCache.set(cacheKey, result);
+    return result;
+  });
+
   // GET /dashboard — overview stats
   fastify.get('/dashboard', { preHandler: requireBotAuth }, async (request) => {
+    const cacheKey = 'dashboard';
+    const cached = aiCache.get(cacheKey);
+    if (cached) return cached;
+
     const { prisma } = fastify;
 
     const today = new Date();
@@ -57,11 +117,17 @@ export default async function botRoutes(fastify) {
       })
     ]);
 
-    return { openThreads, tasksDueToday, atRiskProjects, recentActivities };
+    const result = { openThreads, tasksDueToday, atRiskProjects, recentActivities };
+    aiCache.set(cacheKey, result);
+    return result;
   });
 
   // GET /projects — all projects with client info
   fastify.get('/projects', { preHandler: requireBotAuth }, async (request) => {
+    const cacheKey = 'projects_list';
+    const cached = aiCache.get(cacheKey);
+    if (cached) return cached;
+
     const projects = await fastify.prisma.project.findMany({
       include: {
         client: { select: { name: true } },
@@ -69,18 +135,25 @@ export default async function botRoutes(fastify) {
       }
     });
 
-    return projects.map(p => ({
+    const result = projects.map(p => ({
       id: p.id,
       name: p.name,
-      clientName: p.client.name,
+      clientName: p.client?.name || 'Unknown',
       status: p.status,
       health: p.health,
       taskCount: p._count.tasks
     }));
+
+    aiCache.set(cacheKey, result);
+    return result;
   });
 
   // GET /project/:id — full project detail
   fastify.get('/project/:id', { preHandler: requireBotAuth }, async (request, reply) => {
+    const cacheKey = `project_${request.params.id}`;
+    const cached = aiCache.get(cacheKey);
+    if (cached) return cached;
+
     const project = await fastify.prisma.project.findUnique({
       where: { id: request.params.id },
       include: {
@@ -91,6 +164,7 @@ export default async function botRoutes(fastify) {
     });
 
     if (!project) return reply.status(404).send({ error: 'Project not found' });
+    aiCache.set(cacheKey, project);
     return project;
   });
 
@@ -115,6 +189,11 @@ export default async function botRoutes(fastify) {
     });
 
     if (!project) return reply.status(404).send({ error: 'Project not found' });
+
+    aiCache.invalidate('projects_list');
+    aiCache.invalidate(`project_${request.params.id}`);
+    aiCache.invalidate('sync_dense');
+
     return project;
   });
 
@@ -134,6 +213,9 @@ export default async function botRoutes(fastify) {
         status: status || 'ACTIVE'
       }
     });
+
+    aiCache.invalidate('projects_list');
+    aiCache.invalidate('sync_dense');
 
     return project;
   });
@@ -214,6 +296,10 @@ export default async function botRoutes(fastify) {
       }
     });
 
+    aiCache.invalidate('dashboard');
+    aiCache.invalidate('sync_dense');
+    aiCache.invalidate(`project_${projectId}`);
+
     return task;
   });
 
@@ -226,6 +312,10 @@ export default async function botRoutes(fastify) {
       where: { id: request.params.id },
       data: request.body
     });
+
+    aiCache.invalidate('dashboard');
+    aiCache.invalidate('sync_dense');
+    aiCache.invalidate(`project_${existing.projectId}`);
 
     return task;
   });
@@ -251,6 +341,10 @@ export default async function botRoutes(fastify) {
 
   // GET /team — all users with active task counts
   fastify.get('/team', { preHandler: requireBotAuth }, async () => {
+    const cacheKey = 'team_stats';
+    const cached = aiCache.get(cacheKey);
+    if (cached) return cached;
+
     const users = await fastify.prisma.user.findMany({
       where: { isActive: true },
       include: {
@@ -262,18 +356,27 @@ export default async function botRoutes(fastify) {
       }
     });
 
-    return users.map(u => ({
+    const result = users.map(u => ({
       id: u.id,
       name: u.name,
       email: u.email,
       role: u.role,
       activeTaskCount: u._count.assignedTasks
     }));
+
+    aiCache.set(cacheKey, result);
+    return result;
   });
 
   // GET /clients — all clients
   fastify.get('/clients', { preHandler: requireBotAuth }, async () => {
-    return fastify.prisma.client.findMany();
+    const cacheKey = 'clients_list';
+    const cached = aiCache.get(cacheKey);
+    if (cached) return cached;
+
+    const clients = await fastify.prisma.client.findMany();
+    aiCache.set(cacheKey, clients);
+    return clients;
   });
 
   // POST /client — create client
@@ -288,6 +391,9 @@ export default async function botRoutes(fastify) {
       }
     });
 
+    aiCache.invalidate('clients_list');
+    aiCache.invalidate('sync_dense');
+
     return client;
   });
 
@@ -296,6 +402,10 @@ export default async function botRoutes(fastify) {
   // GET /projects/hours/summary — all active projects hours summary
   // IMPORTANT: registered before /projects/:id/hours to avoid route conflict
   fastify.get('/projects/hours/summary', { preHandler: requireBotAuth }, async () => {
+    const cacheKey = 'hours_summary';
+    const cached = aiCache.get(cacheKey);
+    if (cached) return cached;
+
     const projects = await fastify.prisma.project.findMany({
       where: { status: 'ACTIVE' },
       include: {
@@ -317,7 +427,7 @@ export default async function botRoutes(fastify) {
       return {
         id: p.id,
         name: p.name,
-        clientName: p.client.name,
+        clientName: p.client?.name,
         estimatedHours,
         loggedHours: Math.round(loggedHours * 100) / 100,
         costToDate: Math.round(costToDate * 100) / 100,
@@ -328,11 +438,14 @@ export default async function botRoutes(fastify) {
 
     const overBudgetProjects = projectSummaries.filter(p => p.overBudget);
 
-    return {
+    const result = {
       projects: projectSummaries,
       overBudgetCount: overBudgetProjects.length,
       overBudgetProjects: overBudgetProjects.map(p => p.name)
     };
+
+    aiCache.set(cacheKey, result);
+    return result;
   });
 
   // GET /projects/:id/hours — detailed hours breakdown for a project
@@ -378,7 +491,7 @@ export default async function botRoutes(fastify) {
     return {
       id: project.id,
       name: project.name,
-      clientName: project.client.name,
+      clientName: project.client?.name,
       estimatedHours,
       loggedHours: Math.round(loggedHours * 100) / 100,
       costToDate: Math.round(costToDate * 100) / 100,
@@ -393,7 +506,7 @@ export default async function botRoutes(fastify) {
 
   // POST /approvals — create approval (agents use this)
   fastify.post('/approvals', { preHandler: requireBotAuth }, async (request, reply) => {
-    const { type, title, clientName, projectId, content, metadata, createdBy } = request.body || {};
+    const { type, title, clientName, projectId, content, metadata, createdBy, expiresAt } = request.body || {};
     if (!type || !title || !content || !createdBy) {
       return reply.status(400).send({ error: 'type, title, content, and createdBy are required' });
     }
@@ -407,11 +520,47 @@ export default async function botRoutes(fastify) {
         metadata: metadata ? (typeof metadata === 'string' ? metadata : JSON.stringify(metadata)) : null,
         createdBy,
         status: 'PENDING',
+        expiresAt: expiresAt ? new Date(expiresAt) : null,
       }
     });
+
+    // Create notification for admin user
+    try {
+      const admin = await fastify.prisma.user.findFirst({ where: { role: 'ADMIN' } });
+      if (admin) {
+        const notification = await fastify.prisma.notification.create({
+          data: {
+            type: 'APPROVAL_NEEDED',
+            title: approval.title,
+            message: `${createdBy} needs approval: ${title}`,
+            userId: admin.id,
+          }
+        });
+        // Emit WebSocket event to admin
+        if (fastify.io) {
+          fastify.io.to(`user:${admin.id}`).emit('notification:new', notification);
+        }
+        // Fire webhook (non-blocking)
+        sendWebhookNotification(notification).catch(() => {});
+        // Fire HITL email for approval (non-blocking)
+        import('../utils/hitl-email.service.js').then(({ sendApprovalHITLEmail }) => {
+          fastify.prisma.notification.create({
+            data: {
+              type: 'HITL_REQUIRED',
+              title: approval.title,
+              message: `Approval needed: ${approval.title}`,
+              userId: admin.id,
+              data: JSON.stringify({ type: 'APPROVAL', refId: approval.id }),
+            }
+          }).then(hitlNotif => sendApprovalHITLEmail({ notificationId: hitlNotif.id, approval }))
+        }).catch(err => fastify.log.error('Approval HITL email error:', err.message));
+      }
+    } catch (notifErr) {
+      fastify.log.error('Failed to create approval notification:', notifErr.message);
+    }
+
     return {
       id: approval.id,
-      status: approval.status,
       url: `https://hub.ashbi.ca/approvals/${approval.id}`,
     };
   });
@@ -494,7 +643,7 @@ export default async function botRoutes(fastify) {
     const percentUsed = Math.round((plan.hoursUsed / plan.hoursPerMonth) * 100);
 
     return {
-      clientName: plan.client.name,
+      clientName: plan.client?.name,
       tier: plan.tier,
       hoursTotal: plan.hoursPerMonth,
       hoursUsed: plan.hoursUsed,
@@ -514,7 +663,7 @@ export default async function botRoutes(fastify) {
     const atRisk = plans
       .map(plan => ({
         clientId: plan.clientId,
-        clientName: plan.client.name,
+        clientName: plan.client?.name,
         tier: plan.tier,
         hoursTotal: plan.hoursPerMonth,
         hoursUsed: plan.hoursUsed,
@@ -596,7 +745,7 @@ export default async function botRoutes(fastify) {
     return { success: true, jobId: job.id, message: 'Weekly digest generation queued' };
   });
 
-  // POST /system/restart-gateway � safely restart OpenClaw gateway via watchdog
+  // POST /system/restart-gateway — safely restart OpenClaw gateway via watchdog
   fastify.post('/system/restart-gateway', { preHandler: requireBotAuth }, async (request, reply) => {
     const { exec } = await import('child_process');
     const watchdogScript = 'C:/Users/camst/.openclaw/workspace/watchdog/openclaw-watchdog.js';
@@ -608,13 +757,107 @@ export default async function botRoutes(fastify) {
     return { status: 'restart initiated', timestamp: new Date().toISOString() };
   });
 
-  // GET /system/gateway-status � check gateway health via watchdog
+  // GET /system/gateway-status — check gateway health via watchdog
   fastify.get('/system/gateway-status', { preHandler: requireBotAuth }, async () => {
     return {
       status: 'ok',
       uptime: process.uptime(),
       memoryMb: Math.round(process.memoryUsage().rss / 1024 / 1024),
       timestamp: new Date().toISOString(),
+    };
+  });
+
+  // ==================== ACTIVITY FEED ====================
+
+  // POST /activity — log agent activity
+  fastify.post('/activity', { preHandler: requireBotAuth }, async (request, reply) => {
+    const { agentRole, type, action, title, entityType, entityId, entityName, projectId, metadata } = request.body || {};
+
+    if (!type || !action || !title || !entityType) {
+      return reply.status(400).send({ error: 'type, action, title, and entityType are required' });
+    }
+
+    // Find admin user (same pattern as other bot routes)
+    const admin = await fastify.prisma.user.findFirst({ where: { role: 'ADMIN' } });
+    if (!admin) {
+      return reply.status(500).send({ error: 'No admin user found' });
+    }
+
+    // Build metadata with agentRole included
+    const activityMeta = {
+      ...(metadata || {}),
+      agentRole: agentRole || 'system',
+    };
+
+    const activity = await fastify.prisma.activity.create({
+      data: {
+        type: type.toUpperCase(),
+        action: action.toLowerCase(),
+        entityType: entityType.toUpperCase(),
+        entityId: entityId || '',
+        entityName: entityName || title,
+        metadata: JSON.stringify(activityMeta),
+        projectId: projectId || null,
+        userId: admin.id,
+      },
+      include: {
+        user: { select: { name: true } },
+        project: { select: { name: true } },
+      },
+    });
+
+    // Emit WebSocket event
+    if (fastify.io) {
+      fastify.io.emit('activity:new', activity);
+    }
+
+    return { id: activity.id, createdAt: activity.createdAt };
+  });
+
+  // GET /activities — list recent activities (for frontend)
+  fastify.get('/activities', { preHandler: requireBotAuth }, async (request) => {
+    const { limit = 50 } = request.query;
+
+    const activities = await fastify.prisma.activity.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: parseInt(limit),
+      include: {
+        user: { select: { name: true } },
+        project: { select: { name: true } },
+      },
+    });
+
+    return { activities };
+  });
+
+  // ==================== NOTIFICATIONS ====================
+
+  // GET /notifications — list recent notifications (bot API)
+  fastify.get('/notifications', { preHandler: requireBotAuth }, async (request) => {
+    const { unread, limit = 20 } = request.query;
+
+    const admin = await fastify.prisma.user.findFirst({ where: { role: 'ADMIN' } });
+    if (!admin) return { notifications: [] };
+
+    const where = { userId: admin.id };
+    if (unread === 'true') where.read = false;
+
+    const notifications = await fastify.prisma.notification.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: parseInt(limit),
+    });
+
+    return {
+      notifications: notifications.map(n => ({
+        id: n.id,
+        type: n.type,
+        title: n.title,
+        message: n.message,
+        read: n.read,
+        createdAt: n.createdAt,
+        data: n.data ? JSON.parse(n.data) : null,
+      })),
     };
   });
 
@@ -796,7 +1039,7 @@ export default async function botRoutes(fastify) {
 
     return mappings.map(m => ({
       clientId: m.clientId,
-      clientName: m.client.name,
+      clientName: m.client?.name,
       emailAddress: m.emailAddress,
       emailDomain: m.emailDomain,
       contactName: m.contactName,
@@ -908,5 +1151,188 @@ export default async function botRoutes(fastify) {
     } catch (err) {
       return reply.status(500).send({ error: `Failed to create Gmail draft: ${err.message}` });
     }
+  });
+
+  // ==================== TASK BULK IMPORT ====================
+
+  // POST /tasks/bulk — bulk create tasks from agent backlog
+  fastify.post('/tasks/bulk', { preHandler: requireBotAuth }, async (request, reply) => {
+    const { tasks } = request.body || {};
+    if (!Array.isArray(tasks) || tasks.length === 0) {
+      return reply.status(400).send({ error: 'tasks array is required' });
+    }
+
+    const { prisma } = fastify;
+
+    // Get Cameron's user ID
+    const cameron = await prisma.user.findFirst({ where: { email: 'cameron@ashbi.ca' } });
+    if (!cameron) return reply.status(500).send({ error: 'Cameron user not found' });
+
+    // Get or create Internal Ops project
+    let internalOpsProject = await prisma.project.findFirst({ where: { name: 'Internal Ops' } });
+    if (!internalOpsProject) {
+      // Find or create an internal client
+      let ashbiClient = await prisma.client.findFirst({ where: { name: 'Ashbi Design' } });
+      if (!ashbiClient) {
+        ashbiClient = await prisma.client.create({ data: { name: 'Ashbi Design', status: 'ACTIVE' } });
+      }
+      internalOpsProject = await prisma.project.create({
+        data: {
+          name: 'Internal Ops',
+          description: 'Internal operations, automation, and agent tasks',
+          clientId: ashbiClient.id,
+          status: 'ACTIVE',
+        }
+      });
+    }
+
+    const { sendTaskHITLEmail } = await import('../utils/hitl-email.service.js');
+    const created = [];
+
+    for (const taskDef of tasks) {
+      try {
+        const projectId = taskDef.projectId || internalOpsProject.id;
+
+        // Build tags array — add agent tag if present
+        const tags = Array.isArray(taskDef.tags) ? [...taskDef.tags] : [];
+        if (taskDef.assigneeAgent && !tags.includes(`agent:${taskDef.assigneeAgent}`)) {
+          tags.push(`agent:${taskDef.assigneeAgent}`);
+        }
+
+        // If requiresHITL, force category to WAITING_US
+        const category = taskDef.requiresHITL ? 'WAITING_US' : (taskDef.category || 'UPCOMING');
+
+        const task = await prisma.task.create({
+          data: {
+            title: taskDef.title,
+            description: taskDef.description || null,
+            priority: taskDef.priority || 'NORMAL',
+            projectId,
+            tags: JSON.stringify(tags),
+            category,
+            status: 'PENDING',
+            dueDate: taskDef.dueDate ? new Date(taskDef.dueDate) : null,
+          }
+        });
+
+        // Create notification for Cameron
+        const notification = await prisma.notification.create({
+          data: {
+            type: 'TASK_CREATED',
+            title: task.title,
+            message: `Task created: ${task.title}`,
+            userId: cameron.id,
+            data: JSON.stringify({ type: 'TASK', refId: task.id, requiresHITL: taskDef.requiresHITL }),
+          }
+        });
+
+        // Fire HITL email if required
+        if (taskDef.requiresHITL) {
+          const project = await prisma.project.findUnique({ where: { id: projectId } });
+          const hitlNotif = await prisma.notification.create({
+            data: {
+              type: 'HITL_REQUIRED',
+              title: `HITL: ${task.title}`,
+              message: `Human input required for task: ${task.title}`,
+              userId: cameron.id,
+              data: JSON.stringify({ type: 'TASK', refId: task.id, assigneeAgent: taskDef.assigneeAgent }),
+            }
+          });
+          sendTaskHITLEmail({
+            notificationId: hitlNotif.id,
+            task,
+            project,
+            context: taskDef.description || `Agent ${taskDef.assigneeAgent || 'system'} needs your input on this task.`,
+            urgency: taskDef.priority || 'NORMAL',
+            replyInstructions: 'Reply with your instructions or approval.',
+            assigneeAgent: taskDef.assigneeAgent || 'agent',
+          }).catch(err => fastify.log.error('HITL email error:', err.message));
+        }
+
+        created.push({ id: task.id, title: task.title, projectId: task.projectId });
+      } catch (err) {
+        fastify.log.error('Failed to create task:', taskDef.title, err.message);
+      }
+    }
+
+    return reply.status(201).send({ created: created.length, tasks: created });
+  });
+
+  // ==================== HITL NOTIFY ====================
+
+  // POST /hitl/notify — explicit HITL notification from any agent
+  fastify.post('/hitl/notify', { preHandler: requireBotAuth }, async (request, reply) => {
+    const { type, refId, subject, context, urgency = 'NORMAL', replyInstructions } = request.body || {};
+    if (!type || !subject || !context) {
+      return reply.status(400).send({ error: 'type, subject, and context are required' });
+    }
+
+    const { prisma } = fastify;
+    const cameron = await prisma.user.findFirst({ where: { email: 'cameron@ashbi.ca' } });
+    if (!cameron) return reply.status(500).send({ error: 'Cameron user not found' });
+
+    // Create HITL notification
+    const notification = await prisma.notification.create({
+      data: {
+        type: 'HITL_REQUIRED',
+        title: subject,
+        message: context.substring(0, 500),
+        userId: cameron.id,
+        data: JSON.stringify({ type, refId: refId || null, urgency }),
+      }
+    });
+
+    const { sendTaskHITLEmail, sendApprovalHITLEmail, sendMailgunEmail } = await import('../utils/hitl-email.service.js');
+
+    let emailResult = { ok: false };
+
+    if (type === 'TASK' && refId) {
+      const task = await prisma.task.findUnique({ where: { id: refId } });
+      if (task) {
+        const project = await prisma.project.findUnique({ where: { id: task.projectId } });
+        emailResult = await sendTaskHITLEmail({
+          notificationId: notification.id,
+          task,
+          project,
+          context,
+          urgency,
+          replyInstructions,
+        });
+      }
+    } else if (type === 'APPROVAL' && refId) {
+      const approval = await prisma.approval.findUnique({ where: { id: refId } });
+      if (approval) {
+        emailResult = await sendApprovalHITLEmail({
+          notificationId: notification.id,
+          approval,
+        });
+      }
+    } else {
+      // CUSTOM or PROJECT — send generic email
+      const replyTo = `reply+${notification.id}@${process.env.MAILGUN_DOMAIN || 'ashbi.ca'}`;
+      const urgencyPrefix = urgency === 'CRITICAL' ? '🔴 [CRITICAL] ' : urgency === 'HIGH' ? '🟠 [ACTION NEEDED] ' : '';
+      emailResult = await sendMailgunEmail({
+        to: 'cameron@ashbi.ca',
+        replyTo,
+        subject: `${urgencyPrefix}${subject} — Ashbi Hub`,
+        html: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+          <h2>🔔 ${subject}</h2>
+          <p><strong>Type:</strong> ${type}${refId ? ` | <strong>Ref:</strong> ${refId}` : ''}</p>
+          <p><strong>Urgency:</strong> ${urgency}</p>
+          <div style="background:#f5f5f5;padding:16px;border-radius:6px;margin:16px 0">
+            <p>${context}</p>
+          </div>
+          ${replyInstructions ? `<p><strong>Instructions:</strong> ${replyInstructions}</p>` : ''}
+          <hr>
+          <p style="color:#888;font-size:12px">Reply to this email to respond into Hub. · <a href="https://hub.ashbi.ca">hub.ashbi.ca</a></p>
+        </div>`,
+      });
+    }
+
+    return {
+      notificationId: notification.id,
+      emailSent: emailResult.ok,
+      emailError: emailResult.ok ? undefined : emailResult.error,
+    };
   });
 }

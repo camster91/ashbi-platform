@@ -1,122 +1,171 @@
-// Client Portal Routes (read-only access for logged-in clients)
+// Client Portal Routes — passwordless magic-link auth + invoice viewer
 
 import { prisma } from '../index.js';
+import { generateInvoicePdf } from '../utils/generate-invoice-pdf.js';
+import { createSigner, createVerifier } from 'fast-jwt';
 
-export default async function clientPortalRoutes(fastify) {
-  // Get client's own projects (for client portal)
-  fastify.get('/client/projects', {
-    onRequest: [fastify.authenticate]
-  }, async (request) => {
-    if (request.user.role !== 'CLIENT') {
-      return request.reply.status(403).send({ error: 'Not authorized' });
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
+const PORTAL_BASE = process.env.HUB_URL || 'https://hub.ashbi.ca';
+
+const signToken = createSigner({ key: JWT_SECRET, expiresIn: 3600000 }); // 1 hour
+const verifyToken = createVerifier({ key: JWT_SECRET });
+
+// ── Mailgun helper (no-op if not configured) ────────────────────────────────
+async function sendMagicLinkEmail(toEmail, toName, magicLink) {
+  const MAILGUN_API_KEY = process.env.MAILGUN_API_KEY;
+  const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN;
+  if (!MAILGUN_API_KEY || !MAILGUN_DOMAIN) {
+    console.log('[client-portal] Mailgun not configured — magic link:', magicLink);
+    return;
+  }
+
+  const body = new URLSearchParams();
+  body.append('from', `Ashbi Design <noreply@${MAILGUN_DOMAIN}>`);
+  body.append('to', `${toName} <${toEmail}>`);
+  body.append('subject', 'Your Ashbi Design Client Portal Link');
+  body.append('html', `
+    <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#0f172a;color:#f1f5f9;padding:40px;border-radius:12px;">
+      <h2 style="color:#3b82f6;margin-top:0;">Ashbi Design — Client Portal</h2>
+      <p>Hi ${toName},</p>
+      <p>Click the button below to access your invoices. This link expires in <strong>1 hour</strong>.</p>
+      <a href="${magicLink}" style="display:inline-block;margin:24px 0;padding:14px 28px;background:#3b82f6;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">
+        Access My Portal
+      </a>
+      <p style="font-size:12px;color:#94a3b8;">If you didn't request this, you can safely ignore it.<br>Link: ${magicLink}</p>
+    </div>
+  `);
+
+  const auth = Buffer.from(`api:${MAILGUN_API_KEY}`).toString('base64');
+  const res = await fetch(`https://api.mailgun.net/v3/${MAILGUN_DOMAIN}/messages`, {
+    method: 'POST',
+    headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString()
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    console.error('[client-portal] Mailgun error:', res.status, text);
+  }
+}
+
+// ── CLIENT JWT middleware ────────────────────────────────────────────────────
+async function clientAuth(request, reply) {
+  try {
+    const rawToken =
+      request.query?.token ||
+      (request.headers.authorization?.startsWith('Bearer ')
+        ? request.headers.authorization.slice(7)
+        : null);
+
+    if (!rawToken) {
+      return reply.status(401).send({ error: 'Missing token' });
     }
 
-    const projects = await prisma.project.findMany({
-      where: { clientId: request.user.clientId },
+    const payload = verifyToken(rawToken);
+
+    if (payload.role !== 'CLIENT') {
+      return reply.status(403).send({ error: 'Not authorized' });
+    }
+
+    request.clientUser = payload; // { contactId, clientId, role }
+  } catch (err) {
+    return reply.status(401).send({ error: 'Invalid or expired token' });
+  }
+}
+
+// ── Routes ───────────────────────────────────────────────────────────────────
+export default async function clientPortalRoutes(fastify) {
+
+  // POST /api/client-portal/request-access
+  fastify.post('/client-portal/request-access', async (request, reply) => {
+    const { email } = request.body || {};
+    if (!email) {
+      return reply.status(400).send({ error: 'Email required' });
+    }
+
+    // Find contact by email
+    const contact = await prisma.contact.findFirst({
+      where: { email: email.toLowerCase().trim() },
+      include: { client: true }
+    });
+
+    if (!contact) {
+      // Don't reveal whether email exists — still return sent: true
+      return { sent: true };
+    }
+
+    const token = await signToken({ contactId: contact.id, clientId: contact.clientId, role: 'CLIENT' });
+
+    const magicLink = `${PORTAL_BASE}/client-portal?token=${token}`;
+
+    await sendMagicLinkEmail(contact.email, contact.name, magicLink);
+
+    return { sent: true };
+  });
+
+  // GET /api/client-portal/me
+  fastify.get('/client-portal/me', { preHandler: clientAuth }, async (request, reply) => {
+    const { contactId, clientId } = request.clientUser;
+
+    const [contact, client] = await Promise.all([
+      prisma.contact.findUnique({ where: { id: contactId }, select: { name: true, email: true } }),
+      prisma.client.findUnique({ where: { id: clientId }, select: { name: true, contactPerson: true } })
+    ]);
+
+    if (!contact || !client) {
+      return reply.status(404).send({ error: 'Not found' });
+    }
+
+    return { client, contact };
+  });
+
+  // GET /api/client-portal/invoices
+  fastify.get('/client-portal/invoices', { preHandler: clientAuth }, async (request, reply) => {
+    const { clientId } = request.clientUser;
+
+    const invoices = await prisma.invoice.findMany({
+      where: { clientId },
       select: {
         id: true,
-        name: true,
+        invoiceNumber: true,
         status: true,
-        progress: true,
-        description: true,
-        createdAt: true,
-        updatedAt: true,
-        client: { select: { name: true } }
+        total: true,
+        currency: true,
+        issueDate: true,
+        dueDate: true,
+        paidAt: true,
+        stripePaymentLink: true,
+        title: true,
+        notes: true
       },
-      orderBy: { updatedAt: 'desc' }
+      orderBy: { issueDate: 'desc' }
     });
 
-    return projects;
+    return invoices;
   });
 
-  // Get single project (client view - read-only)
-  fastify.get('/client/projects/:id', {
-    onRequest: [fastify.authenticate]
-  }, async (request) => {
-    if (request.user.role !== 'CLIENT') {
-      return request.reply.status(403).send({ error: 'Not authorized' });
-    }
-
+  // GET /api/client-portal/invoices/:id/pdf
+  fastify.get('/client-portal/invoices/:id/pdf', { preHandler: clientAuth }, async (request, reply) => {
+    const { clientId } = request.clientUser;
     const { id } = request.params;
 
-    const project = await prisma.project.findFirst({
-      where: {
-        id,
-        clientId: request.user.clientId
-      },
+    const invoice = await prisma.invoice.findFirst({
+      where: { id, clientId },
       include: {
-        client: { select: { name: true, id: true } },
-        threads: {
-          take: 3,
-          orderBy: { lastActivityAt: 'desc' },
-          include: {
-            messages: {
-              take: 1,
-              orderBy: { createdAt: 'desc' }
-            }
-          }
-        }
+        client: true,
+        lineItems: true,
+        payments: true
       }
     });
 
-    if (!project) {
-      return request.reply.status(404).send({ error: 'Project not found' });
+    if (!invoice) {
+      return reply.status(404).send({ error: 'Invoice not found' });
     }
 
-    // Extract message data for frontend
-    const messages = project.threads.flatMap(t => 
-      t.messages.map(m => ({
-        id: m.id,
-        sender: 'Team',
-        body: m.content || m.body,
-        createdAt: m.createdAt
-      }))
-    ).slice(0, 3);
+    const pdfBuffer = await generateInvoicePdf(invoice);
 
-    return {
-      id: project.id,
-      name: project.name,
-      status: project.status,
-      progress: project.progress,
-      description: project.description,
-      createdAt: project.createdAt,
-      updatedAt: project.updatedAt,
-      client: project.client,
-      manager: project.manager || 'N/A',
-      teamSize: project.team?.length || 1,
-      threadId: project.threads[0]?.id,
-      messages
-    };
-  });
-
-  // Get thread (client view - read-only)
-  fastify.get('/client/threads/:id', {
-    onRequest: [fastify.authenticate]
-  }, async (request) => {
-    if (request.user.role !== 'CLIENT') {
-      return request.reply.status(403).send({ error: 'Not authorized' });
-    }
-
-    const { id } = request.params;
-
-    const thread = await prisma.thread.findFirst({
-      where: {
-        id,
-        project: {
-          clientId: request.user.clientId
-        }
-      },
-      include: {
-        messages: {
-          orderBy: { createdAt: 'asc' }
-        }
-      }
-    });
-
-    if (!thread) {
-      return request.reply.status(404).send({ error: 'Thread not found' });
-    }
-
-    return thread;
+    reply
+      .header('Content-Type', 'application/pdf')
+      .header('Content-Disposition', `attachment; filename="invoice-${invoice.invoiceNumber}.pdf"`)
+      .send(pdfBuffer);
   });
 }

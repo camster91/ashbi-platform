@@ -1,5 +1,6 @@
 // Invoice routes — full CRUD + send + PDF + payments + templates
 import { createPaymentLink, handleWebhook } from '../services/stripe.service.js';
+import { generateInvoicePdf } from '../utils/generate-invoice-pdf.js';
 
 const HST_RATE = 13; // Ontario HST
 
@@ -377,22 +378,39 @@ export default async function invoiceRoutes(fastify) {
     return { ...flagOverdue(updated), emailSent: !!primaryContact?.email };
   });
 
-  // ─── POST /:id/pdf — generate PDF (stub, returns HTML) ─────────────────────
-  fastify.post('/:id/pdf', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  // ─── GET /:id/pdf — generate and download PDF ──────────────────────────────
+  fastify.get('/:id/pdf', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     const invoice = await fastify.prisma.invoice.findUnique({
       where: { id: request.params.id },
       include: {
-        client: true,
+        client: {
+          include: {
+            contacts: { where: { isPrimary: true }, take: 1 }
+          }
+        },
         createdBy: { select: { id: true, name: true } },
         lineItems: { orderBy: { position: 'asc' } },
-        payments: true,
+        payments: { orderBy: { paidAt: 'desc' } },
       }
     });
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
 
-    const html = generateInvoiceHTML(invoice);
-    reply.header('Content-Type', 'text/html');
-    return reply.send(html);
+    try {
+      const pdfBuffer = await generateInvoicePdf(invoice);
+      const filename = `${invoice.invoiceNumber}.pdf`;
+      reply.header('Content-Type', 'application/pdf');
+      reply.header('Content-Disposition', `attachment; filename="${filename}"`);
+      reply.header('Content-Length', pdfBuffer.length);
+      return reply.send(pdfBuffer);
+    } catch (err) {
+      fastify.log.error({ err }, 'PDF generation failed');
+      return reply.status(500).send({ error: 'PDF generation failed' });
+    }
+  });
+
+  // ─── POST /:id/pdf — legacy stub, redirect to GET ──────────────────────────
+  fastify.post('/:id/pdf', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    return reply.redirect(301, `/api/invoices/${request.params.id}/pdf`);
   });
 
   // ─── POST /:id/mark-paid — mark as paid ────────────────────────────────────
@@ -423,6 +441,39 @@ export default async function invoiceRoutes(fastify) {
     ]);
 
     return updated;
+  });
+
+  // ─── POST /:id/payment-link — generate or return Stripe payment link ───────
+  fastify.post('/:id/payment-link', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const invoice = await fastify.prisma.invoice.findUnique({
+      where: { id: request.params.id },
+      include: { client: true, lineItems: true }
+    });
+    if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
+    if (invoice.status === 'VOID') return reply.status(400).send({ error: 'Cannot generate link for voided invoice' });
+
+    // Return existing link if already generated
+    if (invoice.stripePaymentLink) {
+      return { paymentLinkUrl: invoice.stripePaymentLink };
+    }
+
+    try {
+      const result = await createPaymentLink(invoice);
+      if (!result) return reply.status(503).send({ error: 'Stripe not configured' });
+
+      const updated = await fastify.prisma.invoice.update({
+        where: { id: request.params.id },
+        data: {
+          stripePaymentLink: result.paymentLink,
+          stripePaymentIntentId: result.paymentIntentId,
+        }
+      });
+
+      return { paymentLinkUrl: updated.stripePaymentLink };
+    } catch (err) {
+      fastify.log.error({ err }, 'Failed to create Stripe payment link');
+      return reply.status(500).send({ error: 'Failed to create payment link', detail: err.message });
+    }
   });
 
   // ─── GET /:id/payments — payment history ───────────────────────────────────

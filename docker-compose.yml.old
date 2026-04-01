@@ -1,0 +1,60 @@
+services:
+  agency-hub:
+    image: node:18-bullseye-slim
+    container_name: agency-hub
+    working_dir: /app
+    command: node src/index.js
+    restart: unless-stopped
+    volumes:
+      - /var/www/agency-hub:/app
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+      - JWT_SECRET=ashbi-hub-secret-change-me
+      - ANTHROPIC_API_KEY=placeholder
+      - GEMINI_API_KEY=AIzaSyB-yRQUlDnf3IqdWAwpJxNxhQPYntxZjSE
+      - AI_PROVIDER=gemini
+      - AI_CREATIVE_PROVIDER=gemini
+      - WEBHOOK_SECRET=ashbi-webhook-secret
+      - DATABASE_URL=file:./dev.db
+      - REDIS_URL=redis://10.0.1.2:6379
+    networks:
+      - coolify
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.agency-hub.rule=Host(`hub.ashbi.ca`)"
+      - "traefik.http.routers.agency-hub.entrypoints=https"
+      - "traefik.http.routers.agency-hub.tls=true"
+      - "traefik.http.routers.agency-hub.tls.certresolver=letsencrypt"
+      - "traefik.http.services.agency-hub.loadbalancer.server.port=3002"
+      - "traefik.http.routers.agency-hub-http.rule=Host(`hub.ashbi.ca`)"
+      - "traefik.http.routers.agency-hub-http.entrypoints=http"
+      - "traefik.http.routers.agency-hub-http.middlewares=redirect-https@docker"
+      - "coolify.managed=true"
+
+  agency-hub-worker:
+    image: node:18-bullseye-slim
+    container_name: agency-hub-worker
+    working_dir: /app
+    command: node src/jobs/worker.js
+    restart: unless-stopped
+    volumes:
+      - /var/www/agency-hub:/app
+    environment:
+      - NODE_ENV=production
+      - JWT_SECRET=ashbi-hub-secret-change-me
+      - ANTHROPIC_API_KEY=placeholder
+      - GEMINI_API_KEY=AIzaSyB-yRQUlDnf3IqdWAwpJxNxhQPYntxZjSE
+      - AI_PROVIDER=gemini
+      - AI_CREATIVE_PROVIDER=gemini
+      - WEBHOOK_SECRET=ashbi-webhook-secret
+      - DATABASE_URL=file:./dev.db
+      - REDIS_URL=redis://10.0.1.2:6379
+    networks:
+      - coolify
+    depends_on:
+      - agency-hub
+
+networks:
+  coolify:
+    external: true

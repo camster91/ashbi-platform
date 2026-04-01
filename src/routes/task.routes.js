@@ -154,6 +154,7 @@ export default async function taskRoutes(fastify) {
     if (assigneeId !== undefined) data.assigneeId = assigneeId;
     if (blockedBy !== undefined) data.blockedBy = blockedBy;
 
+    const prevTask = await prisma.task.findUnique({ where: { id } });
     const task = await prisma.task.update({
       where: { id },
       data,
@@ -162,6 +163,30 @@ export default async function taskRoutes(fastify) {
         assignee: { select: { id: true, name: true } }
       }
     });
+
+    // HITL trigger: fire email when task becomes BLOCKED
+    if (data.status === 'BLOCKED' && prevTask?.status !== 'BLOCKED') {
+      import('../utils/hitl-email.service.js').then(async ({ sendBlockedHITLEmail }) => {
+        const cameron = await prisma.user.findFirst({ where: { email: 'cameron@ashbi.ca' } });
+        if (cameron) {
+          const hitlNotif = await prisma.notification.create({
+            data: {
+              type: 'HITL_REQUIRED',
+              title: `Blocked: ${task.title}`,
+              message: `Task blocked: ${task.blockedBy || 'No reason given'}`,
+              userId: cameron.id,
+              data: JSON.stringify({ type: 'TASK', refId: task.id }),
+            }
+          });
+          sendBlockedHITLEmail({
+            notificationId: hitlNotif.id,
+            task,
+            project: task.project,
+            blockedReason: task.blockedBy || data.blockedBy || 'No reason specified',
+          }).catch(console.error);
+        }
+      }).catch(console.error);
+    }
 
     return task;
   });

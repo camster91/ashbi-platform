@@ -1,6 +1,8 @@
 // Notification routes
 
 import { prisma } from '../index.js';
+import { sendWebhookNotification } from '../utils/webhook.js';
+import { sendPushToUser } from '../utils/web-push.js';
 
 export default async function notificationRoutes(fastify) {
   // Get user's notifications
@@ -129,6 +131,17 @@ export async function createNotification(fastify, { userId, type, title, message
       createdAt: notification.createdAt
     });
   }
+
+  // Fire webhook (non-blocking)
+  sendWebhookNotification(notification).catch(() => {});
+
+  // Send web push notification (non-blocking)
+  sendPushToUser(userId, {
+    title: title || 'Ashbi Hub',
+    body: message || '',
+    tag: `hub-${type}-${notification.id}`,
+    data: { url: data?.url || '/' }
+  }).catch(() => {});
 
   return notification;
 }
