@@ -82,7 +82,7 @@ export default function Login() {
           </div>
           
           <div className="text-sm text-primary-foreground/60">
-            © 2026 Agency Hub. All rights reserved.
+            © 2026 Ashbi Design. All rights reserved.
           </div>
         </div>
       </div>

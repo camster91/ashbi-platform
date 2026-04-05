@@ -7,7 +7,7 @@ const env = {
   isDev: process.env.NODE_ENV !== 'production',
 
   // CORS - supports multiple origins separated by commas
-  corsOrigins: (process.env.CORS_ORIGIN || 'https://ashbi-design.vercel.app,https://powderblue-leopard-537122.hostingersite.com')
+  corsOrigins: (process.env.CORS_ORIGIN || 'https://hub.ashbi.ca')
     .split(',')
     .map(origin => origin.trim())
     .filter(Boolean),

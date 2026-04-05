@@ -5,6 +5,7 @@ import compress from '@fastify/compress';
 import cors from '@fastify/cors';
 import cookie from '@fastify/cookie';
 import jwt from '@fastify/jwt';
+import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import multipart from '@fastify/multipart';
 import { Server as SocketIO } from 'socket.io';
@@ -120,6 +121,11 @@ await fastify.register(multipart, {
   limits: {
     fileSize: 50 * 1024 * 1024 // 50MB max file size
   }
+});
+
+// Rate limiting
+await fastify.register(rateLimit, {
+  global: false // only apply where explicitly configured
 });
 
 await fastify.register(jwt, {
@@ -249,6 +255,23 @@ if (!env.isDev) {
     reply.status(404).send({ error: 'Not found' });
   });
 }
+
+// Sanitize error responses in production
+fastify.setErrorHandler((error, request, reply) => {
+  const statusCode = error.statusCode || 500;
+
+  // In production, never leak internal error details
+  if (!env.isDev && statusCode >= 500) {
+    request.log.error(error);
+    return reply.status(500).send({ error: 'Internal server error' });
+  }
+
+  // Validation errors and client errors are safe to return
+  reply.status(statusCode).send({
+    error: error.message || 'An error occurred',
+    ...(error.code && { code: error.code })
+  });
+});
 
 // Health check
 fastify.get('/api/health', async () => {

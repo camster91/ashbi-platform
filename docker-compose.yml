@@ -1,6 +1,6 @@
 services:
   agency-hub:
-    image: node:18-bullseye-slim
+    image: node:20-bullseye-slim
     container_name: agency-hub
     working_dir: /app
     command: node src/index.js
@@ -22,21 +22,6 @@ services:
       - "traefik.http.routers.agency-hub-http.entrypoints=http"
       - "traefik.http.routers.agency-hub-http.middlewares=redirect-https@docker"
       - "coolify.managed=true"
-
-  agency-hub-worker:
-    image: node:18-bullseye-slim
-    container_name: agency-hub-worker
-    working_dir: /app
-    command: node src/jobs/worker.js
-    restart: unless-stopped
-    volumes:
-      - /var/www/agency-hub:/app
-    env_file:
-      - .env
-    networks:
-      - coolify
-    depends_on:
-      - agency-hub
 
 networks:
   coolify:

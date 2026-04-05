@@ -7,6 +7,20 @@ import { randomUUID } from 'crypto';
 
 const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
 
+const ALLOWED_EXTENSIONS = new Set([
+  '.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg',
+  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+  '.txt', '.csv', '.json', '.xml',
+  '.zip', '.gz', '.tar',
+  '.mp4', '.mov', '.mp3', '.wav'
+]);
+
+const BLOCKED_EXTENSIONS = new Set([
+  '.exe', '.bat', '.cmd', '.sh', '.ps1', '.msi', '.dll',
+  '.com', '.scr', '.pif', '.vbs', '.js', '.wsh', '.wsf',
+  '.htm', '.html', '.php', '.asp', '.aspx', '.jsp', '.cgi'
+]);
+
 // Ensure upload directory exists
 async function ensureUploadDir() {
   try {
@@ -56,8 +70,11 @@ export default async function attachmentRoutes(fastify) {
       return reply.status(400).send({ error: 'entityType and entityId are required' });
     }
 
-    // Generate unique filename
-    const ext = path.extname(data.filename);
+    // Validate file extension
+    const ext = path.extname(data.filename).toLowerCase();
+    if (BLOCKED_EXTENSIONS.has(ext)) {
+      return reply.status(400).send({ error: `File type ${ext} is not allowed` });
+    }
     const filename = `${randomUUID()}${ext}`;
     const filepath = path.join(UPLOAD_DIR, filename);
 

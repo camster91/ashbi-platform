@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { CheckCircle, XCircle, Clock, Filter, Eye, ChevronRight, Mail, FileText, Send, DollarSign, Megaphone, Code } from 'lucide-react';
+import DOMPurify from 'dompurify';
 import { api } from '../lib/api';
 
 const TYPE_ICONS = {
@@ -44,7 +45,7 @@ function ContentPreview({ content, type }) {
         {parsed.subject && <p><span className="font-medium text-gray-500">Subject:</span> {parsed.subject}</p>}
         {parsed.body && (
           <div className="mt-3 p-3 bg-gray-50 rounded border border-gray-200 max-h-64 overflow-y-auto prose prose-sm">
-            <div dangerouslySetInnerHTML={{ __html: parsed.body }} />
+            <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(parsed.body) }} />
           </div>
         )}
       </div>
@@ -53,7 +54,7 @@ function ContentPreview({ content, type }) {
   if (typeof parsed === 'string') {
     return (
       <div className="p-3 bg-gray-50 rounded border border-gray-200 max-h-64 overflow-y-auto prose prose-sm text-sm">
-        <div dangerouslySetInnerHTML={{ __html: parsed }} />
+        <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(parsed) }} />
       </div>
     );
   }

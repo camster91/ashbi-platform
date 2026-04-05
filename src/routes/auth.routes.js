@@ -2,21 +2,46 @@
 
 import { prisma } from '../index.js';
 import crypto from 'crypto';
-import mailgun from 'mailgun.js';
+import bcrypt from 'bcrypt';
+import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 
-// Simple password hashing (use bcrypt in production)
-function hashPassword(password) {
-  return crypto.createHash('sha256').update(password).digest('hex');
+const BCRYPT_ROUNDS = 12;
+
+async function hashPassword(password) {
+  return bcrypt.hash(password, BCRYPT_ROUNDS);
 }
 
-function verifyPassword(password, hash) {
-  return hashPassword(password) === hash;
+async function verifyPassword(password, hash) {
+  // Support legacy SHA-256 hashes (auto-upgrade on next login)
+  if (!hash.startsWith('$2')) {
+    const sha256 = crypto.createHash('sha256').update(password).digest('hex');
+    return sha256 === hash;
+  }
+  return bcrypt.compare(password, hash);
+}
+
+async function upgradeHashIfNeeded(userId, password, currentHash) {
+  if (!currentHash.startsWith('$2')) {
+    const newHash = await hashPassword(password);
+    await prisma.user.update({ where: { id: userId }, data: { password: newHash } });
+  }
 }
 
 export default async function authRoutes(fastify) {
+  const authRateLimit = {
+    config: {
+      rateLimit: {
+        max: 10,
+        timeWindow: '15 minutes',
+        keyGenerator: (req) => req.ip
+      }
+    }
+  };
+
   // Login
   fastify.post('/login', {
+    ...authRateLimit,
     schema: {
       body: {
         type: 'object',
@@ -34,13 +59,16 @@ export default async function authRoutes(fastify) {
       where: { email }
     });
 
-    if (!user || !verifyPassword(password, user.password)) {
+    if (!user || !(await verifyPassword(password, user.password))) {
       return reply.status(401).send({ error: 'Invalid credentials' });
     }
 
     if (!user.isActive) {
       return reply.status(401).send({ error: 'Account is disabled' });
     }
+
+    // Auto-upgrade legacy SHA-256 hash to bcrypt
+    await upgradeHashIfNeeded(user.id, password, user.password);
 
     const token = fastify.jwt.sign({
       id: user.id,
@@ -99,7 +127,7 @@ export default async function authRoutes(fastify) {
   });
 
   // Register (admin only, or first user)
-  fastify.post('/register', async (request, reply) => {
+  fastify.post('/register', { ...authRateLimit }, async (request, reply) => {
     const { email, password, name, role = 'TEAM' } = request.body;
 
     // Check if any users exist
@@ -132,7 +160,7 @@ export default async function authRoutes(fastify) {
     const user = await prisma.user.create({
       data: {
         email,
-        password: hashPassword(password),
+        password: await hashPassword(password),
         name,
         role: userRole
       },
@@ -157,13 +185,13 @@ export default async function authRoutes(fastify) {
       where: { id: request.user.id }
     });
 
-    if (!verifyPassword(currentPassword, user.password)) {
+    if (!(await verifyPassword(currentPassword, user.password))) {
       return reply.status(400).send({ error: 'Current password is incorrect' });
     }
 
     await prisma.user.update({
       where: { id: request.user.id },
-      data: { password: hashPassword(newPassword) }
+      data: { password: await hashPassword(newPassword) }
     });
 
     return { success: true };
@@ -214,7 +242,7 @@ export default async function authRoutes(fastify) {
     const user = await prisma.user.create({
       data: {
         email,
-        password: hashPassword(password),
+        password: await hashPassword(password),
         name: email.split('@')[0], // Use email prefix as default name
         role: 'CLIENT',
         clientId: invitation.clientId,
@@ -272,9 +300,12 @@ export default async function authRoutes(fastify) {
       return reply.status(401).send({ error: 'Invalid email or password' });
     }
 
-    if (!verifyPassword(password, user.password)) {
+    if (!(await verifyPassword(password, user.password))) {
       return reply.status(401).send({ error: 'Invalid email or password' });
     }
+
+    // Auto-upgrade legacy SHA-256 hash to bcrypt
+    await upgradeHashIfNeeded(user.id, password, user.password);
 
     if (!user.isActive) {
       return reply.status(401).send({ error: 'Account is inactive' });
@@ -306,7 +337,7 @@ export default async function authRoutes(fastify) {
   });
 
   // Forgot password
-  fastify.post('/forgot-password', async (request, reply) => {
+  fastify.post('/forgot-password', { ...authRateLimit }, async (request, reply) => {
     try {
       const { email } = request.body;
 
@@ -338,16 +369,16 @@ export default async function authRoutes(fastify) {
 
       // Send reset email via Mailgun
       const resetLink = `${process.env.HUB_URL || 'https://hub.ashbi.ca'}/reset-password?token=${resetToken}`;
-      
+
       try {
         if (process.env.MAILGUN_API_KEY && process.env.MAILGUN_DOMAIN) {
-          const mg = mailgun({
-            apiKey: process.env.MAILGUN_API_KEY,
-            domain: process.env.MAILGUN_DOMAIN,
-            httpClientConfig: { timeout: 10000 }
+          const mg = new Mailgun(FormData);
+          const client = mg.client({
+            username: 'api',
+            key: process.env.MAILGUN_API_KEY
           });
 
-          await mg.messages.create(process.env.MAILGUN_DOMAIN, {
+          await client.messages.create(process.env.MAILGUN_DOMAIN, {
             from: `noreply@${process.env.MAILGUN_DOMAIN}`,
             to: email,
             subject: 'Reset Your Password - Agency Hub',
@@ -402,7 +433,7 @@ export default async function authRoutes(fastify) {
       await prisma.user.update({
         where: { id: user.id },
         data: {
-          password: hashPassword(newPassword),
+          password: await hashPassword(newPassword),
           resetToken: null,
           resetTokenExpiresAt: null
         }
