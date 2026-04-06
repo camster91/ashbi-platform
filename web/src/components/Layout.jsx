@@ -46,8 +46,9 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { Download } from 'lucide-react';
+import { Download, Sun, Moon } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { useTheme } from '../hooks/useTheme';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
 import NotificationsDropdown from './NotificationsDropdown';
@@ -59,6 +60,7 @@ export default function Layout({ children }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { isDark, toggle: toggleTheme } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
@@ -407,6 +409,13 @@ export default function Layout({ children }) {
 
           {/* Right side actions */}
           <div className="flex items-center gap-2">
+            <button
+              onClick={toggleTheme}
+              className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors"
+              title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
             <NotificationsDropdown />
           </div>
         </header>

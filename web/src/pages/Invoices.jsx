@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Receipt, Plus, Send, DollarSign, Clock, CheckCircle, AlertTriangle,
   ExternalLink, CreditCard, FileText, Filter, Search, Download,
@@ -30,13 +30,18 @@ export default function Invoices() {
   const navigate = useNavigate();
   const isAdmin = user?.role === 'ADMIN';
 
+  // Support ?create=true&clientId=... from nav
+  const [searchParams] = useSearchParams();
+  const initCreate = searchParams.get('create') === 'true';
+  const initClientId = searchParams.get('clientId') || '';
+
   const [filterStatus, setFilterStatus] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [showCreate, setShowCreate] = useState(false);
+  const [showCreate, setShowCreate] = useState(initCreate);
   const [activeTab, setActiveTab] = useState('list'); // 'list' | 'collections'
 
   const [form, setForm] = useState({
-    clientId: '',
+    clientId: initClientId,
     projectId: '',
     title: '',
     notes: '',
