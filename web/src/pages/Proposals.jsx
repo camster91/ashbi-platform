@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   FileText,
   Plus,
@@ -30,9 +30,10 @@ const statusConfig = {
 
 export default function Proposals() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const queryClient = useQueryClient();
   const toast = useToast();
-  const [showCreate, setShowCreate] = useState(false);
+  const [showCreate, setShowCreate] = useState(searchParams.get('create') === 'true');
   const [showGenerator, setShowGenerator] = useState(false);
   const [filterStatus, setFilterStatus] = useState('');
 

@@ -14,6 +14,7 @@ import {
   Receipt,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { useToast } from '../hooks/useToast';
 import { Button, Card } from '../components/ui';
 
 function HoursBar({ percentUsed }) {
@@ -34,6 +35,7 @@ function HoursBar({ percentUsed }) {
 
 export default function Retainers() {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [showCreate, setShowCreate] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [logHoursFor, setLogHoursFor] = useState(null);
@@ -54,7 +56,9 @@ export default function Retainers() {
       queryClient.invalidateQueries({ queryKey: ['all-retainers'] });
       setShowCreate(false);
       setCreateForm({ clientId: '', tier: 'custom', hoursPerMonth: 20, monthlyAmountUsd: '', monthlyAmountCad: '' });
+      toast.success('Retainer plan created');
     },
+    onError: () => toast.error('Failed to create retainer plan'),
   });
 
   const updateMutation = useMutation({
@@ -62,7 +66,9 @@ export default function Retainers() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['all-retainers'] });
       setEditingId(null);
+      toast.success('Retainer updated');
     },
+    onError: () => toast.error('Failed to update retainer'),
   });
 
   const logHoursMutation = useMutation({
@@ -71,7 +77,9 @@ export default function Retainers() {
       queryClient.invalidateQueries({ queryKey: ['all-retainers'] });
       setLogHoursFor(null);
       setLogForm({ hours: '', description: '' });
+      toast.success('Hours logged');
     },
+    onError: () => toast.error('Failed to log hours'),
   });
 
   const generateInvoiceMutation = useMutation({
@@ -79,11 +87,9 @@ export default function Retainers() {
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['all-retainers'] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
-      alert(`Invoice created: ${result.invoice?.invoiceNumber}\nClick Invoices to view and send it.`);
+      toast.success('Invoice generated', `${result.invoice?.invoiceNumber} — go to Invoices to send it`);
     },
-    onError: (err) => {
-      alert(err.message || 'Failed to generate invoice');
-    },
+    onError: (err) => toast.error(err.message || 'Failed to generate invoice'),
   });
 
   const [createForm, setCreateForm] = useState({
