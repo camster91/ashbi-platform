@@ -21,6 +21,12 @@ import {
   LayoutTemplate,
   Copy,
   Mail,
+  BookOpen,
+  Pin,
+  PinOff,
+  Edit2,
+  Trash2,
+  Save,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import {
@@ -32,6 +38,7 @@ import {
   cn,
 } from '../lib/utils';
 import { useAuth } from '../hooks/useAuth';
+import { useToast } from '../hooks/useToast';
 import ProjectCommunications from '../components/project/ProjectCommunications';
 import ProjectContextCard from '../components/project/ProjectContext';
 
@@ -39,6 +46,7 @@ export default function Project() {
   const { id } = useParams();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const toast = useToast();
   const [showDraftModal, setShowDraftModal] = useState(false);
   const [showPasteModal, setShowPasteModal] = useState(false);
   const [draftNotes, setDraftNotes] = useState('');
@@ -61,7 +69,11 @@ export default function Project() {
 
   const refreshMutation = useMutation({
     mutationFn: () => api.refreshProjectPlan(id),
-    onSuccess: () => queryClient.invalidateQueries(['project', id]),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['project', id]);
+      toast.success('Project plan refreshed');
+    },
+    onError: () => toast.error('Failed to refresh plan'),
   });
 
   const draftUpdateMutation = useMutation({
@@ -75,17 +87,25 @@ export default function Project() {
       queryClient.invalidateQueries(['project', id]);
       setShowPasteModal(false);
       setPasteContent('');
+      toast.success('Message added to project');
     },
+    onError: () => toast.error('Failed to paste message'),
   });
 
   const createRevisionMutation = useMutation({
     mutationFn: (data) => api.createRevision(id, data),
-    onSuccess: () => queryClient.invalidateQueries(['revisions', id]),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['revisions', id]);
+      toast.success('Revision round created');
+    },
   });
 
   const approveRevisionMutation = useMutation({
     mutationFn: (revId) => api.approveRevision(revId),
-    onSuccess: () => queryClient.invalidateQueries(['revisions', id]),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['revisions', id]);
+      toast.success('Revision approved');
+    },
   });
 
   const { data: templates = [] } = useQuery({
@@ -302,6 +322,9 @@ export default function Project() {
           <ProjectContextCard projectId={id} />
         </div>
       </div>
+
+      {/* Notes & Docs */}
+      <ProjectNotes projectId={id} />
 
       {/* Draft Update Modal */}
       {showDraftModal && (
@@ -537,6 +560,269 @@ function RevisionRounds({ revisions, isAdmin, onCreateRound, onApprove, isCreati
               </li>
             ))
           )}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+const NOTE_TYPES = [
+  { value: 'NOTE', label: 'Note' },
+  { value: 'MEETING_NOTES', label: 'Meeting Notes' },
+  { value: 'WIKI', label: 'Wiki' },
+  { value: 'DOC', label: 'Document' },
+];
+
+const NOTE_TYPE_COLORS = {
+  NOTE: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  MEETING_NOTES: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  WIKI: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+  DOC: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+};
+
+function ProjectNotes({ projectId }) {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
+  const [form, setForm] = useState({ title: '', content: '', type: 'NOTE', tags: '' });
+  const [editForm, setEditForm] = useState({});
+
+  const { data: notes = [] } = useQuery({
+    queryKey: ['notes', projectId],
+    queryFn: () => api.getNotes(projectId),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (data) => api.createNote(projectId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notes', projectId] });
+      setShowForm(false);
+      setForm({ title: '', content: '', type: 'NOTE', tags: '' });
+      toast.success('Note created');
+    },
+    onError: () => toast.error('Failed to create note'),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }) => api.updateNote(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notes', projectId] });
+      setEditingId(null);
+      toast.success('Note updated');
+    },
+    onError: () => toast.error('Failed to update note'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => api.deleteNote(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notes', projectId] });
+      toast.success('Note deleted');
+    },
+    onError: () => toast.error('Failed to delete note'),
+  });
+
+  const pinMutation = useMutation({
+    mutationFn: (id) => api.pinNote(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notes', projectId] }),
+  });
+
+  const handleCreate = (e) => {
+    e.preventDefault();
+    createMutation.mutate({
+      title: form.title,
+      content: form.content,
+      type: form.type,
+      tags: form.tags ? form.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
+    });
+  };
+
+  const startEdit = (note) => {
+    setEditingId(note.id);
+    setEditForm({ title: note.title, content: note.content, type: note.type, tags: (note.tags || []).join(', ') });
+    setExpandedId(note.id);
+  };
+
+  const handleUpdate = (e) => {
+    e.preventDefault();
+    updateMutation.mutate({
+      id: editingId,
+      data: {
+        title: editForm.title,
+        content: editForm.content,
+        type: editForm.type,
+        tags: editForm.tags ? editForm.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
+      },
+    });
+  };
+
+  const pinned = notes.filter(n => n.isPinned);
+  const unpinned = notes.filter(n => !n.isPinned);
+  const sorted = [...pinned, ...unpinned];
+
+  return (
+    <div className="bg-card rounded-lg border border-border">
+      <div className="px-4 py-3 border-b flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <BookOpen className="w-4 h-4 text-accent" />
+          <h3 className="font-semibold">Notes & Docs</h3>
+          {notes.length > 0 && (
+            <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">{notes.length}</span>
+          )}
+        </div>
+        <button
+          onClick={() => setShowForm(!showForm)}
+          className="flex items-center gap-1 text-sm text-primary hover:text-primary/80 transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          New Note
+        </button>
+      </div>
+
+      {showForm && (
+        <div className="p-4 border-b bg-muted/20">
+          <form onSubmit={handleCreate} className="space-y-3">
+            <div className="flex gap-3">
+              <input
+                value={form.title}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
+                placeholder="Note title..."
+                className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm"
+                required
+              />
+              <select
+                value={form.type}
+                onChange={(e) => setForm({ ...form, type: e.target.value })}
+                className="px-3 py-2 rounded-lg border border-border bg-background text-sm"
+              >
+                {NOTE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+            </div>
+            <textarea
+              value={form.content}
+              onChange={(e) => setForm({ ...form, content: e.target.value })}
+              placeholder="Content... (supports Markdown)"
+              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm font-mono"
+              rows={5}
+            />
+            <div className="flex items-center gap-3">
+              <input
+                value={form.tags}
+                onChange={(e) => setForm({ ...form, tags: e.target.value })}
+                placeholder="Tags (comma separated)"
+                className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm"
+              />
+              <button type="submit" disabled={createMutation.isPending} className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity flex items-center gap-2">
+                <Save className="w-4 h-4" />
+                {createMutation.isPending ? 'Saving...' : 'Save'}
+              </button>
+              <button type="button" onClick={() => setShowForm(false)} className="px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-muted transition-colors">
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {sorted.length === 0 ? (
+        <div className="p-8 text-center text-muted-foreground text-sm">
+          <BookOpen className="w-8 h-8 mx-auto mb-2 opacity-40" />
+          No notes yet. Create one to document decisions, meeting notes, or guidelines.
+        </div>
+      ) : (
+        <ul className="divide-y divide-border">
+          {sorted.map(note => (
+            <li key={note.id} className="p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {note.isPinned && <Pin className="w-3 h-3 text-primary flex-shrink-0" />}
+                    <button
+                      onClick={() => setExpandedId(expandedId === note.id ? null : note.id)}
+                      className="text-sm font-medium text-foreground hover:text-primary transition-colors text-left"
+                    >
+                      {note.title}
+                    </button>
+                    <span className={cn('text-xs px-1.5 py-0.5 rounded-full', NOTE_TYPE_COLORS[note.type])}>
+                      {NOTE_TYPES.find(t => t.value === note.type)?.label || note.type}
+                    </span>
+                    {note.tags?.map(tag => (
+                      <span key={tag} className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">{tag}</span>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {note.author?.name} · {new Date(note.updatedAt).toLocaleDateString()}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button onClick={() => pinMutation.mutate(note.id)} className="p-1 text-muted-foreground hover:text-foreground rounded transition-colors" title={note.isPinned ? 'Unpin' : 'Pin'}>
+                    {note.isPinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
+                  </button>
+                  <button onClick={() => startEdit(note)} className="p-1 text-muted-foreground hover:text-foreground rounded transition-colors">
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => { if (confirm('Delete this note?')) deleteMutation.mutate(note.id); }}
+                    className="p-1 text-muted-foreground hover:text-destructive rounded transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              {expandedId === note.id && (
+                editingId === note.id ? (
+                  <form onSubmit={handleUpdate} className="mt-3 space-y-2">
+                    <div className="flex gap-2">
+                      <input
+                        value={editForm.title}
+                        onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                        className="flex-1 px-3 py-1.5 rounded-lg border border-border bg-background text-sm"
+                        required
+                      />
+                      <select
+                        value={editForm.type}
+                        onChange={(e) => setEditForm({ ...editForm, type: e.target.value })}
+                        className="px-3 py-1.5 rounded-lg border border-border bg-background text-sm"
+                      >
+                        {NOTE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                      </select>
+                    </div>
+                    <textarea
+                      value={editForm.content}
+                      onChange={(e) => setEditForm({ ...editForm, content: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm font-mono"
+                      rows={8}
+                    />
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={editForm.tags}
+                        onChange={(e) => setEditForm({ ...editForm, tags: e.target.value })}
+                        placeholder="Tags (comma separated)"
+                        className="flex-1 px-3 py-1.5 rounded-lg border border-border bg-background text-sm"
+                      />
+                      <button type="submit" disabled={updateMutation.isPending} className="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90">
+                        {updateMutation.isPending ? 'Saving...' : 'Save'}
+                      </button>
+                      <button type="button" onClick={() => setEditingId(null)} className="px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted rounded-lg">
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  note.content ? (
+                    <pre className="mt-3 text-sm text-foreground bg-muted/30 rounded-lg p-3 whitespace-pre-wrap font-sans leading-relaxed border border-border/50">
+                      {note.content}
+                    </pre>
+                  ) : (
+                    <p className="mt-3 text-sm text-muted-foreground italic">No content yet. Click edit to add.</p>
+                  )
+                )
+              )}
+            </li>
+          ))}
         </ul>
       )}
     </div>
