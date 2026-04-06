@@ -49,6 +49,10 @@ export const api = {
     request('/auth/logout', { method: 'POST' }),
   me: () =>
     request('/auth/me'),
+  updateProfile: (data) =>
+    request('/auth/me', { method: 'PUT', body: data }),
+  changePassword: (data) =>
+    request('/auth/change-password', { method: 'POST', body: data }),
 
   // Inbox
   getInbox: (params = {}) => {

@@ -338,12 +338,14 @@ export default function Layout({ children }) {
                 </p>
               </div>
               <div className="flex items-center gap-1">
-                <button
+                <Link
+                  to="/settings"
                   className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors"
                   title="Settings"
+                  onClick={() => setSidebarOpen(false)}
                 >
                   <Settings className="w-4 h-4" />
-                </button>
+                </Link>
                 <button
                   onClick={logout}
                   className="p-2 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10 transition-colors"

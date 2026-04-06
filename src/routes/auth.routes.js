@@ -175,6 +175,24 @@ export default async function authRoutes(fastify) {
     return reply.status(201).send(user);
   });
 
+  // Update profile (name, skills, capacity)
+  fastify.put('/me', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { name, skills, capacity } = request.body;
+    const data = {};
+    if (name !== undefined) data.name = name;
+    if (skills !== undefined) data.skills = Array.isArray(skills) ? skills : [];
+    if (capacity !== undefined) data.capacity = parseInt(capacity) || 40;
+
+    const user = await prisma.user.update({
+      where: { id: request.user.id },
+      data,
+      select: { id: true, email: true, name: true, role: true, skills: true, capacity: true }
+    });
+    return user;
+  });
+
   // Change password
   fastify.post('/change-password', {
     onRequest: [fastify.authenticate]
