@@ -143,6 +143,72 @@ export default async function clientPortalRoutes(fastify) {
     return invoices;
   });
 
+  // GET /api/client-portal/projects
+  fastify.get('/client-portal/projects', { preHandler: clientAuth }, async (request, reply) => {
+    const { clientId } = request.clientUser;
+
+    const projects = await prisma.project.findMany({
+      where: { clientId, status: { notIn: ['CANCELLED'] } },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        health: true,
+        aiSummary: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: { select: { tasks: true } }
+      },
+      orderBy: { updatedAt: 'desc' }
+    });
+
+    // Compute task completion % for each project
+    const withProgress = await Promise.all(projects.map(async (p) => {
+      const completedCount = await prisma.task.count({
+        where: { projectId: p.id, status: 'DONE' }
+      });
+      const totalCount = p._count.tasks;
+      return {
+        ...p,
+        completedTasks: completedCount,
+        totalTasks: totalCount,
+        progressPct: totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
+      };
+    }));
+
+    return withProgress;
+  });
+
+  // GET /api/client-portal/retainer
+  fastify.get('/client-portal/retainer', { preHandler: clientAuth }, async (request, reply) => {
+    const { clientId } = request.clientUser;
+
+    const retainer = await prisma.retainerPlan.findUnique({
+      where: { clientId }
+    });
+
+    if (!retainer) return null;
+
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const hoursUsed = retainer.hoursUsedThisMonth || 0;
+    const hoursPerMonth = retainer.hoursPerMonth || 0;
+    const hoursRemaining = hoursPerMonth - hoursUsed;
+    const percentUsed = hoursPerMonth > 0 ? Math.round((hoursUsed / hoursPerMonth) * 100) : 0;
+
+    return {
+      tier: retainer.tier,
+      hoursPerMonth,
+      hoursUsed,
+      hoursRemaining,
+      percentUsed,
+      monthlyAmountUsd: retainer.monthlyAmountUsd,
+      monthlyAmountCad: retainer.monthlyAmountCad,
+      retainerStatus: retainer.retainerStatus,
+      cycleStartDate: startOfMonth.toISOString()
+    };
+  });
+
   // GET /api/client-portal/invoices/:id/pdf
   fastify.get('/client-portal/invoices/:id/pdf', { preHandler: clientAuth }, async (request, reply) => {
     const { clientId } = request.clientUser;
