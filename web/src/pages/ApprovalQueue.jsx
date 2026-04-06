@@ -1,35 +1,30 @@
 import { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, Clock, Filter, Eye, ChevronRight, Mail, FileText, Send, DollarSign, Megaphone, Code } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Eye, ChevronRight, Mail, FileText, Send, DollarSign, Megaphone, Code } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { api } from '../lib/api';
+import { Button } from '../components/ui';
 
 const TYPE_ICONS = {
-  EMAIL: Mail,
-  PROPOSAL: FileText,
-  CONTRACT: FileText,
-  DEPLOY: Code,
-  POST: Megaphone,
-  INVOICE: DollarSign,
-  COPY: FileText,
-  OTHER: FileText,
+  EMAIL: Mail, PROPOSAL: FileText, CONTRACT: FileText,
+  DEPLOY: Code, POST: Megaphone, INVOICE: DollarSign, COPY: FileText, OTHER: FileText,
 };
 
 const TYPE_COLORS = {
-  EMAIL: 'bg-blue-100 text-blue-700',
-  PROPOSAL: 'bg-purple-100 text-purple-700',
-  CONTRACT: 'bg-orange-100 text-orange-700',
-  DEPLOY: 'bg-red-100 text-red-700',
-  POST: 'bg-green-100 text-green-700',
-  INVOICE: 'bg-yellow-100 text-yellow-700',
-  COPY: 'bg-pink-100 text-pink-700',
-  OTHER: 'bg-gray-100 text-gray-700',
+  EMAIL: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  PROPOSAL: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+  CONTRACT: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+  DEPLOY: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  POST: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  INVOICE: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+  COPY: 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400',
+  OTHER: 'bg-muted text-muted-foreground',
 };
 
 const STATUS_COLORS = {
-  PENDING: 'text-yellow-600 bg-yellow-50 border-yellow-200',
-  APPROVED: 'text-green-600 bg-green-50 border-green-200',
-  REJECTED: 'text-red-600 bg-red-50 border-red-200',
-  EXPIRED: 'text-gray-500 bg-gray-50 border-gray-200',
+  PENDING: 'text-yellow-600 bg-yellow-50 border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-800',
+  APPROVED: 'text-green-600 bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800',
+  REJECTED: 'text-red-600 bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800',
+  EXPIRED: 'text-muted-foreground bg-muted border-border',
 };
 
 function parseContent(raw) {
@@ -41,10 +36,10 @@ function ContentPreview({ content, type }) {
   if (type === 'EMAIL' && typeof parsed === 'object') {
     return (
       <div className="space-y-2 text-sm">
-        {parsed.to && <p><span className="font-medium text-gray-500">To:</span> {parsed.to}</p>}
-        {parsed.subject && <p><span className="font-medium text-gray-500">Subject:</span> {parsed.subject}</p>}
+        {parsed.to && <p><span className="font-medium text-muted-foreground">To:</span> <span className="text-foreground">{parsed.to}</span></p>}
+        {parsed.subject && <p><span className="font-medium text-muted-foreground">Subject:</span> <span className="text-foreground">{parsed.subject}</span></p>}
         {parsed.body && (
-          <div className="mt-3 p-3 bg-gray-50 rounded border border-gray-200 max-h-64 overflow-y-auto prose prose-sm">
+          <div className="mt-3 p-3 bg-muted rounded border border-border max-h-64 overflow-y-auto prose prose-sm dark:prose-invert text-sm">
             <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(parsed.body) }} />
           </div>
         )}
@@ -53,13 +48,13 @@ function ContentPreview({ content, type }) {
   }
   if (typeof parsed === 'string') {
     return (
-      <div className="p-3 bg-gray-50 rounded border border-gray-200 max-h-64 overflow-y-auto prose prose-sm text-sm">
+      <div className="p-3 bg-muted rounded border border-border max-h-64 overflow-y-auto prose prose-sm dark:prose-invert text-sm">
         <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(parsed) }} />
       </div>
     );
   }
   return (
-    <pre className="p-3 bg-gray-50 rounded border border-gray-200 max-h-64 overflow-y-auto text-xs text-gray-700 whitespace-pre-wrap">
+    <pre className="p-3 bg-muted rounded border border-border max-h-64 overflow-y-auto text-xs text-foreground whitespace-pre-wrap">
       {JSON.stringify(parsed, null, 2)}
     </pre>
   );
@@ -67,7 +62,6 @@ function ContentPreview({ content, type }) {
 
 export default function ApprovalQueue() {
   const [approvals, setApprovals] = useState([]);
-  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedId, setSelectedId] = useState(null);
@@ -90,7 +84,6 @@ export default function ApprovalQueue() {
       if (filterType) filters.type = filterType;
       const data = await api.getApprovals(filters);
       setApprovals(data.approvals || []);
-      setTotal(data.total || 0);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -121,27 +114,24 @@ export default function ApprovalQueue() {
   };
 
   const selected = approvals.find(a => a.id === selectedId);
-  const pending = approvals.filter(a => a.status === 'PENDING');
+  const pendingCount = approvals.filter(a => a.status === 'PENDING').length;
 
   return (
-    <div className="flex h-full bg-[#f8f4ef]">
+    <div className="flex h-[calc(100vh-8rem)] -mx-4 sm:-mx-6">
       {/* List panel */}
-      <div className="w-96 flex-shrink-0 border-r border-gray-200 bg-white flex flex-col">
-        <div className="p-4 border-b border-gray-200">
+      <div className="w-80 flex-shrink-0 border-r border-border bg-card flex flex-col">
+        <div className="p-4 border-b border-border">
           <div className="flex items-center justify-between mb-3">
-            <h1 className="text-lg font-bold text-[#1a2744]">Approvals</h1>
-            {filterStatus === 'PENDING' && pending.length > 0 && (
-              <span className="px-2 py-0.5 bg-red-500 text-white text-xs font-bold rounded-full">
-                {pending.length}
-              </span>
+            <h1 className="text-lg font-bold text-foreground">Approvals</h1>
+            {filterStatus === 'PENDING' && pendingCount > 0 && (
+              <span className="px-2 py-0.5 bg-red-500 text-white text-xs font-bold rounded-full">{pendingCount}</span>
             )}
           </div>
-          {/* Filters */}
           <div className="flex gap-2">
             <select
               value={filterStatus}
               onChange={e => { setFilterStatus(e.target.value); setSelectedId(null); }}
-              className="flex-1 px-2 py-1.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:outline-none focus:ring-1 focus:ring-[#c9a84c]"
+              className="flex-1 px-2 py-1.5 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
             >
               <option value="">All statuses</option>
               <option value="PENDING">Pending</option>
@@ -151,7 +141,7 @@ export default function ApprovalQueue() {
             <select
               value={filterType}
               onChange={e => { setFilterType(e.target.value); setSelectedId(null); }}
-              className="flex-1 px-2 py-1.5 text-sm border border-gray-200 rounded-lg bg-gray-50 focus:outline-none focus:ring-1 focus:ring-[#c9a84c]"
+              className="flex-1 px-2 py-1.5 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
             >
               <option value="">All types</option>
               {['EMAIL','POST','PROPOSAL','CONTRACT','INVOICE','DEPLOY','COPY','OTHER'].map(t => (
@@ -161,43 +151,39 @@ export default function ApprovalQueue() {
           </div>
         </div>
 
-        {/* Approval list */}
         <div className="flex-1 overflow-y-auto">
           {loading ? (
-            <div className="p-8 text-center text-gray-400 text-sm">Loading...</div>
+            <div className="p-8 text-center text-muted-foreground text-sm">Loading...</div>
           ) : approvals.length === 0 ? (
-            <div className="p-8 text-center text-gray-400">
+            <div className="p-8 text-center text-muted-foreground">
               <CheckCircle className="mx-auto mb-2 opacity-30" size={32} />
               <p className="text-sm">No approvals{filterStatus ? ` (${filterStatus.toLowerCase()})` : ''}</p>
             </div>
           ) : (
             approvals.map(a => {
-              const Icon = TYPE_ICONS[a.type] || FileText;
               const isSelected = selectedId === a.id;
               return (
                 <button
                   key={a.id}
                   onClick={() => setSelectedId(isSelected ? null : a.id)}
-                  className={`w-full text-left px-4 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors ${isSelected ? 'bg-blue-50 border-l-2 border-l-[#c9a84c]' : ''}`}
+                  className={`w-full text-left px-4 py-3 border-b border-border hover:bg-muted/50 transition-colors ${
+                    isSelected ? 'bg-primary/5 border-l-2 border-l-primary' : ''
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className={`flex-shrink-0 px-1.5 py-0.5 rounded text-xs font-medium ${TYPE_COLORS[a.type] || TYPE_COLORS.OTHER}`}>
                         {a.type}
                       </span>
-                      {a.status === 'PENDING' && (
-                        <span className="flex-shrink-0 w-2 h-2 bg-yellow-400 rounded-full" />
-                      )}
+                      {a.status === 'PENDING' && <span className="flex-shrink-0 w-2 h-2 bg-yellow-400 rounded-full" />}
                     </div>
-                    <ChevronRight size={14} className="flex-shrink-0 text-gray-400 mt-0.5" />
+                    <ChevronRight size={14} className="flex-shrink-0 text-muted-foreground mt-0.5" />
                   </div>
-                  <p className="mt-1.5 text-sm font-medium text-[#1a2744] truncate">{a.title}</p>
-                  {a.clientName && (
-                    <p className="text-xs text-gray-500 truncate">{a.clientName}</p>
-                  )}
+                  <p className="mt-1.5 text-sm font-medium text-foreground truncate">{a.title}</p>
+                  {a.clientName && <p className="text-xs text-muted-foreground truncate">{a.clientName}</p>}
                   <div className="flex items-center justify-between mt-1.5">
-                    <span className="text-xs text-gray-400">{a.createdBy}</span>
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-muted-foreground">{a.createdBy}</span>
+                    <span className="text-xs text-muted-foreground">
                       {new Date(a.createdAt).toLocaleString('en-CA', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
@@ -209,83 +195,85 @@ export default function ApprovalQueue() {
       </div>
 
       {/* Detail panel */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto bg-background">
         {!selected ? (
-          <div className="flex items-center justify-center h-full text-gray-400">
+          <div className="flex items-center justify-center h-full text-muted-foreground">
             <div className="text-center">
               <Eye size={40} className="mx-auto mb-3 opacity-20" />
               <p className="text-sm">Select an approval to review</p>
             </div>
           </div>
         ) : (
-          <div className="p-6 max-w-3xl">
+          <div className="p-6 max-w-3xl space-y-4">
             {error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-600 text-sm">{error}</div>
+              <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-red-600 text-sm">{error}</div>
             )}
+
             {/* Header */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-4">
+            <div className="bg-card rounded-xl border border-border p-5">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <div className="flex items-center gap-2 mb-2">
                     <span className={`px-2 py-0.5 rounded text-xs font-semibold ${TYPE_COLORS[selected.type] || TYPE_COLORS.OTHER}`}>
                       {selected.type}
                     </span>
-                    <span className={`px-2 py-0.5 rounded border text-xs font-semibold ${STATUS_COLORS[selected.status]}`}>
+                    <span className={`px-2 py-0.5 rounded border text-xs font-semibold ${STATUS_COLORS[selected.status] || STATUS_COLORS.EXPIRED}`}>
                       {selected.status}
                     </span>
                   </div>
-                  <h2 className="text-xl font-bold text-[#1a2744]">{selected.title}</h2>
-                  {selected.clientName && (
-                    <p className="text-sm text-gray-600 mt-0.5">Client: {selected.clientName}</p>
-                  )}
+                  <h2 className="text-xl font-bold text-foreground">{selected.title}</h2>
+                  {selected.clientName && <p className="text-sm text-muted-foreground mt-0.5">Client: {selected.clientName}</p>}
                 </div>
-                <div className="text-right text-xs text-gray-400 flex-shrink-0">
-                  <p>Created by <strong>{selected.createdBy}</strong></p>
+                <div className="text-right text-xs text-muted-foreground flex-shrink-0">
+                  <p>Created by <strong className="text-foreground">{selected.createdBy}</strong></p>
                   <p>{new Date(selected.createdAt).toLocaleString()}</p>
                 </div>
               </div>
               {selected.reviewNote && (
-                <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
+                <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded text-sm text-amber-800 dark:text-amber-300">
                   <strong>Note:</strong> {selected.reviewNote}
                 </div>
               )}
             </div>
 
             {/* Content */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-4">
-              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Content</h3>
+            <div className="bg-card rounded-xl border border-border p-5">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Content</h3>
               <ContentPreview content={selected.content} type={selected.type} />
             </div>
 
             {/* Metadata */}
             {selected.metadata && (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-4">
-                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Metadata</h3>
-                <pre className="text-xs text-gray-600 whitespace-pre-wrap">
+              <div className="bg-card rounded-xl border border-border p-5">
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Metadata</h3>
+                <pre className="text-xs text-muted-foreground whitespace-pre-wrap">
                   {JSON.stringify(parseContent(selected.metadata), null, 2)}
                 </pre>
               </div>
             )}
 
-            {/* Actions — only show for PENDING */}
+            {/* Actions */}
             {selected.status === 'PENDING' && (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Decision</h3>
+              <div className="bg-card rounded-xl border border-border p-5">
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Decision</h3>
                 <div className="flex gap-3">
-                  <button
+                  <Button
+                    className="flex-1"
                     onClick={() => handleApprove(selected.id)}
-                    disabled={actionLoading}
-                    className="flex-1 flex items-center justify-center gap-2 px-5 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 font-semibold"
+                    loading={actionLoading}
+                    leftIcon={<CheckCircle className="w-4 h-4" />}
                   >
-                    <CheckCircle size={18} /> Approve
-                  </button>
-                  <button
+                    Approve
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    variant="destructive"
                     onClick={() => setShowRejectModal(true)}
                     disabled={actionLoading}
-                    className="flex-1 flex items-center justify-center gap-2 px-5 py-3 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50 font-semibold"
+                    leftIcon={<XCircle className="w-4 h-4" />}
                   >
-                    <XCircle size={18} /> Reject
-                  </button>
+                    Reject
+                  </Button>
                 </div>
               </div>
             )}
@@ -295,24 +283,22 @@ export default function ApprovalQueue() {
 
       {/* Reject modal */}
       {showRejectModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-            <h3 className="text-lg font-bold text-[#1a2744] mb-4">Reject & Return</h3>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+          <div className="bg-card rounded-xl shadow-xl border border-border max-w-md w-full p-6">
+            <h3 className="text-lg font-bold text-foreground mb-4">Reject & Return</h3>
             <textarea
               value={rejectNote}
               onChange={e => setRejectNote(e.target.value)}
-              placeholder="Optional: feedback for the agent (e.g. 'Make tone warmer' or 'Wrong client name')"
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#c9a84c] outline-none mb-4 h-24 resize-none"
+              placeholder="Optional: feedback for the agent (e.g. 'Make tone warmer')"
+              className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-sm focus:ring-2 focus:ring-primary outline-none mb-4 h-24 resize-none"
             />
             <div className="flex gap-3">
-              <button onClick={() => { setShowRejectModal(false); setRejectNote(''); }}
-                className="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium">
+              <Button variant="outline" className="flex-1" onClick={() => { setShowRejectModal(false); setRejectNote(''); }}>
                 Cancel
-              </button>
-              <button onClick={() => selected && handleReject(selected.id)} disabled={actionLoading}
-                className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50 text-sm font-semibold">
+              </Button>
+              <Button variant="destructive" className="flex-1" onClick={() => selected && handleReject(selected.id)} loading={actionLoading}>
                 Reject
-              </button>
+              </Button>
             </div>
           </div>
         </div>
