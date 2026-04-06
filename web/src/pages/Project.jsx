@@ -217,7 +217,7 @@ export default function Project() {
 
       {/* AI Summary */}
       {project.aiSummary && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/50 rounded-lg p-4">
           <h3 className="font-medium flex items-center gap-2 mb-2">
             <Sparkles className="w-4 h-4 text-accent" />
             AI Summary

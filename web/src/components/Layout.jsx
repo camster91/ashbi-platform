@@ -45,6 +45,8 @@ import {
   Palette,
   TrendingUp,
   Heart,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Download, Sun, Moon } from 'lucide-react';
@@ -63,6 +65,9 @@ export default function Layout({ children }) {
   const { user, logout } = useAuth();
   const { isDark, toggle: toggleTheme } = useTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return localStorage.getItem('sidebar-collapsed') === 'true'; } catch { return false; }
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const { isInstallable, install } = useInstallPrompt();
@@ -205,6 +210,14 @@ export default function Layout({ children }) {
     }
   };
 
+  const toggleCollapse = () => {
+    setSidebarCollapsed(prev => {
+      const next = !prev;
+      localStorage.setItem('sidebar-collapsed', String(next));
+      return next;
+    });
+  };
+
   function renderNavItems(items) {
     return items.map((item) => {
       const isActive = item.exact
@@ -216,23 +229,31 @@ export default function Layout({ children }) {
           key={item.name}
           to={item.href}
           onClick={() => setSidebarOpen(false)}
+          title={sidebarCollapsed ? item.name : undefined}
           className={cn(
-            'flex items-center px-3 py-1.5 text-sm font-medium rounded-lg transition-all duration-150',
-            'group',
+            'flex items-center text-sm font-medium rounded-lg transition-all duration-150',
+            sidebarCollapsed ? 'px-2.5 py-2 justify-center' : 'px-3 py-1.5',
+            'group relative',
             isActive
               ? 'bg-primary text-primary-foreground shadow-sm'
               : 'text-muted-foreground hover:bg-muted hover:text-foreground'
           )}
         >
-          <item.icon className="w-4 h-4 mr-2.5 shrink-0" />
-          <span className="flex-1 truncate">{item.name}</span>
+          <item.icon className={cn('w-4 h-4 shrink-0', !sidebarCollapsed && 'mr-2.5')} />
+          {!sidebarCollapsed && <span className="flex-1 truncate">{item.name}</span>}
           {badge > 0 && (
-            <span className={cn(
-              'ml-auto px-1.5 py-0.5 text-[10px] font-semibold rounded-full min-w-[18px] text-center',
-              isActive ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-primary text-primary-foreground'
-            )}>
-              {badge > 99 ? '99+' : badge}
-            </span>
+            sidebarCollapsed ? (
+              <span className="absolute -top-1 -right-1 w-4 h-4 text-[9px] font-bold rounded-full bg-primary text-primary-foreground flex items-center justify-center">
+                {badge > 9 ? '9+' : badge}
+              </span>
+            ) : (
+              <span className={cn(
+                'ml-auto px-1.5 py-0.5 text-[10px] font-semibold rounded-full min-w-[18px] text-center',
+                isActive ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-primary text-primary-foreground'
+              )}>
+                {badge > 99 ? '99+' : badge}
+              </span>
+            )
           )}
         </Link>
       );
@@ -241,11 +262,15 @@ export default function Layout({ children }) {
 
   function renderCollapsibleSection(key, label, items) {
     const isExpanded = expandedSections[key];
-    // Auto-expand if any child is active
     const hasActiveChild = items.some(item =>
       item.exact ? location.pathname === item.href : location.pathname.startsWith(item.href) && item.href !== '/'
     );
     const show = isExpanded || hasActiveChild;
+
+    if (sidebarCollapsed) {
+      // In collapsed mode: show all items as icons (no section headers)
+      return <div className="space-y-0.5">{renderNavItems(items)}</div>;
+    }
 
     return (
       <div className="space-y-0.5">
@@ -274,31 +299,52 @@ export default function Layout({ children }) {
       {/* Sidebar */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 w-72 bg-card border-r border-border',
-          'transform transition-transform duration-300 ease-out',
+          'fixed inset-y-0 left-0 z-50 bg-card border-r border-border',
+          'transform transition-all duration-300 ease-out',
           'lg:translate-x-0',
+          sidebarCollapsed ? 'w-[60px]' : 'w-72',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="flex items-center h-16 px-6 border-b border-border">
-            <Link to="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+          <div className={cn('flex items-center h-16 border-b border-border', sidebarCollapsed ? 'px-2 justify-center' : 'px-4')}>
+            <Link to="/" className={cn('flex items-center gap-2', sidebarCollapsed && 'justify-center')}>
+              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shrink-0">
                 <Sparkles className="w-5 h-5 text-primary-foreground" />
               </div>
-              <h1 className="text-xl font-heading font-bold text-foreground">Ashbi</h1>
+              {!sidebarCollapsed && <h1 className="text-xl font-heading font-bold text-foreground">Ashbi</h1>}
             </Link>
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="ml-auto p-2 text-muted-foreground hover:text-foreground lg:hidden"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            {!sidebarCollapsed && (
+              <>
+                <button
+                  onClick={toggleCollapse}
+                  className="ml-auto p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors hidden lg:flex"
+                  title="Collapse sidebar"
+                >
+                  <PanelLeftClose className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setSidebarOpen(false)}
+                  className="ml-auto p-2 text-muted-foreground hover:text-foreground lg:hidden"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </>
+            )}
+            {sidebarCollapsed && (
+              <button
+                onClick={toggleCollapse}
+                className="absolute bottom-20 left-1/2 -translate-x-1/2 p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors hidden lg:flex"
+                title="Expand sidebar"
+              >
+                <PanelLeftOpen className="w-4 h-4" />
+              </button>
+            )}
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-3 py-3 space-y-1 overflow-y-auto">
+          <nav className={cn('flex-1 py-3 space-y-1 overflow-y-auto', sidebarCollapsed ? 'px-1.5' : 'px-3')}>
             {/* Core — always visible */}
             <div className="space-y-0.5 pb-2">
               {renderNavItems(coreNav)}
@@ -314,58 +360,87 @@ export default function Layout({ children }) {
 
             {/* Quick action */}
             <div className="pt-2 border-t border-border">
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full justify-start text-xs"
-                leftIcon={<Plus className="w-3.5 h-3.5" />}
-                onClick={() => navigate('/projects?create=true')}
-              >
-                New Project
-              </Button>
+              {sidebarCollapsed ? (
+                <button
+                  onClick={() => navigate('/projects?create=true')}
+                  className="w-full flex items-center justify-center p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+                  title="New Project"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start text-xs"
+                  leftIcon={<Plus className="w-3.5 h-3.5" />}
+                  onClick={() => navigate('/projects?create=true')}
+                >
+                  New Project
+                </Button>
+              )}
             </div>
           </nav>
 
           {/* User section */}
-          <div className="p-4 border-t border-border">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <span className="text-sm font-semibold text-primary">
-                  {user?.name?.charAt(0)?.toUpperCase()}
-                </span>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground truncate">
-                  {user?.name}
-                </p>
-                <p className="text-xs text-muted-foreground truncate">
-                  {isAdmin ? 'Administrator' : 'Team Member'}
-                </p>
-              </div>
-              <div className="flex items-center gap-1">
-                <Link
-                  to="/settings"
-                  className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors"
-                  title="Settings"
-                  onClick={() => setSidebarOpen(false)}
-                >
-                  <Settings className="w-4 h-4" />
+          <div className={cn('border-t border-border', sidebarCollapsed ? 'p-2' : 'p-4')}>
+            {sidebarCollapsed ? (
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                  <span className="text-xs font-semibold text-primary">
+                    {user?.name?.charAt(0)?.toUpperCase()}
+                  </span>
+                </div>
+                <Link to="/settings" className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors" title="Settings" onClick={() => setSidebarOpen(false)}>
+                  <Settings className="w-3.5 h-3.5" />
                 </Link>
-                <button
-                  onClick={logout}
-                  className="p-2 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10 transition-colors"
-                  title="Logout"
-                >
-                  <LogOut className="w-4 h-4" />
+                <button onClick={logout} className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10 transition-colors" title="Logout">
+                  <LogOut className="w-3.5 h-3.5" />
                 </button>
               </div>
-            </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <span className="text-sm font-semibold text-primary">
+                    {user?.name?.charAt(0)?.toUpperCase()}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {user?.name}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {isAdmin ? 'Administrator' : 'Team Member'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Link
+                    to="/settings"
+                    className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors"
+                    title="Settings"
+                    onClick={() => setSidebarOpen(false)}
+                  >
+                    <Settings className="w-4 h-4" />
+                  </Link>
+                  <button
+                    onClick={logout}
+                    className="p-2 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10 transition-colors"
+                    title="Logout"
+                  >
+                    <LogOut className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 lg:ml-72 min-h-screen flex flex-col w-full">
+      <main className={cn(
+        'flex-1 min-h-screen flex flex-col w-full transition-all duration-300',
+        sidebarCollapsed ? 'lg:ml-[60px]' : 'lg:ml-72'
+      )}>
         {/* Top bar */}
         <header className="sticky top-0 z-30 flex items-center h-16 px-4 bg-card/80 backdrop-blur-md border-b border-border lg:px-6 flex-shrink-0">
           <button
@@ -424,10 +499,10 @@ export default function Layout({ children }) {
 
         {/* Install App Banner */}
         {isInstallable && !installDismissed && (
-          <div className="mx-4 mt-4 lg:mx-6 flex items-center justify-between rounded-lg bg-blue-600/10 border border-blue-500/20 px-4 py-3">
+          <div className="mx-4 mt-4 lg:mx-6 flex items-center justify-between rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/50 px-4 py-3">
             <div className="flex items-center gap-3">
-              <Download className="h-5 w-5 text-blue-400" />
-              <span className="text-sm text-blue-200">Install Ashbi Hub as an app for quick access</span>
+              <Download className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              <span className="text-sm text-blue-700 dark:text-blue-300">Install Ashbi Hub as an app for quick access</span>
             </div>
             <div className="flex items-center gap-2">
               <Button
@@ -436,13 +511,12 @@ export default function Layout({ children }) {
                   await install();
                   if (permission !== 'granted') subscribe();
                 }}
-                className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1"
               >
                 Install
               </Button>
               <button
                 onClick={() => setInstallDismissed(true)}
-                className="text-slate-400 hover:text-slate-300 text-xs"
+                className="text-muted-foreground hover:text-foreground text-xs"
               >
                 Dismiss
               </button>
@@ -452,13 +526,12 @@ export default function Layout({ children }) {
 
         {/* Push notification prompt */}
         {user && permission === 'default' && !subscribed && (
-          <div className="mx-4 mt-2 lg:mx-6 flex items-center justify-between rounded-lg bg-slate-800/50 border border-slate-700/50 px-4 py-2">
-            <span className="text-sm text-slate-300">Enable push notifications to stay updated</span>
+          <div className="mx-4 mt-2 lg:mx-6 flex items-center justify-between rounded-lg bg-muted border border-border px-4 py-2">
+            <span className="text-sm text-muted-foreground">Enable push notifications to stay updated</span>
             <Button
               size="sm"
               variant="ghost"
               onClick={subscribe}
-              className="text-blue-400 hover:text-blue-300 text-xs"
             >
               Enable
             </Button>
