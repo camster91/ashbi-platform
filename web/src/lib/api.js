@@ -513,6 +513,14 @@ export const api = {
   addTaskComment: (taskId, content) =>
     request(`/tasks/${taskId}/comments`, { method: 'POST', body: { content } }),
 
+  // ===== GANTT & DEPENDENCIES =====
+  getGanttTasks: (projectId) => {
+    const params = projectId ? `?projectId=${projectId}` : '';
+    return request(`/tasks/gantt${params}`);
+  },
+  setTaskDependency: (taskId, dependsOnId) =>
+    request(`/tasks/${taskId}/dependency`, { method: 'PUT', body: { dependsOnId } }),
+
   // ===== CREDENTIALS VAULT =====
   getCredentials: (params = {}) => {
     const query = new URLSearchParams(params).toString();
@@ -880,6 +888,58 @@ export const api = {
     request('/gmail/draft-reply', { method: 'POST', body: { hubThreadId } }),
   gmailSyncNow: () =>
     request('/gmail/sync-now', { method: 'POST' }),
+
+  // ===== INTAKE FORMS =====
+  getIntakeForms: () =>
+    request('/intake-forms'),
+  getIntakeForm: (id) =>
+    request(`/intake-forms/${id}`),
+  createIntakeForm: (data) =>
+    request('/intake-forms', { method: 'POST', body: data }),
+  updateIntakeForm: (id, data) =>
+    request(`/intake-forms/${id}`, { method: 'PUT', body: data }),
+  deleteIntakeForm: (id) =>
+    request(`/intake-forms/${id}`, { method: 'DELETE' }),
+  // Public portal form
+  getPortalForm: (token) =>
+    request(`/portal/form/${token}`),
+  submitPortalForm: (token, data) =>
+    request(`/portal/form/${token}`, { method: 'POST', body: data }),
+
+  // ===== BRAND SETTINGS =====
+  getBrandSettings: () =>
+    request('/brand'),
+  updateBrandSettings: (data) =>
+    request('/brand', { method: 'PUT', body: data }),
+  uploadBrandLogo: async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const url = `${API_BASE}/brand/logo`;
+    const res = await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      body: formData,
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new ApiError(data.error || 'Upload failed', res.status, data);
+    }
+    return res.json();
+  },
+
+  // ===== FINANCIAL REPORTS =====
+  getReportsPnl: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/reports/pnl${query ? `?${query}` : ''}`);
+  },
+  getClientProfitability: () =>
+    request('/reports/client-profitability'),
+  getTeamUtilization: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/reports/team-utilization${query ? `?${query}` : ''}`);
+  },
+  getPipeline: () =>
+    request('/reports/pipeline'),
 };
 
 export default api;

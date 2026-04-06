@@ -138,9 +138,11 @@ export default async function taskRoutes(fastify) {
       priority,
       category,
       estimatedTime,
+      startDate,
       dueDate,
       assigneeId,
-      blockedBy
+      blockedBy,
+      dependsOnId
     } = request.body;
 
     const data = {};
@@ -150,9 +152,11 @@ export default async function taskRoutes(fastify) {
     if (priority) data.priority = priority;
     if (category) data.category = category;
     if (estimatedTime !== undefined) data.estimatedTime = estimatedTime;
+    if (startDate !== undefined) data.startDate = startDate ? new Date(startDate) : null;
     if (dueDate !== undefined) data.dueDate = dueDate ? new Date(dueDate) : null;
     if (assigneeId !== undefined) data.assigneeId = assigneeId;
     if (blockedBy !== undefined) data.blockedBy = blockedBy;
+    if (dependsOnId !== undefined) data.dependsOnId = dependsOnId || null;
 
     const prevTask = await prisma.task.findUnique({ where: { id } });
     const task = await prisma.task.update({
@@ -501,6 +505,118 @@ export default async function taskRoutes(fastify) {
         projectName: t.project?.name
       }))
     };
+  });
+
+  // ===== TASK DEPENDENCY =====
+
+  // Set task dependency
+  fastify.put('/:id/dependency', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const { dependsOnId } = request.body;
+
+    // Prevent self-dependency
+    if (dependsOnId === id) {
+      return reply.status(400).send({ error: 'A task cannot depend on itself' });
+    }
+
+    // Prevent circular dependencies
+    if (dependsOnId) {
+      let currentId = dependsOnId;
+      const visited = new Set([id]);
+      while (currentId) {
+        if (visited.has(currentId)) {
+          return reply.status(400).send({ error: 'Circular dependency detected' });
+        }
+        visited.add(currentId);
+        const dep = await prisma.task.findUnique({
+          where: { id: currentId },
+          select: { dependsOnId: true }
+        });
+        currentId = dep?.dependsOnId || null;
+      }
+    }
+
+    const task = await prisma.task.update({
+      where: { id },
+      data: { dependsOnId: dependsOnId || null },
+      include: {
+        project: { select: { id: true, name: true } },
+        assignee: { select: { id: true, name: true } },
+        dependsOn: { select: { id: true, title: true, status: true } }
+      }
+    });
+
+    return task;
+  });
+
+  // ===== GANTT VIEW =====
+
+  // Get tasks formatted for Gantt view
+  fastify.get('/gantt', {
+    onRequest: [fastify.authenticate]
+  }, async (request) => {
+    const { projectId } = request.query;
+
+    const where = {};
+    if (projectId) where.projectId = projectId;
+
+    // Team members see only their tasks
+    if (request.user.role !== 'ADMIN') {
+      where.assigneeId = request.user.id;
+    }
+
+    const tasks = await prisma.task.findMany({
+      where,
+      include: {
+        project: { select: { id: true, name: true } },
+        assignee: { select: { id: true, name: true } },
+        milestone: { select: { id: true, name: true, color: true, dueDate: true } },
+        dependsOn: { select: { id: true, title: true, status: true } },
+        blockedTasks: { select: { id: true, title: true } }
+      },
+      orderBy: [
+        { milestoneId: 'asc' },
+        { startDate: 'asc' },
+        { dueDate: 'asc' },
+        { priority: 'asc' }
+      ]
+    });
+
+    // Compute effective status (BLOCKED if dependsOn is not completed)
+    const ganttTasks = tasks.map(task => {
+      let effectiveStatus = task.status;
+      if (
+        task.dependsOn &&
+        task.dependsOn.status !== 'COMPLETED' &&
+        task.dependsOn.status !== 'DONE' &&
+        task.status !== 'COMPLETED' &&
+        task.status !== 'DONE'
+      ) {
+        effectiveStatus = 'BLOCKED';
+      }
+
+      return {
+        id: task.id,
+        title: task.title,
+        status: task.status,
+        effectiveStatus,
+        priority: task.priority,
+        startDate: task.startDate,
+        dueDate: task.dueDate,
+        completedAt: task.completedAt,
+        estimatedTime: task.estimatedTime,
+        project: task.project,
+        assignee: task.assignee,
+        milestone: task.milestone,
+        dependsOnId: task.dependsOnId,
+        dependsOn: task.dependsOn,
+        blockedTasks: task.blockedTasks
+      };
+    });
+
+    return { tasks: ganttTasks };
   });
 
   // ===== KANBAN BOARD ROUTES =====

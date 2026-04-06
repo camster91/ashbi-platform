@@ -68,6 +68,12 @@ import Expenses from './pages/Expenses';
 import Automations from './pages/Automations';
 import ProjectPlanner from './pages/ProjectPlanner';
 import ProjectTemplates from './pages/ProjectTemplates';
+import GanttView from './pages/GanttView';
+import Reports from './pages/Reports';
+import Pipeline from './pages/Pipeline';
+import IntakeForms from './pages/IntakeForms';
+import BrandSettings from './pages/BrandSettings';
+import PortalIntakeForm from './pages/PortalIntakeForm';
 
 function PrivateRoute({ children }) {
   const { user, isLoading } = useAuth();
@@ -110,6 +116,7 @@ function AppRoutes() {
       <Route path="/portal/contract/:token" element={<PortalContract />} />
       <Route path="/portal/invoice/:token" element={<PortalInvoice />} />
       <Route path="/portal/book" element={<PortalBooking />} />
+      <Route path="/portal/form/:token" element={<PortalIntakeForm />} />
       <Route path="/client-portal" element={<ClientPortal />} />
       {/* Client Portal Routes */}
       <Route path="/client/login" element={<ClientLogin />} />
@@ -173,6 +180,11 @@ function AppRoutes() {
                 <Route path="/expenses" element={<Expenses />} />
                 <Route path="/project-planner" element={<ProjectPlanner />} />
                 <Route path="/project-templates" element={<ProjectTemplates />} />
+                <Route path="/gantt" element={<GanttView />} />
+                <Route path="/reports" element={<AdminRoute><Reports /></AdminRoute>} />
+                <Route path="/pipeline" element={<Pipeline />} />
+                <Route path="/intake-forms" element={<IntakeForms />} />
+                <Route path="/admin/brand" element={<AdminRoute><BrandSettings /></AdminRoute>} />
               </Routes>
             </Layout>
           </PrivateRoute>

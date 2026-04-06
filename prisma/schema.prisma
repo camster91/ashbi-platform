@@ -97,6 +97,7 @@ model Client {
   expenses          Expense[]
   revenueSnapshots  RevenueSnapshot[]
   emailMappings     ClientEmailMapping[]
+  intakeForms       IntakeForm[]
 
   @@map("clients")
 }
@@ -188,6 +189,7 @@ model Task {
   parentId       String?   // For subpages/subtasks
   
   estimatedTime  String?
+  startDate      DateTime?
   dueDate        DateTime?
   completedAt    DateTime?
   sourceThreadId String?
@@ -197,6 +199,7 @@ model Task {
   projectId      String
   assigneeId     String?
   milestoneId    String?
+  dependsOnId    String?   // Task dependency — this task depends on another
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
@@ -206,16 +209,21 @@ model Task {
   milestone   Milestone?    @relation("MilestoneTasks", fields: [milestoneId], references: [id])
   comments    TaskComment[]
   timeEntries TimeEntry[]
-  
+
   // Self-relation for subpages/subtasks
   parent      Task?         @relation("TaskSubpages", fields: [parentId], references: [id], onDelete: Cascade)
   subpages    Task[]        @relation("TaskSubpages")
+
+  // Task dependency relation
+  dependsOn    Task?        @relation("TaskDependency", fields: [dependsOnId], references: [id])
+  blockedTasks Task[]       @relation("TaskDependency")
 
   @@index([parentId])
   @@index([projectId, parentId])
   @@index([status])
   @@index([priority])
   @@index([dueDate])
+  @@index([dependsOnId])
   @@map("tasks")
 }
 
@@ -1359,4 +1367,57 @@ model ProjectTemplate {
   updatedAt   DateTime @updatedAt
 
   @@map("project_templates")
+}
+
+// ==================== INTAKE FORMS ====================
+
+model IntakeForm {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  fields      String   @default("[]") // JSON: [{label, type, required, options?}]
+  isActive    Boolean  @default(true)
+  viewToken   String   @unique @default(cuid())
+  clientId    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  client      Client?  @relation(fields: [clientId], references: [id])
+  responses   IntakeFormResponse[]
+
+  @@map("intake_forms")
+}
+
+model IntakeFormResponse {
+  id              String   @id @default(cuid())
+  formId          String
+  answers         String   @default("{}") // JSON: {fieldLabel: value}
+  respondentName  String?
+  respondentEmail String?
+  clientId        String?
+  createdAt       DateTime @default(now())
+
+  form            IntakeForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  @@map("intake_form_responses")
+}
+
+// ==================== BRAND SETTINGS ====================
+
+model BrandSettings {
+  id             String  @id @default(cuid())
+  companyName    String  @default("Ashbi Design")
+  logoUrl        String?
+  primaryColor   String  @default("#c9a84c")
+  accentColor    String  @default("#1e293b")
+  address        String?
+  phone          String?
+  email          String?
+  website        String?
+  taxId          String? // HST number
+  invoiceFooter  String? // Custom footer text for invoices
+  proposalFooter String?
+  contractHeader String?
+
+  @@map("brand_settings")
 }

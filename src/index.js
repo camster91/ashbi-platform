@@ -98,6 +98,8 @@ import commandCenterRoutes from './routes/integrations.command-center.routes.js'
 import expenseRoutes from './routes/expense.routes.js';
 import { startRecurringInvoicesJob } from './jobs/recurring-invoices.js';
 import automationRoutes from './routes/automation.routes.js';
+import intakeFormRoutes from './routes/intake-form.routes.js';
+import brandRoutes from './routes/brand.routes.js';
 import { startOverdueChecker } from './services/automation.service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -256,6 +258,8 @@ await fastify.register(commandCenterRoutes, { prefix: '/api/command-center' });
 await fastify.register(pushRoutes, { prefix: '/api/push' });
 await fastify.register(expenseRoutes, { prefix: '/api/expenses' });
 await fastify.register(automationRoutes, { prefix: '/api/automations' });
+await fastify.register(intakeFormRoutes, { prefix: '/api/intake-forms' });
+await fastify.register(brandRoutes, { prefix: '/api/brand' });
 
 // Serve static frontend in production
 if (!env.isDev) {

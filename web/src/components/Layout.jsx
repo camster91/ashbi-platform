@@ -38,6 +38,11 @@ import {
   MessageSquare,
   Wallet,
   Zap,
+  GanttChartSquare,
+  PieChart,
+  Filter,
+  ClipboardList,
+  Palette,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Download } from 'lucide-react';
@@ -123,6 +128,7 @@ export default function Layout({ children }) {
 
   // Collapsible sections
   const financeNav = [
+    { name: 'Pipeline', href: '/pipeline', icon: Filter },
     { name: 'Proposals', href: '/proposals', icon: FileText },
     { name: 'Contracts', href: '/contracts', icon: ScrollText },
     { name: 'Expenses', href: '/expenses', icon: Wallet },
@@ -131,9 +137,11 @@ export default function Layout({ children }) {
 
   const projectToolsNav = [
     { name: 'AI Planner', href: '/project-planner', icon: Sparkles },
+    { name: 'Gantt Timeline', href: '/gantt', icon: GanttChartSquare },
     { name: 'Templates', href: '/project-templates', icon: FileText },
     { name: 'Activity', href: '/activity', icon: Activity },
     { name: 'Chat with Ash', href: '/chat', icon: MessageSquare },
+    { name: 'Intake Forms', href: '/intake-forms', icon: ClipboardList },
   ];
 
   const aiNav = [
@@ -158,9 +166,11 @@ export default function Layout({ children }) {
 
   const adminNav = isAdmin ? [
     { name: 'Team', href: '/team', icon: UserCog },
+    { name: 'Reports', href: '/reports', icon: PieChart },
     { name: 'Command Center', href: '/admin/command-center', icon: Activity },
     { name: 'Analytics', href: '/analytics', icon: BarChart3 },
     { name: 'Credentials', href: '/credentials', icon: KeyRound },
+    { name: 'Brand Settings', href: '/admin/brand', icon: Palette },
     { name: 'AI Context', href: '/admin/settings/ai-context', icon: Settings },
   ] : [
     { name: 'Analytics', href: '/analytics', icon: BarChart3 },

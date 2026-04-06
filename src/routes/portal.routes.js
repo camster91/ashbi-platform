@@ -403,6 +403,71 @@ export default async function portalRoutes(fastify) {
     }
   });
 
+  // ==================== INTAKE FORMS ====================
+
+  // Public: get form by viewToken
+  fastify.get('/form/:viewToken', async (request, reply) => {
+    const { viewToken } = request.params;
+
+    const form = await prisma.intakeForm.findUnique({
+      where: { viewToken },
+      include: {
+        client: { select: { name: true } },
+      },
+    });
+
+    if (!form) {
+      return reply.status(404).send({ error: 'Form not found' });
+    }
+
+    if (!form.isActive) {
+      return reply.status(410).send({ error: 'This form is no longer accepting responses' });
+    }
+
+    return {
+      id: form.id,
+      name: form.name,
+      description: form.description,
+      fields: JSON.parse(form.fields || '[]'),
+      clientName: form.client?.name,
+    };
+  });
+
+  // Public: submit response to form
+  fastify.post('/form/:viewToken', async (request, reply) => {
+    const { viewToken } = request.params;
+    const { answers, respondentName, respondentEmail } = request.body || {};
+
+    const form = await prisma.intakeForm.findUnique({ where: { viewToken } });
+
+    if (!form) {
+      return reply.status(404).send({ error: 'Form not found' });
+    }
+
+    if (!form.isActive) {
+      return reply.status(410).send({ error: 'This form is no longer accepting responses' });
+    }
+
+    if (!respondentName || !respondentEmail) {
+      return reply.status(400).send({ error: 'Name and email are required' });
+    }
+
+    const response = await prisma.intakeFormResponse.create({
+      data: {
+        formId: form.id,
+        answers: JSON.stringify(answers || {}),
+        respondentName,
+        respondentEmail,
+        clientId: form.clientId,
+      },
+    });
+
+    return {
+      success: true,
+      id: response.id,
+    };
+  });
+
   // ==================== PUBLIC BOOKING ====================
 
   // Get available time slots for a given date
