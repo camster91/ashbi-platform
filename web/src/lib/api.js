@@ -418,8 +418,10 @@ export const api = {
   // ===== AI PROVIDER =====
   getAIProvider: () =>
     request('/settings/ai-provider'),
-  setAIProvider: (provider) =>
-    request('/settings/ai-provider', { method: 'POST', body: { provider } }),
+  setAIProvider: (provider, model) =>
+    request('/settings/ai-provider', { method: 'POST', body: { provider, model } }),
+  getOllamaModels: () =>
+    request('/settings/ai-provider/ollama-models'),
 
   // ===== PROPOSALS =====
   getProposals: (params = {}) => {

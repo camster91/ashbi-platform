@@ -3,12 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   User,
   Lock,
-  Bell,
   Save,
   CheckCircle,
   Eye,
   EyeOff,
   Wrench,
+  Bot,
+  Zap,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
@@ -28,6 +29,113 @@ function Section({ icon: Icon, title, description, children }) {
       </div>
       {children}
     </Card>
+  );
+}
+
+const TAG_COLORS = {
+  vision:   'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+  tools:    'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  thinking: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  audio:    'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  cloud:    'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
+};
+
+function AIModelSection() {
+  const [saved, setSaved] = useState(false);
+
+  const { data: aiData, isLoading } = useQuery({
+    queryKey: ['ai-provider'],
+    queryFn: () => api.getAIProvider(),
+  });
+
+  const { data: modelData } = useQuery({
+    queryKey: ['ollama-models'],
+    queryFn: () => api.getOllamaModels(),
+  });
+
+  const [selectedModel, setSelectedModel] = useState('');
+
+  useEffect(() => {
+    if (aiData?.ollamaModel && !selectedModel) {
+      setSelectedModel(aiData.ollamaModel);
+    }
+  }, [aiData]);
+
+  const mutation = useMutation({
+    mutationFn: (model) => api.setAIProvider('ollama', model),
+    onSuccess: () => {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    },
+  });
+
+  const models = modelData?.models || aiData?.ollamaModels || {};
+
+  // Group models by family
+  const families = {};
+  Object.entries(models).forEach(([key, val]) => {
+    const family = val.family || 'Other';
+    if (!families[family]) families[family] = [];
+    families[family].push({ key, ...val });
+  });
+
+  return (
+    <Section icon={Bot} title="AI Model" description="Choose which Ollama model powers all AI features">
+      {isLoading ? (
+        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary" />
+      ) : (
+        <div className="space-y-5">
+          {Object.entries(families).map(([family, items]) => (
+            <div key={family}>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">{family}</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {items.map(({ key, label, tags = [] }) => (
+                  <button
+                    key={key}
+                    onClick={() => setSelectedModel(key)}
+                    className={`p-3 rounded-lg border text-left transition-all ${
+                      selectedModel === key
+                        ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                        : 'border-border hover:bg-muted/50'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-sm font-medium text-foreground">{label}</span>
+                      {selectedModel === key && <Zap className="w-3.5 h-3.5 text-primary" />}
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {tags.map(tag => (
+                        <span key={tag} className={`text-xs px-1.5 py-0.5 rounded font-medium ${TAG_COLORS[tag] || 'bg-muted text-muted-foreground'}`}>
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+          <div className="flex items-center gap-3 pt-1">
+            <Button
+              onClick={() => mutation.mutate(selectedModel)}
+              loading={mutation.isPending}
+              disabled={!selectedModel || selectedModel === aiData?.ollamaModel}
+              leftIcon={<Save className="w-4 h-4" />}
+            >
+              Apply Model
+            </Button>
+            {saved && (
+              <span className="text-sm text-green-600 flex items-center gap-1">
+                <CheckCircle className="w-4 h-4" /> Saved — restart may be needed
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Current: <span className="font-mono font-medium">{aiData?.ollamaModel || '—'}</span>
+          </p>
+        </div>
+      )}
+    </Section>
   );
 }
 
@@ -227,6 +335,9 @@ export default function Settings() {
           </div>
         </form>
       </Section>
+
+      {/* AI Model Picker — admin only */}
+      {isAdmin && <AIModelSection />}
 
       {/* Admin links */}
       {isAdmin && (
