@@ -3,6 +3,7 @@
 import { prisma } from '../index.js';
 import { safeParse } from '../utils/safeParse.js';
 import { createPaymentLink } from '../services/stripe.service.js';
+import { onProposalApproved, onContractSigned } from '../services/automation.service.js';
 import crypto from 'crypto';
 
 export default async function portalRoutes(fastify) {
@@ -167,6 +168,11 @@ export default async function portalRoutes(fastify) {
       }
     });
 
+    // Trigger automation: proposal approved
+    onProposalApproved(proposal.id).catch(err =>
+      console.error('[Portal] Automation trigger failed:', err)
+    );
+
     return { success: true, status: 'APPROVED', approvedAt: updated.approvedAt };
   });
 
@@ -275,6 +281,11 @@ export default async function portalRoutes(fastify) {
         signedAt: now
       }
     });
+
+    // Trigger automation: contract signed
+    onContractSigned(contract.id).catch(err =>
+      console.error('[Portal] Automation trigger failed:', err)
+    );
 
     return {
       success: true,

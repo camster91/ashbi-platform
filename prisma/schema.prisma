@@ -1345,5 +1345,18 @@ model AshChatMessage {
 
   @@map("ash_chat_messages")
 }
-_chat_messages")
+
+// ==================== PROJECT TEMPLATES ====================
+
+model ProjectTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  projectType String?  // WEBSITE | BRANDING | MARKETING | CUSTOM
+  tasks       String   @default("[]") // JSON array of task definitions
+  milestones  String   @default("[]") // JSON array of milestone definitions
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("project_templates")
 }

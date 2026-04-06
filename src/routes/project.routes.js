@@ -3,6 +3,7 @@
 import { prisma } from '../index.js';
 import { refreshProjectPlan } from '../services/project.service.js';
 import { safeParse } from '../utils/safeParse.js';
+import aiClient from '../ai/client.js';
 
 export default async function projectRoutes(fastify) {
   // List all projects
@@ -363,5 +364,349 @@ export default async function projectRoutes(fastify) {
     });
 
     return context;
+  });
+
+  // ==================== AI PROJECT PLANNER ====================
+
+  // POST /:id/ai-plan — Generate full project plan with AI
+  fastify.post('/:id/ai-plan', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const { brief, projectType } = request.body || {};
+
+    if (!brief) {
+      return reply.status(400).send({ error: 'Project brief is required' });
+    }
+
+    const project = await prisma.project.findUnique({
+      where: { id },
+      include: { client: { select: { id: true, name: true } } }
+    });
+
+    if (!project) {
+      return reply.status(404).send({ error: 'Project not found' });
+    }
+
+    try {
+      const systemPrompt = `You are a project manager for a design agency called Ashbi Design. Given a project brief, generate a structured project plan.
+
+Return ONLY valid JSON (no markdown, no code fences) with this exact structure:
+{
+  "milestones": [
+    {
+      "name": "Milestone name",
+      "description": "What this milestone covers",
+      "dueOffset": 7
+    }
+  ],
+  "tasks": [
+    {
+      "title": "Task title",
+      "description": "What needs to be done",
+      "category": "IMMEDIATE|THIS_WEEK|UPCOMING",
+      "priority": "CRITICAL|HIGH|NORMAL|LOW",
+      "estimatedHours": 4,
+      "milestoneIndex": 0,
+      "dependsOn": []
+    }
+  ],
+  "timeline": {
+    "estimatedWeeks": 8
+  }
+}
+
+Rules:
+- dueOffset is days from project start
+- milestoneIndex references the index in the milestones array
+- dependsOn is an array of task indices that must complete first
+- Create realistic milestones and tasks for a design agency
+- Include discovery, design, development, content, testing, and launch phases as appropriate
+- Tasks should have clear, actionable titles`;
+
+      const userPrompt = `Project: ${project.name}
+Client: ${project.client?.name || 'Unknown'}
+Type: ${projectType || project.serviceType || 'Custom'}
+Brief: ${brief}`;
+
+      const plan = await aiClient.chatJSON({
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userPrompt }]
+      });
+
+      if (!plan || !plan.milestones || !plan.tasks) {
+        return reply.status(500).send({ error: 'AI returned invalid plan structure' });
+      }
+
+      // Create milestones in DB
+      const now = new Date();
+      const createdMilestones = [];
+
+      for (const ms of plan.milestones) {
+        const dueDate = new Date(now);
+        dueDate.setDate(dueDate.getDate() + (ms.dueOffset || 7));
+
+        const milestone = await prisma.milestone.create({
+          data: {
+            name: ms.name,
+            description: ms.description || null,
+            dueDate,
+            projectId: id,
+          }
+        });
+        createdMilestones.push(milestone);
+      }
+
+      // Create tasks in DB
+      const createdTasks = [];
+      for (const task of plan.tasks) {
+        const milestoneId = task.milestoneIndex != null && createdMilestones[task.milestoneIndex]
+          ? createdMilestones[task.milestoneIndex].id
+          : null;
+
+        const created = await prisma.task.create({
+          data: {
+            title: task.title,
+            description: task.description || null,
+            category: task.category || 'UPCOMING',
+            priority: task.priority || 'NORMAL',
+            estimatedTime: task.estimatedHours ? `${task.estimatedHours}h` : null,
+            projectId: id,
+            milestoneId,
+            aiGenerated: true,
+          }
+        });
+        createdTasks.push(created);
+      }
+
+      // Save the full AI plan as JSON on the project
+      await prisma.project.update({
+        where: { id },
+        data: {
+          aiPlan: JSON.stringify(plan),
+        }
+      });
+
+      return {
+        success: true,
+        plan,
+        milestones: createdMilestones,
+        tasks: createdTasks,
+      };
+    } catch (error) {
+      fastify.log.error(error, 'AI plan generation failed');
+      return reply.status(500).send({
+        error: 'Failed to generate AI plan',
+        message: error.message
+      });
+    }
+  });
+
+  // ==================== PROJECT TEMPLATES ====================
+
+  // GET /templates — List all project templates
+  fastify.get('/templates', {
+    onRequest: [fastify.authenticate]
+  }, async () => {
+    const templates = await prisma.projectTemplate.findMany({
+      orderBy: { updatedAt: 'desc' }
+    });
+
+    return templates.map(t => ({
+      ...t,
+      tasks: safeParse(t.tasks, []),
+      milestones: safeParse(t.milestones, []),
+    }));
+  });
+
+  // POST /templates — Save current project as template
+  fastify.post('/templates', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { projectId, name, description, projectType } = request.body || {};
+
+    if (!name) {
+      return reply.status(400).send({ error: 'Template name is required' });
+    }
+
+    let tasksData = [];
+    let milestonesData = [];
+
+    // If projectId provided, copy from existing project
+    if (projectId) {
+      const project = await prisma.project.findUnique({
+        where: { id: projectId },
+        include: {
+          tasks: {
+            select: {
+              title: true,
+              description: true,
+              category: true,
+              priority: true,
+              estimatedTime: true,
+              milestoneId: true,
+            }
+          },
+          milestones: {
+            select: {
+              name: true,
+              description: true,
+              dueDate: true,
+              color: true,
+            },
+            orderBy: { dueDate: 'asc' }
+          }
+        }
+      });
+
+      if (!project) {
+        return reply.status(404).send({ error: 'Project not found' });
+      }
+
+      // Build milestone map for dueOffset calculation
+      const projectStart = project.startDate || project.createdAt;
+      milestonesData = project.milestones.map((ms, index) => {
+        const dueOffset = Math.round(
+          (new Date(ms.dueDate) - new Date(projectStart)) / (1000 * 60 * 60 * 24)
+        );
+        return {
+          name: ms.name,
+          description: ms.description,
+          dueOffset: Math.max(dueOffset, 1),
+          color: ms.color,
+          _originalId: ms.id || index,
+        };
+      });
+
+      // Map milestone IDs to indices
+      const milestoneIdToIndex = {};
+      project.milestones.forEach((ms, index) => {
+        milestoneIdToIndex[ms.id] = index;
+      });
+
+      tasksData = project.tasks.map(task => ({
+        title: task.title,
+        description: task.description,
+        category: task.category,
+        priority: task.priority,
+        estimatedTime: task.estimatedTime,
+        milestoneIndex: task.milestoneId ? (milestoneIdToIndex[task.milestoneId] ?? null) : null,
+      }));
+
+      // Clean up internal IDs from milestones
+      milestonesData = milestonesData.map(({ _originalId, ...rest }) => rest);
+    }
+
+    const template = await prisma.projectTemplate.create({
+      data: {
+        name,
+        description: description || null,
+        projectType: projectType || null,
+        tasks: JSON.stringify(tasksData),
+        milestones: JSON.stringify(milestonesData),
+      }
+    });
+
+    return reply.status(201).send({
+      ...template,
+      tasks: tasksData,
+      milestones: milestonesData,
+    });
+  });
+
+  // POST /from-template — Create project from template
+  fastify.post('/from-template', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { templateId, clientId, name } = request.body || {};
+
+    if (!templateId || !clientId || !name) {
+      return reply.status(400).send({ error: 'templateId, clientId, and name are required' });
+    }
+
+    const template = await prisma.projectTemplate.findUnique({ where: { id: templateId } });
+    if (!template) {
+      return reply.status(404).send({ error: 'Template not found' });
+    }
+
+    const client = await prisma.client.findUnique({ where: { id: clientId } });
+    if (!client) {
+      return reply.status(404).send({ error: 'Client not found' });
+    }
+
+    const templateMilestones = safeParse(template.milestones, []);
+    const templateTasks = safeParse(template.tasks, []);
+
+    // Create the project
+    const project = await prisma.project.create({
+      data: {
+        name,
+        description: template.description || null,
+        clientId,
+        serviceType: template.projectType || null,
+      }
+    });
+
+    // Create milestones
+    const now = new Date();
+    const createdMilestones = [];
+
+    for (const ms of templateMilestones) {
+      const dueDate = new Date(now);
+      dueDate.setDate(dueDate.getDate() + (ms.dueOffset || 7));
+
+      const milestone = await prisma.milestone.create({
+        data: {
+          name: ms.name,
+          description: ms.description || null,
+          dueDate,
+          color: ms.color || '#3B82F6',
+          projectId: project.id,
+        }
+      });
+      createdMilestones.push(milestone);
+    }
+
+    // Create tasks
+    const createdTasks = [];
+    for (const task of templateTasks) {
+      const milestoneId = task.milestoneIndex != null && createdMilestones[task.milestoneIndex]
+        ? createdMilestones[task.milestoneIndex].id
+        : null;
+
+      const created = await prisma.task.create({
+        data: {
+          title: task.title,
+          description: task.description || null,
+          category: task.category || 'UPCOMING',
+          priority: task.priority || 'NORMAL',
+          estimatedTime: task.estimatedTime || null,
+          projectId: project.id,
+          milestoneId,
+          aiGenerated: false,
+        }
+      });
+      createdTasks.push(created);
+    }
+
+    return reply.status(201).send({
+      project,
+      milestones: createdMilestones,
+      tasks: createdTasks,
+    });
+  });
+
+  // DELETE /templates/:templateId — Delete a project template
+  fastify.delete('/templates/:templateId', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { templateId } = request.params;
+
+    try {
+      await prisma.projectTemplate.delete({ where: { id: templateId } });
+      return { success: true };
+    } catch (error) {
+      return reply.status(404).send({ error: 'Template not found' });
+    }
   });
 }

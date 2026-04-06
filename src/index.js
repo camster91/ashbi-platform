@@ -95,6 +95,10 @@ import agentsRoutes from './routes/integrations.agents.routes.js';
 import pushRoutes from './routes/push.routes.js';
 import { initVapid } from './utils/web-push.js';
 import commandCenterRoutes from './routes/integrations.command-center.routes.js';
+import expenseRoutes from './routes/expense.routes.js';
+import { startRecurringInvoicesJob } from './jobs/recurring-invoices.js';
+import automationRoutes from './routes/automation.routes.js';
+import { startOverdueChecker } from './services/automation.service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -250,6 +254,8 @@ await fastify.register(integrationsHostingerRoutes, { prefix: '/api/integrations
 await fastify.register(agentsRoutes, { prefix: '/api/agents' });
 await fastify.register(commandCenterRoutes, { prefix: '/api/command-center' });
 await fastify.register(pushRoutes, { prefix: '/api/push' });
+await fastify.register(expenseRoutes, { prefix: '/api/expenses' });
+await fastify.register(automationRoutes, { prefix: '/api/automations' });
 
 // Serve static frontend in production
 if (!env.isDev) {
@@ -357,6 +363,10 @@ const start = async () => {
     await fastify.listen({ port: env.port, host: '0.0.0.0' });
     console.log(`🚀 Agency Hub running at http://localhost:${env.port}`);
     console.log(`   Environment: ${env.nodeEnv}`);
+
+    // Start recurring invoices cron job
+    startRecurringInvoicesJob();
+    startOverdueChecker();
   } catch (err) {
     fastify.log.error(err);
     process.exit(1);

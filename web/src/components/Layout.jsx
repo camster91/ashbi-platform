@@ -36,6 +36,8 @@ import {
   MailPlus,
   Activity,
   MessageSquare,
+  Wallet,
+  Zap,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Download } from 'lucide-react';
@@ -94,56 +96,72 @@ export default function Layout({ children }) {
     p => !['LAUNCHED', 'CANCELLED'].includes(p.status)
   ).length || 0;
 
-  // Navigation sections
-  const workNav = [
+  // Track which sections are expanded
+  const [expandedSections, setExpandedSections] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('nav-expanded') || '{}');
+    } catch { return {}; }
+  });
+
+  const toggleSection = (key) => {
+    setExpandedSections(prev => {
+      const next = { ...prev, [key]: !prev[key] };
+      localStorage.setItem('nav-expanded', JSON.stringify(next));
+      return next;
+    });
+  };
+
+  // Core nav — always visible, no section header
+  const coreNav = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard, exact: true },
     { name: 'Inbox', href: '/inbox', icon: Inbox, badge: stats?.needsResponse },
-    ...(isAdmin ? [{ name: 'Approvals', href: '/approvals', icon: CheckCircle, badge: pendingCount }] : []),
-    { name: 'Projects', href: '/projects', icon: FolderOpen, badge: activeProjectCount > 0 ? activeProjectCount : null },
+    ...(isAdmin && pendingCount > 0 ? [{ name: 'Approvals', href: '/approvals', icon: CheckCircle, badge: pendingCount }] : []),
+    { name: 'Projects', href: '/projects', icon: FolderOpen },
     { name: 'Clients', href: '/clients', icon: Users },
-    { name: 'Activity', href: '/activity', icon: Activity },
-  ];
-
-  const financeNav = [
     { name: 'Invoices', href: '/invoices', icon: Receipt },
-    { name: 'Contracts', href: '/contracts', icon: ScrollText },
-    { name: 'Proposals', href: '/proposals', icon: FileText },
   ];
 
-  const growthNav = [
-    { name: 'Upwork', href: '/upwork', icon: Briefcase },
-    { name: 'Contracts', href: '/upwork-contracts', icon: ScrollText },
+  // Collapsible sections
+  const financeNav = [
+    { name: 'Proposals', href: '/proposals', icon: FileText },
+    { name: 'Contracts', href: '/contracts', icon: ScrollText },
+    { name: 'Expenses', href: '/expenses', icon: Wallet },
+    ...(isAdmin ? [{ name: 'Automations', href: '/automations', icon: Zap }] : []),
+  ];
+
+  const projectToolsNav = [
+    { name: 'AI Planner', href: '/project-planner', icon: Sparkles },
+    { name: 'Templates', href: '/project-templates', icon: FileText },
+    { name: 'Activity', href: '/activity', icon: Activity },
     { name: 'Chat with Ash', href: '/chat', icon: MessageSquare },
+  ];
+
+  const aiNav = [
     { name: 'AI Chat', href: '/ai-chat', icon: Bot },
     { name: 'AI Team', href: '/ai-team', icon: UsersRound },
+    { name: 'Email Triage', href: '/email-triage', icon: Mail },
+    { name: 'Content Writer', href: '/content-writer', icon: FileEdit },
+    { name: 'Lead Gen', href: '/lead-gen', icon: Target },
+    { name: 'SEO Blog', href: '/seo-blog', icon: PenSquare },
+    { name: 'Cold Email', href: '/cold-email', icon: MailPlus },
+    { name: 'LinkedIn', href: '/linkedin-outreach', icon: Linkedin },
+    { name: 'Call Screener', href: '/call-screener', icon: Phone },
+    { name: 'Social Content', href: '/social-content', icon: Share2 },
   ];
 
   const marketingNav = [
     { name: 'Outreach', href: '/outreach', icon: UserSearch },
     { name: 'Social', href: '/social', icon: Share2 },
     { name: 'Blog', href: '/blog', icon: PenSquare },
-  ];
-
-  const agentsNav = [
-    { name: 'Lead Gen', href: '/lead-gen', icon: Target },
-    { name: 'Social Content', href: '/social-content', icon: Share2 },
-    { name: 'SEO Blog', href: '/seo-blog', icon: PenSquare },
-  ];
-
-  const aiEmployeesNav = [
-    { name: 'Email Triage', href: '/email-triage', icon: Mail },
-    { name: 'Content Writer', href: '/content-writer', icon: FileEdit },
-    { name: 'LinkedIn Outreach', href: '/linkedin-outreach', icon: Linkedin },
-    { name: 'Cold Email', href: '/cold-email', icon: MailPlus },
-    { name: 'Call Screener', href: '/call-screener', icon: Phone },
+    { name: 'Upwork', href: '/upwork', icon: Briefcase },
   ];
 
   const adminNav = isAdmin ? [
-    { name: 'Command Center', href: '/admin/command-center', icon: Activity },
     { name: 'Team', href: '/team', icon: UserCog },
+    { name: 'Command Center', href: '/admin/command-center', icon: Activity },
+    { name: 'Analytics', href: '/analytics', icon: BarChart3 },
     { name: 'Credentials', href: '/credentials', icon: KeyRound },
     { name: 'AI Context', href: '/admin/settings/ai-context', icon: Settings },
-    { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   ] : [
     { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   ];
@@ -167,50 +185,58 @@ export default function Layout({ children }) {
     }
   };
 
-  function renderNavSection(label, items) {
+  function renderNavItems(items) {
+    return items.map((item) => {
+      const isActive = item.exact
+        ? location.pathname === item.href
+        : location.pathname.startsWith(item.href) && item.href !== '/';
+      const badge = item.badge;
+      return (
+        <Link
+          key={item.name}
+          to={item.href}
+          onClick={() => setSidebarOpen(false)}
+          className={cn(
+            'flex items-center px-3 py-1.5 text-sm font-medium rounded-lg transition-all duration-150',
+            'group',
+            isActive
+              ? 'bg-primary text-primary-foreground shadow-sm'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+          )}
+        >
+          <item.icon className="w-4 h-4 mr-2.5 shrink-0" />
+          <span className="flex-1 truncate">{item.name}</span>
+          {badge > 0 && (
+            <span className={cn(
+              'ml-auto px-1.5 py-0.5 text-[10px] font-semibold rounded-full min-w-[18px] text-center',
+              isActive ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-primary text-primary-foreground'
+            )}>
+              {badge > 99 ? '99+' : badge}
+            </span>
+          )}
+        </Link>
+      );
+    });
+  }
+
+  function renderCollapsibleSection(key, label, items) {
+    const isExpanded = expandedSections[key];
+    // Auto-expand if any child is active
+    const hasActiveChild = items.some(item =>
+      item.exact ? location.pathname === item.href : location.pathname.startsWith(item.href) && item.href !== '/'
+    );
+    const show = isExpanded || hasActiveChild;
+
     return (
-      <div className="space-y-1">
-        <p className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+      <div className="space-y-0.5">
+        <button
+          onClick={() => toggleSection(key)}
+          className="w-full flex items-center px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors"
+        >
+          <ChevronRight className={cn('w-3 h-3 mr-1 transition-transform duration-150', show && 'rotate-90')} />
           {label}
-        </p>
-        {items.map((item) => {
-          const isActive = item.exact
-            ? location.pathname === item.href
-            : location.pathname.startsWith(item.href) && item.href !== '/';
-          const badge = item.badge;
-          return (
-            <Link
-              key={item.name}
-              to={item.href}
-              onClick={() => setSidebarOpen(false)}
-              className={cn(
-                'flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200',
-                'group relative',
-                isActive
-                  ? 'bg-primary text-primary-foreground shadow-sm'
-                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-              )}
-            >
-              <item.icon className={cn(
-                'w-5 h-5 mr-3 transition-transform duration-200',
-                'group-hover:scale-110'
-              )} />
-              <span className="flex-1">{item.name}</span>
-              {badge > 0 && (
-                <span
-                  className={cn(
-                    'ml-auto px-2 py-0.5 text-xs font-semibold rounded-full min-w-[20px] text-center',
-                    isActive
-                      ? 'bg-primary-foreground/20 text-primary-foreground'
-                      : 'bg-primary text-primary-foreground'
-                  )}
-                >
-                  {badge > 99 ? '99+' : badge}
-                </span>
-              )}
-            </Link>
-          );
-        })}
+        </button>
+        {show && <div className="space-y-0.5 pl-1">{renderNavItems(items)}</div>}
       </div>
     );
   }
@@ -241,7 +267,7 @@ export default function Layout({ children }) {
               <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
                 <Sparkles className="w-5 h-5 text-primary-foreground" />
               </div>
-              <h1 className="text-xl font-heading font-bold text-foreground">Agency Hub</h1>
+              <h1 className="text-xl font-heading font-bold text-foreground">Ashbi</h1>
             </Link>
             <button
               onClick={() => setSidebarOpen(false)}
@@ -252,25 +278,27 @@ export default function Layout({ children }) {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-3 py-4 space-y-5 overflow-y-auto">
-            {renderNavSection('Work', workNav)}
-            {renderNavSection('Finance', financeNav)}
-            {renderNavSection('Growth', growthNav)}
-            {renderNavSection('Marketing', marketingNav)}
-            {renderNavSection('Agents', agentsNav)}
-            {renderNavSection('AI Employees', aiEmployeesNav)}
-            {renderNavSection('Admin', adminNav)}
+          <nav className="flex-1 px-3 py-3 space-y-1 overflow-y-auto">
+            {/* Core — always visible */}
+            <div className="space-y-0.5 pb-2">
+              {renderNavItems(coreNav)}
+            </div>
 
-            {/* Quick Actions */}
-            <div className="space-y-1">
-              <p className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Quick Actions
-              </p>
+            <div className="border-t border-border pt-2 space-y-1">
+              {renderCollapsibleSection('finance', 'Finance & Docs', financeNav)}
+              {renderCollapsibleSection('tools', 'Project Tools', projectToolsNav)}
+              {renderCollapsibleSection('ai', 'AI Agents', aiNav)}
+              {renderCollapsibleSection('marketing', 'Marketing', marketingNav)}
+              {renderCollapsibleSection('admin', 'Admin', adminNav)}
+            </div>
+
+            {/* Quick action */}
+            <div className="pt-2 border-t border-border">
               <Button
                 variant="outline"
                 size="sm"
-                className="w-full justify-start"
-                leftIcon={<Plus className="w-4 h-4" />}
+                className="w-full justify-start text-xs"
+                leftIcon={<Plus className="w-3.5 h-3.5" />}
                 onClick={() => navigate('/projects?create=true')}
               >
                 New Project

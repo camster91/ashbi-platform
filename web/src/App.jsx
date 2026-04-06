@@ -64,6 +64,10 @@ import AiContextSettings from './pages/AiContextSettings';
 import UpworkContracts from './pages/UpworkContracts';
 import CommandCenter from './pages/CommandCenter';
 import ActivityFeed from './pages/ActivityFeed';
+import Expenses from './pages/Expenses';
+import Automations from './pages/Automations';
+import ProjectPlanner from './pages/ProjectPlanner';
+import ProjectTemplates from './pages/ProjectTemplates';
 
 function PrivateRoute({ children }) {
   const { user, isLoading } = useAuth();
@@ -165,6 +169,10 @@ function AppRoutes() {
                 <Route path="/client-success" element={<AgentTeamDashboard />} />
                 <Route path="/integrations" element={<IntegrationDashboard />} />
                 <Route path="/activity" element={<ActivityFeed />} />
+                <Route path="/automations" element={<AdminRoute><Automations /></AdminRoute>} />
+                <Route path="/expenses" element={<Expenses />} />
+                <Route path="/project-planner" element={<ProjectPlanner />} />
+                <Route path="/project-templates" element={<ProjectTemplates />} />
               </Routes>
             </Layout>
           </PrivateRoute>

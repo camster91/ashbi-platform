@@ -126,6 +126,20 @@ export const api = {
   refreshProjectPlan: (id) =>
     request(`/projects/${id}/plan/refresh`, { method: 'POST' }),
 
+  // AI Project Planner
+  generateAiPlan: (id, data) =>
+    request(`/projects/${id}/ai-plan`, { method: 'POST', body: data }),
+
+  // Project Templates
+  getProjectTemplates: () =>
+    request('/projects/templates'),
+  createProjectTemplate: (data) =>
+    request('/projects/templates', { method: 'POST', body: data }),
+  deleteProjectTemplate: (templateId) =>
+    request(`/projects/templates/${templateId}`, { method: 'DELETE' }),
+  createProjectFromTemplate: (data) =>
+    request('/projects/from-template', { method: 'POST', body: data }),
+
   // Tasks
   getTasks: (params = {}) => {
     const query = new URLSearchParams(params).toString();
@@ -445,6 +459,37 @@ export const api = {
     request('/invoices/templates', { method: 'POST', body: data }),
   deleteLineItemTemplate: (id) =>
     request(`/invoices/templates/${id}`, { method: 'DELETE' }),
+
+  // ===== EXPENSES =====
+  getExpenses: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/expenses${query ? `?${query}` : ''}`);
+  },
+  getExpenseSummary: () =>
+    request('/expenses/summary'),
+  getExpense: (id) =>
+    request(`/expenses/${id}`),
+  createExpense: (data) =>
+    request('/expenses', { method: 'POST', body: data }),
+  updateExpense: (id, data) =>
+    request(`/expenses/${id}`, { method: 'PUT', body: data }),
+  deleteExpense: (id) =>
+    request(`/expenses/${id}`, { method: 'DELETE' }),
+  uploadReceipt: async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const url = `${API_BASE}/expenses/upload-receipt`;
+    const res = await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      body: formData,
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new ApiError(data.error || 'Upload failed', res.status, data);
+    }
+    return res.json();
+  },
 
   // ===== UPWORK =====
   getUpworkTasks: (tags) => {
