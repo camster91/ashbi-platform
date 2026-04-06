@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
+import { useToast } from '../hooks/useToast';
 import {
   Linkedin, Sparkles, Loader2, X, Plus, Trash2, Edit3, Users,
   ChevronRight, Clock, Building, User, Copy, Check, Upload
@@ -19,6 +20,7 @@ const STATUS_COLORS = {
 };
 
 function GenerateSequenceModal({ onClose, onGenerated }) {
+  const toast = useToast();
   const [name, setName] = useState('');
   const [title, setTitle] = useState('');
   const [company, setCompany] = useState('');
@@ -36,7 +38,7 @@ function GenerateSequenceModal({ onClose, onGenerated }) {
       onGenerated();
       onClose();
     } catch (err) {
-      alert('Failed: ' + err.message);
+      toast.error('Failed: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -103,6 +105,7 @@ function GenerateSequenceModal({ onClose, onGenerated }) {
 }
 
 function ImportProspectsModal({ onClose, onImported }) {
+  const toast = useToast();
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -113,16 +116,16 @@ function ImportProspectsModal({ onClose, onImported }) {
       return { name: parts[0], company: parts[1], title: parts[2], industry: parts[3], linkedinUrl: parts[4], email: parts[5] };
     }).filter(p => p.name);
 
-    if (prospects.length === 0) return alert('No valid prospects found');
+    if (prospects.length === 0) { toast.error('No valid prospects found'); return; }
 
     setLoading(true);
     try {
       const result = await api.importLinkedInProspects({ prospects });
-      alert(`Imported ${result.imported} prospects`);
+      toast.success(`Imported ${result.imported} prospects`);
       onImported();
       onClose();
     } catch (err) {
-      alert('Import failed: ' + err.message);
+      toast.error('Import failed: ' + err.message);
     } finally {
       setLoading(false);
     }

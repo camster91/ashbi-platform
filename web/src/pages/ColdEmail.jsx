@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
+import { useToast } from '../hooks/useToast';
 import {
   Mail, Sparkles, Loader2, X, Plus, Trash2, Upload, Copy, Check,
   ChevronRight, Clock, Users, Eye, Edit3
@@ -27,6 +28,7 @@ const SERVICE_LABELS = {
 };
 
 function GenerateSequenceModal({ onClose, onGenerated }) {
+  const toast = useToast();
   const [name, setName] = useState('');
   const [serviceType, setServiceType] = useState('full_service');
   const [targetIndustry, setTargetIndustry] = useState('');
@@ -43,7 +45,7 @@ function GenerateSequenceModal({ onClose, onGenerated }) {
       onGenerated();
       onClose();
     } catch (err) {
-      alert('Failed: ' + err.message);
+      toast.error('Failed: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -101,6 +103,7 @@ function GenerateSequenceModal({ onClose, onGenerated }) {
 }
 
 function ImportProspectsModal({ onClose, onImported, sequences }) {
+  const toast = useToast();
   const [text, setText] = useState('');
   const [sequenceId, setSequenceId] = useState('');
   const [loading, setLoading] = useState(false);
@@ -112,16 +115,16 @@ function ImportProspectsModal({ onClose, onImported, sequences }) {
       return { name: parts[0], email: parts[1], company: parts[2], industry: parts[3], painPoint: parts[4] };
     }).filter(p => p.name && p.email);
 
-    if (prospects.length === 0) return alert('No valid prospects (need name,email)');
+    if (prospects.length === 0) { toast.error('No valid prospects (need name,email)'); return; }
 
     setLoading(true);
     try {
       const result = await api.importColdEmailProspects({ prospects, sequenceId: sequenceId || undefined });
-      alert(`Imported ${result.imported} prospects`);
+      toast.success(`Imported ${result.imported} prospects`);
       onImported();
       onClose();
     } catch (err) {
-      alert('Import failed: ' + err.message);
+      toast.error('Import failed: ' + err.message);
     } finally {
       setLoading(false);
     }

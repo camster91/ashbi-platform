@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
+import { useToast } from '../hooks/useToast';
 import {
   FileText, Sparkles, Plus, Edit3, Trash2, Globe, Clock,
   Tag, Search, ChevronRight, Loader2, X, Eye, EyeOff
@@ -13,6 +14,7 @@ const STATUS_COLORS = {
 };
 
 function GenerateModal({ onClose, onGenerated }) {
+  const toast = useToast();
   const [title, setTitle] = useState('');
   const [keyword, setKeyword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -26,7 +28,7 @@ function GenerateModal({ onClose, onGenerated }) {
       onGenerated(post);
       onClose();
     } catch (err) {
-      alert('Failed to generate: ' + err.message);
+      toast.error('Failed to generate: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -75,6 +77,7 @@ function GenerateModal({ onClose, onGenerated }) {
 }
 
 function KeywordsModal({ onClose }) {
+  const toast = useToast();
   const [topic, setTopic] = useState('');
   const [keywords, setKeywords] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -86,7 +89,7 @@ function KeywordsModal({ onClose }) {
       const result = await api.generateBlogKeywords(topic);
       setKeywords(result.keywords || []);
     } catch (err) {
-      alert('Failed to generate keywords: ' + err.message);
+      toast.error('Failed to generate keywords: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -143,6 +146,7 @@ function KeywordsModal({ onClose }) {
 }
 
 function PostEditor({ post, onClose, onSaved }) {
+  const toast = useToast();
   const [title, setTitle] = useState(post.title);
   const [content, setContent] = useState(post.content || '');
   const [keyword, setKeyword] = useState(post.targetKeyword || '');
@@ -157,7 +161,7 @@ function PostEditor({ post, onClose, onSaved }) {
       const updated = await api.updateBlogPost(post.id, { title, content, targetKeyword: keyword, metaDescription: metaDesc });
       onSaved(updated);
     } catch (err) {
-      alert('Failed to save: ' + err.message);
+      toast.error('Failed to save: ' + err.message);
     } finally {
       setSaving(false);
     }
@@ -171,7 +175,7 @@ function PostEditor({ post, onClose, onSaved }) {
       onSaved(updated);
       onClose();
     } catch (err) {
-      alert('Failed to publish: ' + err.message);
+      toast.error('Failed to publish: ' + err.message);
     } finally {
       setPublishing(false);
     }

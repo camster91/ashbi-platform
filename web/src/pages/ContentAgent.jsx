@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
+import { useToast } from '../hooks/useToast';
 import {
   FileText, Sparkles, Loader2, X, Check, Trash2, Edit3,
   Linkedin, Instagram, Facebook, ChevronRight, Clock, Eye, EyeOff
@@ -16,6 +17,7 @@ const STATUS_COLORS = {
 const PLATFORM_ICONS = { LINKEDIN: Linkedin, INSTAGRAM: Instagram, FACEBOOK: Facebook };
 
 function BlogGenerator({ onClose, onGenerated }) {
+  const toast = useToast();
   const [topic, setTopic] = useState('');
   const [keywords, setKeywords] = useState('');
   const [loading, setLoading] = useState(false);
@@ -29,7 +31,7 @@ function BlogGenerator({ onClose, onGenerated }) {
       onGenerated();
       onClose();
     } catch (err) {
-      alert('Failed: ' + err.message);
+      toast.error('Failed: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -64,6 +66,7 @@ function BlogGenerator({ onClose, onGenerated }) {
 }
 
 function SocialGenerator({ onClose, onGenerated }) {
+  const toast = useToast();
   const [brief, setBrief] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -76,7 +79,7 @@ function SocialGenerator({ onClose, onGenerated }) {
       onGenerated();
       onClose();
     } catch (err) {
-      alert('Failed: ' + err.message);
+      toast.error('Failed: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -108,6 +111,7 @@ function SocialGenerator({ onClose, onGenerated }) {
 }
 
 function LinkedInGenerator({ onClose, onGenerated }) {
+  const toast = useToast();
   const [topic, setTopic] = useState('');
   const [angle, setAngle] = useState('');
   const [loading, setLoading] = useState(false);
@@ -121,7 +125,7 @@ function LinkedInGenerator({ onClose, onGenerated }) {
       onGenerated();
       onClose();
     } catch (err) {
-      alert('Failed: ' + err.message);
+      toast.error('Failed: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -156,6 +160,7 @@ function LinkedInGenerator({ onClose, onGenerated }) {
 }
 
 function ContentEditor({ draft, onClose, onSaved }) {
+  const toast = useToast();
   const [title, setTitle] = useState(draft.title || '');
   const [content, setContent] = useState(draft.content || '');
   const [preview, setPreview] = useState(false);
@@ -167,7 +172,7 @@ function ContentEditor({ draft, onClose, onSaved }) {
       await api.updateContentDraft(draft.id, { title, content });
       onSaved();
     } catch (err) {
-      alert('Save failed: ' + err.message);
+      toast.error('Save failed: ' + err.message);
     } finally {
       setSaving(false);
     }
@@ -179,7 +184,7 @@ function ContentEditor({ draft, onClose, onSaved }) {
       onSaved();
       onClose();
     } catch (err) {
-      alert('Approve failed: ' + err.message);
+      toast.error('Approve failed: ' + err.message);
     }
   };
 

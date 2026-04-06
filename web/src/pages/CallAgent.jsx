@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
+import { useToast } from '../hooks/useToast';
 import {
   Phone, Sparkles, Loader2, X, Plus, Send, ChevronRight, Clock,
   User, Building, FileText, CheckCircle, MessageSquare, Trash2
@@ -15,6 +16,7 @@ const STATUS_COLORS = {
 };
 
 function NewCallModal({ onClose, onCreated }) {
+  const toast = useToast();
   const [name, setName] = useState('');
   const [number, setNumber] = useState('');
   const [company, setCompany] = useState('');
@@ -30,7 +32,7 @@ function NewCallModal({ onClose, onCreated }) {
       onCreated();
       onClose();
     } catch (err) {
-      alert('Failed: ' + err.message);
+      toast.error('Failed: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -76,6 +78,7 @@ function NewCallModal({ onClose, onCreated }) {
 }
 
 function CallDetail({ call, onClose, onUpdated }) {
+  const toast = useToast();
   const [summary, setSummary] = useState(call.callSummary || call.summaryTemplate || '');
   const [notes, setNotes] = useState(call.callNotes || '');
   const [saving, setSaving] = useState(false);
@@ -92,7 +95,7 @@ function CallDetail({ call, onClose, onUpdated }) {
       queryClient.invalidateQueries(['call-log']);
       onUpdated();
     } catch (err) {
-      alert('Save failed: ' + err.message);
+      toast.error('Save failed: ' + err.message);
     } finally {
       setSaving(false);
     }
@@ -105,7 +108,7 @@ function CallDetail({ call, onClose, onUpdated }) {
       queryClient.invalidateQueries(['call-log']);
       onUpdated();
     } catch (err) {
-      alert('Failed: ' + err.message);
+      toast.error('Failed: ' + err.message);
     } finally {
       setGeneratingFollowUp(false);
     }

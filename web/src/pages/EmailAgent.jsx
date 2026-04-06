@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
+import { useToast } from '../hooks/useToast';
 import {
   Mail, Sparkles, Loader2, X, Check, Archive, Tag, Edit3,
   RefreshCw, Send, ChevronRight, AlertTriangle, User, Clock
@@ -23,6 +24,7 @@ const STATUS_COLORS = {
 };
 
 function DraftEditor({ draft, onClose, onApproved }) {
+  const toast = useToast();
   const [subject, setSubject] = useState(draft.subject);
   const [body, setBody] = useState(draft.body);
   const [saving, setSaving] = useState(false);
@@ -33,7 +35,7 @@ function DraftEditor({ draft, onClose, onApproved }) {
     try {
       await api.updateEmailDraft(draft.id, { subject, body });
     } catch (err) {
-      alert('Save failed: ' + err.message);
+      toast.error('Save failed: ' + err.message);
     } finally {
       setSaving(false);
     }
@@ -47,7 +49,7 @@ function DraftEditor({ draft, onClose, onApproved }) {
       onApproved();
       onClose();
     } catch (err) {
-      alert('Approve failed: ' + err.message);
+      toast.error('Approve failed: ' + err.message);
     } finally {
       setApproving(false);
     }
@@ -77,6 +79,7 @@ function DraftEditor({ draft, onClose, onApproved }) {
 }
 
 function EmailDetail({ item, onClose, onUpdated }) {
+  const toast = useToast();
   const [generating, setGenerating] = useState(false);
   const queryClient = useQueryClient();
 
@@ -87,7 +90,7 @@ function EmailDetail({ item, onClose, onUpdated }) {
       queryClient.invalidateQueries(['email-queue']);
       onUpdated();
     } catch (err) {
-      alert('Failed to generate drafts: ' + err.message);
+      toast.error('Failed to generate drafts: ' + err.message);
     } finally {
       setGenerating(false);
     }
@@ -99,7 +102,7 @@ function EmailDetail({ item, onClose, onUpdated }) {
       queryClient.invalidateQueries(['email-queue']);
       onClose();
     } catch (err) {
-      alert('Archive failed: ' + err.message);
+      toast.error('Archive failed: ' + err.message);
     }
   };
 
@@ -180,6 +183,7 @@ function EmailDetail({ item, onClose, onUpdated }) {
 }
 
 export default function EmailAgent() {
+  const toast = useToast();
   const [selectedItem, setSelectedItem] = useState(null);
   const [tagFilter, setTagFilter] = useState('');
   const [scanning, setScanning] = useState(false);
@@ -195,9 +199,9 @@ export default function EmailAgent() {
     try {
       const result = await api.scanEmailInbox();
       queryClient.invalidateQueries(['email-queue']);
-      alert(`Scanned ${result.scanned} threads, triaged ${result.triaged} new items`);
+      toast.success(`Scanned ${result.scanned} threads, triaged ${result.triaged} new items`);
     } catch (err) {
-      alert('Scan failed: ' + err.message);
+      toast.error('Scan failed: ' + err.message);
     } finally {
       setScanning(false);
     }

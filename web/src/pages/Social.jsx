@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
+import { useToast } from '../hooks/useToast';
 import {
   Instagram, Linkedin, Facebook, Sparkles, Plus, Edit3, Trash2,
   Calendar, CheckCircle, Clock, FileText, Loader2, X, Share2
@@ -26,6 +27,7 @@ const STATUS_COLORS = {
 };
 
 function GenerateModal({ onClose, onSaved }) {
+  const toast = useToast();
   const [topic, setTopic] = useState('');
   const [platform, setPlatform] = useState('INSTAGRAM');
   const [generated, setGenerated] = useState(null);
@@ -40,7 +42,7 @@ function GenerateModal({ onClose, onSaved }) {
       const result = await api.generateSocialPost({ topic, platform });
       setGenerated(result);
     } catch (err) {
-      alert('Failed to generate: ' + err.message);
+      toast.error('Failed to generate: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -59,7 +61,7 @@ function GenerateModal({ onClose, onSaved }) {
       onSaved(post);
       onClose();
     } catch (err) {
-      alert('Failed to save: ' + err.message);
+      toast.error('Failed to save: ' + err.message);
     } finally {
       setSaving(false);
     }
@@ -197,6 +199,7 @@ function PostCard({ post, onEdit, onDelete, onPublish }) {
 }
 
 function EditModal({ post, onClose, onSaved }) {
+  const toast = useToast();
   const [content, setContent] = useState(post.content);
   const [saving, setSaving] = useState(false);
 
@@ -207,7 +210,7 @@ function EditModal({ post, onClose, onSaved }) {
       onSaved(updated);
       onClose();
     } catch (err) {
-      alert('Failed to save: ' + err.message);
+      toast.error('Failed to save: ' + err.message);
     } finally {
       setSaving(false);
     }

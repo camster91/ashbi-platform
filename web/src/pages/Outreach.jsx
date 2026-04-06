@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
+import { useToast } from '../hooks/useToast';
 import {
   Users, Plus, Search, Play, Pause, Mail, Sparkles, ChevronRight,
   Building2, Tag, Calendar, MoreHorizontal, X, Loader2, Send
@@ -221,6 +222,7 @@ function CreateSequenceModal({ onClose, onCreated }) {
 }
 
 export default function Outreach() {
+  const toast = useToast();
   const [tab, setTab] = useState('leads');
   const [showAddLead, setShowAddLead] = useState(false);
   const [showCreateSequence, setShowCreateSequence] = useState(false);
@@ -247,7 +249,7 @@ export default function Outreach() {
     mutationFn: (id) => api.runOutreachSequence(id),
     onSuccess: (data) => {
       queryClient.invalidateQueries(['outreach-leads']);
-      alert(`Sequence run complete: ${data.sent} emails sent, ${data.failed} failed.`);
+      toast.success(`Sequence run complete: ${data.sent} emails sent, ${data.failed} failed.`);
     },
   });
 

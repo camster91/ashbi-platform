@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useToast } from '../hooks/useToast';
 import {
   RefreshCw, Github, Server, Globe, Bot, CheckSquare,
   AlertTriangle, CheckCircle, XCircle, Clock, ExternalLink,
@@ -375,6 +376,7 @@ function TasksPanel({ data, loading }) {
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 export default function CommandCenter() {
+  const toast = useToast();
   const [data, setData] = useState(null);
   const [githubDetailed, setGithubDetailed] = useState(null);
   const [vpsDetailed, setVpsDetailed] = useState(null);
@@ -432,7 +434,7 @@ export default function CommandCenter() {
       await api.restartApp(uuid);
       setTimeout(() => refreshPanel('vps', api.getVpsHealth, setVpsDetailed), 3000);
     } catch (err) {
-      alert(`Restart failed: ${err.message}`);
+      toast.error(`Restart failed: ${err.message}`);
     }
   };
 
@@ -440,7 +442,7 @@ export default function CommandCenter() {
     try {
       await api.runAgent(name);
     } catch (err) {
-      alert(`Failed to run agent: ${err.message}`);
+      toast.error(`Failed to run agent: ${err.message}`);
     }
   };
 
