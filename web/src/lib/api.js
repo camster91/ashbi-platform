@@ -948,6 +948,8 @@ export const api = {
     request('/mailgun/send', { method: 'POST', body: data }),
 
   // ===== RETAINERS =====
+  getRetainerList: () =>
+    request('/retainer'),
   getRetainerStatus: (clientId) =>
     request(`/retainer/${clientId}/status`),
   getAllRetainers: () =>

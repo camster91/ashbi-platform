@@ -37,26 +37,9 @@ export default function Retainers() {
   const [editingId, setEditingId] = useState(null);
   const [logHoursFor, setLogHoursFor] = useState(null);
 
-  const { data: retainers = [], isLoading, refetch } = useQuery({
-    queryKey: ['retainers'],
-    queryFn: () => api.getAllRetainers(),
-    select: (data) => data.atRisk !== undefined ? [...(data.atRisk || [])] : data,
-  });
-
-  const { data: allRetainers = [], isLoadingAll } = useQuery({
+  const { data: allRetainers = [], isLoading: isLoadingAll, refetch } = useQuery({
     queryKey: ['all-retainers'],
-    queryFn: async () => {
-      // We need all retainers, not just at-risk ones — use the list endpoint
-      const res = await fetch('/api/retainer', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-      });
-      if (!res.ok) return [];
-      return res.json();
-    },
+    queryFn: () => api.getRetainerList(),
   });
 
   const { data: clients = [] } = useQuery({
