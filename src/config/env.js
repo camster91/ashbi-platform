@@ -20,10 +20,10 @@ const env = {
   anthropicApiKey: process.env.ANTHROPIC_API_KEY,
   geminiApiKey: process.env.GEMINI_API_KEY,
   ollamaApiKey: process.env.OLLAMA_API_KEY,
-  ollamaBaseUrl: process.env.OLLAMA_BASE_URL || 'https://api.ollama.com/v1',
-  ollamaModel: process.env.OLLAMA_MODEL || 'llama3.1:70b',
-  aiProvider: process.env.AI_PROVIDER || 'gemini', // 'claude', 'gemini', or 'ollama'
-  aiModel: 'claude-sonnet-4-20250514',
+  ollamaBaseUrl: process.env.OLLAMA_BASE_URL || 'https://ollama.com',
+  ollamaModel: process.env.OLLAMA_MODEL || 'gpt-oss:120b-cloud',
+  aiProvider: process.env.AI_PROVIDER || 'ollama', // 'claude', 'gemini', or 'ollama'
+  aiModel: 'gpt-oss:120b-cloud',
 
   // Redis
   redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',

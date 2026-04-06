@@ -1,49 +1,65 @@
-// Ollama Cloud AI provider wrapper (OpenAI-compatible API)
+// Ollama Cloud AI provider
+// Docs: https://docs.ollama.com/cloud
+// API:  POST https://ollama.com/api/chat
+// Auth: Authorization: Bearer $OLLAMA_API_KEY
 
 import env from '../../config/env.js';
 
+// Available Ollama cloud models
+export const OLLAMA_MODELS = {
+  DEFAULT: 'gpt-oss:120b-cloud',   // Fast, capable — good for most tasks
+  FAST:    'gpt-oss:20b-cloud',    // Low latency
+  CODER:   'qwen3-coder:480b-cloud', // Best for code/structured output
+  LARGE:   'deepseek-v3.1:671b-cloud', // Highest quality
+};
+
 class OllamaProvider {
-  constructor() {
+  constructor(modelOverride) {
     this.name = 'ollama';
-    this.baseUrl = env.ollamaBaseUrl;
+    this.modelName = modelOverride || env.ollamaModel || OLLAMA_MODELS.DEFAULT;
+    // Strip /v1 suffix if present — cloud API uses /api/chat directly
+    this.baseUrl = (env.ollamaBaseUrl || 'https://ollama.com').replace(/\/v1\/?$/, '').replace(/\/$/, '');
     this.apiKey = env.ollamaApiKey;
-    this.model = env.ollamaModel;
+  }
+
+  _headers() {
+    const headers = { 'Content-Type': 'application/json' };
+    if (this.apiKey) headers['Authorization'] = `Bearer ${this.apiKey}`;
+    return headers;
   }
 
   async chat({ system, prompt, temperature = 0.3, maxTokens = 4096 }) {
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
+    const messages = [];
+    if (system) messages.push({ role: 'system', content: system });
+    messages.push({ role: 'user', content: prompt });
+
+    const res = await fetch(`${this.baseUrl}/api/chat`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.apiKey}`
-      },
+      headers: this._headers(),
       body: JSON.stringify({
-        model: this.model,
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: prompt }
-        ],
-        temperature,
-        max_tokens: maxTokens
-      })
+        model: this.modelName,
+        messages,
+        stream: false,
+        options: {
+          temperature,
+          num_predict: maxTokens,
+        },
+      }),
     });
 
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`Ollama API error ${response.status}: ${err}`);
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Ollama API error ${res.status}: ${text.slice(0, 300)}`);
     }
 
-    const data = await response.json();
-    return data.choices[0].message.content;
+    const data = await res.json();
+    return data.message?.content ?? '';
   }
 
   async chatJSON(options) {
-    const systemWithJSON = `${options.system}\n\nYou MUST respond with valid JSON only. No additional text or markdown formatting.`;
+    const systemWithJSON = `${options.system || ''}\n\nRespond with valid JSON only. No markdown fences, no explanation — raw JSON only.`.trim();
 
-    const response = await this.chat({
-      ...options,
-      system: systemWithJSON
-    });
+    const response = await this.chat({ ...options, system: systemWithJSON });
 
     try {
       let jsonStr = response.trim();
@@ -52,8 +68,22 @@ class OllamaProvider {
       }
       return JSON.parse(jsonStr);
     } catch (error) {
-      console.error('Failed to parse Ollama JSON response:', response);
+      console.error('Failed to parse Ollama JSON response:', response.slice(0, 500));
       throw new Error('AI returned invalid JSON');
+    }
+  }
+
+  // Fetch available cloud models from Ollama
+  static async listCloudModels(apiKey) {
+    try {
+      const res = await fetch('https://ollama.com/api/tags', {
+        headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      });
+      if (!res.ok) return Object.values(OLLAMA_MODELS);
+      const data = await res.json();
+      return (data.models || []).map(m => m.name).filter(n => n.includes(':cloud'));
+    } catch {
+      return Object.values(OLLAMA_MODELS);
     }
   }
 }

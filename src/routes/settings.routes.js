@@ -241,14 +241,18 @@ export default async function settingsRoutes(fastify) {
 
   // ==================== AI PROVIDER ====================
 
-  // Get current AI provider
+  // Get current AI provider + available Ollama cloud models
   fastify.get('/ai-provider', {
     onRequest: [fastify.authenticate]
   }, async () => {
     const { getProviderName } = await import('../ai/providers/index.js');
+    const { OLLAMA_MODELS } = await import('../ai/providers/ollama.js');
+    const env = (await import('../config/env.js')).default;
     return {
       provider: getProviderName(),
-      available: ['claude', 'gemini']
+      available: ['claude', 'gemini', 'ollama'],
+      ollamaModel: env.ollamaModel,
+      ollamaModels: OLLAMA_MODELS,
     };
   });
 
@@ -256,13 +260,27 @@ export default async function settingsRoutes(fastify) {
   fastify.post('/ai-provider', {
     onRequest: [fastify.adminOnly]
   }, async (request, reply) => {
-    const { provider } = request.body;
-    if (!provider || !['claude', 'gemini'].includes(provider)) {
-      return reply.status(400).send({ error: 'Invalid provider. Use "claude" or "gemini".' });
+    const { provider, model } = request.body;
+    if (!provider || !['claude', 'gemini', 'ollama'].includes(provider)) {
+      return reply.status(400).send({ error: 'Invalid provider. Use "claude", "gemini", or "ollama".' });
     }
     const { setProvider, getProviderName } = await import('../ai/providers/index.js');
     setProvider(provider);
+    // Allow overriding the Ollama model at runtime
+    if (provider === 'ollama' && model) {
+      process.env.OLLAMA_MODEL = model;
+    }
     return { provider: getProviderName(), message: `AI provider switched to ${provider}` };
+  });
+
+  // List available Ollama cloud models (fetched live from ollama.com)
+  fastify.get('/ai-provider/ollama-models', {
+    onRequest: [fastify.authenticate]
+  }, async () => {
+    const { default: OllamaProvider, OLLAMA_MODELS } = await import('../ai/providers/ollama.js');
+    const env = (await import('../config/env.js')).default;
+    const models = await OllamaProvider.listCloudModels(env.ollamaApiKey);
+    return { models, known: OLLAMA_MODELS };
   });
 
   // ==================== ESCALATION RULES ====================
