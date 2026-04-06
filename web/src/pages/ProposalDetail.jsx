@@ -164,7 +164,7 @@ export default function ProposalDetail() {
           </div>
           {(proposal.status === 'SENT' || proposal.status === 'VIEWED') && proposal.viewToken && (
             <button
-              onClick={() => navigator.clipboard.writeText(`${window.location.origin}/view/proposal/${proposal.viewToken}`)}
+              onClick={() => navigator.clipboard.writeText(`${window.location.origin}/portal/proposal/${proposal.viewToken}`)}
               className="mt-2 flex items-center gap-1 text-xs text-primary hover:underline"
             >
               <ExternalLink className="w-3 h-3" /> Copy client view link

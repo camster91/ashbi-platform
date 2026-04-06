@@ -193,7 +193,7 @@ export default function Contracts() {
                     )}
                     {(contract.status === 'SENT' || contract.status === 'SIGNED') && (
                       <button
-                        onClick={() => navigator.clipboard.writeText(`${window.location.origin}/view/contract/${contract.signToken}`)}
+                        onClick={() => navigator.clipboard.writeText(`${window.location.origin}/portal/contract/${contract.signToken}`)}
                         className="p-1.5 text-muted-foreground hover:text-foreground rounded"
                         title="Copy signing link"
                       >

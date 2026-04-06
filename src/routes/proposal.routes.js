@@ -1,6 +1,42 @@
 // Proposal routes
 
+import Mailgun from 'mailgun.js';
+import FormData from 'form-data';
 import { prisma } from '../index.js';
+
+async function sendProposalEmail(to, clientName, proposalTitle, portalUrl) {
+  if (!process.env.MAILGUN_API_KEY || !process.env.MAILGUN_DOMAIN) return;
+  try {
+    const mg = new Mailgun(FormData);
+    const client = mg.client({ username: 'api', key: process.env.MAILGUN_API_KEY });
+    await client.messages.create(process.env.MAILGUN_DOMAIN, {
+      from: `Ashbi Design <noreply@${process.env.MAILGUN_DOMAIN}>`,
+      to,
+      subject: `Your Proposal is Ready — ${proposalTitle}`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+          <h2 style="color: #1a1a1a;">Hi ${clientName},</h2>
+          <p style="color: #444; line-height: 1.6;">
+            Your proposal from Ashbi Design is ready for review.
+            Please take a moment to review the details and let us know if you have any questions.
+          </p>
+          <div style="text-align: center; margin: 32px 0;">
+            <a href="${portalUrl}" style="background: #6366f1; color: white; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">
+              View Proposal
+            </a>
+          </div>
+          <p style="color: #888; font-size: 13px;">
+            You can approve, decline, or ask questions directly through the proposal page.
+          </p>
+          <hr style="border: none; border-top: 1px solid #eee; margin: 32px 0;" />
+          <p style="color: #aaa; font-size: 12px;">Ashbi Design · Toronto, Canada · hub.ashbi.ca</p>
+        </div>
+      `,
+    });
+  } catch (err) {
+    console.error('[Proposal] Email send error:', err.message);
+  }
+}
 
 export default async function proposalRoutes(fastify) {
   // List all proposals
@@ -207,10 +243,24 @@ export default async function proposalRoutes(fastify) {
         sentAt: new Date()
       },
       include: {
-        client: { select: { id: true, name: true } },
+        client: {
+          select: {
+            id: true,
+            name: true,
+            contacts: { where: { isPrimary: true }, take: 1 }
+          }
+        },
         lineItems: true
       }
     });
+
+    // Email the primary contact
+    const primaryEmail = proposal.client?.contacts?.[0]?.email;
+    const primaryName = proposal.client?.contacts?.[0]?.name || proposal.client?.name;
+    if (primaryEmail && proposal.viewToken) {
+      const portalUrl = `${process.env.PORTAL_BASE_URL || 'https://hub.ashbi.ca'}/portal/proposal/${proposal.viewToken}`;
+      await sendProposalEmail(primaryEmail, primaryName, proposal.title, portalUrl);
+    }
 
     return proposal;
   });

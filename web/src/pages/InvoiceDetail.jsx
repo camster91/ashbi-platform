@@ -264,7 +264,7 @@ export default function InvoiceDetail() {
           )}
           {invoice.viewToken && (
             <button
-              onClick={() => navigator.clipboard.writeText(`${window.location.origin}/view/invoice/${invoice.viewToken}`)}
+              onClick={() => navigator.clipboard.writeText(`${window.location.origin}/portal/invoice/${invoice.viewToken}`)}
               className="p-1.5 text-muted-foreground hover:text-foreground rounded" title="Copy client link">
               <ExternalLink className="w-4 h-4" />
             </button>

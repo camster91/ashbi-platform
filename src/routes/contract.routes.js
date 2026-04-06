@@ -1,5 +1,41 @@
 import crypto from 'crypto';
+import Mailgun from 'mailgun.js';
+import FormData from 'form-data';
 import { getContractTemplate, renderTemplate } from '../services/contractTemplates.service.js';
+
+async function sendContractEmail(to, clientName, contractTitle, signUrl) {
+  if (!process.env.MAILGUN_API_KEY || !process.env.MAILGUN_DOMAIN) return;
+  try {
+    const mg = new Mailgun(FormData);
+    const client = mg.client({ username: 'api', key: process.env.MAILGUN_API_KEY });
+    await client.messages.create(process.env.MAILGUN_DOMAIN, {
+      from: `Ashbi Design <noreply@${process.env.MAILGUN_DOMAIN}>`,
+      to,
+      subject: `Action Required: Please Sign Your Contract — ${contractTitle}`,
+      html: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 40px 20px;">
+          <h2 style="color: #1a1a1a;">Hi ${clientName},</h2>
+          <p style="color: #444; line-height: 1.6;">
+            Your contract with Ashbi Design is ready for your signature.
+            Please review the terms and sign electronically at your convenience.
+          </p>
+          <div style="text-align: center; margin: 32px 0;">
+            <a href="${signUrl}" style="background: #6366f1; color: white; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block;">
+              Review &amp; Sign Contract
+            </a>
+          </div>
+          <p style="color: #888; font-size: 13px;">
+            If you have any questions, please reply to this email or contact us directly.
+          </p>
+          <hr style="border: none; border-top: 1px solid #eee; margin: 32px 0;" />
+          <p style="color: #aaa; font-size: 12px;">Ashbi Design · Toronto, Canada · hub.ashbi.ca</p>
+        </div>
+      `,
+    });
+  } catch (err) {
+    console.error('[Contract] Email send error:', err.message);
+  }
+}
 
 export default async function contractRoutes(fastify) {
 
@@ -107,16 +143,36 @@ export default async function contractRoutes(fastify) {
     });
   });
 
-  // POST /:id/send — mark contract as SENT
+  // POST /:id/send — mark contract as SENT and email client
   fastify.post('/:id/send', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const contract = await fastify.prisma.contract.findUnique({ where: { id: request.params.id } });
+    const contract = await fastify.prisma.contract.findUnique({
+      where: { id: request.params.id },
+      include: {
+        client: {
+          select: {
+            name: true,
+            contacts: { where: { isPrimary: true }, take: 1 }
+          }
+        }
+      }
+    });
     if (!contract) return reply.status(404).send({ error: 'Contract not found' });
     if (contract.status !== 'DRAFT') return reply.status(400).send({ error: 'Only draft contracts can be sent' });
 
-    return fastify.prisma.contract.update({
+    const updated = await fastify.prisma.contract.update({
       where: { id: request.params.id },
       data: { status: 'SENT' }
     });
+
+    // Email the primary contact
+    const primaryContact = contract.client?.contacts?.[0];
+    if (primaryContact?.email && contract.signToken) {
+      const baseUrl = process.env.APP_URL || 'https://hub.ashbi.ca';
+      const signUrl = `${baseUrl}/portal/contract/${contract.signToken}`;
+      await sendContractEmail(primaryContact.email, primaryContact.name || contract.client?.name, contract.title || 'Service Agreement', signUrl);
+    }
+
+    return { ...updated, emailSent: !!primaryContact?.email };
   });
 
   // GET /sign/:signToken — PUBLIC — client views contract to sign

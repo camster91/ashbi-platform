@@ -212,7 +212,7 @@ export default function Proposals() {
                   <div className="flex items-center gap-1">
                     {proposal.status === 'SENT' && proposal.viewToken && (
                       <button
-                        onClick={() => navigator.clipboard.writeText(`${window.location.origin}/view/proposal/${proposal.viewToken}`)}
+                        onClick={() => navigator.clipboard.writeText(`${window.location.origin}/portal/proposal/${proposal.viewToken}`)}
                         className="p-1.5 text-muted-foreground hover:text-foreground rounded"
                         title="Copy client link"
                       >

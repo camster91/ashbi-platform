@@ -352,7 +352,7 @@ export default async function invoiceRoutes(fastify) {
     const primaryContact = invoice.client?.contacts?.[0];
     if (primaryContact?.email) {
       try {
-        const viewUrl = `${process.env.APP_URL || 'https://hub.ashbi.ca'}/view/invoice/${invoice.viewToken}`;
+        const viewUrl = `${process.env.APP_URL || 'https://hub.ashbi.ca'}/portal/invoice/${invoice.viewToken}`;
         await sendInvoiceEmail({
           to: primaryContact.email,
           name: primaryContact.name,
