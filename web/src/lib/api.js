@@ -970,6 +970,8 @@ export const api = {
     request('/retainer', { method: 'POST', body: data }),
   updateRetainerPlan: (clientId, data) =>
     request(`/retainer/${clientId}`, { method: 'PUT', body: data }),
+  generateRetainerInvoice: (clientId, data) =>
+    request(`/retainer/${clientId}/generate-invoice`, { method: 'POST', body: data }),
 
   // ===== FINANCIAL REPORTS =====
   getReportsPnl: (params = {}) => {

@@ -1,5 +1,21 @@
 // Retainer plan routes — track hours & revision rounds per client
 
+async function generateInvoiceNumber(prisma) {
+  const year = new Date().getFullYear();
+  const prefix = `INV-${year}-`;
+  const lastInvoice = await prisma.invoice.findFirst({
+    where: { invoiceNumber: { startsWith: prefix } },
+    orderBy: { invoiceNumber: 'desc' }
+  });
+  let nextNum = 1;
+  if (lastInvoice) {
+    const parts = lastInvoice.invoiceNumber.split('-');
+    const lastNum = parseInt(parts[parts.length - 1], 10);
+    nextNum = isNaN(lastNum) ? 1 : lastNum + 1;
+  }
+  return `${prefix}${String(nextNum).padStart(4, '0')}`;
+}
+
 export default async function retainerRoutes(fastify) {
   // GET /retainer — list all retainer plans with client info
   fastify.get('/retainer', {
@@ -206,6 +222,90 @@ export default async function retainerRoutes(fastify) {
       percentUsed,
       revisionRounds,
       scopeCreepRisk: percentUsed > 80
+    };
+  });
+
+  // POST /retainer/:clientId/generate-invoice — create a monthly retainer invoice
+  fastify.post('/retainer/:clientId/generate-invoice', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    if (request.user.role !== 'ADMIN') {
+      return reply.status(403).send({ error: 'Admin access required' });
+    }
+
+    const { clientId } = request.params;
+    const { currency = 'USD', daysUntilDue = 30, resetHours = false } = request.body || {};
+
+    const plan = await fastify.prisma.retainerPlan.findUnique({
+      where: { clientId },
+      include: { client: { select: { id: true, name: true } } }
+    });
+
+    if (!plan) {
+      return reply.status(404).send({ error: 'No retainer plan found for this client' });
+    }
+
+    const amount = currency === 'CAD'
+      ? (plan.monthlyAmountCad || plan.monthlyAmountUsd || 0)
+      : (plan.monthlyAmountUsd || plan.monthlyAmountCad || 0);
+
+    if (!amount) {
+      return reply.status(400).send({ error: 'No monthly rate set on this retainer plan' });
+    }
+
+    const invoiceNumber = await generateInvoiceNumber(fastify.prisma);
+    const now = new Date();
+    const dueDate = new Date(now);
+    dueDate.setDate(dueDate.getDate() + daysUntilDue);
+
+    const monthLabel = now.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+
+    // HST 13% if CAD, no tax if USD (adjust as needed)
+    const taxRate = currency === 'CAD' ? 13 : 0;
+    const subtotal = amount;
+    const tax = Math.round((subtotal * taxRate / 100) * 100) / 100;
+    const total = Math.round((subtotal + tax) * 100) / 100;
+
+    const invoice = await fastify.prisma.invoice.create({
+      data: {
+        invoiceNumber,
+        clientId,
+        status: 'DRAFT',
+        currency,
+        title: `Monthly Retainer — ${monthLabel}`,
+        issueDate: now,
+        dueDate,
+        subtotal,
+        taxRate,
+        taxType: currency === 'CAD' ? 'HST' : 'NONE',
+        tax,
+        total,
+        notes: `Monthly retainer: ${plan.hoursPerMonth} hours included.`,
+        lineItems: {
+          create: [{
+            description: `Monthly Retainer (${plan.hoursPerMonth}h/mo) — ${monthLabel}`,
+            itemType: 'RETAINER',
+            quantity: 1,
+            unitPrice: amount,
+            total: amount,
+            position: 0
+          }]
+        }
+      }
+    });
+
+    // Optionally reset hours for new cycle
+    if (resetHours) {
+      await fastify.prisma.retainerPlan.update({
+        where: { clientId },
+        data: { hoursUsed: 0, billingCycleStart: now }
+      });
+    }
+
+    return {
+      invoice,
+      resetHours,
+      message: `Invoice ${invoiceNumber} created for ${plan.client.name}`
     };
   });
 

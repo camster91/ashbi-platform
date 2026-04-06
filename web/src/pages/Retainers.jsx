@@ -11,6 +11,7 @@ import {
   Edit2,
   X,
   Save,
+  Receipt,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { Button, Card } from '../components/ui';
@@ -70,6 +71,18 @@ export default function Retainers() {
       queryClient.invalidateQueries({ queryKey: ['all-retainers'] });
       setLogHoursFor(null);
       setLogForm({ hours: '', description: '' });
+    },
+  });
+
+  const generateInvoiceMutation = useMutation({
+    mutationFn: ({ clientId, data }) => api.generateRetainerInvoice(clientId, data),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['all-retainers'] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      alert(`Invoice created: ${result.invoice?.invoiceNumber}\nClick Invoices to view and send it.`);
+    },
+    onError: (err) => {
+      alert(err.message || 'Failed to generate invoice');
     },
   });
 
@@ -288,6 +301,18 @@ export default function Retainers() {
                           <CheckCircle className="w-3 h-3" /> On Track
                         </span>
                       )}
+                      <button
+                        onClick={() => {
+                          const currency = plan.monthlyAmountCad && !plan.monthlyAmountUsd ? 'CAD' : 'USD';
+                          if (confirm(`Generate a ${currency} invoice for ${plan.client?.name || plan.clientId}?\n\nAmount: ${currency === 'CAD' ? '$' + plan.monthlyAmountCad : '$' + plan.monthlyAmountUsd} ${currency}/mo`)) {
+                            generateInvoiceMutation.mutate({ clientId: plan.clientId, data: { currency } });
+                          }
+                        }}
+                        className="p-1 text-muted-foreground hover:text-primary rounded"
+                        title="Generate monthly invoice"
+                      >
+                        <Receipt className="w-4 h-4" />
+                      </button>
                       <button onClick={() => handleEdit(plan)} className="p-1 text-muted-foreground hover:text-foreground rounded">
                         <Edit2 className="w-4 h-4" />
                       </button>
