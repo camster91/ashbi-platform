@@ -488,6 +488,24 @@ export const api = {
   getPortal: (token) =>
     request(`/portal/${token}`),
 
+  // ===== PUBLIC PORTAL PAGES =====
+  getPortalProposal: (token) =>
+    request(`/portal/proposal/${token}`),
+  respondPortalProposal: (token, data) =>
+    request(`/portal/proposal/${token}/respond`, { method: 'POST', body: data }),
+  getPortalContract: (token) =>
+    request(`/portal/contract/${token}`),
+  signPortalContract: (token, data) =>
+    request(`/portal/contract/${token}/sign`, { method: 'POST', body: data }),
+  getPortalInvoice: (token) =>
+    request(`/portal/invoice/${token}`),
+  payPortalInvoice: (token) =>
+    request(`/portal/invoice/${token}/pay`, { method: 'POST' }),
+  getPortalBookingSlots: (date) =>
+    request(`/portal/booking/slots?date=${date}`),
+  createPortalBooking: (data) =>
+    request('/portal/booking', { method: 'POST', body: data }),
+
   // ===== TASK TEMPLATES =====
   getTaskTemplates: () =>
     request('/templates'),

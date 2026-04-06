@@ -90,7 +90,7 @@ import gmailRoutes from './routes/gmail.routes.js';
 import integrationsGithubRoutes from './routes/integrations.github.routes.js';
 import integrationsVpsRoutes from './routes/integrations.vps.routes.js';
 import integrationsHostingerRoutes from './routes/integrations.hostinger.routes.js';
-import integrationsNotionRoutes from './routes/integrations.notion.routes.js';
+// Notion integration removed
 import agentsRoutes from './routes/integrations.agents.routes.js';
 import pushRoutes from './routes/push.routes.js';
 import { initVapid } from './utils/web-push.js';
@@ -105,6 +105,17 @@ export const prisma = new PrismaClient();
 const fastify = Fastify({
   logger: {
     level: env.isDev ? 'info' : 'warn'
+  }
+});
+
+// Preserve raw body for Stripe webhook signature verification
+fastify.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
+  try {
+    req.rawBody = body;
+    const json = JSON.parse(body.toString());
+    done(null, json);
+  } catch (err) {
+    done(err);
   }
 });
 
@@ -235,7 +246,7 @@ await fastify.register(gmailRoutes, { prefix: '/api/gmail' });
 await fastify.register(integrationsGithubRoutes, { prefix: '/api/integrations/github' });
 await fastify.register(integrationsVpsRoutes, { prefix: '/api/integrations/vps' });
 await fastify.register(integrationsHostingerRoutes, { prefix: '/api/integrations/hostinger' });
-await fastify.register(integrationsNotionRoutes, { prefix: '/api/integrations/notion' });
+// Notion integration removed
 await fastify.register(agentsRoutes, { prefix: '/api/agents' });
 await fastify.register(commandCenterRoutes, { prefix: '/api/command-center' });
 await fastify.register(pushRoutes, { prefix: '/api/push' });

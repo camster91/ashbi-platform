@@ -43,6 +43,10 @@ import AiChat from './pages/AiChat';
 import Chat from './pages/Chat';
 import Credentials from './pages/Credentials';
 import Portal from './pages/Portal';
+import PortalProposal from './pages/PortalProposal';
+import PortalContract from './pages/PortalContract';
+import PortalInvoice from './pages/PortalInvoice';
+import PortalBooking from './pages/PortalBooking';
 import Outreach from './pages/Outreach';
 import Social from './pages/Social';
 import Blog from './pages/Blog';
@@ -98,6 +102,10 @@ function AppRoutes() {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/portal/:token" element={<Portal />} />
+      <Route path="/portal/proposal/:token" element={<PortalProposal />} />
+      <Route path="/portal/contract/:token" element={<PortalContract />} />
+      <Route path="/portal/invoice/:token" element={<PortalInvoice />} />
+      <Route path="/portal/book" element={<PortalBooking />} />
       <Route path="/client-portal" element={<ClientPortal />} />
       {/* Client Portal Routes */}
       <Route path="/client/login" element={<ClientLogin />} />

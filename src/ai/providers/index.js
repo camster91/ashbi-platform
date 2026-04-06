@@ -2,15 +2,18 @@
 
 import ClaudeProvider from './claude.js';
 import GeminiProvider, { GEMINI_CREATIVE_MODEL } from './gemini.js';
+import OllamaProvider from './ollama.js';
 import env from '../../config/env.js';
 
 let currentProvider = null;
 let currentProviderName = null;
 let creativeProvider = null;
 
+const VALID_PROVIDERS = ['claude', 'gemini', 'ollama'];
+
 /**
  * Get the active AI provider instance.
- * Defaults to env.aiProvider ('claude' | 'gemini'), can be switched at runtime.
+ * Defaults to env.aiProvider ('claude' | 'gemini' | 'ollama'), can be switched at runtime.
  */
 export function getProvider() {
   const desiredProvider = currentProviderName || env.aiProvider;
@@ -24,6 +27,10 @@ export function getProvider() {
       currentProvider = new GeminiProvider();
       currentProviderName = 'gemini';
       break;
+    case 'ollama':
+      currentProvider = new OllamaProvider();
+      currentProviderName = 'ollama';
+      break;
     case 'claude':
     default:
       currentProvider = new ClaudeProvider();
@@ -36,11 +43,11 @@ export function getProvider() {
 
 /**
  * Switch the AI provider at runtime (admin only).
- * @param {'claude' | 'gemini'} providerName
+ * @param {'claude' | 'gemini' | 'ollama'} providerName
  */
 export function setProvider(providerName) {
-  if (!['claude', 'gemini'].includes(providerName)) {
-    throw new Error(`Unknown AI provider: ${providerName}. Use 'claude' or 'gemini'.`);
+  if (!VALID_PROVIDERS.includes(providerName)) {
+    throw new Error(`Unknown AI provider: ${providerName}. Use ${VALID_PROVIDERS.join(', ')}.`);
   }
   currentProviderName = providerName;
   currentProvider = null; // Force re-creation on next getProvider()
