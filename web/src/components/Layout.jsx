@@ -488,6 +488,7 @@ export default function Layout({ children }) {
 
           {/* Right side actions */}
           <div className="flex items-center gap-2">
+            <QuickCreateMenu navigate={navigate} isAdmin={isAdmin} />
             <button
               onClick={toggleTheme}
               className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors"
@@ -545,6 +546,52 @@ export default function Layout({ children }) {
           {children}
         </div>
       </main>
+    </div>
+  );
+}
+
+function QuickCreateMenu({ navigate, isAdmin }) {
+  const [open, setOpen] = useState(false);
+
+  const actions = [
+    { label: 'New Project', icon: FolderOpen, href: '/projects?create=true' },
+    { label: 'New Client', icon: Users, href: '/clients?create=true' },
+    { label: 'New Invoice', icon: Receipt, href: '/invoices?create=true', adminOnly: true },
+    { label: 'New Proposal', icon: FileText, href: '/proposals?create=true' },
+    { label: 'New Note', icon: BookOpen, href: '/docs?create=true' },
+  ].filter(a => !a.adminOnly || isAdmin);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className={cn(
+          'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors',
+          open ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80'
+        )}
+        title="Quick create"
+      >
+        <Plus className="w-4 h-4" />
+        <span className="hidden sm:inline">Create</span>
+      </button>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full mt-1 w-48 bg-card border border-border rounded-xl shadow-lg z-50 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
+            {actions.map(({ label, icon: Icon, href }) => (
+              <button
+                key={label}
+                onClick={() => { navigate(href); setOpen(false); }}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-muted transition-colors text-left"
+              >
+                <Icon className="w-4 h-4 text-muted-foreground" />
+                {label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }

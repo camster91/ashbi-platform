@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   BookOpen,
   Plus,
@@ -42,14 +42,19 @@ const TYPE_COLORS = {
 export default function Docs() {
   const queryClient = useQueryClient();
   const toast = useToast();
+  const [searchParams] = useSearchParams();
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('');
   const [expandedId, setExpandedId] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
-  const [showNewNote, setShowNewNote] = useState(false);
+  const [showNewNote, setShowNewNote] = useState(searchParams.get('create') === 'true');
   const [newNoteProjectId, setNewNoteProjectId] = useState('');
   const [newForm, setNewForm] = useState({ title: '', content: '', type: 'NOTE', tags: '' });
+
+  useEffect(() => {
+    if (searchParams.get('create') === 'true') setShowNewNote(true);
+  }, [searchParams]);
 
   const { data: notes = [], isLoading } = useQuery({
     queryKey: ['all-notes', search, filterType],
