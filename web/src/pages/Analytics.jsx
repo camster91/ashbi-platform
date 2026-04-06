@@ -1,13 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import {
-  MessageSquare,
-  Clock,
-  CheckCircle,
-  TrendingUp,
-  Users,
-  AlertCircle,
-} from 'lucide-react';
+import { MessageSquare, Clock, CheckCircle, TrendingUp, Users, AlertCircle } from 'lucide-react';
 import { api } from '../lib/api';
+import { Card } from '../components/ui';
 import { cn } from '../lib/utils';
 
 export default function Analytics() {
@@ -15,12 +9,10 @@ export default function Analytics() {
     queryKey: ['analytics-overview'],
     queryFn: () => api.getOverview(30),
   });
-
   const { data: responseTimes } = useQuery({
     queryKey: ['analytics-response-times'],
     queryFn: () => api.getResponseTimes(30),
   });
-
   const { data: teamAnalytics } = useQuery({
     queryKey: ['analytics-team'],
     queryFn: () => api.getTeamAnalytics(30),
@@ -29,242 +21,163 @@ export default function Analytics() {
   if (overviewLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
       </div>
     );
   }
 
+  const totalProjects = (overview?.projectHealth?.ON_TRACK || 0) +
+    (overview?.projectHealth?.NEEDS_ATTENTION || 0) +
+    (overview?.projectHealth?.AT_RISK || 0);
+
+  const priorityColors = {
+    CRITICAL: 'text-red-600 bg-red-50 dark:bg-red-900/20',
+    HIGH: 'text-orange-600 bg-orange-50 dark:bg-orange-900/20',
+    NORMAL: 'text-blue-600 bg-blue-50 dark:bg-blue-900/20',
+    LOW: 'text-muted-foreground bg-muted',
+  };
+
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Analytics</h1>
+      <div>
+        <h1 className="text-2xl font-heading font-bold text-foreground">Analytics</h1>
+        <p className="text-sm text-muted-foreground mt-1">Inbox and project performance metrics</p>
+      </div>
 
       {/* Summary Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard
-          label="Total Threads"
-          value={overview?.summary?.totalThreads || 0}
-          icon={MessageSquare}
-        />
+        <StatCard label="Total Threads" value={overview?.summary?.totalThreads || 0} icon={MessageSquare} />
         <StatCard
           label="Open Threads"
           value={overview?.summary?.openThreads || 0}
           icon={AlertCircle}
           highlight={overview?.summary?.openThreads > 10}
         />
-        <StatCard
-          label="Resolution Rate"
-          value={`${overview?.summary?.resolutionRate || 0}%`}
-          icon={CheckCircle}
-        />
-        <StatCard
-          label="Pending Approval"
-          value={overview?.summary?.pendingResponses || 0}
-          icon={Clock}
-        />
+        <StatCard label="Resolution Rate" value={`${overview?.summary?.resolutionRate || 0}%`} icon={CheckCircle} />
+        <StatCard label="Pending Approval" value={overview?.summary?.pendingResponses || 0} icon={Clock} />
       </div>
 
       {/* Period Stats */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <h2 className="font-semibold mb-4">Last 30 Days</h2>
+      <Card className="p-6">
+        <h2 className="font-semibold text-foreground mb-4">Last 30 Days</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-          <div>
-            <p className="text-3xl font-bold text-primary">
-              {overview?.period?.newThreads || 0}
-            </p>
-            <p className="text-sm text-gray-500">New Threads</p>
-          </div>
-          <div>
-            <p className="text-3xl font-bold text-green-600">
-              {overview?.period?.resolvedThreads || 0}
-            </p>
-            <p className="text-sm text-gray-500">Resolved Threads</p>
-          </div>
-          <div>
-            <p className="text-3xl font-bold">
-              {overview?.summary?.activeProjects || 0}
-            </p>
-            <p className="text-sm text-gray-500">Active Projects</p>
-          </div>
-          <div>
-            <p className="text-3xl font-bold">
-              {overview?.summary?.totalClients || 0}
-            </p>
-            <p className="text-sm text-gray-500">Active Clients</p>
-          </div>
+          {[
+            { value: overview?.period?.newThreads || 0, label: 'New Threads', color: 'text-primary' },
+            { value: overview?.period?.resolvedThreads || 0, label: 'Resolved Threads', color: 'text-green-600' },
+            { value: overview?.summary?.activeProjects || 0, label: 'Active Projects', color: 'text-foreground' },
+            { value: overview?.summary?.totalClients || 0, label: 'Active Clients', color: 'text-foreground' },
+          ].map(({ value, label, color }) => (
+            <div key={label}>
+              <p className={`text-3xl font-bold ${color}`}>{value}</p>
+              <p className="text-sm text-muted-foreground mt-1">{label}</p>
+            </div>
+          ))}
         </div>
-      </div>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Response Times */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="font-semibold mb-4">Response Times (hours)</h2>
-          {responseTimes?.averageByPriority ? (
+        <Card className="p-6">
+          <h2 className="font-semibold text-foreground mb-4">Response Times (hours)</h2>
+          {responseTimes?.averageByPriority && Object.keys(responseTimes.averageByPriority).length > 0 ? (
             <div className="space-y-4">
-              {Object.entries(responseTimes.averageByPriority).map(
-                ([priority, hours]) => (
-                  <div key={priority}>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="font-medium">{priority}</span>
-                      <span>{hours}h avg</span>
-                    </div>
-                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                      <div
-                        className={cn(
-                          'h-full rounded-full',
-                          priority === 'CRITICAL'
-                            ? 'bg-red-500'
-                            : priority === 'HIGH'
-                            ? 'bg-orange-500'
-                            : priority === 'NORMAL'
-                            ? 'bg-blue-500'
-                            : 'bg-gray-400'
-                        )}
-                        style={{
-                          width: `${Math.min(100, (hours / 48) * 100)}%`,
-                        }}
-                      />
-                    </div>
+              {Object.entries(responseTimes.averageByPriority).map(([priority, hours]) => (
+                <div key={priority}>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="font-medium text-foreground">{priority}</span>
+                    <span className="text-muted-foreground">{hours}h avg</span>
                   </div>
-                )
-              )}
-              <div className="pt-4 border-t">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Overall Average</span>
-                  <span className="font-medium">
-                    {responseTimes.overallAverage}h
-                  </span>
+                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className={cn(
+                        'h-full rounded-full',
+                        priority === 'CRITICAL' ? 'bg-red-500' :
+                        priority === 'HIGH' ? 'bg-orange-500' :
+                        priority === 'NORMAL' ? 'bg-blue-500' : 'bg-muted-foreground/50'
+                      )}
+                      style={{ width: `${Math.min(100, (hours / 48) * 100)}%` }}
+                    />
+                  </div>
                 </div>
+              ))}
+              <div className="pt-4 border-t border-border flex justify-between text-sm">
+                <span className="text-muted-foreground">Overall Average</span>
+                <span className="font-medium text-foreground">{responseTimes.overallAverage}h</span>
               </div>
             </div>
           ) : (
-            <p className="text-gray-500">No response data yet</p>
+            <p className="text-muted-foreground text-sm">No response data yet</p>
           )}
-        </div>
+        </Card>
 
         {/* Project Health */}
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="font-semibold mb-4">Project Health</h2>
-          {overview?.projectHealth ? (
+        <Card className="p-6">
+          <h2 className="font-semibold text-foreground mb-4">Project Health</h2>
+          {totalProjects > 0 ? (
             <div className="space-y-4">
-              <HealthBar
-                label="On Track"
-                count={overview.projectHealth.ON_TRACK || 0}
-                total={
-                  (overview.projectHealth.ON_TRACK || 0) +
-                  (overview.projectHealth.NEEDS_ATTENTION || 0) +
-                  (overview.projectHealth.AT_RISK || 0)
-                }
-                color="green"
-              />
-              <HealthBar
-                label="Needs Attention"
-                count={overview.projectHealth.NEEDS_ATTENTION || 0}
-                total={
-                  (overview.projectHealth.ON_TRACK || 0) +
-                  (overview.projectHealth.NEEDS_ATTENTION || 0) +
-                  (overview.projectHealth.AT_RISK || 0)
-                }
-                color="yellow"
-              />
-              <HealthBar
-                label="At Risk"
-                count={overview.projectHealth.AT_RISK || 0}
-                total={
-                  (overview.projectHealth.ON_TRACK || 0) +
-                  (overview.projectHealth.NEEDS_ATTENTION || 0) +
-                  (overview.projectHealth.AT_RISK || 0)
-                }
-                color="red"
-              />
+              <HealthBar label="On Track" count={overview?.projectHealth?.ON_TRACK || 0} total={totalProjects} color="green" />
+              <HealthBar label="Needs Attention" count={overview?.projectHealth?.NEEDS_ATTENTION || 0} total={totalProjects} color="yellow" />
+              <HealthBar label="At Risk" count={overview?.projectHealth?.AT_RISK || 0} total={totalProjects} color="red" />
             </div>
           ) : (
-            <p className="text-gray-500">No project data yet</p>
+            <p className="text-muted-foreground text-sm">No project data yet</p>
           )}
-        </div>
+        </Card>
       </div>
 
-      {/* Team Performance */}
-      {teamAnalytics && teamAnalytics.length > 0 && (
-        <div className="bg-white rounded-lg shadow">
-          <div className="px-6 py-4 border-b">
-            <h2 className="font-semibold">Team Performance (30 days)</h2>
+      {/* Priority Breakdown */}
+      {overview?.priorityBreakdown && Object.keys(overview.priorityBreakdown).length > 0 && (
+        <Card className="p-6">
+          <h2 className="font-semibold text-foreground mb-4">Open Threads by Priority</h2>
+          <div className="flex items-center gap-4 flex-wrap">
+            {Object.entries(overview.priorityBreakdown).map(([priority, count]) => (
+              <div key={priority} className={`flex-1 min-w-[100px] p-4 rounded-lg text-center ${priorityColors[priority] || 'bg-muted text-muted-foreground'}`}>
+                <p className="text-2xl font-bold">{count}</p>
+                <p className="text-sm mt-0.5">{priority}</p>
+              </div>
+            ))}
           </div>
-          <table className="w-full">
-            <thead>
-              <tr className="border-b text-left text-sm text-gray-500">
-                <th className="px-6 py-3 font-medium">Member</th>
-                <th className="px-6 py-3 font-medium">Role</th>
-                <th className="px-6 py-3 font-medium">Active Threads</th>
-                <th className="px-6 py-3 font-medium">Responses Created</th>
-                <th className="px-6 py-3 font-medium">Threads Resolved</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y">
-              {teamAnalytics.map((member) => (
-                <tr key={member.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-primary/10 text-primary rounded-full flex items-center justify-center text-sm font-medium">
-                        {member.name[0]}
-                      </div>
-                      <span className="font-medium">{member.name}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-3 text-gray-600">{member.role}</td>
-                  <td className="px-6 py-3">{member.activeThreads}</td>
-                  <td className="px-6 py-3">{member.responsesCreated}</td>
-                  <td className="px-6 py-3">
-                    <span className="text-green-600 font-medium">
-                      {member.threadsResolved}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        </Card>
       )}
 
-      {/* Priority Breakdown */}
-      {overview?.priorityBreakdown && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="font-semibold mb-4">Open Threads by Priority</h2>
-          <div className="flex items-center gap-4">
-            {Object.entries(overview.priorityBreakdown).map(
-              ([priority, count]) => (
-                <div
-                  key={priority}
-                  className={cn(
-                    'flex-1 p-4 rounded-lg text-center',
-                    priority === 'CRITICAL'
-                      ? 'bg-red-50'
-                      : priority === 'HIGH'
-                      ? 'bg-orange-50'
-                      : priority === 'NORMAL'
-                      ? 'bg-blue-50'
-                      : 'bg-gray-50'
-                  )}
-                >
-                  <p
-                    className={cn(
-                      'text-2xl font-bold',
-                      priority === 'CRITICAL'
-                        ? 'text-red-600'
-                        : priority === 'HIGH'
-                        ? 'text-orange-600'
-                        : priority === 'NORMAL'
-                        ? 'text-blue-600'
-                        : 'text-gray-600'
-                    )}
-                  >
-                    {count}
-                  </p>
-                  <p className="text-sm text-gray-500">{priority}</p>
-                </div>
-              )
-            )}
+      {/* Team Performance */}
+      {teamAnalytics?.length > 0 && (
+        <Card>
+          <div className="px-6 py-4 border-b border-border">
+            <h2 className="font-semibold text-foreground">Team Performance (30 days)</h2>
           </div>
-        </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border text-left">
+                  <th className="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Member</th>
+                  <th className="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Role</th>
+                  <th className="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Active Threads</th>
+                  <th className="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Responses</th>
+                  <th className="px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wide">Resolved</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {teamAnalytics.map((member) => (
+                  <tr key={member.id} className="hover:bg-muted/30 transition-colors">
+                    <td className="px-6 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-primary/10 text-primary rounded-full flex items-center justify-center text-sm font-medium">
+                          {member.name?.[0]}
+                        </div>
+                        <span className="font-medium text-foreground">{member.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-3 text-sm text-muted-foreground">{member.role}</td>
+                    <td className="px-6 py-3 text-sm text-foreground">{member.activeThreads}</td>
+                    <td className="px-6 py-3 text-sm text-foreground">{member.responsesCreated}</td>
+                    <td className="px-6 py-3 text-sm font-medium text-green-600">{member.threadsResolved}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       )}
     </div>
   );
@@ -272,45 +185,29 @@ export default function Analytics() {
 
 function StatCard({ label, value, icon: Icon, highlight }) {
   return (
-    <div
-      className={cn(
-        'p-4 rounded-lg bg-white shadow',
-        highlight && 'ring-2 ring-orange-200'
-      )}
-    >
+    <Card className={cn('p-4', highlight && 'ring-2 ring-orange-400/50')}>
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-gray-500">{label}</p>
-          <p className="text-2xl font-bold">{value}</p>
+          <p className="text-sm text-muted-foreground">{label}</p>
+          <p className="text-2xl font-bold text-foreground mt-0.5">{value}</p>
         </div>
-        <Icon className="w-8 h-8 text-gray-400" />
+        <Icon className="w-8 h-8 text-muted-foreground/40" />
       </div>
-    </div>
+    </Card>
   );
 }
 
 function HealthBar({ label, count, total, color }) {
-  const colors = {
-    green: 'bg-green-500',
-    yellow: 'bg-yellow-500',
-    red: 'bg-red-500',
-  };
-
+  const barColors = { green: 'bg-green-500', yellow: 'bg-yellow-400', red: 'bg-red-500' };
   const percentage = total > 0 ? (count / total) * 100 : 0;
-
   return (
     <div>
       <div className="flex justify-between text-sm mb-1">
-        <span>{label}</span>
-        <span>
-          {count} ({Math.round(percentage)}%)
-        </span>
+        <span className="text-foreground">{label}</span>
+        <span className="text-muted-foreground">{count} ({Math.round(percentage)}%)</span>
       </div>
-      <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-        <div
-          className={cn('h-full rounded-full', colors[color])}
-          style={{ width: `${percentage}%` }}
-        />
+      <div className="h-2 bg-muted rounded-full overflow-hidden">
+        <div className={cn('h-full rounded-full transition-all', barColors[color])} style={{ width: `${percentage}%` }} />
       </div>
     </div>
   );
