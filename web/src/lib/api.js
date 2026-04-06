@@ -927,6 +927,10 @@ export const api = {
     return res.json();
   },
 
+  // ===== ONBOARDING =====
+  onboardClient: (data) =>
+    request('/onboarding/client', { method: 'POST', body: data }),
+
   // ===== EMAIL SEND =====
   sendEmail: (data) =>
     request('/mailgun/send', { method: 'POST', body: data }),
