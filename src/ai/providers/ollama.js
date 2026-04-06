@@ -5,13 +5,10 @@
 
 import env from '../../config/env.js';
 
-// Gemma4 model lineup on Ollama
+// Models available under this Ollama account
+// Only gemma4:31b is available in the Gemma4 family — all tasks use it
 export const OLLAMA_MODELS = {
-  MINI:    'gemma4:e2b',       // 2B edge model — fastest, lowest latency
-  FAST:    'gemma4:e4b',       // 4B edge model — fast with good quality
-  DEFAULT: 'gemma4:26b',       // 26B MoE, 256K context — best balance
-  LARGE:   'gemma4:31b',       // 31B dense — highest local quality
-  CLOUD:   'gemma4:31b-cloud', // 31B cloud-hosted — best quality, no local memory
+  DEFAULT: 'gemma4:31b', // Gemma4 31B — used for all tasks
 };
 
 class OllamaProvider {
