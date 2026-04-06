@@ -60,6 +60,10 @@ export default function Analytics() {
     queryKey: ['analytics-trends', period],
     queryFn: () => api.getAnalyticsTrends(period),
   });
+  const { data: aiAccuracy } = useQuery({
+    queryKey: ['analytics-ai-accuracy', period],
+    queryFn: () => api.getAiAccuracy(period),
+  });
 
   const dailyData = (trends?.daily || []).map(d => ({
     ...d,
@@ -291,6 +295,34 @@ export default function Analytics() {
           ))}
         </div>
       </Card>
+
+      {/* AI Performance */}
+      {aiAccuracy && (
+        <Card className="p-6">
+          <h2 className="font-semibold text-foreground mb-4">AI Performance ({period} days)</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            <div>
+              <p className="text-3xl font-bold text-primary">{aiAccuracy.matching?.autoMatchRate || 0}%</p>
+              <p className="text-sm text-muted-foreground mt-1">Auto-match Rate</p>
+              <p className="text-xs text-muted-foreground">{aiAccuracy.matching?.highConfidenceMatches || 0} high-confidence</p>
+            </div>
+            <div>
+              <p className="text-3xl font-bold text-foreground">{aiAccuracy.matching?.totalMatched || 0}</p>
+              <p className="text-sm text-muted-foreground mt-1">Threads Matched</p>
+              <p className="text-xs text-muted-foreground">{aiAccuracy.matching?.needsTriage || 0} need triage</p>
+            </div>
+            <div>
+              <p className="text-3xl font-bold text-green-600">{aiAccuracy.responses?.approvalRate || 0}%</p>
+              <p className="text-sm text-muted-foreground mt-1">AI Response Approval</p>
+              <p className="text-xs text-muted-foreground">{aiAccuracy.responses?.approved || 0} approved</p>
+            </div>
+            <div>
+              <p className="text-3xl font-bold text-foreground">{aiAccuracy.responses?.aiGenerated || 0}</p>
+              <p className="text-sm text-muted-foreground mt-1">AI Drafts Generated</p>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Team Performance */}
       {teamAnalytics?.length > 0 && (
