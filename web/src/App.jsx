@@ -71,6 +71,7 @@ const WordPressDashboard = lazy(() => import('./pages/WordPressDashboard'));
 const AgentTeamDashboard = lazy(() => import('./pages/AgentTeamDashboard'));
 const SkillsCatalog = lazy(() => import('./pages/SkillsCatalog'));
 const IntegrationDashboard = lazy(() => import('./pages/IntegrationDashboard'));
+const Docs = lazy(() => import('./pages/Docs'));
 // Project Tools
 const GanttView = lazy(() => import('./pages/GanttView'));
 const ProjectPlanner = lazy(() => import('./pages/ProjectPlanner'));
@@ -184,6 +185,7 @@ function AppRoutes() {
                   <Route path="/integrations" element={<IntegrationDashboard />} />
                   <Route path="/activity" element={<ActivityFeed />} />
                   <Route path="/automations" element={<AdminRoute><Automations /></AdminRoute>} />
+                  <Route path="/docs" element={<Docs />} />
                   <Route path="/project-planner" element={<ProjectPlanner />} />
                   <Route path="/project-templates" element={<ProjectTemplates />} />
                   <Route path="/gantt" element={<GanttView />} />

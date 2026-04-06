@@ -47,6 +47,7 @@ import {
   Heart,
   PanelLeftClose,
   PanelLeftOpen,
+  BookOpen,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Download, Sun, Moon } from 'lucide-react';
@@ -149,6 +150,7 @@ export default function Layout({ children }) {
   ];
 
   const projectToolsNav = [
+    { name: 'Docs & Notes', href: '/docs', icon: BookOpen },
     { name: 'AI Planner', href: '/project-planner', icon: Sparkles },
     { name: 'Gantt Timeline', href: '/gantt', icon: GanttChartSquare },
     { name: 'Templates', href: '/project-templates', icon: FileText },

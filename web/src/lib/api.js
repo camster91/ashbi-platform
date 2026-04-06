@@ -275,6 +275,10 @@ export const api = {
     request(`/chat/projects/${projectId}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`, { method: 'DELETE' }),
 
   // Notes
+  getAllNotes: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/notes${query ? `?${query}` : ''}`);
+  },
   getNotes: (projectId, params = {}) => {
     const query = new URLSearchParams(params).toString();
     return request(`/projects/${projectId}/notes${query ? `?${query}` : ''}`);

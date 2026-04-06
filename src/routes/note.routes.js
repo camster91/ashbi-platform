@@ -3,6 +3,42 @@
 import { prisma } from '../index.js';
 
 export default async function noteRoutes(fastify) {
+  // List ALL notes across all projects (global docs view)
+  fastify.get('/notes', {
+    onRequest: [fastify.authenticate]
+  }, async (request) => {
+    const { type, search, pinned, projectId } = request.query;
+
+    const where = {};
+    if (projectId) where.projectId = projectId;
+    if (type) where.type = type;
+    if (pinned === 'true') where.isPinned = true;
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: 'insensitive' } },
+        { content: { contains: search, mode: 'insensitive' } }
+      ];
+    }
+
+    const notes = await prisma.note.findMany({
+      where,
+      include: {
+        author: { select: { id: true, name: true } },
+        project: { select: { id: true, name: true, client: { select: { id: true, name: true } } } }
+      },
+      orderBy: [
+        { isPinned: 'desc' },
+        { updatedAt: 'desc' }
+      ],
+      take: 200
+    });
+
+    return notes.map(n => ({
+      ...n,
+      tags: JSON.parse(n.tags)
+    }));
+  });
+
   // List notes for a project
   fastify.get('/projects/:projectId/notes', {
     onRequest: [fastify.authenticate]
