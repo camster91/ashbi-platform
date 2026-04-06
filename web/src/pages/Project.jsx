@@ -202,7 +202,7 @@ export default function Project() {
             <Sparkles className="w-4 h-4 text-accent" />
             AI Summary
           </h3>
-          <p className="text-gray-700">{project.aiSummary}</p>
+          <p className="text-muted-foreground">{project.aiSummary}</p>
         </div>
       )}
 
@@ -228,7 +228,7 @@ export default function Project() {
         {/* Sidebar */}
         <div className="space-y-4">
           {/* Active Threads */}
-          <div className="bg-white rounded-lg shadow-sm border border-border">
+          <div className="bg-card rounded-lg border border-border">
             <div className="px-4 py-3 border-b flex justify-between items-center">
               <h3 className="font-semibold">Active Threads</h3>
               <span className="text-sm text-muted-foreground">
@@ -261,7 +261,7 @@ export default function Project() {
 
           {/* Risks */}
           {project.risks?.length > 0 && (
-            <div className="bg-white rounded-lg shadow-sm border border-border">
+            <div className="bg-card rounded-lg border border-border">
               <div className="px-4 py-3 border-b">
                 <h3 className="font-semibold text-red-600">Risks</h3>
               </div>
@@ -288,7 +288,7 @@ export default function Project() {
       {/* Communications & Context */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
-          <div className="bg-white rounded-lg shadow-sm border border-border">
+          <div className="bg-card rounded-lg border border-border">
             <div className="px-4 py-3 border-b flex items-center gap-2">
               <Mail className="w-4 h-4 text-accent" />
               <h3 className="font-semibold">Email Communications</h3>
@@ -306,7 +306,7 @@ export default function Project() {
       {/* Draft Update Modal */}
       {showDraftModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-scale-in">
+          <div className="bg-card rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-scale-in">
             <div className="px-6 py-4 border-b flex items-center justify-between">
               <h2 className="text-lg font-semibold">Draft Client Update</h2>
               <button onClick={() => { setShowDraftModal(false); setDraftResult(null); }} className="p-1 hover:bg-gray-100 rounded">
@@ -351,11 +351,11 @@ export default function Project() {
                 <>
                   <div>
                     <label className="block text-sm font-medium mb-1">Subject</label>
-                    <div className="border border-border rounded-lg px-3 py-2 text-sm bg-gray-50">{draftResult.subject}</div>
+                    <div className="border border-border rounded-lg px-3 py-2 text-sm bg-muted">{draftResult.subject}</div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-1">Body</label>
-                    <div className="border border-border rounded-lg px-3 py-2 text-sm bg-gray-50 whitespace-pre-wrap">{draftResult.body}</div>
+                    <div className="border border-border rounded-lg px-3 py-2 text-sm bg-muted whitespace-pre-wrap">{draftResult.body}</div>
                   </div>
                   <div className="text-xs text-muted-foreground">Tone: {draftResult.tone}</div>
                   <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded">
@@ -385,7 +385,7 @@ export default function Project() {
       {/* Apply Template Modal */}
       {showTemplateModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full animate-scale-in">
+          <div className="bg-card rounded-xl shadow-xl max-w-md w-full animate-scale-in">
             <div className="px-6 py-4 border-b flex items-center justify-between">
               <h2 className="text-lg font-semibold">Apply Task Template</h2>
               <button onClick={() => setShowTemplateModal(false)} className="p-1 hover:bg-gray-100 rounded">
@@ -423,7 +423,7 @@ export default function Project() {
       {/* Paste Message Modal */}
       {showPasteModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-scale-in">
+          <div className="bg-card rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-scale-in">
             <div className="px-6 py-4 border-b flex items-center justify-between">
               <h2 className="text-lg font-semibold">Paste Message</h2>
               <button onClick={() => setShowPasteModal(false)} className="p-1 hover:bg-gray-100 rounded">
@@ -478,7 +478,7 @@ function RevisionRounds({ revisions, isAdmin, onCreateRound, onApprove, isCreati
   const [expanded, setExpanded] = useState(true);
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-border">
+    <div className="bg-card rounded-lg border border-border">
       <div
         className="px-4 py-3 border-b flex items-center gap-2 cursor-pointer hover:bg-secondary/30 transition-colors"
         onClick={() => setExpanded(!expanded)}
@@ -550,13 +550,13 @@ function TaskCategory({ title, icon: Icon, tasks = [], color, collapsed = false 
     orange: 'text-orange-600 bg-orange-50',
     blue: 'text-blue-600 bg-blue-50',
     green: 'text-green-600 bg-green-50',
-    gray: 'text-gray-600 bg-gray-50',
+    gray: 'text-muted-foreground bg-muted',
   };
 
   if (tasks.length === 0 && collapsed) return null;
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-border">
+    <div className="bg-card rounded-lg border border-border">
       <div
         className="px-4 py-3 border-b flex items-center gap-2 cursor-pointer hover:bg-secondary/30 transition-colors"
         onClick={() => setIsCollapsed(!isCollapsed)}
