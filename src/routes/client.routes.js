@@ -131,7 +131,11 @@ export default async function clientRoutes(fastify) {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const { id } = request.params;
-    const { name, domain, status, communicationPrefs, knowledgeBase } = request.body;
+    const {
+      name, domain, status, communicationPrefs, knowledgeBase,
+      phone, notes, clientNotes, address, city, country,
+      tier, contactPerson, serviceType, relationshipStatus
+    } = request.body;
 
     const data = {};
     if (name) data.name = name;
@@ -139,6 +143,16 @@ export default async function clientRoutes(fastify) {
     if (status) data.status = status;
     if (communicationPrefs) data.communicationPrefs = JSON.stringify(communicationPrefs);
     if (knowledgeBase) data.knowledgeBase = JSON.stringify(knowledgeBase);
+    if (phone !== undefined) data.phone = phone;
+    if (notes !== undefined) data.notes = notes;
+    if (clientNotes !== undefined) data.clientNotes = clientNotes;
+    if (address !== undefined) data.address = address;
+    if (city !== undefined) data.city = city;
+    if (country !== undefined) data.country = country;
+    if (tier !== undefined) data.tier = tier;
+    if (contactPerson !== undefined) data.contactPerson = contactPerson;
+    if (serviceType !== undefined) data.serviceType = serviceType;
+    if (relationshipStatus !== undefined) data.relationshipStatus = relationshipStatus;
 
     const client = await prisma.client.update({
       where: { id },

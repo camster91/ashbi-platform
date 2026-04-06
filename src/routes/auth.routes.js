@@ -123,7 +123,10 @@ export default async function authRoutes(fastify) {
       return reply.status(404).send({ error: 'User not found' });
     }
 
-    return user;
+    return {
+      ...user,
+      skills: typeof user.skills === 'string' ? JSON.parse(user.skills || '[]') : (user.skills || [])
+    };
   });
 
   // Register (admin only, or first user)

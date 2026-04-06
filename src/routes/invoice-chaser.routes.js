@@ -12,7 +12,7 @@ export default async function invoiceChaserRoutes(fastify) {
     const { invoiceId } = request.body || {};
 
     // Get overdue invoices (or a specific one)
-    const where = { status: 'SENT' };
+    const where = { status: { in: ['SENT', 'OVERDUE'] } };
     if (invoiceId) {
       where.id = invoiceId;
     } else {
@@ -103,7 +103,7 @@ Sign off as Cameron Ashley, Ashbi Design.`;
 
     const invoices = await prisma.invoice.findMany({
       where: {
-        status: 'SENT',
+        status: { in: ['SENT', 'OVERDUE'] },
         dueDate: { lt: now }
       },
       include: {

@@ -7,7 +7,7 @@ export default async function reportRoutes(fastify) {
   // ─── WEEKLY REPORTS (existing) ─────────────────────────────────────────────
 
   // POST /reports/weekly/:clientId — generate a weekly report for a client
-  fastify.post('/reports/weekly/:clientId', {
+  fastify.post('/weekly/:clientId', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     if (request.user.role !== 'BOT' && request.user.role !== 'ADMIN') {
@@ -37,7 +37,7 @@ export default async function reportRoutes(fastify) {
   });
 
   // POST /reports/weekly/all — generate reports for all active clients
-  fastify.post('/reports/weekly/all', {
+  fastify.post('/weekly/all', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     if (request.user.role !== 'BOT' && request.user.role !== 'ADMIN') {
@@ -71,7 +71,7 @@ export default async function reportRoutes(fastify) {
   });
 
   // GET /reports/history/:clientId — past generated reports
-  fastify.get('/reports/history/:clientId', {
+  fastify.get('/history/:clientId', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
     const reports = await fastify.prisma.report.findMany({
@@ -84,7 +84,7 @@ export default async function reportRoutes(fastify) {
 
   // ─── P&L REPORT ────────────────────────────────────────────────────────────
 
-  fastify.get('/reports/pnl', {
+  fastify.get('/pnl', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
     const { startDate, endDate, clientId } = request.query;
@@ -179,7 +179,7 @@ export default async function reportRoutes(fastify) {
 
   // ─── CLIENT PROFITABILITY ──────────────────────────────────────────────────
 
-  fastify.get('/reports/client-profitability', {
+  fastify.get('/client-profitability', {
     onRequest: [fastify.authenticate]
   }, async () => {
     const clients = await fastify.prisma.client.findMany({
@@ -236,7 +236,7 @@ export default async function reportRoutes(fastify) {
 
   // ─── TEAM UTILIZATION ──────────────────────────────────────────────────────
 
-  fastify.get('/reports/team-utilization', {
+  fastify.get('/team-utilization', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
     const { startDate, endDate } = request.query;
@@ -317,7 +317,7 @@ export default async function reportRoutes(fastify) {
 
   // ─── PIPELINE VIEW ─────────────────────────────────────────────────────────
 
-  fastify.get('/reports/pipeline', {
+  fastify.get('/pipeline', {
     onRequest: [fastify.authenticate]
   }, async () => {
     const thirtyDaysAgo = new Date();

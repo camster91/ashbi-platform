@@ -116,7 +116,11 @@ export default async function projectRoutes(fastify) {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const { id } = request.params;
-    const { name, description, status, defaultOwnerId, clientId } = request.body;
+    const {
+      name, description, status, defaultOwnerId, clientId,
+      budget, hourlyBudget, health, startDate, endDate,
+      isRetainer, serviceType, notes
+    } = request.body;
 
     const data = {};
     if (name) data.name = name;
@@ -124,6 +128,14 @@ export default async function projectRoutes(fastify) {
     if (status) data.status = status;
     if (defaultOwnerId !== undefined) data.defaultOwnerId = defaultOwnerId;
     if (clientId) data.clientId = clientId;
+    if (budget !== undefined) data.budget = budget;
+    if (hourlyBudget !== undefined) data.hourlyBudget = hourlyBudget;
+    if (health !== undefined) data.health = health;
+    if (startDate !== undefined) data.startDate = startDate ? new Date(startDate) : null;
+    if (endDate !== undefined) data.endDate = endDate ? new Date(endDate) : null;
+    if (isRetainer !== undefined) data.isRetainer = isRetainer;
+    if (serviceType !== undefined) data.serviceType = serviceType;
+    if (notes !== undefined) data.notes = notes;
 
     const project = await prisma.project.update({
       where: { id },
