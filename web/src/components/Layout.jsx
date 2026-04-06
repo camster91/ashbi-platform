@@ -171,6 +171,7 @@ export default function Layout({ children }) {
 
   const adminNav = isAdmin ? [
     { name: 'Team', href: '/team', icon: UserCog },
+    { name: 'Revenue', href: '/revenue', icon: TrendingUp },
     { name: 'Reports', href: '/reports', icon: PieChart },
     { name: 'Command Center', href: '/admin/command-center', icon: Command },
     { name: 'Analytics', href: '/analytics', icon: BarChart3 },

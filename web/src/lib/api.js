@@ -931,6 +931,14 @@ export const api = {
     return res.json();
   },
 
+  // ===== REVENUE =====
+  getRevenueDashboard: (refresh = false) =>
+    request(`/revenue/dashboard${refresh ? '?refresh=true' : ''}`),
+  getRevenueMrr: () =>
+    request('/revenue/mrr'),
+  getRevenueTrends: () =>
+    request('/revenue/trends'),
+
   // ===== ONBOARDING =====
   onboardClient: (data) =>
     request('/onboarding/client', { method: 'POST', body: data }),
