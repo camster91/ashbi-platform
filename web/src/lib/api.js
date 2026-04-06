@@ -151,6 +151,12 @@ export const api = {
   },
   getMyTasks: () =>
     request('/tasks/my'),
+  getKanbanBoard: (projectId) =>
+    request(`/tasks/kanban/${projectId}`),
+  moveTask: (taskId, status) =>
+    request(`/tasks/${taskId}/move`, { method: 'POST', body: { status } }),
+  createQuickTask: (projectId, data) =>
+    request(`/tasks/${projectId}/quick`, { method: 'POST', body: data }),
   updateTask: (id, data) =>
     request(`/tasks/${id}`, { method: 'PUT', body: data }),
   completeTask: (id) =>
