@@ -310,6 +310,53 @@ export default async function analyticsRoutes(fastify) {
     };
   });
 
+  // Thread volume trend (for charts)
+  fastify.get('/trends', {
+    onRequest: [fastify.authenticate]
+  }, async (request) => {
+    const { days = 30 } = request.query;
+    const numDays = parseInt(days);
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - numDays);
+    startDate.setHours(0, 0, 0, 0);
+
+    // Daily thread counts
+    const threads = await prisma.thread.findMany({
+      where: { createdAt: { gte: startDate } },
+      select: { createdAt: true, status: true, priority: true },
+    });
+
+    // Daily invoice revenue
+    const invoices = await prisma.invoice.findMany({
+      where: { status: { in: ['PAID'] }, updatedAt: { gte: startDate } },
+      select: { total: true, updatedAt: true },
+    });
+
+    // Build daily buckets
+    const buckets = {};
+    for (let i = numDays - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().split('T')[0];
+      buckets[key] = { date: key, threads: 0, resolved: 0, revenue: 0 };
+    }
+
+    threads.forEach(t => {
+      const key = t.createdAt.toISOString().split('T')[0];
+      if (buckets[key]) {
+        buckets[key].threads++;
+        if (t.status === 'RESOLVED') buckets[key].resolved++;
+      }
+    });
+
+    invoices.forEach(inv => {
+      const key = inv.updatedAt.toISOString().split('T')[0];
+      if (buckets[key]) buckets[key].revenue += inv.total;
+    });
+
+    return { daily: Object.values(buckets) };
+  });
+
   // AI accuracy metrics
   fastify.get('/ai-accuracy', {
     onRequest: [fastify.authenticate]

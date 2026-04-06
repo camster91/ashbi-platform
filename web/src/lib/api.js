@@ -193,6 +193,8 @@ export const api = {
     request(`/analytics/response-times?days=${days}`),
   getTeamAnalytics: (days = 30) =>
     request(`/analytics/team?days=${days}`),
+  getAnalyticsTrends: (days = 30) =>
+    request(`/analytics/trends?days=${days}`),
 
   // AI
   draftResponse: (threadId) =>

@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth, AuthProvider } from './hooks/useAuth';
 import Layout from './components/Layout';
+import { ToastProvider } from './hooks/useToast';
 
 // Eagerly loaded (auth + portal — always needed before user is known)
 import Login from './pages/Login';
@@ -205,7 +206,9 @@ function AppRoutes() {
 function App() {
   return (
     <AuthProvider>
-      <AppRoutes />
+      <ToastProvider>
+        <AppRoutes />
+      </ToastProvider>
     </AuthProvider>
   );
 }

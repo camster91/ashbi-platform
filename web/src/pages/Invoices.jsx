@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
+import { useToast } from '../hooks/useToast';
 import { Button, Card } from '../components/ui';
 
 const HST_RATE = 13;
@@ -28,6 +29,7 @@ export default function Invoices() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const toast = useToast();
   const isAdmin = user?.role === 'ADMIN';
 
   // Support ?create=true&clientId=... from nav
@@ -85,17 +87,27 @@ export default function Invoices() {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       setShowCreate(false);
       resetForm();
+      toast.success('Invoice created');
     },
+    onError: (err) => toast.error('Failed to create invoice', err.message),
   });
 
   const sendMutation = useMutation({
     mutationFn: (id) => api.sendInvoice(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['invoices'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      toast.success('Invoice sent', 'Client will receive an email');
+    },
+    onError: (err) => toast.error('Failed to send invoice', err.message),
   });
 
   const markPaidMutation = useMutation({
     mutationFn: ({ id, data }) => api.markInvoicePaid(id, data),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['invoices'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      toast.success('Invoice marked as paid');
+    },
+    onError: (err) => toast.error('Failed to update invoice', err.message),
   });
 
   const deleteMutation = useMutation({

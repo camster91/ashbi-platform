@@ -17,6 +17,7 @@ import {
   Save,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { useToast } from '../hooks/useToast';
 import { Button, Card } from '../components/ui';
 
 const statusConfig = {
@@ -30,6 +31,7 @@ const statusConfig = {
 export default function Proposals() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [showCreate, setShowCreate] = useState(false);
   const [showGenerator, setShowGenerator] = useState(false);
   const [filterStatus, setFilterStatus] = useState('');
@@ -55,12 +57,20 @@ export default function Proposals() {
 
   const deleteMutation = useMutation({
     mutationFn: (id) => api.deleteProposal(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['proposals'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['proposals'] });
+      toast.success('Proposal deleted');
+    },
+    onError: () => toast.error('Failed to delete proposal'),
   });
 
   const duplicateMutation = useMutation({
     mutationFn: (id) => api.duplicateProposal(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['proposals'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['proposals'] });
+      toast.success('Proposal duplicated');
+    },
+    onError: () => toast.error('Failed to duplicate proposal'),
   });
 
   const [form, setForm] = useState({ clientId: '', title: '', notes: '' });
