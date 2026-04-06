@@ -927,6 +927,22 @@ export const api = {
     return res.json();
   },
 
+  // ===== EMAIL SEND =====
+  sendEmail: (data) =>
+    request('/mailgun/send', { method: 'POST', body: data }),
+
+  // ===== RETAINERS =====
+  getRetainerStatus: (clientId) =>
+    request(`/retainer/${clientId}/status`),
+  getAllRetainers: () =>
+    request('/retainer/check-all', { method: 'POST' }),
+  logRetainerHours: (clientId, data) =>
+    request(`/retainer/${clientId}/log-hours`, { method: 'POST', body: data }),
+  createRetainerPlan: (data) =>
+    request('/retainer', { method: 'POST', body: data }),
+  updateRetainerPlan: (clientId, data) =>
+    request(`/retainer/${clientId}`, { method: 'PUT', body: data }),
+
   // ===== FINANCIAL REPORTS =====
   getReportsPnl: (params = {}) => {
     const query = new URLSearchParams(params).toString();

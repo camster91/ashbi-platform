@@ -43,6 +43,7 @@ import {
   Filter,
   ClipboardList,
   Palette,
+  TrendingUp,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Download } from 'lucide-react';
@@ -132,7 +133,11 @@ export default function Layout({ children }) {
     { name: 'Proposals', href: '/proposals', icon: FileText },
     { name: 'Contracts', href: '/contracts', icon: ScrollText },
     { name: 'Expenses', href: '/expenses', icon: Wallet },
-    ...(isAdmin ? [{ name: 'Automations', href: '/automations', icon: Zap }] : []),
+    ...(isAdmin ? [
+      { name: 'Retainers', href: '/retainers', icon: TrendingUp },
+      { name: 'Invoice Chaser', href: '/invoice-chaser', icon: Zap },
+      { name: 'Automations', href: '/automations', icon: Activity },
+    ] : []),
   ];
 
   const projectToolsNav = [
@@ -167,7 +172,7 @@ export default function Layout({ children }) {
   const adminNav = isAdmin ? [
     { name: 'Team', href: '/team', icon: UserCog },
     { name: 'Reports', href: '/reports', icon: PieChart },
-    { name: 'Command Center', href: '/admin/command-center', icon: Activity },
+    { name: 'Command Center', href: '/admin/command-center', icon: Command },
     { name: 'Analytics', href: '/analytics', icon: BarChart3 },
     { name: 'Credentials', href: '/credentials', icon: KeyRound },
     { name: 'Brand Settings', href: '/admin/brand', icon: Palette },

@@ -1,6 +1,106 @@
 // Retainer plan routes — track hours & revision rounds per client
 
 export default async function retainerRoutes(fastify) {
+  // GET /retainer — list all retainer plans with client info
+  fastify.get('/retainer', {
+    onRequest: [fastify.authenticate]
+  }, async (request) => {
+    const plans = await fastify.prisma.retainerPlan.findMany({
+      include: {
+        client: { select: { id: true, name: true, status: true } }
+      },
+      orderBy: { billingCycleStart: 'desc' }
+    });
+
+    const now = new Date();
+    return plans.map(plan => {
+      const revisionCount = 0; // lightweight list — detail page has revision count
+      const percentUsed = plan.hoursPerMonth > 0
+        ? Math.round((plan.hoursUsed / plan.hoursPerMonth) * 100)
+        : 0;
+      return {
+        ...plan,
+        hoursRemaining: plan.hoursPerMonth - plan.hoursUsed,
+        percentUsed,
+        scopeCreepRisk: percentUsed > 80,
+        daysInCycle: Math.floor((now - new Date(plan.billingCycleStart)) / 86400000),
+      };
+    });
+  });
+
+  // POST /retainer — create a retainer plan for a client
+  fastify.post('/retainer', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    if (request.user.role !== 'ADMIN') {
+      return reply.status(403).send({ error: 'Admin access required' });
+    }
+
+    const {
+      clientId,
+      tier,
+      hoursPerMonth,
+      monthlyAmountUsd,
+      monthlyAmountCad,
+    } = request.body;
+
+    if (!clientId || !hoursPerMonth) {
+      return reply.status(400).send({ error: 'clientId and hoursPerMonth are required' });
+    }
+
+    const plan = await fastify.prisma.retainerPlan.upsert({
+      where: { clientId },
+      create: {
+        clientId,
+        tier: tier || 'custom',
+        hoursPerMonth: parseInt(hoursPerMonth),
+        monthlyAmountUsd: monthlyAmountUsd ? parseFloat(monthlyAmountUsd) : null,
+        monthlyAmountCad: monthlyAmountCad ? parseFloat(monthlyAmountCad) : null,
+        billingCycleStart: new Date(),
+      },
+      update: {
+        tier: tier || 'custom',
+        hoursPerMonth: parseInt(hoursPerMonth),
+        monthlyAmountUsd: monthlyAmountUsd ? parseFloat(monthlyAmountUsd) : null,
+        monthlyAmountCad: monthlyAmountCad ? parseFloat(monthlyAmountCad) : null,
+      },
+      include: { client: { select: { id: true, name: true } } }
+    });
+
+    return plan;
+  });
+
+  // PUT /retainer/:clientId — update a retainer plan
+  fastify.put('/retainer/:clientId', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    if (request.user.role !== 'ADMIN') {
+      return reply.status(403).send({ error: 'Admin access required' });
+    }
+
+    const { clientId } = request.params;
+    const { tier, hoursPerMonth, monthlyAmountUsd, monthlyAmountCad, resetHours } = request.body;
+
+    const data = {};
+    if (tier !== undefined) data.tier = tier;
+    if (hoursPerMonth !== undefined) data.hoursPerMonth = parseInt(hoursPerMonth);
+    if (monthlyAmountUsd !== undefined) data.monthlyAmountUsd = parseFloat(monthlyAmountUsd);
+    if (monthlyAmountCad !== undefined) data.monthlyAmountCad = parseFloat(monthlyAmountCad);
+    if (resetHours) {
+      data.hoursUsed = 0;
+      data.billingCycleStart = new Date();
+    }
+
+    const plan = await fastify.prisma.retainerPlan.update({
+      where: { clientId },
+      data,
+      include: { client: { select: { id: true, name: true } } }
+    });
+
+    return plan;
+  });
+
+
   // GET /retainer/:clientId — plan + hours used + % remaining + revision count
   fastify.get('/retainer/:clientId', {
     onRequest: [fastify.authenticate]
