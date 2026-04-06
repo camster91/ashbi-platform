@@ -201,7 +201,7 @@ function PropertiesPanel({ task, onUpdate }) {
       'COMPLETED': 'bg-green-100 text-green-800',
       'BLOCKED': 'bg-red-100 text-red-800',
     };
-    return colors[status] || 'bg-gray-100 text-gray-800';
+    return colors[status] || 'bg-muted text-muted-foreground';
   };
 
   const getPriorityColor = (priority) => {
@@ -211,7 +211,7 @@ function PropertiesPanel({ task, onUpdate }) {
       'NORMAL': 'text-blue-600',
       'LOW': 'text-green-600',
     };
-    return colors[priority] || 'text-gray-600';
+    return colors[priority] || 'text-muted-foreground';
   };
 
   return (

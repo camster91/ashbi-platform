@@ -100,8 +100,8 @@ export default function AgentTeamDashboard() {
     switch (status) {
       case 'active': return 'bg-green-100 text-green-700';
       case 'paused': return 'bg-yellow-100 text-yellow-700';
-      case 'inactive': return 'bg-gray-100 text-gray-700';
-      default: return 'bg-gray-100 text-gray-700';
+      case 'inactive': return 'bg-muted text-muted-foreground';
+      default: return 'bg-muted text-muted-foreground';
     }
   };
 
@@ -109,8 +109,8 @@ export default function AgentTeamDashboard() {
     switch (status) {
       case 'active': return <CheckCircle className="w-4 h-4 text-green-600" />;
       case 'paused': return <Pause className="w-4 h-4 text-yellow-600" />;
-      case 'inactive': return <Clock className="w-4 h-4 text-gray-600" />;
-      default: return <AlertCircle className="w-4 h-4 text-gray-600" />;
+      case 'inactive': return <Clock className="w-4 h-4 text-muted-foreground" />;
+      default: return <AlertCircle className="w-4 h-4 text-muted-foreground" />;
     }
   };
 

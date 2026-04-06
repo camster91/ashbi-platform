@@ -12,7 +12,7 @@ const STATUS_COLORS = {
   ACTIVE: 'bg-green-100 text-green-700',
   PAUSED: 'bg-orange-100 text-orange-700',
   COMPLETED: 'bg-blue-100 text-blue-700',
-  NEW: 'bg-gray-100 text-gray-600',
+  NEW: 'bg-muted text-muted-foreground',
   CONTACTED: 'bg-blue-100 text-blue-700',
   REPLIED: 'bg-purple-100 text-purple-700',
   CONVERTED: 'bg-emerald-100 text-emerald-700',
@@ -343,7 +343,7 @@ export default function ColdEmail() {
                     <td className="px-4 py-2.5 text-muted-foreground">{p.email}</td>
                     <td className="px-4 py-2.5 text-muted-foreground">{p.company || '—'}</td>
                     <td className="px-4 py-2.5">
-                      <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', STATUS_COLORS[p.status] || 'bg-gray-100 text-gray-600')}>{p.status}</span>
+                      <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', STATUS_COLORS[p.status] || 'bg-muted text-muted-foreground')}>{p.status}</span>
                     </td>
                   </tr>
                 ))}

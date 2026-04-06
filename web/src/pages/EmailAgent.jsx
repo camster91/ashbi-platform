@@ -12,14 +12,14 @@ const TAG_COLORS = {
   'urgent': 'bg-orange-100 text-orange-700',
   'client': 'bg-blue-100 text-blue-700',
   'lead': 'bg-purple-100 text-purple-700',
-  'info-only': 'bg-gray-100 text-gray-600',
+  'info-only': 'bg-muted text-muted-foreground',
   'spam': 'bg-yellow-100 text-yellow-700',
 };
 
 const STATUS_COLORS = {
   PENDING: 'bg-yellow-100 text-yellow-700',
   REVIEWED: 'bg-green-100 text-green-700',
-  ARCHIVED: 'bg-gray-100 text-gray-600',
+  ARCHIVED: 'bg-muted text-muted-foreground',
 };
 
 function DraftEditor({ draft, onClose, onApproved }) {
@@ -122,7 +122,7 @@ function EmailDetail({ item, onClose, onUpdated }) {
             {item.status}
           </span>
           {tags.map(tag => (
-            <span key={tag} className={cn('px-2 py-0.5 rounded-full text-xs font-medium', TAG_COLORS[tag] || 'bg-gray-100 text-gray-600')}>
+            <span key={tag} className={cn('px-2 py-0.5 rounded-full text-xs font-medium', TAG_COLORS[tag] || 'bg-muted text-muted-foreground')}>
               {tag}
             </span>
           ))}
@@ -279,7 +279,7 @@ export default function EmailAgent() {
                         {item.status}
                       </span>
                       {tags.map(tag => (
-                        <span key={tag} className={cn('px-2 py-0.5 rounded-full text-xs font-medium', TAG_COLORS[tag] || 'bg-gray-100 text-gray-600')}>
+                        <span key={tag} className={cn('px-2 py-0.5 rounded-full text-xs font-medium', TAG_COLORS[tag] || 'bg-muted text-muted-foreground')}>
                           {tag}
                         </span>
                       ))}

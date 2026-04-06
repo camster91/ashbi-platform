@@ -144,8 +144,8 @@ export default function IntegrationDashboard() {
     switch (status) {
       case 'connected': return 'bg-green-100 text-green-700';
       case 'error': return 'bg-red-100 text-red-700';
-      case 'disconnected': return 'bg-gray-100 text-gray-700';
-      default: return 'bg-gray-100 text-gray-700';
+      case 'disconnected': return 'bg-muted text-muted-foreground';
+      default: return 'bg-muted text-muted-foreground';
     }
   };
 
@@ -153,8 +153,8 @@ export default function IntegrationDashboard() {
     switch (status) {
       case 'connected': return <CheckCircle className="w-4 h-4 text-green-600" />;
       case 'error': return <AlertCircle className="w-4 h-4 text-red-600" />;
-      case 'disconnected': return <AlertCircle className="w-4 h-4 text-gray-600" />;
-      default: return <AlertCircle className="w-4 h-4 text-gray-600" />;
+      case 'disconnected': return <AlertCircle className="w-4 h-4 text-muted-foreground" />;
+      default: return <AlertCircle className="w-4 h-4 text-muted-foreground" />;
     }
   };
 

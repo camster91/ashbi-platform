@@ -14,7 +14,7 @@ const AGENT_COLORS = {
   pm: 'bg-indigo-100 text-indigo-800',
   social: 'bg-cyan-100 text-cyan-800',
   ads: 'bg-red-100 text-red-800',
-  system: 'bg-gray-100 text-gray-800',
+  system: 'bg-muted text-muted-foreground',
 };
 
 const TYPE_ICONS = {
@@ -33,7 +33,7 @@ const ENTITY_BADGES = {
   CLIENT: 'bg-green-50 text-green-700 border-green-200',
   INVOICE: 'bg-yellow-50 text-yellow-700 border-yellow-200',
   TASK: 'bg-purple-50 text-purple-700 border-purple-200',
-  SYSTEM: 'bg-gray-50 text-gray-700 border-gray-200',
+  SYSTEM: 'bg-muted text-muted-foreground border-border',
 };
 
 function formatTime(date) {

@@ -126,7 +126,7 @@ export default function Project() {
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Link to="/projects" className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+        <Link to="/projects" className="p-2 hover:bg-muted rounded-lg transition-colors">
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div className="flex-1">
@@ -274,8 +274,8 @@ export default function Project() {
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">{risk.mitigation}</p>
                     <div className="flex gap-2 mt-2">
-                      <span className="text-xs bg-gray-100 px-2 py-0.5 rounded">Likelihood: {risk.likelihood}</span>
-                      <span className="text-xs bg-gray-100 px-2 py-0.5 rounded">Impact: {risk.impact}</span>
+                      <span className="text-xs bg-muted px-2 py-0.5 rounded">Likelihood: {risk.likelihood}</span>
+                      <span className="text-xs bg-muted px-2 py-0.5 rounded">Impact: {risk.impact}</span>
                     </div>
                   </li>
                 ))}
@@ -309,7 +309,7 @@ export default function Project() {
           <div className="bg-card rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-scale-in">
             <div className="px-6 py-4 border-b flex items-center justify-between">
               <h2 className="text-lg font-semibold">Draft Client Update</h2>
-              <button onClick={() => { setShowDraftModal(false); setDraftResult(null); }} className="p-1 hover:bg-gray-100 rounded">
+              <button onClick={() => { setShowDraftModal(false); setDraftResult(null); }} className="p-1 hover:bg-muted rounded">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -331,7 +331,7 @@ export default function Project() {
                       type="checkbox"
                       checked={includeRevisions}
                       onChange={(e) => setIncludeRevisions(e.target.checked)}
-                      className="rounded border-gray-300"
+                      className="rounded border-border"
                     />
                     Include revision round status
                   </label>
@@ -388,7 +388,7 @@ export default function Project() {
           <div className="bg-card rounded-xl shadow-xl max-w-md w-full animate-scale-in">
             <div className="px-6 py-4 border-b flex items-center justify-between">
               <h2 className="text-lg font-semibold">Apply Task Template</h2>
-              <button onClick={() => setShowTemplateModal(false)} className="p-1 hover:bg-gray-100 rounded">
+              <button onClick={() => setShowTemplateModal(false)} className="p-1 hover:bg-muted rounded">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -426,7 +426,7 @@ export default function Project() {
           <div className="bg-card rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-scale-in">
             <div className="px-6 py-4 border-b flex items-center justify-between">
               <h2 className="text-lg font-semibold">Paste Message</h2>
-              <button onClick={() => setShowPasteModal(false)} className="p-1 hover:bg-gray-100 rounded">
+              <button onClick={() => setShowPasteModal(false)} className="p-1 hover:bg-muted rounded">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -490,7 +490,7 @@ function RevisionRounds({ revisions, isAdmin, onCreateRound, onApprove, isCreati
         <button
           onClick={(e) => { e.stopPropagation(); onCreateRound(); }}
           disabled={isCreating}
-          className="p-1 hover:bg-gray-100 rounded"
+          className="p-1 hover:bg-muted rounded"
           title="New revision round"
         >
           <Plus className="w-4 h-4" />
@@ -582,7 +582,7 @@ function TaskCategory({ title, icon: Icon, tasks = [], color, collapsed = false 
                     checked={task.status === 'COMPLETED'}
                     onChange={() => {}}
                     onClick={(e) => e.stopPropagation()}
-                    className="rounded border-gray-300"
+                    className="rounded border-border"
                   />
                   <div className="flex-1 min-w-0">
                     <span className={cn('text-sm', task.status === 'COMPLETED' && 'line-through text-muted-foreground')}>

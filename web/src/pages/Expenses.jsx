@@ -30,7 +30,7 @@ const CATEGORY_COLORS = {
   HOSTING: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400',
   SUBCONTRACTOR: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',
   SUPPLIES: 'bg-lime-100 text-lime-700 dark:bg-lime-900/30 dark:text-lime-400',
-  OTHER: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
+  OTHER: 'bg-muted text-muted-foreground',
 };
 
 function fmt(n) {

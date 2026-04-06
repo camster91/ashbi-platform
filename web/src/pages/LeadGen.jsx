@@ -13,7 +13,7 @@ const PIPELINE_COLUMNS = [
   { key: 'CONTACTED', label: 'Contacted', color: 'bg-yellow-500' },
   { key: 'REPLIED', label: 'Replied', color: 'bg-green-500' },
   { key: 'MEETING', label: 'Meeting / Converted', color: 'bg-purple-500' },
-  { key: 'DEAD', label: 'Dead', color: 'bg-gray-400' },
+  { key: 'DEAD', label: 'Dead', color: 'bg-muted-foreground/50' },
 ];
 
 const STATUS_COLORS = {
@@ -21,7 +21,7 @@ const STATUS_COLORS = {
   CONTACTED: 'bg-yellow-100 text-yellow-700',
   REPLIED: 'bg-green-100 text-green-700',
   MEETING: 'bg-purple-100 text-purple-700',
-  DEAD: 'bg-gray-100 text-gray-500',
+  DEAD: 'bg-muted text-muted-foreground',
 };
 
 function LeadCard({ lead, onStatusChange, onGenerateSequence }) {

@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 
 const STATUS_CONFIG = {
-  DRAFT: { label: 'Draft', color: 'bg-gray-100 text-gray-600' },
+  DRAFT: { label: 'Draft', color: 'bg-muted text-muted-foreground' },
   APPROVED: { label: 'Approved', color: 'bg-blue-100 text-blue-700' },
   PUBLISHED: { label: 'Published', color: 'bg-green-100 text-green-700' },
 };
@@ -211,7 +211,7 @@ export default function SeoBlog() {
         </div>
         <div className="bg-card border border-border rounded-lg p-3">
           <p className="text-xs text-muted-foreground">Drafts</p>
-          <p className="text-2xl font-bold text-gray-600">{drafts.length}</p>
+          <p className="text-2xl font-bold text-muted-foreground">{drafts.length}</p>
         </div>
         <div className="bg-card border border-border rounded-lg p-3">
           <p className="text-xs text-muted-foreground">Approved</p>

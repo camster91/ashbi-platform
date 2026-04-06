@@ -17,7 +17,7 @@ const STATUS_CONFIG = {
   SENT:    { label: 'Sent',    color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',            icon: Send },
   PAID:    { label: 'Paid',    color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',        icon: CheckCircle },
   OVERDUE: { label: 'Overdue', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',               icon: AlertTriangle },
-  VOID:    { label: 'Void',    color: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',              icon: Receipt },
+  VOID:    { label: 'Void',    color: 'bg-muted text-muted-foreground',              icon: Receipt },
 };
 
 function fmt(n) {

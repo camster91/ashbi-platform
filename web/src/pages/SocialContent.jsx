@@ -16,7 +16,7 @@ const PLATFORM_CONFIG = {
 };
 
 const STATUS_COLORS = {
-  DRAFT: 'bg-gray-100 text-gray-600',
+  DRAFT: 'bg-muted text-muted-foreground',
   SCHEDULED: 'bg-yellow-100 text-yellow-700',
   PUBLISHED: 'bg-green-100 text-green-700',
 };

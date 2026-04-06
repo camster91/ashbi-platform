@@ -20,14 +20,14 @@ const healthClasses = {
   green: 'bg-green-500',
   yellow: 'bg-yellow-400',
   red: 'bg-red-500',
-  unknown: 'bg-gray-400',
+  unknown: 'bg-muted-foreground/50',
 };
 
 const healthBorder = {
   green: 'border-green-500/30',
   yellow: 'border-yellow-400/30',
   red: 'border-red-500/30',
-  unknown: 'border-gray-400/30',
+  unknown: 'border-border',
 };
 
 function StatusDot({ health = 'unknown', size = 'sm', animate = false }) {

@@ -50,7 +50,7 @@ export default function Search() {
       <form onSubmit={handleSearch} className="space-y-4">
         <div className="flex gap-2">
           <div className="flex-1 relative">
-            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
             <input
               type="text"
               value={query}
@@ -71,8 +71,8 @@ export default function Search() {
         {/* Filters */}
         <div className="flex flex-wrap gap-4 items-center">
           <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-gray-500" />
-            <span className="text-sm text-gray-500">Filters:</span>
+            <Filter className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">Filters:</span>
           </div>
 
           <select
@@ -125,15 +125,15 @@ export default function Search() {
       {!isLoading && results && (
         <div className="space-y-6">
           {/* Result Count */}
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-muted-foreground">
             Found {results.total || 0} results for "{query}"
           </p>
 
           {/* Threads */}
           {results.threads?.length > 0 && (
-            <div className="bg-white rounded-lg shadow">
+            <div className="bg-card rounded-lg border border-border">
               <div className="px-4 py-3 border-b flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 text-gray-500" />
+                <MessageSquare className="w-4 h-4 text-muted-foreground" />
                 <h2 className="font-semibold">Threads ({results.threads.length})</h2>
               </div>
               <ul className="divide-y">
@@ -141,11 +141,11 @@ export default function Search() {
                   <li key={thread.id}>
                     <Link
                       to={`/thread/${thread.id}`}
-                      className="flex items-center justify-between px-4 py-3 hover:bg-gray-50"
+                      className="flex items-center justify-between px-4 py-3 hover:bg-muted/50"
                     >
                       <div className="min-w-0 flex-1">
                         <div className="font-medium truncate">{thread.subject}</div>
-                        <div className="text-sm text-gray-500 flex items-center gap-2">
+                        <div className="text-sm text-muted-foreground flex items-center gap-2">
                           {thread.client?.name && (
                             <span>{thread.client.name}</span>
                           )}
@@ -166,7 +166,7 @@ export default function Search() {
                         >
                           {thread.status}
                         </span>
-                        <span className="text-sm text-gray-500">
+                        <span className="text-sm text-muted-foreground">
                           {formatRelativeTime(thread.lastActivityAt)}
                         </span>
                       </div>
@@ -179,9 +179,9 @@ export default function Search() {
 
           {/* Messages */}
           {results.messages?.length > 0 && (
-            <div className="bg-white rounded-lg shadow">
+            <div className="bg-card rounded-lg border border-border">
               <div className="px-4 py-3 border-b flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 text-gray-500" />
+                <MessageSquare className="w-4 h-4 text-muted-foreground" />
                 <h2 className="font-semibold">Messages ({results.messages.length})</h2>
               </div>
               <ul className="divide-y">
@@ -189,12 +189,12 @@ export default function Search() {
                   <li key={message.id}>
                     <Link
                       to={`/thread/${message.threadId}`}
-                      className="block px-4 py-3 hover:bg-gray-50"
+                      className="block px-4 py-3 hover:bg-muted/50"
                     >
-                      <div className="text-sm text-gray-500 mb-1">
+                      <div className="text-sm text-muted-foreground mb-1">
                         {message.senderEmail} • {formatRelativeTime(message.receivedAt)}
                       </div>
-                      <div className="text-gray-700 line-clamp-2">
+                      <div className="text-foreground line-clamp-2">
                         {message.bodyText}
                       </div>
                     </Link>
@@ -206,9 +206,9 @@ export default function Search() {
 
           {/* Clients */}
           {results.clients?.length > 0 && (
-            <div className="bg-white rounded-lg shadow">
+            <div className="bg-card rounded-lg border border-border">
               <div className="px-4 py-3 border-b flex items-center gap-2">
-                <Users className="w-4 h-4 text-gray-500" />
+                <Users className="w-4 h-4 text-muted-foreground" />
                 <h2 className="font-semibold">Clients ({results.clients.length})</h2>
               </div>
               <ul className="divide-y">
@@ -216,12 +216,12 @@ export default function Search() {
                   <li key={client.id}>
                     <Link
                       to={`/client/${client.id}`}
-                      className="flex items-center justify-between px-4 py-3 hover:bg-gray-50"
+                      className="flex items-center justify-between px-4 py-3 hover:bg-muted/50"
                     >
                       <div>
                         <div className="font-medium">{client.name}</div>
                         {client.domain && (
-                          <div className="text-sm text-gray-500">{client.domain}</div>
+                          <div className="text-sm text-muted-foreground">{client.domain}</div>
                         )}
                       </div>
                       <span
@@ -229,7 +229,7 @@ export default function Search() {
                           'px-2 py-0.5 text-xs font-medium rounded',
                           client.status === 'ACTIVE'
                             ? 'bg-green-50 text-green-700'
-                            : 'bg-gray-100 text-gray-600'
+                            : 'bg-muted text-muted-foreground'
                         )}
                       >
                         {client.status}
@@ -243,9 +243,9 @@ export default function Search() {
 
           {/* Projects */}
           {results.projects?.length > 0 && (
-            <div className="bg-white rounded-lg shadow">
+            <div className="bg-card rounded-lg border border-border">
               <div className="px-4 py-3 border-b flex items-center gap-2">
-                <FolderOpen className="w-4 h-4 text-gray-500" />
+                <FolderOpen className="w-4 h-4 text-muted-foreground" />
                 <h2 className="font-semibold">Projects ({results.projects.length})</h2>
               </div>
               <ul className="divide-y">
@@ -253,11 +253,11 @@ export default function Search() {
                   <li key={project.id}>
                     <Link
                       to={`/project/${project.id}`}
-                      className="flex items-center justify-between px-4 py-3 hover:bg-gray-50"
+                      className="flex items-center justify-between px-4 py-3 hover:bg-muted/50"
                     >
                       <div>
                         <div className="font-medium">{project.name}</div>
-                        <div className="text-sm text-gray-500">
+                        <div className="text-sm text-muted-foreground">
                           {project.client?.name}
                         </div>
                       </div>
@@ -282,7 +282,7 @@ export default function Search() {
 
           {/* No Results */}
           {results.total === 0 && (
-            <div className="text-center py-12 text-gray-500">
+            <div className="text-center py-12 text-muted-foreground">
               No results found for "{query}"
             </div>
           )}
@@ -290,7 +290,7 @@ export default function Search() {
       )}
 
       {!query && (
-        <div className="text-center py-12 text-gray-500">
+        <div className="text-center py-12 text-muted-foreground">
           Enter at least 2 characters to search
         </div>
       )}

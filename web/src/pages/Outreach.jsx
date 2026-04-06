@@ -12,7 +12,7 @@ const STATUS_COLORS = {
   CONTACTED: 'bg-yellow-100 text-yellow-700',
   REPLIED: 'bg-green-100 text-green-700',
   CONVERTED: 'bg-purple-100 text-purple-700',
-  DEAD: 'bg-gray-100 text-gray-500',
+  DEAD: 'bg-muted text-muted-foreground',
 };
 
 const SEQUENCE_STATUS_COLORS = {
@@ -337,7 +337,7 @@ export default function Outreach() {
                       <td className="px-4 py-3 hidden md:table-cell text-muted-foreground">{lead.company || '—'}</td>
                       <td className="px-4 py-3 hidden lg:table-cell text-muted-foreground">{lead.title || '—'}</td>
                       <td className="px-4 py-3">
-                        <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', STATUS_COLORS[lead.status] || 'bg-gray-100 text-gray-600')}>
+                        <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', STATUS_COLORS[lead.status] || 'bg-muted text-muted-foreground')}>
                           {lead.status}
                         </span>
                       </td>
