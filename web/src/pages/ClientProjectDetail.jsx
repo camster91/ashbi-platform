@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 
 export default function ClientProjectDetail() {
   const { id } = useParams();
@@ -10,37 +11,42 @@ export default function ClientProjectDetail() {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    const fetchProject = async () => {
+      try {
+        setLoading(true);
+        const res = await fetch(`/api/client/projects/${id}`, {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        });
+        if (!res.ok) throw new Error('Failed to load project');
+        const data = await res.json();
+        setProject(data);
+        setMessages(data.messages || []);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
     fetchProject();
   }, [id]);
 
-  const fetchProject = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch(`/api/client/projects/${id}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-      if (!res.ok) throw new Error('Failed to load project');
-      const data = await res.json();
-      setProject(data);
-      setMessages(data.messages || []);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   if (loading) {
-    return <div className="p-12 text-center">Loading project...</div>;
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
   }
 
-  if (error) {
+  if (error || !project) {
     return (
-      <div className="p-12">
-        <div className="bg-red-50 p-4 rounded border border-red-200 text-red-600 mb-4">{error}</div>
+      <div className="p-8 max-w-lg mx-auto">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 text-red-600 mb-4">
+          {error || 'Project not found'}
+        </div>
         <button
           onClick={() => navigate('/client/dashboard')}
-          className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+          className="px-4 py-2 text-sm bg-muted text-muted-foreground rounded-lg hover:bg-muted/80 transition-colors"
         >
           Back to Dashboard
         </button>
@@ -48,131 +54,125 @@ export default function ClientProjectDetail() {
     );
   }
 
-  if (!project) {
-    return <div className="p-12 text-center">Project not found</div>;
-  }
+  const statusColors = {
+    ACTIVE: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+    COMPLETED: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+    ON_HOLD: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+    CANCELLED: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  };
 
   return (
-    <div className="min-h-screen bg-[#f8f4ef]">
+    <div className="space-y-6">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-6 py-4">
-          <button
-            onClick={() => navigate('/client/dashboard')}
-            className="text-[#c9a84c] hover:text-[#b89840] text-sm font-medium mb-4"
-          >
-            ← Back to Dashboard
-          </button>
-          <h1 className="text-3xl font-bold text-[#1a2744]">{project.name}</h1>
-        </div>
-      </header>
+      <div>
+        <button
+          onClick={() => navigate('/client/dashboard')}
+          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-2"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" /> Back to Dashboard
+        </button>
+        <h1 className="text-2xl font-heading font-bold text-foreground">{project.name}</h1>
+      </div>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-6 py-12">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Project Info */}
-          <div className="lg:col-span-2">
-            {/* Status & Progress */}
-            <div className="bg-white p-6 rounded-lg shadow mb-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-semibold text-[#1a2744]">Project Status</h2>
-                <span className="px-3 py-1 bg-green-100 text-green-700 text-sm font-semibold rounded-full">
-                  {project.status}
-                </span>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left: status + description + messages */}
+        <div className="lg:col-span-2 space-y-4">
+          {/* Status & Progress */}
+          <div className="bg-card rounded-xl border border-border p-5">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="font-semibold text-foreground">Project Status</h2>
+              <span className={`px-2.5 py-1 text-xs font-semibold rounded-full ${statusColors[project.status] || 'bg-muted text-muted-foreground'}`}>
+                {project.status}
+              </span>
+            </div>
+            <div className="mb-4">
+              <div className="flex justify-between mb-1.5">
+                <span className="text-sm text-muted-foreground">Progress</span>
+                <span className="text-sm font-semibold text-foreground">{project.progress || 0}%</span>
               </div>
-
-              <div className="mb-6">
-                <div className="flex justify-between mb-2">
-                  <span className="text-gray-600">Progress</span>
-                  <span className="font-semibold text-[#1a2744]">{project.progress || 0}%</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div
-                    className="bg-[#c9a84c] h-3 rounded-full transition-all"
-                    style={{ width: `${project.progress || 0}%` }}
-                  ></div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-600">Started</p>
-                  <p className="font-semibold text-[#1a2744]">
-                    {project.createdAt ? new Date(project.createdAt).toLocaleDateString() : 'N/A'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Last Updated</p>
-                  <p className="font-semibold text-[#1a2744]">
-                    {project.updatedAt ? new Date(project.updatedAt).toLocaleDateString() : 'N/A'}
-                  </p>
-                </div>
+              <div className="w-full bg-muted rounded-full h-2.5">
+                <div
+                  className="bg-primary h-2.5 rounded-full transition-all"
+                  style={{ width: `${project.progress || 0}%` }}
+                />
               </div>
             </div>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="text-muted-foreground">Started</p>
+                <p className="font-medium text-foreground">
+                  {project.createdAt ? new Date(project.createdAt).toLocaleDateString() : 'N/A'}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Last Updated</p>
+                <p className="font-medium text-foreground">
+                  {project.updatedAt ? new Date(project.updatedAt).toLocaleDateString() : 'N/A'}
+                </p>
+              </div>
+            </div>
+          </div>
 
-            {/* Description */}
-            {project.description && (
-              <div className="bg-white p-6 rounded-lg shadow mb-6">
-                <h2 className="text-xl font-semibold text-[#1a2744] mb-4">About This Project</h2>
-                <p className="text-gray-700 leading-relaxed">{project.description}</p>
+          {/* Description */}
+          {project.description && (
+            <div className="bg-card rounded-xl border border-border p-5">
+              <h2 className="font-semibold text-foreground mb-3">About This Project</h2>
+              <p className="text-muted-foreground leading-relaxed">{project.description}</p>
+            </div>
+          )}
+
+          {/* Messages */}
+          <div className="bg-card rounded-xl border border-border p-5">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="font-semibold text-foreground">Messages</h2>
+              {messages.length > 3 && (
+                <button
+                  onClick={() => navigate(`/client/thread/${project.threadId}`)}
+                  className="text-sm text-primary hover:underline"
+                >
+                  View All →
+                </button>
+              )}
+            </div>
+            {messages.length === 0 ? (
+              <p className="text-muted-foreground text-sm text-center py-6">No messages yet</p>
+            ) : (
+              <div className="space-y-3">
+                {messages.slice(0, 3).map((msg, idx) => (
+                  <div key={idx} className="border-l-4 border-primary pl-4 py-1.5">
+                    <div className="flex justify-between mb-0.5">
+                      <p className="font-medium text-sm text-foreground">{msg.sender || 'Team'}</p>
+                      <p className="text-xs text-muted-foreground">{new Date(msg.createdAt).toLocaleDateString()}</p>
+                    </div>
+                    <p className="text-sm text-muted-foreground">{msg.body}</p>
+                  </div>
+                ))}
               </div>
             )}
-
-            {/* Messages */}
-            <div className="bg-white p-6 rounded-lg shadow">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-semibold text-[#1a2744]">Messages</h2>
-                {messages.length > 3 && (
-                  <button
-                    onClick={() => navigate(`/client/thread/${project.threadId}`)}
-                    className="text-[#c9a84c] hover:text-[#b89840] text-sm font-medium"
-                  >
-                    View All →
-                  </button>
-                )}
-              </div>
-
-              <div className="space-y-4">
-                {messages.length === 0 ? (
-                  <p className="text-gray-500 text-center py-6">No messages yet</p>
-                ) : (
-                  messages.slice(0, 3).map((msg, idx) => (
-                    <div key={idx} className="border-l-4 border-[#c9a84c] pl-4 py-2">
-                      <div className="flex justify-between mb-1">
-                        <p className="font-semibold text-gray-700">{msg.sender || 'Team'}</p>
-                        <p className="text-sm text-gray-500">{new Date(msg.createdAt).toLocaleDateString()}</p>
-                      </div>
-                      <p className="text-gray-600">{msg.body}</p>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
           </div>
+        </div>
 
-          {/* Sidebar */}
-          <div>
-            {/* Quick Info */}
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h3 className="text-lg font-semibold text-[#1a2744] mb-4">Quick Info</h3>
-              <div className="space-y-4">
-                <div>
-                  <p className="text-xs text-gray-600 uppercase tracking-wide">Client</p>
-                  <p className="font-semibold text-[#1a2744]">{project.client?.name || 'N/A'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-600 uppercase tracking-wide">Project Manager</p>
-                  <p className="font-semibold text-[#1a2744]">{project.manager || 'N/A'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-600 uppercase tracking-wide">Team Size</p>
-                  <p className="font-semibold text-[#1a2744]">{project.teamSize || 1} people</p>
-                </div>
+        {/* Sidebar */}
+        <div>
+          <div className="bg-card rounded-xl border border-border p-5">
+            <h3 className="font-semibold text-foreground mb-4">Quick Info</h3>
+            <div className="space-y-3 text-sm">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Client</p>
+                <p className="font-medium text-foreground mt-0.5">{project.client?.name || 'N/A'}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Project Manager</p>
+                <p className="font-medium text-foreground mt-0.5">{project.manager || 'N/A'}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Team Size</p>
+                <p className="font-medium text-foreground mt-0.5">{project.teamSize || 1} people</p>
               </div>
             </div>
           </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 }

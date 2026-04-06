@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { FolderOpen, CheckCircle, Layers } from 'lucide-react';
 
 export default function ClientDashboard() {
   const navigate = useNavigate();
@@ -9,145 +10,138 @@ export default function ClientDashboard() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetchProjects();
-    fetchUser();
+    const fetchAll = async () => {
+      try {
+        setLoading(true);
+        const [projectsRes, userRes] = await Promise.all([
+          fetch('/api/client/projects', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }),
+          fetch('/api/auth/me', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }),
+        ]);
+        if (!projectsRes.ok) throw new Error('Failed to load projects');
+        const [projectsData, userData] = await Promise.all([projectsRes.json(), userRes.json()]);
+        setProjects(Array.isArray(projectsData) ? projectsData : []);
+        if (userRes.ok) setUser(userData);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchAll();
   }, []);
 
-  const fetchUser = async () => {
-    try {
-      const res = await fetch('/api/auth/me', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setUser(data);
-      }
-    } catch (err) {
-      console.error('Failed to fetch user:', err);
-    }
-  };
+  const activeCount = projects.filter(p => p.status === 'ACTIVE').length;
+  const completedCount = projects.filter(p => p.status === 'COMPLETED').length;
 
-  const fetchProjects = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch('/api/client/projects', {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-      if (!res.ok) throw new Error('Failed to load projects');
-      const data = await res.json();
-      setProjects(Array.isArray(data) ? data : []);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    navigate('/client/login');
-  };
+  const statusColor = (status) => ({
+    ACTIVE: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+    COMPLETED: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  }[status] || 'bg-muted text-muted-foreground');
 
   return (
-    <div className="min-h-screen bg-[#f8f4ef]">
+    <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200">
+      <header className="bg-card border-b border-border">
         <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
           <div>
-            <h1 className="text-2xl font-bold text-[#1a2744]">Ashbi Client Portal</h1>
-            <p className="text-gray-600 text-sm">Welcome, {user?.email}</p>
+            <h1 className="text-xl font-heading font-bold text-foreground">Client Portal</h1>
+            {user?.email && <p className="text-sm text-muted-foreground">Welcome, {user.email}</p>}
           </div>
           <button
-            onClick={handleLogout}
-            className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition"
+            onClick={() => { localStorage.removeItem('token'); navigate('/client/login'); }}
+            className="px-4 py-2 text-sm bg-muted text-muted-foreground rounded-lg hover:bg-muted/80 transition"
           >
             Logout
           </button>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-6 py-12">
+      <main className="max-w-7xl mx-auto px-6 py-10 space-y-8">
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded text-red-600">
+          <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 text-sm">
             {error}
           </div>
         )}
 
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-12">
-          <div className="bg-white p-6 rounded-lg shadow">
-            <p className="text-gray-600 text-sm font-medium">Active Projects</p>
-            <p className="text-3xl font-bold text-[#1a2744]">
-              {projects.filter((p) => p.status === 'ACTIVE').length}
-            </p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-card rounded-xl border border-border p-5 flex items-center gap-4">
+            <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center">
+              <FolderOpen className="w-5 h-5 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Active Projects</p>
+              <p className="text-2xl font-bold text-foreground">{activeCount}</p>
+            </div>
           </div>
-          <div className="bg-white p-6 rounded-lg shadow">
-            <p className="text-gray-600 text-sm font-medium">Completed</p>
-            <p className="text-3xl font-bold text-[#c9a84c]">
-              {projects.filter((p) => p.status === 'COMPLETED').length}
-            </p>
+          <div className="bg-card rounded-xl border border-border p-5 flex items-center gap-4">
+            <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-lg flex items-center justify-center">
+              <CheckCircle className="w-5 h-5 text-green-600" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Completed</p>
+              <p className="text-2xl font-bold text-foreground">{completedCount}</p>
+            </div>
           </div>
-          <div className="bg-white p-6 rounded-lg shadow">
-            <p className="text-gray-600 text-sm font-medium">Total Projects</p>
-            <p className="text-3xl font-bold text-[#1a2744]">{projects.length}</p>
+          <div className="bg-card rounded-xl border border-border p-5 flex items-center gap-4">
+            <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center">
+              <Layers className="w-5 h-5 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Total Projects</p>
+              <p className="text-2xl font-bold text-foreground">{projects.length}</p>
+            </div>
           </div>
         </div>
 
         {/* Projects */}
-        <section>
-          <h2 className="text-2xl font-bold text-[#1a2744] mb-6">Your Projects</h2>
+        <div>
+          <h2 className="text-lg font-semibold text-foreground mb-4">Your Projects</h2>
 
           {loading ? (
-            <div className="text-center text-gray-500 py-12">Loading projects...</div>
+            <div className="text-center text-muted-foreground py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-3" />
+              Loading projects...
+            </div>
           ) : projects.length === 0 ? (
-            <div className="bg-white p-12 rounded-lg text-center">
-              <p className="text-gray-600">No projects yet. Check back soon!</p>
+            <div className="bg-card rounded-xl border border-border p-12 text-center">
+              <FolderOpen className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
+              <p className="text-muted-foreground">No projects yet. Check back soon!</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {projects.map((project) => (
-                <div
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {projects.map(project => (
+                <button
                   key={project.id}
                   onClick={() => navigate(`/client/project/${project.id}`)}
-                  className="bg-white p-6 rounded-lg shadow hover:shadow-lg cursor-pointer transition"
+                  className="bg-card rounded-xl border border-border p-5 hover:border-primary/40 hover:shadow-md transition text-left"
                 >
-                  <div className="flex justify-between items-start mb-4">
-                    <h3 className="text-lg font-semibold text-[#1a2744]">{project.name}</h3>
-                    <span
-                      className={`px-2 py-1 text-xs font-medium rounded ${
-                        project.status === 'ACTIVE'
-                          ? 'bg-green-100 text-green-700'
-                          : project.status === 'COMPLETED'
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'bg-gray-100 text-gray-700'
-                      }`}
-                    >
+                  <div className="flex justify-between items-start mb-3">
+                    <h3 className="font-semibold text-foreground">{project.name}</h3>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColor(project.status)}`}>
                       {project.status}
                     </span>
                   </div>
-
-                  <div className="mb-4">
-                    <div className="flex justify-between mb-2">
-                      <span className="text-sm text-gray-600">Progress</span>
-                      <span className="text-sm font-semibold text-[#1a2744]">{project.progress || 0}%</span>
+                  <div className="mb-3">
+                    <div className="flex justify-between mb-1 text-xs">
+                      <span className="text-muted-foreground">Progress</span>
+                      <span className="font-medium text-foreground">{project.progress || 0}%</span>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div className="w-full bg-muted rounded-full h-2">
                       <div
-                        className="bg-[#c9a84c] h-2 rounded-full transition-all"
+                        className="bg-primary h-2 rounded-full transition-all"
                         style={{ width: `${project.progress || 0}%` }}
-                      ></div>
+                      />
                     </div>
                   </div>
-
-                  <p className="text-sm text-gray-500">
+                  <p className="text-xs text-muted-foreground">
                     Updated {project.updatedAt ? new Date(project.updatedAt).toLocaleDateString() : 'Never'}
                   </p>
-                </div>
+                </button>
               ))}
             </div>
           )}
-        </section>
+        </div>
       </main>
     </div>
   );

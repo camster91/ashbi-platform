@@ -140,8 +140,8 @@ export default function Dashboard() {
         {/* Pending Approvals */}
         <StatCard
           icon={ShieldAlert}
-          iconColor={stats?.pendingApprovals > 0 ? 'text-red-600' : 'text-gray-500'}
-          iconBg={stats?.pendingApprovals > 0 ? 'bg-red-100 dark:bg-red-900/30' : 'bg-gray-100 dark:bg-gray-800/30'}
+          iconColor={stats?.pendingApprovals > 0 ? 'text-red-600' : 'text-muted-foreground'}
+          iconBg={stats?.pendingApprovals > 0 ? 'bg-red-100 dark:bg-red-900/30' : 'bg-muted'}
           label="Pending Approvals"
           value={stats?.pendingApprovals || 0}
           badge={stats?.pendingApprovals > 0 ? stats.pendingApprovals : null}
@@ -363,7 +363,7 @@ function ClientHealthCard({ client, navigate }) {
   const retainerBadge = {
     ACTIVE: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
     AT_RISK: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-    PAUSED: 'bg-gray-100 text-gray-600 dark:bg-gray-800/30 dark:text-gray-400',
+    PAUSED: 'bg-muted text-muted-foreground',
     CANCELLED: 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400',
   };
 
@@ -371,7 +371,7 @@ function ClientHealthCard({ client, navigate }) {
     <Card
       className={cn(
         'p-4 border-l-4 cursor-pointer hover:border-primary/30 transition-colors',
-        healthColors[client.healthStatus] || 'border-l-gray-300'
+        healthColors[client.healthStatus] || 'border-l-border'
       )}
       onClick={() => navigate(`/clients/${client.id}`)}
     >
@@ -386,7 +386,7 @@ function ClientHealthCard({ client, navigate }) {
         {client.retainerStatus && (
           <span className={cn(
             'inline-block text-xs px-2 py-0.5 rounded-full font-medium',
-            retainerBadge[client.retainerStatus] || 'bg-gray-100 text-gray-600'
+            retainerBadge[client.retainerStatus] || 'bg-muted text-muted-foreground'
           )}>
             {client.retainerStatus.replace('_', ' ')}
             {client.monthlyAmount > 0 && ` · $${client.monthlyAmount.toLocaleString()}/mo`}

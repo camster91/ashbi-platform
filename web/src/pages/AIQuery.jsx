@@ -1,24 +1,27 @@
 import { useState } from 'react';
+import { Search, Folder, CheckSquare, User, BarChart2, AlertTriangle, FileText } from 'lucide-react';
+
+const TYPE_ICON = { project: Folder, task: CheckSquare, client: User, metric: BarChart2, alert: AlertTriangle };
+
+const EXAMPLES = [
+  'Show me overdue tasks',
+  'What are my active projects?',
+  'List clients with no recent activity',
+  'How many hours did the team log this week?',
+  'Tasks assigned to me',
+  'Projects at risk (health < 50%)',
+  'High priority tasks due this week',
+  'Team members with most hours logged',
+];
 
 export default function AIQuery() {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [examples] = useState([
-    'Show me overdue tasks',
-    'What are my active projects?',
-    'List clients with no recent activity',
-    'How many hours did the team log this week?',
-    'Tasks assigned to me',
-    'Projects at risk (health < 50%)',
-    'High priority tasks due this week',
-    'Team members with most hours logged'
-  ]);
 
   const handleQuery = async (text) => {
     if (!text.trim()) return;
-
     setQuery(text);
     try {
       setLoading(true);
@@ -27,11 +30,10 @@ export default function AIQuery() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
         },
-        body: JSON.stringify({ query: text })
+        body: JSON.stringify({ query: text }),
       });
-
       if (!res.ok) throw new Error('Query failed');
       const data = await res.json();
       setResults(data.results || []);
@@ -43,129 +45,112 @@ export default function AIQuery() {
   };
 
   return (
-    <div className="p-6 bg-[#f8f4ef] min-h-screen">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-[#1a2744] mb-2">Ask Hub Anything</h1>
-          <p className="text-gray-600">Use natural language to query projects, tasks, and team data</p>
+    <div className="max-w-4xl mx-auto space-y-6 py-2">
+      <div>
+        <h1 className="text-2xl font-heading font-bold text-foreground">Ask Hub Anything</h1>
+        <p className="text-sm text-muted-foreground mt-1">Use natural language to query projects, tasks, and team data</p>
+      </div>
+
+      {/* Query input */}
+      <div className="bg-card rounded-xl border border-border p-5 space-y-4">
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleQuery(query)}
+            placeholder="Ask anything… e.g. 'Show overdue tasks' or 'Team utilization this week'"
+            className="flex-1 px-4 py-3 border-2 border-border rounded-lg focus:border-primary outline-none text-lg bg-background text-foreground placeholder:text-muted-foreground"
+            autoFocus
+          />
+          <button
+            onClick={() => handleQuery(query)}
+            disabled={loading || !query.trim()}
+            className="px-5 py-3 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 font-semibold flex items-center gap-2"
+          >
+            <Search className="w-4 h-4" />
+            {loading ? 'Thinking…' : 'Ask'}
+          </button>
         </div>
 
-        {/* Query Input */}
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleQuery(query)}
-              placeholder="Ask anything... e.g. 'Show overdue tasks' or 'Team utilization this week'"
-              className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-[#c9a84c] outline-none text-lg"
-              autoFocus
-            />
-            <button
-              onClick={() => handleQuery(query)}
-              disabled={loading || !query.trim()}
-              className="px-6 py-3 bg-[#c9a84c] text-white rounded-lg hover:bg-[#b89840] disabled:opacity-50 font-semibold"
-            >
-              {loading ? '⏳' : '🔍'}
-            </button>
-          </div>
-
-          {/* Examples */}
-          {!query && !results.length && (
-            <div className="mt-4 pt-4 border-t">
-              <p className="text-sm text-gray-600 mb-3">Try asking:</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                {examples.map((example, i) => (
-                  <button
-                    key={i}
-                    onClick={() => handleQuery(example)}
-                    className="text-left px-3 py-2 bg-gray-50 hover:bg-gray-100 rounded text-sm text-gray-700 transition"
-                  >
-                    → {example}
-                  </button>
-                ))}
-              </div>
+        {!query && !results.length && (
+          <div className="border-t border-border pt-4">
+            <p className="text-sm text-muted-foreground mb-3">Try asking:</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {EXAMPLES.map((example, i) => (
+                <button
+                  key={i}
+                  onClick={() => handleQuery(example)}
+                  className="text-left px-3 py-2 bg-muted hover:bg-muted/80 rounded-lg text-sm text-muted-foreground hover:text-foreground transition"
+                >
+                  → {example}
+                </button>
+              ))}
             </div>
-          )}
-        </div>
-
-        {error && (
-          <div className="p-4 bg-red-50 border border-red-200 rounded text-red-600 mb-6">
-            {error}
           </div>
         )}
-
-        {/* Results */}
-        <div>
-          {loading && (
-            <div className="text-center text-gray-500 py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#c9a84c] mx-auto mb-4"></div>
-              Thinking...
-            </div>
-          )}
-
-          {!loading && results.length > 0 && (
-            <div>
-              <p className="text-sm text-gray-600 mb-4">
-                Results for: <span className="font-semibold">"{query}"</span>
-              </p>
-
-              <div className="space-y-4">
-                {results.map((result, i) => (
-                  <div key={i} className="bg-white rounded-lg shadow p-6">
-                    <div className="flex items-start gap-4">
-                      <span className="text-3xl">{getIcon(result.type)}</span>
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-[#1a2744] text-lg">
-                          {result.name || result.title}
-                        </h3>
-                        <p className="text-gray-600 text-sm mt-1">{result.description}</p>
-
-                        <div className="mt-3 flex gap-4 text-sm">
-                          {result.metadata && Object.entries(result.metadata).map(([key, value]) => (
-                            <span key={key} className="text-gray-500">
-                              <span className="font-semibold">{key}:</span> {value}
-                            </span>
-                          ))}
-                        </div>
-
-                        {result.actionUrl && (
-                          <button
-                            onClick={() => window.location.href = result.actionUrl}
-                            className="mt-4 px-4 py-2 bg-[#c9a84c] text-white text-sm rounded hover:bg-[#b89840]"
-                          >
-                            View Details →
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {!loading && query && results.length === 0 && !error && (
-            <div className="text-center text-gray-500 py-12">
-              <p className="text-lg">No results found</p>
-              <p className="text-sm">Try rephrasing your question</p>
-            </div>
-          )}
-        </div>
       </div>
+
+      {error && (
+        <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 text-sm">
+          {error}
+        </div>
+      )}
+
+      {/* Results */}
+      {loading ? (
+        <div className="text-center text-muted-foreground py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4" />
+          Thinking...
+        </div>
+      ) : results.length > 0 ? (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Results for: <span className="font-semibold text-foreground">"{query}"</span>
+          </p>
+          {results.map((result, i) => {
+            const Icon = TYPE_ICON[result.type] || FileText;
+            return (
+              <div key={i} className="bg-card border border-border rounded-xl p-5">
+                <div className="flex items-start gap-4">
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <Icon className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-foreground text-lg">{result.name || result.title}</h3>
+                    {result.description && (
+                      <p className="text-muted-foreground text-sm mt-1">{result.description}</p>
+                    )}
+                    {result.metadata && (
+                      <div className="mt-2 flex gap-4 text-sm flex-wrap">
+                        {Object.entries(result.metadata).map(([key, value]) => (
+                          <span key={key} className="text-muted-foreground">
+                            <span className="font-medium text-foreground">{key}:</span> {value}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {result.actionUrl && (
+                      <button
+                        onClick={() => window.location.href = result.actionUrl}
+                        className="mt-3 px-4 py-1.5 bg-primary text-primary-foreground text-sm rounded-lg hover:bg-primary/90"
+                      >
+                        View Details →
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : query && !error ? (
+        <div className="text-center text-muted-foreground py-12">
+          <Search className="mx-auto mb-3 opacity-20" size={40} />
+          <p className="text-lg">No results found</p>
+          <p className="text-sm">Try rephrasing your question</p>
+        </div>
+      ) : null}
     </div>
   );
-}
-
-function getIcon(type) {
-  switch (type) {
-    case 'project': return '📁';
-    case 'task': return '✓';
-    case 'client': return '👤';
-    case 'metric': return '📊';
-    case 'alert': return '⚠️';
-    default: return '📝';
-  }
 }
