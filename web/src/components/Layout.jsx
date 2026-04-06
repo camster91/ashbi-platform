@@ -542,10 +542,45 @@ export default function Layout({ children }) {
         )}
 
         {/* Page content */}
-        <div className="flex-1 p-4 lg:p-6 animate-fade-in overflow-auto">
+        <div className="flex-1 p-4 lg:p-6 pb-20 lg:pb-6 animate-fade-in overflow-auto">
           {children}
         </div>
       </main>
+
+      {/* Mobile bottom nav */}
+      <nav className="fixed bottom-0 inset-x-0 z-40 bg-card border-t border-border flex lg:hidden safe-area-inset-bottom">
+        {[
+          { href: '/', icon: LayoutDashboard, label: 'Home', exact: true },
+          { href: '/inbox', icon: Inbox, label: 'Inbox', badge: stats?.needsResponse },
+          { href: '/projects', icon: FolderOpen, label: 'Projects' },
+          { href: '/clients', icon: Users, label: 'Clients' },
+          { href: '/invoices', icon: Receipt, label: 'Invoices' },
+        ].map((item) => {
+          const isActive = item.exact
+            ? location.pathname === item.href
+            : location.pathname.startsWith(item.href) && item.href !== '/';
+          return (
+            <Link
+              key={item.href}
+              to={item.href}
+              className={cn(
+                'flex-1 flex flex-col items-center justify-center py-2 text-xs transition-colors relative',
+                isActive ? 'text-primary' : 'text-muted-foreground'
+              )}
+            >
+              <div className="relative">
+                <item.icon className={cn('w-5 h-5 mb-0.5', isActive && 'text-primary')} />
+                {item.badge > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 text-[9px] font-bold rounded-full bg-primary text-primary-foreground flex items-center justify-center">
+                    {item.badge > 9 ? '9+' : item.badge}
+                  </span>
+                )}
+              </div>
+              <span className={cn('text-[10px]', isActive && 'font-medium')}>{item.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
     </div>
   );
 }
