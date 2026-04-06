@@ -10,6 +10,7 @@ import {
   Download,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { useToast } from '../hooks/useToast';
 import { Button, Card } from '../components/ui';
 
 const statusConfig = {
@@ -27,6 +28,7 @@ const templateTypes = [
 
 export default function Contracts() {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [showCreate, setShowCreate] = useState(false);
   const [filterStatus, setFilterStatus] = useState('');
   const [expandedId, setExpandedId] = useState(null);
@@ -47,12 +49,18 @@ export default function Contracts() {
       queryClient.invalidateQueries({ queryKey: ['contracts'] });
       setShowCreate(false);
       setForm({ clientId: '', title: '', templateType: 'RETAINER' });
+      toast.success('Contract created');
     },
+    onError: () => toast.error('Failed to create contract'),
   });
 
   const sendMutation = useMutation({
     mutationFn: (id) => api.sendContract(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['contracts'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contracts'] });
+      toast.success('Contract sent', 'Client will receive a signing link');
+    },
+    onError: () => toast.error('Failed to send contract'),
   });
 
   const [form, setForm] = useState({ clientId: '', title: '', templateType: 'RETAINER' });

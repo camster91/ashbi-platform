@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
+import { useToast } from '../hooks/useToast';
 import { Button, Card } from '../components/ui';
 import CreateClientModal from '../components/CreateClientModal';
 
@@ -26,6 +27,7 @@ const TIER_LABEL = { '999': '$999/mo · 20 hrs', '1999': '$1,999/mo · 40 hrs', 
 export default function Clients() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [showHealth, setShowHealth] = useState(false);
@@ -51,7 +53,9 @@ export default function Clients() {
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['clients'] });
       setOnboardResult(result);
+      toast.success('Client onboarded', 'Portal and retainer set up successfully');
     },
+    onError: () => toast.error('Onboarding failed'),
   });
 
   const filtered = clients.filter(c =>

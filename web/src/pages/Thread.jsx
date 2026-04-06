@@ -30,11 +30,13 @@ import {
   cn,
 } from '../lib/utils';
 import { useAuth } from '../hooks/useAuth';
+import { useToast } from '../hooks/useToast';
 
 export default function Thread() {
   const { id } = useParams();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const toast = useToast();
   const [responseText, setResponseText] = useState('');
   const [noteText, setNoteText] = useState('');
   const [showAllMessages, setShowAllMessages] = useState(false);
@@ -61,7 +63,9 @@ export default function Thread() {
     onSuccess: () => {
       queryClient.invalidateQueries(['thread', id]);
       setResponseText('');
+      toast.success('Response submitted for approval');
     },
+    onError: () => toast.error('Failed to submit response'),
   });
 
   const noteMutation = useMutation({
@@ -69,7 +73,9 @@ export default function Thread() {
     onSuccess: () => {
       queryClient.invalidateQueries(['thread', id]);
       setNoteText('');
+      toast.success('Note added');
     },
+    onError: () => toast.error('Failed to add note'),
   });
 
   const resolveMutation = useMutation({
@@ -77,7 +83,9 @@ export default function Thread() {
     onSuccess: () => {
       queryClient.invalidateQueries(['thread', id]);
       queryClient.invalidateQueries(['inbox']);
+      toast.success('Thread resolved');
     },
+    onError: () => toast.error('Failed to resolve thread'),
   });
 
   const gmailDraftMutation = useMutation({
@@ -107,7 +115,9 @@ export default function Thread() {
       setGmailReplySubject('');
       setGmailDraftMeta(null);
       queryClient.invalidateQueries(['thread', id]);
+      toast.success('Reply sent via Gmail');
     },
+    onError: () => toast.error('Failed to send Gmail reply'),
   });
 
   if (isLoading) {

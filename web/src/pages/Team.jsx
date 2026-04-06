@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
+import { useToast } from '../hooks/useToast';
 import { Card, Button } from '../components/ui';
 import CreateTeamMemberModal from '../components/CreateTeamMemberModal';
 
@@ -39,6 +40,7 @@ const barColor = (status) => {
 
 export default function Team() {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingMember, setEditingMember] = useState(null);
   const [editForm, setEditForm] = useState({});
@@ -58,7 +60,9 @@ export default function Team() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['team'] });
       setEditingMember(null);
+      toast.success('Team member updated');
     },
+    onError: () => toast.error('Failed to update team member'),
   });
 
   const handleEdit = (member) => {

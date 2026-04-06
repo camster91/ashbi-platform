@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
+import { useToast } from '../hooks/useToast';
 import { Button, Card } from '../components/ui';
 
 const HST_RATE = 13;
@@ -34,6 +35,7 @@ export default function InvoiceDetail() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const toast = useToast();
   const isAdmin = user?.role === 'ADMIN';
 
   const [editing, setEditing] = useState(false);
@@ -60,7 +62,9 @@ export default function InvoiceDetail() {
       queryClient.invalidateQueries({ queryKey: ['invoice', id] });
       setEditing(false);
       setEditForm(null);
+      toast.success('Invoice updated');
     },
+    onError: () => toast.error('Failed to update invoice'),
   });
 
   const sendMutation = useMutation({
@@ -68,7 +72,9 @@ export default function InvoiceDetail() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoice', id] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      toast.success('Invoice sent', 'Client will receive an email with payment link');
     },
+    onError: () => toast.error('Failed to send invoice'),
   });
 
   const markPaidMutation = useMutation({
@@ -78,12 +84,15 @@ export default function InvoiceDetail() {
       queryClient.invalidateQueries({ queryKey: ['invoice-payments', id] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       setShowMarkPaid(false);
+      toast.success('Invoice marked as paid');
     },
+    onError: () => toast.error('Failed to mark as paid'),
   });
 
   const deleteMutation = useMutation({
     mutationFn: () => api.deleteInvoice(id),
     onSuccess: () => navigate('/invoices'),
+    onError: () => toast.error('Failed to delete invoice'),
   });
 
   const [copyLinkMsg, setCopyLinkMsg] = useState('');

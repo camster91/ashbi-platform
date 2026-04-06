@@ -13,12 +13,14 @@ import {
   XCircle,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { useToast } from '../hooks/useToast';
 import { Button, Card } from '../components/ui';
 
 export default function ProposalDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const toast = useToast();
 
   const { data: proposal, isLoading } = useQuery({
     queryKey: ['proposal', id],
@@ -44,12 +46,18 @@ export default function ProposalDetail() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['proposal', id] });
       setEditing(false);
+      toast.success('Proposal saved');
     },
+    onError: () => toast.error('Failed to save proposal'),
   });
 
   const sendMutation = useMutation({
     mutationFn: () => api.sendProposal(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['proposal', id] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['proposal', id] });
+      toast.success('Proposal sent', 'Client will receive a review link');
+    },
+    onError: () => toast.error('Failed to send proposal'),
   });
 
   const addLineItem = () => {
