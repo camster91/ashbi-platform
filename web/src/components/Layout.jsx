@@ -44,6 +44,7 @@ import {
   ClipboardList,
   Palette,
   TrendingUp,
+  Heart,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Download, Sun, Moon } from 'lucide-react';
@@ -174,6 +175,7 @@ export default function Layout({ children }) {
   const adminNav = isAdmin ? [
     { name: 'Team', href: '/team', icon: UserCog },
     { name: 'Revenue', href: '/revenue', icon: TrendingUp },
+    { name: 'Client Health', href: '/client-health', icon: Heart },
     { name: 'Reports', href: '/reports', icon: PieChart },
     { name: 'Command Center', href: '/admin/command-center', icon: Command },
     { name: 'Analytics', href: '/analytics', icon: BarChart3 },

@@ -201,6 +201,16 @@ export const api = {
     request('/ai/generate-proposal', { method: 'POST', body: data }),
   getClientHealth: () =>
     request('/ai/client-health', { method: 'POST' }),
+  getClientHealthDashboard: (status = 'ACTIVE') =>
+    request(`/clients/health/dashboard?status=${status}`),
+  getClientHealthAtRisk: () =>
+    request('/clients/health/at-risk'),
+  getClientHealthRecommendations: () =>
+    request('/clients/health/recommendations'),
+  recalculateClientHealth: (clientId) =>
+    request('/clients/health/recalculate', { method: 'POST', body: clientId ? { clientId } : {} }),
+  getSingleClientHealth: (clientId) =>
+    request(`/clients/health/${clientId}`),
   triageInbox: () =>
     request('/ai/triage-inbox', { method: 'POST' }),
 

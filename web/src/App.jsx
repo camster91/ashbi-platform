@@ -84,6 +84,7 @@ const Retainers = lazy(() => import('./pages/Retainers'));
 const InvoiceChaser = lazy(() => import('./pages/InvoiceChaser'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Revenue = lazy(() => import('./pages/Revenue'));
+const ClientHealth = lazy(() => import('./pages/ClientHealth'));
 
 function PageLoader() {
   return (
@@ -190,6 +191,7 @@ function AppRoutes() {
                   <Route path="/invoice-chaser" element={<AdminRoute><InvoiceChaser /></AdminRoute>} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/revenue" element={<AdminRoute><Revenue /></AdminRoute>} />
+                  <Route path="/client-health" element={<AdminRoute><ClientHealth /></AdminRoute>} />
                 </Routes>
               </Suspense>
             </Layout>
