@@ -16,6 +16,7 @@ import {
   Mail,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { useToast } from '../hooks/useToast';
 import { Button, Card } from '../components/ui';
 import { formatRelativeTime } from '../lib/utils';
 
@@ -33,6 +34,7 @@ function urgencyLabel(days) {
 
 export default function InvoiceChaser() {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [generatedEmails, setGeneratedEmails] = useState({});
   const [expanded, setExpanded] = useState({});
   const [copied, setCopied] = useState({});
@@ -94,8 +96,9 @@ export default function InvoiceChaser() {
         invoiceId,
       });
       setSendSuccess(prev => ({ ...prev, [invoiceId]: true }));
+      toast.success('Reminder sent');
     } catch (err) {
-      alert('Failed to send: ' + err.message);
+      toast.error('Failed to send: ' + err.message);
     } finally {
       setSendingEmail(prev => ({ ...prev, [invoiceId]: false }));
     }
