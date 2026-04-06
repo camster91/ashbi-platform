@@ -5,12 +5,13 @@
 
 import env from '../../config/env.js';
 
-// Available Ollama cloud models
+// Gemma4 model lineup on Ollama
 export const OLLAMA_MODELS = {
-  DEFAULT: 'gpt-oss:120b-cloud',   // Fast, capable — good for most tasks
-  FAST:    'gpt-oss:20b-cloud',    // Low latency
-  CODER:   'qwen3-coder:480b-cloud', // Best for code/structured output
-  LARGE:   'deepseek-v3.1:671b-cloud', // Highest quality
+  MINI:    'gemma4:e2b',       // 2B edge model — fastest, lowest latency
+  FAST:    'gemma4:e4b',       // 4B edge model — fast with good quality
+  DEFAULT: 'gemma4:26b',       // 26B MoE, 256K context — best balance
+  LARGE:   'gemma4:31b',       // 31B dense — highest local quality
+  CLOUD:   'gemma4:31b-cloud', // 31B cloud-hosted — best quality, no local memory
 };
 
 class OllamaProvider {

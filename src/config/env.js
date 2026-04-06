@@ -21,9 +21,9 @@ const env = {
   geminiApiKey: process.env.GEMINI_API_KEY,
   ollamaApiKey: process.env.OLLAMA_API_KEY,
   ollamaBaseUrl: process.env.OLLAMA_BASE_URL || 'https://ollama.com',
-  ollamaModel: process.env.OLLAMA_MODEL || 'gpt-oss:120b-cloud',
+  ollamaModel: process.env.OLLAMA_MODEL || 'gemma4:26b',
   aiProvider: process.env.AI_PROVIDER || 'ollama', // 'claude', 'gemini', or 'ollama'
-  aiModel: 'gpt-oss:120b-cloud',
+  aiModel: 'gemma4:26b',
 
   // Redis
   redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
