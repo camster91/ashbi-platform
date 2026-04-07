@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,70 +6,95 @@
 
 @layer base {
   :root {
-    /* Colors - Rich Navy Theme */
-    --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
+    /* Ashbi Brand Colors - Light Mode */
+    --background: 48 33% 97%;        /* #faf9f2 - cream */
+    --foreground: 250 39% 15%;       /* #2e2958 - deep indigo */
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 250 39% 15%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-    --primary: 222 47% 31%;
+    --popover-foreground: 250 39% 15%;
+
+    /* Primary - Deep Indigo */
+    --primary: 250 39% 25%;         /* #2e2958 */
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
-    --accent: 252 87% 67%;
-    --accent-foreground: 0 0% 100%;
+
+    /* Secondary - Sage */
+    --secondary: 75 52% 84%;         /* #d0dd9a */
+    --secondary-foreground: 250 39% 15%;
+
+    /* Accent - Lime */
+    --accent: 68 94% 61%;            /* #e6f354 */
+    --accent-foreground: 250 39% 15%;
+
+    /* Muted */
+    --muted: 75 30% 95%;
+    --muted-foreground: 250 20% 45%;
+
+    /* Destructive */
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 222 47% 31%;
+
+    /* Borders & Inputs */
+    --border: 250 20% 88%;
+    --input: 250 20% 88%;
+    --ring: 250 39% 25%;
     --radius: 0.625rem;
-    
-    /* Extended Colors */
-    --success: 160 84% 39%;
+
+    /* Status Colors */
+    --success: 142 76% 36%;
     --success-foreground: 0 0% 100%;
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
     --info: 199 89% 48%;
     --info-foreground: 0 0% 100%;
-    
+
     /* Priority Colors */
     --priority-critical: 0 84% 60%;
     --priority-high: 25 95% 53%;
     --priority-normal: 199 89% 48%;
-    --priority-low: 160 84% 39%;
-    
+    --priority-low: 142 76% 36%;
+
     /* Shadows */
-    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-    --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-    --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+    --shadow-sm: 0 1px 2px 0 rgb(46 41 88 / 0.05);
+    --shadow-md: 0 4px 6px -1px rgb(46 41 88 / 0.1), 0 2px 4px -2px rgb(46 41 88 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(46 41 88 / 0.1), 0 4px 6px -4px rgb(46 41 88 / 0.1);
+    --shadow-xl: 0 20px 25px -5px rgb(46 41 88 / 0.1), 0 8px 10px -6px rgb(46 41 88 / 0.1);
+    --shadow-2xl: 0 25px 50px -12px rgb(46 41 88 / 0.25);
   }
 
   .dark {
-    --background: 222 47% 11%;
-    --foreground: 210 40% 98%;
-    --card: 222 47% 15%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222 47% 15%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 222 47% 11%;
-    --secondary: 217 33% 25%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217 33% 25%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 252 87% 67%;
-    --accent-foreground: 0 0% 100%;
+    /* Ashbi Brand Colors - Dark Mode */
+    --background: 250 39% 10%;      /* Deep indigo dark */
+    --foreground: 48 33% 97%;        /* Cream */
+    --card: 250 39% 14%;
+    --card-foreground: 48 33% 97%;
+    --popover: 250 39% 14%;
+    --popover-foreground: 48 33% 97%;
+
+    /* Primary - Lime accent in dark */
+    --primary: 68 94% 61%;           /* #e6f354 - lime */
+    --primary-foreground: 250 39% 10%;
+
+    /* Secondary */
+    --secondary: 250 30% 20%;
+    --secondary-foreground: 48 33% 97%;
+
+    /* Accent - Sage */
+    --accent: 75 52% 70%;            /* Sage lighter */
+    --accent-foreground: 250 39% 10%;
+
+    /* Muted */
+    --muted: 250 30% 18%;
+    --muted-foreground: 250 20% 60%;
+
+    /* Destructive */
     --destructive: 0 63% 31%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217 33% 25%;
-    --input: 217 33% 20%;
-    --ring: 217 91% 60%;
+    --destructive-foreground: 48 33% 97%;
+
+    /* Borders & Inputs */
+    --border: 250 30% 22%;
+    --input: 250 30% 18%;
+    --ring: 68 94% 61%;
   }
 }
 
@@ -78,16 +103,41 @@
     @apply border-border;
   }
   html {
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'DM Sans', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
-    font-weight: 600;
+    font-family: 'Instrument Serif', 'DM Sans', system-ui, sans-serif;
+    font-weight: 400;
+    letter-spacing: -0.02em;
   }
   body {
     @apply bg-background text-foreground;
+  }
+
+  /* Brand headline style */
+  .font-display {
+    font-family: 'Instrument Serif', serif;
+  }
+
+  /* Accent text */
+  .text-brand-lime {
+    color: #e6f354;
+  }
+  .text-brand-sage {
+    color: #d0dd9a;
+  }
+  .text-brand-indigo {
+    color: #2e2958;
+  }
+
+  /* Gradient backgrounds */
+  .bg-gradient-brand {
+    background: linear-gradient(135deg, #2e2958 0%, #4a4294 100%);
+  }
+  .bg-gradient-accent {
+    background: linear-gradient(135deg, #e6f354 0%, #d0dd9a 100%);
   }
 }
 
@@ -102,14 +152,14 @@
   .animate-scale-in {
     animation: scaleIn 0.2s ease-out;
   }
-  
+
   /* Transition utilities */
   .transition-transform-opacity {
     transition-property: transform, opacity;
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
     transition-duration: 200ms;
   }
-  
+
   /* Hover lift effect */
   .hover-lift {
     transition: transform 0.2s ease, box-shadow 0.2s ease;
@@ -118,12 +168,17 @@
     transform: translateY(-2px);
     box-shadow: var(--shadow-lg);
   }
-  
+
   /* Skeleton shimmer */
   .skeleton-shimmer {
     background: linear-gradient(90deg, hsl(var(--muted)) 25%, hsl(var(--border)) 50%, hsl(var(--muted)) 75%);
     background-size: 200% 100%;
     animation: shimmer 1.5s infinite;
+  }
+
+  /* Focus ring brand color */
+  .focus-ring-brand {
+    @apply focus:ring-2 focus:ring-[#e6f354] focus:ring-offset-2 focus:ring-offset-background;
   }
 }
 
@@ -145,4 +200,24 @@
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--primary) / 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary) / 0.5);
 }

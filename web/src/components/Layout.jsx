@@ -1,5 +1,6 @@
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import GlobalAIChat from './GlobalAIChat';
 import { useQuery } from '@tanstack/react-query';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Inbox,
   FolderOpen,
@@ -48,8 +49,12 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   BookOpen,
+  MoreHorizontal,
+  ChevronDown,
+  ChevronUp,
+  DollarSign,
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Download, Sun, Moon } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
@@ -71,6 +76,8 @@ export default function Layout({ children }) {
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
+  const sidebarRef = useRef(null);
   const { isInstallable, install } = useInstallPrompt();
   const { permission, subscribed, subscribe } = usePushNotifications();
   const [installDismissed, setInstallDismissed] = useState(false);
@@ -290,11 +297,20 @@ export default function Layout({ children }) {
 
   return (
     <div className="min-h-screen bg-background flex">
+      {/* Skip to content link for accessibility */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[100] focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+      >
+        Skip to main content
+      </a>
+
       {/* Mobile sidebar backdrop */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-40 bg-foreground/20 backdrop-blur-sm lg:hidden"
           onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
         />
       )}
 
@@ -542,36 +558,166 @@ export default function Layout({ children }) {
         )}
 
         {/* Page content */}
-        <div className="flex-1 p-4 lg:p-6 pb-20 lg:pb-6 animate-fade-in overflow-auto">
+        <div id="main-content" className="flex-1 p-4 lg:p-6 pb-20 lg:pb-6 animate-fade-in overflow-auto" tabIndex={-1}>
           {children}
         </div>
       </main>
 
-      {/* Mobile bottom nav */}
-      <nav className="fixed bottom-0 inset-x-0 z-40 bg-card border-t border-border flex lg:hidden safe-area-inset-bottom">
+      {/* Mobile bottom nav with More menu */}
+      <nav className="fixed bottom-0 inset-x-0 z-40 bg-card border-t border-border flex lg:hidden safe-area-inset-bottom" role="navigation" aria-label="Mobile navigation">
         {[
           { href: '/', icon: LayoutDashboard, label: 'Home', exact: true },
           { href: '/inbox', icon: Inbox, label: 'Inbox', badge: stats?.needsResponse },
           { href: '/projects', icon: FolderOpen, label: 'Projects' },
-          { href: '/clients', icon: Users, label: 'Clients' },
           { href: '/invoices', icon: Receipt, label: 'Invoices' },
+          { href: '#more', icon: MoreHorizontal, label: 'More', isMore: true },
         ].map((item) => {
           const isActive = item.exact
             ? location.pathname === item.href
             : location.pathname.startsWith(item.href) && item.href !== '/';
+
+          if (item.isMore) {
+            return (
+              <div key="more" className="relative flex-1">
+                <button
+                  onClick={() => setMoreMenuOpen(!moreMenuOpen)}
+                  className={cn(
+                    'w-full flex flex-col items-center justify-center py-2 text-xs transition-colors',
+                    moreMenuOpen ? 'text-primary' : 'text-muted-foreground'
+                  )}
+                  aria-expanded={moreMenuOpen}
+                  aria-haspopup="true"
+                >
+                  <MoreHorizontal className="w-5 h-5 mb-0.5" />
+                  <span className="text-[10px]">More</span>
+                </button>
+
+                {/* More menu dropdown */}
+                {moreMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-50" onClick={() => setMoreMenuOpen(false)} aria-hidden="true" />
+                    <div className="absolute bottom-full right-0 mb-2 w-56 bg-card border border-border rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150" role="menu">
+                      {/* Quick Actions */}
+                      <div className="px-3 py-2 border-b border-border">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase">Quick Actions</p>
+                      </div>
+                      <div className="py-1">
+                        {[
+                          { label: 'New Project', icon: Plus, href: '/projects?create=true' },
+                          { label: 'New Invoice', icon: Receipt, href: '/invoices?create=true' },
+                          { label: 'New Client', icon: Users, href: '/clients?create=true' },
+                        ].map((action) => (
+                          <Link
+                            key={action.label}
+                            to={action.href}
+                            onClick={() => setMoreMenuOpen(false)}
+                            className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted transition-colors"
+                            role="menuitem"
+                          >
+                            <action.icon className="w-4 h-4 text-muted-foreground" />
+                            {action.label}
+                          </Link>
+                        ))}
+                      </div>
+
+                      {/* AI Agents */}
+                      <div className="px-3 py-2 border-t border-border">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase">AI Agents</p>
+                      </div>
+                      <div className="py-1 max-h-48 overflow-y-auto">
+                        {aiNav.slice(0, 4).map((item) => (
+                          <Link
+                            key={item.name}
+                            to={item.href}
+                            onClick={() => setMoreMenuOpen(false)}
+                            className={cn(
+                              'flex items-center gap-3 px-4 py-2.5 text-sm transition-colors',
+                              location.pathname === item.href ? 'bg-muted text-foreground' : 'hover:bg-muted'
+                            )}
+                            role="menuitem"
+                          >
+                            <item.icon className="w-4 h-4 text-muted-foreground" />
+                            {item.name}
+                          </Link>
+                        ))}
+                      </div>
+
+                      {/* Admin */}
+                      {isAdmin && (
+                        <>
+                          <div className="px-3 py-2 border-t border-border">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase">Admin</p>
+                          </div>
+                          <div className="py-1">
+                            {adminNav.slice(0, 3).map((item) => (
+                              <Link
+                                key={item.name}
+                                to={item.href}
+                                onClick={() => setMoreMenuOpen(false)}
+                                className={cn(
+                                  'flex items-center gap-3 px-4 py-2.5 text-sm transition-colors',
+                                  location.pathname === item.href ? 'bg-muted text-foreground' : 'hover:bg-muted'
+                                )}
+                                role="menuitem"
+                              >
+                                <item.icon className="w-4 h-4 text-muted-foreground" />
+                                {item.name}
+                              </Link>
+                            ))}
+                          </div>
+                        </>
+                      )}
+
+                      {/* Theme & Settings */}
+                      <div className="border-t border-border py-2">
+                        <button
+                          onClick={() => { toggleTheme(); setMoreMenuOpen(false); }}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted transition-colors"
+                          role="menuitem"
+                        >
+                          {isDark ? <Sun className="w-4 h-4 text-muted-foreground" /> : <Moon className="w-4 h-4 text-muted-foreground" />}
+                          {isDark ? 'Light Mode' : 'Dark Mode'}
+                        </button>
+                        <Link
+                          to="/settings"
+                          onClick={() => setMoreMenuOpen(false)}
+                          className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted transition-colors"
+                          role="menuitem"
+                        >
+                          <Settings className="w-4 h-4 text-muted-foreground" />
+                          Settings
+                        </Link>
+                        <button
+                          onClick={() => { logout(); setMoreMenuOpen(false); }}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+                          role="menuitem"
+                        >
+                          <LogOut className="w-4 h-4" />
+                          Logout
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          }
+
           return (
             <Link
               key={item.href}
               to={item.href}
+              onClick={() => setMoreMenuOpen(false)}
               className={cn(
                 'flex-1 flex flex-col items-center justify-center py-2 text-xs transition-colors relative',
                 isActive ? 'text-primary' : 'text-muted-foreground'
               )}
+              aria-current={isActive ? 'page' : undefined}
             >
               <div className="relative">
-                <item.icon className={cn('w-5 h-5 mb-0.5', isActive && 'text-primary')} />
+                <item.icon className={cn('w-5 h-5 mb-0.5', isActive && 'text-primary')} aria-hidden="true" />
                 {item.badge > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 text-[9px] font-bold rounded-full bg-primary text-primary-foreground flex items-center justify-center">
+                  <span className="absolute -top-1 -right-1 w-4 h-4 text-[9px] font-bold rounded-full bg-primary text-primary-foreground flex items-center justify-center" aria-label={`${item.badge} unread items`}>
                     {item.badge > 9 ? '9+' : item.badge}
                   </span>
                 )}
@@ -581,6 +727,9 @@ export default function Layout({ children }) {
           );
         })}
       </nav>
+
+      {/* Global AI Chat Widget */}
+      <GlobalAIChat />
     </div>
   );
 }

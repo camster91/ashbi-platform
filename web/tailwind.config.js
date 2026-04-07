@@ -41,6 +41,18 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // Brand colors
+        brand: {
+          indigo: "#2e2958",
+          lime: "#e6f354",
+          sage: "#d0dd9a",
+          cream: "#faf9f2",
+        },
+      },
+      fontFamily: {
+        sans: ['DM Sans', 'system-ui', 'sans-serif'],
+        display: ['Instrument Serif', 'serif'],
+        heading: ['DM Sans', 'system-ui', 'sans-serif'],
       },
       borderRadius: {
         lg: "var(--radius)",
