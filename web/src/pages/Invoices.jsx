@@ -329,11 +329,56 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
   const displayStatus = invoice.isOverdue ? 'OVERDUE' : invoice.status;
   const config = STATUS_CONFIG[displayStatus] || STATUS_CONFIG.DRAFT;
   const StatusIcon = config.icon;
-  const [showMenu, setShowMenu] = useState(false);
 
   return (
     <Card className={`p-4 hover:shadow-sm transition-shadow cursor-pointer ${invoice.isOverdue ? 'border-red-500/30' : ''}`}>
-      <div className="flex items-center gap-4">
+      {/* Mobile Layout */}
+      <div className="sm:hidden" onClick={onView}>
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="font-mono font-semibold text-foreground">{invoice.invoiceNumber}</span>
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full ${config.color}`}>
+                <StatusIcon className="w-3 h-3" />
+                {config.label}
+              </span>
+            </div>
+            <p className="text-sm text-muted-foreground truncate">{invoice.client?.name}</p>
+          </div>
+          <span className="text-lg font-semibold">{fmt(invoice.total)}</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          {invoice.dueDate && (
+            <span className={`flex items-center gap-1 ${invoice.isOverdue ? 'text-red-500' : ''}`}>
+              <Clock className="w-3 h-3" />
+              {invoice.isOverdue ? `${getDaysOverdue(invoice.dueDate)}d overdue` : `Due ${formatDate(invoice.dueDate)}`}
+            </span>
+          )}
+          {invoice.paidAt && (
+            <span className="flex items-center gap-1 text-green-600">
+              <CheckCircle className="w-3 h-3" />
+              Paid {formatDate(invoice.paidAt)}
+            </span>
+          )}
+          <span>{invoice._count?.lineItems} item{invoice._count?.lineItems !== 1 ? 's' : ''}</span>
+        </div>
+        {/* Mobile Actions */}
+        <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-border" onClick={e => e.stopPropagation()}>
+          <Button size="sm" variant="outline" onClick={onView} leftIcon={<Eye className="w-3 h-3" />}>View</Button>
+          {invoice.status === 'DRAFT' && isAdmin && (
+            <Button size="sm" variant="outline" onClick={onSend} loading={sendLoading} leftIcon={<Send className="w-3 h-3" />}>Send</Button>
+          )}
+          {(invoice.status === 'SENT' || invoice.isOverdue) && (
+            <Button size="sm" variant="outline" onClick={onMarkPaid} leftIcon={<DollarSign className="w-3 h-3" />}>Mark Paid</Button>
+          )}
+          {isAdmin && invoice.status !== 'PAID' && (
+            <Button size="sm" variant="ghost" onClick={onDelete} leftIcon={<Trash2 className="w-3 h-3" />} className="text-destructive hover:text-destructive">Void</Button>
+          )}
+        </div>
+      </div>
+
+      {/* Desktop Layout */}
+      <div className="hidden sm:flex items-center gap-4">
         <div className="flex-1 min-w-0" onClick={onView}>
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-mono font-semibold text-foreground">{invoice.invoiceNumber}</span>
@@ -413,7 +458,7 @@ function InvoiceCreateForm({
   const clientProjects = projects.filter(p => p.clientId === form.clientId);
 
   return (
-    <Card className="p-6">
+    <Card className="p-4 sm:p-6">
       <h2 className="text-lg font-semibold mb-5">New Invoice</h2>
       <form onSubmit={onSubmit} className="space-y-5">
         {/* Client / Project / Title */}
@@ -453,7 +498,7 @@ function InvoiceCreateForm({
         </div>
 
         {/* Dates */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium mb-1">Due Date</label>
             <input type="date" value={form.dueDate}
@@ -483,7 +528,7 @@ function InvoiceCreateForm({
 
         {/* Line Items */}
         <div>
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
             <label className="text-sm font-medium">Line Items</label>
             {templates.length > 0 && (
               <div className="flex gap-1 flex-wrap">
@@ -498,8 +543,8 @@ function InvoiceCreateForm({
             )}
           </div>
 
-          {/* Column headers */}
-          <div className="grid grid-cols-12 gap-2 mb-1 text-xs text-muted-foreground font-medium px-1">
+          {/* Desktop Column headers */}
+          <div className="hidden sm:grid grid-cols-12 gap-2 mb-1 text-xs text-muted-foreground font-medium px-1">
             <span className="col-span-1">Type</span>
             <span className="col-span-4">Description</span>
             <span className="col-span-2 text-center">Qty</span>
@@ -508,36 +553,85 @@ function InvoiceCreateForm({
             <span className="col-span-1" />
           </div>
 
-          <div className="space-y-1.5">
+          <div className="space-y-2 sm:space-y-1.5">
             {form.lineItems.map((li, idx) => (
-              <div key={idx} className="grid grid-cols-12 gap-2 items-center">
-                <select value={li.itemType}
-                  onChange={(e) => onLineItemUpdate(idx, 'itemType', e.target.value)}
-                  className="col-span-1 px-1 py-1.5 rounded border border-border bg-background text-xs">
-                  <option value="LABOR">Labor</option>
-                  <option value="MATERIALS">Materials</option>
-                  <option value="EXPENSE">Expense</option>
-                  <option value="DISCOUNT">Discount</option>
-                  <option value="CUSTOM">Custom</option>
-                </select>
-                <input type="text" value={li.description}
-                  onChange={(e) => onLineItemUpdate(idx, 'description', e.target.value)}
-                  placeholder="Description"
-                  className="col-span-4 px-2 py-1.5 rounded border border-border bg-background text-sm"
-                  required />
-                <input type="number" value={li.quantity} min="0" step="0.5"
-                  onChange={(e) => onLineItemUpdate(idx, 'quantity', e.target.value)}
-                  className="col-span-2 px-2 py-1.5 rounded border border-border bg-background text-sm text-center" />
-                <input type="number" value={li.unitPrice} min="0" step="0.01"
-                  onChange={(e) => onLineItemUpdate(idx, 'unitPrice', e.target.value)}
-                  className="col-span-2 px-2 py-1.5 rounded border border-border bg-background text-sm text-right" />
-                <span className="col-span-2 text-sm text-right font-medium">
-                  {fmt((parseFloat(li.quantity) || 1) * (parseFloat(li.unitPrice) || 0))}
-                </span>
-                <button type="button" onClick={() => onLineItemRemove(idx)}
-                  className="col-span-1 text-muted-foreground hover:text-destructive text-center text-lg leading-none">
-                  ×
-                </button>
+              <div key={idx}>
+                {/* Desktop Layout */}
+                <div className="hidden sm:grid grid-cols-12 gap-2 items-center">
+                  <select value={li.itemType}
+                    onChange={(e) => onLineItemUpdate(idx, 'itemType', e.target.value)}
+                    className="col-span-1 px-1 py-1.5 rounded border border-border bg-background text-xs">
+                    <option value="LABOR">Labor</option>
+                    <option value="MATERIALS">Materials</option>
+                    <option value="EXPENSE">Expense</option>
+                    <option value="DISCOUNT">Discount</option>
+                    <option value="CUSTOM">Custom</option>
+                  </select>
+                  <input type="text" value={li.description}
+                    onChange={(e) => onLineItemUpdate(idx, 'description', e.target.value)}
+                    placeholder="Description"
+                    className="col-span-4 px-2 py-1.5 rounded border border-border bg-background text-sm"
+                    required />
+                  <input type="number" value={li.quantity} min="0" step="0.5"
+                    onChange={(e) => onLineItemUpdate(idx, 'quantity', e.target.value)}
+                    className="col-span-2 px-2 py-1.5 rounded border border-border bg-background text-sm text-center" />
+                  <input type="number" value={li.unitPrice} min="0" step="0.01"
+                    onChange={(e) => onLineItemUpdate(idx, 'unitPrice', e.target.value)}
+                    className="col-span-2 px-2 py-1.5 rounded border border-border bg-background text-sm text-right" />
+                  <span className="col-span-2 text-sm text-right font-medium">
+                    {fmt((parseFloat(li.quantity) || 1) * (parseFloat(li.unitPrice) || 0))}
+                  </span>
+                  <button type="button" onClick={() => onLineItemRemove(idx)}
+                    className="col-span-1 text-muted-foreground hover:text-destructive text-center text-lg leading-none">
+                    ×
+                  </button>
+                </div>
+
+                {/* Mobile Layout - Stacked Card */}
+                <div className="sm:hidden p-3 border border-border rounded-lg bg-muted/30">
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex-1">
+                      <input type="text" value={li.description}
+                        onChange={(e) => onLineItemUpdate(idx, 'description', e.target.value)}
+                        placeholder="Description"
+                        className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm mb-2"
+                        required />
+                      <select value={li.itemType}
+                        onChange={(e) => onLineItemUpdate(idx, 'itemType', e.target.value)}
+                        className="w-full px-2 py-1.5 rounded border border-border bg-background text-xs">
+                        <option value="LABOR">Labor</option>
+                        <option value="MATERIALS">Materials</option>
+                        <option value="EXPENSE">Expense</option>
+                        <option value="DISCOUNT">Discount</option>
+                        <option value="CUSTOM">Custom</option>
+                      </select>
+                    </div>
+                    <button type="button" onClick={() => onLineItemRemove(idx)}
+                      className="p-2 text-muted-foreground hover:text-destructive rounded hover:bg-muted">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-xs text-muted-foreground mb-0.5">Qty</label>
+                      <input type="number" value={li.quantity} min="0" step="0.5"
+                        onChange={(e) => onLineItemUpdate(idx, 'quantity', e.target.value)}
+                        className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm text-center" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted-foreground mb-0.5">Unit Price</label>
+                      <input type="number" value={li.unitPrice} min="0" step="0.01"
+                        onChange={(e) => onLineItemUpdate(idx, 'unitPrice', e.target.value)}
+                        className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-muted-foreground mb-0.5">Total</label>
+                      <div className="px-2 py-1.5 text-sm font-medium">
+                        {fmt((parseFloat(li.quantity) || 1) * (parseFloat(li.unitPrice) || 0))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
@@ -549,7 +643,7 @@ function InvoiceCreateForm({
         </div>
 
         {/* Discount */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium mb-1">Discount ($)</label>
             <input type="number" value={form.discountAmount} min="0" step="0.01"
@@ -566,7 +660,7 @@ function InvoiceCreateForm({
         </div>
 
         {/* Recurring */}
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <input type="checkbox" checked={form.isRecurring}
               onChange={(e) => onFormChange(f => ({ ...f, isRecurring: e.target.checked }))}

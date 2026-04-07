@@ -187,7 +187,7 @@ export default function InvoiceDetail() {
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate('/invoices')}
             className="p-1.5 rounded hover:bg-muted text-muted-foreground">
@@ -195,7 +195,7 @@ export default function InvoiceDetail() {
           </button>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-2xl font-bold font-mono">{invoice.invoiceNumber}</h1>
+              <h1 className="text-xl sm:text-2xl font-bold font-mono">{invoice.invoiceNumber}</h1>
               <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${statusCfg.color}`}>
                 {statusCfg.label}
               </span>
@@ -210,7 +210,8 @@ export default function InvoiceDetail() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap justify-end">
+        {/* Desktop Actions */}
+        <div className="hidden sm:flex items-center gap-2 flex-wrap justify-end">
           {isDraft && (
             <>
               <Button variant="outline" size="sm" leftIcon={<Edit2 className="w-4 h-4" />} onClick={startEdit}>
@@ -286,6 +287,37 @@ export default function InvoiceDetail() {
             </button>
           )}
         </div>
+
+        {/* Mobile Actions - Stacked */}
+        <div className="sm:hidden flex flex-wrap gap-2">
+          {isDraft && (
+            <>
+              <Button variant="outline" size="sm" leftIcon={<Edit2 className="w-4 h-4" />} onClick={startEdit}>
+                Edit
+              </Button>
+              {isAdmin && (
+                <Button size="sm" leftIcon={<Send className="w-4 h-4" />}
+                  onClick={() => sendMutation.mutate()} loading={sendMutation.isPending}>
+                  Send
+                </Button>
+              )}
+            </>
+          )}
+          {isSent && !isPaid && (
+            <Button size="sm" leftIcon={<DollarSign className="w-4 h-4" />}
+              onClick={() => setShowMarkPaid(true)}>
+              Mark Paid
+            </Button>
+          )}
+          <Button variant="outline" size="sm" leftIcon={<Printer className="w-4 h-4" />} onClick={handlePrint}>
+            Print
+          </Button>
+          {isAdmin && !isPaid && (
+            <Button variant="ghost" size="sm" leftIcon={<Trash2 className="w-4 h-4" />} onClick={() => window.confirm(`Void ${invoice.invoiceNumber}?`) && deleteMutation.mutate()} className="text-destructive">
+              Void
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Alert: Overdue */}
@@ -303,10 +335,10 @@ export default function InvoiceDetail() {
 
       {/* Edit Mode */}
       {editing && editForm ? (
-        <Card className="p-6">
+        <Card className="p-4 sm:p-6">
           <h2 className="font-semibold text-lg mb-4">Edit Invoice</h2>
           <form onSubmit={handleUpdate} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Title</label>
                 <input type="text" value={editForm.title}
@@ -324,7 +356,17 @@ export default function InvoiceDetail() {
             {/* Line Items */}
             <div>
               <label className="block text-sm font-medium mb-2">Line Items</label>
-              <div className="space-y-1.5">
+
+              {/* Desktop Layout */}
+              <div className="hidden sm:block space-y-1.5">
+                <div className="grid grid-cols-12 gap-2 mb-1 text-xs text-muted-foreground font-medium px-1">
+                  <span className="col-span-1">Type</span>
+                  <span className="col-span-4">Description</span>
+                  <span className="col-span-2 text-center">Qty</span>
+                  <span className="col-span-2 text-right">Unit Price</span>
+                  <span className="col-span-2 text-right">Total</span>
+                  <span className="col-span-1" />
+                </div>
                 {editForm.lineItems.map((li, idx) => (
                   <div key={idx} className="grid grid-cols-12 gap-2 items-center">
                     <select value={li.itemType}
@@ -372,6 +414,73 @@ export default function InvoiceDetail() {
                   </div>
                 ))}
               </div>
+
+              {/* Mobile Layout */}
+              <div className="sm:hidden space-y-2">
+                {editForm.lineItems.map((li, idx) => (
+                  <div key={idx} className="p-3 border border-border rounded-lg bg-muted/30">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex-1">
+                        <input type="text" value={li.description}
+                          onChange={(e) => setEditForm(f => {
+                            const items = [...f.lineItems];
+                            items[idx] = { ...items[idx], description: e.target.value };
+                            return { ...f, lineItems: items };
+                          })}
+                          placeholder="Description"
+                          className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm mb-2"
+                          required />
+                        <select value={li.itemType}
+                          onChange={(e) => setEditForm(f => {
+                            const items = [...f.lineItems];
+                            items[idx] = { ...items[idx], itemType: e.target.value };
+                            return { ...f, lineItems: items };
+                          })}
+                          className="w-full px-2 py-1.5 rounded border border-border bg-background text-xs">
+                          <option value="LABOR">Labor</option>
+                          <option value="MATERIALS">Materials</option>
+                          <option value="EXPENSE">Expense</option>
+                          <option value="DISCOUNT">Discount</option>
+                          <option value="CUSTOM">Custom</option>
+                        </select>
+                      </div>
+                      <button type="button"
+                        onClick={() => setEditForm(f => ({ ...f, lineItems: f.lineItems.filter((_, i) => i !== idx) }))}
+                        className="p-2 text-muted-foreground hover:text-destructive rounded hover:bg-muted">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="block text-xs text-muted-foreground mb-0.5">Qty</label>
+                        <input type="number" value={li.quantity} min="0" step="0.5"
+                          onChange={(e) => setEditForm(f => {
+                            const items = [...f.lineItems];
+                            items[idx] = { ...items[idx], quantity: e.target.value };
+                            return { ...f, lineItems: items };
+                          })}
+                          className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm text-center" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-muted-foreground mb-0.5">Unit Price</label>
+                        <input type="number" value={li.unitPrice} min="0" step="0.01"
+                          onChange={(e) => setEditForm(f => {
+                            const items = [...f.lineItems];
+                            items[idx] = { ...items[idx], unitPrice: e.target.value };
+                            return { ...f, lineItems: items };
+                          })}
+                          className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-muted-foreground mb-0.5">Total</label>
+                        <div className="px-2 py-1.5 text-sm font-medium">
+                          {fmt((parseFloat(li.quantity) || 1) * (parseFloat(li.unitPrice) || 0))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
               <button type="button"
                 onClick={() => setEditForm(f => ({ ...f, lineItems: [...f.lineItems, { description: '', itemType: 'LABOR', quantity: 1, unitPrice: 0 }] }))}
                 className="text-sm text-primary hover:underline mt-2">
@@ -380,7 +489,7 @@ export default function InvoiceDetail() {
             </div>
 
             {/* Tax / Discount */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Tax Type</label>
                 <select value={editForm.taxType}
@@ -407,7 +516,7 @@ export default function InvoiceDetail() {
             </div>
 
             {/* Notes */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Notes (client-visible)</label>
                 <textarea value={editForm.notes}
@@ -442,9 +551,9 @@ export default function InvoiceDetail() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Main invoice details */}
             <div className="lg:col-span-2 space-y-6">
-              <Card className="p-6">
+              <Card className="p-4 sm:p-6">
                 {/* Bill to / dates */}
-                <div className="grid grid-cols-2 gap-6 mb-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-6">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Bill To</p>
                     <p className="font-semibold text-lg">{invoice.client?.name}</p>
@@ -453,7 +562,7 @@ export default function InvoiceDetail() {
                       <p className="text-sm text-muted-foreground">{invoice.client.contacts[0].email}</p>
                     )}
                   </div>
-                  <div className="text-right">
+                  <div className="sm:text-right">
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Invoice Details</p>
                     <p className="font-mono font-bold text-xl">{invoice.invoiceNumber}</p>
                     <p className="text-sm text-muted-foreground mt-1">Issued: {formatDate(invoice.issueDate || invoice.createdAt)}</p>
@@ -466,8 +575,8 @@ export default function InvoiceDetail() {
                   </div>
                 </div>
 
-                {/* Line Items Table */}
-                <div className="border border-border rounded-lg overflow-hidden">
+                {/* Line Items - Desktop Table */}
+                <div className="hidden sm:block border border-border rounded-lg overflow-hidden">
                   <table className="w-full text-sm">
                     <thead className="bg-muted/50">
                       <tr>
@@ -493,9 +602,28 @@ export default function InvoiceDetail() {
                   </table>
                 </div>
 
+                {/* Line Items - Mobile Cards */}
+                <div className="sm:hidden space-y-2">
+                  {(invoice.lineItems || []).map((li, idx) => (
+                    <div key={li.id} className={`p-3 border border-border rounded-lg ${idx % 2 === 0 ? '' : 'bg-muted/20'}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{li.description}</p>
+                          <p className="text-xs text-muted-foreground">{li.itemType}</p>
+                        </div>
+                        <p className="font-semibold whitespace-nowrap">{fmt(li.total)}</p>
+                      </div>
+                      <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
+                        <span>Qty: {li.quantity}</span>
+                        <span>@ {fmt(li.unitPrice)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
                 {/* Totals */}
                 <div className="mt-4 flex justify-end">
-                  <div className="w-64 space-y-1.5 text-sm">
+                  <div className="w-full sm:w-64 space-y-1.5 text-sm">
                     <div className="flex justify-between text-muted-foreground">
                       <span>Subtotal</span><span>{fmt(invoice.subtotal)}</span>
                     </div>

@@ -3,6 +3,9 @@
 // Use VITE_API_URL for production (external backend), fallback to /api for dev (proxied)
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
+// Default request timeout (30 seconds)
+const DEFAULT_TIMEOUT = 30000;
+
 class ApiError extends Error {
   constructor(message, status, data) {
     super(message);
@@ -11,8 +14,57 @@ class ApiError extends Error {
   }
 }
 
+class TimeoutError extends Error {
+  constructor(timeout) {
+    super(`Request timed out after ${timeout}ms`);
+    this.name = 'TimeoutError';
+    this.timeout = timeout;
+  }
+}
+
+/**
+ * Global error callback system for integration with React
+ * Set these callbacks from your React app (e.g., in ErrorBoundary or App)
+ */
+let onUnauthorized = null;
+let onApiError = null;
+
+export function setUnauthorizedCallback(callback) {
+  onUnauthorized = callback;
+}
+
+export function setApiErrorCallback(callback) {
+  onApiError = callback;
+}
+
+function dispatchApiError(error, endpoint) {
+  console.group('%cAPI Error', 'color: #ef4444; font-weight: bold;');
+  console.error('Endpoint:', endpoint);
+  console.error('Error:', error.message);
+  if (error.status) {
+    console.error('Status:', error.status);
+  }
+  if (error.data) {
+    console.error('Response data:', error.data);
+  }
+  if (error.stack) {
+    console.error('Stack trace:', error.stack);
+  }
+  console.groupEnd();
+
+  // Dispatch to global callback if set
+  if (onApiError) {
+    onApiError(error, endpoint);
+  }
+}
+
 async function request(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
+  const timeout = options.timeout ?? DEFAULT_TIMEOUT;
+
+  // Create AbortController for timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
 
   const config = {
     headers: {
@@ -20,6 +72,7 @@ async function request(endpoint, options = {}) {
       ...options.headers,
     },
     credentials: 'include',
+    signal: controller.signal,
     ...options,
   };
 
@@ -27,18 +80,67 @@ async function request(endpoint, options = {}) {
     config.body = JSON.stringify(config.body);
   }
 
-  const response = await fetch(url, config);
+  try {
+    const response = await fetch(url, config);
+    clearTimeout(timeoutId);
 
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({}));
-    throw new ApiError(
-      data.error || 'Request failed',
-      response.status,
-      data
-    );
+    // Handle 401 Unauthorized - trigger logout
+    if (response.status === 401) {
+      const data = await response.json().catch(() => ({}));
+      const error = new ApiError(
+        data.error || 'Session expired. Please log in again.',
+        response.status,
+        data
+      );
+      dispatchApiError(error, endpoint);
+
+      // Dispatch unauthorized event for React app to handle
+      if (onUnauthorized) {
+        onUnauthorized(data.error || 'Session expired. Please log in again.');
+      }
+
+      throw error;
+    }
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      const error = new ApiError(
+        data.error || 'Request failed',
+        response.status,
+        data
+      );
+      dispatchApiError(error, endpoint);
+      throw error;
+    }
+
+    return response.json();
+  } catch (error) {
+    clearTimeout(timeoutId);
+
+    // Handle timeout errors
+    if (error.name === 'AbortError') {
+      const timeoutError = new TimeoutError(timeout);
+      dispatchApiError(timeoutError, endpoint);
+      throw timeoutError;
+    }
+
+    // Handle network errors
+    if (error instanceof TypeError && error.message === 'Failed to fetch') {
+      const networkError = new Error('Network error. Please check your connection.');
+      networkError.name = 'NetworkError';
+      dispatchApiError(networkError, endpoint);
+      throw networkError;
+    }
+
+    // Re-throw ApiError instances
+    if (error instanceof ApiError) {
+      throw error;
+    }
+
+    // Log and re-throw other errors
+    dispatchApiError(error, endpoint);
+    throw error;
   }
-
-  return response.json();
 }
 
 export const api = {

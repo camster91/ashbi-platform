@@ -1,8 +1,8 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth, AuthProvider } from './hooks/useAuth';
 import Layout from './components/Layout';
-import { ToastProvider } from './hooks/useToast';
+import { ToastProvider, useToast } from './hooks/useToast';
 
 // Eagerly loaded (auth + portal — always needed before user is known)
 import Login from './pages/Login';
@@ -205,11 +205,58 @@ function AppRoutes() {
   );
 }
 
+// Component to handle global API error events
+function GlobalErrorHandler({ children }) {
+  const { logout } = useAuth();
+  const toast = useToast();
+
+  useEffect(() => {
+    const handleUnauthorized = (event) => {
+      const { message } = event.detail;
+      toast.error('Session Expired', message || 'Please log in again.');
+      logout();
+    };
+
+    const handleApiError = (event) => {
+      const { error } = event.detail;
+      // Show error toast for failed requests (but not 401s - those are handled separately)
+      if (error.status !== 401) {
+        // Don't show toast for network errors or timeouts in development
+        // as they can be noisy during development
+        const isNetworkError = error.name === 'NetworkError';
+        const isTimeout = error.name === 'TimeoutError';
+
+        if (isNetworkError) {
+          toast.error('Network Error', 'Please check your internet connection.');
+        } else if (isTimeout) {
+          toast.error('Request Timeout', 'The request took too long. Please try again.');
+        } else if (error.status >= 500) {
+          toast.error('Server Error', 'Something went wrong on our end. Please try again later.');
+        } else if (error.status >= 400) {
+          toast.error('Request Failed', error.message || 'Please check your input and try again.');
+        }
+      }
+    };
+
+    window.addEventListener('api:unauthorized', handleUnauthorized);
+    window.addEventListener('api:error', handleApiError);
+
+    return () => {
+      window.removeEventListener('api:unauthorized', handleUnauthorized);
+      window.removeEventListener('api:error', handleApiError);
+    };
+  }, [logout, toast]);
+
+  return children;
+}
+
 function App() {
   return (
     <AuthProvider>
       <ToastProvider>
-        <AppRoutes />
+        <GlobalErrorHandler>
+          <AppRoutes />
+        </GlobalErrorHandler>
       </ToastProvider>
     </AuthProvider>
   );
