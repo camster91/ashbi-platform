@@ -6,7 +6,7 @@ services:
     command: node src/index.js
     restart: unless-stopped
     volumes:
-      - /var/www/agency-hub:/app
+      - /opt/ashbi-design:/app
     env_file:
       - .env
     networks:
@@ -20,7 +20,6 @@ services:
       - "traefik.http.services.agency-hub.loadbalancer.server.port=3002"
       - "traefik.http.routers.agency-hub-http.rule=Host(`hub.ashbi.ca`)"
       - "traefik.http.routers.agency-hub-http.entrypoints=http"
-      - "traefik.http.routers.agency-hub-http.middlewares=redirect-https@docker"
       - "coolify.managed=true"
 
 networks:
