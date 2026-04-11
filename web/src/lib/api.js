@@ -314,15 +314,15 @@ export const api = {
   getClientHealth: () =>
     request('/ai/client-health', { method: 'POST' }),
   getClientHealthDashboard: (status = 'ACTIVE') =>
-    request(`/clients/health/dashboard?status=${status}`),
+    request(`/client-health/health/dashboard?status=${status}`),
   getClientHealthAtRisk: () =>
-    request('/clients/health/at-risk'),
+    request('/client-health/health/at-risk'),
   getClientHealthRecommendations: () =>
-    request('/clients/health/recommendations'),
+    request('/client-health/health/recommendations'),
   recalculateClientHealth: (clientId) =>
-    request('/clients/health/recalculate', { method: 'POST', body: clientId ? { clientId } : {} }),
+    request('/client-health/health/recalculate', { method: 'POST', body: clientId ? { clientId } : {} }),
   getSingleClientHealth: (clientId) =>
-    request(`/clients/health/${clientId}`),
+    request(`/client-health/health/${clientId}`),
   triageInbox: () =>
     request('/ai/triage-inbox', { method: 'POST' }),
 
@@ -701,7 +701,7 @@ export const api = {
   payPortalInvoice: (token) =>
     request(`/portal/invoice/${token}/pay`, { method: 'POST' }),
   getPortalBookingSlots: (date) =>
-    request(`/portal/booking/slots?date=${date}`),
+    request(`/portal/booking/availability?date=${date}`),
   createPortalBooking: (data) =>
     request('/portal/booking', { method: 'POST', body: data }),
 
@@ -962,18 +962,6 @@ export const api = {
     request('/integrations/hostinger/stores'),
   probeSite: (domain) =>
     request(`/integrations/hostinger/sites/${encodeURIComponent(domain)}`),
-
-  // Notion sync
-  getNotionDatabases: () =>
-    request('/integrations/notion/databases'),
-  syncNotion: (data) =>
-    request('/integrations/notion/sync', { method: 'POST', body: data }),
-  getNotionPages: (dbId, params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/integrations/notion/database/${dbId}/pages${query ? `?${query}` : ''}`);
-  },
-  pushToNotion: (data) =>
-    request('/integrations/notion/page', { method: 'POST', body: data }),
 
   // Agents
   getAgentsStatus: () =>

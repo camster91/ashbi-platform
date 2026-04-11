@@ -253,7 +253,7 @@ await fastify.register(proposalRoutes, { prefix: '/api/proposals' });
 await fastify.register(contractRoutes, { prefix: '/api/contracts' });
 await fastify.register(invoiceRoutes, { prefix: '/api/invoices' });
 await fastify.register(invoiceChaserRoutes, { prefix: '/api/invoice-chaser' });
-  await fastify.register(clientHealthRoutes, { prefix: '/api/clients' });
+  await fastify.register(clientHealthRoutes, { prefix: '/api/client-health' });
   await fastify.register(revenueRoutes, { prefix: '/api/revenue' });
 await fastify.register(aiContextRoutes, { prefix: '/api/settings/ai-context' });
 await fastify.register(upworkContractRoutes, { prefix: '/api/upwork-contracts' });
