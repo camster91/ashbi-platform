@@ -34,3 +34,4 @@ coverage/
 
 # Prisma
 prisma/migrations/**/migration_lock.toml
+config/google-tokens.json
