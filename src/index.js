@@ -135,6 +135,10 @@ const fastify = Fastify({
 fastify.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
   try {
     req.rawBody = body;
+    // Handle empty body (e.g. POST /api/auth/logout with no payload)
+    if (!body || body.length === 0) {
+      return done(null, {});
+    }
     const json = JSON.parse(body.toString());
     done(null, json);
   } catch (err) {
