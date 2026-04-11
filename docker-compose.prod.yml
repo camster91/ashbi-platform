@@ -7,10 +7,18 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    ports:
-      - "3002:3002"
     networks:
       - coolify
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ashbi-platform.rule=Host(`hub.ashbi.ca`)"
+      - "traefik.http.routers.ashbi-platform.entrypoints=https"
+      - "traefik.http.routers.ashbi-platform.tls=true"
+      - "traefik.http.routers.ashbi-platform.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ashbi-platform.loadbalancer.server.port=3002"
+      - "traefik.http.routers.ashbi-platform-http.rule=Host(`hub.ashbi.ca`)"
+      - "traefik.http.routers.ashbi-platform-http.entrypoints=http"
+      - "coolify.managed=true"
 
 networks:
   coolify:
