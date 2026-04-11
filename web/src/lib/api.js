@@ -1104,6 +1104,201 @@ export const api = {
   },
   getPipeline: () =>
     request('/reports/pipeline'),
+
+  // ===== DEAL PIPELINE =====
+  getPipelineStages: () =>
+    request('/pipeline'),
+  getPipelineAnalytics: () =>
+    request('/pipeline/analytics'),
+  createPipelineStage: (data) =>
+    request('/pipeline/stages', { method: 'POST', body: data }),
+  updatePipelineStage: (id, data) =>
+    request(`/pipeline/stages/${id}`, { method: 'PUT', body: data }),
+  deletePipelineStage: (id, moveToStageId) =>
+    request(`/pipeline/stages/${id}?moveToStageId=${moveToStageId || ''}`, { method: 'DELETE' }),
+  createPipelineDeal: (data) =>
+    request('/pipeline/deals', { method: 'POST', body: data }),
+  updatePipelineDeal: (id, data) =>
+    request(`/pipeline/deals/${id}`, { method: 'PUT', body: data }),
+  deletePipelineDeal: (id) =>
+    request(`/pipeline/deals/${id}`, { method: 'DELETE' }),
+
+  // ===== TIME TRACKING =====
+  startTimer: (data) =>
+    request('/time-tracking/start', { method: 'POST', body: data }),
+  stopTimer: (id) =>
+    request(`/time-tracking/${id}/stop`, { method: 'POST' }),
+  stopAllTimers: () =>
+    request('/time-tracking/stop-all', { method: 'POST' }),
+  getRunningTimer: () =>
+    request('/time-tracking/running'),
+  createManualTimeEntry: (data) =>
+    request('/time-tracking/manual', { method: 'POST', body: data }),
+  getTimeSummary: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/time-tracking/summary${query ? `?${query}` : ''}`);
+  },
+  deleteTimeEntry: (id) =>
+    request(`/time-tracking/${id}`, { method: 'DELETE' }),
+
+  // ===== SEMANTIC SEARCH (CLIENT BRAIN) =====
+  semanticSearch: (query, limit, clientId) => {
+    const params = { q: query };
+    if (limit) params.limit = limit;
+    if (clientId) params.clientId = clientId;
+    const queryStr = new URLSearchParams(params).toString();
+    return request(`/semantic-search/search?${queryStr}`);
+  },
+  getEmbeddingStats: () =>
+    request('/semantic-search/stats'),
+  createEmbedding: (data) =>
+    request('/semantic-search/embed', { method: 'POST', body: data }),
+  rebuildClientBrain: (clientId) =>
+    request(`/semantic-search/rebuild/${clientId}`, { method: 'POST' }),
+  deleteEmbedding: (source, sourceId) =>
+    request(`/semantic-search/embeddings/${source}/${sourceId}`, { method: 'DELETE' }),
+
+  // ===== AD COPY GENERATOR =====
+  generateAdCopy: (data) =>
+    request('/ad-copy/generate', { method: 'POST', body: data }),
+  getAdCopies: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/ad-copy${query ? `?${query}` : ''}`);
+  },
+  getAdCopy: (id) =>
+    request(`/ad-copy/${id}`),
+  updateAdCopyStatus: (id, status) =>
+    request(`/ad-copy/${id}/status`, { method: 'PATCH', body: { status } }),
+  deleteAdCopy: (id) =>
+    request(`/ad-copy/${id}`, { method: 'DELETE' }),
+
+  // ===== CREATIVE BRIEF =====
+  generateCreativeBrief: (data) =>
+    request('/creative-brief/generate', { method: 'POST', body: data }),
+  getCreativeBriefs: (clientId) =>
+    request(`/creative-brief/client/${clientId}`),
+  getCreativeBrief: (id) =>
+    request(`/creative-brief/${id}`),
+  updateCreativeBrief: (id, data) =>
+    request(`/creative-brief/${id}`, { method: 'PATCH', body: data }),
+  deleteCreativeBrief: (id) =>
+    request(`/creative-brief/${id}`, { method: 'DELETE' }),
+
+  // ===== SEO AUDIT =====
+  runSeoAudit: (data) =>
+    request('/seo/audit', { method: 'POST', body: data }),
+  getSeoAudits: (clientId) =>
+    request(`/seo/client/${clientId}`),
+  getSeoAudit: (id) =>
+    request(`/seo/${id}`),
+  deleteSeoAudit: (id) =>
+    request(`/seo/${id}`, { method: 'DELETE' }),
+
+  // ===== CONTENT CALENDAR =====
+  getContentEvents: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/content/events${query ? `?${query}` : ''}`);
+  },
+  getContentEvent: (id) =>
+    request(`/content/events/${id}`),
+  createContentEvent: (data) =>
+    request('/content/events', { method: 'POST', body: data }),
+  updateContentEvent: (id, data) =>
+    request(`/content/events/${id}`, { method: 'PATCH', body: data }),
+  updateContentEventStatus: (id, status) =>
+    request(`/content/events/${id}/status`, { method: 'PATCH', body: { status } }),
+  deleteContentEvent: (id) =>
+    request(`/content/events/${id}`, { method: 'DELETE' }),
+  getUpcomingContent: (limit = 10) =>
+    request(`/content/upcoming?limit=${limit}`),
+
+  // ===== SOCIAL SCHEDULER =====
+  generateSocialPosts: (data) =>
+    request('/scheduler/generate', { method: 'POST', body: data }),
+  scheduleSocialPost: (data) =>
+    request('/scheduler/schedule', { method: 'POST', body: data }),
+  getScheduledPosts: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/scheduler/posts${query ? `?${query}` : ''}`);
+  },
+  getSocialPost: (id) =>
+    request(`/scheduler/posts/${id}`),
+  updateSocialPostStatus: (id, status) =>
+    request(`/scheduler/posts/${id}/status`, { method: 'PATCH', body: { status } }),
+  deleteSocialPost: (id) =>
+    request(`/scheduler/posts/${id}`, { method: 'DELETE' }),
+  getSocialAnalytics: () =>
+    request('/scheduler/analytics'),
+
+  // ===== SNIPPET LIBRARY =====
+  getSnippets: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/snippets${query ? `?${query}` : ''}`);
+  },
+  searchSnippets: (q, limit = 20) =>
+    request(`/snippets/search?q=${encodeURIComponent(q)}&limit=${limit}`),
+  getPopularSnippets: (limit = 10) =>
+    request(`/snippets/popular?limit=${limit}`),
+  getSnippet: (id) =>
+    request(`/snippets/${id}`),
+  createSnippet: (data) =>
+    request('/snippets', { method: 'POST', body: data }),
+  updateSnippet: (id, data) =>
+    request(`/snippets/${id}`, { method: 'PATCH', body: data }),
+  deleteSnippet: (id) =>
+    request(`/snippets/${id}`, { method: 'DELETE' }),
+
+  // ===== ASSET LIBRARY =====
+  getAssets: (clientId, params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/assets/client/${clientId}${query ? `?${query}` : ''}`);
+  },
+  getAsset: (id) =>
+    request(`/assets/${id}`),
+  createAsset: (data) =>
+    request('/assets', { method: 'POST', body: data }),
+  updateAsset: (id, data) =>
+    request(`/assets/${id}`, { method: 'PATCH', body: data }),
+  deleteAsset: (id) =>
+    request(`/assets/${id}`, { method: 'DELETE' }),
+  searchAssets: (q, limit = 20) =>
+    request(`/assets/search?q=${encodeURIComponent(q)}&limit=${limit}`),
+  getBrandSettings: () =>
+    request('/assets/guidelines'),
+  updateBrandSettings: (data) =>
+    request('/assets/guidelines', { method: 'POST', body: data }),
+
+  // ===== WP BRIDGE =====
+  listWPSites: () =>
+    request('/wp-bridge'),
+  registerWPSite: (data) =>
+    request('/wp-bridge', { method: 'POST', body: data }),
+  updateWPSiteHealth: (data) =>
+    request('/wp-bridge', { method: 'PUT', body: data }),
+  deleteWPSite: (id) =>
+    request(`/wp-bridge?id=${id}`, { method: 'DELETE' }),
+  generateWPMagicLogin: (siteId) =>
+    request(`/wp-bridge/magic-login?siteId=${siteId}`),
+
+  // ===== SURVEYS / NPS =====
+  submitSurvey: (data) =>
+    request('/surveys/submit', { method: 'POST', body: data }),
+  getSurveyResponses: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/surveys/responses${query ? `?${query}` : ''}`);
+  },
+  getNpsMetrics: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/surveys/metrics${query ? `?${query}` : ''}`);
+  },
+  getAtRiskClients: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/surveys/at-risk-clients${query ? `?${query}` : ''}`);
+  },
+  getClientSurveyHistory: (clientId, params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/surveys/clients/${clientId}${query ? `?${query}` : ''}`);
+  },
 };
 
 export default api;

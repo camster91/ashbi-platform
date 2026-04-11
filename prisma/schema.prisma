@@ -5,8 +5,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions  = [vector]
 }
 
 // ==================== USERS & AUTH ====================
@@ -46,6 +47,8 @@ model User {
   contracts         Contract[]       @relation("ContractCreator")
   invoices          Invoice[]        @relation("InvoiceCreator")
   pushSubscriptions PushSubscription[]
+  snippets          Snippet[]
+  timeSessions      TimeSession[]
 
   @@map("users")
 }
@@ -98,6 +101,14 @@ model Client {
   revenueSnapshots  RevenueSnapshot[]
   emailMappings     ClientEmailMapping[]
   intakeForms       IntakeForm[]
+  pipelineDeals     PipelineDeal[]
+  surveyResponses   SurveyResponse[]
+  creativeBriefs    CreativeBrief[]
+  adCopies          AdCopy[]
+  contentCalendarEvents ContentCalendarEvent[]
+  seoAudits         SEOAudit[]
+  assets            Asset[]
+  clientEmbeddings  ClientEmbedding[]
 
   @@map("clients")
 }
@@ -165,6 +176,12 @@ model Project {
   approvals      Approval[]
   communications ProjectCommunication[]
   context        ProjectContext?
+  contentCalendarEvents ContentCalendarEvent[]
+  wpSite         WPSite?
+  seoAudits      SEOAudit[]
+  adCopies       AdCopy[]
+  creativeBriefs CreativeBrief[]
+  timeSessions   TimeSession[]
 
   @@map("projects")
 }
@@ -209,6 +226,7 @@ model Task {
   milestone   Milestone?    @relation("MilestoneTasks", fields: [milestoneId], references: [id])
   comments    TaskComment[]
   timeEntries TimeEntry[]
+  timeSessions TimeSession[]
 
   // Self-relation for subpages/subtasks
   parent      Task?         @relation("TaskSubpages", fields: [parentId], references: [id], onDelete: Cascade)
@@ -1420,4 +1438,293 @@ model BrandSettings {
   contractHeader String?
 
   @@map("brand_settings")
+}
+
+// ==================== DEAL PIPELINE (from ashbi-hub) ====================
+
+model PipelineStage {
+  id          String   @id @default(cuid())
+  name        String
+  order       Int      @default(0)
+  color       String   @default("#3B82F6")
+  probability Int      @default(0) // Win probability percentage
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  deals       PipelineDeal[]
+
+  @@map("pipeline_stages")
+}
+
+model PipelineDeal {
+  id                String    @id @default(cuid())
+  title             String
+  value             Float     @default(0)
+  clientId          String
+  stageId           String
+  probability       Int       @default(0) // Win probability percentage
+  expectedCloseDate DateTime?
+  notes             String?
+  contactPerson     String?
+  source            String?   // UPWORK | REFERRAL | WEBSITE | COLD_OUTREACH | OTHER
+  lostReason        String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  stage             PipelineStage @relation(fields: [stageId], references: [id])
+  client            Client        @relation(fields: [clientId], references: [id])
+
+  @@index([stageId])
+  @@index([clientId])
+  @@map("pipeline_deals")
+}
+
+// ==================== NPS SURVEYS (from ashbi-hub) ====================
+
+model SurveyResponse {
+  id           String   @id @default(cuid())
+  clientId     String
+  score        Int      // 0-10 NPS score
+  category     String   // PROMOTER | PASSIVE | DETRACTOR
+  comment      String?
+  respondentName  String?
+  respondentEmail String?
+  createdAt    DateTime @default(now())
+
+  client       Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([createdAt])
+  @@map("survey_responses")
+}
+
+// ==================== WORDPRESS SITE BRIDGE (from ashbi-hub) ====================
+
+model WPSite {
+  id            String   @id @default(cuid())
+  name          String
+  url           String
+  adminUrl      String?
+  clientId      String?
+  projectId     String?
+  status        String   @default("ACTIVE") // ACTIVE | MAINTENANCE | OFFLINE | ERROR
+  wpVersion     String?
+  phpVersion    String?
+  pluginCount   Int      @default(0)
+  theme         String?
+  lastCheckedAt DateTime?
+  healthScore   Int      @default(100) // 0-100
+  alerts        String   @default("[]") // JSON: array of alert objects
+  magicLoginUrl String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  client  Client?  @relation(fields: [clientId], references: [id])
+  project Project? @relation(fields: [projectId], references: [id])
+
+  @@map("wp_sites")
+}
+
+// ==================== CREATIVE BRIEFS (from ashbi-hub) ====================
+
+model CreativeBrief {
+  id             String   @id @default(cuid())
+  title          String
+  clientId       String
+  projectId      String?
+  objective      String?  // Brief objective/goal
+  targetAudience String?  // JSON: audience demographics
+  tone           String?  // Brand tone/personality
+  deliverables   String   @default("[]") // JSON: list of expected deliverables
+  references     String   @default("[]") // JSON: reference URLs/descriptions
+  constraints    String?  // Budget, timeline, brand constraints
+  status         String   @default("DRAFT") // DRAFT | APPROVED | IN_PROGRESS | COMPLETED
+  aiGenerated    Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  client  Client?  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id])
+
+  @@index([clientId])
+  @@map("creative_briefs")
+}
+
+// ==================== AD COPY GENERATOR (from ashbi-hub) ====================
+
+model AdCopy {
+  id           String   @id @default(cuid())
+  clientId     String?
+  projectId    String?
+  headline     String
+  body          String
+  cta          String?  // Call-to-action text
+  platform     String   @default("GOOGLE") // GOOGLE | FACEBOOK | INSTAGRAM | LINKEDIN | TIKTOK
+  audience     String?  // Target audience description
+  tone         String?  // Professional | Casual | Urgent | Friendly
+  status       String   @default("DRAFT") // DRAFT | APPROVED | ACTIVE | PAUSED
+  aiGenerated  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  client  Client?  @relation(fields: [clientId], references: [id])
+  project Project? @relation(fields: [projectId], references: [id])
+
+  @@map("ad_copies")
+}
+
+// ==================== CONTENT CALENDAR (from ashbi-hub) ====================
+
+model ContentCalendarEvent {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  contentType String    @default("BLOG") // BLOG | SOCIAL | EMAIL | VIDEO | PODCAST
+  status      String    @default("IDEA") // IDEA | DRAFT | IN_REVIEW | SCHEDULED | PUBLISHED
+  platform    String?   // Blog | LinkedIn | Instagram | Email | etc.
+  scheduledAt DateTime?
+  publishedAt DateTime?
+  contentUrl  String?   // URL of published content
+  clientId    String?
+  projectId   String?
+  assigneeId  String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  client    Client?   @relation(fields: [clientId], references: [id])
+  project   Project?  @relation(fields: [projectId], references: [id])
+  assignee  User?     @relation(fields: [assigneeId], references: [id])
+
+  @@index([scheduledAt])
+  @@map("content_calendar_events")
+}
+
+// ==================== SEO AUDITS (from ashbi-hub) ====================
+
+model SEOAudit {
+  id          String   @id @default(cuid())
+  url         String
+  title       String?  // Page title
+  score       Int      @default(0) // 0-100
+  issues      String   @default("[]") // JSON: array of issue objects
+  suggestions String   @default("[]") // JSON: array of suggestion objects
+  keywords    String   @default("[]") // JSON: target keywords
+  clientId    String?
+  projectId   String?
+  status      String   @default("PENDING") // PENDING | COMPLETED | FAILED
+  aiGenerated Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  client  Client?  @relation(fields: [clientId], references: [id])
+  project Project? @relation(fields: [projectId], references: [id])
+
+  @@map("seo_audits")
+}
+
+// ==================== SNIPPET LIBRARY (from ashbi-hub) ====================
+
+model Snippet {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  code        String   @db.Text
+  language    String   @default("javascript")
+  category    String   @default("general") // general | react | css | sql | api | utility
+  tags        String   @default("[]") // JSON: array of tag strings
+  isFavorite  Boolean  @default(false)
+  useCount    Int      @default(0)
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBy User? @relation(fields: [createdById], references: [id])
+
+  @@map("snippets")
+}
+
+// ==================== ASSET LIBRARY (from ashbi-hub) ====================
+
+model Asset {
+  id          String   @id @default(cuid())
+  name        String
+  type        String   @default("IMAGE") // IMAGE | VIDEO | FONT | ICON | DOCUMENT | TEMPLATE
+  url         String
+  thumbnailUrl String?
+  size        Int?     // File size in bytes
+  mimeType    String?
+  altText     String?
+  tags        String   @default("[]") // JSON: array of tag strings
+  clientId    String?
+  folderId    String?  // For nested folder structure
+  isGlobal    Boolean  @default(false) // Available to all clients vs client-specific
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  client Client? @relation(fields: [clientId], references: [id])
+
+  @@map("assets")
+}
+
+// ==================== CLIENT EMBEDDINGS (RAG / Client Brain) ====================
+
+model ClientEmbedding {
+  id         String   @id @default(cuid())
+  clientId   String
+  source     String   // EMAIL | NOTE | CALL | INVOICE | PROPOSAL | PROJECT | MANUAL
+  sourceId   String?  // ID of the source record
+  content    String   @db.Text // The text content that was embedded
+  embedding  Unsupported("vector(768)")? // pgvector embedding
+  metadata   String   @default("{}") // JSON: additional context
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([source])
+  @@map("client_embeddings")
+}
+
+// ==================== TIME SESSIONS (from ashbi-hub) ====================
+
+model TimeSession {
+  id          String    @id @default(cuid())
+  userId      String
+  projectId   String
+  taskId      String?
+  startTime   DateTime
+  endTime     DateTime?
+  duration    Int       @default(0) // Duration in minutes (calculated on stop)
+  description String?
+  billable    Boolean   @default(true)
+  isRunning   Boolean   @default(false) // True if timer is currently running
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id])
+  project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task    Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([projectId])
+  @@index([isRunning])
+  @@map("time_sessions")
+}
+
+// ==================== PROMPT VERSIONS (for AI enhancement) ====================
+
+model PromptVersion {
+  id          String   @id @default(cuid())
+  name        String   // e.g., "analyzeMessage", "draftResponse"
+  version     Int      @default(1)
+  system      String   @db.Text // System prompt
+  template    String   @db.Text // Prompt template with {{variables}}
+  temperature Float    @default(0.7)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([name, version])
+  @@map("prompt_versions")
 }

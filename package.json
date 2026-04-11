@@ -5,11 +5,13 @@
   "type": "module",
   "main": "src/index.js",
   "scripts": {
-    "dev": "node --watch src/index.js",
+    "dev": "tsx watch src/index.js",
     "dev:web": "vite",
-    "dev:worker": "node --watch src/jobs/worker.js",
+    "dev:worker": "tsx watch src/jobs/worker.js",
     "start": "node src/index.js",
-    "build": "npx prisma generate && npx prisma db push && node prisma/seed.js && vite build",
+    "type-check": "tsc --noEmit",
+    "type-check:watch": "tsc --noEmit --watch",
+    "build": "npx prisma generate && vite build",
     "build:backend": "npx prisma generate",
     "build:all": "npx prisma generate && vite build",
     "preview": "vite preview",
@@ -20,7 +22,8 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "db:push": "prisma db push"
   },
   "prisma": {
     "seed": "node prisma/seed.js"
@@ -83,7 +86,12 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "eslint": "^9.15.0"
+    "@types/bcrypt": "^5.0.2",
+    "@types/node": "^22.10.0",
+    "eslint": "^9.15.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
   },
   "engines": {
     "node": ">=20.0.0"

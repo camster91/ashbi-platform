@@ -53,6 +53,10 @@ import {
   ChevronDown,
   ChevronUp,
   DollarSign,
+  Calendar,
+  Code,
+  Globe,
+  Brain,
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { Download, Sun, Moon } from 'lucide-react';
@@ -184,6 +188,12 @@ export default function Layout({ children }) {
     { name: 'Social', href: '/social', icon: Share2 },
     { name: 'Blog', href: '/blog', icon: PenSquare },
     { name: 'Upwork', href: '/upwork', icon: Briefcase },
+    { name: 'Ad Copy', href: '/ad-copy', icon: Sparkles },
+    { name: 'Content Calendar', href: '/content-calendar', icon: Calendar },
+    { name: 'Social Scheduler', href: '/social-scheduler', icon: Share2 },
+    { name: 'SEO Audit', href: '/seo-audit', icon: Search },
+    { name: 'Creative Brief', href: '/creative-brief', icon: FileEdit },
+    { name: 'Snippets', href: '/snippets', icon: Code },
   ];
 
   const adminNav = isAdmin ? [
@@ -196,6 +206,10 @@ export default function Layout({ children }) {
     { name: 'Credentials', href: '/credentials', icon: KeyRound },
     { name: 'Brand Settings', href: '/admin/brand', icon: Palette },
     { name: 'AI Context', href: '/admin/settings/ai-context', icon: Settings },
+    { name: 'Asset Library', href: '/assets', icon: FolderOpen },
+    { name: 'WP Sites', href: '/wp-sites', icon: Globe },
+    { name: 'Client Brain', href: '/semantic-search', icon: Brain },
+    { name: 'Snippets', href: '/snippets', icon: Code },
   ] : [
     { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   ];

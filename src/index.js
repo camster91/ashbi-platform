@@ -103,6 +103,21 @@ import automationRoutes from './routes/automation.routes.js';
 import intakeFormRoutes from './routes/intake-form.routes.js';
 import brandRoutes from './routes/brand.routes.js';
 import { startOverdueChecker } from './services/automation.service.js';
+// Merged from ashbi-hub (Phase 2 features)
+import pipelineRoutes from './routes/pipeline.routes.js';
+import timeTrackingRoutes from './routes/time-tracking.routes.js';
+import semanticSearchRoutes from './routes/semantic-search.routes.js';
+// Marketing suite (from ashbi-hub Phase 2 Wave 2)
+import adCopyRoutes from './routes/ad-copy.routes.js';
+import creativeBriefRoutes from './routes/creative-brief.routes.js';
+import seoAuditRoutes from './routes/seo-audit.routes.js';
+import contentCalendarRoutes from './routes/content-calendar.routes.js';
+import socialSchedulerRoutes from './routes/social-scheduler.routes.js';
+import snippetLibraryRoutes from './routes/snippet-library.routes.js';
+// Advanced features (from ashbi-hub Phase 2 Wave 3)
+import assetLibraryRoutes from './routes/asset-library.routes.js';
+import wpBridgeRoutes from './routes/wp-bridge.routes.js';
+import surveyRoutes from './routes/survey.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -264,6 +279,21 @@ await fastify.register(expenseRoutes, { prefix: '/api/expenses' });
 await fastify.register(automationRoutes, { prefix: '/api/automations' });
 await fastify.register(intakeFormRoutes, { prefix: '/api/intake-forms' });
 await fastify.register(brandRoutes, { prefix: '/api/brand' });
+// Merged from ashbi-hub (Phase 2 features)
+await fastify.register(pipelineRoutes, { prefix: '/api/pipeline' });
+await fastify.register(timeTrackingRoutes, { prefix: '/api/time-tracking' });
+await fastify.register(semanticSearchRoutes, { prefix: '/api/semantic-search' });
+// Marketing suite (from ashbi-hub Phase 2 Wave 2)
+await fastify.register(adCopyRoutes, { prefix: '/api/ad-copy' });
+await fastify.register(creativeBriefRoutes, { prefix: '/api/creative-brief' });
+await fastify.register(seoAuditRoutes, { prefix: '/api/seo' });
+await fastify.register(contentCalendarRoutes, { prefix: '/api/content' });
+await fastify.register(socialSchedulerRoutes, { prefix: '/api/scheduler' });
+await fastify.register(snippetLibraryRoutes, { prefix: '/api' });
+// Advanced features (from ashbi-hub Phase 2 Wave 3)
+await fastify.register(assetLibraryRoutes, { prefix: '/api/assets' });
+await fastify.register(wpBridgeRoutes, { prefix: '/api/wp-bridge' });
+await fastify.register(surveyRoutes, { prefix: '/api/surveys' });
 
 // Serve static frontend in production
 if (!env.isDev) {

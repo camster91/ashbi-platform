@@ -87,6 +87,17 @@ const InvoiceChaser = lazy(() => import('./pages/InvoiceChaser'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Revenue = lazy(() => import('./pages/Revenue'));
 const ClientHealth = lazy(() => import('./pages/ClientHealth'));
+// Marketing Suite
+const AdCopyGenerator = lazy(() => import('./pages/AdCopyGenerator'));
+const CreativeBriefGenerator = lazy(() => import('./pages/CreativeBriefGenerator'));
+const SeoAudit = lazy(() => import('./pages/SeoAudit'));
+const ContentCalendar = lazy(() => import('./pages/ContentCalendar'));
+const SocialScheduler = lazy(() => import('./pages/SocialScheduler'));
+const SnippetLibrary = lazy(() => import('./pages/SnippetLibrary'));
+// Advanced Features
+const AssetLibrary = lazy(() => import('./pages/AssetLibrary'));
+const WPSites = lazy(() => import('./pages/WPSites'));
+const SemanticSearch = lazy(() => import('./pages/SemanticSearch'));
 
 function PageLoader() {
   return (
@@ -195,6 +206,17 @@ function AppRoutes() {
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/revenue" element={<AdminRoute><Revenue /></AdminRoute>} />
                   <Route path="/client-health" element={<AdminRoute><ClientHealth /></AdminRoute>} />
+                  {/* Marketing Suite */}
+                  <Route path="/ad-copy" element={<AdCopyGenerator />} />
+                  <Route path="/creative-brief" element={<CreativeBriefGenerator />} />
+                  <Route path="/seo-audit" element={<SeoAudit />} />
+                  <Route path="/content-calendar" element={<ContentCalendar />} />
+                  <Route path="/social-scheduler" element={<SocialScheduler />} />
+                  <Route path="/snippets" element={<SnippetLibrary />} />
+                  {/* Advanced Features */}
+                  <Route path="/assets" element={<AssetLibrary />} />
+                  <Route path="/wp-sites" element={<WPSites />} />
+                  <Route path="/semantic-search" element={<SemanticSearch />} />
                 </Routes>
               </Suspense>
             </Layout>
