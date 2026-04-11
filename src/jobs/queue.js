@@ -26,7 +26,8 @@ export const QUEUES = {
   PROJECT_HEALTH: 'project-health',
   ESCALATION: 'escalation',
   NOTIFICATIONS: 'notifications',
-  WEEKLY_DIGEST: 'weekly-digest'
+  WEEKLY_DIGEST: 'weekly-digest',
+  EMBEDDING: 'embedding'
 };
 
 // Create queues
@@ -35,6 +36,7 @@ export const healthQueue = new Queue(QUEUES.PROJECT_HEALTH, { connection });
 export const escalationQueue = new Queue(QUEUES.ESCALATION, { connection });
 export const notificationQueue = new Queue(QUEUES.NOTIFICATIONS, { connection });
 export const weeklyDigestQueue = new Queue(QUEUES.WEEKLY_DIGEST, { connection });
+export const embeddingQueue = new Queue(QUEUES.EMBEDDING, { connection });
 
 // Queue event handlers
 const emailQueueEvents = new QueueEvents(QUEUES.EMAIL_PROCESSING, { connection });
@@ -88,6 +90,17 @@ export async function queueNotification(notification) {
   await notificationQueue.add('send-notification', notification, {
     attempts: 3,
     backoff: { type: 'exponential', delay: 1000 }
+  });
+}
+
+/**
+ * Queue embedding generation for a client
+ */
+export async function queueEmbedding(clientId, content, source, sourceId = null, metadata = {}) {
+  await embeddingQueue.add('generate-embedding', { clientId, content, source, sourceId, metadata }, {
+    attempts: 2,
+    backoff: { type: 'exponential', delay: 5000 },
+    removeOnComplete: true
   });
 }
 

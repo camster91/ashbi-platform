@@ -5,6 +5,7 @@ import { PrismaClient } from '@prisma/client';
 import { connection, QUEUES, scheduleEscalationCheck } from './queue.js';
 import { processEmailPipeline } from '../services/pipeline.service.js';
 import { updateAllProjectHealth } from '../services/project.service.js';
+import { storeEmbedding } from '../services/embedding.service.js';
 import aiClient from '../ai/client.js';
 import env from '../config/env.js';
 
@@ -361,9 +362,30 @@ weeklyDigestWorker.on('failed', (job, err) => {
   console.error(`Weekly digest job ${job?.id} failed:`, err.message);
 });
 
+// Embedding Worker
+const embeddingWorker = new Worker(
+  QUEUES.EMBEDDING,
+  async (job) => {
+    const { clientId, content, source, sourceId, metadata } = job.data;
+    console.log(`Generating embedding for ${source}:${sourceId || 'none'}`);
+    const result = await storeEmbedding(clientId, content, source, sourceId, metadata);
+    return result;
+  },
+  { connection, concurrency: 3 }
+);
+
+embeddingWorker.on('completed', (job) => {
+  console.log(`Embedding job ${job.id} completed`);
+});
+
+embeddingWorker.on('failed', (job, err) => {
+  console.error(`Embedding job ${job?.id} failed:`, err.message);
+});
+
 console.log('Workers started');
 console.log('- Email processing worker');
 console.log('- Project health worker');
 console.log('- Escalation worker');
 console.log('- Notification worker');
 console.log('- Weekly digest worker');
+console.log('- Embedding worker');

@@ -3,6 +3,7 @@
 import { prisma } from '../index.js';
 import { analyzeMessage } from '../services/pipeline.service.js';
 import { assignThread } from '../services/assignment.service.js';
+import { queueEmbedding } from '../jobs/queue.js';
 
 export default async function threadRoutes(fastify) {
   // List threads with filters
@@ -93,6 +94,11 @@ export default async function threadRoutes(fastify) {
         assignedTo: { select: { id: true, name: true } }
       }
     });
+
+    // Auto-embed thread for Client Brain
+    queueEmbedding(clientId, `Thread: ${subject}`, 'THREAD', thread.id, { subject }).catch(err =>
+      console.error('Failed to queue thread embedding:', err.message)
+    );
 
     return reply.status(201).send(thread);
   });
@@ -270,6 +276,16 @@ export default async function threadRoutes(fastify) {
         status: direction === 'INBOUND' ? 'AWAITING_RESPONSE' : 'OPEN'
       }
     });
+
+    // Auto-embed message content for Client Brain
+    if (bodyText) {
+      const thread = await prisma.thread.findUnique({ where: { id }, select: { clientId: true } });
+      if (thread?.clientId) {
+        queueEmbedding(thread.clientId, bodyText.substring(0, 2000), 'THREAD', id, { type: 'message' }).catch(err =>
+          console.error('Failed to queue message embedding:', err.message)
+        );
+      }
+    }
 
     return reply.status(201).send(message);
   });

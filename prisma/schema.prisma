@@ -18,6 +18,7 @@ model User {
   name      String
   password  String
   role      String   @default("TEAM") // ADMIN, TEAM, CLIENT, or BOT
+  clientId  String?  // Set for CLIENT role users
   skills    String   @default("[]") // JSON array of skills
   capacity  Int      @default(100) // Percentage available
   isActive  Boolean  @default(true)
@@ -405,6 +406,7 @@ model UnmatchedEmail {
   bodyText         String
   bodyHtml         String?
   rawEmail         String?
+  source           String?  // Source: upwork, email, form, etc.
   suggestedClients String?  // JSON: AI suggestions
   suggestedProjects String? // JSON: AI suggestions
   status           String   @default("PENDING") // PENDING, RESOLVED, IGNORED

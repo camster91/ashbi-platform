@@ -3,6 +3,7 @@
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import { prisma } from '../index.js';
+import { queueEmbedding } from '../jobs/queue.js';
 
 async function sendProposalEmail(to, clientName, proposalTitle, portalUrl) {
   if (!process.env.MAILGUN_API_KEY || !process.env.MAILGUN_DOMAIN) return;
@@ -136,6 +137,11 @@ export default async function proposalRoutes(fastify) {
 
       return created;
     });
+
+    // Auto-embed proposal for Client Brain
+    queueEmbedding(clientId, `Proposal: ${title} - ${notes || ''}`, 'PROPOSAL', proposal.id, { status: proposal.status, total }).catch(err =>
+      console.error('Failed to queue proposal embedding:', err.message)
+    );
 
     return reply.status(201).send(proposal);
   });

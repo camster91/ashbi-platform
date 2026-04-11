@@ -57,6 +57,11 @@ import {
   Code,
   Globe,
   Brain,
+  ShoppingBag,
+  LayoutGrid,
+  Puzzle,
+  GraduationCap,
+  Star,
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { Download, Sun, Moon } from 'lucide-react';
@@ -170,6 +175,8 @@ export default function Layout({ children }) {
     { name: 'Chat with Ash', href: '/chat', icon: MessageSquare },
     { name: 'Intake Forms', href: '/intake-forms', icon: ClipboardList },
     { name: 'Integrations', href: '/integrations', icon: Command },
+    { name: 'Shopify', href: '/shopify', icon: ShoppingBag },
+    { name: 'WordPress', href: '/wordpress', icon: Globe },
   ];
 
   const aiNav = [
@@ -202,6 +209,7 @@ export default function Layout({ children }) {
     { name: 'Team', href: '/team', icon: UserCog },
     { name: 'Revenue', href: '/revenue', icon: TrendingUp },
     { name: 'Client Health', href: '/client-health', icon: Heart },
+    { name: 'NPS & Surveys', href: '/surveys', icon: Star },
     { name: 'Reports', href: '/reports', icon: PieChart },
     { name: 'Command Center', href: '/admin/command-center', icon: Command },
     { name: 'Analytics', href: '/analytics', icon: BarChart3 },
@@ -211,6 +219,8 @@ export default function Layout({ children }) {
     { name: 'Asset Library', href: '/assets', icon: FolderOpen },
     { name: 'WP Sites', href: '/wp-sites', icon: Globe },
     { name: 'Client Brain', href: '/semantic-search', icon: Brain },
+    { name: 'Skills', href: '/skills', icon: GraduationCap },
+    { name: 'Agents', href: '/agents', icon: LayoutGrid },
   ] : [
     { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   ];

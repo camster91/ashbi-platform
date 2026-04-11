@@ -3,6 +3,7 @@
 import { prisma } from '../index.js';
 import { refreshProjectPlan } from '../services/project.service.js';
 import { safeParse } from '../utils/safeParse.js';
+import { queueEmbedding } from '../jobs/queue.js';
 import aiClient from '../ai/client.js';
 
 export default async function projectRoutes(fastify) {
@@ -66,6 +67,13 @@ export default async function projectRoutes(fastify) {
         defaultOwnerId
       }
     });
+
+    // Auto-embed project for Client Brain
+    if (clientId && description) {
+      queueEmbedding(clientId, `Project: ${name} - ${description}`, 'PROJECT', project.id, { projectName: name }).catch(err =>
+        console.error('Failed to queue project embedding:', err.message)
+      );
+    }
 
     return reply.status(201).send(project);
   });

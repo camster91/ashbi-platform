@@ -85,6 +85,7 @@ const Settings = lazy(() => import('./pages/Settings'));
 const Revenue = lazy(() => import('./pages/Revenue'));
 const ClientHealth = lazy(() => import('./pages/ClientHealth'));
 // Marketing Suite
+const Notifications = lazy(() => import('./pages/Notifications'));
 const AdCopyGenerator = lazy(() => import('./pages/AdCopyGenerator'));
 const CreativeBriefGenerator = lazy(() => import('./pages/CreativeBriefGenerator'));
 const SeoAudit = lazy(() => import('./pages/SeoAudit'));
@@ -95,6 +96,7 @@ const SnippetLibrary = lazy(() => import('./pages/SnippetLibrary'));
 const AssetLibrary = lazy(() => import('./pages/AssetLibrary'));
 const WPSites = lazy(() => import('./pages/WPSites'));
 const SemanticSearch = lazy(() => import('./pages/SemanticSearch'));
+const Surveys = lazy(() => import('./pages/Surveys'));
 
 function PageLoader() {
   return (
@@ -210,10 +212,12 @@ function AppRoutes() {
                   <Route path="/content-calendar" element={<ContentCalendar />} />
                   <Route path="/social-scheduler" element={<SocialScheduler />} />
                   <Route path="/snippets" element={<SnippetLibrary />} />
+                  <Route path="/notifications" element={<Notifications />} />
                   {/* Advanced Features */}
                   <Route path="/assets" element={<AssetLibrary />} />
                   <Route path="/wp-sites" element={<WPSites />} />
                   <Route path="/semantic-search" element={<SemanticSearch />} />
+                  <Route path="/surveys" element={<Surveys />} />
                 </Routes>
               </Suspense>
             </Layout>
