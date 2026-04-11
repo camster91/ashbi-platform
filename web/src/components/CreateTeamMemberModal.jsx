@@ -31,7 +31,7 @@ export default function CreateTeamMemberModal({ isOpen, onClose }) {
   const mutation = useMutation({
     mutationFn: (data) => api.createTeamMember(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['team']);
+      queryClient.invalidateQueries({ queryKey: ['team'] });
       onClose();
       setFormData({
         email: '',

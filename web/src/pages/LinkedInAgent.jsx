@@ -223,7 +223,7 @@ export default function LinkedInAgent() {
 
   const deleteSeq = useMutation({
     mutationFn: api.deleteLinkedInSequence,
-    onSuccess: () => queryClient.invalidateQueries(['linkedin-sequences']),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['linkedin-sequences'] }),
   });
 
   return (
@@ -339,8 +339,8 @@ export default function LinkedInAgent() {
         )
       )}
 
-      {showGenerate && <GenerateSequenceModal onClose={() => setShowGenerate(false)} onGenerated={() => queryClient.invalidateQueries(['linkedin-sequences'])} />}
-      {showImport && <ImportProspectsModal onClose={() => setShowImport(false)} onImported={() => queryClient.invalidateQueries(['linkedin-prospects'])} />}
+      {showGenerate && <GenerateSequenceModal onClose={() => setShowGenerate(false)} onGenerated={() => queryClient.invalidateQueries({ queryKey: ['linkedin-sequences'] })} />}
+      {showImport && <ImportProspectsModal onClose={() => setShowImport(false)} onImported={() => queryClient.invalidateQueries({ queryKey: ['linkedin-prospects'] })} />}
       {selectedSeq && <SequenceDetail seq={selectedSeq} onClose={() => setSelectedSeq(null)} />}
     </div>
   );

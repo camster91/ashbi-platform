@@ -15,7 +15,7 @@ export default function CreateClientModal({ isOpen, onClose }) {
   const mutation = useMutation({
     mutationFn: (data) => api.createClient(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['clients']);
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
       onClose();
       setFormData({ name: '', domain: '', status: 'ACTIVE' });
       setError('');

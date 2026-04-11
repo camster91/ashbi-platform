@@ -87,7 +87,7 @@ function EmailDetail({ item, onClose, onUpdated }) {
     setGenerating(true);
     try {
       await api.generateEmailDrafts(item.id);
-      queryClient.invalidateQueries(['email-queue']);
+      queryClient.invalidateQueries({ queryKey: ['email-queue'] });
       onUpdated();
     } catch (err) {
       toast.error('Failed to generate drafts: ' + err.message);
@@ -99,7 +99,7 @@ function EmailDetail({ item, onClose, onUpdated }) {
   const archive = async () => {
     try {
       await api.archiveEmailItem(item.id);
-      queryClient.invalidateQueries(['email-queue']);
+      queryClient.invalidateQueries({ queryKey: ['email-queue'] });
       onClose();
     } catch (err) {
       toast.error('Archive failed: ' + err.message);
@@ -170,7 +170,7 @@ function EmailDetail({ item, onClose, onUpdated }) {
                 draft={draft}
                 onClose={() => {}}
                 onApproved={() => {
-                  queryClient.invalidateQueries(['email-queue']);
+                  queryClient.invalidateQueries({ queryKey: ['email-queue'] });
                   onUpdated();
                 }}
               />
@@ -198,7 +198,7 @@ export default function EmailAgent() {
     setScanning(true);
     try {
       const result = await api.scanEmailInbox();
-      queryClient.invalidateQueries(['email-queue']);
+      queryClient.invalidateQueries({ queryKey: ['email-queue'] });
       toast.success(`Scanned ${result.scanned} threads, triaged ${result.triaged} new items`);
     } catch (err) {
       toast.error('Scan failed: ' + err.message);
@@ -320,7 +320,7 @@ export default function EmailAgent() {
           item={selectedItem}
           onClose={() => setSelectedItem(null)}
           onUpdated={() => {
-            queryClient.invalidateQueries(['email-queue']);
+            queryClient.invalidateQueries({ queryKey: ['email-queue'] });
             // Refresh selected item
             const refreshed = items.find(i => i.id === selectedItem.id);
             if (refreshed) setSelectedItem(refreshed);

@@ -100,7 +100,7 @@ export default function KanbanBoard({ projectId }) {
       queryClient.setQueryData(['project-tasks', projectId], context.previous);
     },
     onSettled: () => {
-      queryClient.invalidateQueries(['project-tasks', projectId]);
+      queryClient.invalidateQueries({ queryKey: ['project-tasks', projectId] });
     }
   });
 

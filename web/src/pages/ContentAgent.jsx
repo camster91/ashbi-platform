@@ -244,7 +244,7 @@ export default function ContentAgent() {
 
   const deleteMutation = useMutation({
     mutationFn: api.deleteContentDraft,
-    onSuccess: () => queryClient.invalidateQueries(['content-drafts']),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['content-drafts'] }),
   });
 
   const openEditor = async (draft) => {
@@ -345,10 +345,10 @@ export default function ContentAgent() {
         </div>
       )}
 
-      {showBlogGen && <BlogGenerator onClose={() => setShowBlogGen(false)} onGenerated={() => queryClient.invalidateQueries(['content-drafts'])} />}
-      {showSocialGen && <SocialGenerator onClose={() => setShowSocialGen(false)} onGenerated={() => queryClient.invalidateQueries(['content-drafts'])} />}
-      {showLinkedInGen && <LinkedInGenerator onClose={() => setShowLinkedInGen(false)} onGenerated={() => queryClient.invalidateQueries(['content-drafts'])} />}
-      {editingDraft && <ContentEditor draft={editingDraft} onClose={() => setEditingDraft(null)} onSaved={() => { queryClient.invalidateQueries(['content-drafts']); setEditingDraft(null); }} />}
+      {showBlogGen && <BlogGenerator onClose={() => setShowBlogGen(false)} onGenerated={() => queryClient.invalidateQueries({ queryKey: ['content-drafts'] })} />}
+      {showSocialGen && <SocialGenerator onClose={() => setShowSocialGen(false)} onGenerated={() => queryClient.invalidateQueries({ queryKey: ['content-drafts'] })} />}
+      {showLinkedInGen && <LinkedInGenerator onClose={() => setShowLinkedInGen(false)} onGenerated={() => queryClient.invalidateQueries({ queryKey: ['content-drafts'] })} />}
+      {editingDraft && <ContentEditor draft={editingDraft} onClose={() => setEditingDraft(null)} onSaved={() => { queryClient.invalidateQueries({ queryKey: ['content-drafts'] }); setEditingDraft(null); }} />}
     </div>
   );
 }

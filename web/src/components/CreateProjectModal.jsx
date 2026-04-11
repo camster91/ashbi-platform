@@ -30,8 +30,8 @@ export default function CreateProjectModal({ isOpen, onClose, preselectedClientI
   const mutation = useMutation({
     mutationFn: (data) => api.createProject(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['projects']);
-      queryClient.invalidateQueries(['client']);
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+      queryClient.invalidateQueries({ queryKey: ['client'] });
       onClose();
       setFormData({ name: '', description: '', clientId: '', defaultOwnerId: '' });
       setError('');

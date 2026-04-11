@@ -229,7 +229,7 @@ export default function ColdEmail() {
 
   const deleteSeq = useMutation({
     mutationFn: api.deleteColdEmailSequence,
-    onSuccess: () => queryClient.invalidateQueries(['cold-email-sequences']),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['cold-email-sequences'] }),
   });
 
   const openSequence = async (seq) => {
@@ -356,8 +356,8 @@ export default function ColdEmail() {
         )
       )}
 
-      {showGenerate && <GenerateSequenceModal onClose={() => setShowGenerate(false)} onGenerated={() => queryClient.invalidateQueries(['cold-email-sequences'])} />}
-      {showImport && <ImportProspectsModal sequences={sequences} onClose={() => setShowImport(false)} onImported={() => queryClient.invalidateQueries(['cold-email-prospects'])} />}
+      {showGenerate && <GenerateSequenceModal onClose={() => setShowGenerate(false)} onGenerated={() => queryClient.invalidateQueries({ queryKey: ['cold-email-sequences'] })} />}
+      {showImport && <ImportProspectsModal sequences={sequences} onClose={() => setShowImport(false)} onImported={() => queryClient.invalidateQueries({ queryKey: ['cold-email-prospects'] })} />}
       {selectedSeq && <SequenceDetail sequence={selectedSeq} onClose={() => setSelectedSeq(null)} />}
     </div>
   );

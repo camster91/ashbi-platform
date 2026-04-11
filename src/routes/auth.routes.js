@@ -6,6 +6,8 @@ import bcrypt from 'bcrypt';
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 
+const LOGIN_RATE_LIMIT = { max: 5, timeWindow: '1 minute' };
+
 const BCRYPT_ROUNDS = 12;
 
 async function hashPassword(password) {
@@ -32,7 +34,7 @@ export default async function authRoutes(fastify) {
   const authRateLimit = {
     config: {
       rateLimit: {
-        max: 10,
+        max: 5,
         timeWindow: '15 minutes',
         keyGenerator: (req) => req.ip
       }

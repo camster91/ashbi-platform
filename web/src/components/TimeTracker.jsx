@@ -34,7 +34,7 @@ export default function TimeTracker({ projectId, taskId }) {
   const createMutation = useMutation({
     mutationFn: api.createTimeEntry,
     onSuccess: () => {
-      queryClient.invalidateQueries(['time-entries']);
+      queryClient.invalidateQueries({ queryKey: ['time-entries'] });
       setShowForm(false);
     }
   });

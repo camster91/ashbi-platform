@@ -92,7 +92,7 @@ function CallDetail({ call, onClose, onUpdated }) {
     setSaving(true);
     try {
       await api.saveCallSummary({ callId: call.id, summary, notes });
-      queryClient.invalidateQueries(['call-log']);
+      queryClient.invalidateQueries({ queryKey: ['call-log'] });
       onUpdated();
     } catch (err) {
       toast.error('Save failed: ' + err.message);
@@ -105,7 +105,7 @@ function CallDetail({ call, onClose, onUpdated }) {
     setGeneratingFollowUp(true);
     try {
       await api.generateCallFollowUp(call.id);
-      queryClient.invalidateQueries(['call-log']);
+      queryClient.invalidateQueries({ queryKey: ['call-log'] });
       onUpdated();
     } catch (err) {
       toast.error('Failed: ' + err.message);
@@ -265,13 +265,13 @@ export default function CallAgent() {
         </div>
       )}
 
-      {showNewCall && <NewCallModal onClose={() => setShowNewCall(false)} onCreated={() => queryClient.invalidateQueries(['call-log'])} />}
+      {showNewCall && <NewCallModal onClose={() => setShowNewCall(false)} onCreated={() => queryClient.invalidateQueries({ queryKey: ['call-log'] })} />}
       {selectedCall && (
         <CallDetail
           call={selectedCall}
           onClose={() => setSelectedCall(null)}
           onUpdated={() => {
-            queryClient.invalidateQueries(['call-log']);
+            queryClient.invalidateQueries({ queryKey: ['call-log'] });
             setSelectedCall(null);
           }}
         />

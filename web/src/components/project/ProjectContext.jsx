@@ -29,7 +29,7 @@ export default function ProjectContextCard({ projectId }) {
     mutationFn: (humanNotes) => api.updateProjectContext(projectId, { humanNotes }),
     onSuccess: () => {
       setNotesDirty(false);
-      queryClient.invalidateQueries(['project-context', projectId]);
+      queryClient.invalidateQueries({ queryKey: ['project-context', projectId] });
     },
   });
 

@@ -267,7 +267,7 @@ export default function Blog() {
 
   const deleteMutation = useMutation({
     mutationFn: api.deleteBlogPost,
-    onSuccess: () => queryClient.invalidateQueries(['blog-posts']),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['blog-posts'] }),
   });
 
   const openEditor = async (post) => {
@@ -380,7 +380,7 @@ export default function Blog() {
       {showGenerate && (
         <GenerateModal
           onClose={() => setShowGenerate(false)}
-          onGenerated={() => queryClient.invalidateQueries(['blog-posts'])}
+          onGenerated={() => queryClient.invalidateQueries({ queryKey: ['blog-posts'] })}
         />
       )}
       {showKeywords && (
@@ -391,7 +391,7 @@ export default function Blog() {
           post={editingPost}
           onClose={() => setEditingPost(null)}
           onSaved={() => {
-            queryClient.invalidateQueries(['blog-posts']);
+            queryClient.invalidateQueries({ queryKey: ['blog-posts'] });
             setEditingPost(null);
           }}
         />

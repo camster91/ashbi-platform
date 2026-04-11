@@ -61,7 +61,7 @@ export default function Thread() {
   const submitMutation = useMutation({
     mutationFn: (body) => api.createResponse(id, { subject: `Re: ${thread.subject}`, body, tone: 'professional' }),
     onSuccess: () => {
-      queryClient.invalidateQueries(['thread', id]);
+      queryClient.invalidateQueries({ queryKey: ['thread', id] });
       setResponseText('');
       toast.success('Response submitted for approval');
     },
@@ -71,7 +71,7 @@ export default function Thread() {
   const noteMutation = useMutation({
     mutationFn: (content) => api.addNote(id, content),
     onSuccess: () => {
-      queryClient.invalidateQueries(['thread', id]);
+      queryClient.invalidateQueries({ queryKey: ['thread', id] });
       setNoteText('');
       toast.success('Note added');
     },
@@ -81,8 +81,8 @@ export default function Thread() {
   const resolveMutation = useMutation({
     mutationFn: () => api.resolveThread(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['thread', id]);
-      queryClient.invalidateQueries(['inbox']);
+      queryClient.invalidateQueries({ queryKey: ['thread', id] });
+      queryClient.invalidateQueries({ queryKey: ['inbox'] });
       toast.success('Thread resolved');
     },
     onError: () => toast.error('Failed to resolve thread'),
@@ -114,7 +114,7 @@ export default function Thread() {
       setGmailReplyTo('');
       setGmailReplySubject('');
       setGmailDraftMeta(null);
-      queryClient.invalidateQueries(['thread', id]);
+      queryClient.invalidateQueries({ queryKey: ['thread', id] });
       toast.success('Reply sent via Gmail');
     },
     onError: () => toast.error('Failed to send Gmail reply'),

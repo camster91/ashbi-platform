@@ -70,7 +70,7 @@ export default function Project() {
   const refreshMutation = useMutation({
     mutationFn: () => api.refreshProjectPlan(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['project', id]);
+      queryClient.invalidateQueries({ queryKey: ['project', id] });
       toast.success('Project plan refreshed');
     },
     onError: () => toast.error('Failed to refresh plan'),
@@ -84,7 +84,7 @@ export default function Project() {
   const pasteMutation = useMutation({
     mutationFn: (data) => api.pasteMessage(data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['project', id]);
+      queryClient.invalidateQueries({ queryKey: ['project', id] });
       setShowPasteModal(false);
       setPasteContent('');
       toast.success('Message added to project');
@@ -95,7 +95,7 @@ export default function Project() {
   const createRevisionMutation = useMutation({
     mutationFn: (data) => api.createRevision(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['revisions', id]);
+      queryClient.invalidateQueries({ queryKey: ['revisions', id] });
       toast.success('Revision round created');
     },
   });
@@ -103,7 +103,7 @@ export default function Project() {
   const approveRevisionMutation = useMutation({
     mutationFn: (revId) => api.approveRevision(revId),
     onSuccess: () => {
-      queryClient.invalidateQueries(['revisions', id]);
+      queryClient.invalidateQueries({ queryKey: ['revisions', id] });
       toast.success('Revision approved');
     },
   });
@@ -117,7 +117,7 @@ export default function Project() {
   const applyTemplateMutation = useMutation({
     mutationFn: (templateId) => api.applyTemplate(templateId, id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['project', id]);
+      queryClient.invalidateQueries({ queryKey: ['project', id] });
       setShowTemplateModal(false);
     },
   });

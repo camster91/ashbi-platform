@@ -242,13 +242,13 @@ export default function Outreach() {
 
   const toggleSequence = useMutation({
     mutationFn: ({ id, status }) => api.updateOutreachSequence(id, { status }),
-    onSuccess: () => queryClient.invalidateQueries(['outreach-sequences']),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['outreach-sequences'] }),
   });
 
   const runSequence = useMutation({
     mutationFn: (id) => api.runOutreachSequence(id),
     onSuccess: (data) => {
-      queryClient.invalidateQueries(['outreach-leads']);
+      queryClient.invalidateQueries({ queryKey: ['outreach-leads'] });
       toast.success(`Sequence run complete: ${data.sent} emails sent, ${data.failed} failed.`);
     },
   });
@@ -419,13 +419,13 @@ export default function Outreach() {
       {showAddLead && (
         <AddLeadModal
           onClose={() => setShowAddLead(false)}
-          onAdded={() => queryClient.invalidateQueries(['outreach-leads'])}
+          onAdded={() => queryClient.invalidateQueries({ queryKey: ['outreach-leads'] })}
         />
       )}
       {showCreateSequence && (
         <CreateSequenceModal
           onClose={() => setShowCreateSequence(false)}
-          onCreated={() => queryClient.invalidateQueries(['outreach-sequences'])}
+          onCreated={() => queryClient.invalidateQueries({ queryKey: ['outreach-sequences'] })}
         />
       )}
       {selectedLead && (

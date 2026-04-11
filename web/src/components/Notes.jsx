@@ -26,7 +26,7 @@ export default function Notes({ projectId }) {
   const createMutation = useMutation({
     mutationFn: (data) => api.createNote(projectId, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['notes', projectId]);
+      queryClient.invalidateQueries({ queryKey: ['notes', projectId] });
       setShowCreateModal(false);
     }
   });
@@ -35,7 +35,7 @@ export default function Notes({ projectId }) {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => api.updateNote(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['notes', projectId]);
+      queryClient.invalidateQueries({ queryKey: ['notes', projectId] });
       setSelectedNote(null);
     }
   });
@@ -44,7 +44,7 @@ export default function Notes({ projectId }) {
   const deleteMutation = useMutation({
     mutationFn: api.deleteNote,
     onSuccess: () => {
-      queryClient.invalidateQueries(['notes', projectId]);
+      queryClient.invalidateQueries({ queryKey: ['notes', projectId] });
       setSelectedNote(null);
     }
   });
@@ -53,7 +53,7 @@ export default function Notes({ projectId }) {
   const pinMutation = useMutation({
     mutationFn: api.pinNote,
     onSuccess: () => {
-      queryClient.invalidateQueries(['notes', projectId]);
+      queryClient.invalidateQueries({ queryKey: ['notes', projectId] });
     }
   });
 

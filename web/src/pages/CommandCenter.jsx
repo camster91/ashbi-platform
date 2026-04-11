@@ -12,7 +12,7 @@ import {
   Activity, Zap, Database, Code2
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
-import api from '../lib/api';
+import { api } from '../lib/api';
 
 const REFRESH_INTERVAL = 60_000; // 60 seconds
 

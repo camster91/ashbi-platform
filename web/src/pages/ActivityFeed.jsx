@@ -68,7 +68,7 @@ export default function ActivityFeedPage() {
     if (!socket) return;
 
     const handleNewActivity = () => {
-      queryClient.invalidateQueries(['activity-feed']);
+      queryClient.invalidateQueries({ queryKey: ['activity-feed'] });
     };
 
     socket.on('activity:new', handleNewActivity);

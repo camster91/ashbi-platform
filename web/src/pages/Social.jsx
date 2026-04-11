@@ -250,12 +250,12 @@ export default function Social() {
 
   const deleteMutation = useMutation({
     mutationFn: api.deleteSocialPost,
-    onSuccess: () => queryClient.invalidateQueries(['social-posts']),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['social-posts'] }),
   });
 
   const publishMutation = useMutation({
     mutationFn: (post) => api.updateSocialPost(post.id, { status: 'PUBLISHED' }),
-    onSuccess: () => queryClient.invalidateQueries(['social-posts']),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['social-posts'] }),
   });
 
   const grouped = {
@@ -333,14 +333,14 @@ export default function Social() {
       {showGenerate && (
         <GenerateModal
           onClose={() => setShowGenerate(false)}
-          onSaved={() => queryClient.invalidateQueries(['social-posts'])}
+          onSaved={() => queryClient.invalidateQueries({ queryKey: ['social-posts'] })}
         />
       )}
       {editingPost && (
         <EditModal
           post={editingPost}
           onClose={() => setEditingPost(null)}
-          onSaved={() => queryClient.invalidateQueries(['social-posts'])}
+          onSaved={() => queryClient.invalidateQueries({ queryKey: ['social-posts'] })}
         />
       )}
     </div>

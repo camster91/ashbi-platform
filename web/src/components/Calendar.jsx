@@ -32,7 +32,7 @@ export default function Calendar({ projectId }) {
   const createMutation = useMutation({
     mutationFn: api.createCalendarEvent,
     onSuccess: () => {
-      queryClient.invalidateQueries(['calendar']);
+      queryClient.invalidateQueries({ queryKey: ['calendar'] });
       setShowCreateModal(false);
     }
   });

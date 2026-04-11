@@ -159,7 +159,11 @@ await fastify.register(multipart, {
 
 // Rate limiting
 await fastify.register(rateLimit, {
-  global: false // only apply where explicitly configured
+  global: true,
+  max: 100,
+  timeWindow: '1 minute',
+  allowList: ['127.0.0.1'],
+  skipOnError: true // continue if Redis is down
 });
 
 await fastify.register(jwt, {

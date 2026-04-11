@@ -32,16 +32,16 @@ export default function NotificationsDropdown() {
   const markReadMutation = useMutation({
     mutationFn: (id) => api.markNotificationRead(id),
     onSuccess: () => {
-      queryClient.invalidateQueries(['notifications']);
-      queryClient.invalidateQueries(['notifications-unread']);
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications-unread'] });
     },
   });
 
   const markAllReadMutation = useMutation({
     mutationFn: () => api.markAllNotificationsRead(),
     onSuccess: () => {
-      queryClient.invalidateQueries(['notifications']);
-      queryClient.invalidateQueries(['notifications-unread']);
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications-unread'] });
     },
   });
 
@@ -51,8 +51,8 @@ export default function NotificationsDropdown() {
 
     const handleNewNotification = () => {
       // Refetch notifications and unread count immediately
-      queryClient.invalidateQueries(['notifications']);
-      queryClient.invalidateQueries(['notifications-unread']);
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: ['notifications-unread'] });
     };
 
     socket.on('notification', handleNewNotification);

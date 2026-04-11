@@ -360,7 +360,7 @@ function CommentsSection({ comments, taskId }) {
   const addCommentMutation = useMutation({
     mutationFn: (content) => api.addTaskComment(taskId, content),
     onSuccess: () => {
-      queryClient.invalidateQueries(['task', taskId]);
+      queryClient.invalidateQueries({ queryKey: ['task', taskId] });
       setNewComment('');
     }
   });
@@ -448,14 +448,14 @@ export default function TaskPage() {
       content: updates.content || content 
     }),
     onSuccess: () => {
-      queryClient.invalidateQueries(['task', id]);
+      queryClient.invalidateQueries({ queryKey: ['task', id] });
     }
   });
 
   const createSubpageMutation = useMutation({
     mutationFn: (data) => api.createSubpage(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['task', id]);
+      queryClient.invalidateQueries({ queryKey: ['task', id] });
     }
   });
 

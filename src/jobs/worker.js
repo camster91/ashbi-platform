@@ -1,4 +1,4 @@
-// BullMQ Workers
+// BullMQ Workers — graceful Redis connection handling
 
 import { Worker } from 'bullmq';
 import { PrismaClient } from '@prisma/client';
@@ -11,8 +11,33 @@ import env from '../config/env.js';
 
 const prisma = new PrismaClient();
 
+// Helper to create workers with error handling for Redis unavailability
+function createWorker(queueName, processor, options = {}) {
+  try {
+    const worker = new Worker(queueName, processor, { connection, ...options });
+
+    worker.on('completed', (job) => {
+      console.log(`[${queueName}] Job ${job.id} completed`);
+    });
+
+    worker.on('failed', (job, err) => {
+      console.error(`[${queueName}] Job ${job?.id} failed:`, err.message);
+    });
+
+    worker.on('error', (err) => {
+      console.error(`[${queueName}] Worker error:`, err.message);
+    });
+
+    return worker;
+  } catch (err) {
+    console.error(`[${queueName}] Failed to start worker:`, err.message);
+    console.error(`[${queueName}] Jobs will not be processed until Redis is available`);
+    return null;
+  }
+}
+
 // Email Processing Worker
-const emailWorker = new Worker(
+const emailWorker = createWorker(
   QUEUES.EMAIL_PROCESSING,
   async (job) => {
     console.log(`Processing email job ${job.id}`);
@@ -27,19 +52,11 @@ const emailWorker = new Worker(
 
     return result;
   },
-  { connection, concurrency: 5 }
+  { concurrency: 5 }
 );
 
-emailWorker.on('completed', (job) => {
-  console.log(`Email job ${job.id} completed successfully`);
-});
-
-emailWorker.on('failed', (job, err) => {
-  console.error(`Email job ${job?.id} failed:`, err.message);
-});
-
 // Project Health Worker
-const healthWorker = new Worker(
+const healthWorker = createWorker(
   QUEUES.PROJECT_HEALTH,
   async (job) => {
     if (job.name === 'update-all-health') {
@@ -71,15 +88,11 @@ const healthWorker = new Worker(
 
     return { skipped: true };
   },
-  { connection, concurrency: 2 }
+  { concurrency: 2 }
 );
 
-healthWorker.on('failed', (job, err) => {
-  console.error(`Health job ${job?.id} failed:`, err.message);
-});
-
 // Escalation Worker
-const escalationWorker = new Worker(
+const escalationWorker = createWorker(
   QUEUES.ESCALATION,
   async (job) => {
     if (job.name === 'check-all-escalations') {
@@ -93,15 +106,11 @@ const escalationWorker = new Worker(
 
     return { skipped: true };
   },
-  { connection, concurrency: 2 }
+  { concurrency: 2 }
 );
 
-escalationWorker.on('failed', (job, err) => {
-  console.error(`Escalation job ${job?.id} failed:`, err.message);
-});
-
 // Notification Worker
-const notificationWorker = new Worker(
+const notificationWorker = createWorker(
   QUEUES.NOTIFICATIONS,
   async (job) => {
     const { userId, type, title, message, data } = job.data;
@@ -117,17 +126,10 @@ const notificationWorker = new Worker(
       }
     });
 
-    // TODO: Add email notification support
-    // TODO: Add webhook/Slack notification support
-
     return { delivered: true };
   },
-  { connection, concurrency: 10 }
+  { concurrency: 10 }
 );
-
-notificationWorker.on('failed', (job, err) => {
-  console.error(`Notification job ${job?.id} failed:`, err.message);
-});
 
 /**
  * Check all threads for escalation needs
@@ -173,11 +175,6 @@ async function checkThreadEscalation(threadId, existingThread = null) {
   const hoursSinceActivity = (now - new Date(thread.lastActivityAt)) / (1000 * 60 * 60);
   const slaHours = env.slaDefaults[thread.priority] || 24;
 
-  // Check escalation thresholds
-  // 4 hours: Notify assignee
-  // 8 hours: Notify admin
-  // 24 hours or SLA breach: Critical alert
-
   const notifications = [];
 
   if (hoursSinceActivity >= 4 && hoursSinceActivity < 8 && thread.assignedToId) {
@@ -191,7 +188,6 @@ async function checkThreadEscalation(threadId, existingThread = null) {
   }
 
   if (hoursSinceActivity >= 8) {
-    // Notify all admins
     const admins = await prisma.user.findMany({
       where: { role: 'ADMIN', isActive: true }
     });
@@ -208,13 +204,11 @@ async function checkThreadEscalation(threadId, existingThread = null) {
   }
 
   if (hoursSinceActivity >= slaHours && !thread.slaBreached) {
-    // Mark SLA as breached
     await prisma.thread.update({
       where: { id: threadId },
       data: { slaBreached: true }
     });
 
-    // Critical notification
     const admins = await prisma.user.findMany({
       where: { role: 'ADMIN', isActive: true }
     });
@@ -230,7 +224,6 @@ async function checkThreadEscalation(threadId, existingThread = null) {
     }
   }
 
-  // Create notifications
   for (const notif of notifications) {
     await prisma.notification.create({ data: notif });
   }
@@ -243,7 +236,7 @@ async function checkThreadEscalation(threadId, existingThread = null) {
 }
 
 // Weekly Digest Worker
-const weeklyDigestWorker = new Worker(
+const weeklyDigestWorker = createWorker(
   QUEUES.WEEKLY_DIGEST,
   async (job) => {
     console.log('Generating weekly digest');
@@ -252,7 +245,6 @@ const weeklyDigestWorker = new Worker(
     const weekStart = new Date(now);
     weekStart.setDate(weekStart.getDate() - 7);
 
-    // New leads this week (threads with needsTriage from this week)
     const newLeads = await prisma.thread.count({
       where: {
         needsTriage: true,
@@ -260,7 +252,6 @@ const weeklyDigestWorker = new Worker(
       }
     });
 
-    // Proposals sent/viewed/hired this week
     const proposalsSent = await prisma.proposal.count({
       where: { sentAt: { gte: weekStart } }
     });
@@ -271,7 +262,6 @@ const weeklyDigestWorker = new Worker(
       where: { status: 'APPROVED', approvedAt: { gte: weekStart } }
     });
 
-    // Client health summary
     const clients = await prisma.client.findMany({
       where: { status: 'ACTIVE' },
       include: {
@@ -303,16 +293,13 @@ const weeklyDigestWorker = new Worker(
       clientHealthSummary[client.name] = Math.max(0, Math.min(100, score));
     }
 
-    // Tasks overdue
     const tasksOverdue = await prisma.task.count({
       where: { status: { not: 'COMPLETED' }, dueDate: { lt: now } }
     });
 
-    // Revenue summary (retainer totals)
     const retainers = await prisma.retainerPlan.findMany({ include: { client: true } });
     const retainerTotal = retainers.reduce((sum, r) => sum + parseFloat(r.tier || 0), 0);
 
-    // Generate AI digest
     const system = `You are the AI assistant for Ashbi Design agency. Generate a concise weekly digest email for Cameron (CEO).`;
     const prompt = `Generate a weekly digest for the week of ${weekStart.toLocaleDateString()} to ${now.toLocaleDateString()}:
 
@@ -333,7 +320,6 @@ Write a brief, actionable digest highlighting what needs attention this week. In
       fullDigest = `Weekly Digest (${weekStart.toLocaleDateString()} - ${now.toLocaleDateString()})\n\nNew Leads: ${newLeads}\nProposals Sent: ${proposalsSent}\nProposals Viewed: ${proposalsViewed}\nProposals Hired: ${proposalsHired}\nOverdue Tasks: ${tasksOverdue}\nRetainer Revenue: $${retainerTotal}`;
     }
 
-    // Save to DB
     await prisma.weeklyDigest.create({
       data: {
         weekStart,
@@ -351,19 +337,11 @@ Write a brief, actionable digest highlighting what needs attention this week. In
 
     return { newLeads, proposalsSent, proposalsViewed, proposalsHired, tasksOverdue, retainerTotal };
   },
-  { connection, concurrency: 1 }
+  { concurrency: 1 }
 );
 
-weeklyDigestWorker.on('completed', (job) => {
-  console.log(`Weekly digest job ${job.id} completed`);
-});
-
-weeklyDigestWorker.on('failed', (job, err) => {
-  console.error(`Weekly digest job ${job?.id} failed:`, err.message);
-});
-
 // Embedding Worker
-const embeddingWorker = new Worker(
+const embeddingWorker = createWorker(
   QUEUES.EMBEDDING,
   async (job) => {
     const { clientId, content, source, sourceId, metadata } = job.data;
@@ -371,21 +349,8 @@ const embeddingWorker = new Worker(
     const result = await storeEmbedding(clientId, content, source, sourceId, metadata);
     return result;
   },
-  { connection, concurrency: 3 }
+  { concurrency: 3 }
 );
 
-embeddingWorker.on('completed', (job) => {
-  console.log(`Embedding job ${job.id} completed`);
-});
-
-embeddingWorker.on('failed', (job, err) => {
-  console.error(`Embedding job ${job?.id} failed:`, err.message);
-});
-
-console.log('Workers started');
-console.log('- Email processing worker');
-console.log('- Project health worker');
-console.log('- Escalation worker');
-console.log('- Notification worker');
-console.log('- Weekly digest worker');
-console.log('- Embedding worker');
+const activeWorkers = [emailWorker, healthWorker, escalationWorker, notificationWorker, weeklyDigestWorker, embeddingWorker].filter(Boolean);
+console.log(`Workers started (${activeWorkers.length}/6 active)`);

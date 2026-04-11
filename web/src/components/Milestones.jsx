@@ -18,7 +18,7 @@ export default function Milestones({ projectId }) {
   const createMutation = useMutation({
     mutationFn: (data) => api.createMilestone(projectId, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['milestones', projectId]);
+      queryClient.invalidateQueries({ queryKey: ['milestones', projectId] });
       setShowCreateModal(false);
     }
   });
@@ -27,7 +27,7 @@ export default function Milestones({ projectId }) {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => api.updateMilestone(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries(['milestones', projectId]);
+      queryClient.invalidateQueries({ queryKey: ['milestones', projectId] });
       setSelectedMilestone(null);
     }
   });
@@ -36,7 +36,7 @@ export default function Milestones({ projectId }) {
   const deleteMutation = useMutation({
     mutationFn: api.deleteMilestone,
     onSuccess: () => {
-      queryClient.invalidateQueries(['milestones', projectId]);
+      queryClient.invalidateQueries({ queryKey: ['milestones', projectId] });
       setSelectedMilestone(null);
     }
   });

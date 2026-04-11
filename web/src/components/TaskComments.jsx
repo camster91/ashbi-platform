@@ -27,7 +27,7 @@ export default function TaskComments({ taskId }) {
   const addMutation = useMutation({
     mutationFn: (commentContent) => api.addTaskComment(taskId, commentContent),
     onSuccess: () => {
-      queryClient.invalidateQueries(['task-comments', taskId]);
+      queryClient.invalidateQueries({ queryKey: ['task-comments', taskId] });
       setContent('');
     }
   });
@@ -36,7 +36,7 @@ export default function TaskComments({ taskId }) {
   const deleteMutation = useMutation({
     mutationFn: api.deleteComment,
     onSuccess: () => {
-      queryClient.invalidateQueries(['task-comments', taskId]);
+      queryClient.invalidateQueries({ queryKey: ['task-comments', taskId] });
     }
   });
 

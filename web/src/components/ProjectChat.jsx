@@ -47,7 +47,7 @@ export default function ProjectChat({ projectId }) {
 
       // Listen for reactions
       socket.on('chat:reaction', ({ messageId, action, reaction, emoji, userId }) => {
-        queryClient.invalidateQueries(['chat', projectId]);
+        queryClient.invalidateQueries({ queryKey: ['chat', projectId] });
       });
 
       // Listen for typing indicators
@@ -116,7 +116,7 @@ export default function ProjectChat({ projectId }) {
       // May already exist, try to remove
       await api.removeChatReaction(projectId, messageId, emoji);
     }
-    queryClient.invalidateQueries(['chat', projectId]);
+    queryClient.invalidateQueries({ queryKey: ['chat', projectId] });
   };
 
   // Format time
