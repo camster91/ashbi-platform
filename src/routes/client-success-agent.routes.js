@@ -176,6 +176,7 @@ Keep it under 250 words. Professional but conversational — not corporate.`;
       if (!client) return reply.status(404).send({ error: 'Client not found' });
 
       // Create an escalation task for Cameron
+      const clientProject = await fastify.prisma.project.findFirst({ where: { clientId } }).catch(() => null);
       const escalationTask = await fastify.prisma.task.create({
         data: {
           title: `${sev.emoji} ESCALATION: ${client.name} — ${reason}`,
@@ -184,20 +185,21 @@ Keep it under 250 words. Professional but conversational — not corporate.`;
           category: 'UPCOMING',
           tags: JSON.stringify(['escalation', 'client-success', client.name.toLowerCase()]),
           properties: JSON.stringify({ clientId, escalatedAt: new Date().toISOString(), severity }),
-          project: {
-            connect: await fastify.prisma.project.findFirst({ where: { clientId } })
-              .then(p => p ? { id: p.id } : undefined).catch(() => undefined)
-          }
+          ...(clientProject ? { project: { connect: { id: clientProject.id } } } : {})
         }
       }).catch(() => null);
 
       // Log activity
+      const adminUser = await fastify.prisma.user.findFirst({ where: { role: 'ADMIN' } }).catch(() => null);
       await fastify.prisma.activity.create({
         data: {
           type: 'ESCALATION',
-          description: `Client escalation: ${reason}`,
+          action: 'created',
+          entityType: 'CLIENT',
+          entityId: clientId,
+          entityName: `Client escalation: ${reason}`,
           metadata: JSON.stringify({ clientId, severity, reason }),
-          user: { connect: await fastify.prisma.user.findFirst({ where: { role: 'ADMIN' } }).then(u => ({ id: u?.id })).catch(() => undefined) }
+          userId: adminUser?.id || 'system'
         }
       }).catch(() => null);
 

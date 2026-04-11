@@ -143,7 +143,7 @@ export default async function projectRoutes(fastify) {
     if (endDate !== undefined) data.endDate = endDate ? new Date(endDate) : null;
     if (isRetainer !== undefined) data.isRetainer = isRetainer;
     if (serviceType !== undefined) data.serviceType = serviceType;
-    if (notes !== undefined) data.notes = notes;
+    if (notes !== undefined) data.description = notes;
 
     const project = await prisma.project.update({
       where: { id },

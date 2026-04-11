@@ -590,9 +590,7 @@ export default async function taskRoutes(fastify) {
       if (
         task.dependsOn &&
         task.dependsOn.status !== 'COMPLETED' &&
-        task.dependsOn.status !== 'DONE' &&
-        task.status !== 'COMPLETED' &&
-        task.status !== 'DONE'
+        task.status !== 'COMPLETED'
       ) {
         effectiveStatus = 'BLOCKED';
       }
@@ -640,10 +638,10 @@ export default async function taskRoutes(fastify) {
 
     // Group by status
     const board = {
-      NOT_STARTED: tasks.filter(t => t.status === 'NOT_STARTED'),
+      PENDING: tasks.filter(t => t.status === 'PENDING'),
       IN_PROGRESS: tasks.filter(t => t.status === 'IN_PROGRESS'),
-      IN_REVIEW: tasks.filter(t => t.status === 'IN_REVIEW'),
-      DONE: tasks.filter(t => t.status === 'DONE')
+      BLOCKED: tasks.filter(t => t.status === 'BLOCKED'),
+      COMPLETED: tasks.filter(t => t.status === 'COMPLETED')
     };
 
     return board;
@@ -656,7 +654,7 @@ export default async function taskRoutes(fastify) {
     const { id } = request.params;
     const { status } = request.body;
 
-    if (!['NOT_STARTED', 'IN_PROGRESS', 'IN_REVIEW', 'DONE'].includes(status)) {
+    if (!['PENDING', 'IN_PROGRESS', 'BLOCKED', 'COMPLETED'].includes(status)) {
       return request.reply.status(400).send({ error: 'Invalid status' });
     }
 
@@ -664,7 +662,7 @@ export default async function taskRoutes(fastify) {
       where: { id },
       data: {
         status,
-        completedAt: status === 'DONE' ? new Date() : null
+        completedAt: status === 'COMPLETED' ? new Date() : null
       },
       include: {
         assignee: { select: { id: true, name: true, email: true } },
@@ -690,7 +688,7 @@ export default async function taskRoutes(fastify) {
         status: 'NOT_STARTED',
         priority,
         assigneeId,
-        assignedAt: new Date()
+        startDate: new Date()
       },
       include: {
         assignee: { select: { id: true, name: true, email: true } }

@@ -6,7 +6,7 @@ export default async function shopifyAgentRoutes(fastify) {
     try {
       // Fetch connected Shopify stores from credentials
       const shopifyCredentials = await fastify.prisma.credential.findMany({
-        where: { service: { startsWith: 'shopify' } }
+        where: { category: { startsWith: 'SHOPIFY' } }
       }).catch(() => []);
 
       if (!shopifyCredentials.length) {
@@ -21,8 +21,8 @@ export default async function shopifyAgentRoutes(fastify) {
       const storeHealth = await Promise.allSettled(
         shopifyCredentials.map(async (cred) => {
           let config = {};
-          try { config = JSON.parse(cred.value); } catch { config = {}; }
-          const storeName = cred.name || cred.service;
+          try { config = JSON.parse(cred.password); } catch { config = {}; }
+          const storeName = cred.label || cred.category;
           return {
             store: storeName,
             status: config.accessToken ? 'connected' : 'needs_auth',

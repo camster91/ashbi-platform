@@ -165,7 +165,7 @@ export default async function clientPortalRoutes(fastify) {
     // Compute task completion % for each project
     const withProgress = await Promise.all(projects.map(async (p) => {
       const completedCount = await prisma.task.count({
-        where: { projectId: p.id, status: 'DONE' }
+        where: { projectId: p.id, status: 'COMPLETED' }
       });
       const totalCount = p._count.tasks;
       return {
@@ -191,7 +191,7 @@ export default async function clientPortalRoutes(fastify) {
 
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const hoursUsed = retainer.hoursUsedThisMonth || 0;
+    const hoursUsed = retainer.hoursUsed || 0;
     const hoursPerMonth = retainer.hoursPerMonth || 0;
     const hoursRemaining = hoursPerMonth - hoursUsed;
     const percentUsed = hoursPerMonth > 0 ? Math.round((hoursUsed / hoursPerMonth) * 100) : 0;

@@ -258,7 +258,7 @@ export default function Thread() {
             <div className="flex items-center justify-between px-5 py-4 border-t border-border bg-muted/30 rounded-b-xl">
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <Shield className="w-3 h-3" />
-                Sends from cameron@ashbi.ca via Gmail API
+                Sends via Gmail API
               </p>
               <div className="flex gap-2">
                 <button

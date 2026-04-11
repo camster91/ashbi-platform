@@ -41,7 +41,7 @@ export default function IntegrationDashboard() {
             icon: Mail,
             color: 'text-red-600',
             bgColor: 'bg-red-100 dark:bg-red-900/30',
-            config: { account: 'cameron@ashbi.ca', sync: true }
+            config: { account: user?.email || 'Not connected', sync: true }
           },
           {
             id: 2,

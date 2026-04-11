@@ -26,10 +26,10 @@ export default async function financeAgentRoutes(fastify) {
         overdue: invoices.filter(i => i.status === 'OVERDUE').length,
         totalRevenue: invoices
           .filter(i => i.status === 'PAID')
-          .reduce((sum, i) => sum + (i.amount || 0), 0),
+          .reduce((sum, i) => sum + (i.total || 0), 0),
         outstanding: invoices
           .filter(i => ['PENDING', 'SENT', 'OVERDUE'].includes(i.status))
-          .reduce((sum, i) => sum + (i.amount || 0), 0)
+          .reduce((sum, i) => sum + (i.total || 0), 0)
       };
 
       return {
@@ -37,7 +37,7 @@ export default async function financeAgentRoutes(fastify) {
           id: inv.id,
           invoiceNumber: inv.invoiceNumber,
           client: inv.client?.name,
-          amount: inv.amount,
+          amount: inv.total,
           status: inv.status,
           dueDate: inv.dueDate,
           paidAt: inv.paidAt,
@@ -84,7 +84,7 @@ export default async function financeAgentRoutes(fastify) {
         invoiceId,
         clientName: invoice.client?.name,
         clientEmail: invoice.client?.email,
-        amount: invoice.amount,
+        amount: invoice.total,
         status: 'sent',
         method,
         sentAt: new Date().toISOString(),
@@ -124,7 +124,7 @@ export default async function financeAgentRoutes(fastify) {
         }).catch(() => 0)
       ]);
 
-      const invoiceRevenue = paidInvoices.reduce((sum, i) => sum + (i.amount || 0), 0);
+      const invoiceRevenue = paidInvoices.reduce((sum, i) => sum + (i.total || 0), 0);
       const activeRetainers = retainerPlans.filter(r => r.client?.status === 'ACTIVE');
       const mrr = activeRetainers.reduce((sum, r) => {
         const tierMap = { '999': 999, '1999': 1999, '3999': 3999 };
@@ -161,7 +161,7 @@ export default async function financeAgentRoutes(fastify) {
           items: paidInvoices.map(i => ({
             id: i.id,
             client: i.client?.name,
-            amount: i.amount,
+            amount: i.total,
             paidAt: i.paidAt
           }))
         },

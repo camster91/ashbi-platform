@@ -1303,6 +1303,12 @@ export const api = {
     const query = new URLSearchParams(params).toString();
     return request(`/surveys/clients/${clientId}${query ? `?${query}` : ''}`);
   },
+
+  // Ash Chat
+  getAshChatConversations: () => request('/ash-chat/conversations'),
+  getAshChatMessages: (id) => request(`/ash-chat/conversations/${id}/messages`),
+  deleteAshChatConversation: (id) => request(`/ash-chat/conversations/${id}`, { method: 'DELETE' }),
+  sendAshChatMessage: (data) => request('/ash-chat/message', { method: 'POST', body: data }),
 };
 
 export default api;

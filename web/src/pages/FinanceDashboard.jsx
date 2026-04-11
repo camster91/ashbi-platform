@@ -334,8 +334,8 @@ export default function FinanceDashboard() {
               </div>
               <div className="flex justify-end gap-2 pt-4">
                 <Button variant="outline" type="button" onClick={() => setShowAddExpense(false)}>Cancel</Button>
-                <Button type="submit" disabled={createExpenseMutation.isLoading}>
-                  {createExpenseMutation.isLoading ? 'Saving...' : 'Save Expense'}
+                <Button type="submit" disabled={createExpenseMutation.isPending}>
+                  {createExpenseMutation.isPending ? 'Saving...' : 'Save Expense'}
                 </Button>
               </div>
             </form>

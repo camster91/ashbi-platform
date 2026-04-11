@@ -5,10 +5,10 @@ import { Plus, ArrowLeft } from 'lucide-react';
 import { api } from '../lib/api';
 
 const STATUS_COLUMNS = [
-  { key: 'NOT_STARTED', label: 'To Do', headerColor: 'text-muted-foreground border-muted-foreground/30' },
+  { key: 'PENDING', label: 'To Do', headerColor: 'text-muted-foreground border-muted-foreground/30' },
   { key: 'IN_PROGRESS', label: 'In Progress', headerColor: 'text-blue-600 border-blue-400' },
-  { key: 'IN_REVIEW', label: 'In Review', headerColor: 'text-yellow-600 border-yellow-400' },
-  { key: 'DONE', label: 'Done', headerColor: 'text-green-600 border-green-400' },
+  { key: 'BLOCKED', label: 'Blocked', headerColor: 'text-yellow-600 border-yellow-400' },
+  { key: 'COMPLETED', label: 'Done', headerColor: 'text-green-600 border-green-400' },
 ];
 
 const PRIORITY_COLORS = {

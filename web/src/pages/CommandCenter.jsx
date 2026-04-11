@@ -571,13 +571,13 @@ export default function CommandCenter() {
               icon={Github}
               label="View All Repos"
               description="Browse GitHub repositories"
-              onClick={() => window.open(`https://github.com/camster91`, '_blank')}
+              onClick={() => window.open('https://github.com/camster91/ashbi-platform', '_blank')}
             />
             <ActionButton
               icon={Server}
               label="Open Coolify"
               description="Manage deployments"
-              onClick={() => window.open('http://187.77.26.99:8000', '_blank')}
+              onClick={() => window.open('https://coolify.ashbi.ca', '_blank')}
             />
             <ActionButton
               icon={Bot}

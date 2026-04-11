@@ -178,7 +178,7 @@ async function fetchRecentActivity() {
       items: activity.map(a => ({
         id: a.id,
         type: a.type,
-        description: a.description,
+        description: a.entityName || a.action,
         user: a.user?.name,
         createdAt: a.createdAt
       }))

@@ -7,10 +7,10 @@ export default async function wordpressAgentRoutes(fastify) {
   async function getSiteCredentials(domain) {
     try {
       const cred = await fastify.prisma.credential.findFirst({
-        where: { name: { contains: domain } }
+        where: { label: { contains: domain } }
       });
       if (cred) {
-        try { return JSON.parse(cred.value); } catch { return {}; }
+        try { return JSON.parse(cred.password); } catch { return {}; }
       }
     } catch {}
     return null;

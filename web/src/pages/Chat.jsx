@@ -2,13 +2,6 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, MessageSquare, Plus, Trash2, Loader2, Bot, User } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { api } from '../lib/api';
-
-const API_BASE = import.meta.env.VITE_API_URL || '';
-const ashApi = {
-  get: (path) => fetch(`${API_BASE}${path}`, { credentials: 'include', headers: { 'Content-Type': 'application/json' } }).then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(new Error(d.error || 'Request failed')))),
-  post: (path, body) => fetch(`${API_BASE}${path}`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(new Error(d.error || 'Request failed')))),
-  delete: (path) => fetch(`${API_BASE}${path}`, { method: 'DELETE', credentials: 'include' }).then(r => r.ok ? r.json() : r.json().then(d => Promise.reject(new Error(d.error || 'Request failed'))))
-};
 import { cn } from '../lib/utils';
 
 function formatTime(dateStr) {
@@ -60,7 +53,7 @@ export default function Chat() {
 
   const loadConversations = useCallback(async () => {
     try {
-      const data = await ashApi.get('/api/ash-chat/conversations');
+      const data = await api.getAshChatConversations();
       setConversations(data);
     } catch (e) {
       console.error('Failed to load conversations', e);
@@ -73,7 +66,7 @@ export default function Chat() {
 
   const loadMessages = async (id) => {
     try {
-      const data = await ashApi.get(`/api/ash-chat/conversations/${id}/messages`);
+      const data = await api.getAshChatMessages(id);
       setMessages(data.messages);
       setActiveId(id);
     } catch (e) {
@@ -90,7 +83,7 @@ export default function Chat() {
 
   const handleDeleteConversation = async (e, id) => {
     e.stopPropagation();
-    await ashApi.delete(`/api/ash-chat/conversations/${id}`);
+    await api.deleteAshChatConversation(id);
     if (activeId === id) handleNewChat();
     setConversations(prev => prev.filter(c => c.id !== id));
   };
@@ -105,7 +98,7 @@ export default function Chat() {
     setIsThinking(true);
 
     try {
-      const result = await ashApi.post('/api/ash-chat/message', {
+      const result = await api.sendAshChatMessage({
         message: text,
         ...(activeId ? { conversationId: activeId } : {})
       });
