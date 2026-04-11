@@ -62,7 +62,7 @@ export default function Automations() {
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['automation-history', page],
-    queryFn: () => api.get(`/automations/history?limit=${limit}&offset=${page * limit}`),
+    queryFn: () => api.getAutomationHistory(page * limit, limit),
     refetchInterval: 60000,
   });
 

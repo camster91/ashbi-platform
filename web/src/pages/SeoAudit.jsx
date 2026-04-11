@@ -11,7 +11,7 @@ export default function SeoAudit() {
 
   const { data: savedAudits = [], isLoading: loadingAudits } = useQuery({
     queryKey: ['seo-audits'],
-    queryFn: () => api.getSeoAudits(),
+    queryFn: () => api.getAllSeoAudits(),
   });
 
   const auditMutation = useMutation({

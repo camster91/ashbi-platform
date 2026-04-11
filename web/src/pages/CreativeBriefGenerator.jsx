@@ -18,7 +18,7 @@ export default function CreativeBriefGenerator() {
 
   const { data: savedBriefs = [], isLoading } = useQuery({
     queryKey: ['creative-briefs'],
-    queryFn: () => api.getCreativeBriefs(),
+    queryFn: () => api.getAllCreativeBriefs(),
   });
 
   const generateMutation = useMutation({

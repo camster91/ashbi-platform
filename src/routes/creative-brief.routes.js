@@ -10,6 +10,14 @@ import {
 } from '../services/creativeBrief.service.js';
 
 export default async function creativeBriefRoutes(fastify) {
+  // List all briefs (admin/team)
+  fastify.get('/', {
+    onRequest: [fastify.authenticate]
+  }, async (request) => {
+    const { limit, offset } = request.query;
+    return getBriefs(null, parseInt(limit) || 50, parseInt(offset) || 0);
+  });
+
   // Generate a creative brief using AI with RAG context
   fastify.post('/generate', {
     onRequest: [fastify.authenticate]

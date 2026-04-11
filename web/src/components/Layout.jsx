@@ -153,6 +153,7 @@ export default function Layout({ children }) {
     { name: 'Proposals', href: '/proposals', icon: FileText },
     { name: 'Contracts', href: '/contracts', icon: ScrollText },
     { name: 'Expenses', href: '/expenses', icon: Wallet },
+    { name: 'Upwork', href: '/upwork-contracts', icon: Briefcase },
     ...(isAdmin ? [
       { name: 'Retainers', href: '/retainers', icon: TrendingUp },
       { name: 'Invoice Chaser', href: '/invoice-chaser', icon: Zap },
@@ -168,6 +169,7 @@ export default function Layout({ children }) {
     { name: 'Activity', href: '/activity', icon: Activity },
     { name: 'Chat with Ash', href: '/chat', icon: MessageSquare },
     { name: 'Intake Forms', href: '/intake-forms', icon: ClipboardList },
+    { name: 'Integrations', href: '/integrations', icon: Command },
   ];
 
   const aiNav = [
@@ -209,7 +211,6 @@ export default function Layout({ children }) {
     { name: 'Asset Library', href: '/assets', icon: FolderOpen },
     { name: 'WP Sites', href: '/wp-sites', icon: Globe },
     { name: 'Client Brain', href: '/semantic-search', icon: Brain },
-    { name: 'Snippets', href: '/snippets', icon: Code },
   ] : [
     { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   ];

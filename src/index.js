@@ -175,7 +175,7 @@ fastify.decorate('authenticate', async (request, reply) => {
   try {
     await request.jwtVerify();
   } catch (err) {
-    reply.status(401).send({ error: 'Unauthorized' });
+    return reply.status(401).send({ error: 'Unauthorized' });
   }
 });
 
@@ -184,10 +184,10 @@ fastify.decorate('adminOnly', async (request, reply) => {
   try {
     await request.jwtVerify();
     if (request.user.role !== 'ADMIN') {
-      reply.status(403).send({ error: 'Admin access required' });
+      return reply.status(403).send({ error: 'Admin access required' });
     }
   } catch (err) {
-    reply.status(401).send({ error: 'Unauthorized' });
+    return reply.status(401).send({ error: 'Unauthorized' });
   }
 });
 

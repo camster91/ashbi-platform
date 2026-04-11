@@ -17,7 +17,7 @@ model User {
   email     String   @unique
   name      String
   password  String
-  role      String   @default("TEAM") // ADMIN or TEAM
+  role      String   @default("TEAM") // ADMIN, TEAM, CLIENT, or BOT
   skills    String   @default("[]") // JSON array of skills
   capacity  Int      @default(100) // Percentage available
   isActive  Boolean  @default(true)
@@ -109,6 +109,7 @@ model Client {
   seoAudits         SEOAudit[]
   assets            Asset[]
   clientEmbeddings  ClientEmbedding[]
+  invitations        ClientInvitation[]
 
   @@map("clients")
 }
@@ -1727,4 +1728,18 @@ model PromptVersion {
 
   @@unique([name, version])
   @@map("prompt_versions")
+}
+
+model ClientInvitation {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  email     String
+  clientId  String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id])
+
+  @@map("client_invitations")
 }

@@ -31,8 +31,6 @@ const Client = lazy(() => import('./pages/Client'));
 const Team = lazy(() => import('./pages/Team'));
 const Analytics = lazy(() => import('./pages/Analytics'));
 const GlobalSearch = lazy(() => import('./pages/GlobalSearch'));
-const Search = lazy(() => import('./pages/Search'));
-const PendingApprovals = lazy(() => import('./pages/PendingApprovals'));
 const ApprovalQueue = lazy(() => import('./pages/ApprovalQueue'));
 const TaskPage = lazy(() => import('./pages/TaskPage'));
 const TaskKanban = lazy(() => import('./pages/TaskKanban'));
@@ -51,7 +49,6 @@ const Outreach = lazy(() => import('./pages/Outreach'));
 const Social = lazy(() => import('./pages/Social'));
 const Blog = lazy(() => import('./pages/Blog'));
 const AiTeam = lazy(() => import('./pages/AiTeam'));
-const AiChat = lazy(() => import('./pages/AiChat'));
 const AIQuery = lazy(() => import('./pages/AIQuery'));
 const Chat = lazy(() => import('./pages/Chat'));
 // AI Employee Suite

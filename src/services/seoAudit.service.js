@@ -51,10 +51,12 @@ Provide actionable, specific recommendations.`;
 /**
  * List audits for a client
  */
-export async function getAudits(clientId) {
+export async function getAudits(clientId, limit = 50, offset = 0) {
   return prisma.sEOAudit.findMany({
-    where: { clientId },
+    where: clientId ? { clientId } : undefined,
     orderBy: { createdAt: 'desc' },
+    take: limit,
+    skip: offset,
     include: {
       client: { select: { id: true, name: true } }
     }

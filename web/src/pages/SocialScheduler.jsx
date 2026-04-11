@@ -35,7 +35,7 @@ export default function SocialScheduler() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id) => api.deleteSocialPost(id),
+    mutationFn: (id) => api.deleteSchedulerPost(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['social-posts'] }),
   });
 

@@ -426,15 +426,25 @@ export const api = {
     return request(`/time-entries/my${query ? `?${query}` : ''}`);
   },
   createTimeEntry: (data) =>
-    request('/time-entries', { method: 'POST', body: data }),
+    request('/time-tracking', { method: 'POST', body: data }),
   updateTimeEntry: (id, data) =>
-    request(`/time-entries/${id}`, { method: 'PUT', body: data }),
+    request(`/time-tracking/${id}`, { method: 'PUT', body: data }),
   deleteTimeEntry: (id) =>
-    request(`/time-entries/${id}`, { method: 'DELETE' }),
+    request(`/time-tracking/${id}`, { method: 'DELETE' }),
   getTimeSummary: (params = {}) => {
     const query = new URLSearchParams(params).toString();
-    return request(`/time-entries/summary${query ? `?${query}` : ''}`);
+    return request(`/time-tracking/summary${query ? `?${query}` : ''}`);
   },
+  startTimer: (data) =>
+    request('/time-tracking/start', { method: 'POST', body: data }),
+  stopTimer: (id) =>
+    request(`/time-tracking/${id}/stop`, { method: 'POST' }),
+  stopAllTimers: () =>
+    request('/time-tracking/stop-all', { method: 'POST' }),
+  getRunningTimer: () =>
+    request('/time-tracking/running'),
+  createManualTimeEntry: (data) =>
+    request('/time-tracking/manual', { method: 'POST', body: data }),
 
   // Activity Feed
   getProjectActivity: (projectId, params = {}) => {
@@ -622,6 +632,10 @@ export const api = {
     }
     return res.json();
   },
+
+  // ===== AUTOMATIONS =====
+  getAutomationHistory: (offset = 0, limit = 25) =>
+    request(`/automations/history?limit=${limit}&offset=${offset}`),
 
   // ===== UPWORK =====
   getUpworkTasks: (tags) => {
@@ -1123,24 +1137,6 @@ export const api = {
   deletePipelineDeal: (id) =>
     request(`/pipeline/deals/${id}`, { method: 'DELETE' }),
 
-  // ===== TIME TRACKING =====
-  startTimer: (data) =>
-    request('/time-tracking/start', { method: 'POST', body: data }),
-  stopTimer: (id) =>
-    request(`/time-tracking/${id}/stop`, { method: 'POST' }),
-  stopAllTimers: () =>
-    request('/time-tracking/stop-all', { method: 'POST' }),
-  getRunningTimer: () =>
-    request('/time-tracking/running'),
-  createManualTimeEntry: (data) =>
-    request('/time-tracking/manual', { method: 'POST', body: data }),
-  getTimeSummary: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/time-tracking/summary${query ? `?${query}` : ''}`);
-  },
-  deleteTimeEntry: (id) =>
-    request(`/time-tracking/${id}`, { method: 'DELETE' }),
-
   // ===== SEMANTIC SEARCH (CLIENT BRAIN) =====
   semanticSearch: (query, limit, clientId) => {
     const params = { q: query };
@@ -1175,6 +1171,10 @@ export const api = {
   // ===== CREATIVE BRIEF =====
   generateCreativeBrief: (data) =>
     request('/creative-brief/generate', { method: 'POST', body: data }),
+  getAllCreativeBriefs: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/creative-brief${query ? `?${query}` : ''}`);
+  },
   getCreativeBriefs: (clientId) =>
     request(`/creative-brief/client/${clientId}`),
   getCreativeBrief: (id) =>
@@ -1187,6 +1187,10 @@ export const api = {
   // ===== SEO AUDIT =====
   runSeoAudit: (data) =>
     request('/seo/audit', { method: 'POST', body: data }),
+  getAllSeoAudits: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/seo${query ? `?${query}` : ''}`);
+  },
   getSeoAudits: (clientId) =>
     request(`/seo/client/${clientId}`),
   getSeoAudit: (id) =>
@@ -1225,7 +1229,7 @@ export const api = {
     request(`/scheduler/posts/${id}`),
   updateSocialPostStatus: (id, status) =>
     request(`/scheduler/posts/${id}/status`, { method: 'PATCH', body: { status } }),
-  deleteSocialPost: (id) =>
+  deleteSchedulerPost: (id) =>
     request(`/scheduler/posts/${id}`, { method: 'DELETE' }),
   getSocialAnalytics: () =>
     request('/scheduler/analytics'),
@@ -1263,9 +1267,9 @@ export const api = {
     request(`/assets/${id}`, { method: 'DELETE' }),
   searchAssets: (q, limit = 20) =>
     request(`/assets/search?q=${encodeURIComponent(q)}&limit=${limit}`),
-  getBrandSettings: () =>
+  getAssetGuidelines: () =>
     request('/assets/guidelines'),
-  updateBrandSettings: (data) =>
+  updateAssetGuidelines: (data) =>
     request('/assets/guidelines', { method: 'POST', body: data }),
 
   // ===== WP BRIDGE =====

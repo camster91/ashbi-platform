@@ -19,7 +19,7 @@ export default async function salesAgentRoutes(fastify) {
       }).catch(() => []);
 
       // Also fetch any leads tagged as Upwork
-      const leads = await fastify.prisma.lead.findMany({
+      const leads = await fastify.prisma.outreachLead.findMany({
         where: { source: 'UPWORK' },
         orderBy: { createdAt: 'desc' },
         take: 20
@@ -110,7 +110,7 @@ Ashbi's retainer tiers: $999/mo (Starter), $1,999/mo (Growth), $3,999/mo (Scale)
     const { status, limit = 20 } = request.query;
 
     try {
-      const leads = await fastify.prisma.lead.findMany({
+      const leads = await fastify.prisma.outreachLead.findMany({
         where: status ? { status } : undefined,
         orderBy: { createdAt: 'desc' },
         take: parseInt(limit)

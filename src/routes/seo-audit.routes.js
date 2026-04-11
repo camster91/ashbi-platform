@@ -9,6 +9,14 @@ import {
 } from '../services/seoAudit.service.js';
 
 export default async function seoAuditRoutes(fastify) {
+  // List all audits (admin/team)
+  fastify.get('/', {
+    onRequest: [fastify.authenticate]
+  }, async (request) => {
+    const { limit, offset } = request.query;
+    return getAudits(null, parseInt(limit) || 50, parseInt(offset) || 0);
+  });
+
   // Run an SEO audit
   fastify.post('/audit', {
     onRequest: [fastify.authenticate]

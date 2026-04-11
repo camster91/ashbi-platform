@@ -95,10 +95,12 @@ Return a JSON object with each section as a key, containing detailed content.`;
 /**
  * List briefs for a client
  */
-export async function getBriefs(clientId) {
+export async function getBriefs(clientId, limit = 50, offset = 0) {
   return prisma.creativeBrief.findMany({
-    where: { clientId },
+    where: clientId ? { clientId } : undefined,
     orderBy: { createdAt: 'desc' },
+    take: limit,
+    skip: offset,
     include: {
       client: { select: { id: true, name: true } }
     }

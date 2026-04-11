@@ -280,6 +280,7 @@ export default async function authRoutes(fastify) {
     const jwtToken = fastify.jwt.sign({
       id: user.id,
       email: user.email,
+      name: user.name,
       role: 'CLIENT',
       clientId: user.clientId
     });
@@ -296,6 +297,7 @@ export default async function authRoutes(fastify) {
         user: {
           id: user.id,
           email: user.email,
+          name: user.name,
           role: 'CLIENT'
         },
         token: jwtToken
@@ -335,6 +337,7 @@ export default async function authRoutes(fastify) {
     const token = fastify.jwt.sign({
       id: user.id,
       email: user.email,
+      name: user.name,
       role: 'CLIENT',
       clientId: user.clientId
     });
@@ -351,6 +354,7 @@ export default async function authRoutes(fastify) {
         user: {
           id: user.id,
           email: user.email,
+          name: user.name,
           role: 'CLIENT'
         },
         token
