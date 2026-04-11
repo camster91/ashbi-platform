@@ -1,0 +1,17 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ashbi-platform
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "3002:3002"
+    networks:
+      - coolify
+
+networks:
+  coolify:
+    external: true
