@@ -17,7 +17,7 @@ jobs:
           host: 187.77.26.99
           username: root
           key: ${{ secrets.VPS_SSH_KEY }}
-          command_timeout: 10m
+          command_timeout: 20m
           script: |
             set -e
 
@@ -42,14 +42,11 @@ jobs:
             git fetch ashbi-platform main
             git checkout -B main ashbi-platform/main
 
-            echo "Installing backend dependencies..."
-            npm install --legacy-peer-deps
+            # Extract .env from the running container BEFORE we touch anything
+            echo "Extracting .env from running container..."
+            docker exec ashbi-platform env > /var/www/agency-hub/.env 2>/dev/null || true
 
-            echo "Building frontend..."
-            cd web && npm install --legacy-peer-deps && npm run build && cd ..
-            mkdir -p dist && cp -r web/dist/* dist/
-
-            # Extract DATABASE_URL from the running Coolify-managed container
+            # Extract DATABASE_URL from the running container
             echo "Extracting DATABASE_URL from running container..."
             DATABASE_URL=$(docker exec ashbi-platform printenv DATABASE_URL 2>/dev/null || true)
 
@@ -66,11 +63,7 @@ jobs:
 
             # Rebuild and restart the container to pick up code changes
             echo "Rebuilding Docker image..."
-            docker compose -f docker-compose.prod.yml build --no-cache app
-
-            # Extract .env from the running container so docker compose can use it
-            echo "Extracting .env from running container..."
-            docker exec ashbi-platform env | grep -v "^HOME=\|^PATH=\|^HOSTNAME=\|^NODE_VERSION=\|^YARN_VERSION=\|^PNPM_HOME=" > /var/www/agency-hub/.env 2>/dev/null || true
+            docker compose -f docker-compose.prod.yml build app
 
             echo "Stopping and removing old container..."
             docker stop ashbi-platform 2>/dev/null || true
