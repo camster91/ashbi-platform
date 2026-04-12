@@ -61,6 +61,7 @@ function dispatchApiError(error, endpoint) {
 async function request(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
   const timeout = options.timeout ?? DEFAULT_TIMEOUT;
+  const silent = options.silent ?? false;
 
   // Create AbortController for timeout
   const controller = new AbortController();
@@ -73,18 +74,20 @@ async function request(endpoint, options = {}) {
     },
     credentials: 'include',
     signal: controller.signal,
-    ...options,
+    method: options.method,
   };
 
-  if (config.body && typeof config.body === 'object') {
-    config.body = JSON.stringify(config.body);
+  if (options.body && typeof options.body === 'object') {
+    config.body = JSON.stringify(options.body);
+  } else if (options.body) {
+    config.body = options.body;
   }
 
   try {
     const response = await fetch(url, config);
     clearTimeout(timeoutId);
 
-    // Handle 401 Unauthorized - trigger logout
+    // Handle 401 Unauthorized
     if (response.status === 401) {
       const data = await response.json().catch(() => ({}));
       const error = new ApiError(
@@ -92,11 +95,17 @@ async function request(endpoint, options = {}) {
         response.status,
         data
       );
-      dispatchApiError(error, endpoint);
 
-      // Dispatch unauthorized event for React app to handle
-      if (onUnauthorized) {
-        onUnauthorized(data.error || 'Session expired. Please log in again.');
+      // Only dispatch global error/unauthorized events if not silenced
+      // (e.g. /auth/me checks are expected to 401 when not logged in)
+      // Auth endpoints (/auth/login, /auth/me) handle their own errors —
+      // don't trigger global toast/logout for them
+      const isAuthEndpoint = endpoint.startsWith('/auth/login') || endpoint.startsWith('/auth/me');
+      if (!silent && !isAuthEndpoint) {
+        dispatchApiError(error, endpoint);
+        if (onUnauthorized) {
+          onUnauthorized(data.error || 'Session expired. Please log in again.');
+        }
       }
 
       throw error;
@@ -109,7 +118,9 @@ async function request(endpoint, options = {}) {
         response.status,
         data
       );
-      dispatchApiError(error, endpoint);
+      if (!silent) {
+        dispatchApiError(error, endpoint);
+      }
       throw error;
     }
 
@@ -150,7 +161,7 @@ export const api = {
   logout: () =>
     request('/auth/logout', { method: 'POST' }),
   me: () =>
-    request('/auth/me'),
+    request('/auth/me', { silent: true }),
   updateProfile: (data) =>
     request('/auth/me', { method: 'PUT', body: data }),
   changePassword: (data) =>
