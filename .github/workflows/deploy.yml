@@ -72,6 +72,6 @@ jobs:
             sleep 5
 
             echo "Health check..."
-            curl -sf http://localhost:3000/api/health && echo " - OK" || echo " - FAILED"
+            curl -sf https://hub.ashbi.ca/api/health && echo " - OK" || echo " - FAILED"
 
             echo "Deployment complete!"
