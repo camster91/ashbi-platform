@@ -68,7 +68,15 @@ jobs:
             echo "Rebuilding Docker image..."
             docker compose -f docker-compose.prod.yml build --no-cache app
 
-            echo "Recreating container with new image..."
+            # Extract .env from the running container so docker compose can use it
+            echo "Extracting .env from running container..."
+            docker exec ashbi-platform env | grep -v "^HOME=\|^PATH=\|^HOSTNAME=\|^NODE_VERSION=\|^YARN_VERSION=\|^PNPM_HOME=" > /var/www/agency-hub/.env 2>/dev/null || true
+
+            echo "Stopping and removing old container..."
+            docker stop ashbi-platform 2>/dev/null || true
+            docker rm ashbi-platform 2>/dev/null || true
+
+            echo "Starting new container..."
             docker compose -f docker-compose.prod.yml up -d app
 
             echo "Waiting for app to start..."
