@@ -19,14 +19,26 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             set -e
-            cd /var/www/agency-hub
+
+            DEPLOY_DIR="/var/www/agency-hub"
+            REPO_URL="https://github.com/camster91/ashbi-platform.git"
+
+            # Ensure the ashbi-platform remote exists and points to the correct repo
+            cd "$DEPLOY_DIR"
+            if ! git remote get-url ashbi-platform >/dev/null 2>&1; then
+              echo "Adding ashbi-platform remote..."
+              git remote add ashbi-platform "$REPO_URL"
+            else
+              git remote set-url ashbi-platform "$REPO_URL"
+            fi
 
             echo "Resetting working tree to clean state..."
             git reset --hard HEAD
             git clean -fd
 
-            echo "Pulling latest code..."
-            git pull origin main
+            echo "Pulling latest code from ashbi-platform/main..."
+            git fetch ashbi-platform main
+            git checkout -B main ashbi-platform/main
 
             echo "Installing backend dependencies..."
             npm install --legacy-peer-deps
