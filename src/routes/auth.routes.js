@@ -7,8 +7,6 @@ import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import env from '../config/env.js';
 
-const LOGIN_RATE_LIMIT = { max: 5, timeWindow: '1 minute' };
-
 const BCRYPT_ROUNDS = 12;
 
 async function hashPassword(password) {

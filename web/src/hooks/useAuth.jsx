@@ -51,14 +51,3 @@ export function useAuth() {
   }
   return context;
 }
-
-// Wrap App with AuthProvider
-export function withAuth(Component) {
-  return function AuthenticatedComponent(props) {
-    return (
-      <AuthProvider>
-        <Component {...props} />
-      </AuthProvider>
-    );
-  };
-}

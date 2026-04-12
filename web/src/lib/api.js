@@ -162,6 +162,12 @@ export const api = {
     request('/auth/logout', { method: 'POST' }),
   me: () =>
     request('/auth/me', { silent: true }),
+  clientLogin: (email, password) =>
+    request('/auth/client/login', { method: 'POST', body: { email, password }, silent: true }),
+  forgotPassword: (email) =>
+    request('/auth/forgot-password', { method: 'POST', body: { email }, silent: true }),
+  resetPassword: (token, newPassword) =>
+    request('/auth/reset-password', { method: 'POST', body: { token, newPassword }, silent: true }),
   updateProfile: (data) =>
     request('/auth/me', { method: 'PUT', body: data }),
   changePassword: (data) =>
@@ -669,8 +675,6 @@ export const api = {
     request(`/tasks/${id}/breadcrumbs`),
   searchMentions: (query, projectId) =>
     request(`/tasks/mentions/search?q=${encodeURIComponent(query)}${projectId ? `&projectId=${projectId}` : ''}`),
-  addTaskComment: (taskId, content) =>
-    request(`/tasks/${taskId}/comments`, { method: 'POST', body: { content } }),
 
   // ===== GANTT & DEPENDENCIES =====
   getGanttTasks: (projectId) => {
