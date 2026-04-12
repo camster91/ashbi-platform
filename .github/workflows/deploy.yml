@@ -17,6 +17,7 @@ jobs:
           host: 187.77.26.99
           username: root
           key: ${{ secrets.VPS_SSH_KEY }}
+          command_timeout: 10m
           script: |
             set -e
 
@@ -48,19 +49,12 @@ jobs:
             cd web && npm install --legacy-peer-deps && npm run build && cd ..
             mkdir -p dist && cp -r web/dist/* dist/
 
-            # Extract DATABASE_URL from the running container (Coolify injects env vars)
+            # Extract DATABASE_URL from the running Coolify-managed container
             echo "Extracting DATABASE_URL from running container..."
             DATABASE_URL=$(docker exec ashbi-platform printenv DATABASE_URL 2>/dev/null || true)
 
             if [ -z "$DATABASE_URL" ]; then
-              # Fallback: try the .env file if it exists
-              if [ -f .env ]; then
-                DATABASE_URL=$(grep DATABASE_URL .env | cut -d= -f2-)
-              fi
-            fi
-
-            if [ -z "$DATABASE_URL" ]; then
-              echo "ERROR: Could not determine DATABASE_URL. Ensure the ashbi-platform container is running or create a .env file."
+              echo "ERROR: Could not determine DATABASE_URL from container."
               exit 1
             fi
 
@@ -70,9 +64,9 @@ jobs:
             echo "Applying database migrations..."
             DATABASE_URL="$DATABASE_URL" npx prisma migrate deploy
 
-            echo "Rebuilding and restarting containers..."
-            docker compose down
-            docker compose up -d --build
+            # Restart the Coolify-managed container to pick up code changes
+            echo "Restarting Coolify-managed container..."
+            docker restart ashbi-platform
 
             echo "Waiting for app to start..."
             sleep 5
@@ -81,4 +75,3 @@ jobs:
             curl -sf http://localhost:3000/api/health && echo " - OK" || echo " - FAILED"
 
             echo "Deployment complete!"
-            docker compose ps
