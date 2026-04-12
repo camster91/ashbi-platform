@@ -64,9 +64,12 @@ jobs:
             echo "Applying database migrations..."
             DATABASE_URL="$DATABASE_URL" npx prisma migrate deploy
 
-            # Restart the Coolify-managed container to pick up code changes
-            echo "Restarting Coolify-managed container..."
-            docker restart ashbi-platform
+            # Rebuild and restart the container to pick up code changes
+            echo "Rebuilding Docker image..."
+            docker compose -f docker-compose.prod.yml build --no-cache app
+
+            echo "Recreating container with new image..."
+            docker compose -f docker-compose.prod.yml up -d app
 
             echo "Waiting for app to start..."
             sleep 5
