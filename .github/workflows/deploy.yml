@@ -19,7 +19,7 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             set -e
-            cd /var/www/ashbi-platform
+            cd /var/www/agency-hub
 
             echo "Resetting working tree to clean state..."
             git reset --hard HEAD
@@ -38,8 +38,8 @@ jobs:
             echo "Generating Prisma client..."
             DATABASE_URL=$(grep DATABASE_URL .env | cut -d= -f2-) npx prisma generate
 
-            echo "Pushing schema to database..."
-            DATABASE_URL=$(grep DATABASE_URL .env | cut -d= -f2-) npx prisma db push --accept-data-loss
+            echo "Applying database migrations..."
+            DATABASE_URL=$(grep DATABASE_URL .env | cut -d= -f2-) npx prisma migrate deploy
 
             echo "Rebuilding and restarting containers..."
             docker compose down
@@ -49,7 +49,7 @@ jobs:
             sleep 5
 
             echo "Health check..."
-            curl -sf http://localhost:3002/api/health && echo " - OK" || echo " - FAILED"
+            curl -sf http://localhost:3000/api/health && echo " - OK" || echo " - FAILED"
 
             echo "Deployment complete!"
             docker compose ps
