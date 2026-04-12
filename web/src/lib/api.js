@@ -325,6 +325,8 @@ export const api = {
     request(`/client-health/health/${clientId}`),
   triageInbox: () =>
     request('/ai/triage-inbox', { method: 'POST' }),
+  aiQuery: (query) =>
+    request('/ai/query', { method: 'POST', body: { query } }),
 
   // Notifications
   getNotifications: () =>
@@ -1297,6 +1299,11 @@ export const api = {
   getAshChatMessages: (id) => request(`/ash-chat/conversations/${id}/messages`),
   deleteAshChatConversation: (id) => request(`/ash-chat/conversations/${id}`, { method: 'DELETE' }),
   sendAshChatMessage: (data) => request('/ash-chat/message', { method: 'POST', body: data }),
+
+  // API Keys
+  getApiKeys: () => request('/api-keys'),
+  createApiKey: (data) => request('/api-keys', { method: 'POST', body: data }),
+  deleteApiKey: (id) => request(`/api-keys/${id}`, { method: 'DELETE' }),
 };
 
 export default api;

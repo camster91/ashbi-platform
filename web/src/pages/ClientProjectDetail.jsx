@@ -14,7 +14,7 @@ export default function ClientProjectDetail() {
     const fetchProject = async () => {
       try {
         setLoading(true);
-        const res = await fetch(`/api/client/projects/${id}`, {
+        const res = await fetch(`/api/client-portal/projects/${id}`, {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
         });
         if (!res.ok) throw new Error('Failed to load project');

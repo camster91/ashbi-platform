@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { Bot, X, Send, Loader2 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { cn } from '../lib/utils';
+import { api } from '../lib/api';
 
 function formatTimeAgo(date) {
   const now = Date.now();
@@ -89,25 +90,18 @@ export default function GlobalAIChat() {
     setIsTyping(true);
 
     try {
-      const res = await fetch('/api/ai/query', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${user.token}`,
-        },
-        body: JSON.stringify({
-          query: userMessage.content,
-          context: {
-            route: location.pathname,
-            pageTitle: document.title,
-          },
-        }),
-      });
+      const data = await api.aiQuery(userMessage.content).catch(() => ({
+        results: [],
+      }));
 
-      const data = await res.json().catch(() => ({ response: 'Sorry, I had trouble understanding that.' }));
+      // Convert query results into a readable response
+      const assistantContent = data.results?.length
+        ? data.results.map(r => `**${r.name}** (${r.type}) — ${r.description}`).join('\n')
+        : 'No results found for that query.';
+
       const assistantMessage = {
         role: 'assistant',
-        content: data.response || data.result || data.message || "I'm here to help!",
+        content: assistantContent,
         timestamp: Date.now(),
       };
       setMessages(prev => [...prev, assistantMessage]);

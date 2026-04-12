@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Search, Folder, CheckSquare, User, BarChart2, AlertTriangle, FileText } from 'lucide-react';
+import { api } from '../lib/api';
 
 const TYPE_ICON = { project: Folder, task: CheckSquare, client: User, metric: BarChart2, alert: AlertTriangle };
 
@@ -26,16 +27,7 @@ export default function AIQuery() {
     try {
       setLoading(true);
       setError('');
-      const res = await fetch('/api/ai/query', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({ query: text }),
-      });
-      if (!res.ok) throw new Error('Query failed');
-      const data = await res.json();
+      const data = await api.aiQuery(text);
       setResults(data.results || []);
     } catch (err) {
       setError(err.message);

@@ -10,6 +10,10 @@ import {
   Wrench,
   Bot,
   Zap,
+  Key,
+  Plus,
+  Trash2,
+  Copy,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
@@ -136,6 +140,126 @@ function AIModelSection() {
         </div>
       )}
     </Section>
+  );
+}
+
+function ApiKeysSection() {
+  const queryClient = useQueryClient();
+  const [newKeyName, setNewKeyName] = useState('');
+  const [createdKey, setCreatedKey] = useState(null);
+
+  const { data: keysData = { keys: [] }, isLoading } = useQuery({
+    queryKey: ['api-keys'],
+    queryFn: () => api.getApiKeys(),
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (name) => api.createApiKey({ name }),
+    onSuccess: (data) => {
+      setCreatedKey(data.key);
+      setNewKeyName('');
+      queryClient.invalidateQueries({ queryKey: ['api-keys'] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => api.deleteApiKey(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['api-keys'] }),
+  });
+
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Create new key */}
+      <div className="flex gap-2">
+        <input
+          value={newKeyName}
+          onChange={(e) => setNewKeyName(e.target.value)}
+          placeholder="Key name, e.g. OpenClaw Bot"
+          className="flex-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/20"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && newKeyName.trim()) {
+              createMutation.mutate(newKeyName.trim());
+            }
+          }}
+        />
+        <Button
+          onClick={() => createMutation.mutate(newKeyName.trim())}
+          disabled={!newKeyName.trim() || createMutation.isPending}
+          leftIcon={<Plus className="w-4 h-4" />}
+          loading={createMutation.isPending}
+        >
+          Create Key
+        </Button>
+      </div>
+
+      {/* Show newly created key (only shown once) */}
+      {createdKey && (
+        <div className="p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg">
+          <p className="text-sm font-medium text-green-700 dark:text-green-400 mb-1">
+            API key created! Copy it now — you won't see it again.
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 text-xs bg-white dark:bg-card p-2 rounded font-mono break-all select-all">
+              {createdKey}
+            </code>
+            <button
+              onClick={() => copyToClipboard(createdKey)}
+              className="p-1.5 text-muted-foreground hover:text-foreground"
+              title="Copy to clipboard"
+            >
+              <Copy className="w-4 h-4" />
+            </button>
+          </div>
+          <button
+            onClick={() => setCreatedKey(null)}
+            className="text-xs text-muted-foreground hover:text-foreground mt-2"
+          >
+            I've copied it — dismiss
+          </button>
+        </div>
+      )}
+
+      {/* Existing keys */}
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading...</p>
+      ) : keysData.keys.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No API keys yet. Create one above.</p>
+      ) : (
+        <div className="space-y-2">
+          {keysData.keys.map((key) => (
+            <div key={key.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+              <div>
+                <p className="text-sm font-medium">{key.name}</p>
+                <p className="text-xs text-muted-foreground">
+                  Created {new Date(key.createdAt).toLocaleDateString()}
+                  {key.lastUsedAt && ` · Last used ${new Date(key.lastUsedAt).toLocaleDateString()}`}
+                  {key.expiresAt && ` · Expires ${new Date(key.expiresAt).toLocaleDateString()}`}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  if (confirm('Revoke this API key? Any integrations using it will stop working.')) {
+                    deleteMutation.mutate(key.id);
+                  }
+                }}
+                className="p-1.5 text-muted-foreground hover:text-destructive transition-colors"
+                title="Revoke key"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <p className="text-xs text-muted-foreground">
+        Use your API key in the <code className="bg-muted px-1 rounded">x-api-key</code> header or as a <code className="bg-muted px-1 rounded">Bearer</code> token.
+      </p>
+    </div>
   );
 }
 
@@ -334,6 +458,11 @@ export default function Settings() {
             )}
           </div>
         </form>
+      </Section>
+
+      {/* API Keys */}
+      <Section icon={Key} title="API Keys" description="Manage API keys for external integrations like OpenClaw">
+        <ApiKeysSection />
       </Section>
 
       {/* AI Model Picker — admin only */}

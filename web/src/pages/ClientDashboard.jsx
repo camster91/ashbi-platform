@@ -14,7 +14,7 @@ export default function ClientDashboard() {
       try {
         setLoading(true);
         const [projectsRes, userRes] = await Promise.all([
-          fetch('/api/client/projects', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }),
+          fetch('/api/client-portal/projects', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }),
           fetch('/api/auth/me', { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }),
         ]);
         if (!projectsRes.ok) throw new Error('Failed to load projects');

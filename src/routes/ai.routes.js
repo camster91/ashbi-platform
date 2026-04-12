@@ -691,4 +691,131 @@ Provide a 2-3 sentence summary of the project's current state.`;
       });
     }
   });
+
+  // ==================== NATURAL LANGUAGE QUERY ====================
+  fastify.post('/query', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { query } = request.body;
+
+    if (!query || !query.trim()) {
+      return reply.status(400).send({ error: 'query is required' });
+    }
+
+    // Determine what entities to search based on query keywords
+    const q = query.toLowerCase();
+    const results = [];
+
+    try {
+      // Search projects
+      if (q.includes('project') || q.includes('overdue') || q.includes('active') || q.includes('at risk') || q.includes('health')) {
+        const projects = await prisma.project.findMany({
+          where: {
+            OR: [
+              { name: { contains: query, mode: 'insensitive' } },
+              { status: q.includes('active') ? 'ACTIVE' : q.includes('completed') ? 'COMPLETED' : undefined },
+              { health: q.includes('at risk') ? 'AT_RISK' : undefined }
+            ].filter(Boolean)
+          },
+          include: { client: { select: { name: true } } },
+          take: 10
+        });
+        for (const p of projects) {
+          results.push({
+            type: 'project',
+            name: p.name,
+            description: `${p.status} — ${p.health || 'Unknown'} health`,
+            actionUrl: `/projects/${p.id}`,
+            metadata: { client: p.client?.name, status: p.status, health: p.health }
+          });
+        }
+      }
+
+      // Search tasks
+      if (q.includes('task') || q.includes('overdue') || q.includes('due') || q.includes('assigned') || q.includes('priority')) {
+        const taskWhere = {};
+        if (q.includes('overdue')) {
+          taskWhere.status = { not: 'COMPLETED' };
+          taskWhere.dueDate = { lt: new Date() };
+        }
+
+        const tasks = await prisma.task.findMany({
+          where: Object.keys(taskWhere).length > 0 ? taskWhere : {
+            OR: [
+              { title: { contains: query, mode: 'insensitive' } },
+            ]
+          },
+          include: { project: { select: { name: true } }, assignee: { select: { name: true } } },
+          take: 10,
+          orderBy: { priority: 'asc' }
+        });
+        for (const t of tasks) {
+          results.push({
+            type: 'task',
+            name: t.title,
+            description: `${t.status} — ${t.priority} priority`,
+            actionUrl: `/projects/${t.projectId}`,
+            metadata: { project: t.project?.name, assignee: t.assignee?.name, dueDate: t.dueDate }
+          });
+        }
+      }
+
+      // Search clients
+      if (q.includes('client') || q.includes('customer')) {
+        const clients = await prisma.client.findMany({
+          where: {
+            OR: [
+              { name: { contains: query, mode: 'insensitive' } },
+              { domain: { contains: query, mode: 'insensitive' } }
+            ]
+          },
+          take: 10
+        });
+        for (const c of clients) {
+          results.push({
+            type: 'client',
+            name: c.name,
+            description: `${c.status} — ${c.domain || 'No domain'}`,
+            actionUrl: `/clients/${c.id}`,
+            metadata: { status: c.status, domain: c.domain }
+          });
+        }
+      }
+
+      // Generic search if no specific category matched
+      if (results.length === 0) {
+        const [projects, tasks, clients] = await Promise.all([
+          prisma.project.findMany({
+            where: { name: { contains: query, mode: 'insensitive' } },
+            include: { client: { select: { name: true } } },
+            take: 5
+          }),
+          prisma.task.findMany({
+            where: { title: { contains: query, mode: 'insensitive' } },
+            include: { project: { select: { name: true } } },
+            take: 5
+          }),
+          prisma.client.findMany({
+            where: { name: { contains: query, mode: 'insensitive' } },
+            take: 5
+          })
+        ]);
+
+        for (const p of projects) {
+          results.push({ type: 'project', name: p.name, description: `${p.status} — ${p.client?.name}`, actionUrl: `/projects/${p.id}`, metadata: { status: p.status } });
+        }
+        for (const t of tasks) {
+          results.push({ type: 'task', name: t.title, description: `${t.status}`, actionUrl: `/projects/${t.projectId}`, metadata: { project: t.project?.name } });
+        }
+        for (const c of clients) {
+          results.push({ type: 'client', name: c.name, description: c.status, actionUrl: `/clients/${c.id}` });
+        }
+      }
+
+      return { results };
+    } catch (error) {
+      fastify.log.error('AI query error:', error);
+      return reply.status(500).send({ error: 'Query failed', message: error.message });
+    }
+  });
 }

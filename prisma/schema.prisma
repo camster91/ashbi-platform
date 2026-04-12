@@ -52,6 +52,7 @@ model User {
   snippets          Snippet[]
   timeSessions      TimeSession[]
   calendarEvents   ContentCalendarEvent[] @relation("CalendarEventAssignee")
+  apiKeys          ApiKey[]
 
   @@map("users")
 }
@@ -1747,4 +1748,20 @@ model ClientInvitation {
   client Client @relation(fields: [clientId], references: [id])
 
   @@map("client_invitations")
+}
+
+model ApiKey {
+  id          String   @id @default(cuid())
+  name        String
+  key         String   @unique
+  userId      String
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("api_keys")
 }

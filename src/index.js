@@ -118,6 +118,7 @@ import snippetLibraryRoutes from './routes/snippet-library.routes.js';
 import assetLibraryRoutes from './routes/asset-library.routes.js';
 import wpBridgeRoutes from './routes/wp-bridge.routes.js';
 import surveyRoutes from './routes/survey.routes.js';
+import apiKeyRoutes, { authenticateApiKey } from './routes/api-key.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -201,6 +202,20 @@ fastify.decorate('adminOnly', async (request, reply) => {
 
 // Make prisma available in routes
 fastify.decorate('prisma', prisma);
+
+// API key auth decorator (alternative to JWT — checks x-api-key header)
+fastify.decorate('authenticateWithApiKey', authenticateApiKey);
+
+// Combined auth: accepts either JWT cookie/token OR API key
+fastify.decorate('authenticateAny', async (request, reply) => {
+  // Try JWT first
+  try {
+    await request.jwtVerify();
+    return;
+  } catch {}
+  // Fall back to API key
+  await authenticateApiKey(request, reply);
+});
 
 // Register API routes
 await fastify.register(authRoutes, { prefix: '/api/auth' });
@@ -302,6 +317,7 @@ await fastify.register(snippetLibraryRoutes, { prefix: '/api' });
 await fastify.register(assetLibraryRoutes, { prefix: '/api/assets' });
 await fastify.register(wpBridgeRoutes, { prefix: '/api/wp-bridge' });
 await fastify.register(surveyRoutes, { prefix: '/api/surveys' });
+await fastify.register(apiKeyRoutes, { prefix: '/api/api-keys' });
 
 // Serve static frontend in production
 if (!env.isDev) {
