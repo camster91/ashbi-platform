@@ -23,8 +23,9 @@ jobs:
             DEPLOY_DIR="/var/www/agency-hub"
             REPO_URL="https://github.com/camster91/ashbi-platform.git"
 
-            # Ensure the ashbi-platform remote exists and points to the correct repo
             cd "$DEPLOY_DIR"
+
+            # Ensure the ashbi-platform remote exists
             if ! git remote get-url ashbi-platform >/dev/null 2>&1; then
               echo "Adding ashbi-platform remote..."
               git remote add ashbi-platform "$REPO_URL"
@@ -47,11 +48,27 @@ jobs:
             cd web && npm install --legacy-peer-deps && npm run build && cd ..
             mkdir -p dist && cp -r web/dist/* dist/
 
+            # Extract DATABASE_URL from the running container (Coolify injects env vars)
+            echo "Extracting DATABASE_URL from running container..."
+            DATABASE_URL=$(docker exec ashbi-platform printenv DATABASE_URL 2>/dev/null || true)
+
+            if [ -z "$DATABASE_URL" ]; then
+              # Fallback: try the .env file if it exists
+              if [ -f .env ]; then
+                DATABASE_URL=$(grep DATABASE_URL .env | cut -d= -f2-)
+              fi
+            fi
+
+            if [ -z "$DATABASE_URL" ]; then
+              echo "ERROR: Could not determine DATABASE_URL. Ensure the ashbi-platform container is running or create a .env file."
+              exit 1
+            fi
+
             echo "Generating Prisma client..."
-            DATABASE_URL=$(grep DATABASE_URL .env | cut -d= -f2-) npx prisma generate
+            DATABASE_URL="$DATABASE_URL" npx prisma generate
 
             echo "Applying database migrations..."
-            DATABASE_URL=$(grep DATABASE_URL .env | cut -d= -f2-) npx prisma migrate deploy
+            DATABASE_URL="$DATABASE_URL" npx prisma migrate deploy
 
             echo "Rebuilding and restarting containers..."
             docker compose down
