@@ -9,7 +9,7 @@ import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import multipart from '@fastify/multipart';
 import { Server as SocketIO } from 'socket.io';
-import { PrismaClient } from '@prisma/client';
+import prisma from './config/db.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -122,8 +122,8 @@ import apiKeyRoutes, { authenticateApiKey } from './routes/api-key.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Initialize Prisma
-export const prisma = new PrismaClient();
+// Re-export shared Prisma instance (imported from config/db.js)
+export { prisma };
 
 // Initialize Fastify
 const fastify = Fastify({
@@ -133,16 +133,18 @@ const fastify = Fastify({
 });
 
 // Preserve raw body for Stripe webhook signature verification
-fastify.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
+// Preserve raw body for Stripe webhook signature verification
+fastify.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
   try {
-    req.rawBody = body;
+    req.rawBody = body; // Already a string since parseAs: 'string'
     // Handle empty body (e.g. POST /api/auth/logout with no payload)
     if (!body || body.length === 0) {
       return done(null, {});
     }
-    const json = JSON.parse(body.toString());
+    const json = JSON.parse(body);
     done(null, json);
   } catch (err) {
+    err.statusCode = 400;
     done(err);
   }
 });
@@ -365,6 +367,19 @@ const io = new SocketIO(fastify.server, {
   }
 });
 
+io.use(async (socket, next) => {
+  try {
+    const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+    if (!token) return next(new Error('Authentication required'));
+    const decoded = await fastify.jwt.verify(token);
+    socket.userId = decoded.id;
+    socket.userRole = decoded.role;
+    next();
+  } catch (err) {
+    next(new Error('Invalid token'));
+  }
+});
+
 io.on('connection', (socket) => {
   fastify.log.info(`Client connected: ${socket.id}`);
 
@@ -374,8 +389,11 @@ io.on('connection', (socket) => {
 
   // Join user's personal room for notifications
   socket.on('join', (userId) => {
+    if (userId !== socket.userId) {
+      socket.disconnect(true);
+      return;
+    }
     socket.join(`user:${userId}`);
-    socket.userId = userId;
     fastify.log.info(`User ${userId} joined their room`);
   });
 

@@ -106,7 +106,7 @@ export default async function vpsRoutes(fastify) {
 
   // Stop an application
   fastify.post('/stop/:uuid', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.adminOnly]
   }, async (request, reply) => {
     const { uuid } = request.params;
     try {
@@ -123,7 +123,7 @@ export default async function vpsRoutes(fastify) {
 
   // Start an application
   fastify.post('/start/:uuid', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.adminOnly]
   }, async (request, reply) => {
     const { uuid } = request.params;
     try {

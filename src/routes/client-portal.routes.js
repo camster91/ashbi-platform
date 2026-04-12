@@ -2,13 +2,9 @@
 
 import { prisma } from '../index.js';
 import { generateInvoicePdf } from '../utils/generate-invoice-pdf.js';
-import { createSigner, createVerifier } from 'fast-jwt';
+import env from '../config/env.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-in-production';
-const PORTAL_BASE = process.env.HUB_URL || 'https://hub.ashbi.ca';
-
-const signToken = createSigner({ key: JWT_SECRET, expiresIn: 3600000 }); // 1 hour
-const verifyToken = createVerifier({ key: JWT_SECRET });
+const PORTAL_BASE = env.hubUrl;
 
 // ── Mailgun helper (no-op if not configured) ────────────────────────────────
 async function sendMagicLinkEmail(toEmail, toName, magicLink) {
@@ -47,33 +43,33 @@ async function sendMagicLinkEmail(toEmail, toName, magicLink) {
   }
 }
 
-// ── CLIENT JWT middleware ────────────────────────────────────────────────────
-async function clientAuth(request, reply) {
-  try {
-    const rawToken =
-      request.query?.token ||
-      (request.headers.authorization?.startsWith('Bearer ')
-        ? request.headers.authorization.slice(7)
-        : null);
-
-    if (!rawToken) {
-      return reply.status(401).send({ error: 'Missing token' });
-    }
-
-    const payload = verifyToken(rawToken);
-
-    if (payload.role !== 'CLIENT') {
-      return reply.status(403).send({ error: 'Not authorized' });
-    }
-
-    request.clientUser = payload; // { contactId, clientId, role }
-  } catch (err) {
-    return reply.status(401).send({ error: 'Invalid or expired token' });
-  }
-}
-
 // ── Routes ───────────────────────────────────────────────────────────────────
 export default async function clientPortalRoutes(fastify) {
+
+  // ── CLIENT JWT middleware ────────────────────────────────────────────────────
+  async function clientAuth(request, reply) {
+    try {
+      const rawToken =
+        request.query?.token ||
+        (request.headers.authorization?.startsWith('Bearer ')
+          ? request.headers.authorization.slice(7)
+          : null);
+
+      if (!rawToken) {
+        return reply.status(401).send({ error: 'Missing token' });
+      }
+
+      const payload = fastify.jwt.verify(rawToken);
+
+      if (payload.role !== 'CLIENT') {
+        return reply.status(403).send({ error: 'Not authorized' });
+      }
+
+      request.clientUser = payload; // { contactId, clientId, role }
+    } catch (err) {
+      return reply.status(401).send({ error: 'Invalid or expired token' });
+    }
+  }
 
   // POST /api/client-portal/request-access
   fastify.post('/client-portal/request-access', async (request, reply) => {
@@ -93,7 +89,7 @@ export default async function clientPortalRoutes(fastify) {
       return { sent: true };
     }
 
-    const token = await signToken({ contactId: contact.id, clientId: contact.clientId, role: 'CLIENT' });
+    const token = fastify.jwt.sign({ contactId: contact.id, clientId: contact.clientId, role: 'CLIENT' }, { expiresIn: '1h' });
 
     const magicLink = `${PORTAL_BASE}/client-portal?token=${token}`;
 

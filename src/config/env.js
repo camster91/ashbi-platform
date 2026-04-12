@@ -13,7 +13,7 @@ const env = {
     .filter(Boolean),
 
   // Auth
-  jwtSecret: process.env.JWT_SECRET || 'dev-secret-change-in-production',
+  jwtSecret: process.env.JWT_SECRET,
   jwtExpiresIn: '7d',
 
   // AI
@@ -38,7 +38,7 @@ const env = {
   notificationWebhookUrl: process.env.NOTIFICATION_WEBHOOK_URL,
 
   // Credentials vault encryption key
-  credentialsKey: process.env.CREDENTIALS_KEY || 'dev-credentials-key-change-in-production',
+  credentialsKey: process.env.CREDENTIALS_KEY,
 
   // Database
   databaseUrl: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/ashbi',
@@ -68,6 +68,9 @@ const env = {
   // Bot
   botSecret: process.env.BOT_SECRET,
 
+  // WP Bridge
+  wpBridgeSecret: process.env.WP_BRIDGE_SECRET,
+
   // Notion
   notionToken: process.env.NOTION_TOKEN,
 
@@ -96,10 +99,24 @@ const env = {
 
 // Validate required env vars in production
 if (!env.isDev) {
-  const required = ['JWT_SECRET', 'WEBHOOK_SECRET'];
-  const missing = required.filter(key => !process.env[key]);
+  // Critical secrets — app must not start without these
+  const critical = ['JWT_SECRET', 'CREDENTIALS_KEY'];
+  const missingCritical = critical.filter(key => !process.env[key]);
+  if (missingCritical.length > 0) {
+    throw new Error(`Missing critical environment variables: ${missingCritical.join(', ')}`);
+  }
+
+  // Required in production — log warning but allow degraded startup
+  const requiredInProduction = [
+    'WEBHOOK_SECRET',
+    'DATABASE_URL',
+    'REDIS_URL',
+    'MAILGUN_API_KEY',
+    'MAILGUN_SIGNING_KEY',
+  ];
+  const missing = requiredInProduction.filter(key => !process.env[key]);
   if (missing.length > 0) {
-    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+    console.warn(`[env] Missing recommended environment variables in production: ${missing.join(', ')}`);
   }
 }
 

@@ -1,10 +1,10 @@
 // Team management routes
 
 import { prisma } from '../index.js';
-import crypto from 'crypto';
+import bcrypt from 'bcrypt';
 
-function hashPassword(password) {
-  return crypto.createHash('sha256').update(password).digest('hex');
+async function hashPassword(password) {
+  return bcrypt.hash(password, 12);
 }
 
 export default async function teamRoutes(fastify) {
@@ -57,7 +57,7 @@ export default async function teamRoutes(fastify) {
     const user = await prisma.user.create({
       data: {
         email,
-        password: hashPassword(password),
+        password: await hashPassword(password),
         name,
         role,
         skills: JSON.stringify(skills),
@@ -221,7 +221,7 @@ export default async function teamRoutes(fastify) {
 
     await prisma.user.update({
       where: { id },
-      data: { password: hashPassword(newPassword) }
+      data: { password: await hashPassword(newPassword) }
     });
 
     return { success: true };

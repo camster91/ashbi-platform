@@ -10,17 +10,21 @@ import crypto from 'crypto';
 export default async function webhookRoutes(fastify) {
   // Email webhook endpoint
   fastify.post('/email', async (request, reply) => {
-    // Verify webhook secret
+    // Verify webhook secret (fail closed)
+    if (!env.webhookSecret) {
+      return reply.status(500).send({ error: 'Webhook secret not configured' });
+    }
     const signature = request.headers['x-webhook-signature'];
-    if (env.webhookSecret && signature) {
-      const expectedSig = crypto
-        .createHmac('sha256', env.webhookSecret)
-        .update(JSON.stringify(request.body))
-        .digest('hex');
+    if (!signature) {
+      return reply.status(401).send({ error: 'Missing webhook signature' });
+    }
+    const expectedSig = crypto
+      .createHmac('sha256', env.webhookSecret)
+      .update(JSON.stringify(request.body))
+      .digest('hex');
 
-      if (signature !== expectedSig) {
-        return reply.status(401).send({ error: 'Invalid webhook signature' });
-      }
+    if (signature !== expectedSig) {
+      return reply.status(401).send({ error: 'Invalid webhook signature' });
     }
 
     try {

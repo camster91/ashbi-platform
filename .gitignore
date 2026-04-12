@@ -35,3 +35,20 @@ coverage/
 # Prisma
 prisma/migrations/**/migration_lock.toml
 config/google-tokens.json
+
+# Security - never commit secrets or keys
+.vapid-keys.json
+*.pem
+*.key
+
+# Temporary / generated scripts
+docker-compose.yml.old
+tmp-*.mjs
+tmp-*.js
+merge*.mjs
+set-budgets.js
+create-*.mjs
+
+# Uploads and data directories
+uploads/
+data/

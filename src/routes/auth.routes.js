@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
+import env from '../config/env.js';
 
 const LOGIN_RATE_LIMIT = { max: 5, timeWindow: '1 minute' };
 
@@ -83,8 +84,8 @@ export default async function authRoutes(fastify) {
       .setCookie('token', token, {
         path: '/',
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production' && !request.headers.host?.includes('localhost'),
-        sameSite: 'lax',
+        secure: env.isProduction,
+        sameSite: env.isProduction ? 'strict' : 'lax',
         maxAge: 7 * 24 * 60 * 60 // 7 days
       })
       .send({
@@ -93,8 +94,7 @@ export default async function authRoutes(fastify) {
           email: user.email,
           name: user.name,
           role: user.role
-        },
-        token
+        }
       });
   });
 
@@ -291,8 +291,8 @@ export default async function authRoutes(fastify) {
       .setCookie('token', jwtToken, {
         path: '/',
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
+        secure: env.isProduction,
+        sameSite: env.isProduction ? 'strict' : 'lax',
         maxAge: 7 * 24 * 60 * 60
       })
       .send({
@@ -348,8 +348,8 @@ export default async function authRoutes(fastify) {
       .setCookie('token', token, {
         path: '/',
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
+        secure: env.isProduction,
+        sameSite: env.isProduction ? 'strict' : 'lax',
         maxAge: 7 * 24 * 60 * 60
       })
       .send({
@@ -366,14 +366,14 @@ export default async function authRoutes(fastify) {
   // Forgot password
   fastify.post('/forgot-password', { ...authRateLimit }, async (request, reply) => {
     try {
-      const { email } = request.body;
+      const { email } = request.body || {};
 
       if (!email) {
         return reply.status(400).send({ error: 'Email required' });
       }
 
       const user = await prisma.user.findUnique({
-        where: { email }
+        where: { email: email.toLowerCase().trim() }
       });
 
       // Always return success (don't leak if email exists)
@@ -395,36 +395,45 @@ export default async function authRoutes(fastify) {
       });
 
       // Send reset email via Mailgun
-      const resetLink = `${process.env.HUB_URL || 'https://hub.ashbi.ca'}/reset-password?token=${resetToken}`;
+      const resetLink = `${env.hubUrl}/reset-password?token=${resetToken}`;
 
-      try {
-        if (process.env.MAILGUN_API_KEY && process.env.MAILGUN_DOMAIN) {
+      if (env.mailgunApiKey && env.mailgunDomain) {
+        try {
           const mg = new Mailgun(FormData);
           const client = mg.client({
             username: 'api',
-            key: process.env.MAILGUN_API_KEY
+            key: env.mailgunApiKey
           });
 
-          await client.messages.create(process.env.MAILGUN_DOMAIN, {
-            from: `noreply@${process.env.MAILGUN_DOMAIN}`,
+          await client.messages.create(env.mailgunDomain, {
+            from: `Ashbi Design <noreply@${env.mailgunDomain}>`,
             to: email,
-            subject: 'Reset Your Password - Agency Hub',
+            subject: 'Reset Your Password — Ashbi Hub',
             html: `
-              <h2>Password Reset Request</h2>
-              <p>We received a request to reset your password. Click the link below to create a new password.</p>
-              <p><a href="${resetLink}" style="background-color: #c9a84c; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Reset Password</a></p>
-              <p>Or copy this link: <code>${resetLink}</code></p>
-              <p>This link will expire in 24 hours.</p>
-              <p>If you didn't request this, you can safely ignore this email.</p>
+              <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#0f172a;color:#f1f5f9;padding:40px;border-radius:12px;">
+                <h2 style="color:#c9a84c;margin-top:0;">Password Reset Request</h2>
+                <p>We received a request to reset your password. Click the button below to create a new password.</p>
+                <a href="${resetLink}" style="display:inline-block;margin:24px 0;padding:14px 28px;background:#c9a84c;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">Reset Password</a>
+                <p style="font-size:14px;color:#94a3b8;">Or copy this link: <code style="color:#e2e8f0;word-break:break-all;">${resetLink}</code></p>
+                <p style="font-size:12px;color:#94a3b8;">This link will expire in 24 hours. If you didn't request this, you can safely ignore this email.</p>
+              </div>
             `
           });
-          console.log(`Password reset email sent to ${email}`);
-        } else {
-          console.log(`Password reset link for ${email} (email not configured): ${resetLink}`);
+          console.log(`[auth] Password reset email sent to ${email}`);
+        } catch (mailErr) {
+          console.error('[auth] Failed to send reset email:', mailErr.message || mailErr);
+          // In production, surface the error so the user knows email delivery failed
+          if (env.isProduction) {
+            return reply.status(503).send({ error: 'Failed to send reset email. Please try again or contact support.' });
+          }
         }
-      } catch (err) {
-        console.error('Failed to send reset email:', err);
-        // Don't fail the request if email sending fails
+      } else {
+        console.warn('[auth] Mailgun not configured — password reset email not sent');
+        if (env.isProduction) {
+          return reply.status(503).send({ error: 'Email service not configured. Please contact support to reset your password.' });
+        } else {
+          console.log(`[auth] Dev mode — reset link: ${resetLink}`);
+        }
       }
 
       return { success: true };
@@ -437,10 +446,14 @@ export default async function authRoutes(fastify) {
   // Reset password with token
   fastify.post('/reset-password', async (request, reply) => {
     try {
-      const { token, newPassword } = request.body;
+      const { token, newPassword } = request.body || {};
 
       if (!token || !newPassword) {
         return reply.status(400).send({ error: 'Token and password required' });
+      }
+
+      if (newPassword.length < 8) {
+        return reply.status(400).send({ error: 'Password must be at least 8 characters' });
       }
 
       const resetTokenHash = crypto.createHash('sha256').update(token).digest('hex');

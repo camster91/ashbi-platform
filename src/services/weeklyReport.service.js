@@ -1,9 +1,7 @@
 // Weekly report generation service
 
 import aiClient from '../ai/client.js';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import prisma from '../config/db.js';
 
 export async function generateWeeklyReport(clientId) {
   const sevenDaysAgo = new Date();

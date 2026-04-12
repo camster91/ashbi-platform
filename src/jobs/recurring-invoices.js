@@ -1,28 +1,10 @@
 // Recurring Invoices Cron Job
 // Runs on startup and every hour to generate new invoices from recurring templates
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
+import { generateInvoiceNumber } from '../utils/invoice.js';
 
 const ONE_HOUR = 60 * 60 * 1000;
-
-async function generateInvoiceNumber() {
-  const year = new Date().getFullYear();
-  const prefix = `INV-${year}-`;
-
-  const lastInvoice = await prisma.invoice.findFirst({
-    where: { invoiceNumber: { startsWith: prefix } },
-    orderBy: { invoiceNumber: 'desc' }
-  });
-
-  let nextNum = 1;
-  if (lastInvoice) {
-    const parts = lastInvoice.invoiceNumber.split('-');
-    const lastNum = parseInt(parts[parts.length - 1], 10);
-    nextNum = isNaN(lastNum) ? 1 : lastNum + 1;
-  }
-
-  return `${prefix}${String(nextNum).padStart(4, '0')}`;
-}
 
 function getNextRecurringDate(currentDate, interval) {
   const d = new Date(currentDate);

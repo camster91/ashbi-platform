@@ -1,31 +1,11 @@
 // Invoice routes — full CRUD + send + PDF + payments + templates
 import { createPaymentLink, handleWebhook } from '../services/stripe.service.js';
 import { generateInvoicePdf } from '../utils/generate-invoice-pdf.js';
+import { generateInvoiceNumber } from '../utils/invoice.js';
 
 const HST_RATE = 13; // Ontario HST
 
 export default async function invoiceRoutes(fastify) {
-
-  // ─── Helpers ────────────────────────────────────────────────────────────────
-
-  async function generateInvoiceNumber() {
-    const year = new Date().getFullYear();
-    const prefix = `INV-${year}-`;
-
-    const lastInvoice = await fastify.prisma.invoice.findFirst({
-      where: { invoiceNumber: { startsWith: prefix } },
-      orderBy: { invoiceNumber: 'desc' }
-    });
-
-    let nextNum = 1;
-    if (lastInvoice) {
-      const parts = lastInvoice.invoiceNumber.split('-');
-      const lastNum = parseInt(parts[parts.length - 1], 10);
-      nextNum = isNaN(lastNum) ? 1 : lastNum + 1;
-    }
-
-    return `${prefix}${String(nextNum).padStart(4, '0')}`;
-  }
 
   function calcTotals(lineItems, taxRate, discountAmount = 0) {
     const subtotal = lineItems.reduce((sum, li) => sum + li.total, 0);

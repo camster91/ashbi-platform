@@ -116,6 +116,7 @@ model Client {
   invitations        ClientInvitation[]
   wpSites           WPSite[] @relation("WPSiteClient")
 
+  @@index([status])
   @@map("clients")
 }
 
@@ -283,6 +284,9 @@ model Thread {
   responses     Response[]
   internalNotes InternalNote[]
 
+  @@index([clientId])
+  @@index([projectId])
+  @@index([status])
   @@map("threads")
 }
 
@@ -367,6 +371,7 @@ model Notification {
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("notifications")
 }
 

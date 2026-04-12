@@ -1,7 +1,7 @@
 // BullMQ Workers — graceful Redis connection handling
 
 import { Worker } from 'bullmq';
-import { PrismaClient } from '@prisma/client';
+
 import { connection, QUEUES, scheduleEscalationCheck } from './queue.js';
 import { processEmailPipeline } from '../services/pipeline.service.js';
 import { updateAllProjectHealth } from '../services/project.service.js';
@@ -9,7 +9,7 @@ import { storeEmbedding } from '../services/embedding.service.js';
 import aiClient from '../ai/client.js';
 import env from '../config/env.js';
 
-const prisma = new PrismaClient();
+import prisma from '../config/db.js';
 
 // Helper to create workers with error handling for Redis unavailability
 function createWorker(queueName, processor, options = {}) {

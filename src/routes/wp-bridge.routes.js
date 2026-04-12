@@ -8,6 +8,7 @@ import {
   deleteSite,
   generateMagicLogin
 } from '../services/wpBridge.service.js';
+import env from '../config/env.js';
 
 export default async function wpBridgeRoutes(fastify) {
   // List all registered WP sites
@@ -29,7 +30,11 @@ export default async function wpBridgeRoutes(fastify) {
   // Note: This endpoint uses siteUrl + secretKey auth, not user auth
   // The WP plugin authenticates via a shared secret
   fastify.put('/', async (request, reply) => {
-    const { siteUrl, secretKey, ...healthData } = request.body;
+    const { siteKey, secretKey, ...healthData } = request.body;
+    const siteUrl = request.body.siteUrl;
+    if (!secretKey || secretKey !== env.wpBridgeSecret) {
+      return reply.status(401).send({ error: 'Invalid secret key' });
+    }
     if (!siteUrl) return reply.status(400).send({ error: 'siteUrl is required' });
     try {
       const result = await updateSiteHealth(siteUrl, healthData);
@@ -51,7 +56,10 @@ export default async function wpBridgeRoutes(fastify) {
 
   // Receive admin alert from WP site
   fastify.post('/alert', async (request, reply) => {
-    const { siteUrl, alertType, details } = request.body;
+    const { siteUrl, secretKey, alertType, details } = request.body;
+    if (!secretKey || secretKey !== env.wpBridgeSecret) {
+      return reply.status(401).send({ error: 'Invalid secret key' });
+    }
     // Store alert in the WP site's alerts field
     try {
       const site = await updateSiteHealth(siteUrl, {

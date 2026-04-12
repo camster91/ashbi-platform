@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import { processEmailPipeline } from '../services/pipeline.service.js';
+import env from '../config/env.js';
 
 export default async function mailgunRoutes(fastify) {
   // POST /mailgun/send — manually send an email (admin only)
@@ -44,12 +45,21 @@ export default async function mailgunRoutes(fastify) {
     try {
       const body = request.body;
 
-      // Validate Mailgun webhook signature
+      // Validate Mailgun webhook signature (fail closed)
       const signingKey = process.env.MAILGUN_SIGNING_KEY;
-      if (signingKey) {
+      if (!signingKey) {
+        if (!env.isDev) {
+          return reply.status(500).send({ error: 'Mailgun signing key not configured' });
+        }
+        // Dev mode: skip validation
+      } else {
         const timestamp = body.timestamp;
         const token = body.token;
         const signature = body.signature;
+
+        if (!timestamp || !token || !signature) {
+          return reply.status(401).send({ error: 'Missing Mailgun signature fields' });
+        }
 
         const expectedSignature = crypto
           .createHmac('sha256', signingKey)
@@ -58,7 +68,7 @@ export default async function mailgunRoutes(fastify) {
 
         if (expectedSignature !== signature) {
           fastify.log.warn('Invalid Mailgun webhook signature');
-          return reply.status(200).send({ status: 'ok' });
+          return reply.status(401).send({ error: 'Invalid Mailgun webhook signature' });
         }
       }
 
