@@ -729,4 +729,69 @@ Brief: ${brief}`;
       return reply.status(404).send({ error: 'Template not found' });
     }
   });
+
+  // GET /:id/budget — Budget tracking for a project
+  fastify.get('/:id/budget', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const project = await prisma.project.findUnique({
+      where: { id },
+      select: { id: true, name: true, budget: true, hourlyBudget: true, clientId: true }
+    });
+    if (!project) return reply.status(404).send({ error: 'Project not found' });
+
+    // Get billable time entries
+    const timeEntries = await prisma.timeEntry.findMany({
+      where: { projectId: id },
+      include: { user: { select: { id: true, name: true, hourlyRate: true } } }
+    });
+
+    const totalMinutes = timeEntries.reduce((s, e) => s + e.duration, 0);
+    const totalHours = totalMinutes / 60;
+    const billableMinutes = timeEntries.filter(e => e.billable).reduce((s, e) => s + e.duration, 0);
+    const billableHours = billableMinutes / 60;
+
+    // Calculate cost based on user rates
+    const costByUser = {};
+    for (const entry of timeEntries) {
+      const rate = entry.user?.hourlyRate || 0;
+      const hours = entry.duration / 60;
+      const cost = hours * rate;
+      const uid = entry.userId;
+      if (!costByUser[uid]) costByUser[uid] = { user: entry.user, hours: 0, cost: 0 };
+      costByUser[uid].hours += hours;
+      costByUser[uid].cost += cost;
+    }
+
+    // Get expenses for project
+    const expenses = await prisma.expense.findMany({ where: { projectId: id } });
+    const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
+
+    const budgetAmount = project.budget || 0;
+    const hourlyBudget = project.hourlyBudget || 0;
+
+    // Calculate burn rate (last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const recentEntries = timeEntries.filter(e => new Date(e.date) >= thirtyDaysAgo);
+    const recentHours = recentEntries.reduce((s, e) => s + e.duration, 0) / 60;
+
+    const budgetUsed = budgetAmount > 0 ? ((costByUser && Object.values(costByUser).reduce((s, u) => s + u.cost, 0)) + totalExpenses) : totalHours * 50;
+    const budgetRemaining = budgetAmount > 0 ? budgetAmount - budgetUsed : null;
+    const hoursRemaining = hourlyBudget > 0 ? hourlyBudget - billableHours : null;
+
+    return {
+      project: { id: project.id, name: project.name, budget: budgetAmount, hourlyBudget },
+      time: { totalHours, billableHours, totalMinutes: totalMinutes, billableMinutes },
+      costByUser: Object.values(costByUser),
+      totalCost: Object.values(costByUser).reduce((s, u) => s + u.cost, 0),
+      expenses: { total: totalExpenses, count: expenses.length },
+      budgetUsed,
+      budgetRemaining,
+      hoursRemaining,
+      burnRate: recentHours > 0 ? recentHours / 30 : 0,
+      percentUsed: budgetAmount > 0 ? Math.round((budgetUsed / budgetAmount) * 100) : (hourlyBudget > 0 ? Math.round((billableHours / hourlyBudget) * 100) : null)
+    };
+  });
 }

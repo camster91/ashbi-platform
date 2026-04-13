@@ -226,4 +226,49 @@ export default async function teamRoutes(fastify) {
 
     return { success: true };
   });
+
+  // GET /allocations — Resource allocation view
+  fastify.get('/allocations', {
+    onRequest: [fastify.authenticate]
+  }, async (request) => {
+    const team = await prisma.user.findMany({
+      where: { isActive: true, role: { not: 'BOT' } },
+      select: {
+        id: true, name: true, role: true, capacity: true, hourlyRate: true,
+        assignedTasks: {
+          where: { status: { not: 'COMPLETED' } },
+          select: { id: true, title: true, priority: true, projectId: true,
+            project: { select: { id: true, name: true } } }
+        },
+        timeEntries: {
+          where: { date: { gte: new Date(Date.now() - 7 * 86400000) } },
+          select: { duration: true, projectId: true }
+        }
+      }
+    });
+
+    const allocations = team.map(member => {
+      const recentMinutes = member.timeEntries.reduce((s, e) => s + e.duration, 0);
+      const recentHours = recentMinutes / 60;
+      const weeklyCapacity = (member.capacity || 100) * 40 / 100;
+      const utilization = weeklyCapacity > 0 ? Math.round((recentHours / weeklyCapacity) * 100) : 0;
+
+      const projectMap = {};
+      for (const task of member.assignedTasks) {
+        const pid = task.projectId;
+        if (!projectMap[pid]) projectMap[pid] = { project: task.project, taskCount: 0 };
+        projectMap[pid].taskCount++;
+      }
+
+      return {
+        id: member.id, name: member.name, role: member.role,
+        capacity: member.capacity, hourlyRate: member.hourlyRate,
+        utilization, weeklyHours: recentHours,
+        activeTasks: member.assignedTasks.length,
+        projects: Object.values(projectMap)
+      };
+    });
+
+    return { allocations };
+  });
 }

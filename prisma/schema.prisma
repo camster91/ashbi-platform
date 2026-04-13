@@ -115,6 +115,8 @@ model Client {
   clientEmbeddings      ClientEmbedding[]
   invitations           ClientInvitation[]
   wpSites               WPSite[]               @relation("WPSiteClient")
+  estimates             Estimate[]
+  rateCards             RateCard[]
 
   @@index([status])
   @@map("clients")
@@ -1766,4 +1768,55 @@ model ApiKey {
   user User @relation(fields: [userId], references: [id])
 
   @@map("api_keys")
+}
+
+// ==================== ESTIMATES ====================
+
+model Estimate {
+  id          String   @id @default(cuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  status      String   @default("DRAFT") // DRAFT, SENT, APPROVED, DECLINED, CONVERTED
+  lineItems   Json     @default("[]") // [{description, quantity, rate, amount}]
+  subtotal    Float    @default(0)
+  tax         Float    @default(0)
+  total       Float    @default(0)
+  validUntil  DateTime?
+  viewToken   String   @unique @default(cuid())
+  sentAt      DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([clientId])
+  @@index([status])
+  @@map("estimates")
+}
+
+model RateCard {
+  id          String   @id @default(cuid())
+  name        String
+  clientId    String?
+  client      Client?  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  rates       Json     @default("[]") // [{serviceName, unit, rate, description}]
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("rate_cards")
+}
+
+model Integration {
+  id           String    @id @default(cuid())
+  type         String    // QUICKBOOKS, XERO
+  accessToken  String?
+  refreshToken String?
+  orgId        String?
+  status       String    @default("DISCONNECTED") // CONNECTED, DISCONNECTED, ERROR
+  lastSyncAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("integrations")
 }

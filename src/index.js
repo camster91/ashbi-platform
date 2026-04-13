@@ -119,6 +119,11 @@ import assetLibraryRoutes from './routes/asset-library.routes.js';
 import wpBridgeRoutes from './routes/wp-bridge.routes.js';
 import surveyRoutes from './routes/survey.routes.js';
 import apiKeyRoutes, { authenticateApiKey } from './routes/api-key.routes.js';
+// New features (Phase 3)
+import estimateRoutes from './routes/estimate.routes.js';
+import rateCardRoutes from './routes/rate-card.routes.js';
+import bookkeepingRoutes from './routes/bookkeeping.routes.js';
+import integrationRoutes from './routes/integration.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -320,6 +325,11 @@ await fastify.register(assetLibraryRoutes, { prefix: '/api/assets' });
 await fastify.register(wpBridgeRoutes, { prefix: '/api/wp-bridge' });
 await fastify.register(surveyRoutes, { prefix: '/api/surveys' });
 await fastify.register(apiKeyRoutes, { prefix: '/api/api-keys' });
+// Phase 3: New features
+await fastify.register(estimateRoutes, { prefix: '/api/estimates' });
+await fastify.register(rateCardRoutes, { prefix: '/api/rate-cards' });
+await fastify.register(bookkeepingRoutes, { prefix: '/api/bookkeeping' });
+await fastify.register(integrationRoutes, { prefix: '/api/integrations' });
 
 // Serve static frontend in production
 if (!env.isDev) {

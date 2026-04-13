@@ -1323,6 +1323,60 @@ export const api = {
   getApiKeys: () => request('/api-keys'),
   createApiKey: (data) => request('/api-keys', { method: 'POST', body: data }),
   deleteApiKey: (id) => request(`/api-keys/${id}`, { method: 'DELETE' }),
+
+  // ===== ESTIMATES =====
+  getEstimates: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/estimates${query ? `?${query}` : ''}`);
+  },
+  getEstimate: (id) => request(`/estimates/${id}`),
+  createEstimate: (data) => request('/estimates', { method: 'POST', body: data }),
+  updateEstimate: (id, data) => request(`/estimates/${id}`, { method: 'PUT', body: data }),
+  deleteEstimate: (id) => request(`/estimates/${id}`, { method: 'DELETE' }),
+  sendEstimate: (id) => request(`/estimates/${id}/send`, { method: 'POST' }),
+  getEstimateByToken: (viewToken) => request(`/estimates/view/${viewToken}`),
+  approveEstimateByToken: (viewToken, action) => request(`/estimates/view/${viewToken}/approve`, { method: 'POST', body: { action } }),
+  convertEstimate: (id) => request(`/estimates/${id}/convert`, { method: 'POST' }),
+
+  // ===== RATE CARDS =====
+  getRateCards: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/rate-cards${query ? `?${query}` : ''}`);
+  },
+  getRateCard: (id) => request(`/rate-cards/${id}`),
+  createRateCard: (data) => request('/rate-cards', { method: 'POST', body: data }),
+  updateRateCard: (id, data) => request(`/rate-cards/${id}`, { method: 'PUT', body: data }),
+  deleteRateCard: (id) => request(`/rate-cards/${id}`, { method: 'DELETE' }),
+
+  // ===== BOOKKEEPING =====
+  getBookkeepingTransactions: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/bookkeeping/transactions${query ? `?${query}` : ''}`);
+  },
+  getBookkeepingSummary: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/bookkeeping/summary${query ? `?${query}` : ''}`);
+  },
+  getBookkeepingBalance: () => request('/bookkeeping/balance'),
+
+  // ===== BUDGET =====
+  getProjectBudget: (projectId) => request(`/projects/${projectId}/budget`),
+
+  // ===== RESOURCE ALLOCATIONS =====
+  getTeamAllocations: () => request('/team/allocations'),
+
+  // ===== INTEGRATIONS =====
+  getIntegrations: () => request('/integrations'),
+  connectIntegration: (type) => request(`/integrations/${type}/connect`, { method: 'POST' }),
+  disconnectIntegration: (type) => request(`/integrations/${type}/disconnect`, { method: 'POST' }),
+  syncIntegration: (type) => request(`/integrations/${type}/sync`, { method: 'POST' }),
+
+  // ===== TIMESHEETS =====
+  getWeeklyTimesheet: (weekStart) => {
+    const query = weekStart ? `?weekStart=${weekStart}` : '';
+    return request(`/time-entries/timesheets/weekly${query}`);
+  },
+  approveTimesheetEntry: (id) => request(`/time-entries/timesheets/${id}/approve`, { method: 'PATCH' }),
 };
 
 export default api;

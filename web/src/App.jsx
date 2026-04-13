@@ -14,6 +14,7 @@ import PortalContract from './pages/PortalContract';
 import PortalInvoice from './pages/PortalInvoice';
 import PortalBooking from './pages/PortalBooking';
 import PortalIntakeForm from './pages/PortalIntakeForm';
+import PortalEstimate from './pages/PortalEstimate';
 import ClientPortal from './pages/ClientPortal';
 
 // Lazy loaded pages
@@ -65,6 +66,12 @@ const Notifications = lazy(() => import('./pages/Notifications'));
 const AssetLibrary = lazy(() => import('./pages/AssetLibrary'));
 const WPSites = lazy(() => import('./pages/WPSites'));
 const SemanticSearch = lazy(() => import('./pages/SemanticSearch'));
+// New Features
+const Estimates = lazy(() => import('./pages/Estimates'));
+const Schedule = lazy(() => import('./pages/Schedule'));
+const Timesheets = lazy(() => import('./pages/Timesheets'));
+const RateCards = lazy(() => import('./pages/RateCards'));
+const Bookkeeping = lazy(() => import('./pages/Bookkeeping'));
 
 function PageLoader() {
   return (
@@ -100,6 +107,7 @@ function AppRoutes() {
       <Route path="/portal/invoice/:token" element={<PortalInvoice />} />
       <Route path="/portal/book" element={<PortalBooking />} />
       <Route path="/portal/form/:token" element={<PortalIntakeForm />} />
+      <Route path="/portal/estimate/:viewToken" element={<PortalEstimate />} />
       <Route path="/client-portal" element={<ClientPortal />} />
       <Route path="/client/login" element={<ClientPortal />} />
       <Route path="/client/dashboard" element={<ClientPortal />} />
@@ -131,6 +139,11 @@ function AppRoutes() {
                   <Route path="/invoices/:id" element={<InvoiceDetail />} />
                   <Route path="/expenses" element={<Expenses />} />
                   <Route path="/pipeline" element={<Pipeline />} />
+                  <Route path="/estimates" element={<Estimates />} />
+                  <Route path="/schedule" element={<Schedule />} />
+                  <Route path="/timesheets" element={<Timesheets />} />
+                  <Route path="/rate-cards" element={<AdminRoute><RateCards /></AdminRoute>} />
+                  <Route path="/bookkeeping" element={<AdminRoute><Bookkeeping /></AdminRoute>} />
                   <Route path="/upwork-contracts" element={<UpworkContracts />} />
                   <Route path="/credentials" element={<AdminRoute><Credentials /></AdminRoute>} />
                   <Route path="/chat" element={<Chat />} />

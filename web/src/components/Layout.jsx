@@ -29,6 +29,12 @@ import {
   Sparkles,
   Briefcase,
   Key,
+  Calculator,
+  Calendar,
+  Clock,
+  CreditCard,
+  BookOpen,
+  ClipboardList,
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { Download, Sun, Moon } from 'lucide-react';
@@ -111,8 +117,10 @@ export default function Layout({ children }) {
   const financeNav = [
     { name: 'Pipeline', href: '/pipeline', icon: Filter },
     { name: 'Proposals', href: '/proposals', icon: FileText },
+    { name: 'Estimates', href: '/estimates', icon: ClipboardList },
     { name: 'Contracts', href: '/contracts', icon: ScrollText },
     { name: 'Expenses', href: '/expenses', icon: Wallet },
+    { name: 'Schedule', href: '/schedule', icon: Calendar },
     { name: 'Upwork', href: '/upwork-contracts', icon: Briefcase },
   ];
 
@@ -120,6 +128,9 @@ export default function Layout({ children }) {
   const adminNav = isAdmin ? [
     { name: 'Team', href: '/team', icon: UserCog },
     { name: 'Revenue', href: '/revenue', icon: TrendingUp },
+    { name: 'Timesheets', href: '/timesheets', icon: Clock },
+    { name: 'Rate Cards', href: '/rate-cards', icon: CreditCard },
+    { name: 'Bookkeeping', href: '/bookkeeping', icon: BookOpen },
     { name: 'Reports', href: '/reports', icon: PieChart },
     { name: 'Credentials', href: '/credentials', icon: Key },
     { name: 'Settings', href: '/settings', icon: Settings },

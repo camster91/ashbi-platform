@@ -297,4 +297,76 @@ export default async function timeRoutes(fastify) {
       totalMinutes: entries.reduce((sum, e) => sum + e.duration, 0)
     };
   });
-}
+
+  // ===== TIMESHEET ENDPOINTS =====
+
+  // Get weekly timesheet (aggregated by user + day)
+  fastify.get('/timesheets/weekly', {
+    onRequest: [fastify.authenticate]
+  }, async (request) => {
+    const { weekStart } = request.query;
+    const start = weekStart ? new Date(weekStart) : (() => {
+      const d = new Date();
+      d.setDate(d.getDate() - d.getDay()); // Sunday
+      d.setHours(0, 0, 0, 0);
+      return d;
+    })();
+    const end = new Date(start);
+    end.setDate(end.getDate() + 7);
+
+    const where = { date: { gte: start, lt: end } };
+    if (request.user.role !== 'ADMIN') where.userId = request.user.id;
+
+    const entries = await prisma.timeEntry.findMany({
+      where,
+      include: {
+        user: { select: { id: true, name: true, hourlyRate: true } },
+        project: { select: { id: true, name: true } },
+        task: { select: { id: true, title: true } }
+      },
+      orderBy: [{ userId: 'asc' }, { date: 'asc' }]
+    });
+
+    // Group by user, then by day
+    const byUser = {};
+    for (const entry of entries) {
+      if (!byUser[entry.userId]) {
+        byUser[entry.userId] = { user: entry.user, days: {}, totalMinutes: 0, billableMinutes: 0 };
+      }
+      const dayKey = entry.date.toISOString().split('T')[0];
+      if (!byUser[entry.userId].days[dayKey]) {
+        byUser[entry.userId].days[dayKey] = { entries: [], totalMinutes: 0 };
+      }
+      byUser[entry.userId].days[dayKey].entries.push(entry);
+      byUser[entry.userId].days[dayKey].totalMinutes += entry.duration;
+      byUser[entry.userId].totalMinutes += entry.duration;
+      if (entry.billable) byUser[entry.userId].billableMinutes += entry.duration;
+    }
+
+    return {
+      weekStart: start.toISOString(),
+      weekEnd: end.toISOString(),
+      timesheets: Object.values(byUser)
+    };
+  });
+
+  // Approve a timesheet entry
+  fastify.patch('/timesheets/:id/approve', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    if (request.user.role !== 'ADMIN') {
+      return reply.status(403).send({ error: 'Admin only' });
+    }
+
+    const { id } = request.params;
+    const existing = await prisma.timeEntry.findUnique({ where: { id } });
+    if (!existing) return reply.status(404).send({ error: 'Time entry not found' });
+
+    const entry = await prisma.timeEntry.update({
+      where: { id },
+      data: { approvedById: request.user.id }
+    });
+
+    return entry;
+  });
+});

@@ -27,6 +27,8 @@ import {
   Edit2,
   Trash2,
   Save,
+  DollarSign,
+  TrendingUp,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import {
@@ -322,6 +324,9 @@ export default function Project() {
           <ProjectContextCard projectId={id} />
         </div>
       </div>
+
+      {/* Budget Tracking */}
+      <ProjectBudget projectId={id} budget={project.budget} hourlyBudget={project.hourlyBudget} />
 
       {/* Notes & Docs */}
       <ProjectNotes projectId={id} />
@@ -887,6 +892,99 @@ function TaskCategory({ title, icon: Icon, tasks = [], color, collapsed = false 
           </ul>
         )
       )}
+    </div>
+  );
+}
+
+function ProjectBudget({ projectId, budget, hourlyBudget }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['project-budget', projectId],
+    queryFn: () => api.getProjectBudget(projectId),
+  });
+
+  if (isLoading) return <div className="animate-spin h-5 w-5 border-b-2 border-primary rounded-full mx-auto my-4" />;
+  if (!data) return null;
+
+  const pct = data.percentUsed ?? 0;
+  const pctColor = pct >= 100 ? 'text-red-600 bg-red-50 dark:bg-red-900/20' : pct >= 90 ? 'text-orange-600 bg-orange-50 dark:bg-orange-900/20' : pct >= 70 ? 'text-yellow-600 bg-yellow-50 dark:bg-yellow-900/20' : 'text-green-600 bg-green-50 dark:bg-green-900/20';
+  const barColor = pct >= 100 ? 'bg-red-500' : pct >= 90 ? 'bg-orange-500' : pct >= 70 ? 'bg-yellow-500' : 'bg-green-500';
+
+  return (
+    <div className="bg-card rounded-xl border border-border">
+      <div className="px-5 py-4 border-b flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <DollarSign className="w-5 h-5 text-accent" />
+          <h3 className="font-semibold text-foreground">Budget Tracking</h3>
+        </div>
+        <span className={cn('px-2.5 py-1 text-xs font-semibold rounded-full', pctColor)}>
+          {pct}% used
+        </span>
+      </div>
+      <div className="p-5 space-y-4">
+        {(budget || hourlyBudget) && (
+          <div className="space-y-3">
+            {budget > 0 && (
+              <div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-muted-foreground">Financial Budget</span>
+                  <span className="font-medium">${(data.budgetUsed || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} / ${budget.toLocaleString()}</span>
+                </div>
+                <div className="h-2.5 bg-muted rounded-full overflow-hidden">
+                  <div className={cn('h-full rounded-full transition-all', barColor)} style={{ width: `${Math.min(pct, 100)}%` }} />
+                </div>
+              </div>
+            )}
+            {hourlyBudget > 0 && (
+              <div>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-muted-foreground">Hourly Budget</span>
+                  <span className="font-medium">{data.time?.billableHours?.toFixed(1) || 0}h / {hourlyBudget}h</span>
+                </div>
+                <div className="h-2.5 bg-muted rounded-full overflow-hidden">
+                  <div className={cn('h-full rounded-full transition-all', barColor)} style={{ width: `${Math.min((data.time?.billableHours / hourlyBudget) * 100, 100)}%` }} />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="p-3 bg-muted/50 rounded-lg">
+            <p className="text-xs text-muted-foreground">Total Hours</p>
+            <p className="text-lg font-semibold">{data.time?.totalHours?.toFixed(1) || 0}</p>
+          </div>
+          <div className="p-3 bg-muted/50 rounded-lg">
+            <p className="text-xs text-muted-foreground">Billable Hours</p>
+            <p className="text-lg font-semibold">{data.time?.billableHours?.toFixed(1) || 0}</p>
+          </div>
+          <div className="p-3 bg-muted/50 rounded-lg">
+            <p className="text-xs text-muted-foreground">Total Cost</p>
+            <p className="text-lg font-semibold">${(data.totalCost || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+          </div>
+          <div className="p-3 bg-muted/50 rounded-lg">
+            <p className="text-xs text-muted-foreground">Expenses</p>
+            <p className="text-lg font-semibold">${(data.expenses?.total || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+          </div>
+        </div>
+        {data.costByUser?.length > 0 && (
+          <div>
+            <h4 className="text-sm font-medium text-muted-foreground mb-2">Cost by Team Member</h4>
+            <div className="space-y-2">
+              {data.costByUser.map(cu => (
+                <div key={cu.user.id} className="flex justify-between items-center text-sm">
+                  <span>{cu.user.name}</span>
+                  <span className="text-muted-foreground">{cu.hours.toFixed(1)}h — ${cu.cost.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {data.burnRate > 0 && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <TrendingUp className="w-4 h-4" />
+            <span>Burn rate: {data.burnRate.toFixed(1)} hours/day over last 30 days</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
