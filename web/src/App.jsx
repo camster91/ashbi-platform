@@ -38,6 +38,8 @@ const Invoices = lazy(() => import('./pages/Invoices'));
 const InvoiceDetail = lazy(() => import('./pages/InvoiceDetail'));
 const Expenses = lazy(() => import('./pages/Expenses'));
 const Pipeline = lazy(() => import('./pages/Pipeline'));
+const UpworkContracts = lazy(() => import('./pages/UpworkContracts'));
+const Credentials = lazy(() => import('./pages/Credentials'));
 const Chat = lazy(() => import('./pages/Chat'));
 const AiContextSettings = lazy(() => import('./pages/AiContextSettings'));
 const CommandCenter = lazy(() => import('./pages/CommandCenter'));
@@ -129,6 +131,8 @@ function AppRoutes() {
                   <Route path="/invoices/:id" element={<InvoiceDetail />} />
                   <Route path="/expenses" element={<Expenses />} />
                   <Route path="/pipeline" element={<Pipeline />} />
+                  <Route path="/upwork-contracts" element={<UpworkContracts />} />
+                  <Route path="/credentials" element={<AdminRoute><Credentials /></AdminRoute>} />
                   <Route path="/chat" element={<Chat />} />
                   <Route path="/admin/settings/ai-context" element={<AdminRoute><AiContextSettings /></AdminRoute>} />
                   <Route path="/admin/command-center" element={<AdminRoute><CommandCenter /></AdminRoute>} />

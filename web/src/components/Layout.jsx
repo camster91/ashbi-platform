@@ -27,6 +27,8 @@ import {
   ChevronDown,
   ChevronUp,
   Sparkles,
+  Briefcase,
+  Key,
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { Download, Sun, Moon } from 'lucide-react';
@@ -111,6 +113,7 @@ export default function Layout({ children }) {
     { name: 'Proposals', href: '/proposals', icon: FileText },
     { name: 'Contracts', href: '/contracts', icon: ScrollText },
     { name: 'Expenses', href: '/expenses', icon: Wallet },
+    { name: 'Upwork', href: '/upwork-contracts', icon: Briefcase },
   ];
 
   // Admin — collapsible section, only visible to admins
@@ -118,6 +121,7 @@ export default function Layout({ children }) {
     { name: 'Team', href: '/team', icon: UserCog },
     { name: 'Revenue', href: '/revenue', icon: TrendingUp },
     { name: 'Reports', href: '/reports', icon: PieChart },
+    { name: 'Credentials', href: '/credentials', icon: Key },
     { name: 'Settings', href: '/settings', icon: Settings },
   ] : [];
 
