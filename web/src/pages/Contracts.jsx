@@ -8,10 +8,13 @@ import {
   CheckCircle,
   FileText,
   Download,
+  Sparkles,
+  Wand2,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useToast } from '../hooks/useToast';
 import { Button, Card } from '../components/ui';
+import Modal from '../components/Modal';
 
 const statusConfig = {
   DRAFT: { label: 'Draft', color: 'bg-muted text-muted-foreground' },
@@ -30,6 +33,12 @@ export default function Contracts() {
   const queryClient = useQueryClient();
   const toast = useToast();
   const [showCreate, setShowCreate] = useState(false);
+  const [showProposalPicker, setShowProposalPicker] = useState(false);
+  const [showAiRefine, setShowAiRefine] = useState(false);
+  const [aiRefineContract, setAiRefineContract] = useState(null);
+  const [aiInstruction, setAiInstruction] = useState('');
+  const [aiResult, setAiResult] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
   const [filterStatus, setFilterStatus] = useState('');
   const [expandedId, setExpandedId] = useState(null);
 
@@ -43,6 +52,12 @@ export default function Contracts() {
     queryFn: () => api.getClients(),
   });
 
+  const { data: approvedProposals = [] } = useQuery({
+    queryKey: ['proposals', 'APPROVED'],
+    queryFn: () => api.getProposals({ status: 'APPROVED' }),
+    enabled: showProposalPicker,
+  });
+
   const createMutation = useMutation({
     mutationFn: (data) => api.createContract(data),
     onSuccess: () => {
@@ -52,6 +67,16 @@ export default function Contracts() {
       toast.success('Contract created');
     },
     onError: () => toast.error('Failed to create contract'),
+  });
+
+  const fromProposalMutation = useMutation({
+    mutationFn: (proposalId) => api.createContractFromProposal(proposalId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contracts'] });
+      setShowProposalPicker(false);
+      toast.success('Contract generated from proposal');
+    },
+    onError: (err) => toast.error('Failed to generate contract', err?.data?.error || 'Please try again'),
   });
 
   const sendMutation = useMutation({
@@ -70,6 +95,29 @@ export default function Contracts() {
     createMutation.mutate(form);
   };
 
+  const handleAiRefine = async () => {
+    if (!aiInstruction.trim() || !aiRefineContract) return;
+    setAiLoading(true);
+    setAiResult('');
+    try {
+      const contractContent = aiRefineContract.content || '';
+      const prompt = `Refine the following contract content with this instruction: "${aiInstruction}"\n\nContract content:\n${contractContent}\n\nReturn only the revised contract content.`;
+      const res = await api.aiChat({ messages: [{ role: 'user', content: prompt }] });
+      setAiResult(res?.content || res?.text || res?.message || JSON.stringify(res));
+    } catch (err) {
+      toast.error('AI refine failed', err.message);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const openAiRefine = (contract) => {
+    setAiRefineContract(contract);
+    setAiInstruction('');
+    setAiResult('');
+    setShowAiRefine(true);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -77,9 +125,19 @@ export default function Contracts() {
           <h1 className="text-2xl font-heading font-bold text-foreground">Contracts</h1>
           <p className="text-sm text-muted-foreground mt-1">Manage client contracts and agreements</p>
         </div>
-        <Button leftIcon={<Plus className="w-4 h-4" />} onClick={() => setShowCreate(true)}>
-          New Contract
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            leftIcon={<Sparkles className="w-4 h-4" />}
+            onClick={() => setShowProposalPicker(true)}
+            style={{ borderColor: '#2e2958', color: '#2e2958' }}
+          >
+            Generate from Proposal
+          </Button>
+          <Button leftIcon={<Plus className="w-4 h-4" />} onClick={() => setShowCreate(true)}>
+            New Contract
+          </Button>
+        </div>
       </div>
 
       {/* Status Filters */}
@@ -98,6 +156,90 @@ export default function Contracts() {
           </button>
         ))}
       </div>
+
+      {/* Generate from Proposal Modal */}
+      <Modal
+        isOpen={showProposalPicker}
+        onClose={() => setShowProposalPicker(false)}
+        title="Generate Contract from Proposal"
+      >
+        {approvedProposals.length === 0 ? (
+          <div className="py-6 text-center text-sm text-muted-foreground">
+            No approved proposals available.
+          </div>
+        ) : (
+          <div className="space-y-2 max-h-80 overflow-y-auto">
+            {approvedProposals.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => fromProposalMutation.mutate(p.id)}
+                disabled={fromProposalMutation.isPending}
+                className="w-full text-left px-4 py-3 rounded-lg border border-border hover:bg-muted/50 transition-colors disabled:opacity-50"
+              >
+                <div className="text-sm font-medium">{p.title}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  {p.client?.name} — ${Number(p.total || 0).toFixed(2)}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+        {fromProposalMutation.isPending && (
+          <div className="mt-3 text-sm text-muted-foreground text-center">Generating contract...</div>
+        )}
+      </Modal>
+
+      {/* AI Refine Modal */}
+      <Modal
+        isOpen={showAiRefine}
+        onClose={() => setShowAiRefine(false)}
+        title="AI Refine Contract"
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Refinement instructions
+            </label>
+            <input
+              type="text"
+              value={aiInstruction}
+              onChange={(e) => setAiInstruction(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+              placeholder="e.g. Add a late payment clause"
+              onKeyDown={(e) => { if (e.key === 'Enter') handleAiRefine(); }}
+            />
+          </div>
+          <Button
+            onClick={handleAiRefine}
+            loading={aiLoading}
+            disabled={!aiInstruction.trim()}
+            style={{ backgroundColor: '#2e2958' }}
+            leftIcon={<Wand2 className="w-4 h-4" />}
+          >
+            Refine
+          </Button>
+          {aiResult && (
+            <div>
+              <label className="block text-sm font-medium mb-1">AI Result</label>
+              <textarea
+                value={aiResult}
+                readOnly
+                rows={10}
+                className="w-full px-3 py-2 rounded-lg border border-border bg-muted/30 text-sm font-mono resize-y"
+                onClick={(e) => e.target.select()}
+              />
+              <button
+                onClick={() => navigator.clipboard.writeText(aiResult)}
+                className="mt-1 text-xs underline"
+                style={{ color: '#2e2958' }}
+              >
+                Copy to clipboard
+              </button>
+            </div>
+          )}
+        </div>
+      </Modal>
 
       {/* Create Form */}
       {showCreate && (
@@ -199,6 +341,14 @@ export default function Contracts() {
                         Send
                       </Button>
                     )}
+                    <button
+                      onClick={() => openAiRefine(contract)}
+                      className="p-1.5 text-muted-foreground hover:text-foreground rounded"
+                      title="AI Refine"
+                      style={{ '--tw-text-opacity': 1 }}
+                    >
+                      <Wand2 className="w-4 h-4" style={{ color: '#2e2958' }} />
+                    </button>
                     {(contract.status === 'SENT' || contract.status === 'SIGNED') && (
                       <button
                         onClick={() => navigator.clipboard.writeText(`${window.location.origin}/portal/contract/${contract.signToken}`)}

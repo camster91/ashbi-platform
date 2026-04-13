@@ -1,32 +1,74 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Bell, Check, CheckCheck } from 'lucide-react';
 import { api } from '../lib/api';
 import { formatRelativeTime, cn } from '../lib/utils';
 import useSocket from '../hooks/useSocket';
+import { useToast } from '../hooks/useToast';
+
+const TYPE_ROUTES = {
+  'project.update': (data) => data?.projectId ? `/project/${data.projectId}` : '/projects',
+  'project.health': (data) => data?.projectId ? `/project/${data.projectId}` : '/projects',
+  'PROJECT_HEALTH_CHANGED': (data) => data?.projectId ? `/project/${data.projectId}` : '/projects',
+  'invoice.created': () => '/invoices',
+  'invoice.overdue': () => '/invoices',
+  'APPROVAL_NEEDED': (data) => data?.approvalId ? `/approvals/${data.approvalId}` : '/approvals',
+  'THREAD_ASSIGNED': (data) => data?.threadId ? `/thread/${data.threadId}` : '/inbox',
+  'CLIENT_REPLIED': (data) => data?.threadId ? `/thread/${data.threadId}` : '/inbox',
+  'RESPONSE_APPROVED': (data) => data?.threadId ? `/thread/${data.threadId}` : '/inbox',
+  'RESPONSE_REJECTED': (data) => data?.threadId ? `/thread/${data.threadId}` : '/inbox',
+  'TASK_COMMENT': (data) => data?.taskId ? `/task/${data.taskId}` : null,
+  'MENTION': (data) => data?.projectId ? `/project/${data.projectId}` : null,
+  'SLA_WARNING': () => '/inbox',
+  'SLA_BREACH': () => '/inbox',
+  'ESCALATION': () => '/inbox',
+};
+
+const TYPE_BADGES = {
+  'APPROVAL_NEEDED': 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  'THREAD_ASSIGNED': 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  'CLIENT_REPLIED': 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  'RESPONSE_APPROVED': 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  'RESPONSE_REJECTED': 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  'PROJECT_HEALTH_CHANGED': 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+  'project.update': 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+  'invoice.created': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+  'invoice.overdue': 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  'SLA_WARNING': 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  'SLA_BREACH': 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  'ESCALATION': 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+};
+
+function getNotificationLink(notification) {
+  const resolver = TYPE_ROUTES[notification.type];
+  if (resolver) return resolver(notification.data);
+  return null;
+}
+
+function formatTypeBadge(type) {
+  if (!type) return '';
+  return type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).replace('project.update', 'Project').replace('invoice.created', 'Invoice').replace('invoice.overdue', 'Overdue');
+}
 
 export default function NotificationsDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
   const queryClient = useQueryClient();
   const { socket } = useSocket();
+  const toast = useToast();
+  const navigate = useNavigate();
 
   const { data: notifications } = useQuery({
     queryKey: ['notifications'],
-    queryFn: () => api.getNotifications(),
+    queryFn: () => api.getNotifications({ limit: 10 }),
     refetchInterval: 30000,
   });
 
   const { data: unreadCount } = useQuery({
     queryKey: ['notifications-unread'],
-    queryFn: async () => {
-      const res = await fetch('/api/notifications/unread-count', {
-        credentials: 'include',
-      });
-      return res.json();
-    },
-    refetchInterval: 15000,
+    queryFn: api.getUnreadCount,
+    refetchInterval: 30000,
   });
 
   const markReadMutation = useMutation({
@@ -45,26 +87,30 @@ export default function NotificationsDropdown() {
     },
   });
 
-  // Real-time WebSocket notifications
+  // Real-time Socket.IO notifications
   useEffect(() => {
     if (!socket) return;
 
-    const handleNewNotification = () => {
-      // Refetch notifications and unread count immediately
+    const handleNewNotification = (data) => {
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
       queryClient.invalidateQueries({ queryKey: ['notifications-unread'] });
+
+      // Show toast
+      if (data?.title || data?.message) {
+        toast.info(data.title || 'New notification', data.message, 5000);
+      }
     };
 
-    socket.on('notification', handleNewNotification);
     socket.on('notification:new', handleNewNotification);
+    socket.on('notification', handleNewNotification);
 
     return () => {
-      socket.off('notification', handleNewNotification);
       socket.off('notification:new', handleNewNotification);
+      socket.off('notification', handleNewNotification);
     };
-  }, [socket, queryClient]);
+  }, [socket, queryClient, toast]);
 
-  // Close dropdown when clicking outside
+  // Close dropdown on outside click
   useEffect(() => {
     function handleClickOutside(event) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -76,152 +122,118 @@ export default function NotificationsDropdown() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const getNotificationLink = (notification) => {
-    const data = notification.data;
-
-    switch (notification.type) {
-      case 'APPROVAL_NEEDED':
-        return data?.approvalId ? `/approvals/${data.approvalId}` : '/approvals';
-      case 'THREAD_ASSIGNED':
-      case 'CLIENT_REPLIED':
-      case 'RESPONSE_APPROVED':
-      case 'RESPONSE_REJECTED':
-        return data?.threadId ? `/thread/${data.threadId}` : null;
-      case 'PROJECT_HEALTH_CHANGED':
-        return data?.projectId ? `/project/${data.projectId}` : null;
-      case 'TASK_COMMENT':
-        return data?.taskId ? `/task/${data.taskId}` : null;
-      case 'MENTION':
-        return data?.projectId ? `/project/${data.projectId}` : null;
-      default:
-        return null;
-    }
-  };
-
-  const getNotificationIcon = (type) => {
-    switch (type) {
-      case 'APPROVAL_NEEDED':
-        return '🔐';
-      case 'THREAD_ASSIGNED':
-        return '📥';
-      case 'RESPONSE_APPROVED':
-        return '✅';
-      case 'RESPONSE_REJECTED':
-        return '❌';
-      case 'CLIENT_REPLIED':
-        return '💬';
-      case 'PROJECT_HEALTH_CHANGED':
-        return '📊';
-      case 'SLA_WARNING':
-        return '⚠️';
-      case 'SLA_BREACH':
-        return '🚨';
-      case 'ESCALATION':
-        return '🔺';
-      case 'TASK_COMMENT':
-        return '💬';
-      case 'MENTION':
-        return '📣';
-      default:
-        return '🔔';
-    }
-  };
-
-  const handleNotificationClick = (notification) => {
-    // Mark as read on click
+  const handleNotificationClick = useCallback((notification) => {
     if (!notification.read) {
       markReadMutation.mutate(notification.id);
     }
+    const link = getNotificationLink(notification);
+    if (link) {
+      navigate(link);
+    }
     setIsOpen(false);
-  };
+  }, [markReadMutation, navigate]);
+
+  const count = unreadCount?.count ?? 0;
 
   return (
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100"
+        className="relative p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors"
+        aria-label={`Notifications${count > 0 ? ` (${count} unread)` : ''}`}
       >
-        <Bell className="w-5 h-5" />
-        {unreadCount?.count > 0 && (
-          <span className="absolute top-0.5 right-0.5 min-w-[18px] h-[18px] flex items-center justify-center px-1 text-xs font-medium text-white bg-red-500 rounded-full animate-pulse">
-            {unreadCount.count > 9 ? '9+' : unreadCount.count}
+        <Bell className="w-4 h-4" />
+        {count > 0 && (
+          <span className="absolute top-0.5 right-0.5 min-w-[18px] h-[18px] flex items-center justify-center px-1 text-[10px] font-bold bg-[#e6f354] text-[#2e2958] rounded-full">
+            {count > 9 ? '9+' : count}
           </span>
         )}
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border z-50">
-          <div className="flex items-center justify-between px-4 py-3 border-b">
-            <h3 className="font-semibold">Notifications</h3>
+        <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-card border border-border shadow-xl rounded-xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+            <h3 className="text-sm font-semibold text-foreground">Notifications</h3>
             {notifications?.length > 0 && (
               <button
                 onClick={() => markAllReadMutation.mutate()}
-                className="text-sm text-primary hover:text-primary/80 flex items-center gap-1"
+                disabled={markAllReadMutation.isPending}
+                className="flex items-center gap-1 text-xs font-medium text-[#2e2958] hover:text-[#e6f354] dark:text-foreground dark:hover:text-[#e6f354] transition-colors disabled:opacity-50"
                 title="Mark all as read"
               >
-                <CheckCheck className="w-4 h-4" />
+                <CheckCheck className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Mark all read</span>
               </button>
             )}
           </div>
 
+          {/* List */}
           <div className="max-h-96 overflow-y-auto">
             {notifications?.length === 0 ? (
-              <div className="p-4 text-center text-gray-500 text-sm">
+              <div className="p-6 text-center text-muted-foreground text-sm">
+                <Bell className="w-8 h-8 mx-auto mb-2 opacity-30" />
                 No notifications
               </div>
             ) : (
-              <ul className="divide-y">
+              <ul className="divide-y divide-border">
                 {notifications?.map((notification) => {
-                  const link = getNotificationLink(notification);
-                  const content = (
-                    <div
-                      className={cn(
-                        'flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors cursor-pointer',
-                        !notification.read && 'bg-blue-50/50 border-l-2 border-l-blue-500'
-                      )}
-                    >
-                      <span className="text-lg flex-shrink-0">
-                        {getNotificationIcon(notification.type)}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <p className={cn(
-                          'text-sm text-gray-900',
-                          !notification.read && 'font-semibold'
-                        )}>
-                          {notification.title}
-                        </p>
-                        <p className="text-sm text-gray-500 truncate">
-                          {notification.message}
-                        </p>
-                        <p className="text-xs text-gray-400 mt-1">
-                          {formatRelativeTime(notification.createdAt)}
-                        </p>
-                      </div>
-                      {!notification.read && (
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            markReadMutation.mutate(notification.id);
-                          }}
-                          className="p-1 text-gray-400 hover:text-blue-600 rounded flex-shrink-0"
-                          title="Mark as read"
-                        >
-                          <Check className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  );
+                  const badgeStyle = TYPE_BADGES[notification.type] || 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400';
 
                   return (
-                    <li key={notification.id} onClick={() => handleNotificationClick(notification)}>
-                      {link ? (
-                        <Link to={link}>
-                          {content}
-                        </Link>
-                      ) : (
-                        content
-                      )}
+                    <li key={notification.id}>
+                      <button
+                        onClick={() => handleNotificationClick(notification)}
+                        className={cn(
+                          'w-full text-left flex items-start gap-3 px-4 py-3 hover:bg-muted/50 transition-colors cursor-pointer',
+                          !notification.read && 'bg-[#e6f354]/5'
+                        )}
+                      >
+                        {/* Unread dot */}
+                        <div className="flex-shrink-0 mt-1.5">
+                          {!notification.read ? (
+                            <span className="block w-2 h-2 rounded-full bg-[#e6f354]" />
+                          ) : (
+                            <span className="block w-2 h-2 rounded-full bg-transparent" />
+                          )}
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <p className={cn(
+                              'text-sm truncate',
+                              !notification.read ? 'font-semibold text-foreground' : 'text-foreground'
+                            )}>
+                              {notification.title}
+                            </p>
+                            {notification.type && (
+                              <span className={cn('flex-shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded', badgeStyle)}>
+                                {formatTypeBadge(notification.type)}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground line-clamp-2">
+                            {notification.message}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground/60 mt-1">
+                            {formatRelativeTime(notification.createdAt)}
+                          </p>
+                        </div>
+
+                        {/* Mark read button */}
+                        {!notification.read && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              markReadMutation.mutate(notification.id);
+                            }}
+                            className="flex-shrink-0 p-1 text-muted-foreground hover:text-[#2e2958] dark:hover:text-[#e6f354] rounded transition-colors mt-0.5"
+                            title="Mark as read"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </button>
                     </li>
                   );
                 })}
@@ -229,17 +241,16 @@ export default function NotificationsDropdown() {
             )}
           </div>
 
-          {notifications?.length > 0 && (
-            <div className="px-4 py-2 border-t text-center">
-              <Link
-                to="/notifications"
-                onClick={() => setIsOpen(false)}
-                className="text-sm text-primary hover:text-primary/80"
-              >
-                View all notifications
-              </Link>
-            </div>
-          )}
+          {/* Footer */}
+          <div className="px-4 py-2.5 border-t border-border">
+            <Link
+              to="/notifications"
+              onClick={() => setIsOpen(false)}
+              className="block text-center text-xs font-medium text-[#2e2958] hover:text-[#e6f354] dark:text-foreground dark:hover:text-[#e6f354] transition-colors"
+            >
+              View all notifications
+            </Link>
+          </div>
         </div>
       )}
     </div>

@@ -1,12 +1,17 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useRef, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
   Target, FileText, ScrollText, FolderOpen, Receipt, DollarSign,
   ChevronRight, ArrowRight, X, ExternalLink, TrendingUp,
+  Plus, Trash2, MoveRight, Sparkles, Loader2,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { Card } from '../components/ui';
+import Modal, { ModalFooter } from '../components/Modal';
+
+const PRIMARY = '#2e2958';
+const ACCENT = '#e6f354';
 
 function fmt(n) {
   if (n == null) return '--';
@@ -29,8 +34,198 @@ const CONVERSION_LABELS = {
   invoiceToPaid: 'Invoice > Paid',
 };
 
+// ── Create Deal Modal ──────────────────────────────────────────────────
+function CreateDealModal({ isOpen, onClose, stages }) {
+  const queryClient = useQueryClient();
+  const [formData, setFormData] = useState({ name: '', clientId: '', value: '', stageId: '' });
+  const [error, setError] = useState('');
+
+  const { data: clientsData } = useQuery({
+    queryKey: ['clients'],
+    queryFn: () => api.getClients(),
+    enabled: isOpen,
+  });
+  const clients = clientsData?.clients || clientsData || [];
+
+  // Set default stage when stages load
+  useEffect(() => {
+    if (isOpen && stages.length && !formData.stageId) {
+      setFormData(prev => ({ ...prev, stageId: stages[0].id || '' }));
+    }
+  }, [isOpen, stages]);
+
+  const mutation = useMutation({
+    mutationFn: (data) => api.createPipelineDeal(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pipeline'] });
+      setFormData({ name: '', clientId: '', value: '', stageId: stages[0]?.id || '' });
+      setError('');
+      onClose();
+    },
+    onError: (err) => setError(err.message || 'Failed to create deal'),
+  });
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!formData.name.trim()) { setError('Deal name is required'); return; }
+    mutation.mutate({
+      name: formData.name,
+      clientId: formData.clientId || undefined,
+      value: formData.value ? Number(formData.value) : undefined,
+      stageId: formData.stageId || undefined,
+    });
+  };
+
+  const handleChange = (e) => {
+    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+    setError('');
+  };
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="New Deal">
+      <form onSubmit={handleSubmit}>
+        {error && <div className="mb-4 p-3 text-sm text-red-600 bg-red-50 rounded-lg">{error}</div>}
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Deal Name *</label>
+            <input type="text" name="name" value={formData.name} onChange={handleChange}
+              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2"
+              style={{ '--tw-ring-color': ACCENT }} placeholder="Website Redesign" autoFocus />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Client</label>
+            <select name="clientId" value={formData.clientId} onChange={handleChange}
+              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2">
+              <option value="">-- No client --</option>
+              {clients.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Value ($)</label>
+            <input type="number" name="value" value={formData.value} onChange={handleChange}
+              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2"
+              placeholder="5000" min="0" step="100" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Stage</label>
+            <select name="stageId" value={formData.stageId} onChange={handleChange}
+              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2">
+              {stages.map(s => (
+                <option key={s.id} value={s.id}>{s.label || s.name}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <ModalFooter>
+          <button type="button" onClick={onClose}
+            className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg">Cancel</button>
+          <button type="submit" disabled={mutation.isPending}
+            className="px-4 py-2 text-sm text-white rounded-lg hover:opacity-90 disabled:opacity-50"
+            style={{ backgroundColor: PRIMARY }}>
+            {mutation.isPending ? 'Creating...' : 'Create Deal'}
+          </button>
+        </ModalFooter>
+      </form>
+    </Modal>
+  );
+}
+
+// ── Move-to dropdown (inline) ──────────────────────────────────────────
+function MoveToDropdown({ deal, stages, currentStageId, onMove }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const otherStages = stages.filter(s => s.id !== currentStageId);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button onClick={(e) => { e.stopPropagation(); setOpen(v => !v); }}
+        className="p-1.5 rounded-md hover:bg-muted transition-colors"
+        title="Move to stage">
+        <MoveRight className="w-4 h-4 text-muted-foreground" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-30 w-48 bg-white rounded-lg shadow-lg border py-1 text-sm">
+          <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground">Move to</div>
+          {otherStages.map(s => (
+            <button key={s.id}
+              className="w-full text-left px-3 py-1.5 hover:bg-gray-50"
+              onClick={(e) => { e.stopPropagation(); setOpen(false); onMove(deal.id, s.id); }}>
+              {s.label || s.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── AI Score Popover ───────────────────────────────────────────────────
+function AIScoreButton({ deal, stageLabel }) {
+  const [score, setScore] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [show, setShow] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!show) return;
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setShow(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [show]);
+
+  const fetchScore = async (e) => {
+    e.stopPropagation();
+    if (score) { setShow(v => !v); return; }
+    setLoading(true);
+    setShow(true);
+    try {
+      const res = await api.aiChat({
+        message: `Rate this deal's likelihood of closing on a scale of 1-10 based on: name="${deal.name}", value=${deal.value ?? 'unknown'}, stage="${stageLabel}". Give a brief reasoning in 1-2 sentences. Format: Score: X/10 - Reasoning`,
+      });
+      setScore(typeof res === 'string' ? res : res?.reply || res?.message || res?.content || JSON.stringify(res));
+    } catch {
+      setScore('AI scoring unavailable');
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <button onClick={fetchScore}
+        className="p-1.5 rounded-md hover:bg-muted transition-colors"
+        title="AI Lead Score">
+        {loading ? <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
+          : <Sparkles className="w-4 h-4" style={{ color: ACCENT }} />}
+      </button>
+      {show && (
+        <div className="absolute right-0 top-full mt-1 z-30 w-64 bg-white rounded-lg shadow-lg border p-3 text-sm">
+          {loading ? (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin" /> Scoring...
+            </div>
+          ) : (
+            <p className="text-gray-700 whitespace-pre-wrap">{score}</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main Page ──────────────────────────────────────────────────────────
 export default function Pipeline() {
   const [expandedStage, setExpandedStage] = useState(null);
+  const [showCreateDeal, setShowCreateDeal] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ['pipeline'],
@@ -53,10 +248,25 @@ export default function Pipeline() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-heading font-bold text-foreground">Pipeline</h1>
-        <p className="text-sm text-muted-foreground mt-1">Track deals from lead to payment</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-heading font-bold text-foreground">Pipeline</h1>
+          <p className="text-sm text-muted-foreground mt-1">Track deals from lead to payment</p>
+        </div>
+        <button
+          onClick={() => setShowCreateDeal(true)}
+          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg transition-all hover:opacity-90 hover:-translate-y-0.5 hover:shadow-md"
+          style={{ backgroundColor: PRIMARY }}>
+          <Plus className="w-4 h-4" />
+          New Deal
+        </button>
       </div>
+
+      <CreateDealModal
+        isOpen={showCreateDeal}
+        onClose={() => setShowCreateDeal(false)}
+        stages={stages}
+      />
 
       {/* Funnel visualization */}
       <Card className="p-6">
@@ -142,6 +352,7 @@ export default function Pipeline() {
       {expandedStage && (
         <StageDetail
           stage={stages.find(s => s.key === expandedStage)}
+          stages={stages}
           config={STAGE_CONFIG[expandedStage]}
           onClose={() => setExpandedStage(null)}
         />
@@ -174,7 +385,26 @@ export default function Pipeline() {
   );
 }
 
-function StageDetail({ stage, config, onClose }) {
+// ── Stage Detail (with deal actions) ──────────────────────────────────
+function StageDetail({ stage, stages, config, onClose }) {
+  const queryClient = useQueryClient();
+
+  const moveMutation = useMutation({
+    mutationFn: ({ id, stageId }) => api.updatePipelineDeal(id, { stageId }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pipeline'] }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => api.deletePipelineDeal(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pipeline'] }),
+  });
+
+  const handleDelete = (deal) => {
+    const name = deal.name || deal.title || 'this deal';
+    if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    deleteMutation.mutate(deal.id);
+  };
+
   if (!stage) return null;
   const Icon = config?.icon || Target;
 
@@ -241,6 +471,21 @@ function StageDetail({ stage, config, onClose }) {
                     </span>
                   )}
                   {link && <ExternalLink className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />}
+
+                  {/* Action buttons — only for pipeline deals with an id */}
+                  {item.id && (
+                    <div className="flex items-center gap-0.5 ml-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={(e) => e.preventDefault()}>
+                      <MoveToDropdown deal={item} stages={stages} currentStageId={stage.id}
+                        onMove={(id, stageId) => moveMutation.mutate({ id, stageId })} />
+                      <AIScoreButton deal={item} stageLabel={stage.label || stage.name} />
+                      <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(item); }}
+                        className="p-1.5 rounded-md hover:bg-red-50 hover:text-red-500 transition-colors"
+                        title="Delete deal">
+                        <Trash2 className="w-4 h-4 text-muted-foreground hover:text-red-500" />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </Wrapper>
             );

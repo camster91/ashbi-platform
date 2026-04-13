@@ -346,12 +346,14 @@ export const api = {
     request('/ai/query', { method: 'POST', body: { query } }),
 
   // Notifications
-  getNotifications: () =>
-    request('/notifications'),
+  getNotifications: (params = {}) =>
+    request('/notifications?' + new URLSearchParams(params).toString()),
+  getUnreadCount: () =>
+    request('/notifications/unread-count'),
   markNotificationRead: (id) =>
-    request(`/notifications/read/${id}`, { method: 'POST' }),
+    request('/notifications/' + id + '/read', { method: 'PATCH' }),
   markAllNotificationsRead: () =>
-    request('/notifications/read-all', { method: 'POST' }),
+    request('/notifications/read-all', { method: 'PATCH' }),
 
   // Settings - Assignment Rules
   getAssignmentRules: () =>
@@ -927,6 +929,8 @@ export const api = {
   // ===== PROPOSAL AI =====
   generateProposalAI: (data) =>
     request('/proposals-ai/generate', { method: 'POST', body: data }),
+  generateSalesProposal: (data) =>
+    request('/sales/proposal/generate', { method: 'POST', body: data }),
 
   // ===== INVOICE CHASER =====
   chaseInvoices: (data = {}) =>
