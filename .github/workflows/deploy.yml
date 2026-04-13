@@ -42,16 +42,29 @@ jobs:
             git fetch ashbi-platform main
             git checkout -B main ashbi-platform/main
 
+            # Find the running container (Coolify may prefix the name)
+            CONTAINER=$(docker ps --filter "name=ashbi-platform" --format "{{.Names}}" | head -1)
+            if [ -z "$CONTAINER" ]; then
+              CONTAINER=$(docker ps --filter "name=agency-hub" --format "{{.Names}}" | head -1)
+            fi
+            echo "Using container: ${CONTAINER:-not found}"
+
             # Extract .env from the running container BEFORE we touch anything
             echo "Extracting .env from running container..."
-            docker exec ashbi-platform env > /var/www/agency-hub/.env 2>/dev/null || true
+            if [ -n "$CONTAINER" ]; then
+              docker exec "$CONTAINER" env > /var/www/agency-hub/.env 2>/dev/null || true
+            fi
 
-            # Extract DATABASE_URL from the running container
-            echo "Extracting DATABASE_URL from running container..."
-            DATABASE_URL=$(docker exec ashbi-platform printenv DATABASE_URL 2>/dev/null || true)
+            # Extract DATABASE_URL from the running container or .env file
+            echo "Extracting DATABASE_URL..."
+            DATABASE_URL=$(docker exec "$CONTAINER" printenv DATABASE_URL 2>/dev/null || true)
+            if [ -z "$DATABASE_URL" ]; then
+              echo "Falling back to .env file for DATABASE_URL..."
+              DATABASE_URL=$(grep '^DATABASE_URL=' /var/www/agency-hub/.env 2>/dev/null | cut -d'=' -f2- || true)
+            fi
 
             if [ -z "$DATABASE_URL" ]; then
-              echo "ERROR: Could not determine DATABASE_URL from container."
+              echo "ERROR: Could not determine DATABASE_URL."
               exit 1
             fi
 
@@ -66,8 +79,8 @@ jobs:
             docker compose -f docker-compose.prod.yml build app
 
             echo "Stopping and removing old container..."
-            docker stop ashbi-platform 2>/dev/null || true
-            docker rm ashbi-platform 2>/dev/null || true
+            docker stop "$CONTAINER" 2>/dev/null || true
+            docker rm "$CONTAINER" 2>/dev/null || true
 
             echo "Starting new container..."
             docker compose -f docker-compose.prod.yml up -d app
