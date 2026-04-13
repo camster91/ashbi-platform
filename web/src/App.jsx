@@ -15,10 +15,6 @@ import PortalInvoice from './pages/PortalInvoice';
 import PortalBooking from './pages/PortalBooking';
 import PortalIntakeForm from './pages/PortalIntakeForm';
 import ClientPortal from './pages/ClientPortal';
-import ClientLogin from './pages/ClientLogin';
-import ClientSignup from './pages/ClientSignup';
-import ClientDashboard from './pages/ClientDashboard';
-import ClientProjectDetail from './pages/ClientProjectDetail';
 
 // Lazy loaded pages
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -133,10 +129,8 @@ function AppRoutes() {
       <Route path="/portal/book" element={<PortalBooking />} />
       <Route path="/portal/form/:token" element={<PortalIntakeForm />} />
       <Route path="/client-portal" element={<ClientPortal />} />
-      <Route path="/client/login" element={<ClientLogin />} />
-      <Route path="/client/invite" element={<ClientSignup />} />
-      <Route path="/client/dashboard" element={<ClientDashboard />} />
-      <Route path="/client/project/:id" element={<ClientProjectDetail />} />
+      <Route path="/client/login" element={<ClientPortal />} />
+      <Route path="/client/dashboard" element={<ClientPortal />} />
       <Route
         path="/*"
         element={

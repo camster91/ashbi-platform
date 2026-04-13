@@ -6,62 +6,27 @@ import {
   FolderOpen,
   Users,
   UserCog,
-  BarChart3,
   LogOut,
   Search,
   Menu,
-  CheckCircle,
   Settings,
   X,
-  Command,
-  Sparkles,
   ChevronRight,
   Plus,
   FileText,
   ScrollText,
   Receipt,
-  Briefcase,
-  Bot,
-  KeyRound,
-  Home,
-  Target,
   LayoutDashboard,
-  UserSearch,
-  Share2,
-  PenSquare,
-  UsersRound,
-  Mail,
-  Phone,
-  FileEdit,
-  Linkedin,
-  MailPlus,
-  Activity,
-  MessageSquare,
   Wallet,
-  Zap,
-  GanttChartSquare,
   PieChart,
   Filter,
-  ClipboardList,
-  Palette,
   TrendingUp,
-  Heart,
   PanelLeftClose,
   PanelLeftOpen,
-  BookOpen,
   MoreHorizontal,
   ChevronDown,
   ChevronUp,
-  DollarSign,
-  Calendar,
-  Code,
-  Globe,
-  Brain,
-  ShoppingBag,
-  LayoutGrid,
-  Puzzle,
-  GraduationCap,
-  Star,
+  Sparkles,
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { Download, Sun, Moon } from 'lucide-react';
@@ -106,17 +71,6 @@ export default function Layout({ children }) {
     refetchInterval: 30000,
   });
 
-  const { data: pendingCount } = useQuery({
-    queryKey: ['pending-count'],
-    queryFn: async () => {
-      try {
-        return await api.getPendingApprovalCount();
-      } catch { return 0; }
-    },
-    refetchInterval: 30000,
-    enabled: isAdmin,
-  });
-
   const { data: projects } = useQuery({
     queryKey: ['projects'],
     queryFn: () => api.getProjects(),
@@ -146,84 +100,26 @@ export default function Layout({ children }) {
   const coreNav = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard, exact: true },
     { name: 'Inbox', href: '/inbox', icon: Inbox, badge: stats?.needsResponse },
-    ...(isAdmin && pendingCount > 0 ? [{ name: 'Approvals', href: '/approvals', icon: CheckCircle, badge: pendingCount }] : []),
     { name: 'Projects', href: '/projects', icon: FolderOpen },
     { name: 'Clients', href: '/clients', icon: Users },
     { name: 'Invoices', href: '/invoices', icon: Receipt },
   ];
 
-  // Collapsible sections
+  // Finance & Docs — collapsible section
   const financeNav = [
     { name: 'Pipeline', href: '/pipeline', icon: Filter },
     { name: 'Proposals', href: '/proposals', icon: FileText },
     { name: 'Contracts', href: '/contracts', icon: ScrollText },
     { name: 'Expenses', href: '/expenses', icon: Wallet },
-    { name: 'Upwork', href: '/upwork-contracts', icon: Briefcase },
-    ...(isAdmin ? [
-      { name: 'Retainers', href: '/retainers', icon: TrendingUp },
-      { name: 'Invoice Chaser', href: '/invoice-chaser', icon: Zap },
-      { name: 'Automations', href: '/automations', icon: Activity },
-    ] : []),
   ];
 
-  const projectToolsNav = [
-    { name: 'Docs & Notes', href: '/docs', icon: BookOpen },
-    { name: 'AI Planner', href: '/project-planner', icon: Sparkles },
-    { name: 'Gantt Timeline', href: '/gantt', icon: GanttChartSquare },
-    { name: 'Templates', href: '/project-templates', icon: FileText },
-    { name: 'Activity', href: '/activity', icon: Activity },
-    { name: 'Chat with Ash', href: '/chat', icon: MessageSquare },
-    { name: 'Intake Forms', href: '/intake-forms', icon: ClipboardList },
-    { name: 'Integrations', href: '/integrations', icon: Command },
-    { name: 'Shopify', href: '/shopify', icon: ShoppingBag },
-    { name: 'WordPress', href: '/wordpress', icon: Globe },
-  ];
-
-  const aiNav = [
-    { name: 'AI Chat', href: '/ai-chat', icon: Bot },
-    { name: 'AI Team', href: '/ai-team', icon: UsersRound },
-    { name: 'Email Triage', href: '/email-triage', icon: Mail },
-    { name: 'Content Writer', href: '/content-writer', icon: FileEdit },
-    { name: 'Lead Gen', href: '/lead-gen', icon: Target },
-    { name: 'SEO Blog', href: '/seo-blog', icon: PenSquare },
-    { name: 'Cold Email', href: '/cold-email', icon: MailPlus },
-    { name: 'LinkedIn', href: '/linkedin-outreach', icon: Linkedin },
-    { name: 'Call Screener', href: '/call-screener', icon: Phone },
-    { name: 'Social Content', href: '/social-content', icon: Share2 },
-  ];
-
-  const marketingNav = [
-    { name: 'Outreach', href: '/outreach', icon: UserSearch },
-    { name: 'Social', href: '/social', icon: Share2 },
-    { name: 'Blog', href: '/blog', icon: PenSquare },
-    { name: 'Upwork', href: '/upwork', icon: Briefcase },
-    { name: 'Ad Copy', href: '/ad-copy', icon: Sparkles },
-    { name: 'Content Calendar', href: '/content-calendar', icon: Calendar },
-    { name: 'Social Scheduler', href: '/social-scheduler', icon: Share2 },
-    { name: 'SEO Audit', href: '/seo-audit', icon: Search },
-    { name: 'Creative Brief', href: '/creative-brief', icon: FileEdit },
-    { name: 'Snippets', href: '/snippets', icon: Code },
-  ];
-
+  // Admin — collapsible section, only visible to admins
   const adminNav = isAdmin ? [
     { name: 'Team', href: '/team', icon: UserCog },
     { name: 'Revenue', href: '/revenue', icon: TrendingUp },
-    { name: 'Client Health', href: '/client-health', icon: Heart },
-    { name: 'NPS & Surveys', href: '/surveys', icon: Star },
     { name: 'Reports', href: '/reports', icon: PieChart },
-    { name: 'Command Center', href: '/admin/command-center', icon: Command },
-    { name: 'Analytics', href: '/analytics', icon: BarChart3 },
-    { name: 'Credentials', href: '/credentials', icon: KeyRound },
-    { name: 'Brand Settings', href: '/admin/brand', icon: Palette },
-    { name: 'AI Context', href: '/admin/settings/ai-context', icon: Settings },
-    { name: 'Asset Library', href: '/assets', icon: FolderOpen },
-    { name: 'WP Sites', href: '/wp-sites', icon: Globe },
-    { name: 'Client Brain', href: '/semantic-search', icon: Brain },
-    { name: 'Skills', href: '/skills', icon: GraduationCap },
-    { name: 'Agents', href: '/agents', icon: LayoutGrid },
-  ] : [
-    { name: 'Analytics', href: '/analytics', icon: BarChart3 },
-  ];
+    { name: 'Settings', href: '/settings', icon: Settings },
+  ] : [];
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -269,21 +165,21 @@ export default function Layout({ children }) {
             sidebarCollapsed ? 'px-2.5 py-2 justify-center' : 'px-3 py-1.5',
             'group relative',
             isActive
-              ? 'bg-primary text-primary-foreground shadow-sm'
-              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              ? 'bg-[#e6f354]/10 text-[#e6f354] border-l-2 border-[#e6f354]'
+              : 'text-white/70 hover:text-white hover:bg-white/5'
           )}
         >
           <item.icon className={cn('w-4 h-4 shrink-0', !sidebarCollapsed && 'mr-2.5')} />
           {!sidebarCollapsed && <span className="flex-1 truncate">{item.name}</span>}
           {badge > 0 && (
             sidebarCollapsed ? (
-              <span className="absolute -top-1 -right-1 w-4 h-4 text-[9px] font-bold rounded-full bg-primary text-primary-foreground flex items-center justify-center">
+              <span className="absolute -top-1 -right-1 w-4 h-4 text-[9px] font-bold rounded-full bg-[#e6f354] text-[#2e2958] flex items-center justify-center">
                 {badge > 9 ? '9+' : badge}
               </span>
             ) : (
               <span className={cn(
                 'ml-auto px-1.5 py-0.5 text-[10px] font-semibold rounded-full min-w-[18px] text-center',
-                isActive ? 'bg-primary-foreground/20 text-primary-foreground' : 'bg-primary text-primary-foreground'
+                isActive ? 'bg-[#e6f354]/20 text-[#e6f354]' : 'bg-[#e6f354] text-[#2e2958]'
               )}>
                 {badge > 99 ? '99+' : badge}
               </span>
@@ -310,7 +206,7 @@ export default function Layout({ children }) {
       <div className="space-y-0.5">
         <button
           onClick={() => toggleSection(key)}
-          className="w-full flex items-center px-3 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors"
+          className="w-full flex items-center px-3 py-1.5 text-xs font-semibold text-white/40 uppercase tracking-wider hover:text-white/70 transition-colors"
         >
           <ChevronRight className={cn('w-3 h-3 mr-1 transition-transform duration-150', show && 'rotate-90')} />
           {label}
@@ -342,7 +238,7 @@ export default function Layout({ children }) {
       {/* Sidebar */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 bg-card border-r border-border',
+          'fixed inset-y-0 left-0 z-50 bg-[#2e2958] border-r border-white/10',
           'transform transition-all duration-300 ease-out',
           'lg:translate-x-0',
           sidebarCollapsed ? 'w-[60px]' : 'w-72',
@@ -351,25 +247,25 @@ export default function Layout({ children }) {
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className={cn('flex items-center h-16 border-b border-border', sidebarCollapsed ? 'px-2 justify-center' : 'px-4')}>
+          <div className={cn('flex items-center h-16 border-b border-white/10', sidebarCollapsed ? 'px-2 justify-center' : 'px-4')}>
             <Link to="/" className={cn('flex items-center gap-2', sidebarCollapsed && 'justify-center')}>
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shrink-0">
-                <Sparkles className="w-5 h-5 text-primary-foreground" />
+              <div className="w-8 h-8 rounded-lg bg-[#e6f354] flex items-center justify-center shrink-0">
+                <Sparkles className="w-5 h-5 text-[#2e2958]" />
               </div>
-              {!sidebarCollapsed && <h1 className="text-xl font-heading font-bold text-foreground">Ashbi</h1>}
+              {!sidebarCollapsed && <h1 className="text-xl font-heading font-bold text-white">Ashbi</h1>}
             </Link>
             {!sidebarCollapsed && (
               <>
                 <button
                   onClick={toggleCollapse}
-                  className="ml-auto p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors hidden lg:flex"
+                  className="ml-auto p-1.5 text-white/60 hover:text-white rounded-lg hover:bg-white/10 transition-colors hidden lg:flex"
                   title="Collapse sidebar"
                 >
                   <PanelLeftClose className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => setSidebarOpen(false)}
-                  className="ml-auto p-2 text-muted-foreground hover:text-foreground lg:hidden"
+                  className="ml-auto p-2 text-white/60 hover:text-white lg:hidden"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -378,7 +274,7 @@ export default function Layout({ children }) {
             {sidebarCollapsed && (
               <button
                 onClick={toggleCollapse}
-                className="absolute bottom-20 left-1/2 -translate-x-1/2 p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors hidden lg:flex"
+                className="absolute bottom-20 left-1/2 -translate-x-1/2 p-1.5 text-white/60 hover:text-white rounded-lg hover:bg-white/10 transition-colors hidden lg:flex"
                 title="Expand sidebar"
               >
                 <PanelLeftOpen className="w-4 h-4" />
@@ -393,73 +289,68 @@ export default function Layout({ children }) {
               {renderNavItems(coreNav)}
             </div>
 
-            <div className="border-t border-border pt-2 space-y-1">
+            <div className="border-t border-white/10 pt-2 space-y-1">
               {renderCollapsibleSection('finance', 'Finance & Docs', financeNav)}
-              {renderCollapsibleSection('tools', 'Project Tools', projectToolsNav)}
-              {renderCollapsibleSection('ai', 'AI Agents', aiNav)}
-              {renderCollapsibleSection('marketing', 'Marketing', marketingNav)}
-              {renderCollapsibleSection('admin', 'Admin', adminNav)}
+              {adminNav.length > 0 && renderCollapsibleSection('admin', 'Admin', adminNav)}
             </div>
 
             {/* Quick action */}
-            <div className="pt-2 border-t border-border">
+            <div className="pt-2 border-t border-white/10">
               {sidebarCollapsed ? (
                 <button
                   onClick={() => navigate('/projects?create=true')}
-                  className="w-full flex items-center justify-center p-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+                  className="w-full flex items-center justify-center p-2 text-[#e6f354] hover:bg-[#e6f354]/10 rounded-lg transition-colors"
                   title="New Project"
                 >
                   <Plus className="w-4 h-4" />
                 </button>
               ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full justify-start text-xs"
-                  leftIcon={<Plus className="w-3.5 h-3.5" />}
+                <button
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold rounded-full bg-[#e6f354] text-[#2e2958] hover:bg-[#d0dd9a] transition-colors"
                   onClick={() => navigate('/projects?create=true')}
                 >
+                  <Plus className="w-3.5 h-3.5" />
                   New Project
-                </Button>
+                </button>
               )}
             </div>
           </nav>
 
           {/* User section */}
-          <div className={cn('border-t border-border', sidebarCollapsed ? 'p-2' : 'p-4')}>
+          <div className={cn('border-t border-white/10', sidebarCollapsed ? 'p-2' : 'p-4')}>
             {sidebarCollapsed ? (
               <div className="flex flex-col items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                  <span className="text-xs font-semibold text-primary">
+                <div className="w-8 h-8 rounded-full bg-[#e6f354]/20 flex items-center justify-center">
+                  <span className="text-xs font-semibold text-[#e6f354]">
                     {user?.name?.charAt(0)?.toUpperCase()}
                   </span>
                 </div>
-                <Link to="/settings" className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors" title="Settings" onClick={() => setSidebarOpen(false)}>
+                <Link to="/settings" className="p-1.5 text-white/60 hover:text-white rounded-lg hover:bg-white/10 transition-colors" title="Settings" onClick={() => setSidebarOpen(false)}>
                   <Settings className="w-3.5 h-3.5" />
                 </Link>
-                <button onClick={logout} className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10 transition-colors" title="Logout">
+                <button onClick={logout} className="p-1.5 text-white/60 hover:text-red-400 rounded-lg hover:bg-white/10 transition-colors" title="Logout">
                   <LogOut className="w-3.5 h-3.5" />
                 </button>
               </div>
             ) : (
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                  <span className="text-sm font-semibold text-primary">
+                <div className="w-10 h-10 rounded-full bg-[#e6f354]/20 flex items-center justify-center">
+                  <span className="text-sm font-semibold text-[#e6f354]">
                     {user?.name?.charAt(0)?.toUpperCase()}
                   </span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">
+                  <p className="text-sm font-medium text-white truncate">
                     {user?.name}
                   </p>
-                  <p className="text-xs text-muted-foreground truncate">
+                  <p className="text-xs text-white/50 truncate">
                     {isAdmin ? 'Administrator' : 'Team Member'}
                   </p>
                 </div>
                 <div className="flex items-center gap-1">
                   <Link
                     to="/settings"
-                    className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors"
+                    className="p-2 text-white/60 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
                     title="Settings"
                     onClick={() => setSidebarOpen(false)}
                   >
@@ -467,7 +358,7 @@ export default function Layout({ children }) {
                   </Link>
                   <button
                     onClick={logout}
-                    className="p-2 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10 transition-colors"
+                    className="p-2 text-white/60 hover:text-red-400 rounded-lg hover:bg-white/10 transition-colors"
                     title="Logout"
                   >
                     <LogOut className="w-4 h-4" />
@@ -485,7 +376,7 @@ export default function Layout({ children }) {
         sidebarCollapsed ? 'lg:ml-[60px]' : 'lg:ml-72'
       )}>
         {/* Top bar */}
-        <header className="sticky top-0 z-30 flex items-center h-16 px-4 bg-card/80 backdrop-blur-md border-b border-border lg:px-6 flex-shrink-0">
+        <header className="sticky top-0 z-30 flex items-center h-16 px-4 bg-card/80 backdrop-blur-md border-b border-border/60 lg:px-6 flex-shrink-0">
           <button
             onClick={() => setSidebarOpen(true)}
             className="p-2 -ml-2 text-muted-foreground hover:text-foreground lg:hidden"
@@ -503,7 +394,7 @@ export default function Layout({ children }) {
             >
               <Search className={cn(
                 'absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-200',
-                isSearchFocused ? 'text-primary' : 'text-muted-foreground'
+                isSearchFocused ? 'text-[#2e2958]' : 'text-muted-foreground'
               )} />
               <input
                 type="text"
@@ -515,7 +406,7 @@ export default function Layout({ children }) {
                 className={cn(
                   'w-full pl-10 pr-20 py-2 text-sm bg-muted border-0 rounded-xl',
                   'placeholder:text-muted-foreground',
-                  'focus:outline-none focus:ring-2 focus:ring-primary/20 focus:bg-card',
+                  'focus:outline-none focus:ring-2 focus:ring-[#2e2958]/20 focus:bg-card',
                   'transition-all duration-200'
                 )}
               />
@@ -608,7 +499,7 @@ export default function Layout({ children }) {
                   onClick={() => setMoreMenuOpen(!moreMenuOpen)}
                   className={cn(
                     'w-full flex flex-col items-center justify-center py-2 text-xs transition-colors',
-                    moreMenuOpen ? 'text-primary' : 'text-muted-foreground'
+                    moreMenuOpen ? 'text-[#e6f354]' : 'text-muted-foreground'
                   )}
                   aria-expanded={moreMenuOpen}
                   aria-haspopup="true"
@@ -645,43 +536,21 @@ export default function Layout({ children }) {
                         ))}
                       </div>
 
-                      {/* AI Agents */}
-                      <div className="px-3 py-2 border-t border-border">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase">AI Agents</p>
-                      </div>
-                      <div className="py-1 max-h-48 overflow-y-auto">
-                        {aiNav.slice(0, 4).map((item) => (
-                          <Link
-                            key={item.name}
-                            to={item.href}
-                            onClick={() => setMoreMenuOpen(false)}
-                            className={cn(
-                              'flex items-center gap-3 px-4 py-2.5 text-sm transition-colors',
-                              location.pathname === item.href ? 'bg-muted text-foreground' : 'hover:bg-muted'
-                            )}
-                            role="menuitem"
-                          >
-                            <item.icon className="w-4 h-4 text-muted-foreground" />
-                            {item.name}
-                          </Link>
-                        ))}
-                      </div>
-
                       {/* Admin */}
-                      {isAdmin && (
+                      {adminNav.length > 0 && (
                         <>
                           <div className="px-3 py-2 border-t border-border">
                             <p className="text-xs font-semibold text-muted-foreground uppercase">Admin</p>
                           </div>
                           <div className="py-1">
-                            {adminNav.slice(0, 3).map((item) => (
+                            {adminNav.map((item) => (
                               <Link
                                 key={item.name}
                                 to={item.href}
                                 onClick={() => setMoreMenuOpen(false)}
                                 className={cn(
                                   'flex items-center gap-3 px-4 py-2.5 text-sm transition-colors',
-                                  location.pathname === item.href ? 'bg-muted text-foreground' : 'hover:bg-muted'
+                                  location.pathname === item.href ? 'bg-[#e6f354]/10 text-[#e6f354]' : 'hover:bg-muted'
                                 )}
                                 role="menuitem"
                               >
@@ -735,14 +604,14 @@ export default function Layout({ children }) {
               onClick={() => setMoreMenuOpen(false)}
               className={cn(
                 'flex-1 flex flex-col items-center justify-center py-2 text-xs transition-colors relative',
-                isActive ? 'text-primary' : 'text-muted-foreground'
+                isActive ? 'text-[#e6f354]' : 'text-muted-foreground'
               )}
               aria-current={isActive ? 'page' : undefined}
             >
               <div className="relative">
-                <item.icon className={cn('w-5 h-5 mb-0.5', isActive && 'text-primary')} aria-hidden="true" />
+                <item.icon className={cn('w-5 h-5 mb-0.5', isActive && 'text-[#e6f354]')} aria-hidden="true" />
                 {item.badge > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 text-[9px] font-bold rounded-full bg-primary text-primary-foreground flex items-center justify-center" aria-label={`${item.badge} unread items`}>
+                  <span className="absolute -top-1 -right-1 w-4 h-4 text-[9px] font-bold rounded-full bg-[#e6f354] text-[#2e2958] flex items-center justify-center" aria-label={`${item.badge} unread items`}>
                     {item.badge > 9 ? '9+' : item.badge}
                   </span>
                 )}
@@ -775,8 +644,8 @@ function QuickCreateMenu({ navigate, isAdmin }) {
       <button
         onClick={() => setOpen(!open)}
         className={cn(
-          'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors',
-          open ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80'
+          'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full transition-colors',
+          open ? 'bg-[#e6f354] text-[#2e2958]' : 'bg-[#e6f354] text-[#2e2958] hover:bg-[#d0dd9a]'
         )}
         title="Quick create"
       >

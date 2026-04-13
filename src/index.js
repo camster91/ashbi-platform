@@ -372,8 +372,11 @@ io.use(async (socket, next) => {
     const token = socket.handshake.auth?.token || socket.handshake.query?.token;
     if (!token) return next(new Error('Authentication required'));
     const decoded = await fastify.jwt.verify(token);
-    socket.userId = decoded.id;
+    // Support both admin tokens (id) and client portal tokens (contactId)
+    socket.userId = decoded.id || decoded.contactId;
     socket.userRole = decoded.role;
+    socket.clientId = decoded.clientId || null;
+    socket.isClient = decoded.role === 'CLIENT';
     next();
   } catch (err) {
     next(new Error('Invalid token'));
@@ -389,7 +392,8 @@ io.on('connection', (socket) => {
 
   // Join user's personal room for notifications
   socket.on('join', (userId) => {
-    if (userId !== socket.userId) {
+    // Allow client portal users (role=CLIENT) to join their contact room
+    if (userId !== socket.userId && !socket.isClient) {
       socket.disconnect(true);
       return;
     }

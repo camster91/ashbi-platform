@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { Button } from '../components/ui';
-import { 
-  Sparkles, 
-  Mail, 
-  Lock, 
-  Eye, 
-  EyeOff, 
+import {
+  Sparkles,
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
   ArrowRight,
   Zap,
   Users,
@@ -37,52 +37,53 @@ export default function Login() {
   };
 
   const features = [
-    { icon: Zap, text: 'AI-powered response drafting' },
-    { icon: Users, text: 'Smart client assignment' },
-    { icon: MessageSquare, text: 'Unified inbox management' },
+    { icon: Zap, text: 'AI-powered business intelligence' },
+    { icon: Users, text: 'Unified client & store management' },
+    { icon: MessageSquare, text: 'Automated workflows & reporting' },
   ];
 
   return (
     <div className="min-h-screen flex">
       {/* Left side - Branding */}
-      <div className="hidden lg:flex lg:w-1/2 xl:w-5/12 bg-primary relative overflow-hidden">
-        {/* Background pattern */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-0 left-0 w-96 h-96 bg-white rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2" />
-          <div className="absolute bottom-0 right-0 w-96 h-96 bg-accent rounded-full blur-3xl translate-x-1/2 translate-y-1/2" />
+      <div className="hidden lg:flex lg:w-1/2 xl:w-5/12 bg-[#2e2958] relative overflow-hidden">
+        {/* Gradient blur orbs */}
+        <div className="absolute inset-0">
+          <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-[#e6f354] rounded-full blur-3xl opacity-10" />
+          <div className="absolute bottom-[-5%] right-[-5%] w-[28rem] h-[28rem] bg-[#4a4294] rounded-full blur-3xl opacity-10" />
+          <div className="absolute top-[40%] right-[10%] w-72 h-72 bg-[#d0dd9a] rounded-full blur-3xl opacity-10" />
         </div>
-        
-        <div className="relative z-10 flex flex-col justify-between p-12 text-primary-foreground">
+
+        <div className="relative z-10 flex flex-col justify-between p-12 text-white">
           <div>
             <div className="flex items-center gap-3 mb-8">
-              <div className="w-10 h-10 rounded-xl bg-primary-foreground/10 flex items-center justify-center backdrop-blur-sm">
-                <Sparkles className="w-6 h-6" />
+              <div className="w-10 h-10 rounded-xl bg-[#e6f354] flex items-center justify-center">
+                <Sparkles className="w-5 h-5 text-[#2e2958]" />
               </div>
-              <span className="text-xl font-heading font-bold">Agency Hub</span>
+              <span className="text-xl font-display font-bold">Ashbi Hub</span>
             </div>
-            
-            <h2 className="text-4xl font-heading font-bold mb-4 leading-tight">
-              AI-powered client request management
+
+            <h2 className="text-4xl font-display mb-4 leading-tight">
+              Your brands,<br />one platform
             </h2>
-            <p className="text-primary-foreground/80 text-lg max-w-md">
-              Streamline your agency workflow with intelligent automation, 
-              smart assignments, and seamless collaboration.
+            <p className="text-white/70 text-lg max-w-md font-sans">
+              Streamline operations with intelligent automation,
+              unified dashboards, and seamless collaboration across every store.
             </p>
           </div>
-          
+
           <div className="space-y-4">
             {features.map((feature, i) => (
               <div key={i} className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-primary-foreground/10 flex items-center justify-center">
-                  <feature.icon className="w-5 h-5" />
+                <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center">
+                  <feature.icon className="w-5 h-5 text-[#e6f354]" />
                 </div>
-                <span className="text-primary-foreground/90">{feature.text}</span>
+                <span className="text-white/80">{feature.text}</span>
               </div>
             ))}
           </div>
-          
-          <div className="text-sm text-primary-foreground/60">
-            © 2026 Ashbi Design. All rights reserved.
+
+          <div className="text-sm text-white/40">
+            &copy; 2026 Ashbi Design. All rights reserved.
           </div>
         </div>
       </div>
@@ -92,14 +93,14 @@ export default function Login() {
         <div className="w-full max-w-md space-y-8 animate-slide-up">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
-            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
-              <Sparkles className="w-6 h-6 text-primary-foreground" />
+            <div className="w-10 h-10 rounded-xl bg-[#2e2958] flex items-center justify-center">
+              <Sparkles className="w-5 h-6 text-[#e6f354]" />
             </div>
-            <span className="text-xl font-heading font-bold text-foreground">Agency Hub</span>
+            <span className="text-xl font-display font-bold text-foreground">Ashbi Hub</span>
           </div>
 
           <div className="text-center">
-            <h1 className="text-3xl font-heading font-bold text-foreground mb-2">
+            <h1 className="text-3xl font-display text-foreground mb-2">
               Welcome back
             </h1>
             <p className="text-muted-foreground">
@@ -123,9 +124,9 @@ export default function Login() {
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="your@email.com"
                     className={cn(
-                      'w-full pl-11 pr-4 py-3 bg-muted border-0 rounded-xl',
+                      'w-full pl-11 pr-4 py-3 bg-white border border-border rounded-xl',
                       'text-foreground placeholder:text-muted-foreground',
-                      'focus:outline-none focus:ring-2 focus:ring-primary/20 focus:bg-card',
+                      'focus:outline-none focus:ring-2 focus:ring-[#e6f354]/30 focus:border-transparent',
                       'transition-all duration-200'
                     )}
                     required
@@ -147,9 +148,9 @@ export default function Login() {
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Enter your password"
                     className={cn(
-                      'w-full pl-11 pr-12 py-3 bg-muted border-0 rounded-xl',
+                      'w-full pl-11 pr-12 py-3 bg-white border border-border rounded-xl',
                       'text-foreground placeholder:text-muted-foreground',
-                      'focus:outline-none focus:ring-2 focus:ring-primary/20 focus:bg-card',
+                      'focus:outline-none focus:ring-2 focus:ring-[#e6f354]/30 focus:border-transparent',
                       'transition-all duration-200'
                     )}
                     required
@@ -167,10 +168,10 @@ export default function Login() {
               {/* Remember me & Forgot password */}
               <div className="flex items-center justify-between text-sm">
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" className="w-4 h-4 rounded border-border text-primary focus:ring-primary/20" />
+                  <input type="checkbox" className="w-4 h-4 rounded border-border text-primary focus:ring-[#e6f354]/30" />
                   <span className="text-muted-foreground">Remember me</span>
                 </label>
-                <a href="/forgot-password" className="text-primary hover:text-primary-600 font-medium transition-colors">
+                <a href="/forgot-password" className="text-[#2e2958] hover:text-[#3f3580] font-medium transition-colors">
                   Forgot password?
                 </a>
               </div>
@@ -187,18 +188,30 @@ export default function Login() {
             )}
 
             {/* Submit button */}
-            <Button
+            <button
               type="submit"
-              size="lg"
-              isLoading={isLoading}
-              className="w-full"
-              rightIcon={<ArrowRight className="w-5 h-5" />}
+              disabled={isLoading}
+              className={cn(
+                'w-full flex items-center justify-center gap-2 py-3 px-6',
+                'bg-[#2e2958] text-white rounded-full',
+                'hover:bg-[#3f3580]',
+                'shadow-[0_4px_14px_rgba(46,41,88,0.35)] hover:shadow-[0_6px_20px_rgba(46,41,88,0.45)]',
+                'hover:scale-[1.02] active:scale-[0.98]',
+                'transition-all duration-200',
+                'font-semibold text-base',
+                'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100'
+              )}
             >
-              Sign in
-            </Button>
+              {isLoading ? (
+                <span className="inline-block w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <>
+                  Sign in
+                  <ArrowRight className="w-5 h-5" />
+                </>
+              )}
+            </button>
           </form>
-
-
 
 
         </div>

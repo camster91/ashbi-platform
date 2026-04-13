@@ -8,51 +8,51 @@ generator client {
 datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
-  extensions  = [vector]
+  extensions = [vector]
 }
 
 // ==================== USERS & AUTH ====================
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String
-  password  String
-  role      String   @default("TEAM") // ADMIN, TEAM, CLIENT, or BOT
-  clientId  String?  // Set for CLIENT role users
-  skills    String   @default("[]") // JSON array of skills
-  capacity  Int      @default(100) // Percentage available
-  isActive  Boolean  @default(true)
-  hourlyRate Float?  @default(50)
-  resetToken String?
+  id                  String    @id @default(cuid())
+  email               String    @unique
+  name                String
+  password            String
+  role                String    @default("TEAM") // ADMIN, TEAM, CLIENT, or BOT
+  clientId            String? // Set for CLIENT role users
+  skills              String    @default("[]") // JSON array of skills
+  capacity            Int       @default(100) // Percentage available
+  isActive            Boolean   @default(true)
+  hourlyRate          Float?    @default(50)
+  resetToken          String?
   resetTokenExpiresAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   // Relations
-  assignedThreads   Thread[]         @relation("AssignedTo")
-  assignedTasks     Task[]           @relation("TaskAssignee")
-  draftedResponses  Response[]       @relation("DraftedBy")
-  approvedResponses Response[]       @relation("ApprovedBy")
+  assignedThreads   Thread[]               @relation("AssignedTo")
+  assignedTasks     Task[]                 @relation("TaskAssignee")
+  draftedResponses  Response[]             @relation("DraftedBy")
+  approvedResponses Response[]             @relation("ApprovedBy")
   notifications     Notification[]
   internalNotes     InternalNote[]
-  chatMessages      ChatMessage[]    @relation("ChatAuthor")
+  chatMessages      ChatMessage[]          @relation("ChatAuthor")
   chatReactions     ChatReaction[]
-  notes             Note[]           @relation("NoteAuthor")
+  notes             Note[]                 @relation("NoteAuthor")
   timeEntries       TimeEntry[]
   attachments       Attachment[]
   activities        Activity[]
-  taskComments      TaskComment[]    @relation("CommentAuthor")
-  createdEvents     CalendarEvent[]  @relation("EventCreator")
+  taskComments      TaskComment[]          @relation("CommentAuthor")
+  createdEvents     CalendarEvent[]        @relation("EventCreator")
   eventAttendees    EventAttendee[]
-  proposals         Proposal[]       @relation("ProposalCreator")
-  contracts         Contract[]       @relation("ContractCreator")
-  invoices          Invoice[]        @relation("InvoiceCreator")
+  proposals         Proposal[]             @relation("ProposalCreator")
+  contracts         Contract[]             @relation("ContractCreator")
+  invoices          Invoice[]              @relation("InvoiceCreator")
   pushSubscriptions PushSubscription[]
   snippets          Snippet[]
   timeSessions      TimeSession[]
-  calendarEvents   ContentCalendarEvent[] @relation("CalendarEventAssignee")
-  apiKeys          ApiKey[]
+  calendarEvents    ContentCalendarEvent[] @relation("CalendarEventAssignee")
+  apiKeys           ApiKey[]
 
   @@map("users")
 }
@@ -60,61 +60,61 @@ model User {
 // ==================== CLIENTS ====================
 
 model Client {
-  id                  String    @id @default(cuid())
+  id                  String  @id @default(cuid())
   name                String
-  domain              String?   @unique
-  status              String    @default("ACTIVE") // ACTIVE, PAUSED, CHURNED
-  communicationPrefs  String    @default("{}") // JSON: tone, frequency, etc.
-  satisfactionSignals String    @default("{}") // JSON: sentiment trends
-  slaOverrides        String?   // JSON: custom SLA rules
-  knowledgeBase       String    @default("[]") // JSON: brand guidelines, specs, etc.
+  domain              String? @unique
+  status              String  @default("ACTIVE") // ACTIVE, PAUSED, CHURNED
+  communicationPrefs  String  @default("{}") // JSON: tone, frequency, etc.
+  satisfactionSignals String  @default("{}") // JSON: sentiment trends
+  slaOverrides        String? // JSON: custom SLA rules
+  knowledgeBase       String  @default("[]") // JSON: brand guidelines, specs, etc.
 
   // Bonsai migration fields
-  bonsaiClientId      String?   // Original Bonsai client ID
-  tier                String    @default("T3") // T1 | T2 | T3
-  contactPerson       String?
-  phone               String?
-  address             String?
-  city                String?
-  provinceState       String?
-  postalCode          String?
-  country             String    @default("US")
-  serviceType         String?
-  relationshipStatus  String    @default("ACTIVE") // ACTIVE | ARCHIVED | LEAD | CHURNED
-  totalRevenueUsd     Float     @default(0)
-  totalRevenueCad     Float     @default(0)
-  lastInvoiceDate     DateTime?
-  lastInvoiceStatus   String?
-  paymentStatus       String?
-  clientNotes         String?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  bonsaiClientId     String? // Original Bonsai client ID
+  tier               String    @default("T3") // T1 | T2 | T3
+  contactPerson      String?
+  phone              String?
+  address            String?
+  city               String?
+  provinceState      String?
+  postalCode         String?
+  country            String    @default("US")
+  serviceType        String?
+  relationshipStatus String    @default("ACTIVE") // ACTIVE | ARCHIVED | LEAD | CHURNED
+  totalRevenueUsd    Float     @default(0)
+  totalRevenueCad    Float     @default(0)
+  lastInvoiceDate    DateTime?
+  lastInvoiceStatus  String?
+  paymentStatus      String?
+  clientNotes        String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   // Relations
-  contacts          Contact[]
-  projects          Project[]
-  threads           Thread[]
-  retainerPlan      RetainerPlan?
-  reports           Report[]
-  proposals         Proposal[]
-  contracts         Contract[]
-  invoices          Invoice[]
-  credentials       Credential[]
-  aiTeamMessages    AiTeamMessage[]
-  expenses          Expense[]
-  revenueSnapshots  RevenueSnapshot[]
-  emailMappings     ClientEmailMapping[]
-  intakeForms       IntakeForm[]
-  pipelineDeals     PipelineDeal[]
-  surveyResponses   SurveyResponse[]
-  creativeBriefs    CreativeBrief[]
-  adCopies          AdCopy[]
+  contacts              Contact[]
+  projects              Project[]
+  threads               Thread[]
+  retainerPlan          RetainerPlan?
+  reports               Report[]
+  proposals             Proposal[]
+  contracts             Contract[]
+  invoices              Invoice[]
+  credentials           Credential[]
+  aiTeamMessages        AiTeamMessage[]
+  expenses              Expense[]
+  revenueSnapshots      RevenueSnapshot[]
+  emailMappings         ClientEmailMapping[]
+  intakeForms           IntakeForm[]
+  pipelineDeals         PipelineDeal[]
+  surveyResponses       SurveyResponse[]
+  creativeBriefs        CreativeBrief[]
+  adCopies              AdCopy[]
   contentCalendarEvents ContentCalendarEvent[]
-  seoAudits         SEOAudit[]
-  assets            Asset[]
-  clientEmbeddings  ClientEmbedding[]
-  invitations        ClientInvitation[]
-  wpSites           WPSite[] @relation("WPSiteClient")
+  seoAudits             SEOAudit[]
+  assets                Asset[]
+  clientEmbeddings      ClientEmbedding[]
+  invitations           ClientInvitation[]
+  wpSites               WPSite[]               @relation("WPSiteClient")
 
   @@index([status])
   @@map("clients")
@@ -140,24 +140,24 @@ model Contact {
 // ==================== PROJECTS ====================
 
 model Project {
-  id             String   @id @default(cuid())
+  id             String  @id @default(cuid())
   name           String
   description    String?
-  status         String   @default("STARTING_UP") // STARTING_UP, DESIGN_DEV, ADDING_CONTENT, FINALIZING, LAUNCHED, ON_HOLD, CANCELLED
-  health         String   @default("ON_TRACK") // ON_TRACK, NEEDS_ATTENTION, AT_RISK
-  healthScore    Int      @default(100)
-  aiSummary      String?  // AI-generated current status summary
-  aiPlan         String?  // JSON: AI-generated task plan
-  risks          String   @default("[]") // JSON: identified risks
-  defaultOwnerId  String?
-  clientId        String
-  viewToken       String? @unique @default(cuid())
+  status         String  @default("STARTING_UP") // STARTING_UP, DESIGN_DEV, ADDING_CONTENT, FINALIZING, LAUNCHED, ON_HOLD, CANCELLED
+  health         String  @default("ON_TRACK") // ON_TRACK, NEEDS_ATTENTION, AT_RISK
+  healthScore    Int     @default(100)
+  aiSummary      String? // AI-generated current status summary
+  aiPlan         String? // JSON: AI-generated task plan
+  risks          String  @default("[]") // JSON: identified risks
+  defaultOwnerId String?
+  clientId       String
+  viewToken      String? @unique @default(cuid())
 
   // Bonsai migration fields
   bonsaiProjectId String?
-  serviceType     String?   // branding | web_design | ecommerce | seo | maintenance
-  budget          Float?    // Fixed-price contract value
-  hourlyBudget    Float?    // Max billable hours budget
+  serviceType     String? // branding | web_design | ecommerce | seo | maintenance
+  budget          Float? // Fixed-price contract value
+  hourlyBudget    Float? // Max billable hours budget
   startDate       DateTime?
   endDate         DateTime?
   completedAt     DateTime?
@@ -166,52 +166,52 @@ model Project {
   updatedAt       DateTime  @updatedAt
 
   // Relations
-  client         Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  threads        Thread[]
-  tasks          Task[]
-  chatMessages   ChatMessage[]
-  notes          Note[]
-  milestones     Milestone[]
-  timeEntries    TimeEntry[]
-  activities     Activity[]
-  calendarEvents CalendarEvent[]
-  revisionRounds RevisionRound[]
-  proposals      Proposal[]
-  credentials    Credential[]
-  aiTeamMessages AiTeamMessage[]
-  expenses       Expense[]
-  approvals      Approval[]
-  communications ProjectCommunication[]
-  context        ProjectContext?
+  client                Client                 @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  threads               Thread[]
+  tasks                 Task[]
+  chatMessages          ChatMessage[]
+  notes                 Note[]
+  milestones            Milestone[]
+  timeEntries           TimeEntry[]
+  activities            Activity[]
+  calendarEvents        CalendarEvent[]
+  revisionRounds        RevisionRound[]
+  proposals             Proposal[]
+  credentials           Credential[]
+  aiTeamMessages        AiTeamMessage[]
+  expenses              Expense[]
+  approvals             Approval[]
+  communications        ProjectCommunication[]
+  context               ProjectContext?
   contentCalendarEvents ContentCalendarEvent[]
-  wpSite         WPSite?
-  seoAudits      SEOAudit[]
-  adCopies       AdCopy[]
-  creativeBriefs CreativeBrief[]
-  timeSessions   TimeSession[]
+  wpSite                WPSite?
+  seoAudits             SEOAudit[]
+  adCopies              AdCopy[]
+  creativeBriefs        CreativeBrief[]
+  timeSessions          TimeSession[]
 
   @@map("projects")
 }
 
 model Task {
-  id             String    @id @default(cuid())
-  title          String
-  description    String?   // Brief description/summary
-  content        String?   @default("[]") // JSON: Block-based rich content (Notion-like)
-  status         String    @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, BLOCKED
-  priority       String    @default("NORMAL") // CRITICAL, HIGH, NORMAL, LOW
-  category       String    @default("UPCOMING") // IMMEDIATE, THIS_WEEK, UPCOMING, WAITING_CLIENT, WAITING_US
-  tags           String    @default("[]") // JSON array of tags
+  id          String  @id @default(cuid())
+  title       String
+  description String? // Brief description/summary
+  content     String? @default("[]") // JSON: Block-based rich content (Notion-like)
+  status      String  @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, BLOCKED
+  priority    String  @default("NORMAL") // CRITICAL, HIGH, NORMAL, LOW
+  category    String  @default("UPCOMING") // IMMEDIATE, THIS_WEEK, UPCOMING, WAITING_CLIENT, WAITING_US
+  tags        String  @default("[]") // JSON array of tags
 
   // Notion-like page properties
-  isPage         Boolean   @default(false) // Treat as a page with subpages
-  icon           String?   // Emoji or icon URL
-  coverImage     String?   // Cover image URL
-  properties     String    @default("{}") // JSON: Custom properties/fields
-  
+  isPage     Boolean @default(false) // Treat as a page with subpages
+  icon       String? // Emoji or icon URL
+  coverImage String? // Cover image URL
+  properties String  @default("{}") // JSON: Custom properties/fields
+
   // Hierarchy
-  parentId       String?   // For subpages/subtasks
-  
+  parentId String? // For subpages/subtasks
+
   estimatedTime  String?
   startDate      DateTime?
   dueDate        DateTime?
@@ -223,25 +223,25 @@ model Task {
   projectId      String
   assigneeId     String?
   milestoneId    String?
-  dependsOnId    String?   // Task dependency — this task depends on another
+  dependsOnId    String? // Task dependency — this task depends on another
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
   // Relations
-  project     Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  assignee    User?         @relation("TaskAssignee", fields: [assigneeId], references: [id])
-  milestone   Milestone?    @relation("MilestoneTasks", fields: [milestoneId], references: [id])
-  comments    TaskComment[]
-  timeEntries TimeEntry[]
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignee     User?         @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  milestone    Milestone?    @relation("MilestoneTasks", fields: [milestoneId], references: [id])
+  comments     TaskComment[]
+  timeEntries  TimeEntry[]
   timeSessions TimeSession[]
 
   // Self-relation for subpages/subtasks
-  parent      Task?         @relation("TaskSubpages", fields: [parentId], references: [id], onDelete: Cascade)
-  subpages    Task[]        @relation("TaskSubpages")
+  parent   Task?  @relation("TaskSubpages", fields: [parentId], references: [id], onDelete: Cascade)
+  subpages Task[] @relation("TaskSubpages")
 
   // Task dependency relation
-  dependsOn    Task?        @relation("TaskDependency", fields: [dependsOnId], references: [id])
-  blockedTasks Task[]       @relation("TaskDependency")
+  dependsOn    Task?  @relation("TaskDependency", fields: [dependsOnId], references: [id])
+  blockedTasks Task[] @relation("TaskDependency")
 
   @@index([parentId])
   @@index([projectId, parentId])
@@ -255,26 +255,26 @@ model Task {
 // ==================== THREADS & MESSAGES ====================
 
 model Thread {
-  id                 String    @id @default(cuid())
-  subject            String
-  status             String    @default("OPEN") // OPEN, AWAITING_RESPONSE, RESOLVED, SNOOZED
-  priority           String    @default("NORMAL") // CRITICAL, HIGH, NORMAL, LOW
-  intent             String?   // AI-classified intent
-  sentiment          String?   // AI-detected sentiment
-  urgencyReason      String?
-  lastActivityAt     DateTime  @default(now())
-  snoozedUntil       DateTime?
-  slaDeadline        DateTime?
-  slaBreached        Boolean   @default(false)
-  aiAnalysis         String?   // JSON: full AI analysis result
-  matchConfidence    Float     @default(0)
-  matchReason        String?
-  needsTriage        Boolean   @default(false)
-  clientId           String?
-  projectId          String?
-  assignedToId       String?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  id              String    @id @default(cuid())
+  subject         String
+  status          String    @default("OPEN") // OPEN, AWAITING_RESPONSE, RESOLVED, SNOOZED
+  priority        String    @default("NORMAL") // CRITICAL, HIGH, NORMAL, LOW
+  intent          String? // AI-classified intent
+  sentiment       String? // AI-detected sentiment
+  urgencyReason   String?
+  lastActivityAt  DateTime  @default(now())
+  snoozedUntil    DateTime?
+  slaDeadline     DateTime?
+  slaBreached     Boolean   @default(false)
+  aiAnalysis      String? // JSON: full AI analysis result
+  matchConfidence Float     @default(0)
+  matchReason     String?
+  needsTriage     Boolean   @default(false)
+  clientId        String?
+  projectId       String?
+  assignedToId    String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   // Relations
   client        Client?        @relation(fields: [clientId], references: [id])
@@ -291,20 +291,20 @@ model Thread {
 }
 
 model Message {
-  id             String   @id @default(cuid())
-  direction      String   // INBOUND or OUTBOUND
-  senderEmail    String
-  senderName     String?
-  subject        String?
-  bodyText       String
-  bodyHtml       String?
-  rawEmail       String?  // Original email content preserved
-  headers        String?  // JSON: email headers
-  receivedAt     DateTime @default(now())
-  processedAt    DateTime?
-  aiExtracted    String?  // JSON: AI-extracted data
-  threadId       String
-  createdAt      DateTime @default(now())
+  id          String    @id @default(cuid())
+  direction   String // INBOUND or OUTBOUND
+  senderEmail String
+  senderName  String?
+  subject     String?
+  bodyText    String
+  bodyHtml    String?
+  rawEmail    String? // Original email content preserved
+  headers     String? // JSON: email headers
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+  aiExtracted String? // JSON: AI-extracted data
+  threadId    String
+  createdAt   DateTime  @default(now())
 
   // Relations
   thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
@@ -331,21 +331,21 @@ model InternalNote {
 // ==================== RESPONSES & APPROVAL ====================
 
 model Response {
-  id               String    @id @default(cuid())
-  status           String    @default("DRAFT") // DRAFT, PENDING_APPROVAL, APPROVED, REJECTED, SENT
-  subject          String
-  body             String
-  tone             String?
-  aiGenerated      Boolean   @default(false)
-  aiOptions        String?   // JSON: alternative AI drafts
-  rejectionReason  String?
-  approvedAt       DateTime?
-  sentAt           DateTime?
-  threadId         String
-  draftedById      String
-  approvedById     String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id              String    @id @default(cuid())
+  status          String    @default("DRAFT") // DRAFT, PENDING_APPROVAL, APPROVED, REJECTED, SENT
+  subject         String
+  body            String
+  tone            String?
+  aiGenerated     Boolean   @default(false)
+  aiOptions       String? // JSON: alternative AI drafts
+  rejectionReason String?
+  approvedAt      DateTime?
+  sentAt          DateTime?
+  threadId        String
+  draftedById     String
+  approvedById    String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   // Relations
   thread     Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
@@ -359,19 +359,18 @@ model Response {
 
 model Notification {
   id        String    @id @default(cuid())
-  type      String    // THREAD_ASSIGNED, RESPONSE_APPROVED, ESCALATION, etc.
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String // project.update, invoice.created, invoice.overdue, invoice.paid, proposal.sent, proposal.approved, proposal.declined, contract.signed, message.new, task.assigned, task.completed
   title     String
   message   String
-  data      String?   // JSON: additional context
+  data      Json?
   read      Boolean   @default(false)
   readAt    DateTime?
-  userId    String
   createdAt DateTime  @default(now())
 
-  // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
+  @@index([userId, read])
+  @@index([userId, createdAt])
   @@map("notifications")
 }
 
@@ -380,8 +379,8 @@ model Notification {
 model AssignmentRule {
   id         String   @id @default(cuid())
   name       String
-  type       String   // SKILL, CLIENT, PROJECT, LOAD_BALANCE
-  conditions String   // JSON: rule conditions
+  type       String // SKILL, CLIENT, PROJECT, LOAD_BALANCE
+  conditions String // JSON: rule conditions
   assignToId String?
   priority   Int      @default(0)
   isActive   Boolean  @default(true)
@@ -394,7 +393,7 @@ model AssignmentRule {
 model Template {
   id        String   @id @default(cuid())
   name      String
-  category  String   // GREETING, ACKNOWLEDGMENT, FOLLOW_UP, etc.
+  category  String // GREETING, ACKNOWLEDGMENT, FOLLOW_UP, etc.
   subject   String?
   body      String
   variables String   @default("[]") // JSON: available variables
@@ -408,19 +407,19 @@ model Template {
 // ==================== UNMATCHED QUEUE ====================
 
 model UnmatchedEmail {
-  id               String   @id @default(cuid())
-  senderEmail      String
-  senderName       String?
-  subject          String
-  bodyText         String
-  bodyHtml         String?
-  rawEmail         String?
-  source           String?  // Source: upwork, email, form, etc.
-  suggestedClients String?  // JSON: AI suggestions
+  id                String    @id @default(cuid())
+  senderEmail       String
+  senderName        String?
+  subject           String
+  bodyText          String
+  bodyHtml          String?
+  rawEmail          String?
+  source            String? // Source: upwork, email, form, etc.
+  suggestedClients  String? // JSON: AI suggestions
   suggestedProjects String? // JSON: AI suggestions
-  status           String   @default("PENDING") // PENDING, RESOLVED, IGNORED
-  resolvedAt       DateTime?
-  createdAt        DateTime @default(now())
+  status            String    @default("PENDING") // PENDING, RESOLVED, IGNORED
+  resolvedAt        DateTime?
+  createdAt         DateTime  @default(now())
 
   @@map("unmatched_emails")
 }
@@ -431,10 +430,10 @@ model ChatMessage {
   id        String    @id @default(cuid())
   content   String
   type      String    @default("TEXT") // TEXT, FILE, SYSTEM
-  metadata  String?   // JSON: file info, mentions, etc.
+  metadata  String? // JSON: file info, mentions, etc.
   isEdited  Boolean   @default(false)
   editedAt  DateTime?
-  parentId  String?   // For thread replies
+  parentId  String? // For thread replies
   projectId String
   authorId  String
   createdAt DateTime  @default(now())
@@ -468,16 +467,16 @@ model ChatReaction {
 // ==================== NOTES & DOCUMENTS ====================
 
 model Note {
-  id          String    @id @default(cuid())
-  title       String
-  content     String    // Rich text / Markdown content
-  type        String    @default("NOTE") // NOTE, MEETING_NOTES, WIKI, DOC
-  isPinned    Boolean   @default(false)
-  tags        String    @default("[]") // JSON array of tags
-  projectId   String
-  authorId    String
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id        String   @id @default(cuid())
+  title     String
+  content   String // Rich text / Markdown content
+  type      String   @default("NOTE") // NOTE, MEETING_NOTES, WIKI, DOC
+  isPinned  Boolean  @default(false)
+  tags      String   @default("[]") // JSON array of tags
+  projectId String
+  authorId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -510,20 +509,20 @@ model Milestone {
 // ==================== TIME TRACKING ====================
 
 model TimeEntry {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   description String?
-  duration    Int       // Duration in minutes
-  date        DateTime  @default(now())
-  billable    Boolean   @default(true)
-  hourlyRate  Float?    // Override rate for this entry
-  source      String    @default("MANUAL")
-  invoiced    Boolean   @default(false) // Has this been included in an invoice?
-  invoiceId   String?   // Link to invoice if billed
+  duration    Int // Duration in minutes
+  date        DateTime @default(now())
+  billable    Boolean  @default(true)
+  hourlyRate  Float? // Override rate for this entry
+  source      String   @default("MANUAL")
+  invoiced    Boolean  @default(false) // Has this been included in an invoice?
+  invoiceId   String? // Link to invoice if billed
   taskId      String?
   projectId   String
   userId      String
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   // Relations
   task    Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
@@ -537,17 +536,17 @@ model TimeEntry {
 // ==================== FILE ATTACHMENTS ====================
 
 model Attachment {
-  id           String   @id @default(cuid())
-  filename     String
-  originalName String
-  mimeType     String
-  size         Int      // Size in bytes
-  path         String   // Storage path or URL
+  id            String   @id @default(cuid())
+  filename      String
+  originalName  String
+  mimeType      String
+  size          Int // Size in bytes
+  path          String // Storage path or URL
   thumbnailPath String? // For images
-  entityType   String   // PROJECT, TASK, CHAT, NOTE
-  entityId     String
-  uploadedById String
-  createdAt    DateTime @default(now())
+  entityType    String // PROJECT, TASK, CHAT, NOTE
+  entityId      String
+  uploadedById  String
+  createdAt     DateTime @default(now())
 
   // Relations
   uploadedBy User @relation(fields: [uploadedById], references: [id])
@@ -559,12 +558,12 @@ model Attachment {
 
 model Activity {
   id         String   @id @default(cuid())
-  type       String   // TASK_CREATED, TASK_COMPLETED, CHAT_MESSAGE, NOTE_CREATED, etc.
-  action     String   // created, updated, deleted, completed, commented
-  entityType String   // TASK, PROJECT, THREAD, NOTE, MILESTONE, etc.
+  type       String // TASK_CREATED, TASK_COMPLETED, CHAT_MESSAGE, NOTE_CREATED, etc.
+  action     String // created, updated, deleted, completed, commented
+  entityType String // TASK, PROJECT, THREAD, NOTE, MILESTONE, etc.
   entityId   String
-  entityName String?  // Display name of the entity
-  metadata   String?  // JSON: additional context
+  entityName String? // Display name of the entity
+  metadata   String? // JSON: additional context
   projectId  String?
   userId     String
   createdAt  DateTime @default(now())
@@ -598,25 +597,25 @@ model TaskComment {
 // ==================== CALENDAR & MEETINGS ====================
 
 model CalendarEvent {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   title       String
   description String?
   startTime   DateTime
   endTime     DateTime
-  type        String    @default("MEETING") // MEETING, DEADLINE, REMINDER, MILESTONE
-  location    String?   // Physical location or video call link
-  isAllDay    Boolean   @default(false)
-  color       String    @default("#3B82F6")
-  recurrence  String?   // JSON: recurrence rules
+  type        String   @default("MEETING") // MEETING, DEADLINE, REMINDER, MILESTONE
+  location    String? // Physical location or video call link
+  isAllDay    Boolean  @default(false)
+  color       String   @default("#3B82F6")
+  recurrence  String? // JSON: recurrence rules
   projectId   String?
   createdById String
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   // Relations
-  project     Project?          @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  createdBy   User              @relation("EventCreator", fields: [createdById], references: [id])
-  attendees   EventAttendee[]
+  project   Project?        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User            @relation("EventCreator", fields: [createdById], references: [id])
+  attendees EventAttendee[]
 
   @@map("calendar_events")
 }
@@ -641,26 +640,26 @@ model EventAttendee {
 model RetainerPlan {
   id                String   @id @default(cuid())
   clientId          String   @unique
-  tier              String   // 999 | 1999 | 3999
-  hoursPerMonth     Int      // 20 | 40 | 80
+  tier              String // 999 | 1999 | 3999
+  hoursPerMonth     Int // 20 | 40 | 80
   hoursUsed         Float    @default(0)
   billingCycleStart DateTime @default(now())
 
   // Bonsai migration fields
   monthlyAmountUsd   Float?
   monthlyAmountCad   Float?
-  currency           String   @default("USD")
-  billingDay         Int      @default(1)   // Day of month 1-28
-  autoBillingEnabled Boolean  @default(true)
+  currency           String    @default("USD")
+  billingDay         Int       @default(1) // Day of month 1-28
+  autoBillingEnabled Boolean   @default(true)
   startDate          DateTime?
   nextBillingDate    DateTime?
   renewalDate        DateTime?
   serviceDescription String?
-  retainerStatus     String   @default("ACTIVE") // ACTIVE | AT_RISK | PAUSED | CANCELLED
+  retainerStatus     String    @default("ACTIVE") // ACTIVE | AT_RISK | PAUSED | CANCELLED
   annualValue        Float?
   bonsaiRetainerId   String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   // Relations
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -718,7 +717,7 @@ model Proposal {
   total         Float     @default(0)
   notes         String?
   internalNotes String?
-  viewToken String? @unique @default(cuid())
+  viewToken     String?   @unique @default(cuid())
   approvedAt    DateTime?
   declinedAt    DateTime?
   sentAt        DateTime?
@@ -728,9 +727,9 @@ model Proposal {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  project   Project? @relation(fields: [projectId], references: [id])
-  createdBy User     @relation("ProposalCreator", fields: [createdById], references: [id])
+  client    Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  project   Project?           @relation(fields: [projectId], references: [id])
+  createdBy User               @relation("ProposalCreator", fields: [createdById], references: [id])
   lineItems ProposalLineItem[]
   contract  Contract?
 
@@ -755,7 +754,7 @@ model Contract {
   id            String    @id @default(cuid())
   title         String
   status        String    @default("DRAFT") // DRAFT | SENT | SIGNED | VOID
-  content       String    // Rich text / HTML contract body
+  content       String // Rich text / HTML contract body
   templateType  String    @default("RETAINER") // RETAINER | PROJECT | NDA
   signToken     String    @unique @default(cuid())
   clientSigHash String?
@@ -778,19 +777,19 @@ model Contract {
 // ==================== INVOICES ====================
 
 model Invoice {
-  id                    String    @id @default(cuid())
-  invoiceNumber         String    @unique
-  status                String    @default("DRAFT") // DRAFT | SENT | PAID | OVERDUE | VOID
-  title                 String?
-  dueDate               DateTime?
-  issueDate             DateTime  @default(now())
+  id            String    @id @default(cuid())
+  invoiceNumber String    @unique
+  status        String    @default("DRAFT") // DRAFT | SENT | PAID | OVERDUE | VOID
+  title         String?
+  dueDate       DateTime?
+  issueDate     DateTime  @default(now())
 
   // Bonsai migration fields
-  bonsaiInvoiceId       String?   // Original Bonsai invoice ID
-  currency              String    @default("USD") // USD | CAD
-  amountUsd             Float?    // For multi-currency tracking
-  amountCad             Float?
-  daysToPayActual       Int?      // Historical: actual days client took to pay
+  bonsaiInvoiceId String? // Original Bonsai invoice ID
+  currency        String  @default("USD") // USD | CAD
+  amountUsd       Float? // For multi-currency tracking
+  amountCad       Float?
+  daysToPayActual Int? // Historical: actual days client took to pay
 
   subtotal              Float     @default(0)
   discountAmount        Float     @default(0)
@@ -802,12 +801,12 @@ model Invoice {
   internalNotes         String?
   stripePaymentLink     String?
   stripePaymentIntentId String?
-  paymentMethod         String?   // STRIPE | BANK | CHECK | CASH | OTHER
+  paymentMethod         String? // STRIPE | BANK | CHECK | CASH | OTHER
   paymentNotes          String?
   paidAt                DateTime?
   sentAt                DateTime?
   isRecurring           Boolean   @default(false)
-  recurringInterval     String?   // MONTHLY | QUARTERLY | ANNUALLY
+  recurringInterval     String? // MONTHLY | QUARTERLY | ANNUALLY
   recurringNextDate     DateTime?
   reminderSentAt        DateTime?
   viewToken             String?   @unique @default(cuid())
@@ -818,9 +817,9 @@ model Invoice {
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
-  client    Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  createdBy User              @relation("InvoiceCreator", fields: [createdById], references: [id])
-  lineItems InvoiceLineItem[]
+  client      Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy   User              @relation("InvoiceCreator", fields: [createdById], references: [id])
+  lineItems   InvoiceLineItem[]
   payments    InvoicePayment[]
   timeEntries TimeEntry[]
   expenses    Expense[]
@@ -876,18 +875,18 @@ model LineItemTemplate {
 // ==================== WEEKLY DIGEST ====================
 
 model WeeklyDigest {
-  id            String   @id @default(cuid())
-  weekStart     DateTime
-  weekEnd       DateTime
-  newLeads      Int      @default(0)
-  proposalsSent Int      @default(0)
-  proposalsViewed Int    @default(0)
-  proposalsHired Int     @default(0)
-  tasksOverdue  Int      @default(0)
-  retainerTotal Float    @default(0)
-  clientHealthSummary String @default("{}") // JSON: per-client health scores
-  fullDigest    String   // Full AI-generated digest text
-  createdAt     DateTime @default(now())
+  id                  String   @id @default(cuid())
+  weekStart           DateTime
+  weekEnd             DateTime
+  newLeads            Int      @default(0)
+  proposalsSent       Int      @default(0)
+  proposalsViewed     Int      @default(0)
+  proposalsHired      Int      @default(0)
+  tasksOverdue        Int      @default(0)
+  retainerTotal       Float    @default(0)
+  clientHealthSummary String   @default("{}") // JSON: per-client health scores
+  fullDigest          String // Full AI-generated digest text
+  createdAt           DateTime @default(now())
 
   @@map("weekly_digests")
 }
@@ -898,7 +897,7 @@ model Credential {
   id        String   @id @default(cuid())
   label     String
   username  String?
-  password  String   // AES-256 encrypted
+  password  String // AES-256 encrypted
   url       String?
   notes     String?
   category  String   @default("OTHER") // WP_ADMIN, HOSTING, DNS, FTP, STRIPE, OTHER
@@ -916,10 +915,10 @@ model Credential {
 // ==================== TASK TEMPLATES ====================
 
 model TaskTemplate {
-  id    String @id @default(cuid())
-  name  String
-  phase String // STARTING_UP, DESIGN_DEV, ADDING_CONTENT, FINALIZING, LAUNCHED
-  tasks String @default("[]") // JSON array of {title, description, assignee_role}
+  id        String   @id @default(cuid())
+  name      String
+  phase     String // STARTING_UP, DESIGN_DEV, ADDING_CONTENT, FINALIZING, LAUNCHED
+  tasks     String   @default("[]") // JSON array of {title, description, assignee_role}
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -970,7 +969,7 @@ model OutreachLead {
 
 model SocialPost {
   id          String    @id @default(cuid())
-  platform    String    // INSTAGRAM | LINKEDIN | FACEBOOK
+  platform    String // INSTAGRAM | LINKEDIN | FACEBOOK
   content     String
   imagePrompt String?
   status      String    @default("DRAFT") // DRAFT | SCHEDULED | PUBLISHED
@@ -988,7 +987,7 @@ model BlogPost {
   id              String    @id @default(cuid())
   title           String
   slug            String    @unique
-  content         String    // Markdown
+  content         String // Markdown
   excerpt         String?
   status          String    @default("DRAFT") // DRAFT | APPROVED | PUBLISHED
   targetKeyword   String?
@@ -1004,17 +1003,17 @@ model BlogPost {
 // ==================== EMAIL TRIAGE AGENT ====================
 
 model EmailTriageItem {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   subject     String
   senderEmail String
   senderName  String?
   bodyText    String
-  tags        String    @default("[]") // JSON: ['needs-reply', 'info-only', 'urgent', 'client', 'lead', 'spam']
-  status      String    @default("PENDING") // PENDING | REVIEWED | ARCHIVED
+  tags        String   @default("[]") // JSON: ['needs-reply', 'info-only', 'urgent', 'client', 'lead', 'spam']
+  status      String   @default("PENDING") // PENDING | REVIEWED | ARCHIVED
   aiSummary   String?
-  threadId    String?   // Link to existing Thread if matched
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  threadId    String? // Link to existing Thread if matched
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   drafts EmailTriageDraft[]
 
@@ -1041,12 +1040,12 @@ model EmailTriageDraft {
 
 model ContentDraft {
   id          String    @id @default(cuid())
-  type        String    // BLOG | SOCIAL | LINKEDIN_ARTICLE
+  type        String // BLOG | SOCIAL | LINKEDIN_ARTICLE
   title       String?
   content     String
-  platform    String?   // LINKEDIN | INSTAGRAM | FACEBOOK (for SOCIAL type)
-  brief       String?   // Original brief/topic
-  keywords    String?   // Target keywords
+  platform    String? // LINKEDIN | INSTAGRAM | FACEBOOK (for SOCIAL type)
+  brief       String? // Original brief/topic
+  keywords    String? // Target keywords
   status      String    @default("DRAFT") // DRAFT | APPROVED | PUBLISHED
   approvedAt  DateTime?
   publishedAt DateTime?
@@ -1059,35 +1058,35 @@ model ContentDraft {
 // ==================== LINKEDIN OUTREACH AGENT ====================
 
 model LinkedInSequence {
-  id             String   @id @default(cuid())
-  prospectName   String
-  prospectTitle  String?
-  company        String?
-  industry       String?
-  linkedinUrl    String?
-  connectionMsg  String   // Connection request message
-  followUp1      String   // 3-day follow-up
-  followUp2      String   // 7-day follow-up
-  status         String   @default("DRAFT") // DRAFT | ACTIVE | COMPLETED
-  notes          String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id            String   @id @default(cuid())
+  prospectName  String
+  prospectTitle String?
+  company       String?
+  industry      String?
+  linkedinUrl   String?
+  connectionMsg String // Connection request message
+  followUp1     String // 3-day follow-up
+  followUp2     String // 7-day follow-up
+  status        String   @default("DRAFT") // DRAFT | ACTIVE | COMPLETED
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   @@map("linkedin_sequences")
 }
 
 model LinkedInProspect {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   name        String
   title       String?
   company     String?
   industry    String?
   linkedinUrl String?
   email       String?
-  status      String    @default("NEW") // NEW | CONNECTED | IN_SEQUENCE | REPLIED | CONVERTED
+  status      String   @default("NEW") // NEW | CONNECTED | IN_SEQUENCE | REPLIED | CONVERTED
   notes       String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@map("linkedin_prospects")
 }
@@ -1095,14 +1094,14 @@ model LinkedInProspect {
 // ==================== COLD EMAIL AGENT ====================
 
 model ColdEmailSequence {
-  id            String   @id @default(cuid())
-  name          String
-  serviceType   String   // web_design | branding | seo | full_service
-  emails        String   @default("[]") // JSON: array of 5 emails [{subject, body, delayDays}]
-  status        String   @default("DRAFT") // DRAFT | ACTIVE | PAUSED | COMPLETED
+  id             String   @id @default(cuid())
+  name           String
+  serviceType    String // web_design | branding | seo | full_service
+  emails         String   @default("[]") // JSON: array of 5 emails [{subject, body, delayDays}]
+  status         String   @default("DRAFT") // DRAFT | ACTIVE | PAUSED | COMPLETED
   targetIndustry String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   prospects ColdEmailProspect[]
 
@@ -1134,13 +1133,13 @@ model CallLog {
   callerName      String
   callerNumber    String?
   callerCompany   String?
-  screeningScript String?   // AI-generated screening questions
-  summaryTemplate String?   // AI-generated summary template
-  callSummary     String?   // Filled in after call
+  screeningScript String? // AI-generated screening questions
+  summaryTemplate String? // AI-generated summary template
+  callSummary     String? // Filled in after call
   callNotes       String?
   status          String    @default("PENDING") // PENDING | SCREENED | COMPLETED | FOLLOW_UP_SENT
-  followUpDraftId String?   // Reference to follow-up email draft
-  followUpEmail   String?   // AI-generated follow-up email
+  followUpDraftId String? // Reference to follow-up email draft
+  followUpEmail   String? // AI-generated follow-up email
   calledAt        DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -1152,8 +1151,8 @@ model CallLog {
 
 model AiTeamMessage {
   id        String   @id @default(cuid())
-  agentRole String   // WEB_DESIGNER, WEB_DEVELOPER, PROJECT_MANAGER, MARKETING_MANAGER, SALES, LEGAL, BRANDING_EXPERT
-  role      String   // USER or ASSISTANT
+  agentRole String // WEB_DESIGNER, WEB_DEVELOPER, PROJECT_MANAGER, MARKETING_MANAGER, SALES, LEGAL, BRANDING_EXPERT
+  role      String // USER or ASSISTANT
   content   String
   clientId  String?
   projectId String?
@@ -1181,47 +1180,46 @@ model AiContext {
 // ==================== UPWORK CONTRACT TRACKER ====================
 
 model UpworkContract {
-  id              String    @id @default(cuid())
-  clientName      String
-  projectName     String
-  platform        String    @default("UPWORK") // UPWORK | DIRECT
-  contractType    String    @default("FIXED") // FIXED | HOURLY
-  totalBudget     Float     @default(0)
-  hourlyRate      Float?
-  status          String    @default("ACTIVE") // ACTIVE | PAUSED | COMPLETED | CANCELLED
+  id               String    @id @default(cuid())
+  clientName       String
+  projectName      String
+  platform         String    @default("UPWORK") // UPWORK | DIRECT
+  contractType     String    @default("FIXED") // FIXED | HOURLY
+  totalBudget      Float     @default(0)
+  hourlyRate       Float?
+  status           String    @default("ACTIVE") // ACTIVE | PAUSED | COMPLETED | CANCELLED
   currentMilestone String?
-  milestoneAmount Float?
-  milestoneStatus String?   // PENDING | SUBMITTED | APPROVED | OVERDUE
+  milestoneAmount  Float?
+  milestoneStatus  String? // PENDING | SUBMITTED | APPROVED | OVERDUE
   milestoneDueDate DateTime?
-  lastMessageAt   DateTime?
-  lastMessageDays Int?
-  notes           String?
-  upworkUrl       String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  lastMessageAt    DateTime?
+  lastMessageDays  Int?
+  notes            String?
+  upworkUrl        String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@map("upwork_contracts")
 }
 
-
 // ==================== EXPENSE TRACKING ====================
 
 model Expense {
-  id          String    @id @default(cuid())
+  id          String   @id @default(cuid())
   description String
   amount      Float
-  currency    String    @default("USD") // USD | CAD
-  category    String    @default("OTHER") // SOFTWARE | SUBCONTRACTOR | HOSTING | MARKETING | TRAVEL | SUPPLIES | OTHER
-  date        DateTime  @default(now())
-  billable    Boolean   @default(false)
-  invoiced    Boolean   @default(false)
+  currency    String   @default("USD") // USD | CAD
+  category    String   @default("OTHER") // SOFTWARE | SUBCONTRACTOR | HOSTING | MARKETING | TRAVEL | SUPPLIES | OTHER
+  date        DateTime @default(now())
+  billable    Boolean  @default(false)
+  invoiced    Boolean  @default(false)
   receiptUrl  String?
   notes       String?
   clientId    String?
   projectId   String?
   invoiceId   String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   client  Client?  @relation(fields: [clientId], references: [id])
   project Project? @relation(fields: [projectId], references: [id])
@@ -1230,29 +1228,28 @@ model Expense {
   @@map("expenses")
 }
 
-
 // ==================== REVENUE SNAPSHOTS (MRR/ARR) ====================
 
 model RevenueSnapshot {
-  id                      String    @id @default(cuid())
-  month                   String    // YYYY-MM e.g. "2026-03"
-  revenueUsd              Float     @default(0)
-  revenueCad              Float     @default(0)
-  revenueUsdEquiv         Float     @default(0)
-  mrr                     Float     @default(0)
-  arr                     Float     @default(0)
-  retainerRevenue         Float     @default(0)
-  projectRevenue          Float     @default(0)
-  maintenanceRevenue      Float     @default(0)
-  newClients              Int       @default(0)
-  churnedClients          Int       @default(0)
-  outstandingUsd          Float     @default(0)
-  overdueUsd              Float     @default(0)
-  exchangeRateUsedCadUsd  Float     @default(0.80)
-  notes                   String?
-  clientId                String?
-  createdAt               DateTime  @default(now())
-  updatedAt               DateTime  @updatedAt
+  id                     String   @id @default(cuid())
+  month                  String // YYYY-MM e.g. "2026-03"
+  revenueUsd             Float    @default(0)
+  revenueCad             Float    @default(0)
+  revenueUsdEquiv        Float    @default(0)
+  mrr                    Float    @default(0)
+  arr                    Float    @default(0)
+  retainerRevenue        Float    @default(0)
+  projectRevenue         Float    @default(0)
+  maintenanceRevenue     Float    @default(0)
+  newClients             Int      @default(0)
+  churnedClients         Int      @default(0)
+  outstandingUsd         Float    @default(0)
+  overdueUsd             Float    @default(0)
+  exchangeRateUsedCadUsd Float    @default(0.80)
+  notes                  String?
+  clientId               String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
   client Client? @relation(fields: [clientId], references: [id])
 
@@ -1263,23 +1260,23 @@ model RevenueSnapshot {
 // ==================== APPROVALS ====================
 
 model Approval {
-  id          String    @id @default(cuid())
-  type        String    // EMAIL | PROPOSAL | CONTRACT | DEPLOY | POST | INVOICE | COPY | OTHER
-  status      String    @default("PENDING") // PENDING | APPROVED | REJECTED | EXPIRED
-  title       String
-  clientName  String?
-  projectId   String?
-  content     String    // JSON string — full content (email body, post copy, etc.)
-  metadata    String?   // JSON string — extra context (recipient, subject, channel, etc.)
-  createdBy   String    // agent name e.g. "comms", "social", "finance"
-  reviewedBy  String?
-  reviewedAt  DateTime?
-  reviewNote  String?
-  expiresAt   DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id         String    @id @default(cuid())
+  type       String // EMAIL | PROPOSAL | CONTRACT | DEPLOY | POST | INVOICE | COPY | OTHER
+  status     String    @default("PENDING") // PENDING | APPROVED | REJECTED | EXPIRED
+  title      String
+  clientName String?
+  projectId  String?
+  content    String // JSON string — full content (email body, post copy, etc.)
+  metadata   String? // JSON string — extra context (recipient, subject, channel, etc.)
+  createdBy  String // agent name e.g. "comms", "social", "finance"
+  reviewedBy String?
+  reviewedAt DateTime?
+  reviewNote String?
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
-  project     Project?  @relation(fields: [projectId], references: [id])
+  project Project? @relation(fields: [projectId], references: [id])
 
   @@index([status])
   @@index([type])
@@ -1290,23 +1287,23 @@ model Approval {
 // ==================== EMAIL COMMUNICATIONS & CONTEXT ====================
 
 model ProjectCommunication {
-  id              String    @id @default(cuid())
-  projectId       String
-  gmailThreadId   String
-  gmailMessageId  String    @unique
-  from            String
-  to              String
-  subject         String
-  bodySnippet     String    // First 500 chars
-  fullBody        String    // Complete email body
-  direction       String    // INBOUND | OUTBOUND
-  sentiment       String?   // AI classified
-  summary         String?   // AI one-liner
-  actionItems     String?   // JSON array extracted by AI
-  account         String    // Which inbox: cameron@ashbi.ca or bianca@ashbi.ca
-  receivedAt      DateTime
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id             String   @id @default(cuid())
+  projectId      String
+  gmailThreadId  String
+  gmailMessageId String   @unique
+  from           String
+  to             String
+  subject        String
+  bodySnippet    String // First 500 chars
+  fullBody       String // Complete email body
+  direction      String // INBOUND | OUTBOUND
+  sentiment      String? // AI classified
+  summary        String? // AI one-liner
+  actionItems    String? // JSON array extracted by AI
+  account        String // Which inbox: cameron@ashbi.ca or bianca@ashbi.ca
+  receivedAt     DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
@@ -1318,8 +1315,8 @@ model ProjectCommunication {
 model ProjectContext {
   id                String    @id @default(cuid())
   projectId         String    @unique
-  aiSummary         String    // Compacted running context
-  humanNotes        String?   // Free-form notes by Cameron/Bianca
+  aiSummary         String // Compacted running context
+  humanNotes        String? // Free-form notes by Cameron/Bianca
   lastCompactedAt   DateTime?
   compactionVersion Int       @default(0)
   emailCount        Int       @default(0) // Total emails tracked
@@ -1351,7 +1348,7 @@ model ClientEmailMapping {
 model PushSubscription {
   id        String   @id @default(cuid())
   endpoint  String   @unique
-  keys      String   // JSON: { p256dh, auth }
+  keys      String // JSON: { p256dh, auth }
   userId    String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1377,7 +1374,7 @@ model AshChatMessage {
   id             String          @id @default(cuid())
   conversationId String
   conversation   AshConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  role           String          // "user" | "assistant"
+  role           String // "user" | "assistant"
   content        String          @db.Text
   createdAt      DateTime        @default(now())
 
@@ -1390,7 +1387,7 @@ model ProjectTemplate {
   id          String   @id @default(cuid())
   name        String
   description String?
-  projectType String?  // WEBSITE | BRANDING | MARKETING | CUSTOM
+  projectType String? // WEBSITE | BRANDING | MARKETING | CUSTOM
   tasks       String   @default("[]") // JSON array of task definitions
   milestones  String   @default("[]") // JSON array of milestone definitions
   createdAt   DateTime @default(now())
@@ -1412,8 +1409,8 @@ model IntakeForm {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  client      Client?  @relation(fields: [clientId], references: [id])
-  responses   IntakeFormResponse[]
+  client    Client?              @relation(fields: [clientId], references: [id])
+  responses IntakeFormResponse[]
 
   @@map("intake_forms")
 }
@@ -1427,7 +1424,7 @@ model IntakeFormResponse {
   clientId        String?
   createdAt       DateTime @default(now())
 
-  form            IntakeForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+  form IntakeForm @relation(fields: [formId], references: [id], onDelete: Cascade)
 
   @@map("intake_form_responses")
 }
@@ -1463,7 +1460,7 @@ model PipelineStage {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  deals       PipelineDeal[]
+  deals PipelineDeal[]
 
   @@map("pipeline_stages")
 }
@@ -1478,13 +1475,13 @@ model PipelineDeal {
   expectedCloseDate DateTime?
   notes             String?
   contactPerson     String?
-  source            String?   // UPWORK | REFERRAL | WEBSITE | COLD_OUTREACH | OTHER
+  source            String? // UPWORK | REFERRAL | WEBSITE | COLD_OUTREACH | OTHER
   lostReason        String?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  stage             PipelineStage @relation(fields: [stageId], references: [id])
-  client            Client        @relation(fields: [clientId], references: [id])
+  stage  PipelineStage @relation(fields: [stageId], references: [id])
+  client Client        @relation(fields: [clientId], references: [id])
 
   @@index([stageId])
   @@index([clientId])
@@ -1494,16 +1491,16 @@ model PipelineDeal {
 // ==================== NPS SURVEYS (from ashbi-hub) ====================
 
 model SurveyResponse {
-  id           String   @id @default(cuid())
-  clientId     String
-  score        Int      // 0-10 NPS score
-  category     String   // PROMOTER | PASSIVE | DETRACTOR
-  comment      String?
+  id              String   @id @default(cuid())
+  clientId        String
+  score           Int // 0-10 NPS score
+  category        String // PROMOTER | PASSIVE | DETRACTOR
+  comment         String?
   respondentName  String?
   respondentEmail String?
-  createdAt    DateTime @default(now())
+  createdAt       DateTime @default(now())
 
-  client       Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@index([clientId])
   @@index([createdAt])
@@ -1513,23 +1510,23 @@ model SurveyResponse {
 // ==================== WORDPRESS SITE BRIDGE (from ashbi-hub) ====================
 
 model WPSite {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   name          String
   url           String
   adminUrl      String?
   clientId      String?
   projectId     String?   @unique
-  status        String   @default("ACTIVE") // ACTIVE | MAINTENANCE | OFFLINE | ERROR
+  status        String    @default("ACTIVE") // ACTIVE | MAINTENANCE | OFFLINE | ERROR
   wpVersion     String?
   phpVersion    String?
-  pluginCount   Int      @default(0)
+  pluginCount   Int       @default(0)
   theme         String?
   lastCheckedAt DateTime?
-  healthScore   Int      @default(100) // 0-100
-  alerts        String   @default("[]") // JSON: array of alert objects
+  healthScore   Int       @default(100) // 0-100
+  alerts        String    @default("[]") // JSON: array of alert objects
   magicLoginUrl String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   client  Client?  @relation("WPSiteClient", fields: [clientId], references: [id])
   project Project? @relation(fields: [projectId], references: [id])
@@ -1544,12 +1541,12 @@ model CreativeBrief {
   title          String
   clientId       String
   projectId      String?
-  objective      String?  // Brief objective/goal
-  targetAudience String?  // JSON: audience demographics
-  tone           String?  // Brand tone/personality
+  objective      String? // Brief objective/goal
+  targetAudience String? // JSON: audience demographics
+  tone           String? // Brand tone/personality
   deliverables   String   @default("[]") // JSON: list of expected deliverables
   references     String   @default("[]") // JSON: reference URLs/descriptions
-  constraints    String?  // Budget, timeline, brand constraints
+  constraints    String? // Budget, timeline, brand constraints
   status         String   @default("DRAFT") // DRAFT | APPROVED | IN_PROGRESS | COMPLETED
   aiGenerated    Boolean  @default(false)
   createdAt      DateTime @default(now())
@@ -1565,19 +1562,19 @@ model CreativeBrief {
 // ==================== AD COPY GENERATOR (from ashbi-hub) ====================
 
 model AdCopy {
-  id           String   @id @default(cuid())
-  clientId     String?
-  projectId    String?
-  headline     String
-  body          String
-  cta          String?  // Call-to-action text
-  platform     String   @default("GOOGLE") // GOOGLE | FACEBOOK | INSTAGRAM | LINKEDIN | TIKTOK
-  audience     String?  // Target audience description
-  tone         String?  // Professional | Casual | Urgent | Friendly
-  status       String   @default("DRAFT") // DRAFT | APPROVED | ACTIVE | PAUSED
-  aiGenerated  Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id          String   @id @default(cuid())
+  clientId    String?
+  projectId   String?
+  headline    String
+  body        String
+  cta         String? // Call-to-action text
+  platform    String   @default("GOOGLE") // GOOGLE | FACEBOOK | INSTAGRAM | LINKEDIN | TIKTOK
+  audience    String? // Target audience description
+  tone        String? // Professional | Casual | Urgent | Friendly
+  status      String   @default("DRAFT") // DRAFT | APPROVED | ACTIVE | PAUSED
+  aiGenerated Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   client  Client?  @relation(fields: [clientId], references: [id])
   project Project? @relation(fields: [projectId], references: [id])
@@ -1593,19 +1590,19 @@ model ContentCalendarEvent {
   description String?
   contentType String    @default("BLOG") // BLOG | SOCIAL | EMAIL | VIDEO | PODCAST
   status      String    @default("IDEA") // IDEA | DRAFT | IN_REVIEW | SCHEDULED | PUBLISHED
-  platform    String?   // Blog | LinkedIn | Instagram | Email | etc.
+  platform    String? // Blog | LinkedIn | Instagram | Email | etc.
   scheduledAt DateTime?
   publishedAt DateTime?
-  contentUrl  String?   // URL of published content
+  contentUrl  String? // URL of published content
   clientId    String?
   projectId   String?
   assigneeId  String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  client    Client?   @relation(fields: [clientId], references: [id])
-  project   Project?  @relation(fields: [projectId], references: [id])
-  assignee  User?     @relation("CalendarEventAssignee", fields: [assigneeId], references: [id])
+  client   Client?  @relation(fields: [clientId], references: [id])
+  project  Project? @relation(fields: [projectId], references: [id])
+  assignee User?    @relation("CalendarEventAssignee", fields: [assigneeId], references: [id])
 
   @@index([scheduledAt])
   @@map("content_calendar_events")
@@ -1616,7 +1613,7 @@ model ContentCalendarEvent {
 model SEOAudit {
   id          String   @id @default(cuid())
   url         String
-  title       String?  // Page title
+  title       String? // Page title
   score       Int      @default(0) // 0-100
   issues      String   @default("[]") // JSON: array of issue objects
   suggestions String   @default("[]") // JSON: array of suggestion objects
@@ -1658,20 +1655,20 @@ model Snippet {
 // ==================== ASSET LIBRARY (from ashbi-hub) ====================
 
 model Asset {
-  id          String   @id @default(cuid())
-  name        String
-  type        String   @default("IMAGE") // IMAGE | VIDEO | FONT | ICON | DOCUMENT | TEMPLATE
-  url         String
+  id           String   @id @default(cuid())
+  name         String
+  type         String   @default("IMAGE") // IMAGE | VIDEO | FONT | ICON | DOCUMENT | TEMPLATE
+  url          String
   thumbnailUrl String?
-  size        Int?     // File size in bytes
-  mimeType    String?
-  altText     String?
-  tags        String   @default("[]") // JSON: array of tag strings
-  clientId    String?
-  folderId    String?  // For nested folder structure
-  isGlobal    Boolean  @default(false) // Available to all clients vs client-specific
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  size         Int? // File size in bytes
+  mimeType     String?
+  altText      String?
+  tags         String   @default("[]") // JSON: array of tag strings
+  clientId     String?
+  folderId     String? // For nested folder structure
+  isGlobal     Boolean  @default(false) // Available to all clients vs client-specific
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   client Client? @relation(fields: [clientId], references: [id])
 
@@ -1681,15 +1678,15 @@ model Asset {
 // ==================== CLIENT EMBEDDINGS (RAG / Client Brain) ====================
 
 model ClientEmbedding {
-  id         String   @id @default(cuid())
-  clientId   String
-  source     String   // EMAIL | NOTE | CALL | INVOICE | PROPOSAL | PROJECT | MANUAL
-  sourceId   String?  // ID of the source record
-  content    String   @db.Text // The text content that was embedded
-  embedding  Unsupported("vector(768)")? // pgvector embedding
-  metadata   String   @default("{}") // JSON: additional context
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id        String                      @id @default(cuid())
+  clientId  String
+  source    String // EMAIL | NOTE | CALL | INVOICE | PROPOSAL | PROJECT | MANUAL
+  sourceId  String? // ID of the source record
+  content   String                      @db.Text // The text content that was embedded
+  embedding Unsupported("vector(768)")? // pgvector embedding
+  metadata  String                      @default("{}") // JSON: additional context
+  createdAt DateTime                    @default(now())
+  updatedAt DateTime                    @updatedAt
 
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
@@ -1714,9 +1711,9 @@ model TimeSession {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  user    User     @relation(fields: [userId], references: [id])
-  project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  task    Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  user    User    @relation(fields: [userId], references: [id])
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task    Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([projectId])
@@ -1728,7 +1725,7 @@ model TimeSession {
 
 model PromptVersion {
   id          String   @id @default(cuid())
-  name        String   // e.g., "analyzeMessage", "draftResponse"
+  name        String // e.g., "analyzeMessage", "draftResponse"
   version     Int      @default(1)
   system      String   @db.Text // System prompt
   template    String   @db.Text // Prompt template with {{variables}}
@@ -1742,13 +1739,13 @@ model PromptVersion {
 }
 
 model ClientInvitation {
-  id        String   @id @default(cuid())
-  token     String   @unique
+  id        String    @id @default(cuid())
+  token     String    @unique
   email     String
   clientId  String
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   client Client @relation(fields: [clientId], references: [id])
 
@@ -1756,15 +1753,15 @@ model ClientInvitation {
 }
 
 model ApiKey {
-  id          String   @id @default(cuid())
-  name        String
-  key         String   @unique
-  userId      String
-  lastUsedAt  DateTime?
-  expiresAt   DateTime?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id         String    @id @default(cuid())
+  name       String
+  key        String    @unique
+  userId     String
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  isActive   Boolean   @default(true)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id])
 

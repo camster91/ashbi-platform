@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Overdue Invoice Reminder</title>
+</head>
+<body style="margin:0;padding:0;background-color:#faf9f2;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#faf9f2;">
+  <tr>
+    <td align="center" style="padding:24px 16px;">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+
+        <!-- Header -->
+        <tr>
+          <td style="background-color:#2e2958;border-radius:12px 12px 0 0;padding:32px 40px;text-align:center;">
+            <h1 style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:28px;font-weight:700;color:#ffffff;letter-spacing:0.5px;">ashbi</h1>
+            <p style="margin:4px 0 0;font-family:system-ui,-apple-system,sans-serif;font-size:12px;color:#e6f354;text-transform:uppercase;letter-spacing:3px;">Design &amp; Development</p>
+          </td>
+        </tr>
+
+        <!-- Accent bar -->
+        <tr>
+          <td style="padding:0;">
+            <div style="height:4px;background:linear-gradient(90deg,#e6f354 0%,#2e2958 100%);"></div>
+          </td>
+        </tr>
+
+        <!-- Body -->
+        <tr>
+          <td style="background-color:#ffffff;padding:40px;">
+            <!-- Overdue badge -->
+            <table role="presentation" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+              <tr>
+                <td style="background-color:#fdecea;border-radius:6px;padding:8px 16px;">
+                  <p style="margin:0;font-size:13px;font-weight:700;color:#c0392b;text-transform:uppercase;letter-spacing:1px;">Overdue by {{daysOverdue}} days</p>
+                </td>
+              </tr>
+            </table>
+
+            <h2 style="margin:0 0 8px;font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:700;color:#2e2958;">Past Due: Invoice {{invoiceNumber}}</h2>
+            <p style="margin:0 0 28px;font-size:15px;color:#555555;line-height:1.6;">Hi {{clientName}}, this is a reminder that invoice {{invoiceNumber}} is now past due. Please take care of it at your earliest convenience.</p>
+
+            <!-- Invoice summary card -->
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+              <tr>
+                <td style="background-color:#faf9f2;border:1px solid #e8e6dd;border-radius:8px;padding:24px;">
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td style="padding-bottom:12px;">
+                        <p style="margin:0;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#888888;">Invoice</p>
+                        <p style="margin:4px 0 0;font-size:18px;font-weight:700;color:#2e2958;">{{invoiceNumber}}</p>
+                      </td>
+                      <td style="padding-bottom:12px;text-align:right;">
+                        <p style="margin:0;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:#888888;">Amount Due</p>
+                        <p style="margin:4px 0 0;font-size:18px;font-weight:700;color:#c0392b;">{{amount}}</p>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td colspan="2" style="border-top:1px solid #e8e6dd;padding-top:12px;">
+                        <p style="margin:0;font-size:13px;color:#666665;">Overdue by <strong style="color:#c0392b;">{{daysOverdue}} days</strong></p>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+
+            <!-- CTA Button -->
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td align="center" style="padding:8px 0 32px;">
+                  <a href="{{payLink}}" style="display:inline-block;background-color:#e6f354;color:#2e2958;text-decoration:none;font-family:system-ui,-apple-system,sans-serif;font-size:15px;font-weight:600;padding:14px 36px;border-radius:50px;box-shadow:0 4px 14px rgba(230,243,84,0.35);">Pay Now</a>
+                </td>
+              </tr>
+            </table>
+
+            <p style="margin:0;font-size:13px;color:#888888;line-height:1.6;">If you've already sent payment, please disregard this notice. If you have questions, just reply to this email.</p>
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="background-color:#2e2958;border-radius:0 0 12px 12px;padding:24px 40px;text-align:center;">
+            <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:16px;font-weight:700;color:#ffffff;letter-spacing:0.5px;">ashbi</p>
+            <p style="margin:4px 0 16px;font-size:12px;color:rgba(255,255,255,0.6);"><a href="https://ashbi.ca" style="color:#e6f354;text-decoration:none;">ashbi.ca</a></p>
+            <p style="margin:0;font-size:11px;color:rgba(255,255,255,0.4);">Sent with care from Ashbi Hub</p>
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>

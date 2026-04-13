@@ -1,103 +1,68 @@
 // Notification routes
 
-import { prisma } from '../index.js';
-import { sendWebhookNotification } from '../utils/webhook.js';
-import { sendPushToUser } from '../utils/web-push.js';
+import {
+  getNotifications,
+  markAsRead,
+  markAllAsRead,
+  getUnreadCount
+} from '../services/notification.service.js';
 
 export default async function notificationRoutes(fastify) {
-  // Get user's notifications
+  // Get user's notifications (paginated)
   fastify.get('/', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
-    const { unreadOnly, limit = 50 } = request.query;
+    const { unreadOnly, limit = '50', offset = '0' } = request.query;
 
-    const where = { userId: request.user.id };
-    if (unreadOnly === 'true') {
-      where.read = false;
-    }
-
-    const notifications = await prisma.notification.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      take: parseInt(limit)
+    const result = await getNotifications(request.user.id, {
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+      unreadOnly: unreadOnly === 'true'
     });
 
-    // Parse data JSON field
-    return notifications.map(n => ({
-      ...n,
-      data: n.data ? JSON.parse(n.data) : null
-    }));
+    return result;
   });
 
   // Get unread count
   fastify.get('/unread-count', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
-    const count = await prisma.notification.count({
-      where: {
-        userId: request.user.id,
-        read: false
-      }
-    });
-
+    const count = await getUnreadCount(request.user.id);
     return { count };
   });
 
   // Mark single notification as read
-  fastify.post('/read/:id', {
+  fastify.patch('/:id/read', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const notification = await prisma.notification.findUnique({
-      where: { id }
-    });
+    const notification = await markAsRead(request.user.id, id);
 
     if (!notification) {
       return reply.status(404).send({ error: 'Notification not found' });
     }
 
-    if (notification.userId !== request.user.id) {
-      return reply.status(403).send({ error: 'Not authorized' });
-    }
-
-    await prisma.notification.update({
-      where: { id },
-      data: {
-        read: true,
-        readAt: new Date()
-      }
-    });
-
-    return { success: true };
+    return notification;
   });
 
   // Mark all notifications as read
-  fastify.post('/read-all', {
+  fastify.patch('/read-all', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
-    await prisma.notification.updateMany({
-      where: {
-        userId: request.user.id,
-        read: false
-      },
-      data: {
-        read: true,
-        readAt: new Date()
-      }
-    });
-
-    return { success: true };
+    const count = await markAllAsRead(request.user.id);
+    return { success: true, count };
   });
 
-  // Delete old notifications (admin only)
+  // Delete old read notifications (admin only)
   fastify.delete('/cleanup', {
     onRequest: [fastify.adminOnly]
   }, async (request) => {
-    const { olderThanDays = 30 } = request.query;
+    const { olderThanDays = '30' } = request.query;
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - parseInt(olderThanDays));
 
+    const { prisma } = await import('../index.js');
     const result = await prisma.notification.deleteMany({
       where: {
         read: true,
@@ -107,41 +72,4 @@ export default async function notificationRoutes(fastify) {
 
     return { deleted: result.count };
   });
-}
-
-// Helper to create notifications (used by other services)
-export async function createNotification(fastify, { userId, type, title, message, data }) {
-  const notification = await prisma.notification.create({
-    data: {
-      type,
-      title,
-      message,
-      data: data ? JSON.stringify(data) : null,
-      userId
-    }
-  });
-
-  // Send real-time notification via Socket.io
-  if (fastify.notify) {
-    fastify.notify(userId, type, {
-      id: notification.id,
-      title,
-      message,
-      data,
-      createdAt: notification.createdAt
-    });
-  }
-
-  // Fire webhook (non-blocking)
-  sendWebhookNotification(notification).catch(() => {});
-
-  // Send web push notification (non-blocking)
-  sendPushToUser(userId, {
-    title: title || 'Ashbi Hub',
-    body: message || '',
-    tag: `hub-${type}-${notification.id}`,
-    data: { url: data?.url || '/' }
-  }).catch(() => {});
-
-  return notification;
 }

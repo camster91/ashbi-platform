@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>New Message</title>
+</head>
+<body style="margin:0;padding:0;background-color:#faf9f2;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#faf9f2;">
+  <tr>
+    <td align="center" style="padding:24px 16px;">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+
+        <!-- Header -->
+        <tr>
+          <td style="background-color:#2e2958;border-radius:12px 12px 0 0;padding:32px 40px;text-align:center;">
+            <h1 style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:28px;font-weight:700;color:#ffffff;letter-spacing:0.5px;">ashbi</h1>
+            <p style="margin:4px 0 0;font-family:system-ui,-apple-system,sans-serif;font-size:12px;color:#e6f354;text-transform:uppercase;letter-spacing:3px;">Design &amp; Development</p>
+          </td>
+        </tr>
+
+        <!-- Accent bar -->
+        <tr>
+          <td style="padding:0;">
+            <div style="height:4px;background:linear-gradient(90deg,#e6f354 0%,#2e2958 100%);"></div>
+          </td>
+        </tr>
+
+        <!-- Body -->
+        <tr>
+          <td style="background-color:#ffffff;padding:40px;">
+            <h2 style="margin:0 0 8px;font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:700;color:#2e2958;">New message from {{senderName}}</h2>
+            <p style="margin:0 0 24px;font-size:15px;color:#555555;line-height:1.6;">Hi {{clientName}}, you've got a new message in your project.</p>
+
+            <!-- Chat bubble -->
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+              <tr>
+                <td style="background-color:#faf9f2;border:1px solid #e8e6dd;border-radius:12px;padding:24px;">
+                  <!-- Sender name row -->
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td style="padding-bottom:12px;">
+                        <table role="presentation" cellpadding="0" cellspacing="0">
+                          <tr>
+                            <td style="background-color:#2e2958;border-radius:50%;width:32px;height:32px;text-align:center;vertical-align:middle;">
+                              <p style="margin:0;color:#ffffff;font-size:13px;font-weight:700;">{{senderInitial}}</p>
+                            </td>
+                            <td style="padding-left:10px;">
+                              <p style="margin:0;font-size:14px;font-weight:600;color:#2e2958;">{{senderName}}</p>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+                  <!-- Message preview bubble -->
+                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td style="background-color:#ffffff;border:1px solid #e8e6dd;border-radius:8px;border-top-left-radius:0;padding:14px 18px;">
+                        <p style="margin:0;font-size:14px;color:#444444;line-height:1.5;">{{messagePreview}}</p>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+
+            <!-- CTA Button -->
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td align="center" style="padding:8px 0 32px;">
+                  <a href="{{portalLink}}" style="display:inline-block;background-color:#e6f354;color:#2e2958;text-decoration:none;font-family:system-ui,-apple-system,sans-serif;font-size:15px;font-weight:600;padding:14px 36px;border-radius:50px;box-shadow:0 4px 14px rgba(230,243,84,0.35);">Reply in Portal</a>
+                </td>
+              </tr>
+            </table>
+
+            <p style="margin:0;font-size:13px;color:#888888;line-height:1.6;">Head to your portal to read the full message and reply.</p>
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="background-color:#2e2958;border-radius:0 0 12px 12px;padding:24px 40px;text-align:center;">
+            <p style="margin:0;font-family:Georgia,'Times New Roman',serif;font-size:16px;font-weight:700;color:#ffffff;letter-spacing:0.5px;">ashbi</p>
+            <p style="margin:4px 0 16px;font-size:12px;color:rgba(255,255,255,0.6);"><a href="https://ashbi.ca" style="color:#e6f354;text-decoration:none;">ashbi.ca</a></p>
+            <p style="margin:0;font-size:11px;color:rgba(255,255,255,0.4);">Sent with care from Ashbi Hub</p>
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>
