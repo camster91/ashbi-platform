@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Search, Folder, CheckSquare, User, MessageSquare, Mail } from 'lucide-react';
+import api from '../lib/api';
 
 const TYPE_ICON = { project: Folder, task: CheckSquare, client: User, thread: MessageSquare, message: Mail };
 
@@ -41,12 +42,8 @@ export default function GlobalSearch() {
     if (query.trim().length < 2) { setResults([]); return; }
     try {
       setLoading(true);
-      const params = new URLSearchParams({ q: query, type: filter === 'all' ? '' : filter });
-      const res = await fetch(`/api/search?${params}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-      });
-      if (!res.ok) throw new Error('Search failed');
-      const data = await res.json();
+      const type = filter === 'all' ? '' : filter;
+      const data = await api.search(query, type);
       setResults(data.results || []);
     } catch (err) {
       setError(err.message);
