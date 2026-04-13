@@ -369,4 +369,4 @@ export default async function timeRoutes(fastify) {
 
     return entry;
   });
-});
+}
