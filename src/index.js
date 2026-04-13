@@ -434,7 +434,32 @@ io.engine.on('connection_error', (err) => {
 fastify.decorate('io', io);
 
 // Global notification helper
-fastify.decorate('notify', (userId, type, data) => {
+fastify.decorate('notify', async (userId, type, data) => {
+  // Persist to database so the notification bell can load history
+  try {
+    const { createNotification } = await import('./services/notification.service.js');
+    const typeLabels = {
+      THREAD_ASSIGNED: 'Thread Assigned',
+      MENTION: 'Mention',
+      TASK_COMMENT: 'Task Comment',
+      RESPONSE_PENDING: 'Response Pending',
+      RESPONSE_APPROVED: 'Response Approved',
+      RESPONSE_REJECTED: 'Response Rejected',
+      EVENT_INVITE: 'Event Invite',
+      INVOICE_OVERDUE: 'Invoice Overdue',
+      PROJECT_UPDATE: 'Project Update',
+    };
+    await createNotification({
+      userId,
+      type,
+      title: typeLabels[type] || type,
+      message: typeof data === 'string' ? data : JSON.stringify(data),
+      data: typeof data === 'object' ? data : undefined,
+    });
+  } catch (err) {
+    console.error('[notify] Failed to persist notification:', err.message);
+  }
+  // Also emit real-time via Socket.IO
   io.to(`user:${userId}`).emit('notification', { type, data });
 });
 
