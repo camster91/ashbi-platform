@@ -1,5 +1,5 @@
 // Push Notification Routes
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 import { getVapidPublicKey, sendPushToAll } from '../utils/web-push.js';
 
 export default async function pushRoutes(fastify) {

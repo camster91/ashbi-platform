@@ -1,6 +1,6 @@
 // Webhook routes (email + Stripe)
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 import { parseEmail } from '../utils/emailParser.js';
 import { processEmailPipeline } from '../services/pipeline.service.js';
 import { handleWebhook } from '../services/stripe.service.js';

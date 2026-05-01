@@ -1,4 +1,4 @@
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 
 export default async function integrationRoutes(fastify) {
   // List connected integrations

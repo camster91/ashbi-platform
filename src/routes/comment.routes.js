@@ -1,6 +1,6 @@
 // Task Comment routes with @mentions
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 
 export default async function commentRoutes(fastify) {
   // Get comments for a task

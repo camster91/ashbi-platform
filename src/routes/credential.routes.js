@@ -1,6 +1,6 @@
 // Credentials Vault routes
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 import { encrypt, decrypt } from '../utils/crypto.js';
 
 export default async function credentialRoutes(fastify) {
@@ -51,7 +51,7 @@ export default async function credentialRoutes(fastify) {
 
     return {
       ...credential,
-      password: decrypt(credential.password)
+      password: decrypt(credential.password, { audit: true, label: `credential:${id}:${credential.label}` })
     };
   });
 
@@ -70,7 +70,7 @@ export default async function credentialRoutes(fastify) {
       return reply.status(404).send({ error: 'Credential not found' });
     }
 
-    return { password: decrypt(credential.password) };
+    return { password: decrypt(credential.password, { audit: true, label: `credential-password:${id}` }) };
   });
 
   // Create credential (admin only)

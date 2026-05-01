@@ -1,6 +1,6 @@
 // Calendar & Meeting routes
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 
 export default async function calendarRoutes(fastify) {
   // Get calendar events

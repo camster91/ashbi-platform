@@ -192,6 +192,8 @@ model Project {
   creativeBriefs        CreativeBrief[]
   timeSessions          TimeSession[]
 
+  @@index([clientId])
+  @@index([status])
   @@map("projects")
 }
 
@@ -251,6 +253,8 @@ model Task {
   @@index([priority])
   @@index([dueDate])
   @@index([dependsOnId])
+  @@index([assigneeId])
+  @@index([projectId, status])
   @@map("tasks")
 }
 
@@ -289,6 +293,8 @@ model Thread {
   @@index([clientId])
   @@index([projectId])
   @@index([status])
+  @@index([assignedToId])
+  @@index([status, assignedToId])
   @@map("threads")
 }
 
@@ -448,6 +454,8 @@ model ChatMessage {
   replies   ChatMessage[]  @relation("ChatReplies")
   reactions ChatReaction[]
 
+  @@index([projectId])
+  @@index([projectId, createdAt])
   @@map("chat_messages")
 }
 
@@ -532,6 +540,9 @@ model TimeEntry {
   user    User     @relation(fields: [userId], references: [id])
   invoice Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
 
+  @@index([projectId])
+  @@index([userId])
+  @@index([invoiceId])
   @@map("time_entries")
 }
 
@@ -575,6 +586,8 @@ model Activity {
   user    User     @relation(fields: [userId], references: [id])
 
   @@index([projectId, createdAt])
+  @@index([userId, createdAt])
+  @@index([entityType, entityId])
   @@map("activities")
 }
 
@@ -911,6 +924,8 @@ model Credential {
   client  Client?  @relation(fields: [clientId], references: [id], onDelete: Cascade)
   project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
+  @@index([clientId])
+  @@index([projectId])
   @@map("credentials")
 }
 
@@ -1227,6 +1242,9 @@ model Expense {
   project Project? @relation(fields: [projectId], references: [id])
   invoice Invoice? @relation(fields: [invoiceId], references: [id])
 
+  @@index([clientId])
+  @@index([projectId])
+  @@index([invoiceId])
   @@map("expenses")
 }
 

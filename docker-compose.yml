@@ -29,6 +29,8 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./scripts/pgvector-init.sh:/docker-entrypoint-initdb.d/pgvector-init.sh
+    # ⚠️ Do NOT expose database ports in production — comment out the ports mapping below
+    # Only the app container needs database access via the internal Docker network
     ports:
       - "5432:5432"
     networks:
@@ -38,6 +40,8 @@ services:
     image: redis:7-alpine
     container_name: ashbi-redis
     restart: unless-stopped
+    # ⚠️ Do NOT expose Redis ports in production — comment out the ports mapping below
+    # Only the app container needs Redis access via the internal Docker network
     ports:
       - "6379:6379"
     volumes:

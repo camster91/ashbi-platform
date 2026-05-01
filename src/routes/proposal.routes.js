@@ -2,7 +2,7 @@
 
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 import { queueEmbedding } from '../jobs/queue.js';
 
 async function sendProposalEmail(to, clientName, proposalTitle, portalUrl) {

@@ -1,6 +1,6 @@
 // Ash AI Chat — persistent conversations with the AI Chief of Staff
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 import env from '../config/env.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 

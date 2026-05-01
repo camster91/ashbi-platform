@@ -1,7 +1,7 @@
 // Deal Pipeline service - CRM deal management
 // Migrated from ashbi-hub raw SQL to Prisma
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 
 /**
  * Get all pipeline stages with their deals

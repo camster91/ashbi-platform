@@ -1,7 +1,7 @@
 // Time Tracking service
 // Migrated from ashbi-hub to Prisma
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 
 /**
  * Start a new time tracking session

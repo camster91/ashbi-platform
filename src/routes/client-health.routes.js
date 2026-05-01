@@ -1,7 +1,7 @@
 // Client Health Bot Routes
 // Scores clients based on engagement, payment history, project activity, and communication
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 
 // Health scoring weights
 const WEIGHTS = {

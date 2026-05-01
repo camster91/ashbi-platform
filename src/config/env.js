@@ -5,6 +5,7 @@ const env = {
   port: parseInt(process.env.PORT || '3000', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
   isDev: process.env.NODE_ENV !== 'production',
+  isProduction: process.env.NODE_ENV === 'production',
 
   // CORS - supports multiple origins separated by commas
   corsOrigins: (process.env.CORS_ORIGIN || 'https://hub.ashbi.ca')
@@ -15,6 +16,7 @@ const env = {
   // Auth
   jwtSecret: process.env.JWT_SECRET,
   jwtExpiresIn: '7d',
+  adminInviteToken: process.env.ADMIN_INVITE_TOKEN, // Required for first admin registration
 
   // AI
   anthropicApiKey: process.env.ANTHROPIC_API_KEY,

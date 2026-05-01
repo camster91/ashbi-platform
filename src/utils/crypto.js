@@ -27,12 +27,16 @@ export function encrypt(plaintext) {
   return `${iv.toString('hex')}:${tag.toString('hex')}:${encrypted}`;
 }
 
-export function decrypt(ciphertext) {
+export function decrypt(ciphertext, { audit = false, label } = {}) {
   if (!ciphertext) return ciphertext;
   const key = getKey();
   const parts = ciphertext.split(':');
   if (parts.length !== 3) {
     throw new Error('Invalid encrypted format');
+  }
+  // Audit log: track every decryption of sensitive credentials
+  if (audit || label) {
+    console.warn(`[CREDENTIAL AUDIT] Decryption accessed${label ? `: ${label}` : ''} at ${new Date().toISOString()}`);
   }
   const iv = Buffer.from(parts[0], 'hex');
   const tag = Buffer.from(parts[1], 'hex');

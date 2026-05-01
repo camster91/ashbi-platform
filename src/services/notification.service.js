@@ -1,6 +1,6 @@
 // Notification service — create, list, and manage notifications
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 
 /**
  * Placeholder for email sending. Will be replaced with real templates later.

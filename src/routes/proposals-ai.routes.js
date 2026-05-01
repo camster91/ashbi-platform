@@ -1,7 +1,7 @@
 // Proposal AI Agent — generates full proposals from client intake + project type
 
 import aiClient from '../ai/client.js';
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 
 export default async function proposalsAiRoutes(fastify) {
 

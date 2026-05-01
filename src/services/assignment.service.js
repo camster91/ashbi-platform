@@ -1,6 +1,6 @@
 // Assignment service - handles thread/task routing
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 
 /**
  * Assignment algorithm priority:

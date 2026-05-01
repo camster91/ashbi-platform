@@ -1,9 +1,10 @@
 // Expense routes — full CRUD + summary stats
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 import path from 'path';
 import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
+import { validateBody, createExpenseSchema, fileUpload } from '../validators/schemas.js';
 
 const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
 
@@ -104,7 +105,7 @@ export default async function expenseRoutes(fastify) {
   });
 
   // ─── POST / — create expense ───────────────────────────────────────────────
-  fastify.post('/', { onRequest: [fastify.authenticate] }, async (request) => {
+  fastify.post('/', { onRequest: [fastify.authenticate], preHandler: [validateBody(createExpenseSchema)] }, async (request) => {
     const { description, amount, currency, category, date, billable, notes, clientId, projectId, receiptUrl } = request.body;
 
     const expense = await fastify.prisma.expense.create({
@@ -134,13 +135,13 @@ export default async function expenseRoutes(fastify) {
     const data = await request.file();
     if (!data) return reply.status(400).send({ error: 'No file uploaded' });
 
-    const ext = path.extname(data.filename).toLowerCase();
-    const allowed = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf']);
-    if (!allowed.has(ext)) {
-      return reply.status(400).send({ error: 'File type not allowed. Use JPG, PNG, GIF, WEBP, or PDF.' });
+    // Validate file type and extension via shared validator
+    const validation = fileUpload.validate(data.filename, data.mimetype);
+    if (!validation.valid) {
+      return reply.status(400).send({ error: validation.error });
     }
 
-    const filename = `receipt-${randomUUID()}${ext}`;
+    const filename = `receipt-${randomUUID()}${validation.ext}`;
     const filepath = path.join(UPLOAD_DIR, filename);
     const buffer = await data.toBuffer();
     await fs.writeFile(filepath, buffer);

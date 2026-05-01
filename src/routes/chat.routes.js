@@ -1,6 +1,6 @@
 // Project Chat routes - Real-time team messaging
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 
 export default async function chatRoutes(fastify) {
   // Get chat messages for a project (paginated)

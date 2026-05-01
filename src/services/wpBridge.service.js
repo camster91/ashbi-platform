@@ -1,7 +1,7 @@
 // WordPress Bridge service
 // Migrated from ashbi-hub with proper auth and Prisma
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 import crypto from 'crypto';
 
 /**

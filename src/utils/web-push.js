@@ -1,6 +1,6 @@
 // Web Push Notifications (VAPID)
 import webpush from 'web-push';
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';

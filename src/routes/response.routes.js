@@ -1,6 +1,6 @@
 // Response routes (drafts and approvals)
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 
 export default async function responseRoutes(fastify) {
   // Get all pending approval responses (admin only)

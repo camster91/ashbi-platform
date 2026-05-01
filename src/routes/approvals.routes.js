@@ -1,15 +1,12 @@
-// Frontend-accessible approval routes (uses JWT auth, not bot secret)
-export default async function approvalRoutes(fastify) {
-  const requireAuth = async (request, reply) => {
-    try {
-      await request.jwtVerify();
-    } catch {
-      return reply.status(401).send({ error: 'Unauthorized' });
-    }
-  };
+// Frontend-accessible approval routes (uses fastify.authenticate + adminOnly)
+import { validateBody, patchApprovalSchema, validateParams } from '../validators/schemas.js';
+import cuid2 from '../utils/safeParse.js'; // for cuid validation
 
+const cuidId = { type: 'string', minLength: 1, maxLength: 50 };
+
+export default async function approvalRoutes(fastify) {
   // GET /api/approvals
-  fastify.get('/approvals', { preHandler: requireAuth }, async (request) => {
+  fastify.get('/approvals', { onRequest: [fastify.authenticate] }, async (request) => {
     const { status, type, limit = 50, offset = 0 } = request.query;
     const where = {};
     if (status) where.status = status.toUpperCase();
@@ -27,34 +24,34 @@ export default async function approvalRoutes(fastify) {
   });
 
   // GET /api/approvals/pending-count
-  fastify.get('/approvals/pending-count', { preHandler: requireAuth }, async () => {
+  fastify.get('/approvals/pending-count', { onRequest: [fastify.authenticate] }, async () => {
     const count = await fastify.prisma.approval.count({ where: { status: 'PENDING' } });
     return { count };
   });
 
   // GET /api/approvals/:id
-  fastify.get('/approvals/:id', { preHandler: requireAuth }, async (request, reply) => {
+  fastify.get('/approvals/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const { id } = request.params;
+
     const approval = await fastify.prisma.approval.findUnique({
-      where: { id: request.params.id },
+      where: { id },
     });
     if (!approval) return reply.status(404).send({ error: 'Not found' });
     return approval;
   });
 
-  // PATCH /api/approvals/:id — Cameron approves/rejects
-  fastify.patch('/approvals/:id', { preHandler: requireAuth }, async (request, reply) => {
-    const { status, reviewNote } = request.body || {};
-    if (!status || !['APPROVED', 'REJECTED'].includes(status.toUpperCase())) {
-      return reply.status(400).send({ error: 'status must be APPROVED or REJECTED' });
-    }
-    // Only admin can approve
-    if (request.user?.role !== 'ADMIN') {
-      return reply.status(403).send({ error: 'Admin only' });
-    }
+  // PATCH /api/approvals/:id — admin approves/rejects
+  fastify.patch('/approvals/:id', {
+    onRequest: [fastify.authenticate, fastify.adminOnly],
+    preHandler: [validateBody(patchApprovalSchema)],
+  }, async (request, reply) => {
+    const { status, reviewNote } = request.body;
+    const { id } = request.params;
+
     const approval = await fastify.prisma.approval.update({
-      where: { id: request.params.id },
+      where: { id },
       data: {
-        status: status.toUpperCase(),
+        status,
         reviewNote: reviewNote || null,
         reviewedBy: request.user.email,
         reviewedAt: new Date(),

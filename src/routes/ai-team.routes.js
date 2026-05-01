@@ -1,6 +1,6 @@
 // AI Team Routes — 7 specialized AI agents with chat interfaces
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 import { getProvider } from '../ai/providers/index.js';
 
 const AGENTS = [

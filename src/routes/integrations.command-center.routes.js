@@ -2,7 +2,7 @@
 // GET /api/command-center   - single endpoint that aggregates all integration data
 // Returns all panels in one response for the dashboard
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 
 const COOLIFY_URL = process.env.COOLIFY_URL || 'http://187.77.26.99:8000';
 const COOLIFY_TOKEN = process.env.COOLIFY_TOKEN;

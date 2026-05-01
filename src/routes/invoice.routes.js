@@ -2,6 +2,7 @@
 import { createPaymentLink, handleWebhook } from '../services/stripe.service.js';
 import { generateInvoicePdf } from '../utils/generate-invoice-pdf.js';
 import { generateInvoiceNumber } from '../utils/invoice.js';
+import { validateBody, createInvoiceSchema, updateInvoiceSchema, markInvoicePaidSchema, sendInvoiceSchema } from '../validators/schemas.js';
 
 const HST_RATE = 13; // Ontario HST
 
@@ -162,7 +163,7 @@ export default async function invoiceRoutes(fastify) {
   });
 
   // ─── POST / — create invoice ────────────────────────────────────────────────
-  fastify.post('/', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.post('/', { onRequest: [fastify.authenticate], preHandler: [validateBody(createInvoiceSchema)] }, async (request, reply) => {
     const {
       clientId,
       projectId,
@@ -219,7 +220,7 @@ export default async function invoiceRoutes(fastify) {
   });
 
   // ─── PUT /:id — update invoice ──────────────────────────────────────────────
-  fastify.put('/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.put('/:id', { onRequest: [fastify.authenticate], preHandler: [validateBody(updateInvoiceSchema)] }, async (request, reply) => {
     const invoice = await fastify.prisma.invoice.findUnique({ where: { id: request.params.id } });
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
     if (invoice.status !== 'DRAFT') return reply.status(400).send({ error: 'Only draft invoices can be fully updated. Use /mark-paid or /void for status changes.' });
@@ -302,7 +303,7 @@ export default async function invoiceRoutes(fastify) {
   });
 
   // ─── POST /:id/send — send invoice to client ───────────────────────────────
-  fastify.post('/:id/send', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.post('/:id/send', { onRequest: [fastify.authenticate], preHandler: [validateBody(sendInvoiceSchema)] }, async (request, reply) => {
     const invoice = await fastify.prisma.invoice.findUnique({
       where: { id: request.params.id },
       include: {
@@ -394,8 +395,9 @@ export default async function invoiceRoutes(fastify) {
   });
 
   // ─── POST /:id/mark-paid — mark as paid ────────────────────────────────────
-  fastify.post('/:id/mark-paid', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const { paymentMethod = 'BANK', paymentNotes, transactionId, paidAt } = request.body || {};
+  fastify.post('/:id/mark-paid', { onRequest: [fastify.authenticate], preHandler: [validateBody(markInvoicePaidSchema)] }, async (request, reply) => {
+    const { method, amount, paidAt } = request.body;
+    const paymentMethod = method || 'OTHER';
     const invoice = await fastify.prisma.invoice.findUnique({ where: { id: request.params.id } });
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
     if (invoice.status === 'PAID') return reply.status(400).send({ error: 'Invoice already paid' });

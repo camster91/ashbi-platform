@@ -1,11 +1,12 @@
 // Client Portal Routes — passwordless magic-link auth + full portal experience
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 import { generateInvoicePdf } from '../utils/generate-invoice-pdf.js';
 import env from '../config/env.js';
 import path from 'path';
 import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
+import { validateBody, validateParams, clientPortalMessageSchema, requestAccessSchema, fileUpload } from '../validators/schemas.js';
 
 const PORTAL_BASE = env.hubUrl;
 const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
@@ -53,11 +54,13 @@ export default async function clientPortalRoutes(fastify) {
   // ── CLIENT JWT middleware ────────────────────────────────────────────────────
   async function clientAuth(request, reply) {
     try {
+      // Accept token from Authorization header or cookie only — never from URL query string
+      // (query string tokens get leaked in browser history, proxy logs, and Referer headers)
       const rawToken =
-        request.query?.token ||
         (request.headers.authorization?.startsWith('Bearer ')
           ? request.headers.authorization.slice(7)
-          : null);
+          : null) ||
+        request.cookies?.token;
 
       if (!rawToken) {
         return reply.status(401).send({ error: 'Missing token' });
@@ -78,11 +81,11 @@ export default async function clientPortalRoutes(fastify) {
   // ── Auth ─────────────────────────────────────────────────────────────────────
 
   // POST /api/client-portal/request-access
-  fastify.post('/client-portal/request-access', async (request, reply) => {
-    const { email } = request.body || {};
-    if (!email) {
-      return reply.status(400).send({ error: 'Email required' });
-    }
+  // Sends a magic link email — link points to /verify-token which sets a secure cookie
+  fastify.post('/client-portal/request-access', {
+    preHandler: [validateBody(requestAccessSchema)],
+  }, async (request, reply) => {
+    const { email } = request.body;
 
     const contact = await prisma.contact.findFirst({
       where: { email: email.toLowerCase().trim() },
@@ -90,14 +93,60 @@ export default async function clientPortalRoutes(fastify) {
     });
 
     if (!contact) {
+      // Don't leak whether email exists
       return { sent: true };
     }
 
     const token = fastify.jwt.sign({ contactId: contact.id, clientId: contact.clientId, role: 'CLIENT' }, { expiresIn: '1h' });
-    const magicLink = `${PORTAL_BASE}/client-portal?token=${token}`;
+    // Magic link now goes to the verify endpoint which POSTs the token
+    const magicLink = `${PORTAL_BASE}/client-portal/verify?token=${token}`;
     await sendMagicLinkEmail(contact.email, contact.name, magicLink);
 
     return { sent: true };
+  });
+
+  // POST /api/client-portal/verify-token
+  // Exchanges a magic-link token for an httpOnly secure cookie
+  // This avoids JWT tokens appearing in browser history / Referer headers
+  fastify.post('/client-portal/verify-token', async (request, reply) => {
+    const { token } = request.body || {};
+
+    if (!token) {
+      return reply.status(400).send({ error: 'Token required' });
+    }
+
+    try {
+      const payload = fastify.jwt.verify(token);
+
+      if (payload.role !== 'CLIENT') {
+        return reply.status(403).send({ error: 'Not authorized' });
+      }
+
+      // Re-issue a new token with longer expiry for the session cookie
+      const sessionToken = fastify.jwt.sign({
+        contactId: payload.contactId,
+        clientId: payload.clientId,
+        role: 'CLIENT'
+      }, { expiresIn: '7d' });
+
+      reply
+        .setCookie('token', sessionToken, {
+          path: '/',
+          httpOnly: true,
+          secure: env.isProduction,
+          sameSite: env.isProduction ? 'strict' : 'lax',
+          maxAge: 7 * 24 * 60 * 60 // 7 days
+        })
+        .send({
+          user: {
+            contactId: payload.contactId,
+            clientId: payload.clientId,
+            role: 'CLIENT'
+          }
+        });
+    } catch (err) {
+      return reply.status(401).send({ error: 'Invalid or expired token' });
+    }
   });
 
   // GET /api/client-portal/me
@@ -271,14 +320,10 @@ export default async function clientPortalRoutes(fastify) {
   });
 
   // POST /api/client-portal/projects/:id/messages
-  fastify.post('/client-portal/projects/:id/messages', { preHandler: clientAuth }, async (request, reply) => {
+  fastify.post('/client-portal/projects/:id/messages', { preHandler: [clientAuth, validateBody(clientPortalMessageSchema)] }, async (request, reply) => {
     const { clientId, contactId } = request.clientUser;
     const { id } = request.params;
-    const { content, type = 'TEXT' } = request.body;
-
-    if (!content?.trim()) {
-      return reply.status(400).send({ error: 'Message content is required' });
-    }
+    const { content, type } = request.body;
 
     const project = await prisma.project.findFirst({ where: { id, clientId } });
     if (!project) {
@@ -366,11 +411,17 @@ export default async function clientPortalRoutes(fastify) {
       return reply.status(400).send({ error: 'No file uploaded' });
     }
 
+    // Validate file type and extension
+    const validation = fileUpload.validate(data.filename, data.mimetype);
+    if (!validation.valid) {
+      return reply.status(400).send({ error: validation.error });
+    }
+
     // Ensure upload directory
     await fs.mkdir(UPLOAD_DIR, { recursive: true });
 
-    const ext = path.extname(data.filename).toLowerCase();
-    const filename = `${randomUUID()}${ext}`;
+    // Use validated extension (always from allowlist)
+    const filename = `${randomUUID()}${validation.ext}`;
     const filepath = path.join(UPLOAD_DIR, filename);
 
     // Write file

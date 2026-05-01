@@ -15,20 +15,26 @@ export default async function mailgunHitlRoutes(fastify) {
     try {
       const body = request.body;
 
-      // Validate Mailgun signature
+      // Validate Mailgun signature — ALWAYS validate in production
       const signingKey = process.env.MAILGUN_SIGNING_KEY;
-      if (signingKey) {
-        const timestamp = body.timestamp;
-        const token = body.token;
-        const signature = body.signature;
-        const expected = crypto
-          .createHmac('sha256', signingKey)
-          .update(timestamp + token)
-          .digest('hex');
-        if (expected !== signature) {
-          fastify.log.warn('[hitl-reply] Invalid Mailgun signature — ignoring');
-          return;
-        }
+      if (!signingKey) {
+        fastify.log.error('[hitl-reply] MAILGUN_SIGNING_KEY not configured — rejecting webhook');
+        return;
+      }
+      const timestamp = body.timestamp;
+      const token = body.token;
+      const signature = body.signature;
+      if (!timestamp || !token || !signature) {
+        fastify.log.warn('[hitl-reply] Missing Mailgun signature fields — ignoring');
+        return;
+      }
+      const expected = crypto
+        .createHmac('sha256', signingKey)
+        .update(timestamp + token)
+        .digest('hex');
+      if (expected !== signature) {
+        fastify.log.warn('[hitl-reply] Invalid Mailgun signature — ignoring');
+        return;
       }
 
       const recipient = body.recipient || '';

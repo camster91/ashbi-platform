@@ -1,5 +1,5 @@
 // Dashboard stats — single endpoint for the command center
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 
 export default async function dashboardRoutes(fastify) {
   // GET /api/dashboard/stats — all numbers in one call

@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth, AuthProvider } from './hooks/useAuth';
 import Layout from './components/Layout';
+import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider, useToast } from './hooks/useToast';
 
 // Eagerly loaded (auth + portal — always needed before user is known)
@@ -97,27 +98,29 @@ function AdminRoute({ children }) {
 
 function AppRoutes() {
   return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="/forgot-password" element={<ForgotPassword />} />
-      <Route path="/reset-password" element={<ResetPassword />} />
-      <Route path="/portal/:token" element={<Portal />} />
-      <Route path="/portal/proposal/:token" element={<PortalProposal />} />
-      <Route path="/portal/contract/:token" element={<PortalContract />} />
-      <Route path="/portal/invoice/:token" element={<PortalInvoice />} />
-      <Route path="/portal/book" element={<PortalBooking />} />
-      <Route path="/portal/form/:token" element={<PortalIntakeForm />} />
-      <Route path="/portal/estimate/:viewToken" element={<PortalEstimate />} />
-      <Route path="/client-portal" element={<ClientPortal />} />
-      <Route path="/client/login" element={<ClientPortal />} />
-      <Route path="/client/dashboard" element={<ClientPortal />} />
+      <ErrorBoundary>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/portal/:token" element={<Portal />} />
+          <Route path="/portal/proposal/:token" element={<PortalProposal />} />
+          <Route path="/portal/contract/:token" element={<PortalContract />} />
+          <Route path="/portal/invoice/:token" element={<PortalInvoice />} />
+          <Route path="/portal/book" element={<PortalBooking />} />
+          <Route path="/portal/form/:token" element={<PortalIntakeForm />} />
+          <Route path="/portal/estimate/:viewToken" element={<PortalEstimate />} />
+          <Route path="/client-portal" element={<ClientPortal />} />
+          <Route path="/client/login" element={<ClientPortal />} />
+          <Route path="/client/dashboard" element={<ClientPortal />} />
       <Route
         path="/*"
         element={
           <PrivateRoute>
             <Layout>
-              <Suspense fallback={<PageLoader />}>
-                <Routes>
+              <ErrorBoundary>
+                <Suspense fallback={<PageLoader />}>
+                  <Routes>
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/inbox" element={<Inbox />} />
                   <Route path="/thread/:id" element={<Thread />} />
@@ -169,13 +172,15 @@ function AppRoutes() {
                   <Route path="/assets" element={<AssetLibrary />} />
                   <Route path="/wp-sites" element={<WPSites />} />
                   <Route path="/semantic-search" element={<SemanticSearch />} />
-                </Routes>
-              </Suspense>
+                  </Routes>
+                </Suspense>
+              </ErrorBoundary>
             </Layout>
           </PrivateRoute>
         }
       />
-    </Routes>
+      </Routes>
+      </ErrorBoundary>
   );
 }
 

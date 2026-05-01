@@ -1,6 +1,6 @@
 // Activity Feed routes
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 
 export default async function activityRoutes(fastify) {
   // Get activity feed for a project

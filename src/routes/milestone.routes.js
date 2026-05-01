@@ -1,6 +1,6 @@
 // Milestone routes
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 
 export default async function milestoneRoutes(fastify) {
   // List milestones for a project

@@ -1,10 +1,11 @@
 // Client Portal routes (public - no auth required, token-based access)
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 import { safeParse } from '../utils/safeParse.js';
 import { createPaymentLink } from '../services/stripe.service.js';
 import { onProposalApproved, onContractSigned } from '../services/automation.service.js';
 import crypto from 'crypto';
+import { validateBody, bookingSchema, contractSignSchema, formSubmitSchema, proposalDeclineSchema } from '../validators/schemas.js';
 
 export default async function portalRoutes(fastify) {
   // ==================== PROJECT PORTAL ====================
@@ -177,9 +178,9 @@ export default async function portalRoutes(fastify) {
   });
 
   // Decline proposal
-  fastify.post('/proposal/:viewToken/decline', async (request, reply) => {
+  fastify.post('/proposal/:viewToken/decline', { preHandler: [validateBody(proposalDeclineSchema)] }, async (request, reply) => {
     const { viewToken } = request.params;
-    const { reason } = request.body || {};
+    const { reason } = request.body;
 
     const proposal = await prisma.proposal.findUnique({ where: { viewToken } });
     if (!proposal) {
@@ -248,13 +249,9 @@ export default async function portalRoutes(fastify) {
   });
 
   // Sign contract
-  fastify.post('/contract/:signToken/sign', async (request, reply) => {
+  fastify.post('/contract/:signToken/sign', { preHandler: [validateBody(contractSignSchema)] }, async (request, reply) => {
     const { signToken } = request.params;
-    const { name, signature } = request.body || {};
-
-    if (!name || !signature) {
-      return reply.status(400).send({ error: 'Name and signature are required' });
-    }
+    const { name, signature } = request.body;
 
     const contract = await prisma.contract.findUnique({ where: { signToken } });
     if (!contract) {
@@ -434,9 +431,9 @@ export default async function portalRoutes(fastify) {
   });
 
   // Public: submit response to form
-  fastify.post('/form/:viewToken', async (request, reply) => {
+  fastify.post('/form/:viewToken', { preHandler: [validateBody(formSubmitSchema)] }, async (request, reply) => {
     const { viewToken } = request.params;
-    const { answers, respondentName, respondentEmail } = request.body || {};
+    const { answers, respondentName, respondentEmail } = request.body;
 
     const form = await prisma.intakeForm.findUnique({ where: { viewToken } });
 
@@ -446,10 +443,6 @@ export default async function portalRoutes(fastify) {
 
     if (!form.isActive) {
       return reply.status(410).send({ error: 'This form is no longer accepting responses' });
-    }
-
-    if (!respondentName || !respondentEmail) {
-      return reply.status(400).send({ error: 'Name and email are required' });
     }
 
     const response = await prisma.intakeFormResponse.create({
@@ -537,14 +530,8 @@ export default async function portalRoutes(fastify) {
   });
 
   // Book a time slot
-  fastify.post('/booking', async (request, reply) => {
-    const { name, email, date, time, notes, phone } = request.body || {};
-
-    if (!name || !email || !date || !time) {
-      return reply.status(400).send({ error: 'Name, email, date, and time are required' });
-    }
-
-    // Validate date format and time format
+  fastify.post('/booking', { preHandler: [validateBody(bookingSchema)] }, async (request, reply) => {
+    const { name, email, date, time, notes, phone } = request.body;
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       return reply.status(400).send({ error: 'Invalid date format (YYYY-MM-DD)' });
     }

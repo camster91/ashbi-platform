@@ -1,6 +1,6 @@
 // AI routes (direct AI interactions)
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 import aiClient from '../ai/client.js';
 import { buildDraftResponsePrompt } from '../ai/prompts/draftResponse.js';
 import { buildAnalyzeMessagePrompt } from '../ai/prompts/analyzeMessage.js';

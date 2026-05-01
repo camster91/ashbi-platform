@@ -1,6 +1,6 @@
 // AI Context settings routes
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 
 export default async function aiContextRoutes(fastify) {
   // Get all AI context key/value pairs

@@ -1,39 +1,48 @@
 // Project routes
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 import { refreshProjectPlan } from '../services/project.service.js';
 import { safeParse } from '../utils/safeParse.js';
 import { queueEmbedding } from '../jobs/queue.js';
 import aiClient from '../ai/client.js';
+import { validateBody, createProjectSchema, updateProjectSchema } from '../validators/schemas.js';
 
 export default async function projectRoutes(fastify) {
   // List all projects
   fastify.get('/', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
-    const { status, clientId, health } = request.query;
+    const { status, clientId, health, limit = '50', offset = '0' } = request.query;
 
     const where = {};
     if (status) where.status = status;
     if (clientId) where.clientId = clientId;
     if (health) where.health = health;
 
-    const projects = await prisma.project.findMany({
-      where,
-      include: {
-        client: { select: { id: true, name: true } },
-        _count: {
-          select: {
-            threads: true,
-            tasks: true
+    const take = Math.min(parseInt(limit) || 50, 200);
+    const skip = parseInt(offset) || 0;
+
+    const [projects, total] = await Promise.all([
+      prisma.project.findMany({
+        where,
+        include: {
+          client: { select: { id: true, name: true } },
+          _count: {
+            select: {
+              threads: true,
+              tasks: true
+            }
           }
-        }
-      },
-      orderBy: [
-        { health: 'asc' }, // AT_RISK first
-        { updatedAt: 'desc' }
-      ]
-    });
+        },
+        orderBy: [
+          { health: 'asc' }, // AT_RISK first
+          { updatedAt: 'desc' }
+        ],
+        take,
+        skip
+      }),
+      prisma.project.count({ where })
+    ]);
 
     // Add completed task counts
     const projectIds = projects.map(p => p.id);
@@ -47,15 +56,21 @@ export default async function projectRoutes(fastify) {
       return acc;
     }, {});
 
-    return projects.map(p => ({
-      ...p,
-      completedTaskCount: completedMap[p.id] || 0
-    }));
+    return {
+      projects: projects.map(p => ({
+        ...p,
+        completedTaskCount: completedMap[p.id] || 0
+      })),
+      total,
+      limit: take,
+      offset: skip
+    };
   });
 
   // Create project
   fastify.post('/', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: [validateBody(createProjectSchema)],
   }, async (request, reply) => {
     const { name, description, clientId, defaultOwnerId } = request.body;
 
@@ -121,7 +136,8 @@ export default async function projectRoutes(fastify) {
 
   // Update project
   fastify.put('/:id', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: [validateBody(updateProjectSchema)],
   }, async (request, reply) => {
     const { id } = request.params;
     const {

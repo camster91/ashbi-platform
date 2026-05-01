@@ -1,6 +1,6 @@
 // Thread routes
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 import { analyzeMessage } from '../services/pipeline.service.js';
 import { assignThread } from '../services/assignment.service.js';
 import { queueEmbedding } from '../jobs/queue.js';

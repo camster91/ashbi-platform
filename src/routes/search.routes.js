@@ -1,6 +1,6 @@
 // Search routes
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 import aiClient from '../ai/client.js';
 
 export default async function searchRoutes(fastify) {

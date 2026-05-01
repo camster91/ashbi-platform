@@ -1,6 +1,6 @@
 // Team management routes
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 import bcrypt from 'bcrypt';
 
 async function hashPassword(password) {

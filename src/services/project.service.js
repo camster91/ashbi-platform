@@ -1,6 +1,6 @@
 // Project service
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 import aiClient from '../ai/client.js';
 import { buildReplanProjectPrompt } from '../ai/prompts/replanProject.js';
 

@@ -1,11 +1,24 @@
 // Authentication routes
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import env from '../config/env.js';
+import {
+  validateBody,
+  schemas,
+  loginSchema,
+  registerSchema,
+  changePasswordSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  clientSignupSchema,
+  clientLoginSchema,
+  inviteClientSchema,
+  updateProfileSchema
+} from '../validators/schemas.js';
 
 const BCRYPT_ROUNDS = 12;
 
@@ -43,13 +56,14 @@ export default async function authRoutes(fastify) {
   // Login
   fastify.post('/login', {
     ...authRateLimit,
+    preHandler: [validateBody(loginSchema)],
     schema: {
       body: {
         type: 'object',
         required: ['email', 'password'],
         properties: {
           email: { type: 'string', format: 'email' },
-          password: { type: 'string', minLength: 6 }
+          password: { type: 'string', minLength: 1 }
         }
       }
     }
@@ -129,22 +143,36 @@ export default async function authRoutes(fastify) {
     };
   });
 
-  // Register (admin only, or first user)
-  fastify.post('/register', { ...authRateLimit }, async (request, reply) => {
-    const { email, password, name, role = 'TEAM' } = request.body;
+  // Register (admin only, or first user with ADMIN_INVITE_TOKEN)
+  fastify.post('/register', {
+    ...authRateLimit,
+    preHandler: [validateBody(registerSchema)],
+  }, async (request, reply) => {
+    const { email, password, name, role = 'TEAM', adminInviteToken } = request.body;
 
     // Check if any users exist
     const userCount = await prisma.user.count();
 
-    // If users exist, require admin auth
-    if (userCount > 0) {
+    if (userCount === 0) {
+      // First user registration — if ADMIN_INVITE_TOKEN env var is set, require it
+      // This prevents anyone from becoming admin by hitting /register on a fresh database
+      if (process.env.ADMIN_INVITE_TOKEN) {
+        if (!adminInviteToken || adminInviteToken !== process.env.ADMIN_INVITE_TOKEN) {
+          return reply.status(403).send({ error: 'Invalid admin invite token. Provide the correct ADMIN_INVITE_TOKEN to register as first admin.' });
+        }
+      } else {
+        // No ADMIN_INVITE_TOKEN configured — log warning
+        console.warn('[auth] First user registration without ADMIN_INVITE_TOKEN. Set this env var in production to prevent unauthorized admin escalation.');
+      }
+    } else {
+      // Subsequent users — require admin auth
       try {
         await request.jwtVerify();
         if (request.user.role !== 'ADMIN') {
           return reply.status(403).send({ error: 'Admin access required' });
         }
       } catch (err) {
-        return reply.status(401).send({ error: 'Unauthorized' });
+        return reply.status(401).send({ error: 'Unauthorized — admin login required' });
       }
     }
 
@@ -157,7 +185,7 @@ export default async function authRoutes(fastify) {
       return reply.status(400).send({ error: 'Email already registered' });
     }
 
-    // First user is always admin
+    // First user is always admin; subsequent users use the provided role (validated by Zod)
     const userRole = userCount === 0 ? 'ADMIN' : role;
 
     const user = await prisma.user.create({
@@ -180,7 +208,8 @@ export default async function authRoutes(fastify) {
 
   // Update profile (name, skills, capacity)
   fastify.put('/me', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: [validateBody(updateProfileSchema)],
   }, async (request, reply) => {
     const { name, skills, capacity } = request.body;
     const data = {};
@@ -198,7 +227,8 @@ export default async function authRoutes(fastify) {
 
   // Change password
   fastify.post('/change-password', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: [validateBody(changePasswordSchema)],
   }, async (request, reply) => {
     const { currentPassword, newPassword } = request.body;
 
@@ -221,12 +251,10 @@ export default async function authRoutes(fastify) {
   // ===== CLIENT AUTHENTICATION =====
 
   // Client signup via invitation token
-  fastify.post('/client/signup', async (request, reply) => {
+  fastify.post('/client/signup', {
+    preHandler: [validateBody(clientSignupSchema)],
+  }, async (request, reply) => {
     const { token, email, password } = request.body;
-
-    if (!token || !email || !password) {
-      return reply.status(400).send({ error: 'Token, email, and password required' });
-    }
 
     // Find and validate invitation
     const invitation = await prisma.clientInvitation.findUnique({
@@ -305,12 +333,10 @@ export default async function authRoutes(fastify) {
   });
 
   // Client login
-  fastify.post('/client/login', async (request, reply) => {
+  fastify.post('/client/login', {
+    preHandler: [validateBody(clientLoginSchema)],
+  }, async (request, reply) => {
     const { email, password } = request.body;
-
-    if (!email || !password) {
-      return reply.status(400).send({ error: 'Email and password required' });
-    }
 
     const user = await prisma.user.findFirst({
       where: {
@@ -362,13 +388,12 @@ export default async function authRoutes(fastify) {
   });
 
   // Forgot password
-  fastify.post('/forgot-password', { ...authRateLimit }, async (request, reply) => {
+  fastify.post('/forgot-password', {
+    ...authRateLimit,
+    preHandler: [validateBody(forgotPasswordSchema)],
+  }, async (request, reply) => {
     try {
-      const { email } = request.body || {};
-
-      if (!email) {
-        return reply.status(400).send({ error: 'Email required' });
-      }
+      const { email } = request.body;
 
       const user = await prisma.user.findUnique({
         where: { email: email.toLowerCase().trim() }
@@ -442,17 +467,11 @@ export default async function authRoutes(fastify) {
   });
 
   // Reset password with token
-  fastify.post('/reset-password', async (request, reply) => {
+  fastify.post('/reset-password', {
+    preHandler: [validateBody(resetPasswordSchema)],
+  }, async (request, reply) => {
     try {
-      const { token, newPassword } = request.body || {};
-
-      if (!token || !newPassword) {
-        return reply.status(400).send({ error: 'Token and password required' });
-      }
-
-      if (newPassword.length < 8) {
-        return reply.status(400).send({ error: 'Password must be at least 8 characters' });
-      }
+      const { token, newPassword } = request.body;
 
       const resetTokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
@@ -486,7 +505,8 @@ export default async function authRoutes(fastify) {
 
   // Admin invite client
   fastify.post('/admin/clients/:clientId/invite', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: [validateBody(inviteClientSchema)],
   }, async (request, reply) => {
     // Check admin role
     if (request.user.role !== 'ADMIN') {
@@ -495,10 +515,6 @@ export default async function authRoutes(fastify) {
 
     const { clientId } = request.params;
     const { email } = request.body;
-
-    if (!email) {
-      return reply.status(400).send({ error: 'Email required' });
-    }
 
     // Verify client exists
     const client = await prisma.client.findUnique({

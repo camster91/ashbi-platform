@@ -1,7 +1,7 @@
 // Workflow Automations Engine
 // Handles trigger-action automations for invoices, proposals, and contracts
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import crypto from 'crypto';

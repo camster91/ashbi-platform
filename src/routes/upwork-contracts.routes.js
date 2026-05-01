@@ -1,6 +1,6 @@
 // Upwork Contract Tracker routes
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 
 export default async function upworkContractRoutes(fastify) {
   // List all contracts

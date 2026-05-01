@@ -1,6 +1,7 @@
 // Task routes
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
+import { validateBody, createTaskSchema, updateTaskSchema } from '../validators/schemas.js';
 
 export default async function taskRoutes(fastify) {
   // List all tasks with filters
@@ -128,7 +129,8 @@ export default async function taskRoutes(fastify) {
 
   // Update task
   fastify.put('/:id', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: [validateBody(updateTaskSchema)],
   }, async (request, reply) => {
     const { id } = request.params;
     const {
@@ -675,7 +677,8 @@ export default async function taskRoutes(fastify) {
 
   // Quick task create (for Kanban "Add Task" button)
   fastify.post('/:projectId/quick', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: [validateBody(createTaskSchema)],
   }, async (request) => {
     const { projectId } = request.params;
     const { title, assigneeId, priority = 'MEDIUM' } = request.body;

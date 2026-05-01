@@ -9,11 +9,11 @@ import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import multipart from '@fastify/multipart';
 import { Server as SocketIO } from 'socket.io';
-import prisma from './config/db.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 import env from './config/env.js';
+import prisma from './config/db.js';
 
 // Routes
 import authRoutes from './routes/auth.routes.js';
@@ -127,9 +127,6 @@ import integrationRoutes from './routes/integration.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Re-export shared Prisma instance (imported from config/db.js)
-export { prisma };
-
 // Initialize Fastify
 const fastify = Fastify({
   logger: {
@@ -185,6 +182,13 @@ await fastify.register(jwt, {
     signed: false
   }
 });
+
+// TODO: CSRF Protection — Since auth uses httpOnly cookies (not Bearer tokens),
+// state-changing requests from browsers could be forged if SameSite is lax.
+// Consider adding @fastify/csrf-protection or a custom CSRF token mechanism
+// for all mutation endpoints (POST/PUT/DELETE) when SameSite=strict is not enough.
+// Low risk currently since production uses sameSite: 'strict', but worth adding
+// if the app adds any state-changing GET endpoints or supports older browsers.
 
 // Auth decorator
 fastify.decorate('authenticate', async (request, reply) => {
@@ -372,7 +376,7 @@ fastify.get('/api/health', async () => {
 // Setup Socket.IO for real-time notifications
 const io = new SocketIO(fastify.server, {
   cors: {
-    origin: env.isDev ? '*' : env.corsOrigins,
+    origin: env.isDev ? 'http://localhost:*' : env.corsOrigins,
     credentials: true
   }
 });
@@ -402,8 +406,8 @@ io.on('connection', (socket) => {
 
   // Join user's personal room for notifications
   socket.on('join', (userId) => {
-    // Allow client portal users (role=CLIENT) to join their contact room
-    if (userId !== socket.userId && !socket.isClient) {
+    // Users can only join their own notification room
+    if (userId !== socket.userId) {
       socket.disconnect(true);
       return;
     }
@@ -412,9 +416,37 @@ io.on('connection', (socket) => {
   });
 
   // Join project room for real-time chat
-  socket.on('join-project', (projectId) => {
-    socket.join(`project:${projectId}`);
-    fastify.log.info(`Socket ${socket.id} joined project:${projectId}`);
+  socket.on('join-project', async (projectId) => {
+    try {
+      // Admin/Team users can join any project room
+      if (socket.userRole === 'ADMIN' || socket.userRole === 'TEAM') {
+        socket.join(`project:${projectId}`);
+        fastify.log.info(`User ${socket.userId} (role: ${socket.userRole}) joined project:${projectId}`);
+        return;
+      }
+
+      // Client users can only join rooms for their own projects
+      if (socket.isClient && socket.clientId) {
+        const project = await prisma.project.findUnique({
+          where: { id: projectId },
+          select: { clientId: true }
+        });
+        if (!project || project.clientId !== socket.clientId) {
+          fastify.log.warn(`Client ${socket.userId} denied access to project:${projectId}`);
+          socket.emit('error', { message: 'Not authorized for this project' });
+          return;
+        }
+        socket.join(`project:${projectId}`);
+        fastify.log.info(`Client ${socket.userId} joined project:${projectId}`);
+        return;
+      }
+
+      // Deny all other cases
+      fastify.log.warn(`Unauthorized socket ${socket.id} denied access to project:${projectId}`);
+      socket.emit('error', { message: 'Not authorized' });
+    } catch (err) {
+      fastify.log.error({ err, socketId: socket.id }, 'Error in join-project');
+    }
   });
 
   // Leave project room

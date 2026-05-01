@@ -1,7 +1,7 @@
 // Revenue Dashboard Routes
 // MRR, ARR, collections rate, client breakdown, seasonal trends
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 
 // Simple in-memory cache
 let cache = null;

@@ -1,6 +1,6 @@
 // Settings routes (assignment rules, templates, configuration)
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 import { safeParse } from '../utils/safeParse.js';
 
 export default async function settingsRoutes(fastify) {

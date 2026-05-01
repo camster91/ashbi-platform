@@ -1,6 +1,6 @@
 // Notes & Documents routes
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 
 export default async function noteRoutes(fastify) {
   // List ALL notes across all projects (global docs view)

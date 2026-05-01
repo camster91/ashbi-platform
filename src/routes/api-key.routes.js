@@ -1,6 +1,6 @@
 // API Key management routes
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 import crypto from 'crypto';
 
 const PREFIX = 'ashbi_'; // API keys start with ashbi_ for easy identification

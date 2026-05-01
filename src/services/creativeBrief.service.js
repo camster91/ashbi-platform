@@ -2,7 +2,7 @@
 // Migrated from ashbi-hub raw SQL to Prisma
 // Enhanced with Client Brain RAG context
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 import aiClient from '../ai/client.js';
 import { searchSimilar } from './embedding.service.js';
 

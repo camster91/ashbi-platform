@@ -1,6 +1,6 @@
 // File Attachment routes
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 import path from 'path';
 import fs from 'fs/promises';
 import { randomUUID } from 'crypto';

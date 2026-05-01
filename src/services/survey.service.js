@@ -1,7 +1,7 @@
 // Survey service (NPS)
 // Migrated from ashbi-hub with Prisma and proper structure
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 
 /**
  * Submit a survey response (public endpoint)

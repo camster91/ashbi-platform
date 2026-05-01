@@ -1,14 +1,15 @@
 // Client routes
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 import { safeParse } from '../utils/safeParse.js';
+import { validateBody, createClientSchema, updateClientSchema } from '../validators/schemas.js';
 
 export default async function clientRoutes(fastify) {
   // List all clients
   fastify.get('/', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
-    const { status, search } = request.query;
+    const { status, search, limit = '50', offset = '0' } = request.query;
 
     const where = {};
     if (status) where.status = status;
@@ -19,28 +20,37 @@ export default async function clientRoutes(fastify) {
       ];
     }
 
-    const clients = await prisma.client.findMany({
-      where,
-      include: {
-        _count: {
-          select: {
-            projects: true,
-            threads: true,
-            contacts: true
-          }
-        }
-      },
-      orderBy: { name: 'asc' }
-    });
+    const take = Math.min(parseInt(limit) || 50, 200);
+    const skip = parseInt(offset) || 0;
 
-    return clients;
+    const [clients, total] = await Promise.all([
+      prisma.client.findMany({
+        where,
+        include: {
+          _count: {
+            select: {
+              projects: true,
+              threads: true,
+              contacts: true
+            }
+          }
+        },
+        orderBy: { name: 'asc' },
+        take,
+        skip
+      }),
+      prisma.client.count({ where })
+    ]);
+
+    return { clients, total, limit: take, offset: skip };
   });
 
   // Create client
   fastify.post('/', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: [validateBody(createClientSchema)],
   }, async (request, reply) => {
-    const { name, domain, status = 'ACTIVE' } = request.body;
+    const { name, domain, status } = request.body;
 
     // Check for duplicate domain
     if (domain) {
@@ -128,7 +138,8 @@ export default async function clientRoutes(fastify) {
 
   // Update client
   fastify.put('/:id', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: [validateBody(updateClientSchema)],
   }, async (request, reply) => {
     const { id } = request.params;
     const {

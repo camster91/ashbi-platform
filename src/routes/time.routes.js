@@ -1,6 +1,6 @@
 // Time Tracking routes
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 
 export default async function timeRoutes(fastify) {
   // Get time entries for a project

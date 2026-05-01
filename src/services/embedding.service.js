@@ -1,7 +1,7 @@
 // Embedding service - pgvector-based RAG for Client Brain
 // Migrated from ashbi-hub raw SQL to Prisma with $queryRaw for vector ops
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
 const EMBEDDING_MODEL = 'nomic-embed-text';

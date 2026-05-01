@@ -1,6 +1,6 @@
 // Automation history routes
 
-import { prisma } from '../index.js';
+import prisma from '../config/db.js';
 
 export default async function automationRoutes(fastify) {
   // All routes require admin auth
