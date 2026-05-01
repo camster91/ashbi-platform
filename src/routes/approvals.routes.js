@@ -1,6 +1,6 @@
 // Frontend-accessible approval routes (uses fastify.authenticate + adminOnly)
 import { validateBody, patchApprovalSchema, validateParams } from '../validators/schemas.js';
-import cuid2 from '../utils/safeParse.js'; // for cuid validation
+import { safeParse } from '../utils/safeParse.js';
 
 const cuidId = { type: 'string', minLength: 1, maxLength: 50 };
 
