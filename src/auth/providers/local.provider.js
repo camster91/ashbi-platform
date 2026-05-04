@@ -36,13 +36,25 @@ export class LocalAuthProvider {
       await this.prisma.user.update({ where: { id: user.id }, data: { password: newHash } });
     }
 
+    // Enterprise Graceful Migration: Ensure user has an organization
+    let organizationId = user.organizationId;
+    if (!organizationId) {
+      const defaultOrg = await this.prisma.organization.upsert({
+        where: { slug: 'ashbi-agency' },
+        create: { name: 'Ashbi Agency', slug: 'ashbi-agency' },
+        update: {}
+      });
+      organizationId = defaultOrg.id;
+      await this.prisma.user.update({ where: { id: user.id }, data: { organizationId } });
+    }
+
     const token = this.jwt.sign({
       id: user.id,
       email: user.email,
       name: user.name,
       role: user.role,
       clientId: user.clientId,
-      organizationId: user.organizationId
+      organizationId: organizationId
     });
 
     return {
@@ -51,7 +63,7 @@ export class LocalAuthProvider {
         email: user.email,
         name: user.name,
         role: user.role,
-        organizationId: user.organizationId
+        organizationId: organizationId
       },
       token
     };
