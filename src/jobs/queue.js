@@ -13,12 +13,30 @@ function parseRedisUrl(url) {
   return { host: 'localhost', port: 6379 };
 }
 const { host: redisHost, port: redisPort, password: redisPassword } = parseRedisUrl(env.redisUrl);
-const connection = new IORedis({
+
+// Do not connect to real Redis during tests
+const isTestEnv = process.env.NODE_ENV === 'test';
+
+const connection = isTestEnv ? {} : new IORedis({
   host: redisHost,
   port: redisPort,
   password: redisPassword,
   maxRetriesPerRequest: null
 });
+
+// Mock Queue classes for tests
+class MockQueue {
+  constructor(name) { this.name = name; }
+  async add() { return { id: 'mock-job-id' }; }
+}
+
+class MockQueueEvents {
+  constructor(name) { this.name = name; }
+  on() {}
+}
+
+const QueueClass = isTestEnv ? MockQueue : Queue;
+const QueueEventsClass = isTestEnv ? MockQueueEvents : QueueEvents;
 
 // Queue names
 export const QUEUES = {
@@ -31,15 +49,15 @@ export const QUEUES = {
 };
 
 // Create queues
-export const emailQueue = new Queue(QUEUES.EMAIL_PROCESSING, { connection });
-export const healthQueue = new Queue(QUEUES.PROJECT_HEALTH, { connection });
-export const escalationQueue = new Queue(QUEUES.ESCALATION, { connection });
-export const notificationQueue = new Queue(QUEUES.NOTIFICATIONS, { connection });
-export const weeklyDigestQueue = new Queue(QUEUES.WEEKLY_DIGEST, { connection });
-export const embeddingQueue = new Queue(QUEUES.EMBEDDING, { connection });
+export const emailQueue = new QueueClass(QUEUES.EMAIL_PROCESSING, { connection });
+export const healthQueue = new QueueClass(QUEUES.PROJECT_HEALTH, { connection });
+export const escalationQueue = new QueueClass(QUEUES.ESCALATION, { connection });
+export const notificationQueue = new QueueClass(QUEUES.NOTIFICATIONS, { connection });
+export const weeklyDigestQueue = new QueueClass(QUEUES.WEEKLY_DIGEST, { connection });
+export const embeddingQueue = new QueueClass(QUEUES.EMBEDDING, { connection });
 
 // Queue event handlers
-const emailQueueEvents = new QueueEvents(QUEUES.EMAIL_PROCESSING, { connection });
+const emailQueueEvents = new QueueEventsClass(QUEUES.EMAIL_PROCESSING, { connection });
 emailQueueEvents.on('completed', ({ jobId }) => {
   console.log(`Email processing job ${jobId} completed`);
 });

@@ -1,7 +1,7 @@
 // Task routes
 
-import prisma from '../config/db.js';
 import { validateBody, createTaskSchema, updateTaskSchema } from '../validators/schemas.js';
+import bus, { EVENTS } from '../utils/events.js';
 
 export default async function taskRoutes(fastify) {
   // List all tasks with filters
@@ -35,7 +35,7 @@ export default async function taskRoutes(fastify) {
     }
 
     const [tasks, total] = await Promise.all([
-      prisma.task.findMany({
+      request.prisma.task.findMany({
         where,
         include: {
           project: { select: { id: true, name: true, clientId: true } },
@@ -49,7 +49,7 @@ export default async function taskRoutes(fastify) {
         skip: (page - 1) * limit,
         take: limit
       }),
-      prisma.task.count({ where })
+      request.prisma.task.count({ where })
     ]);
 
     return {
@@ -62,7 +62,7 @@ export default async function taskRoutes(fastify) {
   fastify.get('/my', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
-    const tasks = await prisma.task.findMany({
+    const tasks = await fastify.prisma.task.findMany({
       where: {
         assigneeId: request.user.id,
         status: { not: 'COMPLETED' }
@@ -108,7 +108,7 @@ export default async function taskRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const task = await prisma.task.findUnique({
+    const task = await request.prisma.task.findUnique({
       where: { id },
       include: {
         project: {
@@ -160,8 +160,8 @@ export default async function taskRoutes(fastify) {
     if (blockedBy !== undefined) data.blockedBy = blockedBy;
     if (dependsOnId !== undefined) data.dependsOnId = dependsOnId || null;
 
-    const prevTask = await prisma.task.findUnique({ where: { id } });
-    const task = await prisma.task.update({
+    const prevTask = await fastify.prisma.task.findUnique({ where: { id } });
+    const task = await fastify.prisma.task.update({
       where: { id },
       data,
       include: {
@@ -172,26 +172,7 @@ export default async function taskRoutes(fastify) {
 
     // HITL trigger: fire email when task becomes BLOCKED
     if (data.status === 'BLOCKED' && prevTask?.status !== 'BLOCKED') {
-      import('../utils/hitl-email.service.js').then(async ({ sendBlockedHITLEmail }) => {
-        const cameron = await prisma.user.findFirst({ where: { email: 'cameron@ashbi.ca' } });
-        if (cameron) {
-          const hitlNotif = await prisma.notification.create({
-            data: {
-              type: 'HITL_REQUIRED',
-              title: `Blocked: ${task.title}`,
-              message: `Task blocked: ${task.blockedBy || 'No reason given'}`,
-              userId: cameron.id,
-              data: JSON.stringify({ type: 'TASK', refId: task.id }),
-            }
-          });
-          sendBlockedHITLEmail({
-            notificationId: hitlNotif.id,
-            task,
-            project: task.project,
-            blockedReason: task.blockedBy || data.blockedBy || 'No reason specified',
-          }).catch(console.error);
-        }
-      }).catch(console.error);
+      bus.emit(EVENTS.TASK_BLOCKED, { task, user: request.user, reason: task.blockedBy || data.blockedBy });
     }
 
     return task;
@@ -203,7 +184,7 @@ export default async function taskRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const task = await prisma.task.update({
+    const task = await fastify.prisma.task.update({
       where: { id },
       data: {
         status: 'COMPLETED',
@@ -214,6 +195,8 @@ export default async function taskRoutes(fastify) {
       }
     });
 
+    bus.emit(EVENTS.TASK_COMPLETED, { task, user: request.user });
+
     return task;
   });
 
@@ -223,7 +206,7 @@ export default async function taskRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const task = await prisma.task.findUnique({ where: { id } });
+    const task = await fastify.prisma.task.findUnique({ where: { id } });
 
     if (!task) {
       return reply.status(404).send({ error: 'Task not found' });
@@ -234,7 +217,7 @@ export default async function taskRoutes(fastify) {
       return reply.status(403).send({ error: 'Not authorized to delete this task' });
     }
 
-    await prisma.task.delete({ where: { id } });
+    await fastify.prisma.task.delete({ where: { id } });
 
     return { success: true };
   });
@@ -248,7 +231,7 @@ export default async function taskRoutes(fastify) {
     // updates is an array of { id, category, priority }
     const results = await Promise.all(
       updates.map(update =>
-        prisma.task.update({
+        fastify.prisma.task.update({
           where: { id: update.id },
           data: {
             category: update.category,
@@ -269,7 +252,7 @@ export default async function taskRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const task = await prisma.task.findUnique({
+    const task = await fastify.prisma.task.findUnique({
       where: { id },
       include: {
         project: {
@@ -349,7 +332,7 @@ export default async function taskRoutes(fastify) {
     if (coverImage !== undefined) updateData.coverImage = coverImage;
     if (properties !== undefined) updateData.properties = JSON.stringify(properties);
 
-    const task = await prisma.task.update({
+    const task = await fastify.prisma.task.update({
       where: { id },
       data: updateData,
       include: {
@@ -368,7 +351,7 @@ export default async function taskRoutes(fastify) {
     const { id } = request.params;
     const { title, icon, content } = request.body;
 
-    const parentTask = await prisma.task.findUnique({
+    const parentTask = await fastify.prisma.task.findUnique({
       where: { id },
       select: { projectId: true }
     });
@@ -377,10 +360,10 @@ export default async function taskRoutes(fastify) {
       return reply.status(404).send({ error: 'Parent task not found' });
     }
 
-    const subpage = await prisma.task.create({
+    const subpage = await fastify.prisma.task.create({
       data: {
         title: title || 'Untitled',
-        icon: icon || '📄',
+        icon: icon || 'ðŸ“„',
         content: JSON.stringify(content || [{ type: 'paragraph', content: '' }]),
         isPage: true,
         parentId: id,
@@ -406,7 +389,7 @@ export default async function taskRoutes(fastify) {
     let currentId = id;
 
     while (currentId) {
-      const task = await prisma.task.findUnique({
+      const task = await fastify.prisma.task.findUnique({
         where: { id: currentId },
         select: { id: true, title: true, icon: true, parentId: true, projectId: true }
       });
@@ -425,7 +408,7 @@ export default async function taskRoutes(fastify) {
 
     // Add project at root if all tasks are from same project
     if (breadcrumbs.length > 0 && breadcrumbs[0].projectId) {
-      const project = await prisma.project.findUnique({
+      const project = await fastify.prisma.project.findUnique({
         where: { id: breadcrumbs[0].projectId },
         select: { id: true, name: true }
       });
@@ -433,7 +416,7 @@ export default async function taskRoutes(fastify) {
         breadcrumbs.unshift({
           id: project.id,
           title: project.name,
-          icon: '📁',
+          icon: 'ðŸ“',
           isProject: true
         });
       }
@@ -455,7 +438,7 @@ export default async function taskRoutes(fastify) {
     const searchQuery = q.toLowerCase();
 
     // Search users
-    const users = await prisma.user.findMany({
+    const users = await fastify.prisma.user.findMany({
       where: {
         isActive: true,
         OR: [
@@ -479,7 +462,7 @@ export default async function taskRoutes(fastify) {
       tasksWhere.projectId = projectId;
     }
 
-    const tasks = await prisma.task.findMany({
+    const tasks = await fastify.prisma.task.findMany({
       where: tasksWhere,
       select: {
         id: true,
@@ -503,7 +486,7 @@ export default async function taskRoutes(fastify) {
         id: t.id,
         type: 'task',
         title: t.title,
-        icon: t.icon || (t.isPage ? '📄' : '✓'),
+        icon: t.icon || (t.isPage ? 'ðŸ“„' : 'âœ“'),
         projectName: t.project?.name
       }))
     };
@@ -532,7 +515,7 @@ export default async function taskRoutes(fastify) {
           return reply.status(400).send({ error: 'Circular dependency detected' });
         }
         visited.add(currentId);
-        const dep = await prisma.task.findUnique({
+        const dep = await fastify.prisma.task.findUnique({
           where: { id: currentId },
           select: { dependsOnId: true }
         });
@@ -540,7 +523,7 @@ export default async function taskRoutes(fastify) {
       }
     }
 
-    const task = await prisma.task.update({
+    const task = await fastify.prisma.task.update({
       where: { id },
       data: { dependsOnId: dependsOnId || null },
       include: {
@@ -569,7 +552,7 @@ export default async function taskRoutes(fastify) {
       where.assigneeId = request.user.id;
     }
 
-    const tasks = await prisma.task.findMany({
+    const tasks = await fastify.prisma.task.findMany({
       where,
       include: {
         project: { select: { id: true, name: true } },
@@ -627,7 +610,7 @@ export default async function taskRoutes(fastify) {
   }, async (request) => {
     const { projectId } = request.params;
 
-    const tasks = await prisma.task.findMany({
+    const tasks = await fastify.prisma.task.findMany({
       where: { projectId },
       include: {
         assignee: { select: { id: true, name: true, email: true } }
@@ -660,7 +643,7 @@ export default async function taskRoutes(fastify) {
       return request.reply.status(400).send({ error: 'Invalid status' });
     }
 
-    const task = await prisma.task.update({
+    const task = await fastify.prisma.task.update({
       where: { id },
       data: {
         status,
@@ -681,9 +664,9 @@ export default async function taskRoutes(fastify) {
     preHandler: [validateBody(createTaskSchema)],
   }, async (request) => {
     const { projectId } = request.params;
-    const { title, assigneeId, priority = 'MEDIUM' } = request.body;
+    const { title, assigneeId, priority = 'NORMAL' } = request.body;
 
-    const task = await prisma.task.create({
+    const task = await fastify.prisma.task.create({
       data: {
         projectId,
         title,

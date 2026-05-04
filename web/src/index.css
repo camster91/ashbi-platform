@@ -162,11 +162,30 @@
 
   /* Hover lift effect */
   .hover-lift {
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
   }
   .hover-lift:hover {
-    transform: translateY(-2px);
-    box-shadow: var(--shadow-lg);
+    transform: translateY(-4px) scale(1.01);
+    box-shadow: 0 20px 25px -5px rgb(46 41 88 / 0.1), 0 10px 10px -5px rgb(46 41 88 / 0.04);
+  }
+
+  /* Glassmorphism */
+  .glass-card {
+    @apply bg-white/70 dark:bg-[#2e2958]/70 backdrop-blur-md border border-white/20 dark:border-white/5 shadow-xl;
+  }
+
+  .glass-header {
+    @apply bg-background/80 backdrop-blur-lg border-b border-border/50 sticky top-0 z-40;
+  }
+
+  /* Text Masking */
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-br from-primary to-indigo-400;
+  }
+
+  /* Refined Focus */
+  .focus-ring-premium {
+    @apply focus:outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all duration-200;
   }
 
   /* Skeleton shimmer */

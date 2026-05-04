@@ -1,8 +1,8 @@
-// Project service
+// Project service - Enterprise Logic Layer
 
-import prisma from '../config/db.js';
 import aiClient from '../ai/client.js';
 import { buildReplanProjectPrompt } from '../ai/prompts/replanProject.js';
+import { safeParse } from '../utils/safeParse.js';
 
 /**
  * Calculate project health score
@@ -10,44 +10,30 @@ import { buildReplanProjectPrompt } from '../ai/prompts/replanProject.js';
 export function calculateHealthScore(project, threads) {
   let score = 100;
 
-  // Critical open threads: -30
   const criticalThreads = threads.filter(t =>
     t.priority === 'CRITICAL' && t.status !== 'RESOLVED'
   );
-  if (criticalThreads.length > 0) {
-    score -= 30;
-  }
+  if (criticalThreads.length > 0) score -= 30;
 
-  // More than 2 threads needing response: -15
-  const needsResponse = threads.filter(t =>
-    t.status === 'AWAITING_RESPONSE'
-  );
-  if (needsResponse.length > 2) {
-    score -= 15;
-  }
+  const needsResponse = threads.filter(t => t.status === 'AWAITING_RESPONSE');
+  if (needsResponse.length > 2) score -= 15;
 
-  // Stale threads (no activity 3+ days): -10 each
   const now = new Date();
-  const staleDays = 3;
   const staleThreads = threads.filter(t => {
     const daysSinceActivity = (now - new Date(t.lastActivityAt)) / (1000 * 60 * 60 * 24);
-    return daysSinceActivity >= staleDays && t.status !== 'RESOLVED';
+    return daysSinceActivity >= 3 && t.status !== 'RESOLVED';
   });
-  score -= Math.min(staleThreads.length * 10, 30); // Cap at -30
+  score -= Math.min(staleThreads.length * 10, 30);
 
-  // Long client waits: -5 each
   const longWaits = threads.filter(t => {
     const daysSinceActivity = (now - new Date(t.lastActivityAt)) / (1000 * 60 * 60 * 24);
     return daysSinceActivity >= 5 && t.status === 'AWAITING_RESPONSE';
   });
-  score -= Math.min(longWaits.length * 5, 20); // Cap at -20
+  score -= Math.min(longWaits.length * 5, 20);
 
   return Math.max(0, score);
 }
 
-/**
- * Determine health status from score
- */
 export function getHealthStatus(score) {
   if (score >= 80) return 'ON_TRACK';
   if (score >= 50) return 'NEEDS_ATTENTION';
@@ -55,35 +41,70 @@ export function getHealthStatus(score) {
 }
 
 /**
- * Update all project health scores
+ * Calculate full budget metrics for a project
  */
-export async function updateAllProjectHealth() {
-  const projects = await prisma.project.findMany({
-    where: { status: 'ACTIVE' },
-    include: {
-      threads: {
-        where: { status: { not: 'RESOLVED' } }
-      }
-    }
+export async function getProjectBudgetMetrics(prisma, projectId) {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { id: true, name: true, budget: true, hourlyBudget: true, clientId: true }
+  });
+  
+  if (!project) return null;
+
+  const timeEntries = await prisma.timeEntry.findMany({
+    where: { projectId },
+    include: { user: { select: { id: true, name: true, hourlyRate: true } } }
   });
 
-  for (const project of projects) {
-    const score = calculateHealthScore(project, project.threads);
-    const health = getHealthStatus(score);
+  const totalMinutes = timeEntries.reduce((s, e) => s + e.duration, 0);
+  const totalHours = totalMinutes / 60;
+  const billableMinutes = timeEntries.filter(e => e.billable).reduce((s, e) => s + e.duration, 0);
+  const billableHours = billableMinutes / 60;
 
-    await prisma.project.update({
-      where: { id: project.id },
-      data: { healthScore: score, health }
-    });
+  const costByUser = {};
+  for (const entry of timeEntries) {
+    const rate = entry.user?.hourlyRate || 0;
+    const hours = entry.duration / 60;
+    const cost = hours * rate;
+    const uid = entry.userId;
+    if (!costByUser[uid]) costByUser[uid] = { user: entry.user, hours: 0, cost: 0 };
+    costByUser[uid].hours += hours;
+    costByUser[uid].cost += cost;
   }
 
-  return projects.length;
+  const expenses = await prisma.expense.findMany({ where: { projectId } });
+  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
+
+  const budgetAmount = project.budget || 0;
+  const hourlyBudget = project.hourlyBudget || 0;
+
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+  const recentEntries = timeEntries.filter(e => new Date(e.date) >= thirtyDaysAgo);
+  const recentHours = recentEntries.reduce((s, e) => s + e.duration, 0) / 60;
+
+  const budgetUsed = budgetAmount > 0 
+    ? (Object.values(costByUser).reduce((s, u) => s + u.cost, 0) + totalExpenses) 
+    : totalHours * 50;
+    
+  return {
+    project: { id: project.id, name: project.name, budget: budgetAmount, hourlyBudget },
+    time: { totalHours, billableHours, totalMinutes, billableMinutes },
+    costByUser: Object.values(costByUser),
+    totalCost: Object.values(costByUser).reduce((s, u) => s + u.cost, 0),
+    expenses: { total: totalExpenses, count: expenses.length },
+    budgetUsed,
+    budgetRemaining: budgetAmount > 0 ? budgetAmount - budgetUsed : null,
+    hoursRemaining: hourlyBudget > 0 ? hourlyBudget - billableHours : null,
+    burnRate: recentHours > 0 ? recentHours / 30 : 0,
+    percentUsed: budgetAmount > 0 ? Math.round((budgetUsed / budgetAmount) * 100) : (hourlyBudget > 0 ? Math.round((billableHours / hourlyBudget) * 100) : null)
+  };
 }
 
 /**
  * Refresh project plan using AI
  */
-export async function refreshProjectPlan(projectId) {
+export async function refreshProjectPlan(prisma, projectId) {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     include: {
@@ -92,27 +113,18 @@ export async function refreshProjectPlan(projectId) {
         where: { status: { not: 'RESOLVED' } },
         orderBy: { lastActivityAt: 'desc' },
         include: {
-          messages: {
-            orderBy: { receivedAt: 'desc' },
-            take: 1
-          }
+          messages: { orderBy: { receivedAt: 'desc' }, take: 1 }
         }
       },
-      tasks: {
-        where: { status: { not: 'COMPLETED' } }
-      }
+      tasks: { where: { status: { not: 'COMPLETED' } } }
     }
   });
 
-  if (!project) {
-    throw new Error('Project not found');
-  }
+  if (!project) throw new Error('Project not found');
 
-  // Get most recent message for context
   const recentMessage = project.threads[0]?.messages[0];
 
   if (!recentMessage) {
-    // No messages to analyze, just update health
     const score = calculateHealthScore(project, project.threads);
     const health = getHealthStatus(score);
 
@@ -134,7 +146,6 @@ export async function refreshProjectPlan(projectId) {
 
   const result = await aiClient.chatJSON({ system, prompt, temperature });
 
-  // Update project
   const updatedProject = await prisma.project.update({
     where: { id: projectId },
     data: {
@@ -146,121 +157,36 @@ export async function refreshProjectPlan(projectId) {
     }
   });
 
-  // Sync tasks from AI plan
-  await syncTasksFromPlan(projectId, result.plan);
+  await syncTasksFromPlan(prisma, projectId, result.plan);
 
   return updatedProject;
 }
 
-/**
- * Sync AI-generated tasks with existing tasks
- */
-async function syncTasksFromPlan(projectId, plan) {
-  // Get existing AI-generated tasks
+async function syncTasksFromPlan(prisma, projectId, plan) {
   const existingAiTasks = await prisma.task.findMany({
-    where: {
-      projectId,
-      aiGenerated: true,
-      status: { not: 'COMPLETED' }
-    }
+    where: { projectId, aiGenerated: true, status: { not: 'COMPLETED' } }
   });
 
-  // Create new immediate tasks that don't exist
-  if (plan.immediate?.length > 0) {
-    for (const item of plan.immediate) {
-      // Check if similar task exists
-      const exists = existingAiTasks.some(t =>
-        t.title.toLowerCase().includes(item.task.toLowerCase().substring(0, 20))
-      );
+  const allPlannedTasks = [...(plan.immediate || []), ...(plan.thisWeek || [])];
+  
+  for (const item of allPlannedTasks) {
+    const exists = existingAiTasks.some(t =>
+      t.title.toLowerCase().includes(item.task.toLowerCase().substring(0, 20))
+    );
 
-      if (!exists) {
-        await prisma.task.create({
-          data: {
-            title: item.task,
-            description: item.reason,
-            priority: 'HIGH',
-            category: 'IMMEDIATE',
-            estimatedTime: item.estimatedTime,
-            blockedBy: item.blockedBy,
-            aiGenerated: true,
-            projectId
-          }
-        });
-      }
+    if (!exists) {
+      await prisma.task.create({
+        data: {
+          title: item.task,
+          description: item.reason,
+          priority: item.priority || 'NORMAL',
+          category: item.category || 'UPCOMING',
+          estimatedTime: item.estimatedTime,
+          blockedBy: item.blockedBy,
+          aiGenerated: true,
+          projectId
+        }
+      });
     }
   }
-
-  // Create this week tasks
-  if (plan.thisWeek?.length > 0) {
-    for (const item of plan.thisWeek) {
-      const exists = existingAiTasks.some(t =>
-        t.title.toLowerCase().includes(item.task.toLowerCase().substring(0, 20))
-      );
-
-      if (!exists) {
-        await prisma.task.create({
-          data: {
-            title: item.task,
-            description: item.reason,
-            priority: 'NORMAL',
-            category: 'THIS_WEEK',
-            estimatedTime: item.estimatedTime,
-            aiGenerated: true,
-            projectId
-          }
-        });
-      }
-    }
-  }
-}
-
-/**
- * Get project timeline/history
- */
-export async function getProjectTimeline(projectId) {
-  const [threads, tasks, responses] = await Promise.all([
-    prisma.thread.findMany({
-      where: { projectId },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        subject: true,
-        status: true,
-        createdAt: true,
-        priority: true
-      }
-    }),
-    prisma.task.findMany({
-      where: { projectId },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        title: true,
-        status: true,
-        createdAt: true,
-        completedAt: true
-      }
-    }),
-    prisma.response.findMany({
-      where: {
-        thread: { projectId }
-      },
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        status: true,
-        createdAt: true,
-        sentAt: true
-      }
-    })
-  ]);
-
-  // Combine and sort by date
-  const timeline = [
-    ...threads.map(t => ({ type: 'thread', ...t })),
-    ...tasks.map(t => ({ type: 'task', ...t })),
-    ...responses.map(r => ({ type: 'response', ...r }))
-  ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-  return timeline;
 }

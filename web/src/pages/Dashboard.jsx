@@ -68,28 +68,28 @@ export default function Dashboard() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-heading font-bold text-foreground">{greeting}</h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <h1 className="text-3xl font-heading font-bold text-foreground tracking-tight">{greeting}</h1>
+          <p className="text-sm text-muted-foreground mt-1 font-medium">
             Agency command center — everything at a glance
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/projects?create=true')}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition-all shadow-md active:scale-95"
           >
-            <Plus className="w-3.5 h-3.5" /> New Project
+            <Plus className="w-4 h-4" /> New Project
           </button>
           {isAdmin && (
             <button
               onClick={() => navigate('/invoices?create=true')}
-              className="flex items-center gap-1.5 px-3 py-2 text-sm bg-card border border-border text-foreground rounded-lg hover:bg-muted transition-colors"
+              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-card border border-border text-foreground rounded-full hover:bg-muted transition-all active:scale-95"
             >
-              <Receipt className="w-3.5 h-3.5" /> New Invoice
+              <Receipt className="w-4 h-4" /> New Invoice
             </button>
           )}
         </div>
@@ -326,29 +326,29 @@ export default function Dashboard() {
 /* ─── Stat Card Component ─── */
 function StatCard({ icon: Icon, iconColor, iconBg, label, value, subtitle, badge, onClick }) {
   return (
-    <Card
+    <div
       className={cn(
-        'p-4 transition-colors relative',
-        onClick && 'cursor-pointer hover:border-primary/30'
+        'p-5 rounded-2xl bg-card border border-border/60 transition-all relative group hover-lift',
+        onClick && 'cursor-pointer hover:border-primary/20 shadow-sm'
       )}
       onClick={onClick}
     >
       {badge && (
-        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center shadow-sm">
+        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-lg border-2 border-background animate-pulse">
           {badge}
         </span>
       )}
-      <div className="flex items-center gap-3">
-        <div className={cn('p-2 rounded-lg', iconBg)}>
+      <div className="flex flex-col gap-4">
+        <div className={cn('p-2.5 rounded-xl w-fit transition-transform group-hover:scale-110 duration-200', iconBg)}>
           <Icon className={cn('w-5 h-5', iconColor)} />
         </div>
         <div>
-          <p className="text-xs text-muted-foreground">{label}</p>
-          <p className="text-xl font-semibold">{value}</p>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{label}</p>
+          <p className="text-2xl font-bold mt-0.5 tracking-tight text-foreground">{value}</p>
           {subtitle}
         </div>
       </div>
-    </Card>
+    </div>
   );
 }
 

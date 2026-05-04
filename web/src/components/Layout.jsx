@@ -495,7 +495,7 @@ export default function Layout({ children }) {
       </main>
 
       {/* Mobile bottom nav with More menu */}
-      <nav className="fixed bottom-0 inset-x-0 z-40 bg-card border-t border-border flex lg:hidden safe-area-inset-bottom" role="navigation" aria-label="Mobile navigation">
+      <nav className="fixed bottom-0 inset-x-0 z-40 bg-card/80 backdrop-blur-lg border-t border-border/60 flex lg:hidden safe-area-inset-bottom shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.05)]" role="navigation" aria-label="Mobile navigation">
         {[
           { href: '/', icon: LayoutDashboard, label: 'Home', exact: true },
           { href: '/inbox', icon: Inbox, label: 'Inbox', badge: stats?.needsResponse },
@@ -513,26 +513,26 @@ export default function Layout({ children }) {
                 <button
                   onClick={() => setMoreMenuOpen(!moreMenuOpen)}
                   className={cn(
-                    'w-full flex flex-col items-center justify-center py-2 text-xs transition-colors',
-                    moreMenuOpen ? 'text-[#e6f354]' : 'text-muted-foreground'
+                    'w-full flex flex-col items-center justify-center py-2.5 text-xs transition-all active:scale-90',
+                    moreMenuOpen ? 'text-primary' : 'text-muted-foreground'
                   )}
                   aria-expanded={moreMenuOpen}
                   aria-haspopup="true"
                 >
                   <MoreHorizontal className="w-5 h-5 mb-0.5" />
-                  <span className="text-[10px]">More</span>
+                  <span className="text-[10px] font-medium uppercase tracking-tighter">More</span>
                 </button>
 
                 {/* More menu dropdown */}
                 {moreMenuOpen && (
                   <>
-                    <div className="fixed inset-0 z-50" onClick={() => setMoreMenuOpen(false)} aria-hidden="true" />
-                    <div className="absolute bottom-full right-0 mb-2 w-56 bg-card border border-border rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150" role="menu">
+                    <div className="fixed inset-0 z-50 bg-black/5 backdrop-blur-sm" onClick={() => setMoreMenuOpen(false)} aria-hidden="true" />
+                    <div className="absolute bottom-full right-2 mb-4 w-64 bg-card/90 backdrop-blur-xl border border-border/40 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-300" role="menu">
                       {/* Quick Actions */}
-                      <div className="px-3 py-2 border-b border-border">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase">Quick Actions</p>
+                      <div className="px-4 py-3 border-b border-border/40">
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Quick Actions</p>
                       </div>
-                      <div className="py-1">
+                      <div className="py-2">
                         {[
                           { label: 'New Project', icon: Plus, href: '/projects?create=true' },
                           { label: 'New Invoice', icon: Receipt, href: '/invoices?create=true' },
@@ -542,11 +542,13 @@ export default function Layout({ children }) {
                             key={action.label}
                             to={action.href}
                             onClick={() => setMoreMenuOpen(false)}
-                            className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted transition-colors"
+                            className="flex items-center gap-4 px-5 py-3 text-sm hover:bg-primary/5 transition-colors"
                             role="menuitem"
                           >
-                            <action.icon className="w-4 h-4 text-muted-foreground" />
-                            {action.label}
+                            <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
+                              <action.icon className="w-4 h-4 text-muted-foreground" />
+                            </div>
+                            <span className="font-medium text-foreground">{action.label}</span>
                           </Link>
                         ))}
                       </div>
@@ -554,23 +556,28 @@ export default function Layout({ children }) {
                       {/* Admin */}
                       {adminNav.length > 0 && (
                         <>
-                          <div className="px-3 py-2 border-t border-border">
-                            <p className="text-xs font-semibold text-muted-foreground uppercase">Admin</p>
+                          <div className="px-4 py-3 border-t border-border/40">
+                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Admin</p>
                           </div>
-                          <div className="py-1">
+                          <div className="py-2">
                             {adminNav.map((item) => (
                               <Link
                                 key={item.name}
                                 to={item.href}
                                 onClick={() => setMoreMenuOpen(false)}
                                 className={cn(
-                                  'flex items-center gap-3 px-4 py-2.5 text-sm transition-colors',
-                                  location.pathname === item.href ? 'bg-[#e6f354]/10 text-[#e6f354]' : 'hover:bg-muted'
+                                  'flex items-center gap-4 px-5 py-3 text-sm transition-colors',
+                                  location.pathname === item.href ? 'bg-primary/5 text-primary' : 'hover:bg-primary/5'
                                 )}
                                 role="menuitem"
                               >
-                                <item.icon className="w-4 h-4 text-muted-foreground" />
-                                {item.name}
+                                <div className={cn(
+                                  "w-8 h-8 rounded-lg flex items-center justify-center",
+                                  location.pathname === item.href ? "bg-primary/10" : "bg-muted"
+                                )}>
+                                  <item.icon className="w-4 h-4" />
+                                </div>
+                                <span className="font-medium">{item.name}</span>
                               </Link>
                             ))}
                           </div>
@@ -578,31 +585,37 @@ export default function Layout({ children }) {
                       )}
 
                       {/* Theme & Settings */}
-                      <div className="border-t border-border py-2">
+                      <div className="border-t border-border/40 py-2 bg-muted/30">
                         <button
                           onClick={() => { toggleTheme(); setMoreMenuOpen(false); }}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted transition-colors"
+                          className="w-full flex items-center gap-4 px-5 py-3 text-sm hover:bg-primary/5 transition-colors"
                           role="menuitem"
                         >
-                          {isDark ? <Sun className="w-4 h-4 text-muted-foreground" /> : <Moon className="w-4 h-4 text-muted-foreground" />}
-                          {isDark ? 'Light Mode' : 'Dark Mode'}
+                          <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
+                            {isDark ? <Sun className="w-4 h-4 text-muted-foreground" /> : <Moon className="w-4 h-4 text-muted-foreground" />}
+                          </div>
+                          <span className="font-medium">{isDark ? 'Light Mode' : 'Dark Mode'}</span>
                         </button>
                         <Link
                           to="/settings"
                           onClick={() => setMoreMenuOpen(false)}
-                          className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-muted transition-colors"
+                          className="flex items-center gap-4 px-5 py-3 text-sm hover:bg-primary/5 transition-colors"
                           role="menuitem"
                         >
-                          <Settings className="w-4 h-4 text-muted-foreground" />
-                          Settings
+                          <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
+                            <Settings className="w-4 h-4 text-muted-foreground" />
+                          </div>
+                          <span className="font-medium">Settings</span>
                         </Link>
                         <button
                           onClick={() => { logout(); setMoreMenuOpen(false); }}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+                          className="w-full flex items-center gap-4 px-5 py-3 text-sm text-destructive hover:bg-destructive/10 transition-colors"
                           role="menuitem"
                         >
-                          <LogOut className="w-4 h-4" />
-                          Logout
+                          <div className="w-8 h-8 rounded-lg bg-destructive/10 flex items-center justify-center">
+                            <LogOut className="w-4 h-4" />
+                          </div>
+                          <span className="font-bold uppercase tracking-tight">Logout</span>
                         </button>
                       </div>
                     </div>
@@ -618,20 +631,20 @@ export default function Layout({ children }) {
               to={item.href}
               onClick={() => setMoreMenuOpen(false)}
               className={cn(
-                'flex-1 flex flex-col items-center justify-center py-2 text-xs transition-colors relative',
-                isActive ? 'text-[#e6f354]' : 'text-muted-foreground'
+                'flex-1 flex flex-col items-center justify-center py-2.5 text-xs transition-all active:scale-90 relative',
+                isActive ? 'text-primary' : 'text-muted-foreground'
               )}
               aria-current={isActive ? 'page' : undefined}
             >
               <div className="relative">
-                <item.icon className={cn('w-5 h-5 mb-0.5', isActive && 'text-[#e6f354]')} aria-hidden="true" />
+                <item.icon className={cn('w-5 h-5 mb-0.5', isActive && 'scale-110')} aria-hidden="true" />
                 {item.badge > 0 && (
-                  <span className="absolute -top-1 -right-1 w-4 h-4 text-[9px] font-bold rounded-full bg-[#e6f354] text-[#2e2958] flex items-center justify-center" aria-label={`${item.badge} unread items`}>
+                  <span className="absolute -top-1.5 -right-1.5 w-4 h-4 text-[9px] font-bold rounded-full bg-red-500 text-white flex items-center justify-center shadow-sm" aria-label={`${item.badge} unread items`}>
                     {item.badge > 9 ? '9+' : item.badge}
                   </span>
                 )}
               </div>
-              <span className={cn('text-[10px]', isActive && 'font-medium')}>{item.label}</span>
+              <span className={cn('text-[10px] uppercase tracking-tighter', isActive ? 'font-bold' : 'font-medium')}>{item.label}</span>
             </Link>
           );
         })}

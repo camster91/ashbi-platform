@@ -52,3 +52,10 @@ create-*.mjs
 # Uploads and data directories
 uploads/
 data/
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/

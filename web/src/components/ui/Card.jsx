@@ -10,29 +10,30 @@ const Card = forwardRef(({
   ...props
 }, ref) => {
   const variants = {
-    default: 'bg-card text-card-foreground border border-border',
+    default: 'bg-card text-card-foreground border border-border/60',
     elevated: 'bg-card text-card-foreground shadow-md border-0',
     outlined: 'bg-transparent border-2 border-border text-foreground',
     ghost: 'bg-transparent border-0 text-foreground',
+    glass: 'glass-card',
   };
 
   const paddings = {
     none: '',
     xs: 'p-2',
     sm: 'p-3',
-    md: 'p-4',
+    md: 'p-5',
     lg: 'p-6',
-    xl: 'p-8',
+    xl: 'p-10',
   };
 
   return (
     <div
       ref={ref}
       className={cn(
-        'rounded-xl',
+        'rounded-2xl transition-all duration-300',
         variants[variant],
         paddings[padding],
-        isInteractive && 'cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:shadow-lg',
+        isInteractive && 'cursor-pointer hover-lift',
         className
       )}
       {...props}
@@ -48,7 +49,7 @@ Card.displayName = 'Card';
 const CardHeader = forwardRef(({ children, className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn('flex flex-col space-y-1.5', className)}
+    className={cn('flex flex-col space-y-2 mb-4', className)}
     {...props}
   >
     {children}
@@ -60,7 +61,7 @@ CardHeader.displayName = 'CardHeader';
 const CardTitle = forwardRef(({ children, className, ...props }, ref) => (
   <h3
     ref={ref}
-    className={cn('font-heading font-semibold text-lg leading-tight', className)}
+    className={cn('font-display font-bold text-xl leading-tight text-foreground', className)}
     {...props}
   >
     {children}

@@ -1,11 +1,11 @@
 // Project routes
 
-import prisma from '../config/db.js';
-import { refreshProjectPlan } from '../services/project.service.js';
+import { refreshProjectPlan, getProjectBudgetMetrics } from '../services/project.service.js';
 import { safeParse } from '../utils/safeParse.js';
 import { queueEmbedding } from '../jobs/queue.js';
 import aiClient from '../ai/client.js';
 import { validateBody, createProjectSchema, updateProjectSchema } from '../validators/schemas.js';
+import bus, { EVENTS } from '../utils/events.js';
 
 export default async function projectRoutes(fastify) {
   // List all projects
@@ -23,7 +23,7 @@ export default async function projectRoutes(fastify) {
     const skip = parseInt(offset) || 0;
 
     const [projects, total] = await Promise.all([
-      prisma.project.findMany({
+      request.prisma.project.findMany({
         where,
         include: {
           client: { select: { id: true, name: true } },
@@ -41,12 +41,12 @@ export default async function projectRoutes(fastify) {
         take,
         skip
       }),
-      prisma.project.count({ where })
+      request.prisma.project.count({ where })
     ]);
 
     // Add completed task counts
     const projectIds = projects.map(p => p.id);
-    const completedCounts = await prisma.task.groupBy({
+    const completedCounts = await request.prisma.task.groupBy({
       by: ['projectId'],
       where: { projectId: { in: projectIds }, status: 'COMPLETED' },
       _count: true
@@ -74,7 +74,7 @@ export default async function projectRoutes(fastify) {
   }, async (request, reply) => {
     const { name, description, clientId, defaultOwnerId } = request.body;
 
-    const project = await prisma.project.create({
+    const project = await fastify.prisma.project.create({
       data: {
         name,
         description,
@@ -83,12 +83,8 @@ export default async function projectRoutes(fastify) {
       }
     });
 
-    // Auto-embed project for Client Brain
-    if (clientId && description) {
-      queueEmbedding(clientId, `Project: ${name} - ${description}`, 'PROJECT', project.id, { projectName: name }).catch(err =>
-        console.error('Failed to queue project embedding:', err.message)
-      );
-    }
+    // Decoupled side-effects via Event Bus
+    bus.emit(EVENTS.PROJECT_CREATED, { project, user: request.user });
 
     return reply.status(201).send(project);
   });
@@ -99,7 +95,7 @@ export default async function projectRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const project = await prisma.project.findUnique({
+    const project = await fastify.prisma.project.findUnique({
       where: { id },
       include: {
         client: { select: { id: true, name: true } },
@@ -161,10 +157,13 @@ export default async function projectRoutes(fastify) {
     if (serviceType !== undefined) data.serviceType = serviceType;
     if (notes !== undefined) data.description = notes;
 
-    const project = await prisma.project.update({
+    const project = await fastify.prisma.project.update({
       where: { id },
       data
     });
+
+    // Emit update event
+    bus.emit(EVENTS.PROJECT_UPDATED, { project, user: request.user });
 
     return project;
   });
@@ -175,7 +174,7 @@ export default async function projectRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const project = await prisma.project.findUnique({
+    const project = await fastify.prisma.project.findUnique({
       where: { id },
       select: {
         id: true,
@@ -207,7 +206,7 @@ export default async function projectRoutes(fastify) {
     const { id } = request.params;
 
     try {
-      const updatedProject = await refreshProjectPlan(id);
+      const updatedProject = await refreshProjectPlan(request.prisma, id);
       return {
         success: true,
         project: {
@@ -236,7 +235,7 @@ export default async function projectRoutes(fastify) {
     if (category) where.category = category;
     if (assigneeId) where.assigneeId = assigneeId;
 
-    const tasks = await prisma.task.findMany({
+    const tasks = await fastify.prisma.task.findMany({
       where,
       include: {
         assignee: { select: { id: true, name: true } }
@@ -266,7 +265,7 @@ export default async function projectRoutes(fastify) {
       sourceThreadId
     } = request.body;
 
-    const task = await prisma.task.create({
+    const task = await fastify.prisma.task.create({
       data: {
         title,
         description,
@@ -281,6 +280,8 @@ export default async function projectRoutes(fastify) {
       }
     });
 
+    bus.emit(EVENTS.TASK_CREATED, { task, user: request.user });
+
     return reply.status(201).send(task);
   });
 
@@ -292,7 +293,7 @@ export default async function projectRoutes(fastify) {
 
     // TODO: Implement health history tracking
     // For now, return current health
-    const project = await prisma.project.findUnique({
+    const project = await fastify.prisma.project.findUnique({
       where: { id },
       select: { health: true, healthScore: true, updatedAt: true }
     });
@@ -313,7 +314,7 @@ export default async function projectRoutes(fastify) {
     const { id } = request.params;
     const { limit = '20', offset = '0', direction, full } = request.query;
 
-    const project = await prisma.project.findUnique({ where: { id } });
+    const project = await fastify.prisma.project.findUnique({ where: { id } });
     if (!project) return reply.status(404).send({ error: 'Project not found' });
 
     const where = { projectId: id };
@@ -324,7 +325,7 @@ export default async function projectRoutes(fastify) {
     const includeFullBody = full === 'true';
 
     const [communications, total] = await Promise.all([
-      prisma.projectCommunication.findMany({
+      fastify.prisma.projectCommunication.findMany({
         where,
         orderBy: { receivedAt: 'desc' },
         take: parseInt(limit),
@@ -347,7 +348,7 @@ export default async function projectRoutes(fastify) {
           createdAt: true,
         },
       }),
-      prisma.projectCommunication.count({ where }),
+      fastify.prisma.projectCommunication.count({ where }),
     ]);
 
     return { communications, total };
@@ -361,10 +362,10 @@ export default async function projectRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const project = await prisma.project.findUnique({ where: { id } });
+    const project = await fastify.prisma.project.findUnique({ where: { id } });
     if (!project) return reply.status(404).send({ error: 'Project not found' });
 
-    const context = await prisma.projectContext.findUnique({
+    const context = await fastify.prisma.projectContext.findUnique({
       where: { projectId: id },
     });
 
@@ -384,10 +385,10 @@ export default async function projectRoutes(fastify) {
     const { id } = request.params;
     const { humanNotes } = request.body || {};
 
-    const project = await prisma.project.findUnique({ where: { id } });
+    const project = await fastify.prisma.project.findUnique({ where: { id } });
     if (!project) return reply.status(404).send({ error: 'Project not found' });
 
-    const context = await prisma.projectContext.upsert({
+    const context = await fastify.prisma.projectContext.upsert({
       where: { projectId: id },
       create: {
         projectId: id,
@@ -415,7 +416,7 @@ export default async function projectRoutes(fastify) {
       return reply.status(400).send({ error: 'Project brief is required' });
     }
 
-    const project = await prisma.project.findUnique({
+    const project = await fastify.prisma.project.findUnique({
       where: { id },
       include: { client: { select: { id: true, name: true } } }
     });
@@ -482,7 +483,7 @@ Brief: ${brief}`;
         const dueDate = new Date(now);
         dueDate.setDate(dueDate.getDate() + (ms.dueOffset || 7));
 
-        const milestone = await prisma.milestone.create({
+        const milestone = await fastify.prisma.milestone.create({
           data: {
             name: ms.name,
             description: ms.description || null,
@@ -500,7 +501,7 @@ Brief: ${brief}`;
           ? createdMilestones[task.milestoneIndex].id
           : null;
 
-        const created = await prisma.task.create({
+        const created = await fastify.prisma.task.create({
           data: {
             title: task.title,
             description: task.description || null,
@@ -516,7 +517,7 @@ Brief: ${brief}`;
       }
 
       // Save the full AI plan as JSON on the project
-      await prisma.project.update({
+      await fastify.prisma.project.update({
         where: { id },
         data: {
           aiPlan: JSON.stringify(plan),
@@ -544,7 +545,7 @@ Brief: ${brief}`;
   fastify.get('/templates', {
     onRequest: [fastify.authenticate]
   }, async () => {
-    const templates = await prisma.projectTemplate.findMany({
+    const templates = await fastify.prisma.projectTemplate.findMany({
       orderBy: { updatedAt: 'desc' }
     });
 
@@ -570,7 +571,7 @@ Brief: ${brief}`;
 
     // If projectId provided, copy from existing project
     if (projectId) {
-      const project = await prisma.project.findUnique({
+      const project = await fastify.prisma.project.findUnique({
         where: { id: projectId },
         include: {
           tasks: {
@@ -633,7 +634,7 @@ Brief: ${brief}`;
       milestonesData = milestonesData.map(({ _originalId, ...rest }) => rest);
     }
 
-    const template = await prisma.projectTemplate.create({
+    const template = await fastify.prisma.projectTemplate.create({
       data: {
         name,
         description: description || null,
@@ -660,12 +661,12 @@ Brief: ${brief}`;
       return reply.status(400).send({ error: 'templateId, clientId, and name are required' });
     }
 
-    const template = await prisma.projectTemplate.findUnique({ where: { id: templateId } });
+    const template = await fastify.prisma.projectTemplate.findUnique({ where: { id: templateId } });
     if (!template) {
       return reply.status(404).send({ error: 'Template not found' });
     }
 
-    const client = await prisma.client.findUnique({ where: { id: clientId } });
+    const client = await fastify.prisma.client.findUnique({ where: { id: clientId } });
     if (!client) {
       return reply.status(404).send({ error: 'Client not found' });
     }
@@ -674,7 +675,7 @@ Brief: ${brief}`;
     const templateTasks = safeParse(template.tasks, []);
 
     // Create the project
-    const project = await prisma.project.create({
+    const project = await fastify.prisma.project.create({
       data: {
         name,
         description: template.description || null,
@@ -691,7 +692,7 @@ Brief: ${brief}`;
       const dueDate = new Date(now);
       dueDate.setDate(dueDate.getDate() + (ms.dueOffset || 7));
 
-      const milestone = await prisma.milestone.create({
+      const milestone = await fastify.prisma.milestone.create({
         data: {
           name: ms.name,
           description: ms.description || null,
@@ -710,7 +711,7 @@ Brief: ${brief}`;
         ? createdMilestones[task.milestoneIndex].id
         : null;
 
-      const created = await prisma.task.create({
+      const created = await fastify.prisma.task.create({
         data: {
           title: task.title,
           description: task.description || null,
@@ -739,7 +740,7 @@ Brief: ${brief}`;
     const { templateId } = request.params;
 
     try {
-      await prisma.projectTemplate.delete({ where: { id: templateId } });
+      await fastify.prisma.projectTemplate.delete({ where: { id: templateId } });
       return { success: true };
     } catch (error) {
       return reply.status(404).send({ error: 'Template not found' });
@@ -751,63 +752,13 @@ Brief: ${brief}`;
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const { id } = request.params;
-    const project = await prisma.project.findUnique({
-      where: { id },
-      select: { id: true, name: true, budget: true, hourlyBudget: true, clientId: true }
-    });
-    if (!project) return reply.status(404).send({ error: 'Project not found' });
-
-    // Get billable time entries
-    const timeEntries = await prisma.timeEntry.findMany({
-      where: { projectId: id },
-      include: { user: { select: { id: true, name: true, hourlyRate: true } } }
-    });
-
-    const totalMinutes = timeEntries.reduce((s, e) => s + e.duration, 0);
-    const totalHours = totalMinutes / 60;
-    const billableMinutes = timeEntries.filter(e => e.billable).reduce((s, e) => s + e.duration, 0);
-    const billableHours = billableMinutes / 60;
-
-    // Calculate cost based on user rates
-    const costByUser = {};
-    for (const entry of timeEntries) {
-      const rate = entry.user?.hourlyRate || 0;
-      const hours = entry.duration / 60;
-      const cost = hours * rate;
-      const uid = entry.userId;
-      if (!costByUser[uid]) costByUser[uid] = { user: entry.user, hours: 0, cost: 0 };
-      costByUser[uid].hours += hours;
-      costByUser[uid].cost += cost;
+    
+    const metrics = await getProjectBudgetMetrics(request.prisma, id);
+    
+    if (!metrics) {
+      return reply.status(404).send({ error: 'Project not found' });
     }
 
-    // Get expenses for project
-    const expenses = await prisma.expense.findMany({ where: { projectId: id } });
-    const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
-
-    const budgetAmount = project.budget || 0;
-    const hourlyBudget = project.hourlyBudget || 0;
-
-    // Calculate burn rate (last 30 days)
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const recentEntries = timeEntries.filter(e => new Date(e.date) >= thirtyDaysAgo);
-    const recentHours = recentEntries.reduce((s, e) => s + e.duration, 0) / 60;
-
-    const budgetUsed = budgetAmount > 0 ? ((costByUser && Object.values(costByUser).reduce((s, u) => s + u.cost, 0)) + totalExpenses) : totalHours * 50;
-    const budgetRemaining = budgetAmount > 0 ? budgetAmount - budgetUsed : null;
-    const hoursRemaining = hourlyBudget > 0 ? hourlyBudget - billableHours : null;
-
-    return {
-      project: { id: project.id, name: project.name, budget: budgetAmount, hourlyBudget },
-      time: { totalHours, billableHours, totalMinutes: totalMinutes, billableMinutes },
-      costByUser: Object.values(costByUser),
-      totalCost: Object.values(costByUser).reduce((s, u) => s + u.cost, 0),
-      expenses: { total: totalExpenses, count: expenses.length },
-      budgetUsed,
-      budgetRemaining,
-      hoursRemaining,
-      burnRate: recentHours > 0 ? recentHours / 30 : 0,
-      percentUsed: budgetAmount > 0 ? Math.round((budgetUsed / budgetAmount) * 100) : (hourlyBudget > 0 ? Math.round((billableHours / hourlyBudget) * 100) : null)
-    };
+    return metrics;
   });
 }

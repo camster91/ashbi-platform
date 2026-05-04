@@ -136,7 +136,7 @@ describe('Zod Schema Validation', () => {
       const result = createTaskSchema.safeParse({
         projectId: 'proj-123',
         title: 'Design homepage mockup',
-        priority: 'MEDIUM'
+        priority: 'NORMAL'
       });
       assert.equal(result.success, true);
     });
@@ -170,7 +170,7 @@ describe('Zod Schema Validation', () => {
       const result = createExpenseSchema.safeParse({
         amount: -50,
         category: 'SOFTWARE',
-        date: '2026-01-15'
+        date: '2026-01-15T10:00:00Z'
       });
       assert.equal(result.success, false);
     });
@@ -179,7 +179,7 @@ describe('Zod Schema Validation', () => {
       const result = createExpenseSchema.safeParse({
         amount: 49.99,
         category: 'SOFTWARE',
-        date: '2026-01-15',
+        date: '2026-01-15T10:00:00Z',
         description: 'Figma subscription'
       });
       assert.equal(result.success, true);

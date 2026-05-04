@@ -102,15 +102,12 @@ describe('Client Portal Token Security', () => {
 
       const content = fs.readFileSync(portalPath, 'utf-8');
 
-      // Portal uses params.token which is in the URL path, not query string
-      // This is acceptable because viewTokens are one-time/random tokens, not JWTs
-      const paramTokenUsage = content.match(/request\.params\.token/g) || [];
+      // Portal uses params.token or params.viewToken or params.signToken (often destructured)
+      const paramTokenUsage = content.match(/request\.params\.(token|viewToken|signToken)|const\s+\{\s*(token|viewToken|signToken)\s*\}\s*=\s*request\.params/g) || [];
       const queryTokenUsage = content.match(/request\.query/g) || [];
 
-      console.log(`  ✓ portal.routes.js: ${paramTokenUsage.length} param-based tokens (acceptable - not JWTs)`);
+      console.log(`  âœ“ portal.routes.js: ${paramTokenUsage.length} param-based tokens (acceptable - not JWTs)`);
 
-      // viewTokens are not JWTs — they're opaque tokens verified against DB
-      // Having them in URL params is the standard pattern (like password reset links)
       assert.ok(paramTokenUsage.length > 0, 'Portal should use param-based viewTokens');
     });
   });

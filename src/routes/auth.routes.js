@@ -57,57 +57,24 @@ export default async function authRoutes(fastify) {
   fastify.post('/login', {
     ...authRateLimit,
     preHandler: [validateBody(loginSchema)],
-    schema: {
-      body: {
-        type: 'object',
-        required: ['email', 'password'],
-        properties: {
-          email: { type: 'string', format: 'email' },
-          password: { type: 'string', minLength: 1 }
-        }
-      }
-    }
   }, async (request, reply) => {
     const { email, password } = request.body;
 
-    const user = await prisma.user.findUnique({
-      where: { email }
-    });
+    try {
+      const { user, token } = await fastify.auth.login({ email, password });
 
-    if (!user || !(await verifyPassword(password, user.password))) {
-      return reply.status(401).send({ error: 'Invalid credentials' });
+      reply
+        .setCookie('token', token, {
+          path: '/',
+          httpOnly: true,
+          secure: env.isProduction,
+          sameSite: env.isProduction ? 'strict' : 'lax',
+          maxAge: 7 * 24 * 60 * 60 // 7 days
+        })
+        .send({ user });
+    } catch (err) {
+      return reply.status(401).send({ error: err.message });
     }
-
-    if (!user.isActive) {
-      return reply.status(401).send({ error: 'Account is disabled' });
-    }
-
-    // Auto-upgrade legacy SHA-256 hash to bcrypt
-    await upgradeHashIfNeeded(user.id, password, user.password);
-
-    const token = fastify.jwt.sign({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role
-    });
-
-    reply
-      .setCookie('token', token, {
-        path: '/',
-        httpOnly: true,
-        secure: env.isProduction,
-        sameSite: env.isProduction ? 'strict' : 'lax',
-        maxAge: 7 * 24 * 60 * 60 // 7 days
-      })
-      .send({
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role
-        }
-      });
   });
 
   // Logout

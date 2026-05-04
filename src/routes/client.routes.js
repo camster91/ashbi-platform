@@ -1,6 +1,5 @@
 // Client routes
 
-import prisma from '../config/db.js';
 import { safeParse } from '../utils/safeParse.js';
 import { validateBody, createClientSchema, updateClientSchema } from '../validators/schemas.js';
 
@@ -24,7 +23,7 @@ export default async function clientRoutes(fastify) {
     const skip = parseInt(offset) || 0;
 
     const [clients, total] = await Promise.all([
-      prisma.client.findMany({
+      request.prisma.client.findMany({
         where,
         include: {
           _count: {
@@ -39,7 +38,7 @@ export default async function clientRoutes(fastify) {
         take,
         skip
       }),
-      prisma.client.count({ where })
+      request.prisma.client.count({ where })
     ]);
 
     return { clients, total, limit: take, offset: skip };
@@ -54,7 +53,7 @@ export default async function clientRoutes(fastify) {
 
     // Check for duplicate domain
     if (domain) {
-      const existing = await prisma.client.findUnique({
+      const existing = await request.prisma.client.findUnique({
         where: { domain }
       });
       if (existing) {
@@ -62,7 +61,7 @@ export default async function clientRoutes(fastify) {
       }
     }
 
-    const client = await prisma.client.create({
+    const client = await request.prisma.client.create({
       data: { name, domain, status }
     });
 
@@ -75,7 +74,7 @@ export default async function clientRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const client = await prisma.client.findUnique({
+    const client = await request.prisma.client.findUnique({
       where: { id },
       include: {
         contacts: true,
@@ -165,7 +164,7 @@ export default async function clientRoutes(fastify) {
     if (serviceType !== undefined) data.serviceType = serviceType;
     if (relationshipStatus !== undefined) data.relationshipStatus = relationshipStatus;
 
-    const client = await prisma.client.update({
+    const client = await request.prisma.client.update({
       where: { id },
       data
     });
@@ -179,7 +178,7 @@ export default async function clientRoutes(fastify) {
   }, async (request) => {
     const { id } = request.params;
 
-    const contacts = await prisma.contact.findMany({
+    const contacts = await request.prisma.contact.findMany({
       where: { clientId: id },
       orderBy: [
         { isPrimary: 'desc' },
@@ -199,13 +198,13 @@ export default async function clientRoutes(fastify) {
 
     // If setting as primary, unset other primaries
     if (isPrimary) {
-      await prisma.contact.updateMany({
+      await request.prisma.contact.updateMany({
         where: { clientId: id, isPrimary: true },
         data: { isPrimary: false }
       });
     }
 
-    const contact = await prisma.contact.create({
+    const contact = await request.prisma.contact.create({
       data: {
         email,
         name,
@@ -225,7 +224,7 @@ export default async function clientRoutes(fastify) {
     const { id } = request.params;
 
     // Get recent threads for analysis
-    const recentThreads = await prisma.thread.findMany({
+    const recentThreads = await request.prisma.thread.findMany({
       where: { clientId: id },
       orderBy: { lastActivityAt: 'desc' },
       take: 20,
