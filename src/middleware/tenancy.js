@@ -18,9 +18,13 @@ export async function tenancyMiddleware(request, reply) {
   const organizationId = request.user?.organizationId || request.headers['x-org-id'];
 
   if (!organizationId) {
-    // Exempt Auth and Public Portal from strict isolation
-    if (request.url.startsWith('/api/auth') || request.url.startsWith('/api/portal')) {
-      request.prisma = prisma; // Use global for auth/portal
+    // Exempt Auth, Health, and Public Portal from strict isolation
+    if (
+      request.url.startsWith('/api/auth') || 
+      request.url.startsWith('/api/portal') ||
+      request.url === '/api/health'
+    ) {
+      request.prisma = prisma; // Use global for auth/portal/health
       return;
     }
 
