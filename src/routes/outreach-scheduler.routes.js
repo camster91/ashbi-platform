@@ -11,7 +11,7 @@ import {
   generateFollowUpDrafts,
   runWeeklyCycle,
   getSchedulerStatus
- } from '../agents/outreach-scheduler.agent';
+} from '../agents/outreach-scheduler.agent';
 
 /**
  * Simple auth middleware - checks for Authorization header
@@ -88,5 +88,4 @@ router.get('/status', async (req, res) => {
   }
 });
 
-export default router;
 export default router;
