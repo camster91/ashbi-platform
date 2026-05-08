@@ -1,10 +1,43 @@
 /**
  * Gmail Draft Agent for ashbi-platform
  * Connects to Maton API to create Gmail drafts and search inbox
+ *
+ * Email headers are sanitized to prevent RFC 2822 violations
+ * and header injection attacks (Issue #26/#30).
  */
 
 const MATON_API_KEY = process.env.MATON_API_KEY;
 const BASE_URL = 'https://api.maton.ai/google-mail/gmail/v1/users/me';
+
+/**
+ * Sanitize an email header value to prevent header injection and RFC violations.
+ * Removes control characters, newlines, and trims whitespace.
+ * Encodes non-ASCII characters using RFC 2047 encoded-word syntax.
+ *
+ * @param {string} value - The raw header value
+ * @returns {string} Sanitized header value safe for RFC 2822
+ */
+function sanitizeEmailHeader(value) {
+  if (typeof value !== 'string') return '';
+
+  // Remove any control characters except tabs
+  let sanitized = value.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+
+  // Remove any newlines (prevents header injection)
+  sanitized = sanitized.replace(/\r?\n|\r/g, ' ');
+
+  // Collapse multiple spaces
+  sanitized = sanitized.replace(/[ \t]+/g, ' ').trim();
+
+  // If there are non-ASCII characters, encode the whole value as RFC 2047
+  // eslint-disable-next-line no-control-regex
+  if (/[^\x20-\x7E]/.test(sanitized)) {
+    const buf = Buffer.from(sanitized, 'utf-8');
+    sanitized = '=?UTF-8?B?' + buf.toString('base64') + '?=';
+  }
+
+  return sanitized;
+}
 
 /**
  * Build RFC 2822 email message
@@ -14,9 +47,12 @@ const BASE_URL = 'https://api.maton.ai/google-mail/gmail/v1/users/me';
  * @returns {string} RFC 2822 formatted message
  */
 function buildRfc2822Email(to, subject, body) {
+  const sanitizedSubject = sanitizeEmailHeader(subject);
+  const sanitizedTo = sanitizeEmailHeader(to);
+
   const lines = [
-    `To: ${to}`,
-    `Subject: ${subject}`,
+    `To: ${sanitizedTo}`,
+    `Subject: ${sanitizedSubject}`,
     'Content-Type: text/plain; charset="UTF-8"',
     '',
     body
@@ -49,7 +85,9 @@ async function createDraft(toEmail, subject, body) {
     throw new Error('MATON_API_KEY environment variable is not set');
   }
 
-  const rfc2822Message = buildRfc2822Email(toEmail, subject, body);
+  // Sanitize inputs before building the RFC 2822 message
+  const sanitizedSubject = sanitizeEmailHeader(subject);
+  const rfc2822Message = buildRfc2822Email(toEmail, sanitizedSubject, body);
   const rawEncoded = toBase64Url(rfc2822Message);
 
   const response = await fetch(`${BASE_URL}/drafts`, {
@@ -99,7 +137,8 @@ async function searchInbox(query) {
   return await response.json();
 }
 
-module.exports = {
+export {
   createDraft,
-  searchInbox
+  searchInbox,
+  sanitizeEmailHeader
 };
