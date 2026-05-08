@@ -191,6 +191,7 @@ await fastify.register(upworkAgentRoutes, { prefix: '/api/upwork' });
 await fastify.register(leadIntelligenceRoutes, { prefix: '/api/lead-intelligence' });
 await fastify.register(proposalBuilderRoutes, { prefix: '/api/proposal-builder' });
 await fastify.register(coldCallRoutes, { prefix: '/api/cold-call' });
+await fastify.register(coldEmailRoutes, { prefix: '/api/cold-email' });
 await fastify.register(upworkAutoAlertRoutes, { prefix: '/api/upwork-auto-alert' });
 // ... (all other routes would be registered here in a production app, condensed for space)
 
