@@ -3,10 +3,10 @@
  * API endpoints for referral network, tracking, and stats
  */
 
-const express = require('express');
+import express from 'express';
 const router = express.Router();
 
-const {
+import { 
   getReferralNetwork,
   generateReferralEmail,
   createDraftForReferral,
@@ -14,7 +14,7 @@ const {
   getTopReferrers,
   importContacts,
   REFERRAL_REWARD
-} = require('../agents/referral-engine.agent');
+ } from '../agents/referral-engine.agent';
 
 /**
  * Simple auth middleware - checks for Authorization header
@@ -159,7 +159,7 @@ router.get('/stats', async (req, res) => {
     const topReferrersResult = await getTopReferrers(limit);
     
     // Get overall referral stats from database
-    const { PrismaClient } = require('@prisma/client');
+    import {  PrismaClient  } from '@prisma/client';
     const prisma = new PrismaClient();
     
     const [totalReferrals, referralsByStatus] = await Promise.all([
