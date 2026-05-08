@@ -3,15 +3,15 @@
  * API endpoints for manual trigger and status checks
  */
 
-const express = require('express');
+import express from 'express';
 const router = express.Router();
 
-const {
+import { 
   checkReplies,
   generateFollowUpDrafts,
   runWeeklyCycle,
   getSchedulerStatus
-} = require('../agents/outreach-scheduler.agent');
+ } from '../agents/outreach-scheduler.agent';
 
 /**
  * Simple auth middleware - checks for Authorization header
@@ -88,4 +88,5 @@ router.get('/status', async (req, res) => {
   }
 });
 
+export default router;
 export default router;
