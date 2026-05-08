@@ -262,4 +262,4 @@ router.post('/import-contacts', authMiddleware, async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;
