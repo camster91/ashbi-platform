@@ -118,6 +118,10 @@ import integrationRoutes from './routes/integration.routes.js';
 import outreachSchedulerRoutes from './routes/outreach-scheduler.routes.js';
 import referralEngineRoutes from './routes/referral-engine.routes.js';
 import upworkAgentRoutes from './routes/upwork-agent.routes.js';
+import leadIntelligenceRoutes from './routes/lead-intelligence.routes.js';
+import proposalBuilderRoutes from './routes/proposal-builder.routes.js';
+import coldCallRoutes from './routes/cold-call.routes.js';
+import upworkAutoAlertRoutes from './routes/upwork-auto-alert.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -184,6 +188,10 @@ await fastify.register(settingsRoutes, { prefix: '/api/settings' });
 await fastify.register(outreachSchedulerRoutes, { prefix: '/api/outreach-scheduler' });
 await fastify.register(referralEngineRoutes, { prefix: '/api/referral-engine' });
 await fastify.register(upworkAgentRoutes, { prefix: '/api/upwork' });
+await fastify.register(leadIntelligenceRoutes, { prefix: '/api/lead-intelligence' });
+await fastify.register(proposalBuilderRoutes, { prefix: '/api/proposal-builder' });
+await fastify.register(coldCallRoutes, { prefix: '/api/cold-call' });
+await fastify.register(upworkAutoAlertRoutes, { prefix: '/api/upwork-auto-alert' });
 // ... (all other routes would be registered here in a production app, condensed for space)
 
 // Hub-Hermes bridge initialization
