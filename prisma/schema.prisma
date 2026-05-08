@@ -74,6 +74,7 @@ model User {
   timeSessions      TimeSession[]
   calendarEvents    ContentCalendarEvent[] @relation("CalendarEventAssignee")
   apiKeys           ApiKey[]
+  workflowDefinitions WorkflowDefinition[]
 
   @@map("users")
 }
@@ -1919,4 +1920,47 @@ model Integration {
   updatedAt    DateTime  @updatedAt
 
   @@map("integrations")
+}
+
+// ==================== AUTOMATION WORKFLOWS ====================
+
+model WorkflowDefinition {
+  id            String   @id @default(cuid())
+  name          String
+  description   String?
+  trigger       String   // schedule, webhook, event (new_lead, proposal_approved, etc.)
+  triggerConfig String   @default("{}") // JSON: { cron: "* * * * *", webhook_path: "/hooks/x", event: "NEW_LEAD" }
+  conditions    String   @default("[]") // JSON: array of condition objects
+  actions       String   @default("[]") // JSON: array of action objects
+  isActive      Boolean  @default(true)
+  isPaused      Boolean  @default(false)
+  runCount      Int      @default(0)
+  lastRunAt     DateTime?
+  lastRunStatus String?  // SUCCESS, FAILED
+  createdById   String?
+  createdBy     User?    @relation(fields: [createdById], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  runs WorkflowRun[]
+
+  @@index([isActive, trigger])
+  @@map("workflow_definitions")
+}
+
+model WorkflowRun {
+  id          String   @id @default(cuid())
+  workflowId  String
+  workflow    WorkflowDefinition @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  status      String   @default("RUNNING") // RUNNING, SUCCESS, FAILED
+  trigger     String   // What triggered this run
+  triggerData String?  // JSON: trigger payload
+  actions     String   @default("[]") // JSON: actions executed with results
+  error       String?
+  durationMs  Int?
+  startedAt   DateTime @default(now())
+  completedAt DateTime?
+
+  @@index([workflowId, startedAt])
+  @@map("workflow_runs")
 }
