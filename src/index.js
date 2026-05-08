@@ -123,6 +123,7 @@ import leadIntelligenceRoutes from './routes/lead-intelligence.routes.js';
 import proposalBuilderRoutes from './routes/proposal-builder.routes.js';
 import coldCallRoutes from './routes/cold-call.routes.js';
 import upworkAutoAlertRoutes from './routes/upwork-auto-alert.routes.js';
+import clientAcquisitionRoutes from './routes/client-acquisition.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -302,6 +303,9 @@ await fastify.register(webhookRoutes, { prefix: '/api/webhooks' });
 await fastify.register(clientPortalRoutes, { prefix: '/api/client-portal' });
 await fastify.register(wordpressAgentRoutes, { prefix: '/api/wordpress' });
 await fastify.register(gmailRoutes, { prefix: '/api/gmail' });
+await fastify.register(clientAcquisitionRoutes, { prefix: '/api/client-acquisition' });
+// ... (all other routes would be registered here in a production app, condensed for space)
+5e1ec13 (feat: Issue #11 — Client Acquisition Funnel (landing page + intake + auto-lead))
 
 // Hub-Hermes bridge initialization
 initHermesBridge(fastify);

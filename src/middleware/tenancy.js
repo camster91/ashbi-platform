@@ -22,9 +22,11 @@ export async function tenancyMiddleware(request, reply) {
     if (
       request.url.startsWith('/api/auth') || 
       request.url.startsWith('/api/portal') ||
+      request.url.startsWith('/api/client-acquisition/config') ||
+      request.url.startsWith('/api/client-acquisition/intake') ||
       request.url === '/api/health'
     ) {
-      request.prisma = prisma; // Use global for auth/portal/health
+      request.prisma = prisma; // Use global for auth/portal/health/public routes
       return;
     }
 

@@ -17,6 +17,7 @@ import PortalBooking from './pages/PortalBooking';
 import PortalIntakeForm from './pages/PortalIntakeForm';
 import PortalEstimate from './pages/PortalEstimate';
 import ClientPortal from './pages/ClientPortal';
+import LandingPage from './pages/LandingPage';
 
 // Lazy loaded pages
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -118,6 +119,7 @@ function AppRoutes() {
           <Route path="/client-portal" element={<ClientPortal />} />
           <Route path="/client/login" element={<ClientPortal />} />
           <Route path="/client/dashboard" element={<ClientPortal />} />
+          <Route path="/" element={<LandingPage />} />
       <Route
         path="/*"
         element={
@@ -126,7 +128,8 @@ function AppRoutes() {
               <ErrorBoundary>
                 <Suspense fallback={<PageLoader />}>
                   <Routes>
-                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/" element={<Navigate to="/dashboard" />} />
                   <Route path="/inbox" element={<Inbox />} />
                   <Route path="/thread/:id" element={<Thread />} />
                   <Route path="/projects" element={<Projects />} />
