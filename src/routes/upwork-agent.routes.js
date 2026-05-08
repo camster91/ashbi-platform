@@ -178,4 +178,4 @@ router.get('/job-alerts', authMiddleware, async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;
