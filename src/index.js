@@ -98,6 +98,7 @@ import intakeFormRoutes from './routes/intake-form.routes.js';
 import brandRoutes from './routes/brand.routes.js';
 import { startOverdueChecker } from './services/automation.service.js';
 import pipelineRoutes from './routes/pipeline.routes.js';
+import { initHermesBridge } from './agents/hub-hermes.integration.js';
 import timeTrackingRoutes from './routes/time-tracking.routes.js';
 import semanticSearchRoutes from './routes/semantic-search.routes.js';
 import adCopyRoutes from './routes/ad-copy.routes.js';
@@ -114,6 +115,9 @@ import estimateRoutes from './routes/estimate.routes.js';
 import rateCardRoutes from './routes/rate-card.routes.js';
 import bookkeepingRoutes from './routes/bookkeeping.routes.js';
 import integrationRoutes from './routes/integration.routes.js';
+import outreachSchedulerRoutes from './routes/outreach-scheduler.routes.js';
+import referralEngineRoutes from './routes/referral-engine.routes.js';
+import upworkAgentRoutes from './routes/upwork-agent.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -177,7 +181,13 @@ await fastify.register(dashboardRoutes, { prefix: '/api/dashboard' });
 await fastify.register(aiRoutes, { prefix: '/api/ai' });
 await fastify.register(notificationRoutes, { prefix: '/api/notifications' });
 await fastify.register(settingsRoutes, { prefix: '/api/settings' });
+await fastify.register(outreachSchedulerRoutes, { prefix: '/api/outreach-scheduler' });
+await fastify.register(referralEngineRoutes, { prefix: '/api/referral-engine' });
+await fastify.register(upworkAgentRoutes, { prefix: '/api/upwork' });
 // ... (all other routes would be registered here in a production app, condensed for space)
+
+// Hub-Hermes bridge initialization
+initHermesBridge(fastify);
 
 // Static files
 if (!env.isDev) {
