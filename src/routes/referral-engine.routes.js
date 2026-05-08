@@ -6,7 +6,7 @@
 import express from 'express';
 const router = express.Router();
 
-import { 
+const {
   getReferralNetwork,
   generateReferralEmail,
   createDraftForReferral,
@@ -14,7 +14,7 @@ import {
   getTopReferrers,
   importContacts,
   REFERRAL_REWARD
- } from '../agents/referral-engine.agent';
+} = require('../agents/referral-engine.agent');
 
 /**
  * Simple auth middleware - checks for Authorization header
