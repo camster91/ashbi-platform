@@ -3,16 +3,16 @@
  * API endpoints for Upwork profile optimization, job search, and proposal generation
  */
 
-const express = require('express');
+import express from 'express';
 const router = express.Router();
 
-const {
+import { 
   optimizeProfile,
   searchJobs,
   generateProposal,
   createProposalDraft,
   getJobAlerts
-} = require('../agents/upwork-agent');
+ } from '../agents/upwork-agent';
 
 /**
  * Simple auth middleware - checks for Authorization header
