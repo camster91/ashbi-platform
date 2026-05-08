@@ -35,6 +35,10 @@ import {
   CreditCard,
   BookOpen,
   ClipboardList,
+  Target,
+  Send,
+  Share2,
+  Phone,
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { Download, Sun, Moon } from 'lucide-react';
@@ -111,6 +115,15 @@ export default function Layout({ children }) {
     { name: 'Projects', href: '/projects', icon: FolderOpen },
     { name: 'Clients', href: '/clients', icon: Users },
     { name: 'Invoices', href: '/invoices', icon: Receipt },
+  ];
+  
+  // Client Growth — collapsible section for acquisition pipeline
+  const growthNav = [
+    { name: 'Client Acquisition', href: '/client-acquisition', icon: Target, badge: stats?.activeOutreach },
+    { name: 'Lead Intelligence', href: '/lead-intelligence', icon: Search },
+    { name: 'Outreach', href: '/outreach', icon: Send },
+    { name: 'Referral Network', href: '/referral-network', icon: Share2 },
+    { name: 'Call Block', href: '/call-block', icon: Phone },
   ];
 
   // Finance & Docs — collapsible section
@@ -305,6 +318,7 @@ export default function Layout({ children }) {
             </div>
 
             <div className="border-t border-white/10 pt-2 space-y-1">
+              {renderCollapsibleSection('growth', 'Client Growth', growthNav)}
               {renderCollapsibleSection('finance', 'Finance & Docs', financeNav)}
               {adminNav.length > 0 && renderCollapsibleSection('admin', 'Admin', adminNav)}
             </div>

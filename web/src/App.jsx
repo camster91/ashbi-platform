@@ -73,6 +73,11 @@ const Schedule = lazy(() => import('./pages/Schedule'));
 const Timesheets = lazy(() => import('./pages/Timesheets'));
 const RateCards = lazy(() => import('./pages/RateCards'));
 const Bookkeeping = lazy(() => import('./pages/Bookkeeping'));
+// Agent Pages (client acquisition pipeline)
+const ClientAcquisition = lazy(() => import('./pages/ClientAcquisition'));
+const LeadIntelligence = lazy(() => import('./pages/LeadIntelligence'));
+const ReferralNetwork = lazy(() => import('./pages/ReferralNetwork'));
+const CallBlock = lazy(() => import('./pages/CallBlock'));
 
 function PageLoader() {
   return (
@@ -142,6 +147,10 @@ function AppRoutes() {
                   <Route path="/invoices/:id" element={<InvoiceDetail />} />
                   <Route path="/expenses" element={<Expenses />} />
                   <Route path="/pipeline" element={<Pipeline />} />
+                  <Route path="/client-acquisition" element={<ClientAcquisition />} />
+                  <Route path="/lead-intelligence" element={<LeadIntelligence />} />
+                  <Route path="/referral-network" element={<ReferralNetwork />} />
+                  <Route path="/call-block" element={<CallBlock />} />
                   <Route path="/estimates" element={<Estimates />} />
                   <Route path="/schedule" element={<Schedule />} />
                   <Route path="/timesheets" element={<Timesheets />} />
