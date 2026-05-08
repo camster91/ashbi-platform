@@ -99,7 +99,7 @@ async function searchInbox(query) {
   return await response.json();
 }
 
-module.exports = {
+export {
   createDraft,
   searchInbox
 };
