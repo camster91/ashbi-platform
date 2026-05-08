@@ -302,6 +302,9 @@ await fastify.register(webhookRoutes, { prefix: '/api/webhooks' });
 await fastify.register(clientPortalRoutes, { prefix: '/api/client-portal' });
 await fastify.register(wordpressAgentRoutes, { prefix: '/api/wordpress' });
 await fastify.register(gmailRoutes, { prefix: '/api/gmail' });
+await fastify.register(automationRoutes, { prefix: '/api/automations' });
+// ... (all other routes would be registered here in a production app, condensed for space)
+d80ee93 (feat(automation): expand routes with full CRUD for workflow definitions)
 
 // Hub-Hermes bridge initialization
 initHermesBridge(fastify);
