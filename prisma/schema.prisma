@@ -110,6 +110,7 @@ model Client {
   lastInvoiceStatus  String?
   paymentStatus      String?
   clientNotes        String?
+  referralCode       String?    @unique
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
@@ -140,6 +141,8 @@ model Client {
   wpSites               WPSite[]               @relation("WPSiteClient")
   estimates             Estimate[]
   rateCards             RateCard[]
+  referralsGiven        Referral[]       @relation("ReferrerClient")
+  referralsReceived     Referral[]       @relation("ReferredClient")
 
   @@index([status])
   @@map("clients")
@@ -1443,6 +1446,30 @@ model ClientEmailMapping {
 
   @@unique([emailAddress, clientId])
   @@map("client_email_mappings")
+}
+
+// ==================== REFERRALS ====================
+
+model Referral {
+  id                String   @id @default(cuid())
+  referrerClientId  String
+  referrerClient    Client   @relation("ReferrerClient", fields: [referrerClientId], references: [id], onDelete: Cascade)
+  referredClientId  String
+  referredClient    Client   @relation("ReferredClient", fields: [referredClientId], references: [id], onDelete: Cascade)
+  status            String   @default("referred") // referred | converted | paid | cancelled
+  referredAt        DateTime @default(now())
+  projectValue      Float?
+  rewardEligible    Boolean  @default(false)
+  rewardPaid        Boolean  @default(false)
+  rewardPaidAt      DateTime?
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([referrerClientId])
+  @@index([referredClientId])
+  @@index([status])
+  @@map("referrals")
 }
 
 // ==================== PUSH SUBSCRIPTIONS ====================
