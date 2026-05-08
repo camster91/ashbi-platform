@@ -4,6 +4,11 @@
  * Uses Fastify plugin pattern for route registration
  */
 
+import express from 'express';
+import { PrismaClient } from '@prisma/client';
+const router = express.Router();
+
+552e59f (fix: move PrismaClient import to top-level ESM import in referral-engine routes)
 import {
   getReferralNetwork,
   generateReferralEmail,
@@ -14,6 +19,9 @@ import {
   REFERRAL_REWARD,
   sanitizeEmailHeader
 } from '../agents/referral-engine.agent.js';
+  REFERRAL_REWARD
+} from '../agents/referral-engine.agent';
+552e59f (fix: move PrismaClient import to top-level ESM import in referral-engine routes)
 
 /**
  * Simple auth preHandler - checks for Authorization header
@@ -121,6 +129,36 @@ export default async function referralEngineRoutes(fastify) {
         return reply.status(400).send({ 
           error: 'referredLead must include name and email' 
         });
+/**
+ * GET /referral-engine/stats
+ * Get referral stats: total referrals, close rate, top referrers
+ * Query params: limit (default 10)
+ */
+router.get('/stats', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 10;
+    const topReferrersResult = await getTopReferrers(limit);
+    
+    // Get overall referral stats from database
+    const prisma = new PrismaClient();
+    
+    const [totalReferrals, referralsByStatus] = await Promise.all([
+      prisma.referral.count(),
+      prisma.referral.groupBy({
+        by: ['status'],
+        _count: true
+      })
+    ]);
+
+    const statusCounts = {};
+    let convertedCount = 0;
+    let paidCount = 0;
+    
+    referralsByStatus.forEach(s => {
+      statusCounts[s.status] = s._count;
+      if (['converted', 'paid'].includes(s.status)) {
+        convertedCount += s._count;
+552e59f (fix: move PrismaClient import to top-level ESM import in referral-engine routes)
       }
 
       const result = await trackReferral(referrerId, referredLead);
