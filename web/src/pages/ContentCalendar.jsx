@@ -196,6 +196,8 @@ export default function ContentCalendar() {
           tabIndex={0}
           aria-label="Close modal"
         >
+        <div role="button" tabIndex={0} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowAdd(false)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { setShowAdd(false); e.preventDefault(); } }}>
+09d9bd8 (fix(a11y): add keyboard accessibility to interactive div elements)
           <div className="bg-card rounded-xl border border-border p-6 w-full max-w-lg mx-4 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-semibold mb-4">Add Content Event</h3>
             <form onSubmit={handleCreate} className="space-y-4">
@@ -247,6 +249,8 @@ export default function ContentCalendar() {
           tabIndex={0}
           aria-label="Close modal"
         >
+        <div role="button" tabIndex={0} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setSelectedEvent(null)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { setSelectedEvent(null); e.preventDefault(); } }}>
+09d9bd8 (fix(a11y): add keyboard accessibility to interactive div elements)
           <div className="bg-card rounded-xl border border-border p-6 w-full max-w-lg mx-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">{selectedEvent.title}</h3>

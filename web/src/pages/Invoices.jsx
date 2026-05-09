@@ -333,7 +333,7 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
   return (
     <Card className={`p-4 hover:shadow-sm transition-shadow cursor-pointer ${invoice.isOverdue ? 'border-red-500/30' : ''}`}>
       {/* Mobile Layout */}
-      <div className="sm:hidden" onClick={onView}>
+      <div className="sm:hidden" role="button" tabIndex={0} onClick={onView} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { onView(); e.preventDefault(); } }}>
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
@@ -379,7 +379,7 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
 
       {/* Desktop Layout */}
       <div className="hidden sm:flex items-center gap-4">
-        <div className="flex-1 min-w-0" onClick={onView}>
+        <div className="flex-1 min-w-0" role="button" tabIndex={0} onClick={onView} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { onView(); e.preventDefault(); } }}>
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-mono font-semibold text-foreground">{invoice.invoiceNumber}</span>
             <span className="text-muted-foreground">·</span>
