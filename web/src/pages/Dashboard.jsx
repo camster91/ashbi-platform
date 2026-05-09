@@ -554,10 +554,14 @@ export default function Dashboard() {
 
 /* ─── Stat Card Component ─── */
 function StatCard({ icon: Icon, iconColor, iconBg, label, value, subtitle, badge, onClick }) {
+  const Component = onClick ? 'button' : 'div';
+  const ariaAttrs = onClick ? {
+    'aria-label': `${label}: ${value}`,
+  } : {};
   return (
-    <div
+    <Component
       className={cn(
-        'p-5 rounded-2xl bg-card border border-border/60 transition-all relative group hover-lift',
+        'p-5 rounded-2xl bg-card border border-border/60 transition-all relative group hover-lift w-full text-left',
         onClick && 'cursor-pointer hover:border-primary/20 shadow-sm'
       )}
       onClick={onClick}
@@ -565,6 +569,8 @@ function StatCard({ icon: Icon, iconColor, iconBg, label, value, subtitle, badge
       tabIndex={onClick ? 0 : undefined}
       aria-label={onClick ? label : undefined}
       onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(e); } } : undefined}
+      {...ariaAttrs}
+b42b37a (fix(accessibility): make StatCard and ClientHealthCard keyboard-accessible (#62))
     >
       {badge && (
         <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-lg border-2 border-background animate-pulse">
@@ -581,7 +587,7 @@ function StatCard({ icon: Icon, iconColor, iconBg, label, value, subtitle, badge
           {subtitle}
         </div>
       </div>
-    </div>
+    </Component>
   );
 }
 
@@ -607,6 +613,10 @@ function ClientHealthCard({ client, navigate }) {
         healthColors[client.healthStatus] || 'border-l-border'
       )}
       onClick={() => navigate(`/clients/${client.id}`)}
+      role="button"
+      tabIndex={0}
+      aria-label={`View client health for ${client.name}`}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/clients/${client.id}`); } }}
     >
       <div className="flex items-start justify-between mb-2">
         <h3 className="font-semibold text-sm text-foreground truncate flex-1">{client.name}</h3>
