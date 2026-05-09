@@ -8,7 +8,7 @@ import {
   generateFollowUpDrafts,
   runWeeklyCycle,
   getSchedulerStatus
-} from '../agents/outreach-scheduler.agent';
+} from '../agents/outreach-scheduler.agent.js';
 
 /**
  * Auth middleware for Fastify - checks for Authorization header
