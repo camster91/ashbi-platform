@@ -38,7 +38,7 @@ function formatTime(date) {
   if (minutes < 60) return `${minutes}m ago`;
   if (hours < 24) return `${hours}h ago`;
   if (days < 7) return `${days}d ago`;
-  return new Date(date).toLocaleDateString('en-US', {
+  return new Date(date).toLocaleDateString({
     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
   });
 }

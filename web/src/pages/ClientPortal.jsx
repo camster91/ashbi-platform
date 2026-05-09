@@ -24,7 +24,7 @@ function fmt(amount, currency) {
 }
 function fmtDate(d) {
   if (!d) return '—';
-  return new Date(d).toLocaleDateString('en-CA', { year: 'numeric', month: 'short', day: 'numeric' });
+  return new Date(d).toLocaleDateString({ year: 'numeric', month: 'short', day: 'numeric' });
 }
 function fmtRelative(d) {
   if (!d) return '';

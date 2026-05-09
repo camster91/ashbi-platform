@@ -310,7 +310,7 @@ export default function Dashboard() {
                       new Date(task.dueDate) < new Date() ? 'text-red-500' : 'text-muted-foreground'
                     )}>
                       <Clock className="w-3 h-3" />
-                      {new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      {new Date(task.dueDate).toLocaleDateString({ month: 'short', day: 'numeric' })}
                     </span>
                   )}
                 </Link>
