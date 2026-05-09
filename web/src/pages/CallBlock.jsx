@@ -147,7 +147,7 @@ export default function CallBlock() {
   // Group scheduled calls by date
   const scheduledByDate = {};
   scheduledCalls.forEach(call => {
-    const dateKey = call.time ? new Date(call.time).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Unscheduled';
+    const dateKey = call.time ? new Date(call.time).toLocaleDateString({ weekday: 'short', month: 'short', day: 'numeric' }) : 'Unscheduled';
     if (!scheduledByDate[dateKey]) scheduledByDate[dateKey] = [];
     scheduledByDate[dateKey].push(call);
   });

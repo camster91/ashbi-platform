@@ -67,7 +67,7 @@ export default function Analytics() {
 
   const dailyData = (trends?.daily || []).map(d => ({
     ...d,
-    date: new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    date: new Date(d.date).toLocaleDateString({ month: 'short', day: 'numeric' }),
     revenue: Math.round(d.revenue),
   }));
 

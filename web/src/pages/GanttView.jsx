@@ -56,7 +56,7 @@ function addDays(date, days) {
 
 function formatDate(d) {
   if (!d) return '';
-  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return new Date(d).toLocaleDateString({ month: 'short', day: 'numeric' });
 }
 
 function startOfDay(d) {
