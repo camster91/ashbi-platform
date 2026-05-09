@@ -32,11 +32,13 @@ export default function Dashboard() {
   const { user } = useAuth();
   const { notifications: liveNotifications } = useSocket();
 
-  const { data: stats, isLoading } = useQuery({
+  const { data: stats, isLoading, isError, failureCount } = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: () => api.getDashboardStats(),
     refetchInterval: 30000,
     placeholderData: keepPreviousData,
+    retry: 3,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
   });
 
   const { data: myTasks = [] } = useQuery({
@@ -45,6 +47,7 @@ export default function Dashboard() {
     placeholderData: keepPreviousData,
   });
 
+  // Show skeleton on first load (no data yet)
   if (isLoading && !stats) {
     return (
       <div className="space-y-6 min-h-[60vh]">
@@ -63,6 +66,30 @@ export default function Dashboard() {
             <div key={i} className="h-80 bg-muted rounded-xl animate-pulse" />
           ))}
         </div>
+      </div>
+    );
+  }
+
+  // Show error banner if query keeps failing after retries
+  if (isError && !stats && failureCount >= 3) {
+    return (
+      <div className="space-y-6 min-h-[60vh]">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6 text-center">
+          <p className="text-red-600 dark:text-red-400 font-semibold">Failed to load dashboard stats</p>
+          <p className="text-sm text-red-500 dark:text-red-400 mt-1">
+            Could not fetch dashboard data after multiple attempts. Try refreshing the page.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-4 px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+          >
+            Refresh Page
+          </button>
+        </div>
+        {/* Show partial UI with fallback data */}
+        <p className="text-sm text-muted-foreground text-center">
+          Showing default data until the dashboard connects.
+        </p>
       </div>
     );
   }

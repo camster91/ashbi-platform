@@ -1,11 +1,35 @@
 // Dashboard stats — single endpoint for the command center
 import prisma from '../config/db.js';
 
+// Simple in-memory cache: key -> { data, timestamp }
+// Dashboard stats change infrequently — cache for 30s to avoid 11 DB round-trips on every load
+const statsCache = new Map();
+const CACHE_TTL_MS = 30_000; // 30 seconds, matching frontend refetchInterval
+
+function getCachedStats(orgId) {
+  const entry = statsCache.get(orgId);
+  if (entry && Date.now() - entry.timestamp < CACHE_TTL_MS) {
+    return entry.data;
+  }
+  return null;
+}
+
+function setCachedStats(orgId, data) {
+  statsCache.set(orgId, { data, timestamp: Date.now() });
+}
+
 export default async function dashboardRoutes(fastify) {
   // GET /api/dashboard/stats — all numbers in one call
   fastify.get('/stats', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
+    // Check cache first
+    const orgId = request.user?.organizationId || 'default';
+    const cached = getCachedStats(orgId);
+    if (cached) {
+      return cached;
+    }
+
     const now = new Date();
 
     const [
@@ -235,7 +259,7 @@ export default async function dashboardRoutes(fastify) {
       };
     });
 
-    return {
+    const result = {
       mrr,
       totalOutstanding,
       overdueAmount,
@@ -295,5 +319,10 @@ export default async function dashboardRoutes(fastify) {
         assignee: t.assignee?.name || null
       }))
     };
+
+    // Cache the result before returning
+    setCachedStats(orgId, result);
+
+    return result;
   });
 }
