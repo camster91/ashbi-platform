@@ -234,6 +234,8 @@ export const api = {
     request(`/clients/${id}`, { method: 'PUT', body: data }),
   getClientInsights: (id) =>
     request(`/clients/${id}/insights`),
+  addClientNote: (clientId, content) =>
+    request(`/clients/${clientId}/notes`, { method: 'POST', body: { content } }),
 
   // Projects
   getProjects: (params = {}) => {
