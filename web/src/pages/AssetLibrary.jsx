@@ -147,7 +147,13 @@ export default function AssetLibrary() {
 
       {/* Upload Modal */}
       {showUpload && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowUpload(false)}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={() => setShowUpload(false)}
+          role="button"
+          tabIndex={0}
+          aria-label="Close modal"
+        >
           <div className="bg-card rounded-xl border border-border p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Add Asset</h3>
@@ -198,7 +204,13 @@ export default function AssetLibrary() {
 
       {/* Brand Guidelines Modal */}
       {showGuidelines && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowGuidelines(false)}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={() => setShowGuidelines(false)}
+          role="button"
+          tabIndex={0}
+          aria-label="Close modal"
+        >
           <div className="bg-card rounded-xl border border-border p-6 w-full max-w-lg mx-4 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Brand Guidelines</h3>
