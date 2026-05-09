@@ -1,4 +1,5 @@
 import GlobalAIChat from './GlobalAIChat';
+import QuickAdd from './QuickAdd';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -67,6 +68,7 @@ export default function Layout({ children }) {
   const { isInstallable, install } = useInstallPrompt();
   const { permission, subscribed, subscribe } = usePushNotifications();
   const [installDismissed, setInstallDismissed] = useState(false);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
 
   // Auto-subscribe to push on login if permission already granted
   useEffect(() => {
@@ -74,6 +76,18 @@ export default function Layout({ children }) {
       subscribe();
     }
   }, [user, permission, subscribed, subscribe]);
+
+  // Cmd+K / Ctrl+K to open Quick Add
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setQuickAddOpen(prev => !prev);
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, []);
 
   const isAdmin = user?.role === 'ADMIN';
 
@@ -672,6 +686,9 @@ export default function Layout({ children }) {
 
       {/* Global AI Chat Widget */}
       <GlobalAIChat />
+
+      {/* Quick Add — Cmd+K command palette */}
+      <QuickAdd open={quickAddOpen} onClose={() => setQuickAddOpen(false)} />
     </div>
   );
 }
