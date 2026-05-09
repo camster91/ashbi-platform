@@ -126,10 +126,25 @@ import upworkAutoAlertRoutes from './routes/upwork-auto-alert.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+import * as Sentry from '@sentry/node';
 import logger from './utils/logger.js';
 import { initSubscribers } from './subscribers/index.js';
 import { tenancyMiddleware } from './middleware/tenancy.js';
 import { getAuthProvider } from './auth/index.js';
+
+// Initialize Sentry error monitoring
+if (env.sentryDsn) {
+  Sentry.init({
+    dsn: env.sentryDsn,
+    environment: env.nodeEnv,
+    tracesSampleRate: env.isProduction ? 0.2 : 1.0,
+    enabled: true,
+    integrations: [Sentry.fastifyIntegration()],
+  });
+  logger.info('[Sentry] Error monitoring initialized');
+} else {
+  logger.info('[Sentry] No SENTRY_DSN configured — skipping initialization');
+}
 
 // Initialize Fastify
 const fastify = Fastify({
@@ -137,6 +152,11 @@ const fastify = Fastify({
     level: env.isDev ? 'debug' : 'info'
   }
 });
+
+// Attach Sentry error handler (must be after Fastify creation, before plugins/routes)
+if (env.sentryDsn) {
+  Sentry.setupFastifyErrorHandler(fastify);
+}
 
 // Content Type Parser
 fastify.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
@@ -299,6 +319,7 @@ if (!env.isDev) {
 fastify.setErrorHandler((error, request, reply) => {
   const statusCode = error.statusCode || 500;
   request.log.error({ err: error, userId: request.user?.id, url: request.url, method: request.method, organizationId: request.organizationId }, '🔥 Global Error Caught');
+  Sentry.captureException(error, { extra: { url: request.url, method: request.method, userId: request.user?.id, organizationId: request.organizationId, traceId: request.id } });
   reply.status(statusCode).send({ error: error.name || 'InternalServerError', message: error.message || 'An unexpected error occurred', statusCode, traceId: request.id });
 });
 
