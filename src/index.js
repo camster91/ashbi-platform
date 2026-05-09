@@ -1,3 +1,4 @@
+
 // Agency Hub - Main Entry Point
 
 import Fastify from 'fastify';
@@ -263,7 +264,6 @@ await fastify.register(seoBlogRoutes, { prefix: '/api/seo-blog' });
 await fastify.register(socialContentRoutes, { prefix: '/api/social-content' });
 await fastify.register(leadGenRoutes, { prefix: '/api/lead-gen' });
 await fastify.register(callScreenerRoutes, { prefix: '/api/call-screener' });
-await fastify.register(coldEmailRoutes, { prefix: '/api/cold-email' });
 await fastify.register(linkedinOutreachRoutes, { prefix: '/api/linkedin-outreach' });
 await fastify.register(contentWriterRoutes, { prefix: '/api/content-writer' });
 await fastify.register(emailTriageRoutes, { prefix: '/api/email-triage' });
@@ -308,9 +308,15 @@ initHermesBridge(fastify);
 
 // Static files
 if (!env.isDev) {
+  // Health check endpoint
+  fastify.get("/api/health", async (request, reply) => {
+    return { status: 'ok', timestamp: new Date().toISOString() };
+  });
+
   await fastify.register(fastifyStatic, { root: path.join(__dirname, '../dist'), prefix: '/' });
   fastify.setNotFoundHandler((request, reply) => {
     if (!request.url.startsWith('/api/')) return reply.sendFile('index.html');
+  // Health check endpoint
     reply.status(404).send({ error: 'Not found' });
   });
 }

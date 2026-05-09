@@ -3,8 +3,8 @@
  * AI generates branded proposals from lead intake data, exports as PDF, creates Gmail draft
  */
 
-const { createDraft } = require('./gmail-draft.agent');
-const { PrismaClient } = require('@prisma/client');
+import { createDraft } from './gmail-draft.agent.js';
+import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 // Pricing tiers (hardcoded for now, can be updated via UI)
@@ -45,7 +45,8 @@ const PROPOSAL_STATUS = {
 // AI Client import - uses ../ai/client.js
 let aiClient = null;
 try {
-  aiClient = require('../ai/client.js');
+  const mod = await import('../ai/client.js');
+  aiClient = mod.default || mod;
 } catch (err) {
   console.warn('AI client not found, proposal generation will use fallback');
 }
@@ -360,7 +361,7 @@ Return JSON with these exact fields:
  */
 async function generatePdf(proposalHtml) {
   try {
-    const PDFDocument = require('pdfkit');
+    const { default: PDFDocument } = await import('pdfkit');
     
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument({ margin: 50, size: 'LETTER' });
@@ -713,7 +714,7 @@ async function acceptProposal(proposalId) {
   }
 }
 
-module.exports = {
+export {
   generateProposal,
   generatePdf,
   createProposalDraft,
