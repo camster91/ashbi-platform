@@ -1384,6 +1384,16 @@ export const api = {
   disconnectIntegration: (type) => request(`/integrations/${type}/disconnect`, { method: 'POST' }),
   syncIntegration: (type) => request(`/integrations/${type}/sync`, { method: 'POST' }),
 
+  // ===== NOTION SYNC =====
+  syncNotionAll: () =>
+    request('/notion-sync/sync-all', { method: 'POST' }),
+  syncNotionOne: (pageId) =>
+    request('/notion-sync/sync-one', { method: 'POST', body: { pageId } }),
+  getNotionProjects: () =>
+    request('/notion-sync/projects'),
+  getNotionStatus: () =>
+    request('/notion-sync/status'),
+
   // ===== TIMESHEETS =====
   getWeeklyTimesheet: (weekStart) => {
     const query = weekStart ? `?weekStart=${weekStart}` : '';
