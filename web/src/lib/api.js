@@ -849,6 +849,14 @@ export const api = {
     const query = new URLSearchParams(params).toString();
     return request(`/linkedin-outreach/prospects${query ? `?${query}` : ''}`);
   },
+  getLinkedInStats: () =>
+    request('/linkedin-outreach/stats'),
+  sendLinkedInConnection: (data) =>
+    request('/linkedin-outreach/send-connection', { method: 'POST', body: data }),
+  sendLinkedInMessage: (data) =>
+    request('/linkedin-outreach/send-message', { method: 'POST', body: data }),
+  updateLinkedInProspectStatus: (id, status) =>
+    request(`/linkedin-outreach/prospects/${id}/status`, { method: 'PATCH', body: { status } }),
 
   // ===== COLD EMAIL AGENT =====
   generateColdEmailSequence: (data) =>

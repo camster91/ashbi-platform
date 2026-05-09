@@ -302,6 +302,9 @@ await fastify.register(webhookRoutes, { prefix: '/api/webhooks' });
 await fastify.register(clientPortalRoutes, { prefix: '/api/client-portal' });
 await fastify.register(wordpressAgentRoutes, { prefix: '/api/wordpress' });
 await fastify.register(gmailRoutes, { prefix: '/api/gmail' });
+await fastify.register(linkedinOutreachRoutes, { prefix: '/api/linkedin-outreach' });
+// ... (all other routes would be registered here in a production app, condensed for space)
+7768921 (feat(linkedin): campaign dashboard, rate limiting, sequence activation)
 
 // Hub-Hermes bridge initialization
 initHermesBridge(fastify);
