@@ -1281,6 +1281,26 @@ model UpworkContract {
   @@map("upwork_contracts")
 }
 
+model UpworkProposal {
+  id              String    @id @default(cuid())
+  jobId           String
+  jobTitle        String
+  clientName      String?
+  budget          Float?
+  coverLetter     String
+  status          String    @default("DRAFT")
+  // DRAFT | QUEUED | SUBMITTED | INTERVIEWING | HIRED | DECLINED | WITHDRAWN
+  score           Int?
+  jobUrl          String?
+  submittedAt     DateTime?
+  interviewAt     DateTime?
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("upwork_proposals")
+}
+
 // ==================== EXPENSE TRACKING ====================
 
 model Expense {
