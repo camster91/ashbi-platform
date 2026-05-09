@@ -9,8 +9,8 @@
  * - Safe Electrical (id 15) gets special handling: pricing sent May 5, next bump May 9
  */
 
-const { createDraft, searchInbox } = require('./gmail-draft.agent');
-const { PrismaClient } = require('@prisma/client');
+import { createDraft, searchInbox } from './gmail-draft.agent.js';
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -366,7 +366,7 @@ async function getSchedulerStatus() {
   };
 }
 
-module.exports = {
+export {
   checkReplies,
   generateFollowUpDrafts,
   generateNewProspectDrafts,
