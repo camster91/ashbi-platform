@@ -106,7 +106,9 @@ export default function Modal({
       <div
         className="fixed inset-0 bg-black/50 transition-opacity"
         onClick={onClose}
-        aria-hidden="true"
+        role="button"
+        tabIndex={0}
+        aria-label="Close modal"
       />
 
       {/* Modal container */}

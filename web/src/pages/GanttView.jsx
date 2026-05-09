@@ -693,7 +693,13 @@ function TaskEditDialog({ task, tasks, onClose, onSave, onRemoveDependency, onNa
   const sc = STATUS_COLORS[task.effectiveStatus] || STATUS_COLORS.PENDING;
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div
+    className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+    onClick={onClose}
+    role="button"
+    tabIndex={0}
+    aria-label="Close modal"
+  >
       <div
         className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md"
         onClick={e => e.stopPropagation()}

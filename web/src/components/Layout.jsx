@@ -540,7 +540,13 @@ export default function Layout({ children }) {
                 {/* More menu dropdown */}
                 {moreMenuOpen && (
                   <>
-                    <div className="fixed inset-0 z-50 bg-black/5 backdrop-blur-sm" onClick={() => setMoreMenuOpen(false)} aria-hidden="true" />
+                    <div
+          className="fixed inset-0 z-50 bg-black/5 backdrop-blur-sm"
+          onClick={() => setMoreMenuOpen(false)}
+          role="button"
+          tabIndex={0}
+          aria-label="Close menu"
+         />
                     <div className="absolute bottom-full right-2 mb-4 w-64 bg-card/90 backdrop-blur-xl border border-border/40 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-300" role="menu">
                       {/* Quick Actions */}
                       <div className="px-4 py-3 border-b border-border/40">
@@ -697,7 +703,13 @@ function QuickCreateMenu({ navigate, isAdmin }) {
 
       {open && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div
+          className="fixed inset-0 z-40"
+          onClick={() => setOpen(false)}
+          role="button"
+          tabIndex={0}
+          aria-label="Close sidebar"
+        />
           <div className="absolute right-0 top-full mt-1 w-48 bg-card border border-border rounded-xl shadow-lg z-50 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
             {actions.map(({ label, icon: Icon, href }) => (
               <button
