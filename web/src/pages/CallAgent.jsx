@@ -252,7 +252,7 @@ export default function CallAgent() {
                   <div className="flex items-center gap-3 text-xs text-muted-foreground">
                     {call.callerCompany && <span><Building className="w-3 h-3 inline mr-0.5" />{call.callerCompany}</span>}
                     {call.callerNumber && <span><Phone className="w-3 h-3 inline mr-0.5" />{call.callerNumber}</span>}
-                    <span><Clock className="w-3 h-3 inline mr-0.5" />{new Date(call.createdAt).toLocaleDateString()}</span>
+                    <span><Clock className="w-3 h-3 inline mr-0.5" />{new Date(call.createdAt).toLocaleDateString('en-CA')}</span>
                   </div>
                   {call.callSummary && (
                     <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{call.callSummary}</p>

@@ -330,7 +330,7 @@ export default function ContentAgent() {
                     <h3 className="font-semibold text-sm group-hover:text-primary transition-colors">{draft.title || draft.brief}</h3>
                     <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{draft.content?.substring(0, 150)}...</p>
                     <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-                      <Clock className="w-3 h-3" /> {new Date(draft.createdAt).toLocaleDateString()}
+                      <Clock className="w-3 h-3" /> {new Date(draft.createdAt).toLocaleDateString('en-CA')}
                     </div>
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">

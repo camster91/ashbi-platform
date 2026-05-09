@@ -326,7 +326,7 @@ export default function KanbanBoard({ projectId }) {
                 role="listitem"
                 aria-grabbed={draggedTask?.id === task.id}
                 aria-selected={selectedTaskId === task.id}
-                aria-label={`${task.title}. Priority: ${task.priority}. Status: ${column.title}${task.assignee ? `. Assigned to: ${task.assignee.name}` : ''}${task.dueDate ? `. Due: ${new Date(task.dueDate).toLocaleDateString()}` : ''}`}
+                aria-label={`${task.title}. Priority: ${task.priority}. Status: ${column.title}${task.assignee ? `. Assigned to: ${task.assignee.name}` : ''}${task.dueDate ? `. Due: ${new Date(task.dueDate).toLocaleDateString('en-CA')}` : ''}`}
                 className={`bg-white rounded-lg p-3 shadow-sm border-l-4 ${PRIORITY_COLORS[task.priority]} transition-all ${
                   draggedTask?.id === task.id ? 'opacity-50 scale-95' : ''
                 } ${
@@ -375,7 +375,7 @@ export default function KanbanBoard({ projectId }) {
                     </div>
                     {task.dueDate && (
                       <div className="mt-2 text-xs text-gray-400">
-                        Due: {new Date(task.dueDate).toLocaleDateString()}
+                        Due: {new Date(task.dueDate).toLocaleDateString('en-CA')}
                       </div>
                     )}
                     {/* Mobile move button */}

@@ -152,7 +152,7 @@ export default function GlobalSearch() {
                       {result.clientName && <span>Client: {result.clientName}</span>}
                       {result.status && <span>Status: {result.status}</span>}
                       {result.lastActivity && (
-                        <span>Updated: {new Date(result.lastActivity).toLocaleDateString()}</span>
+                        <span>Updated: {new Date(result.lastActivity).toLocaleDateString('en-CA')}</span>
                       )}
                     </div>
                   </div>

@@ -176,7 +176,7 @@ export default function AiContextSettings() {
                     {keyLabels[item.key] || item.key.replace(/_/g, ' ')}
                   </span>
                   <span className="text-xs text-muted-foreground ml-auto">
-                    Updated {new Date(item.updatedAt).toLocaleDateString()}
+                    Updated {new Date(item.updatedAt).toLocaleDateString('en-CA')}
                   </span>
                 </div>
 

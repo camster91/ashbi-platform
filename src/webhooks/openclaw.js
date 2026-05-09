@@ -96,7 +96,7 @@ View: https://hub.ashbi.ca/projects/${project.id}`;
 • Project: ${project.name} (${client.name})
 • Priority: ${task.priority || 'NORMAL'}
 • Status: ${task.status || 'PENDING'}
-• Due: ${task.dueAt ? new Date(task.dueAt).toLocaleDateString() : 'No due date'}
+• Due: ${task.dueAt ? new Date(task.dueAt).toLocaleDateString('en-CA') : 'No due date'}
 
 View: https://hub.ashbi.ca/projects/${project.id}`;
 

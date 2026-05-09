@@ -318,7 +318,7 @@ export async function checkOverdueInvoices() {
               <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
                 <h2 style="color: #dc2626;">Payment Overdue — Immediate Attention Required</h2>
                 <p>Dear ${contact.name || invoice.client.name},</p>
-                <p>Invoice <strong>${invoice.invoiceNumber}</strong>${invoice.title ? ` (${invoice.title})` : ''} for <strong>$${invoice.total.toFixed(2)}</strong> was due on <strong>${new Date(invoice.dueDate).toLocaleDateString()}</strong> and is now <strong>${daysOverdue} days overdue</strong>.</p>
+                <p>Invoice <strong>${invoice.invoiceNumber}</strong>${invoice.title ? ` (${invoice.title})` : ''} for <strong>$${invoice.total.toFixed(2)}</strong> was due on <strong>${new Date(invoice.dueDate).toLocaleDateString('en-CA')}</strong> and is now <strong>${daysOverdue} days overdue</strong>.</p>
                 <p>Please arrange payment at your earliest convenience to avoid any disruption to ongoing work.</p>
                 ${portalLink ? `
                   <p style="margin-top: 24px;">
@@ -371,7 +371,7 @@ export async function checkOverdueInvoices() {
                 <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
                   <h2 style="color: #1a1a2e;">Payment Reminder</h2>
                   <p>Dear ${contact.name || invoice.client.name},</p>
-                  <p>This is a friendly reminder that invoice <strong>${invoice.invoiceNumber}</strong>${invoice.title ? ` (${invoice.title})` : ''} for <strong>$${invoice.total.toFixed(2)}</strong> was due on <strong>${new Date(invoice.dueDate).toLocaleDateString()}</strong>.</p>
+                  <p>This is a friendly reminder that invoice <strong>${invoice.invoiceNumber}</strong>${invoice.title ? ` (${invoice.title})` : ''} for <strong>$${invoice.total.toFixed(2)}</strong> was due on <strong>${new Date(invoice.dueDate).toLocaleDateString('en-CA')}</strong>.</p>
                   <p>If you've already sent payment, thank you! Otherwise, we'd appreciate it if you could arrange payment at your convenience.</p>
                   ${portalLink ? `
                     <p style="margin-top: 24px;">

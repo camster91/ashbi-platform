@@ -260,7 +260,7 @@ export default function ClientAcquisition() {
                       </span>
                     </td>
                     <td className="px-4 py-3 hidden lg:table-cell text-xs text-muted-foreground">
-                      {p.nextFollowUp ? new Date(p.nextFollowUp).toLocaleDateString() : '—'}
+                      {p.nextFollowUp ? new Date(p.nextFollowUp).toLocaleDateString('en-CA') : '—'}
                     </td>
                     <td className="px-4 py-3">
                       <button className="text-xs text-primary hover:text-primary/80 font-medium flex items-center gap-1">
@@ -352,7 +352,7 @@ export default function ClientAcquisition() {
                       </span>
                     </td>
                     <td className="px-4 py-3 hidden lg:table-cell text-xs text-muted-foreground">
-                      {new Date(r.date).toLocaleDateString()}
+                      {new Date(r.date).toLocaleDateString('en-CA')}
                     </td>
                   </tr>
                 ))}

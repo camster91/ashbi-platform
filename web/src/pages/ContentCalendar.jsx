@@ -175,7 +175,7 @@ export default function ContentCalendar() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-foreground">{event.title}</p>
                   <p className="text-xs text-muted-foreground">
-                    {new Date(event.publishDate || event.publish_date).toLocaleDateString()} &middot; {event.type}
+                    {new Date(event.publishDate || event.publish_date).toLocaleDateString('en-CA')} &middot; {event.type}
                   </p>
                 </div>
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[event.status] || STATUS_COLORS.draft}`}>
