@@ -238,7 +238,7 @@ export default function CallAgent() {
       ) : (
         <div className="space-y-2">
           {calls.map(call => (
-            <div key={call.id} onClick={() => setSelectedCall(call)}
+            <div key={call.id} role="button" tabIndex={0} onClick={() => setSelectedCall(call)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { setSelectedCall(call); e.preventDefault(); } }}
               className="bg-card rounded-xl border border-border p-4 hover:border-primary/30 transition-colors cursor-pointer group">
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
