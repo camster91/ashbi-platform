@@ -301,7 +301,7 @@ const weeklyDigestWorker = createWorker(
     const retainerTotal = retainers.reduce((sum, r) => sum + parseFloat(r.tier || 0), 0);
 
     const system = `You are the AI assistant for Ashbi Design agency. Generate a concise weekly digest email for Cameron (CEO).`;
-    const prompt = `Generate a weekly digest for the week of ${weekStart.toLocaleDateString()} to ${now.toLocaleDateString()}:
+    const prompt = `Generate a weekly digest for the week of ${weekStart.toLocaleDateString('en-CA')} to ${now.toLocaleDateString('en-CA')}:
 
 - New leads: ${newLeads}
 - Proposals sent: ${proposalsSent}
@@ -317,7 +317,7 @@ Write a brief, actionable digest highlighting what needs attention this week. In
     try {
       fullDigest = await aiClient.chat({ system, prompt, temperature: 0.5 });
     } catch (err) {
-      fullDigest = `Weekly Digest (${weekStart.toLocaleDateString()} - ${now.toLocaleDateString()})\n\nNew Leads: ${newLeads}\nProposals Sent: ${proposalsSent}\nProposals Viewed: ${proposalsViewed}\nProposals Hired: ${proposalsHired}\nOverdue Tasks: ${tasksOverdue}\nRetainer Revenue: $${retainerTotal}`;
+      fullDigest = `Weekly Digest (${weekStart.toLocaleDateString('en-CA')} - ${now.toLocaleDateString('en-CA')})\n\nNew Leads: ${newLeads}\nProposals Sent: ${proposalsSent}\nProposals Viewed: ${proposalsViewed}\nProposals Hired: ${proposalsHired}\nOverdue Tasks: ${tasksOverdue}\nRetainer Revenue: $${retainerTotal}`;
     }
 
     await prisma.weeklyDigest.create({

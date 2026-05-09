@@ -295,7 +295,7 @@ export default function SeoBlog() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">
-                    {new Date(post.createdAt).toLocaleDateString()}
+                    {new Date(post.createdAt).toLocaleDateString('en-CA')}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">

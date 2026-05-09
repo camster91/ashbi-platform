@@ -370,7 +370,7 @@ export default function Contracts() {
                 {contract.status === 'SIGNED' && contract.clientSigName && (
                   <div className="mt-2 flex items-center gap-1 text-xs text-green-600">
                     <CheckCircle className="w-3 h-3" />
-                    Signed by {contract.clientSigName} on {new Date(contract.signedAt).toLocaleDateString()}
+                    Signed by {contract.clientSigName} on {new Date(contract.signedAt).toLocaleDateString('en-CA')}
                   </div>
                 )}
               </Card>

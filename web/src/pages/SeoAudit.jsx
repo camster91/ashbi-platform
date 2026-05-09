@@ -84,7 +84,7 @@ export default function SeoAudit() {
                   <button key={a.id} onClick={() => setSelectedAudit(a)}
                     className="w-full text-left p-2 rounded-lg hover:bg-muted transition-colors">
                     <p className="text-sm font-medium text-foreground truncate">{a.url}</p>
-                    <p className="text-xs text-muted-foreground">{new Date(a.createdAt || a.created_at).toLocaleDateString()}</p>
+                    <p className="text-xs text-muted-foreground">{new Date(a.createdAt || a.created_at).toLocaleDateString('en-CA')}</p>
                   </button>
                 ))}
               </div>

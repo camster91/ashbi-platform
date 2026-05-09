@@ -239,9 +239,9 @@ function ApiKeysSection() {
               <div>
                 <p className="text-sm font-medium">{key.name}</p>
                 <p className="text-xs text-muted-foreground">
-                  Created {new Date(key.createdAt).toLocaleDateString()}
-                  {key.lastUsedAt && ` · Last used ${new Date(key.lastUsedAt).toLocaleDateString()}`}
-                  {key.expiresAt && ` · Expires ${new Date(key.expiresAt).toLocaleDateString()}`}
+                  Created {new Date(key.createdAt).toLocaleDateString('en-CA')}
+                  {key.lastUsedAt && ` · Last used ${new Date(key.lastUsedAt).toLocaleDateString('en-CA')}`}
+                  {key.expiresAt && ` · Expires ${new Date(key.expiresAt).toLocaleDateString('en-CA')}`}
                 </p>
               </div>
               <button

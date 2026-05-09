@@ -304,7 +304,7 @@ export default function EmailAgent() {
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <span className="text-xs text-muted-foreground">
                       <Clock className="w-3 h-3 inline mr-1" />
-                      {new Date(item.createdAt).toLocaleDateString()}
+                      {new Date(item.createdAt).toLocaleDateString('en-CA')}
                     </span>
                     <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>

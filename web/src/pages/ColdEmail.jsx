@@ -303,7 +303,7 @@ export default function ColdEmail() {
                       <span>{SERVICE_LABELS[seq.serviceType] || seq.serviceType}</span>
                       {seq.targetIndustry && <span>{seq.targetIndustry}</span>}
                       {seq._count && <span><Users className="w-3 h-3 inline mr-0.5" />{seq._count.prospects} prospects</span>}
-                      <span><Clock className="w-3 h-3 inline mr-0.5" />{new Date(seq.createdAt).toLocaleDateString()}</span>
+                      <span><Clock className="w-3 h-3 inline mr-0.5" />{new Date(seq.createdAt).toLocaleDateString('en-CA')}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">

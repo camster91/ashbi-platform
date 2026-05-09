@@ -232,7 +232,7 @@ function RecentTimeEntries({ projectId }) {
             </div>
             <div className="flex items-center gap-3">
               <span className="text-gray-500">
-                {new Date(entry.date).toLocaleDateString()}
+                {new Date(entry.date).toLocaleDateString('en-CA')}
               </span>
               <span className={`font-medium ${entry.billable ? 'text-green-600' : 'text-gray-600'}`}>
                 {formatDuration(entry.duration)}

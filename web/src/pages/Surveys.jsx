@@ -111,7 +111,7 @@ export default function Surveys() {
                   }`}>
                     {response.score}/10
                   </span>
-                  <span className="text-xs text-muted-foreground">{new Date(response.createdAt).toLocaleDateString()}</span>
+                  <span className="text-xs text-muted-foreground">{new Date(response.createdAt).toLocaleDateString('en-CA')}</span>
                 </div>
               </Card>
             ))}
@@ -174,7 +174,7 @@ export default function Surveys() {
                   }`}>
                     {response.score}/10
                   </span>
-                  <span className="text-xs text-muted-foreground">{new Date(response.createdAt).toLocaleDateString()}</span>
+                  <span className="text-xs text-muted-foreground">{new Date(response.createdAt).toLocaleDateString('en-CA')}</span>
                 </div>
               </Card>
             ))}

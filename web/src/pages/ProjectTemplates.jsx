@@ -126,7 +126,7 @@ export default function ProjectTemplates() {
                       <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
                         <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {milestoneCount} milestones</span>
                         <span className="flex items-center gap-1"><ListTodo className="w-3.5 h-3.5" /> {taskCount} tasks</span>
-                        <span>Created {new Date(template.createdAt).toLocaleDateString()}</span>
+                        <span>Created {new Date(template.createdAt).toLocaleDateString('en-CA')}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 ml-4">

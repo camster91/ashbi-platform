@@ -164,9 +164,9 @@ export default function ProposalDetail() {
             {proposal.status === 'SENT' && <Send className="w-4 h-4 text-blue-600" />}
             {proposal.status === 'VIEWED' && <FileText className="w-4 h-4 text-amber-600" />}
             <span className="font-medium">
-              {proposal.status === 'APPROVED' && `Approved on ${new Date(proposal.approvedAt).toLocaleDateString()}`}
-              {proposal.status === 'DECLINED' && `Declined on ${new Date(proposal.declinedAt).toLocaleDateString()}`}
-              {proposal.status === 'SENT' && `Sent on ${new Date(proposal.sentAt).toLocaleDateString()}`}
+              {proposal.status === 'APPROVED' && `Approved on ${new Date(proposal.approvedAt).toLocaleDateString('en-CA')}`}
+              {proposal.status === 'DECLINED' && `Declined on ${new Date(proposal.declinedAt).toLocaleDateString('en-CA')}`}
+              {proposal.status === 'SENT' && `Sent on ${new Date(proposal.sentAt).toLocaleDateString('en-CA')}`}
               {proposal.status === 'VIEWED' && 'Viewed by client'}
             </span>
           </div>

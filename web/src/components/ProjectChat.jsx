@@ -126,7 +126,7 @@ export default function ProjectChat({ projectId }) {
 
   // Group messages by date
   const groupedMessages = messages.reduce((groups, msg) => {
-    const date = new Date(msg.createdAt).toLocaleDateString();
+    const date = new Date(msg.createdAt).toLocaleDateString('en-CA');
     if (!groups[date]) groups[date] = [];
     groups[date].push(msg);
     return groups;
@@ -148,7 +148,7 @@ export default function ProjectChat({ projectId }) {
           <div key={date}>
             <div className="flex items-center justify-center my-4">
               <span className="text-xs text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-                {date === new Date().toLocaleDateString() ? 'Today' : date}
+                {date === new Date().toLocaleDateString('en-CA') ? 'Today' : date}
               </span>
             </div>
             {msgs.map((msg) => (
