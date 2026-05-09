@@ -41,10 +41,6 @@ function sanitizeEmailHeader(value) {
 
 /**
  * Build RFC 2822 email message
- * @param {string} to - Recipient email
- * @param {string} subject - Email subject
- * @param {string} body - Email body
- * @returns {string} RFC 2822 formatted message
  */
 function buildRfc2822Email(to, subject, body) {
   const sanitizedSubject = sanitizeEmailHeader(subject);
@@ -62,8 +58,6 @@ function buildRfc2822Email(to, subject, body) {
 
 /**
  * Encode string to base64url format (URL-safe base64)
- * @param {string} str - String to encode
- * @returns {string} Base64 URL-safe encoded string
  */
 function toBase64Url(str) {
   return Buffer.from(str)
@@ -75,10 +69,6 @@ function toBase64Url(str) {
 
 /**
  * Create a Gmail draft
- * @param {string} toEmail - Recipient email address
- * @param {string} subject - Email subject
- * @param {string} body - Email body content
- * @returns {Promise<object>} API response with draft info
  */
 async function createDraft(toEmail, subject, body) {
   if (!MATON_API_KEY) {
@@ -113,8 +103,6 @@ async function createDraft(toEmail, subject, body) {
 
 /**
  * Search inbox for messages matching query
- * @param {string} query - Gmail search query
- * @returns {Promise<object>} API response with matching messages
  */
 async function searchInbox(query) {
   if (!MATON_API_KEY) {
@@ -142,3 +130,5 @@ export {
   searchInbox,
   sanitizeEmailHeader
 };
+export { createDraft, searchInbox };
+ade404a (feat(proposals): convert proposal-builder to ESM + Fastify plugin)
