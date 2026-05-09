@@ -4,7 +4,7 @@
  * Endpoints for phone lookup, lead management, call scheduling, and script generation
  */
 
-import { lookupPhone, addLeadWithPhone, generateCallScript, scheduleCallBlock, runDailyCallBlocks, getScheduledCalls } from '../agents/cold-call.agent.js';
+import { lookupPhone, addLeadWithPhone, generateCallScript, scheduleCallBlock, runDailyCallBlocks, getScheduledCalls, verifyPhoneNumber, validateCallTime, scheduleFollowUpReminder, getCallLogs, getCallStats, getDNCList, addToDNC } from '../agents/cold-call.agent.js';
 
 export default async function coldCallRoutes(fastify) {
   const { prisma } = fastify;
@@ -217,7 +217,7 @@ export default async function coldCallRoutes(fastify) {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     try {
-      const { leadId, dateTime } = request.body || {};
+      const { leadId, dateTime, timezone = 'America/Toronto' } = request.body || {};
 
       if (!leadId) {
         return reply.status(400).send({
@@ -242,7 +242,21 @@ export default async function coldCallRoutes(fastify) {
         });
       }
 
-      console.log(`[ColdCall] Scheduling call for lead ${leadId} at ${dateTime}`);
+      // Timezone-aware validation: check business hours
+      const timeValidation = validateCallTime(dateTime, timezone);
+      if (!timeValidation.valid) {
+        return reply.status(400).send({
+          error: 'Invalid call time',
+          message: timeValidation.reason,
+          details: {
+            localHour: timeValidation.localHour,
+            localDay: timeValidation.localDay,
+            timezone
+          }
+        });
+      }
+
+      console.log(`[ColdCall] Scheduling call for lead ${leadId} at ${dateTime} (${timezone}, hour ${timeValidation.localHour})`);
 
       const result = await scheduleCallBlock(leadId, dateTime);
 
@@ -374,6 +388,267 @@ export default async function coldCallRoutes(fastify) {
       fastify.log.error('[ColdCall] Lookup-and-add error:', err);
       return reply.status(500).send({
         error: 'Lookup and add failed',
+        message: err.message
+      });
+    }
+  });
+
+  /**
+   * POST /cold-call/verify
+   * Verify a phone number's format and validity
+   *
+   * Body: { phone: string }
+   * Returns: { valid, cleaned, type, areaCode, formatted, reason }
+   */
+  fastify.post('/verify', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    try {
+      const { phone } = request.body || {};
+      if (!phone) {
+        return reply.status(400).send({
+          error: 'Phone number required',
+          message: 'Please provide a phone number to verify'
+        });
+      }
+      const result = verifyPhoneNumber(phone);
+      return result;
+    } catch (err) {
+      fastify.log.error('[ColdCall] Verify error:', err);
+      return reply.status(500).send({
+        error: 'Phone verification failed',
+        message: err.message
+      });
+    }
+  });
+
+  /**
+   * POST /cold-call/log
+   * Log a call outcome
+   *
+   * Body: { callerName, callerNumber, callerCompany, callSummary, callNotes, status, calledAt }
+   * Returns: Created CallLog entry
+   */
+  fastify.post('/log', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    try {
+      const { callerName, callerNumber, callerCompany, callSummary, callNotes, status = 'COMPLETED', calledAt } = request.body || {};
+
+      if (!callerName) {
+        return reply.status(400).send({
+          error: 'Caller name is required',
+          message: 'Please provide the caller name'
+        });
+      }
+
+      const log = await prisma.callLog.create({
+        data: {
+          callerName,
+          callerNumber: callerNumber || null,
+          callerCompany: callerCompany || null,
+          callSummary: callSummary || null,
+          callNotes: callNotes || null,
+          status,
+          calledAt: calledAt ? new Date(calledAt) : new Date()
+        }
+      });
+
+      console.log(`[ColdCall] Call logged: ${callerName} (${log.id}) — ${status}`);
+
+      return {
+        success: true,
+        callLog: log
+      };
+    } catch (err) {
+      fastify.log.error('[ColdCall] Log error:', err);
+      return reply.status(500).send({
+        error: 'Failed to log call',
+        message: err.message
+      });
+    }
+  });
+
+  /**
+   * GET /cold-call/logs
+   * List call logs (most recent first)
+   *
+   * Query: ?limit=50
+   * Returns: Array of CallLog entries
+   */
+  fastify.get('/logs', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    try {
+      const limit = parseInt(request.query.limit) || 50;
+      const logs = await getCallLogs(limit);
+      return {
+        count: logs.length,
+        logs
+      };
+    } catch (err) {
+      fastify.log.error('[ColdCall] Get logs error:', err);
+      return reply.status(500).send({
+        error: 'Failed to fetch call logs',
+        message: err.message
+      });
+    }
+  });
+
+  /**
+   * GET /cold-call/stats
+   * Get call statistics: calls made, connect rate, meetings booked
+   *
+   * Returns: { totalCalls, completed, screened, pending, followUpSent, scheduledLeads, connectRate }
+   */
+  fastify.get('/stats', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    try {
+      const stats = await getCallStats();
+      return stats;
+    } catch (err) {
+      fastify.log.error('[ColdCall] Stats error:', err);
+      return reply.status(500).send({
+        error: 'Failed to fetch call stats',
+        message: err.message
+      });
+    }
+  });
+
+  /**
+   * POST /cold-call/follow-up
+   * Schedule a follow-up reminder after an initial call
+   *
+   * Body: { leadId: string, originalEventId?: string }
+   * Returns: { success, eventId, followUpAt, leadId, businessName }
+   */
+  fastify.post('/follow-up', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    try {
+      const { leadId, originalEventId } = request.body || {};
+
+      if (!leadId) {
+        return reply.status(400).send({
+          error: 'Lead ID is required',
+          message: 'Please provide a leadId for the follow-up'
+        });
+      }
+
+      const result = await scheduleFollowUpReminder(leadId, originalEventId);
+
+      return result;
+    } catch (err) {
+      fastify.log.error('[ColdCall] Follow-up error:', err);
+      if (err.message.includes('not found')) {
+        return reply.status(404).send({
+          error: 'Lead not found',
+          message: err.message
+        });
+      }
+      return reply.status(500).send({
+        error: 'Follow-up scheduling failed',
+        message: err.message
+      });
+    }
+  });
+
+  /**
+   * GET /cold-call/dnc
+   * List the Do Not Call list
+   *
+   * Returns: Array of DNC entries { id, name, company, industry, phone, dncAt }
+   */
+  fastify.get('/dnc', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    try {
+      const dncs = await getDNCList();
+      return {
+        count: dncs.length,
+        dnc: dncs
+      };
+    } catch (err) {
+      fastify.log.error('[ColdCall] DNC list error:', err);
+      return reply.status(500).send({
+        error: 'Failed to fetch DNC list',
+        message: err.message
+      });
+    }
+  });
+
+  /**
+   * POST /cold-call/dnc
+   * Add a lead to the Do Not Call list
+   *
+   * Body: { leadId: string }
+   * Returns: { success, leadId, name, company }
+   */
+  fastify.post('/dnc', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    try {
+      const { leadId } = request.body || {};
+
+      if (!leadId) {
+        return reply.status(400).send({
+          error: 'Lead ID is required',
+          message: 'Please provide a leadId to add to DNC'
+        });
+      }
+
+      const result = await addToDNC(leadId);
+
+      return result;
+    } catch (err) {
+      fastify.log.error('[ColdCall] DNC add error:', err);
+      if (err.message.includes('not found')) {
+        return reply.status(404).send({
+          error: 'Lead not found',
+          message: err.message
+        });
+      }
+      return reply.status(500).send({
+        error: 'Failed to add to DNC',
+        message: err.message
+      });
+    }
+  });
+
+  /**
+   * GET /cold-call/queue
+   * List call queue — all leads with phone numbers grouped by area code
+   *
+   * Query: ?areaCode=416 (optional filter)
+   * Returns: Array of leads in the call queue
+   */
+  fastify.get('/queue', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    try {
+      const { areaCode } = request.query;
+      const daily = await runDailyCallBlocks();
+
+      // Flatten leadsByAreaCode, optionally filtered
+      let allLeads = [];
+      if (areaCode && daily.leadsByAreaCode[areaCode]) {
+        allLeads = daily.leadsByAreaCode[areaCode].map(l => ({ ...l, areaCode }));
+      } else if (!areaCode) {
+        for (const [ac, leads] of Object.entries(daily.leadsByAreaCode)) {
+          allLeads.push(...leads.map(l => ({ ...l, areaCode: ac })));
+        }
+      }
+
+      // Enrich with DNC status
+      const dncIds = new Set((await getDNCList()).map(d => d.id));
+      allLeads = allLeads.map(l => ({ ...l, dnc: dncIds.has(l.id) }));
+
+      return allLeads;
+    } catch (err) {
+      fastify.log.error('[ColdCall] Queue error:', err);
+      return reply.status(500).send({
+        error: 'Failed to fetch call queue',
         message: err.message
       });
     }
