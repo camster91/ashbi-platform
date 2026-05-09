@@ -57,6 +57,7 @@ function MoveToMenu({ task, columns, onMove, onClose, position }) {
             task.status === col.id ? 'text-gray-400 cursor-not-allowed' : 'text-gray-700'
           }`}
           role="menuitem"
+          aria-label={`Move "${task.title}" to ${col.title}${task.status === col.id ? ' (current column)' : ''}`}
         >
           {col.title}
           {task.status === col.id && ' (current)'}
