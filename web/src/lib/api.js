@@ -1050,6 +1050,8 @@ export const api = {
   // ===== GMAIL =====
   getGmailStatus: () =>
     request('/gmail/status'),
+  gmailInbox: (maxResults = 20) =>
+    request(`/gmail/inbox?maxResults=${maxResults}`),
   gmailSend: (data) =>
     request('/gmail/send', { method: 'POST', body: data }),
   gmailDraftReply: (hubThreadId) =>

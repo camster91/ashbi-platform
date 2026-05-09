@@ -93,6 +93,89 @@ function encodeBase64Url(str) {
 
 export default async function gmailRoutes(fastify) {
 
+  // ==================== GET /api/gmail/inbox ====================
+  /**
+   * Fetch recent inbox messages via Maton Gmail API
+   * Query: ?maxResults=20 (default 20)
+   */
+  fastify.get('/inbox', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const maxResults = parseInt(request.query.maxResults) || 20;
+    const MATON_API_KEY = process.env.MATON_API_KEY;
+
+    if (!MATON_API_KEY) {
+      fastify.log.warn('MATON_API_KEY not configured — Gmail inbox unavailable');
+      return { messages: [], notice: 'Gmail integration not configured (MATON_API_KEY missing)' };
+    }
+
+    try {
+      // Step 1: List message IDs from INBOX
+      const listResp = await fetch(
+        `https://api.maton.ai/google-mail/gmail/v1/users/me/messages?labelIds=INBOX&maxResults=${maxResults}`,
+        { headers: { Authorization: `Bearer ${MATON_API_KEY}`, Accept: 'application/json' } }
+      );
+
+      if (!listResp.ok) {
+        const errText = await listResp.text();
+        fastify.log.error(`Maton Gmail list failed: ${listResp.status} ${errText}`);
+        return reply.status(502).send({ error: `Gmail API error: ${listResp.status}` });
+      }
+
+      const listData = await listResp.json();
+      const messages = listData.messages || [];
+
+      if (messages.length === 0) {
+        return { messages: [], resultSizeEstimate: 0 };
+      }
+
+      // Step 2: Fetch details for each message in parallel (metadata-only for speed)
+      const messageDetails = await Promise.all(
+        messages.map(async (msg) => {
+          try {
+            const detailResp = await fetch(
+              `https://api.maton.ai/google-mail/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
+              { headers: { Authorization: `Bearer ${MATON_API_KEY}`, Accept: 'application/json' } }
+            );
+            if (!detailResp.ok) return null;
+            const detail = await detailResp.json();
+
+            const headers = {};
+            (detail.payload?.headers || []).forEach(h => {
+              headers[h.name] = h.value;
+            });
+
+            const isUnread = (detail.labelIds || []).includes('UNREAD');
+            const isStarred = (detail.labelIds || []).includes('STARRED');
+
+            return {
+              id: msg.id,
+              threadId: msg.threadId,
+              from: headers['From'] || 'Unknown',
+              subject: headers['Subject'] || '(no subject)',
+              date: headers['Date'] || '',
+              snippet: detail.snippet || '',
+              isUnread,
+              isStarred,
+              labelIds: detail.labelIds || []
+            };
+          } catch (err) {
+            fastify.log.error(`Failed to fetch message ${msg.id}:`, err);
+            return null;
+          }
+        })
+      );
+
+      return {
+        messages: messageDetails.filter(Boolean),
+        resultSizeEstimate: listData.resultSizeEstimate || 0
+      };
+    } catch (err) {
+      fastify.log.error('Gmail inbox fetch error:', err);
+      return reply.status(500).send({ error: err.message });
+    }
+  });
+
   // ==================== POST /api/gmail/send ====================
   /**
    * Send an email via Gmail API
