@@ -14,6 +14,9 @@ import {
   MoreHorizontal,
   Sparkles,
   Loader2,
+  Mail,
+  Star,
+  ExternalLink,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import {
@@ -206,7 +209,139 @@ export default function Inbox() {
           </ul>
         )}
       </div>
+
+      {/* Gmail Inbox Section */}
+      <GmailInboxSection />
     </div>
+  );
+}
+
+function GmailInboxSection() {
+  const { data: gmailData, isLoading: gmailLoading, isError: gmailError } = useQuery({
+    queryKey: ['gmail-inbox'],
+    queryFn: () => api.gmailInbox(20),
+    refetchInterval: 60000,
+    retry: 1,
+  });
+
+  const emails = gmailData?.messages || [];
+  const notice = gmailData?.notice;
+
+  return (
+    <div className="bg-card rounded-xl border border-border overflow-hidden">
+      <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Mail className="w-5 h-5 text-primary" />
+          <h2 className="font-heading font-semibold text-foreground">Gmail Inbox</h2>
+        </div>
+        <span className="text-sm text-muted-foreground">
+          {emails.length} {emails.length === 1 ? 'email' : 'emails'}
+        </span>
+      </div>
+
+      {gmailLoading ? (
+        <div className="p-8 flex items-center justify-center">
+          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+          <span className="ml-2 text-sm text-muted-foreground">Loading emails...</span>
+        </div>
+      ) : gmailError ? (
+        <div className="p-8 text-center text-sm text-muted-foreground">
+          <AlertCircle className="w-5 h-5 mx-auto mb-2 text-warning" />
+          Could not load Gmail inbox. Check MATON_API_KEY configuration.
+        </div>
+      ) : notice ? (
+        <div className="p-8 text-center text-sm text-muted-foreground">
+          <Mail className="w-8 h-8 mx-auto mb-3 opacity-30" />
+          {notice}
+        </div>
+      ) : emails.length === 0 ? (
+        <div className="p-8 text-center text-sm text-muted-foreground">
+          <Mail className="w-8 h-8 mx-auto mb-3 opacity-30" />
+          No emails in inbox.
+        </div>
+      ) : (
+        <ul className="divide-y divide-border">
+          {emails.map((email) => (
+            <GmailEmailRow key={email.id} email={email} />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function GmailEmailRow({ email }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <li>
+      <div
+        className={cn(
+          'px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors',
+          email.isUnread && 'bg-primary/5 border-l-4 border-l-primary'
+        )}
+        onClick={() => setExpanded(!expanded)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(!expanded); } }}
+        aria-expanded={expanded}
+      >
+        <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              {email.isUnread && (
+                <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0" title="Unread" />
+              )}
+              <span className={cn(
+                'font-medium truncate',
+                email.isUnread ? 'text-foreground' : 'text-muted-foreground'
+              )}>
+                {email.from}
+              </span>
+              {email.isStarred && (
+                <Star className="w-4 h-4 text-warning flex-shrink-0" fill="currentColor" />
+              )}
+            </div>
+            <p className={cn(
+              'text-sm mt-0.5 truncate',
+              email.isUnread ? 'font-medium text-foreground' : 'text-muted-foreground'
+            )}>
+              {email.subject}
+            </p>
+            {!expanded && (
+              <p className="text-sm text-muted-foreground mt-0.5 truncate">
+                {email.snippet}
+              </p>
+            )}
+            {expanded && (
+              <div className="mt-2 pt-2 border-t border-border">
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                  {email.snippet}
+                </p>
+                <div className="flex items-center gap-4 mt-2">
+                  <span className="text-xs text-muted-foreground">
+                    {formatRelativeTime(email.date)}
+                  </span>
+                  <a
+                    href={`https://mail.google.com/mail/u/0/#inbox/${email.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-primary hover:underline flex items-center gap-1"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    Open in Gmail
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+          <span className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0 mt-0.5">
+            {formatRelativeTime(email.date)}
+          </span>
+        </div>
+      </div>
+    </li>
   );
 }
 
