@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   FolderOpen,
@@ -33,22 +33,28 @@ export default function Dashboard() {
     queryKey: ['dashboard-stats'],
     queryFn: () => api.getDashboardStats(),
     refetchInterval: 30000,
+    placeholderData: keepPreviousData,
   });
 
   const { data: myTasks = [] } = useQuery({
     queryKey: ['my-tasks'],
     queryFn: () => api.getMyTasks(),
+    placeholderData: keepPreviousData,
   });
 
-  if (isLoading) {
+  if (isLoading && !stats) {
     return (
-      <div className="space-y-6">
-        <div className="h-8 w-48 bg-muted rounded animate-pulse" />
+      <div className="space-y-6 min-h-[60vh]">
+        {/* Greeting skeleton */}
+        <div className="h-10 w-64 bg-muted rounded-lg animate-pulse" />
+        <p className="h-4 w-48 bg-muted rounded animate-pulse" />
+        {/* Stat card skeletons */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map(i => (
             <div key={i} className="h-28 bg-muted rounded-xl animate-pulse" />
           ))}
         </div>
+        {/* Activity + Notifications skeletons */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {[1, 2].map(i => (
             <div key={i} className="h-80 bg-muted rounded-xl animate-pulse" />
@@ -68,7 +74,7 @@ export default function Dashboard() {
   );
 
   return (
-    <div className="space-y-8 animate-fade-in">
+    <div className="space-y-8 animate-slide-up">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
