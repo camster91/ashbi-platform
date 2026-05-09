@@ -1,0 +1,54 @@
+name: Database Backup
+
+on:
+  schedule:
+    # Daily at 2:00 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    # Allow manual trigger for ad-hoc backups
+
+jobs:
+  backup:
+    name: Database Backup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check for .env file
+        id: check_env
+        run: |
+          if [ -f .env ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo ".env found — proceeding with backup"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "WARNING: .env file not found. Database backup cannot proceed."
+            echo "This is expected if DATABASE_URL is not configured for CI."
+          fi
+
+      - name: Run database backup
+        id: backup
+        if: steps.check_env.outputs.exists == 'true'
+        run: |
+          chmod +x scripts/db-backup.sh
+          OUTPUT=$(./scripts/db-backup.sh 2>&1)
+          EXIT_CODE=$?
+          echo "$OUTPUT"
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "Backup script failed with exit code $EXIT_CODE"
+            exit $EXIT_CODE
+          fi
+          BACKUP_PATH=$(echo "$OUTPUT" | grep '^BACKUP_PATH=' | tail -1 | cut -d= -f2)
+          echo "backup_path=$BACKUP_PATH" >> "$GITHUB_OUTPUT"
+          echo "backup_name=$(basename "$BACKUP_PATH")" >> "$GITHUB_OUTPUT"
+
+      - name: Upload backup artifact
+        if: steps.check_env.outputs.exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: database-backup-${{ github.run_id }}
+          path: ${{ steps.backup.outputs.backup_path }}
+          retention-days: 7
+          if-no-files-found: error
+          compression-level: 0  # already gzipped by script
