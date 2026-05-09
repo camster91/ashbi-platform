@@ -1142,10 +1142,21 @@ model ColdEmailSequence {
   emails         String   @default("[]") // JSON: array of 5 emails [{subject, body, delayDays}]
   status         String   @default("DRAFT") // DRAFT | ACTIVE | PAUSED | COMPLETED
   targetIndustry String?
+  // Sequence engine fields
+  startedAt      DateTime?
+  completedAt    DateTime?
+  // Stats (denormalized for fast reads)
+  totalSent      Int      @default(0)
+  totalOpened    Int      @default(0)
+  totalClicked   Int      @default(0)
+  totalReplied   Int      @default(0)
+  totalBounced   Int      @default(0)
+  totalProspects Int      @default(0)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   prospects ColdEmailProspect[]
+  events    ColdEmailEvent[]
 
   @@map("cold_email_sequences")
 }
@@ -1159,13 +1170,39 @@ model ColdEmailProspect {
   painPoint     String?
   status        String    @default("NEW") // NEW | CONTACTED | REPLIED | CONVERTED | UNSUBSCRIBED
   sequenceId    String?
+  // Tracking fields
+  lastEmailStep Int?      @default(0) // Which email step in the sequence was last sent (0-indexed)
+  nextEmailAt   DateTime? // When to send the next email
+  openedAt      DateTime?
+  clickedAt     DateTime?
+  bouncedAt     DateTime?
   lastEmailedAt DateTime?
+  emailCount    Int        @default(0) // Total emails sent to this prospect
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   sequence ColdEmailSequence? @relation(fields: [sequenceId], references: [id], onDelete: SetNull)
+  events   ColdEmailEvent[]
 
   @@map("cold_email_prospects")
+}
+
+// ColdEmailEvent — individual send/tracking events per prospect
+model ColdEmailEvent {
+  id          String   @id @default(cuid())
+  prospectId  String
+  sequenceId  String?
+  type        String   // SENT | OPENED | CLICKED | BOUNCED | REPLIED | UNSUBSCRIBED
+  emailStep   Int?     // Which step in the sequence (0-indexed)
+  mailgunId   String?  // Mailgun message ID for tracking
+  mailgunEvent String? // Raw Mailgun event type
+  metadata    String?  // JSON — Mailgun event payload
+  createdAt   DateTime @default(now())
+
+  prospect ColdEmailProspect  @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  sequence ColdEmailSequence? @relation(fields: [sequenceId], references: [id], onDelete: SetNull)
+
+  @@map("cold_email_events")
 }
 
 // ==================== CALL SCREENER AGENT ====================

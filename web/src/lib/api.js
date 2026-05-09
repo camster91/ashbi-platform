@@ -865,6 +865,17 @@ export const api = {
     const query = new URLSearchParams(params).toString();
     return request(`/cold-email/prospects${query ? `?${query}` : ''}`);
   },
+  // Sequence engine
+  activateColdEmailSequence: (sequenceId) =>
+    request(`/cold-email/sequences/${sequenceId}/activate`, { method: 'POST' }),
+  pauseColdEmailSequence: (sequenceId) =>
+    request(`/cold-email/sequences/${sequenceId}/pause`, { method: 'POST' }),
+  sendColdEmailToProspect: (prospectId, stepIndex) =>
+    request(`/cold-email/send-to-prospect/${prospectId}`, { method: 'POST', body: { stepIndex } }),
+  getColdEmailStats: (sequenceId) =>
+    request(`/cold-email/stats/${sequenceId}`),
+  processColdEmailQueue: () =>
+    request('/cold-email/process-queue', { method: 'POST' }),
 
   // ===== CALL SCREENER AGENT =====
   screenCall: (data) =>
