@@ -103,7 +103,7 @@ async function startProfile(name) {
       return;
     }
   }
-  console.error(`❌ Chrome for ${name} didn't start in time`);
+  console.log(`❌ Chrome for ${name} didn't start in time`);
 }
 
 async function stopProfile(name) {
