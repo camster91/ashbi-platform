@@ -302,9 +302,9 @@ await fastify.register(webhookRoutes, { prefix: '/api/webhooks' });
 await fastify.register(clientPortalRoutes, { prefix: '/api/client-portal' });
 await fastify.register(wordpressAgentRoutes, { prefix: '/api/wordpress' });
 await fastify.register(gmailRoutes, { prefix: '/api/gmail' });
-await fastify.register(gmailRoutes, { prefix: '/api/gmail' });
+await fastify.register(contractRoutes, { prefix: '/api/contracts' });
+await fastify.register(invoiceRoutes, { prefix: '/api/invoices' });
 // ... (all other routes would be registered here in a production app, condensed for space)
-b47f6cd (feat: add Gmail inbox integration via Maton API)
 
 // Hub-Hermes bridge initialization
 initHermesBridge(fastify);
