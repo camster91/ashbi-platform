@@ -54,7 +54,9 @@ export default async function dashboardRoutes(fastify) {
       // WordPress sites with errors
       wpSitesWithErrors,
       // Overdue tasks (not on blocked projects, standalone)
-      overdueTasks
+      overdueTasks,
+      // Upwork contracts with pending messages (active, recent activity)
+      upworkContracts
     ] = await Promise.all([
       prisma.retainerPlan.findMany({
         where: { retainerStatus: 'ACTIVE' },
@@ -217,6 +219,24 @@ export default async function dashboardRoutes(fastify) {
         },
         orderBy: { dueDate: 'asc' },
         take: 10
+      }),
+      // Active Upwork contracts with pending messages or recent activity
+      prisma.upworkContract.findMany({
+        where: {
+          status: 'ACTIVE',
+          lastMessageAt: { not: null }
+        },
+        select: {
+          id: true,
+          clientName: true,
+          projectName: true,
+          lastMessageAt: true,
+          milestoneStatus: true,
+          currentMilestone: true,
+          upworkUrl: true
+        },
+        orderBy: { lastMessageAt: 'desc' },
+        take: 10
       })
     ]);
 
@@ -317,6 +337,18 @@ export default async function dashboardRoutes(fastify) {
         project: t.project?.name || null,
         client: t.project?.client?.name || null,
         assignee: t.assignee?.name || null
+      })),
+      upworkMessages: upworkContracts.map(c => ({
+        id: c.id,
+        clientName: c.clientName,
+        projectName: c.projectName,
+        lastMessageAt: c.lastMessageAt,
+        lastMessageDays: c.lastMessageAt
+          ? Math.floor((Date.now() - new Date(c.lastMessageAt).getTime()) / (1000 * 60 * 60 * 24))
+          : null,
+        milestoneStatus: c.milestoneStatus,
+        currentMilestone: c.currentMilestone,
+        upworkUrl: c.upworkUrl
       }))
     };
 
