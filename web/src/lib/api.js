@@ -1446,6 +1446,22 @@ export const api = {
   getNotionStatus: () =>
     request('/notion-sync/status'),
 
+  // ===== UPWORK JOBS =====
+  getUpworkJobs: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/upwork/jobs${query ? `?${query}` : ''}`);
+  },
+  getUpworkJob: (id) => request(`/upwork/jobs/${id}`),
+  createUpworkJob: (data) => request('/upwork/jobs', { method: 'POST', body: data }),
+  updateUpworkJob: (id, data) => request(`/upwork/jobs/${id}`, { method: 'PATCH', body: data }),
+  deleteUpworkJob: (id) => request(`/upwork/jobs/${id}`, { method: 'DELETE' }),
+  applyUpworkJob: (jobId) => request(`/upwork/jobs/${jobId}/apply`, { method: 'POST' }),
+  // Drafts
+  getUpworkDrafts: (jobId) => request(`/upwork/jobs/${jobId}/drafts`),
+  createUpworkDraft: (jobId, data) => request(`/upwork/jobs/${jobId}/drafts`, { method: 'POST', body: data }),
+  updateUpworkDraft: (id, data) => request(`/upwork/drafts/${id}`, { method: 'PUT', body: data }),
+  deleteUpworkDraft: (id) => request(`/upwork/drafts/${id}`, { method: 'DELETE' }),
+
   // ===== TIMESHEETS =====
   getWeeklyTimesheet: (weekStart) => {
     const query = weekStart ? `?weekStart=${weekStart}` : '';

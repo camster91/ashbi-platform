@@ -17,6 +17,7 @@ import PortalBooking from './pages/PortalBooking';
 import PortalIntakeForm from './pages/PortalIntakeForm';
 import PortalEstimate from './pages/PortalEstimate';
 import ClientPortal from './pages/ClientPortal';
+import Landing from './pages/Landing';
 
 // Lazy loaded pages
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -41,6 +42,7 @@ const InvoiceDetail = lazy(() => import('./pages/InvoiceDetail'));
 const Expenses = lazy(() => import('./pages/Expenses'));
 const Pipeline = lazy(() => import('./pages/Pipeline'));
 const UpworkContracts = lazy(() => import('./pages/UpworkContracts'));
+const UpworkJobs = lazy(() => import('./pages/UpworkJobs'));
 const Credentials = lazy(() => import('./pages/Credentials'));
 const Chat = lazy(() => import('./pages/Chat'));
 const AiContextSettings = lazy(() => import('./pages/AiContextSettings'));
@@ -78,6 +80,8 @@ const ClientAcquisition = lazy(() => import('./pages/ClientAcquisition'));
 const LeadIntelligence = lazy(() => import('./pages/LeadIntelligence'));
 const ReferralNetwork = lazy(() => import('./pages/ReferralNetwork'));
 const CallBlock = lazy(() => import('./pages/CallBlock'));
+// Cold Email
+const EmailCampaigns = lazy(() => import('./pages/EmailCampaigns'));
 
 function PageLoader() {
   return (
@@ -118,6 +122,7 @@ function AppRoutes() {
           <Route path="/client-portal" element={<ClientPortal />} />
           <Route path="/client/login" element={<ClientPortal />} />
           <Route path="/client/dashboard" element={<ClientPortal />} />
+          <Route path="/landing" element={<Landing />} />
       <Route
         path="/*"
         element={
@@ -157,6 +162,7 @@ function AppRoutes() {
                   <Route path="/rate-cards" element={<AdminRoute><RateCards /></AdminRoute>} />
                   <Route path="/bookkeeping" element={<AdminRoute><Bookkeeping /></AdminRoute>} />
                   <Route path="/upwork-contracts" element={<UpworkContracts />} />
+                  <Route path="/upwork" element={<UpworkJobs />} />
                   <Route path="/credentials" element={<AdminRoute><Credentials /></AdminRoute>} />
                   <Route path="/chat" element={<Chat />} />
                   <Route path="/admin/settings/ai-context" element={<AdminRoute><AiContextSettings /></AdminRoute>} />
@@ -176,6 +182,7 @@ function AppRoutes() {
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/revenue" element={<AdminRoute><Revenue /></AdminRoute>} />
                   <Route path="/client-health" element={<AdminRoute><ClientHealth /></AdminRoute>} />
+                  <Route path="/email-campaigns" element={<AdminRoute><EmailCampaigns /></AdminRoute>} />
                   <Route path="/notifications" element={<Notifications />} />
                   {/* Advanced Features */}
                   <Route path="/assets" element={<AssetLibrary />} />
