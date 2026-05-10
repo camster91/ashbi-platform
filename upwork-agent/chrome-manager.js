@@ -154,7 +154,7 @@ const target = process.argv[3]; // optional: cameron | bianca
 if (cmd === 'start') {
   const toStart = target ? [target] : Object.keys(PROFILES);
   for (const name of toStart) {
-    if (!PROFILES[name]) { console.error(`Unknown profile: ${name}`); continue; }
+    if (!PROFILES[name]) { console.log(`Unknown profile: ${name}`); continue; }
     await startProfile(name);
   }
 } else if (cmd === 'stop') {
