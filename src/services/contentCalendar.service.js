@@ -139,3 +139,60 @@ export async function getUpcoming(limit = 10) {
     take: limit
   });
 }
+
+/**
+ * Process due social posts - auto-publish scheduled posts that are past their scheduled time
+ * Called by the social posts worker on a cron schedule
+ */
+export async function processDueSocialPosts() {
+  const now = new Date();
+
+  // Find SCHEDULED posts where scheduledAt <= now
+  const duePosts = await prisma.socialPost.findMany({
+    where: {
+      status: 'SCHEDULED',
+      scheduledAt: { lte: now }
+    }
+  });
+
+  const results = [];
+  for (const post of duePosts) {
+    try {
+      // Import here to avoid circular deps
+      const { formatPostForPlatform } = await import('./socialScheduler.service.js');
+      const formatted = formatPostForPlatform(post.content, post.platform, { truncate: false });
+
+      await prisma.socialPost.update({
+        where: { id: post.id },
+        data: {
+          status: 'PUBLISHED',
+          content: formatted,
+          publishedAt: new Date()
+        }
+      });
+
+      // Create a content calendar event record if it was auto-published
+      // to track it in the calendar
+      await prisma.contentCalendarEvent.create({
+        data: {
+          title: `Auto-posted: ${post.platform}`,
+          description: post.content.substring(0, 200),
+          contentType: 'SOCIAL',
+          platform: post.platform,
+          status: 'PUBLISHED',
+          publishedAt: new Date()
+        }
+      });
+
+      results.push({ id: post.id, platform: post.platform, status: 'PUBLISHED' });
+    } catch (err) {
+      await prisma.socialPost.update({
+        where: { id: post.id },
+        data: { status: 'FAILED' }
+      });
+      results.push({ id: post.id, platform: post.platform, status: 'FAILED', error: err.message });
+    }
+  }
+
+  return results;
+}

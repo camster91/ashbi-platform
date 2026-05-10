@@ -519,6 +519,40 @@ export const api = {
   getUpcomingEvents: (limit = 5) =>
     request(`/calendar/upcoming?limit=${limit}`),
 
+  // ===== CONTENT CALENDAR + SOCIAL POSTS =====
+  getContentEvents: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/content-calendar/events${query ? `?${query}` : ''}`);
+  },
+  getUpcomingContent: (limit = 10) =>
+    request(`/content-calendar/upcoming?limit=${limit}`),
+  createContentEvent: (data) =>
+    request('/content-calendar/events', { method: 'POST', body: data }),
+  updateContentEvent: (id, data) =>
+    request(`/content-calendar/events/${id}`, { method: 'PATCH', body: data }),
+  updateContentEventStatus: (id, status) =>
+    request(`/content-calendar/events/${id}/status`, { method: 'PATCH', body: { status } }),
+  deleteContentEvent: (id) =>
+    request(`/content-calendar/events/${id}`, { method: 'DELETE' }),
+
+  // Social posts
+  getSocialPosts: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/content-calendar/posts${query ? `?${query}` : ''}`);
+  },
+  getSocialPost: (id) =>
+    request(`/content-calendar/posts/${id}`),
+  createSocialPost: (data) =>
+    request('/content-calendar/posts', { method: 'POST', body: data }),
+  updateSocialPostStatus: (id, status) =>
+    request(`/content-calendar/posts/${id}/status`, { method: 'PATCH', body: { status } }),
+  publishSocialPost: (id) =>
+    request(`/content-calendar/posts/${id}/publish`, { method: 'POST' }),
+  deleteSocialPost: (id) =>
+    request(`/content-calendar/posts/${id}`, { method: 'DELETE' }),
+  getSocialPostAnalytics: () =>
+    request('/content-calendar/posts/analytics'),
+
   // Attachments
   getAttachments: (entityType, entityId) =>
     request(`/attachments?entityType=${entityType}&entityId=${entityId}`),
