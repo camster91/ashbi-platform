@@ -1113,8 +1113,17 @@ model LinkedInSequence {
   connectionMsg String // Connection request message
   followUp1     String // 3-day follow-up
   followUp2     String // 7-day follow-up
-  status        String   @default("DRAFT") // DRAFT | ACTIVE | COMPLETED
+  status        String   @default("DRAFT") // DRAFT | ACTIVE | PAUSED | COMPLETED | FAILED
   notes         String?
+  // Sequence engine fields
+  startedAt      DateTime?
+  nextSendAt     DateTime? // when to send next message in sequence
+  lastSentAt     DateTime?
+  sentCount      Int      @default(0) // how many messages sent (0=connection,1=followup1,2=followup2)
+  // LinkedIn message tracking
+  linkedinConnectionId String?
+  // Campaign link
+  campaignId     String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -1131,10 +1140,50 @@ model LinkedInProspect {
   email       String?
   status      String   @default("NEW") // NEW | CONNECTED | IN_SEQUENCE | REPLIED | CONVERTED
   notes       String?
+  // Link to sequence/campaign
+  sequenceId  String?
+  campaignId  String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@map("linkedin_prospects")
+}
+
+model LinkedInCampaign {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  status      String   @default("DRAFT") // DRAFT | ACTIVE | PAUSED | COMPLETED
+  // Rate limiting config
+  maxConnectionsPerDay Int @default(20)
+  // Stats
+  totalProspects      Int @default(0)
+  totalSent           Int @default(0)
+  totalReplied        Int @default(0)
+  totalConverted      Int @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("linkedin_campaigns")
+}
+
+model LinkedInMessage {
+  id             String   @id @default(cuid())
+  sequenceId     String
+  campaignId     String?
+  prospectName   String
+  prospectUrl    String?
+  messageType    String   // connection | followup1 | followup2
+  content        String
+  status         String   @default("PENDING") // PENDING | SENT | FAILED | REPLIED
+  sentAt         DateTime?
+  scheduledFor   DateTime?
+  // LinkedIn API response tracking
+  linkedinMsgId  String?
+  errorMessage   String?
+  createdAt      DateTime @default(now())
+
+  @@map("linkedin_messages")
 }
 
 // ==================== COLD EMAIL AGENT ====================

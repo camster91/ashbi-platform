@@ -856,18 +856,49 @@ export const api = {
   // ===== LINKEDIN OUTREACH AGENT =====
   generateLinkedInSequence: (data) =>
     request('/linkedin-outreach/sequence', { method: 'POST', body: data }),
-  getLinkedInSequences: () =>
-    request('/linkedin-outreach/sequences'),
+  getLinkedInSequences: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/linkedin-outreach/sequences${query ? `?${query}` : ''}`);
+  },
   getLinkedInSequence: (id) =>
     request(`/linkedin-outreach/sequences/${id}`),
+  updateLinkedInSequence: (id, data) =>
+    request(`/linkedin-outreach/sequences/${id}`, { method: 'PUT', body: data }),
   deleteLinkedInSequence: (id) =>
     request(`/linkedin-outreach/sequences/${id}`, { method: 'DELETE' }),
+  activateLinkedInSequence: (id) =>
+    request(`/linkedin-outreach/sequences/${id}/activate`, { method: 'POST' }),
+  pauseLinkedInSequence: (id) =>
+    request(`/linkedin-outreach/sequences/${id}/pause`, { method: 'POST' }),
+  sendLinkedInMessage: (data) =>
+    request('/linkedin-outreach/send', { method: 'POST', body: data }),
+  getLinkedInMessages: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/linkedin-outreach/messages${query ? `?${query}` : ''}`);
+  },
+  getLinkedInRateLimit: (campaignId) => {
+    const q = campaignId ? `?campaignId=${campaignId}` : '';
+    return request(`/linkedin-outreach/rate-limit${q}`);
+  },
   importLinkedInProspects: (data) =>
     request('/linkedin-outreach/prospects', { method: 'POST', body: data }),
   getLinkedInProspects: (params = {}) => {
     const query = new URLSearchParams(params).toString();
     return request(`/linkedin-outreach/prospects${query ? `?${query}` : ''}`);
   },
+  updateLinkedInProspect: (id, data) =>
+    request(`/linkedin-outreach/prospects/${id}`, { method: 'PATCH', body: data }),
+  // Campaigns
+  createLinkedInCampaign: (data) =>
+    request('/linkedin-outreach/campaigns', { method: 'POST', body: data }),
+  getLinkedInCampaigns: () =>
+    request('/linkedin-outreach/campaigns'),
+  getLinkedInCampaign: (id) =>
+    request(`/linkedin-outreach/campaigns/${id}`),
+  updateLinkedInCampaign: (id, data) =>
+    request(`/linkedin-outreach/campaigns/${id}`, { method: 'PUT', body: data }),
+  deleteLinkedInCampaign: (id) =>
+    request(`/linkedin-outreach/campaigns/${id}`, { method: 'DELETE' }),
 
   // ===== COLD EMAIL AGENT =====
   generateColdEmailSequence: (data) =>
