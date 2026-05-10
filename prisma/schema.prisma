@@ -1947,3 +1947,20 @@ model Integration {
 
   @@map("integrations")
 }
+
+// ==================== LANDING PAGE LEADS ====================
+
+model Lead {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  company   String?
+  phone     String?
+  budget    String? // Budget range selected
+  message   String
+  status    String   @default("NEW") // NEW, CONTACTED, QUALIFIED, CONVERTED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("leads")
+}
