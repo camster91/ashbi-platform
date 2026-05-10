@@ -74,6 +74,7 @@ model User {
   timeSessions      TimeSession[]
   calendarEvents    ContentCalendarEvent[] @relation("CalendarEventAssignee")
   apiKeys           ApiKey[]
+      workflows         Workflow[]
 
   @@map("users")
 }
@@ -1946,4 +1947,75 @@ model Integration {
   updatedAt    DateTime  @updatedAt
 
   @@map("integrations")
+}
+
+// ==================== LEAD INTELLIGENCE ====================
+
+model LeadIntelligence {
+  id             String   @id @default(cuid())
+  name           String
+  email          String?
+  company        String?
+  domain         String?
+  linkedinUrl    String?
+  source         String   // manual, producthunt, kickstarter, shopify, domain_registration, clearbit, hunter
+  qualityScore   Int      @default(0) // 0-100
+  enrichmentData Json     @default("{}") // { industry, size, description, logo, socials, etc. }
+  status         String   @default("NEW") // NEW, SCANNED, QUALIFIED, ENRICHED, CONTACTED, CONVERTED
+  notes          String?
+  lastEnrichedAt DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([domain])
+  @@index([qualityScore])
+  @@index([status])
+  @@index([source])
+  @@map("lead_intelligence")
+}
+
+// ==================== WORKFLOW AUTOMATIONS ====================
+
+model Workflow {
+  id            String   @id @default(cuid())
+  name          String
+  description   String?
+  triggerType   String   // SCHEDULE | WEBHOOK | EVENT
+  triggerConfig Json     // { cronExpression, webhookPath, eventName, etc. }
+  actions       Json     // [{ type, config }]
+  enabled       Boolean  @default(true)
+  lastRun       DateTime?
+  lastStatus    String?  // SUCCESS | FAILED | PARTIAL
+  lastError     String?
+  runCount      Int      @default(0)
+  createdById   String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  createdBy User              @relation(fields: [createdById], references: [id])
+  runs      WorkflowRun[]
+
+  @@index([triggerType])
+  @@index([enabled])
+  @@map("workflows")
+}
+
+model WorkflowRun {
+  id          String   @id @default(cuid())
+  workflowId  String
+  status      String   @default("RUNNING") // RUNNING | SUCCESS | FAILED | PARTIAL
+  startedAt   DateTime @default(now())
+  completedAt DateTime?
+  error       String?
+  triggerData Json?
+  resultData  Json?
+  createdAt   DateTime @default(now())
+
+  // Relations
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId])
+  @@index([status])
+  @@map("workflow_runs")
 }

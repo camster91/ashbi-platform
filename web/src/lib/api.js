@@ -660,6 +660,25 @@ export const api = {
   getAutomationHistory: (offset = 0, limit = 25) =>
     request(`/automations/history?limit=${limit}&offset=${offset}`),
 
+  // Workflows CRUD
+  getWorkflows: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/automations/workflows${query ? `?${query}` : ''}`);
+  },
+  getWorkflow: (id) => request(`/automations/workflows/${id}`),
+  createWorkflow: (data) => request('/automations/workflows', { method: 'POST', body: data }),
+  updateWorkflow: (id, data) => request(`/automations/workflows/${id}`, { method: 'PUT', body: data }),
+  deleteWorkflow: (id) => request(`/automations/workflows/${id}`, { method: 'DELETE' }),
+  toggleWorkflow: (id) => request(`/automations/workflows/${id}/toggle`, { method: 'POST' }),
+  runWorkflow: (id, triggerData) => request(`/automations/workflows/${id}/run`, { method: 'POST', body: triggerData }),
+
+  // Workflow runs
+  getWorkflowRuns: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/automations/runs${query ? `?${query}` : ''}`);
+  },
+  getWorkflowRun: (id) => request(`/automations/runs/${id}`),
+
   // ===== UPWORK =====
   getUpworkTasks: (tags) => {
     const query = new URLSearchParams({ tags }).toString();
