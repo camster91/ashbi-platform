@@ -326,6 +326,79 @@ export default function Dashboard() {
         </Card>
       </div>
 
+      {/* ─── Row: Upwork Messages ─── */}
+      {stats?.upworkMessages?.length > 0 && (
+        <Card>
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-green-600" />
+              <h2 className="font-semibold text-foreground">Upwork Messages</h2>
+              {stats.upworkMessages.filter(m => m.lastMessageDays !== null && m.lastMessageDays >= 3).length > 0 && (
+                <span className="bg-amber-500 text-white text-xs font-bold rounded-full px-2 py-0.5">
+                  {stats.upworkMessages.filter(m => m.lastMessageDays !== null && m.lastMessageDays >= 3).length} pending
+                </span>
+              )}
+            </div>
+            <a
+              href="https://www.upwork.com/nx/messages"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-primary hover:underline flex items-center gap-1"
+            >
+              Open inbox <ArrowRight className="w-3 h-3" />
+            </a>
+          </div>
+          <ul className="divide-y divide-border max-h-[340px] overflow-y-auto">
+            {stats.upworkMessages.map(msg => {
+              const daysSince = msg.lastMessageDays;
+              const needsResponse = daysSince !== null && daysSince >= 2;
+              return (
+                <li key={msg.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
+                  <div className="flex items-start gap-3">
+                    <div className={cn(
+                      'w-2 h-2 rounded-full mt-2 flex-shrink-0',
+                      needsResponse ? 'bg-red-500 animate-pulse' : 'bg-green-400'
+                    )} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground">{msg.clientName}</p>
+                      {msg.projectName && (
+                        <p className="text-xs text-muted-foreground truncate">{msg.projectName}</p>
+                      )}
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {daysSince !== null && (
+                          <span className={cn(
+                            'text-xs font-medium',
+                            needsResponse ? 'text-red-500' : 'text-muted-foreground'
+                          )}>
+                            {daysSince === 0 ? 'Today' : daysSince === 1 ? 'Yesterday' : `${daysSince} days ago`}
+                          </span>
+                        )}
+                        {msg.currentMilestone && (
+                          <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">
+                            {msg.milestoneStatus || 'Active'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {msg.upworkUrl && (
+                      <a
+                        href={msg.upworkUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary hover:underline flex-shrink-0 mt-1"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        View
+                      </a>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      )}
+
       {/* ─── Row: Alerts Triage (Blocked Projects + Inbox Summary) ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Blocked & At-Risk Projects */}
