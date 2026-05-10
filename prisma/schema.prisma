@@ -1304,6 +1304,39 @@ model UpworkProposal {
   @@map("upwork_proposals")
 }
 
+// ==================== UPWORK JOB TRACKER ====================
+
+model UpworkJob {
+  id          String   @id @default(cuid())
+  title       String
+  url         String   @unique
+  description String?
+  budget      String?  // Stored as string (e.g., "$500 - $1,000" or "Fixed" or "Hourly")
+  clientName  String?
+  status      String   @default("DRAFT") // DRAFT | APPLIED | INTERVIEWED | REJECTED
+  notes       String?
+  score       Int?     // 1-10 relevance score
+  // Relations
+  drafts      UpworkDraftProposal[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("upwork_jobs")
+}
+
+model UpworkDraftProposal {
+  id            String   @id @default(cuid())
+  jobId         String
+  job           UpworkJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  coverLetter   String
+  proposedRate  String?
+  status        String   @default("DRAFT") // DRAFT | READY | SUBMITTED
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("upwork_draft_proposals")
+}
+
 // ==================== EXPENSE TRACKING ====================
 
 model Expense {
