@@ -518,6 +518,28 @@ export async function executeWorkflow(workflow, triggerData = {}) {
 async function executeAction(action, triggerData, workflow) {
   const { type, config } = action;
 
+  // Validate action config schema before execution
+  if (!config || typeof config !== 'object') {
+    throw new Error(`Action config is required and must be an object for action type: ${type}`);
+  }
+
+  const REQUIRED_FIELDS = {
+    SEND_EMAIL: ['to', 'subject'],
+    CREATE_TASK: ['title'],
+    SEND_TELEGRAM: ['chat_id', 'message'],
+    UPDATE_DEAL_STAGE: ['deal_id', 'stage'],
+    WEBHOOK_CALL: ['url', 'method'],
+    CONDITION: ['field', 'operator'],
+  };
+
+  const required = REQUIRED_FIELDS[type];
+  if (required) {
+    const missing = required.filter(f => !config[f]);
+    if (missing.length > 0) {
+      throw new Error(`Action type "${type}" is missing required config field(s): ${missing.join(', ')}`);
+    }
+  }
+
   switch (type) {
     case 'SEND_EMAIL':
       return executeSendEmail(config, triggerData);
