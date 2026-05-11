@@ -4,8 +4,7 @@
  */
 
 import { createDraft } from './gmail-draft.agent.js';
-import { PrismaClient } from '@prisma/client';
-const prisma = new PrismaClient();
+import prisma from '../config/db.js';
 
 // Pricing tiers (hardcoded for now, can be updated via UI)
 const PRICING_TIERS = {

@@ -4,17 +4,10 @@
  *
  * Referral rewards: $250 gift card for clients who refer projects $5K-$15K
  * Reward paid after first payment received
- *
- * Referral one-liner: "If you ever need a web developer, [Your Name] is fantastic —
- * they built our site and it's been running great."
  */
 
 import { createDraft } from './gmail-draft.agent.js';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
 import prisma from '../config/db.js';
-4f0a1ca (fix(referral-engine): ESM conversion + Fastify routes + email header sanitization)
 
 // Referral reward configuration
 const REFERRAL_REWARD = {
@@ -24,59 +17,46 @@ const REFERRAL_REWARD = {
   PAYMENT_CONDITION: 'paid after first payment received'
 };
 
-// AI Client import - uses ../ai/client.js
-let aiClient = null;
-try {
-  const module = await import('../ai/client.js');
-  aiClient = module.default || module;
-  aiClient = (await import('../ai/client.js')).default;
-4f0a1ca (fix(referral-engine): ESM conversion + Fastify routes + email header sanitization)
-} catch (err) {
-  console.warn('AI client not found, using fallback generation');
-  aiClient = null;
-}
-
 const REFERRAL_TIERS = {
   TIER_1: 'tier_1',
   TIER_2: 'tier_2',
   TIER_3: 'tier_3'
 };
 
+// AI Client import - uses ../ai/client.js
+let aiClient = null;
+try {
+  const mod = await import('../ai/client.js');
+  aiClient = mod.default || mod;
+} catch (err) {
+  console.warn('AI client not found, using fallback generation');
+}
+
 /**
  * Sanitize an email header value to prevent header injection and RFC violations.
- * Removes control characters, newlines, and trims whitespace.
- * Encodes non-ASCII characters using RFC 2047 encoded-word syntax.
- * @param {string} value - The raw header value
- * @returns {string} Sanitized header value safe for RFC 2822
  */
 function sanitizeEmailHeader(value) {
   if (typeof value !== 'string') return '';
   
-  // Remove any control characters except tabs
   let sanitized = value.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
-  
-  // Remove any newlines (prevents header injection)
   sanitized = sanitized.replace(/\r?\n|\r/g, ' ');
-  
-  // Collapse multiple spaces
   sanitized = sanitized.replace(/[ \t]+/g, ' ').trim();
   
-  // If there are non-ASCII characters, encode the whole value as RFC 2047
-  // eslint-disable-next-line no-control-regex
   if (/[^\x20-\x7E]/.test(sanitized)) {
-    // Encode using ISO-8859-1 or UTF-8 base64 encoded-word
     const buf = Buffer.from(sanitized, 'utf-8');
     sanitized = '=?UTF-8?B?' + buf.toString('base64') + '?=';
   }
   
   return sanitized;
- * Helper: get the primary email for a client from their email mappings
+}
+
+/**
+ * Get the primary email for a client from their email mappings
  */
 function getPrimaryEmail(client) {
   if (!client.emailMappings || client.emailMappings.length === 0) return null;
   const primary = client.emailMappings.find(m => m.isPrimary);
   return primary ? primary.emailAddress : client.emailMappings[0].emailAddress;
-4f0a1ca (fix(referral-engine): ESM conversion + Fastify routes + email header sanitization)
 }
 
 /**
@@ -106,10 +86,8 @@ async function getReferralNetwork() {
 
     for (const client of clients) {
       const referralLikelihood = calculateReferralLikelihood(client);
-      
       const primaryEmail = getPrimaryEmail(client);
 
-4f0a1ca (fix(referral-engine): ESM conversion + Fastify routes + email header sanitization)
       const tierEntry = {
         id: client.id,
         name: client.name,
@@ -190,14 +168,7 @@ function getLastProjectDate(projects) {
 }
 
 /**
- * Generate referral email using AI
- * Creates a personalized referral ask email
- * 
- * @param {string} contactName - Name of the contact to ask for referral
- * @param {string} company - Company name of the contact
- * @returns {Promise<object>} Generated email content { subject, body }
  * Generate referral email using AI or template
-4f0a1ca (fix(referral-engine): ESM conversion + Fastify routes + email header sanitization)
  */
 async function generateReferralEmail(contactName, company) {
   try {
@@ -225,37 +196,13 @@ Thanks for considering it!
 
 Best,
 Cameron`
-      subject: 'Quick favor \u2014 trusted web developer recommendation',
-      body: [
-        'Hi ' + firstName + ',',
-        '',
-        "I hope you're doing well! I wanted to reach out with a quick ask.",
-        '',
-        "I've been working with some great clients in the " + company + ' space, and a few have mentioned they occasionally get asked for recommendations for web developers.',
-        '',
-        "If you ever find yourself in that position, I'd love to be in the conversation. Here's what I typically hear from people who refer me:",
-        '',
-        '"If you ever need a web developer, ' + contactName + ' is fantastic \u2014 they built our site and its been running great."',
-        '',
-        "Of course, I only take on projects where I can genuinely deliver results, so you'd never recommend me if it wasn't warranted.",
-        '',
-        'The referral reward if someone moves forward: $250 (for projects $5K-$15K, paid after first payment).',
-        '',
-        'No pressure at all \u2014 just wanted to put myself on your radar for when the need arises.',
-        '',
-        'Thanks for considering it!',
-        '',
-        'Best,',
-        'Cameron'
-      ].join('\n')
-4f0a1ca (fix(referral-engine): ESM conversion + Fastify routes + email header sanitization)
     };
 
     // Try AI for enhanced personalization
     if (aiClient) {
       try {
         const prompt = 'Generate a referral request email for ' + contactName + ' at ' + company + '. '
-          + 'Use this one-liner style: "If you ever need a web developer, [Your Name] is fantastic \u2014 they built our site and its been running great." '
+          + 'Use this one-liner style: "If you ever need a web developer, [Your Name] is fantastic — they built our site and its been running great." '
           + 'Include mention of $250 referral reward for $5K-$15K projects, paid after first payment. '
           + 'Return in format: Subject: <line> followed by blank line then body. Keep it warm and natural, not pushy.';
 
@@ -265,7 +212,6 @@ Cameron`
         });
         
         if (aiResponse && aiResponse.text) {
-          // Parse AI response for subject and body
           const lines = aiResponse.text.split('\n');
           const subjectLine = lines.find(l => l.toLowerCase().startsWith('subject:'));
           const emptyIdx = lines.findIndex(l => l === '');
@@ -277,25 +223,6 @@ Cameron`
             generatedBy: 'ai',
             generatedAt: new Date().toISOString()
           };
-
-        if (aiResponse) {
-          const responseText = typeof aiResponse === 'string' ? aiResponse
-            : aiResponse.text || aiResponse.content || aiResponse.message?.content || '';
-
-          if (responseText) {
-            const lines = responseText.split('\n');
-            const subjectLine = lines.find(l => l.toLowerCase().startsWith('subject:'));
-            const bodyStartIndex = lines.findIndex(l => l === '');
-            const bodyLines = bodyStartIndex >= 0 ? lines.slice(bodyStartIndex + 1) : lines;
-
-            return {
-              subject: subjectLine ? subjectLine.replace(/^subject:\s*/i, '') : referralEmailTemplate.subject,
-              body: bodyLines.join('\n') || referralEmailTemplate.body,
-              generatedBy: 'ai',
-              generatedAt: new Date().toISOString()
-            };
-          }
-4f0a1ca (fix(referral-engine): ESM conversion + Fastify routes + email header sanitization)
         }
       } catch (aiError) {
         console.warn('AI generation failed, using template:', aiError.message);
@@ -322,9 +249,7 @@ async function createDraftForReferral(toEmail, subject, body) {
       throw new Error('Missing required parameters: toEmail, subject, body');
     }
 
-    // Sanitize email header values to prevent injection and RFC violations
     const sanitizedSubject = sanitizeEmailHeader(subject);
-
     const draftResult = await createDraft(toEmail, sanitizedSubject, body);
 
     return {
@@ -381,7 +306,6 @@ async function trackReferral(referrerId, referredLead) {
       throw new Error('Referrer client not found with ID: ' + referrerId);
     }
 
-    // Check if referred client already exists by email mapping
     const existingMapping = await prisma.clientEmailMapping.findFirst({
       where: { emailAddress: referredLead.email },
       include: { client: true }
@@ -612,6 +536,4 @@ export {
   REFERRAL_TIERS,
   REFERRAL_REWARD,
   sanitizeEmailHeader
-  REFERRAL_REWARD
-4f0a1ca (fix(referral-engine): ESM conversion + Fastify routes + email header sanitization)
 };
