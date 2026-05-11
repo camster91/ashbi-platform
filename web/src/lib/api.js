@@ -1199,19 +1199,19 @@ export const api = {
 
   // ===== RETAINERS =====
   getRetainerList: () =>
-    request('/retainer'),
+    request('/retainers'),
   getRetainerStatus: (clientId) =>
-    request(`/retainer/${clientId}/status`),
+    request(`/retainers/${clientId}/status`),
   getAllRetainers: () =>
-    request('/retainer/check-all', { method: 'POST' }),
+    request('/retainers/check-all', { method: 'POST' }),
   logRetainerHours: (clientId, data) =>
-    request(`/retainer/${clientId}/log-hours`, { method: 'POST', body: data }),
+    request(`/retainers/${clientId}/log-hours`, { method: 'POST', body: data }),
   createRetainerPlan: (data) =>
-    request('/retainer', { method: 'POST', body: data }),
+    request('/retainers', { method: 'POST', body: data }),
   updateRetainerPlan: (clientId, data) =>
-    request(`/retainer/${clientId}`, { method: 'PUT', body: data }),
+    request(`/retainers/${clientId}`, { method: 'PUT', body: data }),
   generateRetainerInvoice: (clientId, data) =>
-    request(`/retainer/${clientId}/generate-invoice`, { method: 'POST', body: data }),
+    request(`/retainers/${clientId}/generate-invoice`, { method: 'POST', body: data }),
 
   // ===== FINANCIAL REPORTS =====
   getReportsPnl: (params = {}) => {

@@ -280,7 +280,7 @@ await fastify.register(credentialRoutes, { prefix: '/api/credentials' });
 await fastify.register(leadRoutes, { prefix: '/api/leads' });
 await fastify.register(landingRoutes, { prefix: '/api/leads' });
 await fastify.register(reportRoutes, { prefix: '/api/reports' });
-await fastify.register(retainerRoutes, { prefix: '/api/retainers' });
+await fastify.register(retainerRoutes, { prefix: '/api/retainer' });
 await fastify.register(onboardingRoutes, { prefix: '/api/onboarding' });
 await fastify.register(botRoutes, { prefix: '/api/bot' });
 await fastify.register(approvalRoutes, { prefix: '/api/approvals' });
