@@ -74,7 +74,7 @@ model User {
   timeSessions      TimeSession[]
   calendarEvents    ContentCalendarEvent[] @relation("CalendarEventAssignee")
   apiKeys           ApiKey[]
-      workflows         Workflow[]
+  workflows         Workflow[]
 
   @@map("users")
 }
@@ -1008,6 +1008,8 @@ model OutreachLead {
 
   sequence OutreachSequence? @relation(fields: [sequenceId], references: [id], onDelete: SetNull)
 
+  @@index([sequenceId])
+  @@index([status])
   @@map("outreach_leads")
 }
 
@@ -1146,6 +1148,9 @@ model LinkedInProspect {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  @@index([sequenceId])
+  @@index([campaignId])
+  @@index([status])
   @@map("linkedin_prospects")
 }
 
@@ -1183,6 +1188,9 @@ model LinkedInMessage {
   errorMessage   String?
   createdAt      DateTime @default(now())
 
+  @@index([sequenceId])
+  @@index([campaignId])
+  @@index([status, scheduledFor])
   @@map("linkedin_messages")
 }
 
@@ -1255,6 +1263,9 @@ model ColdEmailEvent {
   prospect ColdEmailProspect  @relation(fields: [prospectId], references: [id], onDelete: Cascade)
   sequence ColdEmailSequence? @relation(fields: [sequenceId], references: [id], onDelete: SetNull)
 
+  @@index([mailgunId])
+  @@index([sequenceId])
+  @@index([prospectId, type, createdAt])
   @@map("cold_email_events")
 }
 
