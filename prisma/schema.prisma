@@ -177,6 +177,7 @@ model Project {
   status         String  @default("STARTING_UP") // STARTING_UP, DESIGN_DEV, ADDING_CONTENT, FINALIZING, LAUNCHED, ON_HOLD, CANCELLED
   health         String  @default("ON_TRACK") // ON_TRACK, NEEDS_ATTENTION, AT_RISK
   healthScore    Int     @default(100)
+  healthHistory  Json?   // Array of {health, score, timestamp} for historical tracking
   aiSummary      String? // AI-generated current status summary
   aiPlan         String? // JSON: AI-generated task plan
   risks          String  @default("[]") // JSON: identified risks
