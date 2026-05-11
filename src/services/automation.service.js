@@ -151,7 +151,33 @@ export async function onProposalApproved(proposalId) {
 
     console.log(`[Automation] Contract created: ${contract.id} from proposal ${proposalId}`);
 
-    // Action 2: Create notification for admin
+    // Action 2: Auto-create pipeline deal from approved proposal
+    try {
+      // Find the first pipeline stage (usually "New" or similar)
+      const defaultStage = await prisma.pipelineStage.findFirst({
+        orderBy: { order: 'asc' },
+        select: { id: true }
+      });
+
+      if (defaultStage) {
+        const deal = await prisma.pipelineDeal.create({
+          data: {
+            title: proposal.title,
+            value: proposal.total,
+            clientId: proposal.clientId,
+            stageId: defaultStage.id,
+            probability: 100, // Won
+            expectedCloseDate: new Date(),
+            notes: `Auto-created from approved proposal ${proposalId}`
+          }
+        });
+        console.log(`[Automation] Pipeline deal created: ${deal.id} from proposal ${proposalId}`);
+      }
+    } catch (dealErr) {
+      console.error(`[Automation] Could not create pipeline deal:`, dealErr.message);
+    }
+
+    // Action 3: Create notification for admin
     await createAdminNotification(
       'PROPOSAL_APPROVED',
       'Proposal Approved',

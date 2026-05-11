@@ -1,4 +1,4 @@
-import { translations } from './translations';
+import { translations } from '../lib/translations';
 
 export function useTranslations(lang = 'en') {
   const t = translations[lang] || translations.en;

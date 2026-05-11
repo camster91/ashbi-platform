@@ -670,7 +670,6 @@ function StatCard({ icon: Icon, iconColor, iconBg, label, value, subtitle, badge
       aria-label={onClick ? label : undefined}
       onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(e); } } : undefined}
       {...ariaAttrs}
-b42b37a (fix(accessibility): make StatCard and ClientHealthCard keyboard-accessible (#62))
     >
       {badge && (
         <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-lg border-2 border-background animate-pulse">

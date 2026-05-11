@@ -5,6 +5,7 @@
 
 import {
   generateProposal,
+  generatePdf,
   createProposalDraft,
   getProposalTemplates,
   saveProposal,
@@ -170,4 +171,116 @@ export default async function proposalBuilderRoutes(fastify, opts) {
     return reply.type("image/gif")
       .send(Buffer.from("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", "base64"));
   });
+
+  // Download proposal as PDF
+  fastify.get("/:id/pdf", async (request, reply) => {
+    try {
+      const proposalId = request.params.id;
+      const proposal = await getProposal(proposalId);
+      if (!proposal) return reply.status(404).send({ error: "Proposal not found" });
+
+      // Get or generate the HTML for the proposal
+      let proposalHtml = "";
+      try {
+        const notesObj = proposal.notes ? JSON.parse(proposal.notes) : {};
+        proposalHtml = notesObj.html || "";
+      } catch (e) {
+        proposalHtml = proposal.notes || "";
+      }
+
+      // If no HTML stored, generate it from the proposal data
+      if (!proposalHtml) {
+        const leadData = {
+          name: proposal.client?.name || "Client",
+          email: proposal.client?.email || "",
+          company: proposal.client?.company || ""
+        };
+        const proposalData = {
+          title: proposal.title,
+          id: proposal.id,
+          selectedTier: { name: "Package", price: proposal.total },
+          pricingTiers: proposal.lineItems?.map(li => ({
+            name: li.description,
+            price: li.unitPrice
+          })) || []
+        };
+        // Use basic HTML since we don't have AI generation here
+        proposalHtml = buildFallbackProposalHtml(proposalData, leadData);
+      }
+
+      const pdfBuffer = await generatePdf(proposalHtml);
+      const filename = `Ashbi_Proposal_${proposal.id}.pdf`;
+
+      return reply
+        .header("Content-Type", "application/pdf")
+        .header("Content-Disposition", `attachment; filename="${filename}"`)
+        .send(pdfBuffer);
+    } catch (error) {
+      request.log.error(error, "Error generating proposal PDF");
+      return reply.status(500).send({ error: "Failed to generate PDF", message: error.message });
+    }
+  });
+}
+
+// Helper to build basic proposal HTML when AI is not available
+function buildFallbackProposalHtml(proposalData, leadData) {
+  const today = new Date().toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' });
+  const validUntil = new Date(Date.now() + 30 * 86400000).toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Proposal: ${proposalData.title || 'Project Proposal'}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1a1a1a; line-height: 1.6; background: #fff; }
+    .container { max-width: 800px; margin: 0 auto; padding: 40px; }
+    .header { border-bottom: 2px solid #1a1a1a; padding-bottom: 24px; margin-bottom: 40px; }
+    .logo { font-size: 28px; font-weight: 700; letter-spacing: -1px; }
+    .proposal-title { font-size: 32px; font-weight: 600; margin: 24px 0 8px; }
+    .client-info { background: #f7f7f7; padding: 20px; border-radius: 4px; margin-bottom: 32px; }
+    .section { margin-bottom: 40px; }
+    .section h2 { font-size: 20px; font-weight: 600; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid #e5e5e5; }
+    .pricing-tier { border: 1px solid #e5e5e5; border-radius: 4px; padding: 20px; margin-bottom: 16px; }
+    .pricing-tier h3 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+    .pricing-tier .price { font-size: 24px; font-weight: 700; margin-bottom: 8px; }
+    .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e5e5; font-size: 12px; color: #999; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo">ASHBI</div>
+      <h1 class="proposal-title">${proposalData.title || 'Project Proposal'}</h1>
+      <div>Prepared for ${leadData.name}${leadData.company ? `, ${leadData.company}` : ''} | ${today}</div>
+    </div>
+    <div class="client-info">
+      <h3>Prepared For</h3>
+      <p><strong>${leadData.name}</strong></p>
+      ${leadData.company ? `<p>${leadData.company}</p>` : ''}
+      <p>${leadData.email}</p>
+    </div>
+    <div class="section">
+      <h2>Pricing</h2>
+      ${(proposalData.pricingTiers || []).map(tier => `
+        <div class="pricing-tier">
+          <h3>${tier.name}</h3>
+          <div class="price">$${tier.price.toLocaleString()}</div>
+        </div>
+      `).join('')}
+      <div class="pricing-tier" style="background:#fafafa;">
+        <h3>Total</h3>
+        <div class="price">$${(proposalData.selectedTier?.price || 0).toLocaleString()}</div>
+      </div>
+    </div>
+    <div class="footer">
+      <p>Ashbi | Toronto, ON | hello@ashbi.design</p>
+      <p>Valid until ${validUntil}</p>
+    </div>
+  </div>
+</body>
+</html>`;
+
 }

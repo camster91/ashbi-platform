@@ -402,9 +402,9 @@ export default function LeadIntelligence() {
                   </td>
                   <td className="px-4 py-3 hidden lg:table-cell text-xs text-muted-foreground">
                     {lead.foundAt ? new Date(lead.foundAt).toLocaleDateString('en-CA') : '—'}
+                  </td>
                   <td className="px-3 py-3 hidden md:table-cell">
                     <ScoreBadge score={lead.score} />
-50c1085 (feat(web): Redesign LeadIntelligence page with score, source health, and batch actions)
                   </td>
                   <td className="px-3 py-3 hidden lg:table-cell text-xs text-muted-foreground">
                     {lead.discoveredAt ? new Date(lead.discoveredAt).toLocaleDateString() : '—'}

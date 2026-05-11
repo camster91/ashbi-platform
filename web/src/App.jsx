@@ -82,6 +82,8 @@ const ReferralNetwork = lazy(() => import('./pages/ReferralNetwork'));
 const CallBlock = lazy(() => import('./pages/CallBlock'));
 // Cold Email
 const EmailCampaigns = lazy(() => import('./pages/EmailCampaigns'));
+const ColdEmail = lazy(() => import('./pages/ColdEmail'));
+const LinkedInAgent = lazy(() => import('./pages/LinkedInAgent'));
 
 function PageLoader() {
   return (
@@ -183,6 +185,8 @@ function AppRoutes() {
                   <Route path="/revenue" element={<AdminRoute><Revenue /></AdminRoute>} />
                   <Route path="/client-health" element={<AdminRoute><ClientHealth /></AdminRoute>} />
                   <Route path="/email-campaigns" element={<AdminRoute><EmailCampaigns /></AdminRoute>} />
+                  <Route path="/cold-email" element={<ColdEmail />} />
+                  <Route path="/linkedin" element={<LinkedInAgent />} />
                   <Route path="/notifications" element={<Notifications />} />
                   {/* Advanced Features */}
                   <Route path="/assets" element={<AssetLibrary />} />

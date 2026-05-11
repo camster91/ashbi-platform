@@ -1231,6 +1231,12 @@ model ColdEmailProspect {
   painPoint     String?
   status        String    @default("NEW") // NEW | CONTACTED | REPLIED | CONVERTED | UNSUBSCRIBED
   sequenceId    String?
+  // Pipeline source: Ashbi | cameronashley
+  source        String    @default("Ashbi")
+  // LinkedIn
+  linkedinUrl   String?
+  // Audit notes for Ashbi outreach (specific observation per brand)
+  auditNotes    String?
   // Tracking fields
   lastEmailStep Int?      @default(0) // Which email step in the sequence was last sent (0-indexed)
   nextEmailAt   DateTime? // When to send the next email
