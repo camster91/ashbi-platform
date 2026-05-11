@@ -12,8 +12,8 @@
 import { createDraft, searchInbox } from './gmail-draft.agent.js';
 import prisma from '../config/db.js';
 
-// Maton API key - use provided key
-const MATON_API_KEY = '09Lw3Ph9eS9PwAQ5Jo6KpJ5qM50csup1iMe4R1SIr7kE_lVh98cuxt2SEFCj86KpduMQEgM8-Je_JumUp7cHAAXASUWRdUtvvNg';
+// Maton API key from environment
+const MATON_API_KEY = process.env.MATON_API_KEY;
 
 // Follow-up configuration
 const FOLLOW_UP_DAYS = {
