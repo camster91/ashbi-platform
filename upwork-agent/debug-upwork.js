@@ -67,6 +67,6 @@ async function debug() {
 }
 
 debug().catch(err => {
-  console.log('❌ Error:', err.message);
+  console.error('❌ Error:', err.message);
   process.exit(1);
 });

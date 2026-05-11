@@ -8,90 +8,6 @@
 
 import prisma from '../config/db.js';
 
-// ==================== Retry & Resilience ====================
-
-/**
- * Retry wrapper with exponential backoff for HTTP requests
- * Handles 429 Rate Limit, 503 Service Unavailable, and transient network errors
- */
-async function withRetry(fn, opts = {}) {
-  const { maxRetries = 3, baseDelay = 2000, retryOn = [429, 503, 502, 504] } = opts;
-  let lastError;
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try { return await fn(); } catch (err) {
-      lastError = err;
-      const status = err.status || err.statusCode;
-      const isRetryable = retryOn.includes(status) ||
-        err.code === 'ECONNRESET' || err.code === 'ETIMEDOUT' ||
-        err.code === 'ENOTFOUND' || err.message?.includes('timeout') ||
-        err.message?.includes('fetch failed');
-      if (!isRetryable || attempt === maxRetries) throw err;
-      const delay = baseDelay * Math.pow(2, attempt - 1) * (0.5 + Math.random() * 0.5);
-      console.warn(`[Retry] Attempt ${attempt}/${maxRetries} failed (${status || err.code}), retrying in ${Math.round(delay)}ms...`);
-      await new Promise(r => setTimeout(r, delay));
-    }
-  }
-  throw lastError;
-}
-
-/**
- * Fetch with timeout wrapper
- */
-async function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, { ...options, signal: controller.signal });
-    return response;
-  } finally { clearTimeout(timer); }
-}
-
-// ==================== Lead Scoring ====================
-
-/**
- * Score a lead on a 0-10 scale based on company signals
- */
-function scoreLead(lead) {
-  let score = 0;
-
-  // Source credibility (0-2)
-  const sourceWeights = {
-    'crunchbase': 2, 'ycombinator': 2, 'g2': 1.5, 'clutch': 1.5,
-    'builtin': 1, 'producthunt': 1, 'kickstarter': 0.8,
-    'shopify': 0.5, 'domain_registration': 0.3
-  };
-  score += sourceWeights[lead.source] || 0.5;
-
-  // Company signals (0-5)
-  if (lead.funding && lead.funding > 0) {
-    if (lead.funding >= 10000000) score += 2.5;
-    else if (lead.funding >= 1000000) score += 1.5;
-    else score += 0.5;
-  }
-  if (lead.employees) {
-    if (lead.employees >= 50) score += 1;
-    else if (lead.employees >= 10) score += 0.5;
-  }
-  if (lead.domain && !lead.domain.includes('.myshopify.com') &&
-      !lead.domain.includes('.wordpress.com') && !lead.domain.includes('.github.io')) {
-    score += 0.5;
-  }
-  if (lead.votes && lead.votes >= 100) score += 0.5;
-  if (lead.fundingRound && ['A', 'B', 'C', 'YC'].includes(lead.fundingRound)) score += 0.5;
-
-  // Market fit (0-3)
-  const domainName = (lead.domain || lead.name || '').toLowerCase();
-  let keywordHits = 0;
-  for (const kw of CPG_KEYWORDS) {
-    if (domainName.includes(kw.toLowerCase())) keywordHits++;
-  }
-  score += Math.min(keywordHits * 0.75, 2);
-  if (lead.description && lead.description.length > 50) score += 0.5;
-  if (lead.description && lead.description.length > 200) score += 0.5;
-
-  return Math.min(Math.round(score * 10) / 10, 10);
-}
-
 const CPG_KEYWORDS = [
   'supplement', 'skincare', 'beauty', 'food', 'beverage', 'drink',
   'nutrition', 'wellness', 'cosmetics', 'personal care', 'protein',
@@ -840,72 +756,12 @@ async function runDailyIntelligence() {
       results.errors.push({ source: 'domain_registration', error: e.message });
     }
 
-    // 5. Scrape Crunchbase
-    console.log('[LeadIntelligence] Scraping Crunchbase...');
-    try {
-      const cbLeads = await scrapeCrunchbase('consumer-goods');
-      results.sources.crunchbase = cbLeads;
-      console.log(`[LeadIntelligence] Crunchbase: ${cbLeads.length} leads found`);
-    } catch (e) {
-      console.error('[LeadIntelligence] Crunchbase error:', e.message);
-      results.errors.push({ source: 'crunchbase', error: e.message });
-    }
-
-    // 6. Scrape Clutch
-    console.log('[LeadIntelligence] Scraping Clutch...');
-    try {
-      const clutchLeads = await scrapeClutch('digital-marketing');
-      results.sources.clutch = clutchLeads;
-      console.log(`[LeadIntelligence] Clutch: ${clutchLeads.length} leads found`);
-    } catch (e) {
-      console.error('[LeadIntelligence] Clutch error:', e.message);
-      results.errors.push({ source: 'clutch', error: e.message });
-    }
-
-    // 7. Scrape G2
-    console.log('[LeadIntelligence] Scraping G2...');
-    try {
-      const g2Leads = await scrapeG2('ecommerce-platforms');
-      results.sources.g2 = g2Leads;
-      console.log(`[LeadIntelligence] G2: ${g2Leads.length} leads found`);
-    } catch (e) {
-      console.error('[LeadIntelligence] G2 error:', e.message);
-      results.errors.push({ source: 'g2', error: e.message });
-    }
-
-    // 8. Scrape BuiltIn
-    console.log('[LeadIntelligence] Scraping BuiltIn...');
-    try {
-      const biLeads = await scrapeBuiltIn('consumer-goods');
-      results.sources.builtin = biLeads;
-      console.log(`[LeadIntelligence] BuiltIn: ${biLeads.length} leads found`);
-    } catch (e) {
-      console.error('[LeadIntelligence] BuiltIn error:', e.message);
-      results.errors.push({ source: 'builtin', error: e.message });
-    }
-
-    // 9. Scrape Y Combinator
-    console.log('[LeadIntelligence] Scraping Y Combinator...');
-    try {
-      const ycLeads = await scrapeYCCombinator();
-      results.sources.ycombinator = ycLeads;
-      console.log(`[LeadIntelligence] Y Combinator: ${ycLeads.length} leads found`);
-    } catch (e) {
-      console.error('[LeadIntelligence] Y Combinator error:', e.message);
-      results.errors.push({ source: 'ycombinator', error: e.message });
-    }
-
     // Combine all leads and deduplicate
     const allLeads = [
       ...(results.sources.producthunt || []),
       ...(results.sources.kickstarter || []),
       ...(results.sources.shopify || []),
-      ...(results.sources.domain_registration || []),
-      ...(results.sources.crunchbase || []),
-      ...(results.sources.clutch || []),
-      ...(results.sources.g2 || []),
-      ...(results.sources.builtin || []),
-      ...(results.sources.ycombinator || [])
+      ...(results.sources.domain_registration || [])
     ];
 
     // Deduplicate by domain
@@ -972,128 +828,6 @@ async function runDailyIntelligence() {
     results.completedAt = new Date().toISOString();
     return results;
   }
-}
-
-// ==================== New Source Scrapers ====================
-
-async function scrapeCrunchbase(category = 'consumer-goods') {
-  const leads = [];
-  try {
-    if (process.env.CRUNCHBASE_API_KEY) {
-      const url = `https://api.crunchbase.com/api/v4/searches/organizations?query=${encodeURIComponent(category)}&limit=20&field_ids=name,short_description,website,linkedin,funding_total,num_employees_enum,founded_on`;
-      const response = await withRetry(() => fetchWithTimeout(url, { headers: { 'X-Cb-User-Key': process.env.CRUNCHBASE_API_KEY, 'Accept': 'application/json' } }, 15000));
-      if (response.ok) {
-        const data = await response.json();
-        for (const entity of (data?.entities || [])) {
-          const props = entity.properties || {};
-          const domain = (props.website?.value || '').replace(/^https?:\/\//, '').replace(/\/$/, '');
-          if (!domain) continue;
-          leads.push({ source: 'crunchbase', name: props.name, domain, description: props.short_description, funding: props.funding_total?.value_usd || 0, employees: props.num_employees_enum, url: domain.startsWith('http') ? domain : `https://${domain}`, industry: category });
-        }
-      }
-    } else {
-      const url = `https://www.crunchbase.com/discover/organization.companies/${encodeURIComponent(category)}`;
-      const response = await withRetry(() => fetchWithTimeout(url, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; LeadIntelligence/1.0)' } }, 15000));
-      if (response.ok) {
-        const html = await response.text();
-        for (const match of html.matchAll(/<a[^>]*href="\/organization\/([^"]+)"[^>]*>([^<]+)<\/a>/g)) {
-          const slug = match[1], name = match[2].trim();
-          if (name && slug && !slug.includes('/') && name.length > 1) {
-            leads.push({ source: 'crunchbase', name, domain: `${slug.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`, description: `Crunchbase company: ${name}`, url: `https://www.crunchbase.com/organization/${slug}`, industry: category });
-          }
-        }
-      }
-    }
-  } catch (err) { console.error('Crunchbase scrape error:', err.message); }
-  return leads;
-}
-
-async function scrapeClutch(category = 'digital-marketing') {
-  const leads = [];
-  try {
-    const url = `https://clutch.co/${encodeURIComponent(category)}`;
-    const response = await withRetry(() => fetchWithTimeout(url, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; LeadIntelligence/1.0)' } }, 15000));
-    if (response.ok) {
-      const html = await response.text();
-      for (const match of html.matchAll(/<h3[^>]*class="[^"]*company-name[^"]*"[^>]*>.*?<a[^>]*href="([^"]*)"[^>]*>([^<]+)<\/a>/gs)) {
-        const linkUrl = match[1]?.startsWith('http') ? match[1] : `https://clutch.co${match[1]}`;
-        const name = match[2]?.trim();
-        if (name && linkUrl) leads.push({ source: 'clutch', name, domain: extractDomain(linkUrl) || 'clutch.co', description: `Clutch profile: ${name}`, url: linkUrl, industry: category });
-      }
-    }
-  } catch (err) { console.error('Clutch scrape error:', err.message); }
-  return leads;
-}
-
-async function scrapeG2(category = 'ecommerce-platforms') {
-  const leads = [];
-  try {
-    const url = `https://www.g2.com/categories/${encodeURIComponent(category)}`;
-    const response = await withRetry(() => fetchWithTimeout(url, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; LeadIntelligence/1.0)' } }, 15000));
-    if (response.ok) {
-      const html = await response.text();
-      for (const match of html.matchAll(/"product_name":"([^"]+)","product_shortname":"([^"]+)".*?"vendor_name":"([^"]+)"/g)) {
-        if (match[1] && match[3]) {
-          leads.push({ source: 'g2', name: match[3], domain: `${match[3].toLowerCase().replace(/[^a-z0-9]/g, '')}.com`, description: `${match[1]} — G2 category: ${category}`, url: `https://www.g2.com/products/${match[2]}/reviews`, industry: category });
-        }
-      }
-    }
-  } catch (err) { console.error('G2 scrape error:', err.message); }
-  return leads;
-}
-
-async function scrapeBuiltIn(category = 'consumer-goods') {
-  const leads = [];
-  try {
-    const url = `https://builtin.com/companies/industry/${encodeURIComponent(category)}`;
-    const response = await withRetry(() => fetchWithTimeout(url, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; LeadIntelligence/1.0)' } }, 15000));
-    if (response.ok) {
-      const html = await response.text();
-      for (const match of html.matchAll(/<a[^>]*href="\/company\/([^"]*)"[^>]*>((?:(?!<\/a>).)*)<\/a>/gs)) {
-        const slug = match[1], content = match[2];
-        const nameMatch = content.match(/<h[23][^>]*>([^<]+)<\/h[23]>/);
-        if (slug && nameMatch) {
-          leads.push({ source: 'builtin', name: nameMatch[1].trim(), domain: `${slug.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`, description: `BuiltIn company — ${category}`, url: `https://builtin.com/company/${slug}`, industry: category });
-        }
-      }
-    }
-  } catch (err) { console.error('BuiltIn scrape error:', err.message); }
-  return leads;
-}
-
-async function scrapeYCCombinator() {
-  const leads = [];
-  try {
-    const waaSUrl = 'https://www.workatastartup.com/companies';
-    const response = await withRetry(() => fetchWithTimeout(waaSUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; LeadIntelligence/1.0)', 'Accept': 'application/json' } }, 15000));
-    if (response.ok) {
-      try {
-        const data = await response.json();
-        for (const company of (data.companies || [])) {
-          if (!company.name) continue;
-          const desc = (company.description || company.long_description || '').toLowerCase();
-          const isCPG = CPG_KEYWORDS.some(kw => desc.includes(kw.toLowerCase()));
-          if (isCPG || company.tags?.some(t => CPG_KEYWORDS.some(kw => t.toLowerCase().includes(kw)))) {
-            leads.push({ source: 'ycombinator', name: company.name, domain: company.website ? extractDomain(company.website) : `${company.name.toLowerCase().replace(/[^a-z]/g, '')}.com`, description: company.description || company.long_description, funding: 500000, employees: company.team_size, url: company.website || `https://www.ycombinator.com/companies/${company.slug}`, fundingRound: 'YC' });
-          }
-        }
-      } catch (jsonErr) { console.warn('YC API returned non-JSON:', jsonErr.message); }
-    }
-    if (leads.length < 5) {
-      const launchUrl = 'https://www.ycombinator.com/companies?industry=Consumer';
-      const launchResp = await withRetry(() => fetchWithTimeout(launchUrl, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; LeadIntelligence/1.0)' } }, 15000));
-      if (launchResp.ok) {
-        const html = await launchResp.text();
-        for (const match of html.matchAll(/<a[^>]*href="\/companies\/([^"]+)"[^>]*>\s*(?:<span[^>]*>)?\s*([^<\n]+)/g)) {
-          const slug = match[1], name = match[2]?.trim();
-          if (name && slug && !leads.some(l => l.name === name)) {
-            leads.push({ source: 'ycombinator', name, domain: `${slug.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`, url: `https://www.ycombinator.com/companies/${slug}`, industry: 'Consumer', funding: 500000, fundingRound: 'YC' });
-          }
-        }
-      }
-    }
-  } catch (err) { console.error('YC Combinator scrape error:', err.message); }
-  return leads;
 }
 
 // ==================== Helper Functions ====================
@@ -1352,19 +1086,11 @@ export {
   scrapeKickstarter,
   scrapeShopifyNewStores,
   scrapeDomainRegs,
-  scrapeCrunchbase,
-  scrapeClutch,
-  scrapeG2,
-  scrapeBuiltIn,
-  scrapeYCCombinator,
   enrichLead,
   addToOutreachQueue,
   runDailyIntelligence,
-  scoreLead,
   // Export helpers for testing
   extractDomain,
   detectDTCPlatform,
-  guessBrandNameFromDomain,
-  withRetry,
-  fetchWithTimeout
+  guessBrandNameFromDomain
 };

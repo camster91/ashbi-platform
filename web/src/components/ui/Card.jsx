@@ -7,7 +7,6 @@ const Card = forwardRef(({
   padding = 'md',
   isInteractive = false,
   className,
-  onKeyDown,
   ...props
 }, ref) => {
   const variants = {
@@ -27,19 +26,6 @@ const Card = forwardRef(({
     xl: 'p-10',
   };
 
-  const interactiveProps = isInteractive ? {
-    role: 'button',
-    tabIndex: 0,
-    'aria-pressed': props['aria-pressed'] || undefined,
-    onKeyDown: (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        if (props.onClick) props.onClick(e);
-      }
-      if (onKeyDown) onKeyDown(e);
-    },
-  } : {};
-
   return (
     <div
       ref={ref}
@@ -51,7 +37,6 @@ const Card = forwardRef(({
         className
       )}
       {...props}
-      {...interactiveProps}
     >
       {children}
     </div>
