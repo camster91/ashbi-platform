@@ -99,6 +99,9 @@ Email 1: Lead with observation about their brand, one line of value. Email 2: Sh
           industry: p.industry || null,
           painPoint: p.painPoint || null,
           status: 'NEW',
+          source: p.source || 'Ashbi',
+          linkedinUrl: p.linkedinUrl || null,
+          auditNotes: p.auditNotes || null,
           sequenceId: sequenceId || null
         }
       });
