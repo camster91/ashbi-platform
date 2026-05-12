@@ -190,3 +190,34 @@ async function syncTasksFromPlan(prisma, projectId, plan) {
     }
   }
 }
+
+/**
+ * Update health scores for all projects (called by health worker cron)
+ */
+export async function updateAllProjectHealth(prismaClient) {
+  const prisma = prismaClient || (await import('../config/db.js')).default;
+
+  const projects = await prisma.project.findMany({
+    include: {
+      threads: { where: { status: { not: 'RESOLVED' } } }
+    }
+  });
+
+  let updated = 0;
+  for (const project of projects) {
+    const score = calculateHealthScore(project, project.threads);
+    const health = getHealthStatus(score);
+    await prisma.project.update({
+      where: { id: project.id },
+      data: {
+        healthScore: score,
+        health,
+        healthHistory: { push: { health, score, timestamp: new Date().toISOString() } }
+      }
+    });
+    updated++;
+  }
+
+  console.log(`[health] Updated ${updated} projects`);
+  return updated;
+}
