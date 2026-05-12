@@ -245,6 +245,9 @@ export default function LeadIntelligence() {
                   <td className="px-4 py-3 hidden lg:table-cell text-xs text-muted-foreground">
                     {lead.foundAt ? new Date(lead.foundAt).toLocaleDateString('en-CA') : '—'}
                   </td>
+                  <td className="px-3 py-3 hidden md:table-cell">
+                    <ScoreBadge score={lead.score} />
+                  </td>
                   <td className="px-4 py-3">
                     <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', STATUS_COLORS[lead.status] || 'bg-muted text-muted-foreground')}>
                       {lead.status}

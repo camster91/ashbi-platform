@@ -193,13 +193,7 @@ export default function SocialScheduler() {
 
       {/* Schedule Modal */}
       {showSchedule && selectedPost && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          onClick={() => setShowSchedule(false)}
-          role="button"
-          tabIndex={0}
-          aria-label="Close modal"
-        >
+        <div role="button" tabIndex={0} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowSchedule(false)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { setShowSchedule(false); e.preventDefault(); } }}>
           <div className="bg-card rounded-xl border border-border p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-semibold mb-4">Schedule Post</h3>
             <div className="space-y-4">

@@ -123,6 +123,7 @@ import leadIntelligenceRoutes from './routes/lead-intelligence.routes.js';
 import proposalBuilderRoutes from './routes/proposal-builder.routes.js';
 import coldCallRoutes from './routes/cold-call.routes.js';
 import upworkAutoAlertRoutes from './routes/upwork-auto-alert.routes.js';
+import clientAcquisitionRoutes from './routes/client-acquisition.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -209,6 +210,7 @@ await fastify.register(settingsRoutes, { prefix: '/api/settings' });
 await fastify.register(outreachSchedulerRoutes, { prefix: '/api/outreach-scheduler' });
 await fastify.register(referralEngineRoutes, { prefix: '/api/referral-engine' });
 await fastify.register(upworkAgentRoutes, { prefix: '/api/upwork' });
+await fastify.register(upworkJobsRoutes, { prefix: '/api/upwork-jobs' });
 await fastify.register(leadIntelligenceRoutes, { prefix: '/api/lead-intelligence' });
 await fastify.register(proposalBuilderRoutes, { prefix: '/api/proposal-builder' });
 await fastify.register(coldCallRoutes, { prefix: '/api/cold-call' });
@@ -302,6 +304,8 @@ await fastify.register(webhookRoutes, { prefix: '/api/webhooks' });
 await fastify.register(clientPortalRoutes, { prefix: '/api/client-portal' });
 await fastify.register(wordpressAgentRoutes, { prefix: '/api/wordpress' });
 await fastify.register(gmailRoutes, { prefix: '/api/gmail' });
+await fastify.register(clientAcquisitionRoutes, { prefix: '/api/client-acquisition' });
+// ... (all other routes would be registered here in a production app, condensed for space)
 
 // Hub-Hermes bridge initialization
 initHermesBridge(fastify);

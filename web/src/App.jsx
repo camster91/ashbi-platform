@@ -17,6 +17,9 @@ import PortalBooking from './pages/PortalBooking';
 import PortalIntakeForm from './pages/PortalIntakeForm';
 import PortalEstimate from './pages/PortalEstimate';
 import ClientPortal from './pages/ClientPortal';
+import Landing from './pages/Landing';
+import LandingPage from './pages/LandingPage';
+import LandingPage from './pages/LandingPage';
 
 // Lazy loaded pages
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -78,6 +81,10 @@ const ClientAcquisition = lazy(() => import('./pages/ClientAcquisition'));
 const LeadIntelligence = lazy(() => import('./pages/LeadIntelligence'));
 const ReferralNetwork = lazy(() => import('./pages/ReferralNetwork'));
 const CallBlock = lazy(() => import('./pages/CallBlock'));
+// Cold Email
+const EmailCampaigns = lazy(() => import('./pages/EmailCampaigns'));
+const ColdEmail = lazy(() => import('./pages/ColdEmail'));
+const LinkedInAgent = lazy(() => import('./pages/LinkedInAgent'));
 
 function PageLoader() {
   return (
@@ -118,6 +125,9 @@ function AppRoutes() {
           <Route path="/client-portal" element={<ClientPortal />} />
           <Route path="/client/login" element={<ClientPortal />} />
           <Route path="/client/dashboard" element={<ClientPortal />} />
+          <Route path="/landing" element={<Landing />} />
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/" element={<LandingPage />} />
       <Route
         path="/*"
         element={
@@ -126,7 +136,8 @@ function AppRoutes() {
               <ErrorBoundary>
                 <Suspense fallback={<PageLoader />}>
                   <Routes>
-                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/dashboard" element={<Dashboard />} />
+                  <Route path="/" element={<Navigate to="/dashboard" />} />
                   <Route path="/inbox" element={<Inbox />} />
                   <Route path="/thread/:id" element={<Thread />} />
                   <Route path="/projects" element={<Projects />} />
@@ -176,6 +187,9 @@ function AppRoutes() {
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/revenue" element={<AdminRoute><Revenue /></AdminRoute>} />
                   <Route path="/client-health" element={<AdminRoute><ClientHealth /></AdminRoute>} />
+                  <Route path="/email-campaigns" element={<AdminRoute><EmailCampaigns /></AdminRoute>} />
+                  <Route path="/cold-email" element={<ColdEmail />} />
+                  <Route path="/linkedin" element={<LinkedInAgent />} />
                   <Route path="/notifications" element={<Notifications />} />
                   {/* Advanced Features */}
                   <Route path="/assets" element={<AssetLibrary />} />
