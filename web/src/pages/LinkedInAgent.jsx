@@ -224,6 +224,7 @@ function ImportProspectsModal({ onClose, onImported }) {
 
 function SequenceDetail({ seq, rateLimit, onClose, onSend }) {
   const [copied, setCopied] = useState('');
+  const toast = useToast();
 
   const copy = (text, label) => {
     navigator.clipboard.writeText(text);
