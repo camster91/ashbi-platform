@@ -10,8 +10,6 @@ const StatCard = forwardRef(({
   trendValue,
   variant = 'default',
   className,
-  onClick,
-  onKeyDown,
   ...props
 }, ref) => {
   const variants = {
@@ -41,32 +39,15 @@ const StatCard = forwardRef(({
   const TrendIcon = trend === 'up' ? TrendingUp : trend === 'down' ? TrendingDown : Minus;
   const trendColor = trend === 'up' ? 'text-success' : trend === 'down' ? 'text-destructive' : 'text-muted-foreground';
 
-  const isInteractive = !!onClick;
-  const interactiveProps = isInteractive ? {
-    role: 'button',
-    tabIndex: 0,
-    'aria-label': `${label}: ${value}`,
-    onKeyDown: (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        onClick(e);
-      }
-      if (onKeyDown) onKeyDown(e);
-    },
-  } : {};
-
   return (
     <div
       ref={ref}
       className={cn(
         'relative overflow-hidden rounded-xl border p-5',
         'transition-all duration-200 hover:-translate-y-1 hover:shadow-lg',
-        onClick && 'cursor-pointer',
         variants[variant],
         className
       )}
-      onClick={onClick}
-      {...interactiveProps}
       {...props}
     >
       <div className="flex items-start justify-between">

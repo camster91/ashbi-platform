@@ -329,7 +329,7 @@ export default function Blog() {
           {posts.map(post => (
             <div key={post.id} className="bg-card rounded-xl border border-border p-4 hover:border-primary/30 transition-colors group">
               <div className="flex items-start gap-4">
-                <div className="flex-1 min-w-0 cursor-pointer" role="button" tabIndex={0} onClick={() => openEditor(post)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { openEditor(post); e.preventDefault(); } }}>
+                <div className="flex-1 min-w-0 cursor-pointer" onClick={() => openEditor(post)}>
                   <div className="flex items-center gap-2 mb-1">
                     <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', STATUS_COLORS[post.status])}>
                       {post.status}

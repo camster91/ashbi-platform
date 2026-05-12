@@ -151,10 +151,7 @@ export default function Layout({ children }) {
     { name: 'Contracts', href: '/contracts', icon: ScrollText },
     { name: 'Expenses', href: '/expenses', icon: Wallet },
     { name: 'Schedule', href: '/schedule', icon: Calendar },
-    { name: 'Upwork', icon: Briefcase, children: [
-      { name: 'Job Tracker', href: '/upwork', icon: Target },
-      { name: 'Contracts', href: '/upwork-contracts', icon: ScrollText },
-    ]},
+    { name: 'Upwork', href: '/upwork-contracts', icon: Briefcase },
   ];
 
   // Admin — collapsible section, only visible to admins

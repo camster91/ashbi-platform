@@ -41,7 +41,7 @@ async function test() {
     console.log('✨ All tests passed! Playwright is working correctly.\n');
     
   } catch (err) {
-    console.warn('❌ Test failed:', err.message);
+    console.error('❌ Test failed:', err.message);
     process.exit(1);
   } finally {
     await browser.close();

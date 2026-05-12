@@ -125,12 +125,12 @@ export default function ClientDashboard() {
                   <div className="mb-3">
                     <div className="flex justify-between mb-1 text-xs">
                       <span className="text-muted-foreground">Progress</span>
-                      <span className="font-medium text-foreground">{project.progressPct || 0}%</span>
+                      <span className="font-medium text-foreground">{project.progress || 0}%</span>
                     </div>
                     <div className="w-full bg-muted rounded-full h-2">
                       <div
                         className="bg-primary h-2 rounded-full transition-all"
-                        style={{ width: `${project.progressPct || 0}%` }}
+                        style={{ width: `${project.progress || 0}%` }}
                       />
                     </div>
                   </div>

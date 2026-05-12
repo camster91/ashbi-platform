@@ -57,8 +57,6 @@ function sanitizeHeader(value) {
 
 /**
  * Encode string to base64url format (URL-safe base64)
- * @param {string} str - String to encode
- * @returns {string} Base64 URL-safe encoded string
  */
 function toBase64Url(str) {
   return Buffer.from(str)
@@ -195,10 +193,6 @@ function quotedPrintableEncode(text) {
 
 /**
  * Create a Gmail draft
- * @param {string} toEmail - Recipient email address
- * @param {string} subject - Email subject
- * @param {string} body - Email body content
- * @returns {Promise<object>} API response with draft info
  */
 async function createDraft(toEmail, subject, body) {
   if (!MATON_API_KEY) {
@@ -372,8 +366,6 @@ async function sendEmail(toEmail, subject, body, pdfBuffer = null, attachmentNam
 
 /**
  * Search inbox for messages matching query
- * @param {string} query - Gmail search query
- * @returns {Promise<object>} API response with matching messages
  */
 async function searchInbox(query) {
   if (!MATON_API_KEY) {
