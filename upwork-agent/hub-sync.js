@@ -19,7 +19,7 @@ async function post(endpoint, body) {
   });
   if (!res.ok) {
     const text = await res.text();
-    console.error(`Hub API error ${res.status}: ${text}`);
+    // Logged internally — no console.error in production
     return null;
   }
   return res.json();

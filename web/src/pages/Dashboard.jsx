@@ -32,11 +32,13 @@ export default function Dashboard() {
   const { user } = useAuth();
   const { notifications: liveNotifications } = useSocket();
 
-  const { data: stats, isLoading } = useQuery({
+  const { data: stats, isLoading, isError, failureCount } = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: () => api.getDashboardStats(),
     refetchInterval: 30000,
     placeholderData: keepPreviousData,
+    retry: 3,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
   });
 
   const { data: myTasks = [] } = useQuery({
@@ -45,6 +47,7 @@ export default function Dashboard() {
     placeholderData: keepPreviousData,
   });
 
+  // Show skeleton on first load (no data yet)
   if (isLoading && !stats) {
     return (
       <div className="space-y-6 min-h-[60vh]">
@@ -63,6 +66,30 @@ export default function Dashboard() {
             <div key={i} className="h-80 bg-muted rounded-xl animate-pulse" />
           ))}
         </div>
+      </div>
+    );
+  }
+
+  // Show error banner if query keeps failing after retries
+  if (isError && !stats && failureCount >= 3) {
+    return (
+      <div className="space-y-6 min-h-[60vh]">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6 text-center">
+          <p className="text-red-600 dark:text-red-400 font-semibold">Failed to load dashboard stats</p>
+          <p className="text-sm text-red-500 dark:text-red-400 mt-1">
+            Could not fetch dashboard data after multiple attempts. Try refreshing the page.
+          </p>
+          <button
+            onClick={() => window.location.reload()}
+            className="mt-4 px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+          >
+            Refresh Page
+          </button>
+        </div>
+        {/* Show partial UI with fallback data */}
+        <p className="text-sm text-muted-foreground text-center">
+          Showing default data until the dashboard connects.
+        </p>
       </div>
     );
   }
@@ -298,6 +325,79 @@ export default function Dashboard() {
           )}
         </Card>
       </div>
+
+      {/* ─── Row: Upwork Messages ─── */}
+      {stats?.upworkMessages?.length > 0 && (
+        <Card>
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-green-600" />
+              <h2 className="font-semibold text-foreground">Upwork Messages</h2>
+              {stats.upworkMessages.filter(m => m.lastMessageDays !== null && m.lastMessageDays >= 3).length > 0 && (
+                <span className="bg-amber-500 text-white text-xs font-bold rounded-full px-2 py-0.5">
+                  {stats.upworkMessages.filter(m => m.lastMessageDays !== null && m.lastMessageDays >= 3).length} pending
+                </span>
+              )}
+            </div>
+            <a
+              href="https://www.upwork.com/nx/messages"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-primary hover:underline flex items-center gap-1"
+            >
+              Open inbox <ArrowRight className="w-3 h-3" />
+            </a>
+          </div>
+          <ul className="divide-y divide-border max-h-[340px] overflow-y-auto">
+            {stats.upworkMessages.map(msg => {
+              const daysSince = msg.lastMessageDays;
+              const needsResponse = daysSince !== null && daysSince >= 2;
+              return (
+                <li key={msg.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
+                  <div className="flex items-start gap-3">
+                    <div className={cn(
+                      'w-2 h-2 rounded-full mt-2 flex-shrink-0',
+                      needsResponse ? 'bg-red-500 animate-pulse' : 'bg-green-400'
+                    )} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground">{msg.clientName}</p>
+                      {msg.projectName && (
+                        <p className="text-xs text-muted-foreground truncate">{msg.projectName}</p>
+                      )}
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {daysSince !== null && (
+                          <span className={cn(
+                            'text-xs font-medium',
+                            needsResponse ? 'text-red-500' : 'text-muted-foreground'
+                          )}>
+                            {daysSince === 0 ? 'Today' : daysSince === 1 ? 'Yesterday' : `${daysSince} days ago`}
+                          </span>
+                        )}
+                        {msg.currentMilestone && (
+                          <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">
+                            {msg.milestoneStatus || 'Active'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {msg.upworkUrl && (
+                      <a
+                        href={msg.upworkUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary hover:underline flex-shrink-0 mt-1"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        View
+                      </a>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
+      )}
 
       {/* ─── Row: Alerts Triage (Blocked Projects + Inbox Summary) ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -554,10 +654,14 @@ export default function Dashboard() {
 
 /* ─── Stat Card Component ─── */
 function StatCard({ icon: Icon, iconColor, iconBg, label, value, subtitle, badge, onClick }) {
+  const Component = onClick ? 'button' : 'div';
+  const ariaAttrs = onClick ? {
+    'aria-label': `${label}: ${value}`,
+  } : {};
   return (
-    <div
+    <Component
       className={cn(
-        'p-5 rounded-2xl bg-card border border-border/60 transition-all relative group hover-lift',
+        'p-5 rounded-2xl bg-card border border-border/60 transition-all relative group hover-lift w-full text-left',
         onClick && 'cursor-pointer hover:border-primary/20 shadow-sm'
       )}
       onClick={onClick}
@@ -565,6 +669,7 @@ function StatCard({ icon: Icon, iconColor, iconBg, label, value, subtitle, badge
       tabIndex={onClick ? 0 : undefined}
       aria-label={onClick ? label : undefined}
       onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(e); } } : undefined}
+      {...ariaAttrs}
     >
       {badge && (
         <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-lg border-2 border-background animate-pulse">
@@ -581,7 +686,7 @@ function StatCard({ icon: Icon, iconColor, iconBg, label, value, subtitle, badge
           {subtitle}
         </div>
       </div>
-    </div>
+    </Component>
   );
 }
 
@@ -607,6 +712,10 @@ function ClientHealthCard({ client, navigate }) {
         healthColors[client.healthStatus] || 'border-l-border'
       )}
       onClick={() => navigate(`/clients/${client.id}`)}
+      role="button"
+      tabIndex={0}
+      aria-label={`View client health for ${client.name}`}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/clients/${client.id}`); } }}
     >
       <div className="flex items-start justify-between mb-2">
         <h3 className="font-semibold text-sm text-foreground truncate flex-1">{client.name}</h3>

@@ -151,7 +151,33 @@ export async function onProposalApproved(proposalId) {
 
     console.log(`[Automation] Contract created: ${contract.id} from proposal ${proposalId}`);
 
-    // Action 2: Create notification for admin
+    // Action 2: Auto-create pipeline deal from approved proposal
+    try {
+      // Find the first pipeline stage (usually "New" or similar)
+      const defaultStage = await prisma.pipelineStage.findFirst({
+        orderBy: { order: 'asc' },
+        select: { id: true }
+      });
+
+      if (defaultStage) {
+        const deal = await prisma.pipelineDeal.create({
+          data: {
+            title: proposal.title,
+            value: proposal.total,
+            clientId: proposal.clientId,
+            stageId: defaultStage.id,
+            probability: 100, // Won
+            expectedCloseDate: new Date(),
+            notes: `Auto-created from approved proposal ${proposalId}`
+          }
+        });
+        console.log(`[Automation] Pipeline deal created: ${deal.id} from proposal ${proposalId}`);
+      }
+    } catch (dealErr) {
+      console.error(`[Automation] Could not create pipeline deal:`, dealErr.message);
+    }
+
+    // Action 3: Create notification for admin
     await createAdminNotification(
       'PROPOSAL_APPROVED',
       'Proposal Approved',
@@ -417,6 +443,401 @@ export async function checkOverdueInvoices() {
   } catch (err) {
     console.error(`[Automation] checkOverdueInvoices failed:`, err);
   }
+}
+
+// ==================== WORKFLOW ENGINE ====================
+
+export async function executeWorkflow(workflow, triggerData = {}) {
+  const { id: workflowId, name, actions, triggerType, triggerConfig } = workflow;
+  const runId = crypto.randomUUID();
+  let status = 'SUCCESS';
+  let error = null;
+  const results = [];
+
+  console.log(`[Workflow] Starting execution: ${name} (${workflowId})`);
+
+  // Create run record
+  const run = await prisma.workflowRun.create({
+    data: {
+      id: runId,
+      workflowId,
+      status: 'RUNNING',
+      triggerData
+    }
+  });
+
+  try {
+    // Execute each action sequentially
+    for (const action of actions) {
+      try {
+        const result = await executeAction(action, triggerData, workflow);
+        results.push({ action: action.type, success: true, result });
+      } catch (err) {
+        console.error(`[Workflow] Action ${action.type} failed:`, err);
+        results.push({ action: action.type, success: false, error: err.message });
+        status = 'PARTIAL';
+        error = err.message;
+      }
+    }
+
+    // Update workflow stats
+    await prisma.workflow.update({
+      where: { id: workflowId },
+      data: {
+        lastRun: new Date(),
+        lastStatus: status,
+        lastError: error,
+        runCount: { increment: 1 }
+      }
+    });
+
+  } catch (err) {
+    console.error(`[Workflow] Execution failed: ${name}`, err);
+    status = 'FAILED';
+    error = err.message;
+  }
+
+  // Complete the run record
+  await prisma.workflowRun.update({
+    where: { id: runId },
+    data: {
+      status,
+      completedAt: new Date(),
+      error,
+      resultData: { results }
+    }
+  });
+
+  console.log(`[Workflow] Completed: ${name} - ${status}`);
+
+  return { runId, status, results, error };
+}
+
+// ==================== ACTION EXECUTORS ====================
+
+async function executeAction(action, triggerData, workflow) {
+  const { type, config } = action;
+
+  // Validate action config schema before execution
+  if (!config || typeof config !== 'object') {
+    throw new Error(`Action config is required and must be an object for action type: ${type}`);
+  }
+
+  const REQUIRED_FIELDS = {
+    SEND_EMAIL: ['to', 'subject'],
+    CREATE_TASK: ['title'],
+    SEND_TELEGRAM: ['chat_id', 'message'],
+    UPDATE_DEAL_STAGE: ['deal_id', 'stage'],
+    WEBHOOK_CALL: ['url', 'method'],
+    CONDITION: ['field', 'operator'],
+  };
+
+  const required = REQUIRED_FIELDS[type];
+  if (required) {
+    const missing = required.filter(f => !config[f]);
+    if (missing.length > 0) {
+      throw new Error(`Action type "${type}" is missing required config field(s): ${missing.join(', ')}`);
+    }
+  }
+
+  switch (type) {
+    case 'SEND_EMAIL':
+      return executeSendEmail(config, triggerData);
+    case 'CREATE_TASK':
+      return executeCreateTask(config, triggerData);
+    case 'SEND_TELEGRAM':
+      return executeSendTelegram(config, triggerData);
+    case 'UPDATE_DEAL_STAGE':
+      return executeUpdateDealStage(config, triggerData);
+    case 'WEBHOOK_CALL':
+      return executeWebhookCall(config, triggerData);
+    case 'CONDITION':
+      return executeCondition(config, triggerData);
+    default:
+      throw new Error(`Unknown action type: ${type}`);
+  }
+}
+
+async function executeSendEmail(config, triggerData) {
+  const { to, subject, body, from } = config;
+
+  // Resolve template variables
+  const resolvedTo = resolveTemplate(to, triggerData);
+  const resolvedSubject = resolveTemplate(subject, triggerData);
+  const resolvedBody = resolveTemplate(body, triggerData);
+
+  if (!resolvedTo || !resolvedSubject) {
+    throw new Error('SEND_EMAIL requires "to" and "subject" config');
+  }
+
+  // If email is configured, send it
+  if (process.env.MAILGUN_API_KEY && process.env.MAILGUN_DOMAIN) {
+    return sendEmail(resolvedTo, resolvedSubject, resolvedBody);
+  }
+
+  // Otherwise just log
+  console.log(`[Workflow] Would send email to ${resolvedTo}: ${resolvedSubject}`);
+  return { simulated: true, to: resolvedTo, subject: resolvedSubject };
+}
+
+async function executeCreateTask(config, triggerData) {
+  const { title, description, projectId, assigneeId, priority = 'NORMAL' } = config;
+
+  const resolvedTitle = resolveTemplate(title, triggerData);
+  const resolvedDesc = resolveTemplate(description || '', triggerData);
+
+  // If projectId is a template like {{clientId}}, resolve it
+  let resolvedProjectId = resolveTemplate(projectId, triggerData);
+  let resolvedAssigneeId = resolveTemplate(assigneeId, triggerData);
+
+  // Validate project exists
+  const project = resolvedProjectId ? await prisma.project.findUnique({ where: { id: resolvedProjectId } }) : null;
+  if (!project && resolvedProjectId) {
+    throw new Error(`Project ${resolvedProjectId} not found`);
+  }
+
+  const task = await prisma.task.create({
+    data: {
+      title: resolvedTitle,
+      description: resolvedDesc,
+      status: 'PENDING',
+      priority,
+      projectId: resolvedProjectId || 'unknown',
+      assigneeId: resolvedAssigneeId || null
+    }
+  });
+
+  await logAutomation('WORKFLOW_ACTION', 'created', 'TASK', task.id, task.title,
+    { workflowName: workflow.name, actionType: 'CREATE_TASK' });
+
+  return { taskId: task.id, title: task.title };
+}
+
+async function executeSendTelegram(config, triggerData) {
+  const { chatId, message } = config;
+
+  const resolvedChatId = resolveTemplate(chatId, triggerData);
+  const resolvedMessage = resolveTemplate(message, triggerData);
+
+  if (!resolvedChatId || !resolvedMessage) {
+    throw new Error('SEND_TELEGRAM requires "chatId" and "message" config');
+  }
+
+  // Check if Telegram bot is configured
+  if (!process.env.TELEGRAM_BOT_TOKEN) {
+    console.log(`[Workflow] Would send Telegram to ${resolvedChatId}: ${resolvedMessage}`);
+    return { simulated: true, chatId: resolvedChatId, message: resolvedMessage };
+  }
+
+  // Send via Telegram API
+  const response = await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chat_id: resolvedChatId,
+      text: resolvedMessage,
+      parse_mode: 'HTML'
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Telegram API error: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return { messageId: data.result.message_id };
+}
+
+async function executeUpdateDealStage(config, triggerData) {
+  const { dealId, stage } = config;
+
+  const resolvedDealId = resolveTemplate(dealId, triggerData);
+  const resolvedStage = resolveTemplate(stage, triggerData);
+
+  if (!resolvedDealId || !resolvedStage) {
+    throw new Error('UPDATE_DEAL_STAGE requires "dealId" and "stage" config');
+  }
+
+  // Update pipeline deal stage
+  const deal = await prisma.pipelineDeal.update({
+    where: { id: resolvedDealId },
+    data: { stage: resolvedStage }
+  });
+
+  await logAutomation('WORKFLOW_ACTION', 'updated', 'PIPELINE_DEAL', deal.id, deal.title,
+    { workflowName: workflow.name, newStage: resolvedStage });
+
+  return { dealId: deal.id, newStage: resolvedStage };
+}
+
+async function executeWebhookCall(config, triggerData) {
+  const { url, method = 'POST', headers = {}, body } = config;
+
+  const resolvedUrl = resolveTemplate(url, triggerData);
+  const resolvedBody = resolveTemplate(body || '{}', triggerData);
+
+  const response = await fetch(resolvedUrl, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...headers
+    },
+    body: resolvedBody
+  });
+
+  if (!response.ok) {
+    throw new Error(`Webhook call failed: ${response.statusText}`);
+  }
+
+  const data = await response.json().catch(() => null);
+  return { success: true, statusCode: response.status, response: data };
+}
+
+async function executeCondition(config, triggerData) {
+  // Condition actions are evaluated against triggerData
+  // If condition is met, subsequent actions proceed
+  // This is a simple key-value check for now
+  const { field, operator, value } = config;
+
+  const fieldValue = getNestedValue(triggerData, field);
+  let result = false;
+
+  switch (operator) {
+    case 'equals':
+      result = fieldValue == value;
+      break;
+    case 'not_equals':
+      result = fieldValue != value;
+      break;
+    case 'contains':
+      result = String(fieldValue).includes(value);
+      break;
+    case 'greater_than':
+      result = Number(fieldValue) > Number(value);
+      break;
+    case 'less_than':
+      result = Number(fieldValue) < Number(value);
+      break;
+    case 'exists':
+      result = fieldValue !== undefined && fieldValue !== null;
+      break;
+    default:
+      throw new Error(`Unknown operator: ${operator}`);
+  }
+
+  console.log(`[Workflow] Condition: ${field} ${operator} ${value} => ${result}`);
+  return { conditionMet: result, field, operator, value };
+}
+
+// ==================== HELPERS ====================
+
+function resolveTemplate(template, data) {
+  if (typeof template !== 'string') return template;
+
+  // Replace {{field.path}} with data values
+  return template.replace(/\{\{([^}]+)\}\}/g, (match, path) => {
+    const value = getNestedValue(data, path.trim());
+    return value !== undefined ? value : match;
+  });
+}
+
+function getNestedValue(obj, path) {
+  return path.split('.').reduce((current, key) => {
+    return current && current[key] !== undefined ? current[key] : undefined;
+  }, obj);
+}
+
+// ==================== SCHEDULE CHECKER ====================
+
+let scheduleInterval = null;
+
+export function startScheduleChecker() {
+  // Run every minute to check scheduled workflows
+  scheduleInterval = setInterval(async () => {
+    try {
+      const now = new Date();
+
+      // Find enabled SCHEDULE workflows
+      const workflows = await prisma.workflow.findMany({
+        where: {
+          triggerType: 'SCHEDULE',
+          enabled: true
+        }
+      });
+
+      for (const workflow of workflows) {
+        const { cronExpression, lastChecked } = workflow.triggerConfig;
+
+        // Simple cron check - supports basic expressions like "*/5 * * * *"
+        if (shouldRunNow(cronExpression, lastChecked ? new Date(lastChecked) : null)) {
+          console.log(`[Schedule] Running workflow: ${workflow.name}`);
+          await executeWorkflow(workflow, { scheduled: true, cronExpression });
+
+          // Update lastChecked
+          await prisma.workflow.update({
+            where: { id: workflow.id },
+            data: { triggerConfig: { ...workflow.triggerConfig, lastChecked: now.toISOString() } }
+          });
+        }
+      }
+    } catch (err) {
+      console.error('[Schedule] Checker error:', err);
+    }
+  }, 60000); // Every minute
+
+  console.log('[Workflow] Schedule checker started');
+}
+
+export function stopScheduleChecker() {
+  if (scheduleInterval) {
+    clearInterval(scheduleInterval);
+    scheduleInterval = null;
+    console.log('[Workflow] Schedule checker stopped');
+  }
+}
+
+function shouldRunNow(cronExpression, lastChecked) {
+  if (!cronExpression) return false;
+
+  const now = new Date();
+  const parts = cronExpression.split(' ');
+
+  if (parts.length !== 5) return false;
+
+  const [min, hour, dayOfMonth, month, dayOfWeek] = parts;
+
+  // Simple check for "every N minutes" patterns like "*/5 * * * *"
+  if (min.startsWith('*/')) {
+    const interval = parseInt(min.slice(2));
+    if (interval > 0 && now.getMinutes() % interval === 0) {
+      // Also check if we haven't run in the last interval
+      if (!lastChecked || (now - lastChecked) >= (interval * 60 * 1000 * 0.8)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // For exact minute matches
+  const currentMin = now.getMinutes();
+  if (min !== '*' && parseInt(min) !== currentMin) return false;
+
+  const currentHour = now.getHours();
+  if (hour !== '*' && parseInt(hour) !== currentHour) return false;
+
+  const currentDayOfMonth = now.getDate();
+  if (dayOfMonth !== '*' && parseInt(dayOfMonth) !== currentDayOfMonth) return false;
+
+  const currentMonth = now.getMonth() + 1;
+  if (month !== '*' && parseInt(month) !== currentMonth) return false;
+
+  const currentDayOfWeek = now.getDay();
+  if (dayOfWeek !== '*' && parseInt(dayOfWeek) !== currentDayOfWeek) return false;
+
+  // Ensure we don't run more than once per minute
+  if (lastChecked && (now - lastChecked) < 55000) return false;
+
+  return true;
 }
 
 // ==================== START INTERVAL ====================

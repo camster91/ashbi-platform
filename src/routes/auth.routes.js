@@ -518,16 +518,38 @@ export default async function authRoutes(fastify) {
       }
     });
 
-    // Send email (placeholder - integrate with Mailgun)
+    // Send invitation email via Mailgun
     const inviteLink = `${process.env.HUB_URL || 'https://hub.ashbi.ca'}/client/invite?token=${token}`;
-    
-    try {
-      // TODO: Send via Mailgun
-      console.log(`Client invitation link: ${inviteLink}`);
-      // await sendInviteEmail(email, inviteLink);
-    } catch (err) {
-      console.error('Failed to send invitation email:', err);
-      // Don't fail the request, invitation is still created
+
+    if (env.mailgunApiKey && env.mailgunDomain) {
+      try {
+        const mg = new Mailgun(FormData);
+        const mgClient = mg.client({
+          username: 'api',
+          key: env.mailgunApiKey
+        });
+
+        await mgClient.messages.create(env.mailgunDomain, {
+          from: `Ashbi Design <noreply@${env.mailgunDomain}>`,
+          to: email,
+          subject: 'You have been invited to Ashbi Hub',
+          html: `
+            <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#0f172a;color:#f1f5f9;padding:40px;border-radius:12px;">
+              <h2 style="color:#c9a84c;margin-top:0;">You've been invited</h2>
+              <p>You have been invited to join Ashbi Hub. Click the button below to access your client portal.</p>
+              <a href="${inviteLink}" style="display:inline-block;margin:24px 0;padding:14px 28px;background:#c9a84c;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">Access Client Portal</a>
+              <p style="font-size:14px;color:#94a3b8;">Or copy this link: <code style="color:#e2e8f0;word-break:break-all;">${inviteLink}</code></p>
+              <p style="font-size:12px;color:#94a3b8;">This link will expire in 7 days.</p>
+            </div>
+          `
+        });
+        console.log(`[auth] Client invitation email sent to ${email}`);
+      } catch (mailErr) {
+        console.error('[auth] Failed to send invitation email:', mailErr.message || mailErr);
+      }
+    } else {
+      console.warn('[auth] Mailgun not configured — invitation email not sent');
+      console.log(`[auth] Dev mode — invite link: ${inviteLink}`);
     }
 
     return {
