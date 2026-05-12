@@ -1,253 +1,231 @@
-// Automation routes — workflow CRUD + history
+// Workflow Automations Routes
 
 import prisma from '../config/db.js';
-import { runWorkflow, runScheduledWorkflows, triggerEventWorkflows } from '../services/automation.service.js';
+import { executeWorkflow } from '../services/automation.service.js';
 
 export default async function automationRoutes(fastify) {
   // All routes require admin auth
   fastify.addHook('onRequest', fastify.adminOnly);
 
-  // ==================== WORKFLOW DEFINITIONS ====================
+  // ==================== WORKFLOWS CRUD ====================
 
-  // GET /api/automations — list all workflow definitions
-  fastify.get('/', async (request, reply) => {
-    const workflows = await prisma.workflowDefinition.findMany({
-      orderBy: { updatedAt: 'desc' },
+  // GET /api/automations/workflows — list all workflows
+  fastify.get('/workflows', async (request, reply) => {
+    const { enabled, triggerType } = request.query;
+
+    const where = {};
+    if (enabled !== undefined) where.enabled = enabled === 'true';
+    if (triggerType) where.triggerType = triggerType;
+
+    const workflows = await prisma.workflow.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
       include: {
         createdBy: { select: { id: true, name: true } },
         _count: { select: { runs: true } }
       }
     });
 
-    return workflows.map(w => ({
-      id: w.id,
-      name: w.name,
-      description: w.description,
-      trigger: w.trigger,
-      triggerConfig: JSON.parse(w.triggerConfig || '{}'),
-      conditions: JSON.parse(w.conditions || '[]'),
-      actions: JSON.parse(w.actions || '[]'),
-      isActive: w.isActive,
-      isPaused: w.isPaused,
-      runCount: w.runCount,
-      lastRunAt: w.lastRunAt,
-      lastRunStatus: w.lastRunStatus,
-      createdBy: w.createdBy,
-      totalRuns: w._count.runs,
-      createdAt: w.createdAt,
-      updatedAt: w.updatedAt
-    }));
+    return { workflows };
   });
 
-  // POST /api/automations — create a new workflow
-  fastify.post('/', async (request, reply) => {
-    const { name, description, trigger, triggerConfig, conditions, actions } = request.body;
+  // GET /api/automations/workflows/:id — get single workflow
+  fastify.get('/workflows/:id', async (request, reply) => {
+    const { id } = request.params;
 
-    if (!name || !trigger) {
-      return reply.status(400).send({ error: 'Name and trigger are required' });
+    const workflow = await prisma.workflow.findUnique({
+      where: { id },
+      include: {
+        createdBy: { select: { id: true, name: true } },
+        runs: {
+          orderBy: { createdAt: 'desc' },
+          take: 20
+        }
+      }
+    });
+
+    if (!workflow) {
+      return reply.status(404).send({ error: 'Workflow not found' });
     }
 
-    const validTriggers = ['schedule', 'webhook', 'event'];
-    const isEventTrigger = trigger.startsWith('event:');
-    if (!validTriggers.includes(trigger) && !isEventTrigger) {
-      return reply.status(400).send({ error: `Invalid trigger type. Must be one of: ${validTriggers.join(', ')}, or event:<name>` });
+    return { workflow };
+  });
+
+  // POST /api/automations/workflows — create workflow
+  fastify.post('/workflows', async (request, reply) => {
+    const { name, description, triggerType, triggerConfig, actions, enabled = true } = request.body;
+
+    if (!name || !triggerType || !triggerConfig || !actions) {
+      return reply.status(400).send({ error: 'name, triggerType, triggerConfig, and actions are required' });
     }
 
-    const workflow = await prisma.workflowDefinition.create({
+    const validTriggers = ['SCHEDULE', 'WEBHOOK', 'EVENT'];
+    if (!validTriggers.includes(triggerType)) {
+      return reply.status(400).send({ error: `triggerType must be one of: ${validTriggers.join(', ')}` });
+    }
+
+    // Validate actions array
+    const actionsArr = Array.isArray(actions) ? actions : JSON.parse(actions || '[]');
+    const validActionTypes = ['SEND_EMAIL', 'CREATE_TASK', 'SEND_TELEGRAM', 'UPDATE_DEAL_STAGE', 'WEBHOOK_CALL', 'CONDITION'];
+    for (const action of actionsArr) {
+      if (!action.type || !validActionTypes.includes(action.type)) {
+        return reply.status(400).send({ error: `Invalid action type: ${action.type}. Must be one of: ${validActionTypes.join(', ')}` });
+      }
+    }
+
+    const workflow = await prisma.workflow.create({
       data: {
         name,
-        description: description || null,
-        trigger,
-        triggerConfig: JSON.stringify(triggerConfig || {}),
-        conditions: JSON.stringify(conditions || []),
-        actions: JSON.stringify(actions || []),
-        createdById: request.user?.id || null
-      }
-    });
-
-    reply.status(201).send({
-      ...workflow,
-      triggerConfig: JSON.parse(workflow.triggerConfig),
-      conditions: JSON.parse(workflow.conditions),
-      actions: JSON.parse(workflow.actions)
-    });
-  });
-
-  // GET /api/automations/:id — get a single workflow
-  fastify.get('/:id', async (request, reply) => {
-    const workflow = await prisma.workflowDefinition.findUnique({
-      where: { id: request.params.id },
+        description,
+        triggerType,
+        triggerConfig: typeof triggerConfig === 'string' ? JSON.parse(triggerConfig) : triggerConfig,
+        actions: actionsArr,
+        enabled,
+        createdById: request.user.id
+      },
       include: {
-        createdBy: { select: { id: true, name: true } },
-        _count: { select: { runs: true } }
+        createdBy: { select: { id: true, name: true } }
       }
     });
 
-    if (!workflow) {
-      return reply.status(404).send({ error: 'Workflow not found' });
-    }
-
-    return {
-      ...workflow,
-      triggerConfig: JSON.parse(workflow.triggerConfig || '{}'),
-      conditions: JSON.parse(workflow.conditions || '[]'),
-      actions: JSON.parse(workflow.actions || '[]'),
-      totalRuns: workflow._count.runs
-    };
+    return { workflow };
   });
 
-  // PUT /api/automations/:id — update a workflow
-  fastify.put('/:id', async (request, reply) => {
-    const workflow = await prisma.workflowDefinition.findUnique({
-      where: { id: request.params.id }
-    });
+  // PUT /api/automations/workflows/:id — update workflow
+  fastify.put('/workflows/:id', async (request, reply) => {
+    const { id } = request.params;
+    const { name, description, triggerType, triggerConfig, actions, enabled } = request.body;
 
-    if (!workflow) {
+    const existing = await prisma.workflow.findUnique({ where: { id } });
+    if (!existing) {
       return reply.status(404).send({ error: 'Workflow not found' });
     }
-
-    const { name, description, trigger, triggerConfig, conditions, actions, isActive, isPaused } = request.body;
 
     const updateData = {};
     if (name !== undefined) updateData.name = name;
     if (description !== undefined) updateData.description = description;
-    if (trigger !== undefined) updateData.trigger = trigger;
-    if (triggerConfig !== undefined) updateData.triggerConfig = JSON.stringify(triggerConfig);
-    if (conditions !== undefined) updateData.conditions = JSON.stringify(conditions);
-    if (actions !== undefined) updateData.actions = JSON.stringify(actions);
-    if (isActive !== undefined) updateData.isActive = isActive;
-    if (isPaused !== undefined) updateData.isPaused = isPaused;
-
-    const updated = await prisma.workflowDefinition.update({
-      where: { id: request.params.id },
-      data: updateData
-    });
-
-    return {
-      ...updated,
-      triggerConfig: JSON.parse(updated.triggerConfig),
-      conditions: JSON.parse(updated.conditions),
-      actions: JSON.parse(updated.actions)
-    };
-  });
-
-  // DELETE /api/automations/:id — delete a workflow
-  fastify.delete('/:id', async (request, reply) => {
-    const workflow = await prisma.workflowDefinition.findUnique({
-      where: { id: request.params.id }
-    });
-
-    if (!workflow) {
-      return reply.status(404).send({ error: 'Workflow not found' });
+    if (triggerType !== undefined) {
+      const validTriggers = ['SCHEDULE', 'WEBHOOK', 'EVENT'];
+      if (!validTriggers.includes(triggerType)) {
+        return reply.status(400).send({ error: `triggerType must be one of: ${validTriggers.join(', ')}` });
+      }
+      updateData.triggerType = triggerType;
     }
-
-    await prisma.workflowDefinition.delete({
-      where: { id: request.params.id }
-    });
-
-    return { deleted: true };
-  });
-
-  // POST /api/automations/:id/toggle — toggle active/paused
-  fastify.post('/:id/toggle', async (request, reply) => {
-    const workflow = await prisma.workflowDefinition.findUnique({
-      where: { id: request.params.id }
-    });
-
-    if (!workflow) {
-      return reply.status(404).send({ error: 'Workflow not found' });
+    if (triggerConfig !== undefined) {
+      updateData.triggerConfig = typeof triggerConfig === 'string' ? JSON.parse(triggerConfig) : triggerConfig;
     }
+    if (actions !== undefined) {
+      const actionsArr = Array.isArray(actions) ? actions : JSON.parse(actions || '[]');
+      updateData.actions = actionsArr;
+    }
+    if (enabled !== undefined) updateData.enabled = enabled;
 
-    const updated = await prisma.workflowDefinition.update({
-      where: { id: request.params.id },
-      data: {
-        isActive: !workflow.isActive,
-        isPaused: workflow.isActive ? true : false
+    const workflow = await prisma.workflow.update({
+      where: { id },
+      data: updateData,
+      include: {
+        createdBy: { select: { id: true, name: true } }
       }
     });
 
-    return {
-      ...updated,
-      triggerConfig: JSON.parse(updated.triggerConfig),
-      conditions: JSON.parse(updated.conditions),
-      actions: JSON.parse(updated.actions)
-    };
+    return { workflow };
   });
 
-  // POST /api/automations/:id/run — test-run a workflow
-  fastify.post('/:id/run', async (request, reply) => {
-    const workflow = await prisma.workflowDefinition.findUnique({
-      where: { id: request.params.id }
-    });
+  // DELETE /api/automations/workflows/:id — delete workflow
+  fastify.delete('/workflows/:id', async (request, reply) => {
+    const { id } = request.params;
 
+    const existing = await prisma.workflow.findUnique({ where: { id } });
+    if (!existing) {
+      return reply.status(404).send({ error: 'Workflow not found' });
+    }
+
+    await prisma.workflow.delete({ where: { id } });
+
+    return { success: true };
+  });
+
+  // POST /api/automations/workflows/:id/toggle — enable/disable workflow
+  fastify.post('/workflows/:id/toggle', async (request, reply) => {
+    const { id } = request.params;
+
+    const workflow = await prisma.workflow.findUnique({ where: { id } });
     if (!workflow) {
       return reply.status(404).send({ error: 'Workflow not found' });
     }
 
-    try {
-      const run = await runWorkflow(workflow.id, {
-        ...request.body || {},
-        triggeredAt: new Date().toISOString(),
-        trigger: 'manual_test'
-      });
-
-      return {
-        runId: run.id,
-        status: run.status,
-        actions: JSON.parse(run.actions || '[]'),
-        error: run.error,
-        durationMs: run.durationMs
-      };
-    } catch (err) {
-      return reply.status(400).send({ error: err.message });
-    }
-  });
-
-  // GET /api/automations/:id/runs — execution history for a workflow
-  fastify.get('/:id/runs', async (request, reply) => {
-    const { limit = 20, offset = 0 } = request.query;
-
-    const workflow = await prisma.workflowDefinition.findUnique({
-      where: { id: request.params.id }
+    const updated = await prisma.workflow.update({
+      where: { id },
+      data: { enabled: !workflow.enabled }
     });
 
+    return { workflow: updated };
+  });
+
+  // POST /api/automations/workflows/:id/run — manually trigger workflow
+  fastify.post('/workflows/:id/run', async (request, reply) => {
+    const { id } = request.params;
+    const triggerData = request.body || {};
+
+    const workflow = await prisma.workflow.findUnique({ where: { id } });
     if (!workflow) {
       return reply.status(404).send({ error: 'Workflow not found' });
     }
 
-    const [runs, total] = await Promise.all([
-      prisma.workflowRun.findMany({
-        where: { workflowId: request.params.id },
-        orderBy: { startedAt: 'desc' },
-        take: Math.min(parseInt(limit) || 20, 100),
-        skip: parseInt(offset) || 0
-      }),
-      prisma.workflowRun.count({
-        where: { workflowId: request.params.id }
-      })
-    ]);
+    // Execute workflow and get result
+    const result = await executeWorkflow(workflow, { ...triggerData, manual: true });
 
-    return {
-      runs: runs.map(r => ({
-        id: r.id,
-        status: r.status,
-        trigger: r.trigger,
-        triggerData: r.triggerData ? JSON.parse(r.triggerData) : null,
-        actions: JSON.parse(r.actions || '[]'),
-        error: r.error,
-        durationMs: r.durationMs,
-        startedAt: r.startedAt,
-        completedAt: r.completedAt
-      })),
-      total,
-      limit: parseInt(limit) || 20,
-      offset: parseInt(offset) || 0
-    };
+    return result;
   });
 
-  // ==================== HISTORY ====================
+  // ==================== WORKFLOW RUNS ====================
 
-  // GET /api/automations/history — last 50 automation events
+  // GET /api/automations/runs — list workflow runs
+  fastify.get('/runs', async (request, reply) => {
+    const { workflowId, status, limit = 50, offset = 0 } = request.query;
+
+    const where = {};
+    if (workflowId) where.workflowId = workflowId;
+    if (status) where.status = status;
+
+    const runs = await prisma.workflowRun.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: Math.min(parseInt(limit) || 50, 100),
+      skip: parseInt(offset) || 0,
+      include: {
+        workflow: { select: { id: true, name: true } }
+      }
+    });
+
+    const total = await prisma.workflowRun.count({ where });
+
+    return { runs, total, limit: parseInt(limit) || 50, offset: parseInt(offset) || 0 };
+  });
+
+  // GET /api/automations/runs/:id — get run details
+  fastify.get('/runs/:id', async (request, reply) => {
+    const { id } = request.params;
+
+    const run = await prisma.workflowRun.findUnique({
+      where: { id },
+      include: {
+        workflow: {
+          select: { id: true, name: true, triggerType: true, triggerConfig: true, actions: true }
+        }
+      }
+    });
+
+    if (!run) {
+      return reply.status(404).send({ error: 'Run not found' });
+    }
+
+    return { run };
+  });
+
+  // ==================== LEGACY HISTORY (kept for backwards compat) ====================
+
+  // GET /api/automations/history — last 50 automation events (legacy)
   fastify.get('/history', async (request, reply) => {
     const { limit = 50, offset = 0 } = request.query;
 
@@ -292,20 +270,38 @@ export default async function automationRoutes(fastify) {
     };
   });
 
-  // POST /api/automations/trigger-event — trigger event workflows externally
-  fastify.post('/trigger-event', async (request, reply) => {
-    const { event, context } = request.body;
+  // ==================== WEBHOOK ENDPOINT (public, no auth) ====================
 
-    if (!event) {
-      return reply.status(400).send({ error: 'Event name is required' });
+  // POST /api/automations/webhook/:webhookPath — trigger workflows by webhook
+  fastify.post('/webhook/:webhookPath', { preHandler: [] }, async (request, reply) => {
+    const { webhookPath } = request.params;
+    const payload = request.body || {};
+
+    // Find workflows with matching webhook path
+    const workflows = await prisma.workflow.findMany({
+      where: {
+        triggerType: 'WEBHOOK',
+        enabled: true,
+        triggerConfig: {
+          path: webhookPath
+        }
+      }
+    });
+
+    if (workflows.length === 0) {
+      return reply.status(404).send({ error: 'Webhook not found or disabled' });
     }
 
-    const results = await triggerEventWorkflows(event, context || {});
+    const results = [];
+    for (const workflow of workflows) {
+      try {
+        const result = await executeWorkflow(workflow, { webhookPath, payload });
+        results.push({ workflowId: workflow.id, success: true, result });
+      } catch (err) {
+        results.push({ workflowId: workflow.id, success: false, error: err.message });
+      }
+    }
 
-    return {
-      event,
-      triggered: results.length,
-      results
-    };
+    return { triggered: workflows.length, results };
   });
 }

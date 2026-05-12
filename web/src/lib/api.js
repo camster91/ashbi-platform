@@ -519,6 +519,40 @@ export const api = {
   getUpcomingEvents: (limit = 5) =>
     request(`/calendar/upcoming?limit=${limit}`),
 
+  // ===== CONTENT CALENDAR + SOCIAL POSTS =====
+  getContentEvents: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/content-calendar/events${query ? `?${query}` : ''}`);
+  },
+  getUpcomingContent: (limit = 10) =>
+    request(`/content-calendar/upcoming?limit=${limit}`),
+  createContentEvent: (data) =>
+    request('/content-calendar/events', { method: 'POST', body: data }),
+  updateContentEvent: (id, data) =>
+    request(`/content-calendar/events/${id}`, { method: 'PATCH', body: data }),
+  updateContentEventStatus: (id, status) =>
+    request(`/content-calendar/events/${id}/status`, { method: 'PATCH', body: { status } }),
+  deleteContentEvent: (id) =>
+    request(`/content-calendar/events/${id}`, { method: 'DELETE' }),
+
+  // Social posts
+  getSocialPosts: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/content-calendar/posts${query ? `?${query}` : ''}`);
+  },
+  getSocialPost: (id) =>
+    request(`/content-calendar/posts/${id}`),
+  createSocialPost: (data) =>
+    request('/content-calendar/posts', { method: 'POST', body: data }),
+  updateSocialPostStatus: (id, status) =>
+    request(`/content-calendar/posts/${id}/status`, { method: 'PATCH', body: { status } }),
+  publishSocialPost: (id) =>
+    request(`/content-calendar/posts/${id}/publish`, { method: 'POST' }),
+  deleteSocialPost: (id) =>
+    request(`/content-calendar/posts/${id}`, { method: 'DELETE' }),
+  getSocialPostAnalytics: () =>
+    request('/content-calendar/posts/analytics'),
+
   // Attachments
   getAttachments: (entityType, entityId) =>
     request(`/attachments?entityType=${entityType}&entityId=${entityId}`),
@@ -660,25 +694,24 @@ export const api = {
   getAutomationHistory: (offset = 0, limit = 25) =>
     request(`/automations/history?limit=${limit}&offset=${offset}`),
 
-  // Workflow definitions CRUD
-  getWorkflows: () =>
-    request('/automations'),
-  getWorkflow: (id) =>
-    request(`/automations/${id}`),
-  createWorkflow: (data) =>
-    request('/automations', { method: 'POST', body: data }),
-  updateWorkflow: (id, data) =>
-    request(`/automations/${id}`, { method: 'PUT', body: data }),
-  deleteWorkflow: (id) =>
-    request(`/automations/${id}`, { method: 'DELETE' }),
-  toggleWorkflow: (id) =>
-    request(`/automations/${id}/toggle`, { method: 'POST' }),
-  testRunWorkflow: (id, context = {}) =>
-    request(`/automations/${id}/run`, { method: 'POST', body: context }),
-  getWorkflowRuns: (id, offset = 0, limit = 20) =>
-    request(`/automations/${id}/runs?limit=${limit}&offset=${offset}`),
-  triggerEventWorkflows: (event, context = {}) =>
-    request('/automations/trigger-event', { method: 'POST', body: { event, context } }),
+  // Workflows CRUD
+  getWorkflows: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/automations/workflows${query ? `?${query}` : ''}`);
+  },
+  getWorkflow: (id) => request(`/automations/workflows/${id}`),
+  createWorkflow: (data) => request('/automations/workflows', { method: 'POST', body: data }),
+  updateWorkflow: (id, data) => request(`/automations/workflows/${id}`, { method: 'PUT', body: data }),
+  deleteWorkflow: (id) => request(`/automations/workflows/${id}`, { method: 'DELETE' }),
+  toggleWorkflow: (id) => request(`/automations/workflows/${id}/toggle`, { method: 'POST' }),
+  runWorkflow: (id, triggerData) => request(`/automations/workflows/${id}/run`, { method: 'POST', body: triggerData }),
+
+  // Workflow runs
+  getWorkflowRuns: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/automations/runs${query ? `?${query}` : ''}`);
+  },
+  getWorkflowRun: (id) => request(`/automations/runs/${id}`),
 
   // ===== UPWORK =====
   getUpworkTasks: (tags) => {
@@ -857,18 +890,49 @@ export const api = {
   // ===== LINKEDIN OUTREACH AGENT =====
   generateLinkedInSequence: (data) =>
     request('/linkedin-outreach/sequence', { method: 'POST', body: data }),
-  getLinkedInSequences: () =>
-    request('/linkedin-outreach/sequences'),
+  getLinkedInSequences: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/linkedin-outreach/sequences${query ? `?${query}` : ''}`);
+  },
   getLinkedInSequence: (id) =>
     request(`/linkedin-outreach/sequences/${id}`),
+  updateLinkedInSequence: (id, data) =>
+    request(`/linkedin-outreach/sequences/${id}`, { method: 'PUT', body: data }),
   deleteLinkedInSequence: (id) =>
     request(`/linkedin-outreach/sequences/${id}`, { method: 'DELETE' }),
+  activateLinkedInSequence: (id) =>
+    request(`/linkedin-outreach/sequences/${id}/activate`, { method: 'POST' }),
+  pauseLinkedInSequence: (id) =>
+    request(`/linkedin-outreach/sequences/${id}/pause`, { method: 'POST' }),
+  sendLinkedInMessage: (data) =>
+    request('/linkedin-outreach/send', { method: 'POST', body: data }),
+  getLinkedInMessages: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/linkedin-outreach/messages${query ? `?${query}` : ''}`);
+  },
+  getLinkedInRateLimit: (campaignId) => {
+    const q = campaignId ? `?campaignId=${campaignId}` : '';
+    return request(`/linkedin-outreach/rate-limit${q}`);
+  },
   importLinkedInProspects: (data) =>
     request('/linkedin-outreach/prospects', { method: 'POST', body: data }),
   getLinkedInProspects: (params = {}) => {
     const query = new URLSearchParams(params).toString();
     return request(`/linkedin-outreach/prospects${query ? `?${query}` : ''}`);
   },
+  updateLinkedInProspect: (id, data) =>
+    request(`/linkedin-outreach/prospects/${id}`, { method: 'PATCH', body: data }),
+  // Campaigns
+  createLinkedInCampaign: (data) =>
+    request('/linkedin-outreach/campaigns', { method: 'POST', body: data }),
+  getLinkedInCampaigns: () =>
+    request('/linkedin-outreach/campaigns'),
+  getLinkedInCampaign: (id) =>
+    request(`/linkedin-outreach/campaigns/${id}`),
+  updateLinkedInCampaign: (id, data) =>
+    request(`/linkedin-outreach/campaigns/${id}`, { method: 'PUT', body: data }),
+  deleteLinkedInCampaign: (id) =>
+    request(`/linkedin-outreach/campaigns/${id}`, { method: 'DELETE' }),
 
   // ===== COLD EMAIL AGENT =====
   generateColdEmailSequence: (data) =>
@@ -1070,6 +1134,8 @@ export const api = {
   // ===== GMAIL =====
   getGmailStatus: () =>
     request('/gmail/status'),
+  gmailInbox: (maxResults = 20) =>
+    request(`/gmail/inbox?maxResults=${maxResults}`),
   gmailSend: (data) =>
     request('/gmail/send', { method: 'POST', body: data }),
   gmailDraftReply: (hubThreadId) =>
@@ -1133,19 +1199,19 @@ export const api = {
 
   // ===== RETAINERS =====
   getRetainerList: () =>
-    request('/retainer'),
+    request('/retainers'),
   getRetainerStatus: (clientId) =>
-    request(`/retainer/${clientId}/status`),
+    request(`/retainers/${clientId}/status`),
   getAllRetainers: () =>
-    request('/retainer/check-all', { method: 'POST' }),
+    request('/retainers/check-all', { method: 'POST' }),
   logRetainerHours: (clientId, data) =>
-    request(`/retainer/${clientId}/log-hours`, { method: 'POST', body: data }),
+    request(`/retainers/${clientId}/log-hours`, { method: 'POST', body: data }),
   createRetainerPlan: (data) =>
-    request('/retainer', { method: 'POST', body: data }),
+    request('/retainers', { method: 'POST', body: data }),
   updateRetainerPlan: (clientId, data) =>
-    request(`/retainer/${clientId}`, { method: 'PUT', body: data }),
+    request(`/retainers/${clientId}`, { method: 'PUT', body: data }),
   generateRetainerInvoice: (clientId, data) =>
-    request(`/retainer/${clientId}/generate-invoice`, { method: 'POST', body: data }),
+    request(`/retainers/${clientId}/generate-invoice`, { method: 'POST', body: data }),
 
   // ===== FINANCIAL REPORTS =====
   getReportsPnl: (params = {}) => {
@@ -1413,6 +1479,22 @@ export const api = {
     request('/notion-sync/projects'),
   getNotionStatus: () =>
     request('/notion-sync/status'),
+
+  // ===== UPWORK JOBS =====
+  getUpworkJobs: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/upwork/jobs${query ? `?${query}` : ''}`);
+  },
+  getUpworkJob: (id) => request(`/upwork/jobs/${id}`),
+  createUpworkJob: (data) => request('/upwork/jobs', { method: 'POST', body: data }),
+  updateUpworkJob: (id, data) => request(`/upwork/jobs/${id}`, { method: 'PATCH', body: data }),
+  deleteUpworkJob: (id) => request(`/upwork/jobs/${id}`, { method: 'DELETE' }),
+  applyUpworkJob: (jobId) => request(`/upwork/jobs/${jobId}/apply`, { method: 'POST' }),
+  // Drafts
+  getUpworkDrafts: (jobId) => request(`/upwork/jobs/${jobId}/drafts`),
+  createUpworkDraft: (jobId, data) => request(`/upwork/jobs/${jobId}/drafts`, { method: 'POST', body: data }),
+  updateUpworkDraft: (id, data) => request(`/upwork/drafts/${id}`, { method: 'PUT', body: data }),
+  deleteUpworkDraft: (id) => request(`/upwork/drafts/${id}`, { method: 'DELETE' }),
 
   // ===== TIMESHEETS =====
   getWeeklyTimesheet: (weekStart) => {

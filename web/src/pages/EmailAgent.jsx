@@ -274,7 +274,7 @@ export default function EmailAgent() {
             const tags = JSON.parse(item.tags || '[]');
             const hasDrafts = item.drafts && item.drafts.length > 0;
             return (
-              <div key={item.id} onClick={() => setSelectedItem(item)}
+              <div key={item.id} role="button" tabIndex={0} onClick={() => setSelectedItem(item)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { setSelectedItem(item); e.preventDefault(); } }}
                 className="bg-card rounded-xl border border-border p-4 hover:border-primary/30 transition-colors cursor-pointer group">
                 <div className="flex items-start gap-3">
                   <div className="flex-1 min-w-0">

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
-import { useToast } from '../hooks/useToast';
+import { useToast, toast } from '../hooks/useToast';
 import {
   Mail, Sparkles, Loader2, X, Plus, Trash2, Upload, Copy, Check,
   ChevronRight, Clock, Users, Eye, Edit3
@@ -186,6 +186,21 @@ function SequenceDetail({ sequence, onClose }) {
           <button onClick={onClose} className="p-1 text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
         </div>
 
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-medium">{emails.length} Emails in Sequence</h3>
+          <div className="flex gap-2">
+            <button onClick={async () => {
+              try {
+                const result = await api.createGmailDraftsFromSequence(sequence.id, 0);
+                alert('Gmail drafts created — check your draft folder');
+              } catch (err) {
+                alert('Draft failed: ' + err.message);
+              }
+            }} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700">
+              <Mail className="w-3.5 h-3.5" /> Create Gmail Drafts
+            </button>
+          </div>
+        </div>
         <div className="space-y-4">
           {emails.map((email, i) => (
             <div key={i} className="bg-muted/50 rounded-lg p-4">
@@ -222,9 +237,10 @@ export default function ColdEmail() {
     queryFn: api.getColdEmailSequences,
   });
 
+  const [sourceFilter, setSourceFilter] = useState('');
   const { data: prospects = [], isLoading: prospLoading } = useQuery({
-    queryKey: ['cold-email-prospects'],
-    queryFn: () => api.getColdEmailProspects(),
+    queryKey: ['cold-email-prospects', sourceFilter],
+    queryFn: () => api.getColdEmailProspects(sourceFilter ? { source: sourceFilter } : {}),
   });
 
   const deleteSeq = useMutation({
@@ -291,7 +307,7 @@ export default function ColdEmail() {
         ) : (
           <div className="space-y-2">
             {sequences.map(seq => (
-              <div key={seq.id} onClick={() => openSequence(seq)}
+              <div key={seq.id} role="button" tabIndex={0} onClick={() => openSequence(seq)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { openSequence(seq); e.preventDefault(); } }}
                 className="bg-card rounded-xl border border-border p-4 hover:border-primary/30 transition-colors cursor-pointer group">
                 <div className="flex items-start gap-3">
                   <div className="flex-1 min-w-0">
@@ -319,7 +335,7 @@ export default function ColdEmail() {
       )}
 
       {/* Prospects Tab */}
-      {activeTab === 'prospects' && (
+      {activeTab === 'prospects' ? (
         prospLoading ? (
           <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
         ) : prospects.length === 0 ? (
@@ -329,32 +345,47 @@ export default function ColdEmail() {
             <p className="text-sm">Import prospects for your campaigns</p>
           </div>
         ) : (
-          <div className="bg-card rounded-xl border border-border overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/50">
-                  <th className="text-left px-4 py-2 text-xs font-medium text-muted-foreground">Name</th>
-                  <th className="text-left px-4 py-2 text-xs font-medium text-muted-foreground">Email</th>
-                  <th className="text-left px-4 py-2 text-xs font-medium text-muted-foreground">Company</th>
-                  <th className="text-left px-4 py-2 text-xs font-medium text-muted-foreground">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {prospects.map(p => (
-                  <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30">
-                    <td className="px-4 py-2.5 font-medium">{p.name}</td>
-                    <td className="px-4 py-2.5 text-muted-foreground">{p.email}</td>
-                    <td className="px-4 py-2.5 text-muted-foreground">{p.company || '—'}</td>
-                    <td className="px-4 py-2.5">
-                      <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', STATUS_COLORS[p.status] || 'bg-muted text-muted-foreground')}>{p.status}</span>
-                    </td>
+          <>
+            <div className="flex items-center gap-3 mb-3">
+              <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value)}
+                className="px-3 py-1.5 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/20">
+                <option value="">All Sources</option>
+                <option value="Ashbi">Ashbi</option>
+                <option value="cameronashley">cameronashley</option>
+              </select>
+              <span className="text-xs text-muted-foreground">{prospects.length} prospects</span>
+            </div>
+            <div className="bg-card rounded-xl border border-border overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50">
+                    <th className="text-left px-4 py-2 text-xs font-medium text-muted-foreground">Name</th>
+                    <th className="text-left px-4 py-2 text-xs font-medium text-muted-foreground">Source</th>
+                    <th className="text-left px-4 py-2 text-xs font-medium text-muted-foreground">Email</th>
+                    <th className="text-left px-4 py-2 text-xs font-medium text-muted-foreground">Company</th>
+                    <th className="text-left px-4 py-2 text-xs font-medium text-muted-foreground">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {prospects.map(p => (
+                    <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30">
+                      <td className="px-4 py-2.5 font-medium">{p.name}</td>
+                      <td className="px-4 py-2.5">
+                        <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', p.source === 'Ashbi' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700')}>{p.source || 'Ashbi'}</span>
+                      </td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{p.email}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{p.company || '—'}</td>
+                      <td className="px-4 py-2.5">
+                        <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', STATUS_COLORS[p.status] || 'bg-muted text-muted-foreground')}>{p.status}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )
-      )}
+      ) : null}
 
       {showGenerate && <GenerateSequenceModal onClose={() => setShowGenerate(false)} onGenerated={() => queryClient.invalidateQueries({ queryKey: ['cold-email-sequences'] })} />}
       {showImport && <ImportProspectsModal sequences={sequences} onClose={() => setShowImport(false)} onImported={() => queryClient.invalidateQueries({ queryKey: ['cold-email-prospects'] })} />}
