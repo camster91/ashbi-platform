@@ -29,6 +29,7 @@ import {
   ChevronUp,
   Sparkles,
   Briefcase,
+  Linkedin,
   Key,
   Calculator,
   Calendar,
@@ -135,6 +136,8 @@ export default function Layout({ children }) {
   const growthNav = [
     { name: 'Client Acquisition', href: '/client-acquisition', icon: Target, badge: stats?.activeOutreach },
     { name: 'Lead Intelligence', href: '/lead-intelligence', icon: Search },
+    { name: 'Cold Email', href: '/cold-email', icon: Mail },
+    { name: 'LinkedIn', href: '/linkedin', icon: Linkedin },
     { name: 'Outreach', href: '/outreach', icon: Send },
     { name: 'Referral Network', href: '/referral-network', icon: Share2 },
     { name: 'Call Block', href: '/call-block', icon: Phone },
@@ -148,7 +151,10 @@ export default function Layout({ children }) {
     { name: 'Contracts', href: '/contracts', icon: ScrollText },
     { name: 'Expenses', href: '/expenses', icon: Wallet },
     { name: 'Schedule', href: '/schedule', icon: Calendar },
-    { name: 'Upwork', href: '/upwork-contracts', icon: Briefcase },
+    { name: 'Upwork', icon: Briefcase, children: [
+      { name: 'Job Tracker', href: '/upwork', icon: Target },
+      { name: 'Contracts', href: '/upwork-contracts', icon: ScrollText },
+    ]},
   ];
 
   // Admin — collapsible section, only visible to admins

@@ -1,4 +1,7 @@
 import prisma from '../config/db.js';
+import Mailgun from 'mailgun.js';
+import FormData from 'form-data';
+import env from '../config/env.js';
 
 export default async function estimateRoutes(fastify) {
   // List estimates
@@ -124,8 +127,43 @@ export default async function estimateRoutes(fastify) {
       include: { client: { select: { id: true, name: true } } }
     });
 
-    // TODO: Send email with magic link to client
-    // const portalUrl = `${process.env.FRONTEND_URL || 'https://hub.ashbi.ca'}/portal/estimate/${estimate.viewToken}`;
+    // Send estimate email with magic link to client
+    const portalUrl = `${process.env.FRONTEND_URL || 'https://hub.ashbi.ca'}/portal/estimate/${estimate.viewToken}`;
+    const env = fastify.utils.getEnvConfig ? fastify.utils.getEnvConfig() : { mailgunApiKey: null, mailgunDomain: null };
+
+    if (env.mailgunApiKey && env.mailgunDomain && estimate.client?.email) {
+      try {
+        const mg = new Mailgun(FormData);
+        const mgClient = mg.client({
+          username: 'api',
+          key: env.mailgunApiKey
+        });
+
+        await mgClient.messages.create(env.mailgunDomain, {
+          from: `Ashbi Design <noreply@${env.mailgunDomain}>`,
+          to: estimate.client.email,
+          subject: `Estimate from Ashbi Design — $${updated.totalAmount.toLocaleString()}`,
+          html: `
+            <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#0f172a;color:#f1f5f9;padding:40px;border-radius:12px;">
+              <h2 style="color:#c9a84c;margin-top:0;">New Estimate from Ashbi Design</h2>
+              <p>Hello ${estimate.client.name},</p>
+              <p>We've prepared an estimate for you. Please review and approve or decline at your convenience.</p>
+              <p><strong>Amount:</strong> $${updated.totalAmount.toLocaleString()}</p>
+              <p><strong>Status:</strong> Pending your review</p>
+              <a href="${portalUrl}" style="display:inline-block;margin:24px 0;padding:14px 28px;background:#c9a84c;color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">View & Approve Estimate</a>
+              <p style="font-size:14px;color:#94a3b8;">Or copy this link: <code style="color:#e2e8f0;word-break:break-all;">${portalUrl}</code></p>
+              <p style="font-size:12px;color:#94a3b8;">This estimate will expire in 30 days.</p>
+            </div>
+          `
+        });
+        console.log(`[estimate] Estimate email sent to ${estimate.client.email}`);
+      } catch (mailErr) {
+        console.error('[estimate] Failed to send estimate email:', mailErr.message || mailErr);
+      }
+    } else {
+      console.warn('[estimate] Mailgun not configured or no client email — estimate email not sent');
+      console.log(`[estimate] Dev mode — estimate link: ${portalUrl}`);
+    }
 
     return updated;
   });

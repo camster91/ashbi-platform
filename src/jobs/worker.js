@@ -6,6 +6,7 @@ import { connection, QUEUES, scheduleEscalationCheck } from './queue.js';
 import { processEmailPipeline } from '../services/pipeline.service.js';
 import { updateAllProjectHealth } from '../services/project.service.js';
 import { storeEmbedding } from '../services/embedding.service.js';
+import { processDueSocialPosts } from '../services/contentCalendar.service.js';
 import aiClient from '../ai/client.js';
 import env from '../config/env.js';
 
@@ -352,5 +353,25 @@ const embeddingWorker = createWorker(
   { concurrency: 3 }
 );
 
-const activeWorkers = [emailWorker, healthWorker, escalationWorker, notificationWorker, weeklyDigestWorker, embeddingWorker].filter(Boolean);
-console.log(`Workers started (${activeWorkers.length}/6 active)`);
+// Social Posts Worker (auto-publish scheduled posts)
+const socialPostsWorker = createWorker(
+  QUEUES.SOCIAL_POSTS,
+  async (job) => {
+    console.log(`Processing social posts job ${job.id}: ${job.name}`);
+    if (job.name === 'process-due-posts') {
+      const results = await processDueSocialPosts();
+      return { processed: results.length, results };
+    }
+    if (job.name === 'publish-post' && job.data.postId) {
+      // Direct publish request via queue
+      const { publishPost } = await import('../services/socialScheduler.service.js');
+      const result = await publishPost(job.data.postId);
+      return result;
+    }
+    return { skipped: true };
+  },
+  { concurrency: 2 }
+);
+
+const activeWorkers = [emailWorker, healthWorker, escalationWorker, notificationWorker, weeklyDigestWorker, embeddingWorker, socialPostsWorker].filter(Boolean);
+console.log(`Workers started (${activeWorkers.length}/7 active)`);

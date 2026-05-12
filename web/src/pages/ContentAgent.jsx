@@ -322,7 +322,7 @@ export default function ContentAgent() {
             return (
               <div key={draft.id} className="bg-card rounded-xl border border-border p-4 hover:border-primary/30 transition-colors group">
                 <div className="flex items-start gap-4">
-                  <div className="flex-1 min-w-0 cursor-pointer" onClick={() => openEditor(draft)}>
+                  <div className="flex-1 min-w-0 cursor-pointer" role="button" tabIndex={0} onClick={() => openEditor(draft)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { openEditor(draft); e.preventDefault(); } }}>
                     <div className="flex items-center gap-2 mb-1">
                       <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', STATUS_COLORS[draft.status])}>{draft.status}</span>
                       {draft.platform && <PlatformIcon className="w-3.5 h-3.5 text-muted-foreground" />}

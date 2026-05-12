@@ -2,6 +2,7 @@
 // Phase 1b: Wire Mailgun sending, sequence engine, tracking
 
 import aiClient from '../ai/client.js';
+import { createDraft } from '../agents/gmail-draft.agent.js';
 import {
   sendSequenceEmailToProspect,
   processScheduledSends,
@@ -98,6 +99,9 @@ Email 1: Lead with observation about their brand, one line of value. Email 2: Sh
           industry: p.industry || null,
           painPoint: p.painPoint || null,
           status: 'NEW',
+          source: p.source || 'Ashbi',
+          linkedinUrl: p.linkedinUrl || null,
+          auditNotes: p.auditNotes || null,
           sequenceId: sequenceId || null
         }
       });
@@ -291,6 +295,100 @@ Email 1: Lead with observation about their brand, one line of value. Email 2: Sh
       const status = err.message.includes('not found') ? 404 : 500;
       return reply.status(status).send({ error: err.message });
     }
+  });
+
+  // ==================== GMAIL DRAFT — Cold Email ====================
+
+  // POST /cold-email/draft — create Gmail draft from a sequence email for a prospect
+  // Does NOT send — Cam reviews in Gmail draft folder first
+  fastify.post('/draft', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { prospectId, stepIndex } = request.body || {};
+
+    if (!prospectId) return reply.status(400).send({ error: 'prospectId is required' });
+
+    // Fetch prospect with sequence
+    const prospect = await prisma.coldEmailProspect.findUnique({
+      where: { id: prospectId },
+      include: { sequence: true }
+    });
+
+    if (!prospect) return reply.status(404).send({ error: 'Prospect not found' });
+    if (!prospect.sequence) return reply.status(400).send({ error: 'Prospect has no sequence assigned' });
+
+    // Parse emails from sequence
+    const emails = JSON.parse(prospect.sequence.emails || '[]');
+    const step = stepIndex ?? 0;
+
+    if (!emails[step]) return reply.status(400).send({ error: `No email at step ${step}` });
+
+    const email = emails[step];
+
+    // Personalize placeholders
+    const personalize = (text) => text
+      .replace(/\{\{company\}\}/g, prospect.company || '')
+      .replace(/\{\{name\}\}/g, prospect.name || '');
+
+    const subject = personalize(email.subject || '');
+    const body = personalize(email.body || '');
+
+    try {
+      const draft = await createDraft(prospect.email, subject, body);
+      return {
+        draftCreated: true,
+        draftId: draft.id,
+        prospectId: prospect.id,
+        prospectEmail: prospect.email,
+        subject,
+        step
+      };
+    } catch (err) {
+      fastify.log.error('Gmail draft error:', err);
+      return reply.status(500).send({ error: 'Failed to create Gmail draft: ' + err.message });
+    }
+  });
+
+  // POST /cold-email/draft-from-sequence — create drafts for all prospects in a sequence
+  // Creates Gmail drafts for ALL prospects at a given step. Cam sends manually.
+  fastify.post('/draft-from-sequence', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { sequenceId, stepIndex = 0 } = request.body || {};
+
+    if (!sequenceId) return reply.status(400).send({ error: 'sequenceId is required' });
+
+    const sequence = await prisma.coldEmailSequence.findUnique({
+      where: { id: sequenceId },
+      include: { prospects: true }
+    });
+
+    if (!sequence) return reply.status(404).send({ error: 'Sequence not found' });
+
+    const emails = JSON.parse(sequence.emails || '[]');
+    if (!emails[stepIndex]) return reply.status(400).send({ error: `No email at step ${stepIndex}` });
+
+    const email = emails[stepIndex];
+
+    const results = [];
+    for (const prospect of sequence.prospects) {
+      const personalize = (text) => text
+        .replace(/\{\{company\}\}/g, prospect.company || '')
+        .replace(/\{\{name\}\}/g, prospect.name || '');
+
+      try {
+        const draft = await createDraft(
+          prospect.email,
+          personalize(email.subject || ''),
+          personalize(email.body || '')
+        );
+        results.push({ prospectId: prospect.id, email: prospect.email, draftId: draft.id, ok: true });
+      } catch (err) {
+        results.push({ prospectId: prospect.id, email: prospect.email, ok: false, error: err.message });
+      }
+    }
+
+    return { sequenceId, step: stepIndex, subject: email.subject, results };
   });
 
   // ==================== MAILGUN WEBHOOK FOR TRACKING ====================

@@ -3,9 +3,8 @@
  * AI generates branded proposals from lead intake data, exports as PDF, creates Gmail draft
  */
 
-const { createDraft } = require('./gmail-draft.agent');
-const { PrismaClient } = require('@prisma/client');
-const prisma = new PrismaClient();
+import { createDraft, createDraftWithAttachment } from './gmail-draft.agent.js';
+import prisma from '../config/db.js';
 
 // Pricing tiers (hardcoded for now, can be updated via UI)
 const PRICING_TIERS = {
@@ -45,7 +44,8 @@ const PROPOSAL_STATUS = {
 // AI Client import - uses ../ai/client.js
 let aiClient = null;
 try {
-  aiClient = require('../ai/client.js');
+  const mod = await import('../ai/client.js');
+  aiClient = mod.default || mod;
 } catch (err) {
   console.warn('AI client not found, proposal generation will use fallback');
 }
@@ -360,7 +360,7 @@ Return JSON with these exact fields:
  */
 async function generatePdf(proposalHtml) {
   try {
-    const PDFDocument = require('pdfkit');
+    const { default: PDFDocument } = await import('pdfkit');
     
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument({ margin: 50, size: 'LETTER' });
@@ -384,7 +384,7 @@ async function generatePdf(proposalHtml) {
 
       for (const line of lines) {
         const trimmed = line.trim();
-        if (!trimed) continue;
+        if (!trimmed) continue;
         
         if (y > 700) {
           doc.addPage();
@@ -460,12 +460,9 @@ Best,
 Cameron
 Ashbi Design`;
 
-    // Create draft via gmail-draft agent
-    const draftResult = await createDraft(leadEmail, subject, emailBody);
-
-    // In a full implementation, we would attach the PDF here
-    // The Maton API supports attachments - would need to upload PDF first then attach
-    // For now, we create the draft and note that PDF attachment requires additional step
+    // Create draft with PDF attachment via gmail-draft agent
+    const attachmentName = `Ashbi_Proposal_${proposal.id || Date.now()}.pdf`;
+    const draftResult = await createDraftWithAttachment(leadEmail, subject, emailBody, pdfBuffer, attachmentName);
 
     return {
       success: true,
@@ -474,7 +471,8 @@ Ashbi Design`;
       subject,
       pdfGenerated: true,
       pdfSize: pdfBuffer.length,
-      message: 'Draft created. PDF attachment requires additional API call to attach file.'
+      attachmentName,
+      message: 'Draft created with PDF attachment.'
     };
   } catch (error) {
     console.error('Error creating proposal draft:', error);
@@ -713,7 +711,7 @@ async function acceptProposal(proposalId) {
   }
 }
 
-module.exports = {
+export {
   generateProposal,
   generatePdf,
   createProposalDraft,

@@ -11,48 +11,26 @@ import {
   trackReferral,
   getTopReferrers,
   importContacts,
-  REFERRAL_REWARD,
-  sanitizeEmailHeader
+  REFERRAL_REWARD
 } from '../agents/referral-engine.agent.js';
 
-/**
- * Simple auth preHandler - checks for Authorization header
- * In production, replace with proper JWT/session validation
- */
-async function authPreHandler(request, reply) {
-  const authHeader = request.headers.authorization;
-
-  if (!authHeader) {
-    return reply.status(401).send({ error: 'Authorization header required' });
-  }
-
-  // Simple API key check - in production use proper auth
-  const apiKey = authHeader.replace('Bearer ', '');
-  const validKey = process.env.REFERRAL_ENGINE_API_KEY || 'dev-key';
-
-  if (apiKey !== validKey) {
-    return reply.status(403).send({ error: 'Invalid API key' });
-  }
-}
-
-/**
- * Referral Engine Routes - Fastify plugin
- */
 export default async function referralEngineRoutes(fastify) {
   /**
    * GET /referral-engine/network
    * Get full referral network categorized by tiers
    * Returns clients organized by referral likelihood (Tier 1-3)
    */
-  fastify.get('/network', { preHandler: [authPreHandler] }, async (request, reply) => {
+  fastify.get('/network', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
     try {
       const network = await getReferralNetwork();
-      return network;
+      return reply.send(network);
     } catch (error) {
       request.log.error({ err: error }, 'Error getting referral network');
-      return reply.status(500).send({ 
+      return reply.status(500).send({
         error: 'Failed to get referral network',
-        message: error.message 
+        message: error.message
       });
     }
   });
@@ -63,23 +41,25 @@ export default async function referralEngineRoutes(fastify) {
    * Body: { contactName, company, email }
    * Returns the generated email and creates a Gmail draft
    */
-  fastify.post('/refer', { preHandler: [authPreHandler] }, async (request, reply) => {
+  fastify.post('/refer', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
     try {
-      const { contactName, company, email } = request.body;
+      const { contactName, company, email } = request.body || {};
 
       if (!contactName || !company || !email) {
-        return reply.status(400).send({ 
-          error: 'Missing required fields: contactName, company, email' 
+        return reply.status(400).send({
+          error: 'Missing required fields: contactName, company, email'
         });
       }
 
       // Generate referral email using AI
       const emailContent = await generateReferralEmail(contactName, company);
-      
-      // Create Gmail draft (subject is sanitized inside createDraftForReferral)
+
+      // Create Gmail draft
       const draftResult = await createDraftForReferral(email, emailContent.subject, emailContent.body);
 
-      return {
+      return reply.send({
         success: true,
         generatedEmail: {
           subject: emailContent.subject,
@@ -91,12 +71,12 @@ export default async function referralEngineRoutes(fastify) {
           to: email,
           createdAt: draftResult.createdAt
         }
-      };
+      });
     } catch (error) {
       request.log.error({ err: error }, 'Error triggering referral');
-      return reply.status(500).send({ 
+      return reply.status(500).send({
         error: 'Failed to trigger referral',
-        message: error.message 
+        message: error.message
       });
     }
   });
@@ -107,25 +87,27 @@ export default async function referralEngineRoutes(fastify) {
    * Body: { referrerId, referredLead: { name, email, company, projectValue } }
    * Returns created referral record
    */
-  fastify.post('/track', { preHandler: [authPreHandler] }, async (request, reply) => {
+  fastify.post('/track', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
     try {
-      const { referrerId, referredLead } = request.body;
+      const { referrerId, referredLead } = request.body || {};
 
       if (!referrerId || !referredLead) {
-        return reply.status(400).send({ 
-          error: 'Missing required fields: referrerId, referredLead' 
+        return reply.status(400).send({
+          error: 'Missing required fields: referrerId, referredLead'
         });
       }
 
       if (!referredLead.name || !referredLead.email) {
-        return reply.status(400).send({ 
-          error: 'referredLead must include name and email' 
+        return reply.status(400).send({
+          error: 'referredLead must include name and email'
         });
       }
 
       const result = await trackReferral(referrerId, referredLead);
 
-      return {
+      return reply.send({
         success: true,
         referral: result.referral,
         rewardInfo: result.referral.rewardEligible ? {
@@ -135,16 +117,16 @@ export default async function referralEngineRoutes(fastify) {
           maxProjectValue: REFERRAL_REWARD.MAX_PROJECT_VALUE
         } : {
           eligible: false,
-          reason: referredLead.projectValue 
+          reason: referredLead.projectValue
             ? `Project value ${referredLead.projectValue} not in ${REFERRAL_REWARD.MIN_PROJECT_VALUE}-${REFERRAL_REWARD.MAX_PROJECT_VALUE} range`
             : 'No project value provided'
         }
-      };
+      });
     } catch (error) {
       request.log.error({ err: error }, 'Error tracking referral');
-      return reply.status(500).send({ 
+      return reply.status(500).send({
         error: 'Failed to track referral',
-        message: error.message 
+        message: error.message
       });
     }
   });
@@ -154,13 +136,48 @@ export default async function referralEngineRoutes(fastify) {
    * Get referral stats: total referrals, close rate, top referrers
    * Query params: limit (default 10)
    */
-  fastify.get('/stats', async (request, reply) => {
+  fastify.get('/stats', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
     try {
       const limit = parseInt(request.query.limit) || 10;
       const topReferrersResult = await getTopReferrers(limit);
 
-      return {
-        stats: topReferrersResult.summary,
+      // Get overall referral stats from database
+      const { prisma } = fastify;
+
+      const [totalReferrals, referralsByStatus] = await Promise.all([
+        prisma.referral.count(),
+        prisma.referral.groupBy({
+          by: ['status'],
+          _count: true
+        })
+      ]);
+
+      const statusCounts = {};
+      let convertedCount = 0;
+      let paidCount = 0;
+
+      for (const s of referralsByStatus) {
+        statusCounts[s.status] = s._count;
+        if (['converted', 'paid'].includes(s.status)) {
+          convertedCount += s._count;
+        }
+        if (s.status === 'paid') {
+          paidCount += s._count;
+        }
+      }
+
+      const closeRate = totalReferrals > 0 ? Math.round((convertedCount / totalReferrals) * 100) : 0;
+
+      return reply.send({
+        stats: {
+          totalReferrals,
+          convertedReferrals: convertedCount,
+          paidReferrals: paidCount,
+          closeRate,
+          byStatus: statusCounts
+        },
         topReferrers: topReferrersResult.referrers,
         topReferrersSummary: topReferrersResult.summary,
         rewardConfig: {
@@ -170,12 +187,12 @@ export default async function referralEngineRoutes(fastify) {
           paymentCondition: REFERRAL_REWARD.PAYMENT_CONDITION
         },
         generatedAt: new Date().toISOString()
-      };
+      });
     } catch (error) {
       request.log.error({ err: error }, 'Error getting referral stats');
-      return reply.status(500).send({ 
+      return reply.status(500).send({
         error: 'Failed to get referral stats',
-        message: error.message 
+        message: error.message
       });
     }
   });
@@ -186,26 +203,28 @@ export default async function referralEngineRoutes(fastify) {
    * Body: { contacts: [{ name, email, company }] }
    * Returns import results with count of imported vs skipped
    */
-  fastify.post('/import-contacts', { preHandler: [authPreHandler] }, async (request, reply) => {
+  fastify.post('/import-contacts', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
     try {
-      const { contacts } = request.body;
+      const { contacts } = request.body || {};
 
       if (!contacts || !Array.isArray(contacts)) {
-        return reply.status(400).send({ 
-          error: 'Body must include contacts array: [{ name, email, company }]' 
+        return reply.status(400).send({
+          error: 'Body must include contacts array: [{ name, email, company }]'
         });
       }
 
       if (contacts.length === 0) {
-        return reply.status(400).send({ 
-          error: 'Contacts array cannot be empty' 
+        return reply.status(400).send({
+          error: 'Contacts array cannot be empty'
         });
       }
 
       // Validate each contact has required fields
       const invalidContacts = contacts.filter(c => !c.name || !c.email);
       if (invalidContacts.length > 0) {
-        return reply.status(400).send({ 
+        return reply.status(400).send({
           error: 'All contacts must have name and email',
           invalid: invalidContacts.map(c => c.email || c.name)
         });
@@ -213,18 +232,18 @@ export default async function referralEngineRoutes(fastify) {
 
       const result = await importContacts(contacts);
 
-      return {
+      return reply.send({
         success: true,
         imported: result.imported,
         skipped: result.skipped,
         clients: result.clients,
         errors: result.errors.length > 0 ? result.errors : undefined
-      };
+      });
     } catch (error) {
       request.log.error({ err: error }, 'Error importing contacts');
-      return reply.status(500).send({ 
+      return reply.status(500).send({
         error: 'Failed to import contacts',
-        message: error.message 
+        message: error.message
       });
     }
   });

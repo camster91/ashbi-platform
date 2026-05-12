@@ -189,13 +189,16 @@ export default async function contractRoutes(fastify) {
     return contract;
   });
 
-  // POST /sign/:signToken — PUBLIC — client signs contract
+  // POST /sign/:signToken — PUBLIC — client signs contract + auto-creates first invoice
   // Body: { signerName, agreement: true }
   fastify.post('/sign/:signToken', async (request, reply) => {
     const { signerName, agreement } = request.body;
     if (!signerName || !agreement) return reply.status(400).send({ error: 'signerName and agreement:true required' });
 
-    const contract = await fastify.prisma.contract.findUnique({ where: { signToken: request.params.signToken } });
+    const contract = await fastify.prisma.contract.findUnique({
+      where: { signToken: request.params.signToken },
+      include: { proposal: { include: { lineItems: true } }, client: true }
+    });
     if (!contract) return reply.status(404).send({ error: 'Contract not found' });
     if (contract.status === 'SIGNED') return reply.status(400).send({ error: 'Contract already signed' });
     if (contract.status === 'VOID') return reply.status(400).send({ error: 'Contract is void' });
@@ -205,7 +208,7 @@ export default async function contractRoutes(fastify) {
       .update(signerName + now.getTime().toString())
       .digest('hex');
 
-    return fastify.prisma.contract.update({
+    const signed = await fastify.prisma.contract.update({
       where: { signToken: request.params.signToken },
       data: {
         status: 'SIGNED',
@@ -215,6 +218,69 @@ export default async function contractRoutes(fastify) {
         signedAt: now
       }
     });
+
+    // Auto-create first invoice from contract
+    let invoice = null;
+    try {
+      const { generateInvoiceNumber } = await import('../utils/invoice.js');
+      const lineItems = (contract.proposal?.lineItems || []).map((li, idx) => ({
+        description: li.description,
+        itemType: 'LABOR',
+        quantity: li.quantity,
+        unitPrice: li.unitPrice,
+        total: li.total,
+        position: idx,
+      }));
+
+      if (lineItems.length === 0) {
+        lineItems.push({
+          description: contract.title || 'Services rendered',
+          itemType: 'LABOR',
+          quantity: 1,
+          unitPrice: 0,
+          total: 0,
+          position: 0,
+        });
+      }
+
+      const subtotal = lineItems.reduce((sum, li) => sum + li.total, 0);
+      const discountAmount = 0;
+      const taxRate = 13; // Ontario HST
+      const discounted = Math.max(0, subtotal - discountAmount);
+      const tax = parseFloat(((discounted * taxRate) / 100).toFixed(2));
+      const total = parseFloat((discounted + tax).toFixed(2));
+
+      const dueDate = new Date(now);
+      dueDate.setDate(dueDate.getDate() + 30); // Net 30
+
+      invoice = await fastify.prisma.invoice.create({
+        data: {
+          invoiceNumber: generateInvoiceNumber(),
+          status: 'SENT',
+          title: `Invoice: ${contract.title || 'Services'}`,
+          dueDate,
+          issueDate: now,
+          subtotal,
+          discountAmount,
+          taxRate,
+          taxType: 'HST',
+          tax,
+          total,
+          currency: 'CAD',
+          clientId: contract.clientId,
+          proposalId: contract.proposalId || null,
+          createdById: contract.createdById,
+          lineItems: { create: lineItems },
+          sentAt: now,
+        },
+        include: { lineItems: true }
+      });
+    } catch (err) {
+      console.error('[Contract] Auto-invoice creation failed:', err.message);
+      // Don't fail the signing — the contract is signed, invoice can be created manually
+    }
+
+    return { ...signed, invoiceCreated: !!invoice, invoiceId: invoice?.id };
   });
 
   // GET /:id/pdf — generate branded PDF

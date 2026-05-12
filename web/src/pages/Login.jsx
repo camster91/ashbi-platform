@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
+import { useTranslation } from '../hooks/useTranslation';
 import { Button } from '../components/ui';
 import {
   Sparkles,
@@ -21,6 +22,7 @@ export default function Login() {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
+  const t = useTranslation();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -30,16 +32,16 @@ export default function Login() {
     try {
       await login(email, password);
     } catch (err) {
-      setError(err.message || 'Invalid email or password');
+      setError(err.message || t('login.invalidCredentials'));
     } finally {
       setIsLoading(false);
     }
   };
 
   const features = [
-    { icon: Zap, text: 'AI-powered business intelligence' },
-    { icon: Users, text: 'Unified client & store management' },
-    { icon: MessageSquare, text: 'Automated workflows & reporting' },
+    { icon: Zap, textKey: 'login.feature1' },
+    { icon: Users, textKey: 'login.feature2' },
+    { icon: MessageSquare, textKey: 'login.feature3' },
   ];
 
   return (
@@ -63,11 +65,12 @@ export default function Login() {
             </div>
 
             <h2 className="text-4xl font-display mb-4 leading-tight">
-              Your brands,<br />one platform
+              {t('login.brandTagline').split(',').map((part, i, arr) => (
+                i === 0 ? part : <><br />{part}</>
+              ))}
             </h2>
             <p className="text-white/70 text-lg max-w-md font-sans">
-              Streamline operations with intelligent automation,
-              unified dashboards, and seamless collaboration across every store.
+              {t('login.brandDescription')}
             </p>
           </div>
 
@@ -77,13 +80,13 @@ export default function Login() {
                 <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center">
                   <feature.icon className="w-5 h-5 text-[#e6f354]" />
                 </div>
-                <span className="text-white/80">{feature.text}</span>
+                <span className="text-white/80">{t(feature.textKey)}</span>
               </div>
             ))}
           </div>
 
           <div className="text-sm text-white/40">
-            &copy; 2026 Ashbi Design. All rights reserved.
+            {t('login.copyright')}
           </div>
         </div>
       </div>
@@ -101,10 +104,10 @@ export default function Login() {
 
           <div className="text-center">
             <h1 className="text-3xl font-display text-foreground mb-2">
-              Welcome back
+              {t('login.welcomeBack')}
             </h1>
             <p className="text-muted-foreground">
-              Sign in to your account to continue
+              {t('login.signInToAccount')}
             </p>
           </div>
 
@@ -113,7 +116,7 @@ export default function Login() {
               {/* Email field */}
               <div className="space-y-2">
                 <label htmlFor="email" className="text-sm font-medium text-foreground">
-                  Email address
+                  {t('login.emailLabel')}
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
@@ -122,7 +125,7 @@ export default function Login() {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="your@email.com"
+                    placeholder={t('login.emailPlaceholder')}
                     className={cn(
                       'w-full pl-11 pr-4 py-3 bg-white border border-border rounded-xl',
                       'text-foreground placeholder:text-muted-foreground',
@@ -137,7 +140,7 @@ export default function Login() {
               {/* Password field */}
               <div className="space-y-2">
                 <label htmlFor="password" className="text-sm font-medium text-foreground">
-                  Password
+                  {t('login.passwordLabel')}
                 </label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
@@ -146,7 +149,7 @@ export default function Login() {
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter your password"
+                    placeholder={t('login.passwordPlaceholder')}
                     className={cn(
                       'w-full pl-11 pr-12 py-3 bg-white border border-border rounded-xl',
                       'text-foreground placeholder:text-muted-foreground',
@@ -169,10 +172,10 @@ export default function Login() {
               <div className="flex items-center justify-between text-sm">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input type="checkbox" className="w-4 h-4 rounded border-border text-primary focus:ring-[#e6f354]/30" />
-                  <span className="text-muted-foreground">Remember me</span>
+                  <span className="text-muted-foreground">{t('login.rememberMe')}</span>
                 </label>
                 <a href="/forgot-password" className="text-[#2e2958] hover:text-[#3f3580] font-medium transition-colors">
-                  Forgot password?
+                  {t('login.forgotPassword')}
                 </a>
               </div>
             </div>
@@ -206,7 +209,7 @@ export default function Login() {
                 <span className="inline-block w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
                 <>
-                  Sign in
+                  {t('login.signIn')}
                   <ArrowRight className="w-5 h-5" />
                 </>
               )}

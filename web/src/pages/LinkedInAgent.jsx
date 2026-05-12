@@ -6,30 +6,80 @@ import { useToast } from '../hooks/useToast';
 import {
   Linkedin, Sparkles, Loader2, X, Plus, Trash2, Edit3, Users,
   ChevronRight, Clock, Building, User, Copy, Check, Upload,
-  Send, BarChart3, Activity, TrendingUp, AlertTriangle
+  Play, Pause, Send, BarChart3, Target, AlertCircle, CheckCircle2
 } from 'lucide-react';
 
 const STATUS_COLORS = {
   DRAFT: 'bg-yellow-100 text-yellow-700',
   ACTIVE: 'bg-green-100 text-green-700',
+  PAUSED: 'bg-orange-100 text-orange-700',
   COMPLETED: 'bg-blue-100 text-blue-700',
+  FAILED: 'bg-red-100 text-red-700',
   NEW: 'bg-muted text-muted-foreground',
   CONNECTED: 'bg-green-100 text-green-700',
   IN_SEQUENCE: 'bg-blue-100 text-blue-700',
   REPLIED: 'bg-purple-100 text-purple-700',
   CONVERTED: 'bg-emerald-100 text-emerald-700',
-  DECLINED: 'bg-red-100 text-red-700',
+  PENDING: 'bg-yellow-50 text-yellow-600',
+  SENT: 'bg-green-50 text-green-600',
 };
 
-const STATUS_BG = {
-  NEW: 'bg-muted',
-  CONNECTED: 'bg-green-50',
-  IN_SEQUENCE: 'bg-blue-50',
-  REPLIED: 'bg-purple-50',
-  CONVERTED: 'bg-emerald-50',
-};
+function CampaignModal({ onClose, onSaved }) {
+  const toast = useToast();
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [maxPerDay, setMaxPerDay] = useState(20);
+  const [loading, setLoading] = useState(false);
 
-function GenerateSequenceModal({ onClose, onGenerated }) {
+  const create = async (e) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setLoading(true);
+    try {
+      await api.createLinkedInCampaign({ name, description, maxConnectionsPerDay: maxPerDay });
+      onSaved();
+      onClose();
+    } catch (err) {
+      toast.error('Failed: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/20 backdrop-blur-sm">
+      <div className="bg-card rounded-xl shadow-xl border border-border w-full max-w-md p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2"><Target className="w-5 h-5 text-primary" /><h2 className="text-lg font-semibold">New Campaign</h2></div>
+          <button onClick={onClose} className="p-1 text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
+        </div>
+        <form onSubmit={create} className="space-y-3">
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Campaign Name *</label>
+            <input value={name} onChange={e => setName(e.target.value)} required placeholder="Q2 CPG Outreach"
+              className="w-full mt-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Description</label>
+            <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} placeholder="Targeting CPG brands for branding project..."
+              className="w-full mt-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-muted-foreground">Max Connections/Day</label>
+            <input type="number" value={maxPerDay} onChange={e => setMaxPerDay(Number(e.target.value))} min={1} max={100}
+              className="w-full mt-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/20" />
+          </div>
+          <button type="submit" disabled={loading}
+            className="w-full py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 flex items-center justify-center gap-2">
+            {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating...</> : <><Plus className="w-4 h-4" /> Create Campaign</>}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function GenerateSequenceModal({ campaigns, onClose, onGenerated }) {
   const toast = useToast();
   const [name, setName] = useState('');
   const [title, setTitle] = useState('');
@@ -37,6 +87,7 @@ function GenerateSequenceModal({ onClose, onGenerated }) {
   const [industry, setIndustry] = useState('CPG/DTC');
   const [linkedinUrl, setLinkedinUrl] = useState('');
   const [notes, setNotes] = useState('');
+  const [campaignId, setCampaignId] = useState('');
   const [loading, setLoading] = useState(false);
 
   const generate = async (e) => {
@@ -44,7 +95,7 @@ function GenerateSequenceModal({ onClose, onGenerated }) {
     if (!name.trim() || !company.trim()) return;
     setLoading(true);
     try {
-      await api.generateLinkedInSequence({ prospectName: name, prospectTitle: title, company, industry, linkedinUrl, notes });
+      await api.generateLinkedInSequence({ prospectName: name, prospectTitle: title, company, industry, linkedinUrl, notes, campaignId: campaignId || undefined });
       onGenerated();
       onClose();
     } catch (err) {
@@ -86,14 +137,24 @@ function GenerateSequenceModal({ onClose, onGenerated }) {
                 className="w-full mt-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/20">
                 <option value="CPG/DTC">CPG/DTC</option>
                 <option value="Shopify ecommerce">Shopify ecommerce</option>
-                <option value="Food & Beverage">Food & Beverage</option>
-                <option value="Health & Wellness">Health & Wellness</option>
-                <option value="Beauty & Skincare">Beauty & Skincare</option>
+                <option value="Food &amp; Beverage">Food &amp; Beverage</option>
+                <option value="Health &amp; Wellness">Health &amp; Wellness</option>
+                <option value="Beauty &amp; Skincare">Beauty &amp; Skincare</option>
                 <option value="Supplements">Supplements</option>
                 <option value="Other">Other</option>
               </select>
             </div>
           </div>
+          {campaigns.length > 0 && (
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Campaign (optional)</label>
+              <select value={campaignId} onChange={e => setCampaignId(e.target.value)}
+                className="w-full mt-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/20">
+                <option value="">No campaign</option>
+                {campaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+          )}
           <div>
             <label className="text-xs font-medium text-muted-foreground">LinkedIn URL</label>
             <input value={linkedinUrl} onChange={e => setLinkedinUrl(e.target.value)} placeholder="https://linkedin.com/in/..."
@@ -101,7 +162,7 @@ function GenerateSequenceModal({ onClose, onGenerated }) {
           </div>
           <div>
             <label className="text-xs font-medium text-muted-foreground">Notes</label>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Anything notable about this prospect..."
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Anything notable..."
               className="w-full mt-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none" />
           </div>
           <button type="submit" disabled={loading}
@@ -148,7 +209,7 @@ function ImportProspectsModal({ onClose, onImported }) {
           <div className="flex items-center gap-2"><Upload className="w-5 h-5 text-primary" /><h2 className="text-lg font-semibold">Import Prospects</h2></div>
           <button onClick={onClose} className="p-1 text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
         </div>
-        <p className="text-xs text-muted-foreground mb-3">One prospect per line: Name, Company, Title, Industry, LinkedIn URL, Email</p>
+        <p className="text-xs text-muted-foreground mb-3">One per line: Name, Company, Title, Industry, LinkedIn URL, Email</p>
         <textarea value={text} onChange={e => setText(e.target.value)} rows={8}
           placeholder="Sarah Johnson, GlowUp Skincare, VP Marketing, Beauty, https://linkedin.com/in/sarah, sarah@glowup.com"
           className="w-full px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none font-mono" />
@@ -161,7 +222,7 @@ function ImportProspectsModal({ onClose, onImported }) {
   );
 }
 
-function SequenceDetail({ seq, onClose, onSend }) {
+function SequenceDetail({ seq, rateLimit, onClose, onSend }) {
   const [copied, setCopied] = useState('');
   const toast = useToast();
 
@@ -171,15 +232,9 @@ function SequenceDetail({ seq, onClose, onSend }) {
     setTimeout(() => setCopied(''), 2000);
   };
 
-  const handleSendConnection = async (prospectId) => {
-    try {
-      const result = await api.sendLinkedInConnection({ sequenceId: seq.id, prospectId });
-      toast.success('Connection request tracked');
-      onSend?.();
-    } catch (err) {
-      toast.error('Failed: ' + (err.data?.error || err.message));
-    }
-  };
+  const canSend = rateLimit && rateLimit.remaining > 0;
+  const nextMsgType = seq.sentCount === 0 ? 'connection' : seq.sentCount === 1 ? 'followup1' : seq.sentCount === 2 ? 'followup2' : null;
+  const nextTiming = seq.sentCount === 0 ? 'Send now' : seq.sentCount === 1 ? 'Day 3 (scheduled)' : seq.sentCount === 2 ? 'Day 7 (scheduled)' : 'Complete';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/20 backdrop-blur-sm">
@@ -190,27 +245,26 @@ function SequenceDetail({ seq, onClose, onSend }) {
             <p className="text-sm text-muted-foreground">{seq.prospectTitle} at {seq.company} — {seq.industry}</p>
           </div>
           <div className="flex items-center gap-2">
-            {seq.status === 'DRAFT' && onSend && (
-              <button onClick={() => handleSendConnection(seq.prospectId)}
-                className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">
-                <Send className="w-4 h-4" /> Send Connection
-              </button>
-            )}
+            <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', STATUS_COLORS[seq.status])}>{seq.status}</span>
             <button onClick={onClose} className="p-1 text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
           </div>
         </div>
 
-        <div className="space-y-4">
+        {/* Sequence steps */}
+        <div className="space-y-3">
           {[
-            { label: 'Connection Request', text: seq.connectionMsg, timing: 'Send now' },
-            { label: 'Follow-Up 1', text: seq.followUp1, timing: '3 days after connection' },
-            { label: 'Follow-Up 2', text: seq.followUp2, timing: '7 days after connection' },
+            { label: 'Step 1: Connection Request', text: seq.connectionMsg, step: 0, sent: seq.sentCount > 0 },
+            { label: 'Step 2: Follow-Up (Day 3)', text: seq.followUp1, step: 1, sent: seq.sentCount > 1 },
+            { label: 'Step 3: Follow-Up (Day 7)', text: seq.followUp2, step: 2, sent: seq.sentCount > 2 },
           ].map(msg => (
-            <div key={msg.label} className="bg-muted/50 rounded-lg p-4">
+            <div key={msg.label} className={cn('rounded-lg p-4 border', msg.sent ? 'bg-green-50 border-green-200' : 'bg-muted/50 border-border')}>
               <div className="flex items-center justify-between mb-2">
-                <div>
+                <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">{msg.label}</span>
-                  <span className="text-xs text-muted-foreground ml-2">{msg.timing}</span>
+                  {msg.sent
+                    ? <span className="flex items-center gap-1 text-xs text-green-600"><CheckCircle2 className="w-3 h-3" /> Sent</span>
+                    : <span className="text-xs text-muted-foreground">{msg.step === 0 ? 'Send now' : msg.step === 1 ? 'Day 3' : 'Day 7'}</span>
+                  }
                 </div>
                 <button onClick={() => copy(msg.text, msg.label)}
                   className="flex items-center gap-1 px-2 py-1 text-xs bg-card hover:bg-muted rounded transition-colors">
@@ -220,6 +274,44 @@ function SequenceDetail({ seq, onClose, onSend }) {
               <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
             </div>
           ))}
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-3 mt-5">
+          {nextMsgType && seq.status !== 'COMPLETED' && seq.status !== 'FAILED' && (
+            <>
+              {nextMsgType === 'connection' && seq.status === 'DRAFT' && (
+                <button onClick={() => onSend(seq.id, 'connection')}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90">
+                  <Play className="w-4 h-4" /> Start Sequence
+                </button>
+              )}
+              {(seq.status === 'ACTIVE' || seq.status === 'PAUSED') && (
+                <button onClick={() => onSend(seq.id, nextMsgType)}
+                  disabled={!canSend && seq.status === 'ACTIVE'}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50">
+                  <Send className="w-4 h-4" /> Send {nextMsgType === 'connection' ? 'Connection' : nextMsgType === 'followup1' ? 'Follow-up 1' : 'Follow-up 2'}
+                </button>
+              )}
+              {seq.status === 'PAUSED' && (
+                <button onClick={() => onSend(seq.id, 'resume')}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">
+                  <Play className="w-4 h-4" /> Resume
+                </button>
+              )}
+            </>
+          )}
+          {seq.status === 'ACTIVE' && (
+            <button onClick={() => onSend(seq.id, 'pause')}
+              className="flex items-center gap-2 px-4 py-2 bg-muted text-foreground rounded-lg text-sm font-medium hover:bg-muted/80">
+              <Pause className="w-4 h-4" /> Pause
+            </button>
+          )}
+          {rateLimit && seq.status === 'ACTIVE' && (
+            <span className="text-xs text-muted-foreground flex items-center gap-1">
+              <AlertCircle className="w-3 h-3" /> {rateLimit.remaining}/{rateLimit.limit} connections left today
+            </span>
+          )}
         </div>
 
         {seq.linkedinUrl && (
@@ -233,218 +325,148 @@ function SequenceDetail({ seq, onClose, onSend }) {
   );
 }
 
-// ── Campaign Dashboard ────────────────────────────────────────────
+function CampaignDashboard({ campaigns, sequences, onSelectCampaign }) {
+  if (campaigns.length === 0) {
+    return (
+      <div className="text-center py-8 text-muted-foreground">
+        <Target className="w-10 h-10 mx-auto mb-2 opacity-30" />
+        <p className="text-sm">No campaigns yet</p>
+      </div>
+    );
+  }
 
-function CampaignDashboard() {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {campaigns.map(c => {
+        const seqs = sequences.filter(s => s.campaignId === c.id);
+        const active = seqs.filter(s => s.status === 'ACTIVE').length;
+        const completed = seqs.filter(s => s.status === 'COMPLETED').length;
+        return (
+          <div key={c.id} onClick={() => onSelectCampaign(c.id)}
+            className="bg-card rounded-xl border border-border p-4 hover:border-primary/30 transition-colors cursor-pointer">
+            <div className="flex items-start justify-between mb-2">
+              <h3 className="font-semibold text-sm">{c.name}</h3>
+              <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', STATUS_COLORS[c.status])}>{c.status}</span>
+            </div>
+            {c.description && <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{c.description}</p>}
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="bg-muted/50 rounded-lg p-2">
+                <div className="text-lg font-bold">{seqs.length}</div>
+                <div className="text-xs text-muted-foreground">Sequences</div>
+              </div>
+              <div className="bg-green-50 rounded-lg p-2">
+                <div className="text-lg font-bold text-green-700">{active}</div>
+                <div className="text-xs text-green-600">Active</div>
+              </div>
+              <div className="bg-blue-50 rounded-lg p-2">
+                <div className="text-lg font-bold text-blue-700">{completed}</div>
+                <div className="text-xs text-blue-600">Done</div>
+              </div>
+            </div>
+            <div className="mt-2 text-xs text-muted-foreground flex items-center gap-1">
+              <BarChart3 className="w-3 h-3" /> Max {c.maxConnectionsPerDay}/day
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function LinkedInAgent() {
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [showGenerate, setShowGenerate] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [showCampaign, setShowCampaign] = useState(false);
+  const [selectedSeq, setSelectedSeq] = useState(null);
+  const [selectedCampaignId, setSelectedCampaignId] = useState(null);
   const queryClient = useQueryClient();
   const toast = useToast();
 
-  const { data: stats, isLoading } = useQuery({
-    queryKey: ['linkedin-stats'],
-    queryFn: api.getLinkedInStats,
-    refetchInterval: 30_000,
-  });
-
-  const { data: sequences = [] } = useQuery({
-    queryKey: ['linkedin-sequences'],
-    queryFn: api.getLinkedInSequences,
-  });
-
-  const { data: prospects = [] } = useQuery({
-    queryKey: ['linkedin-prospects'],
-    queryFn: () => api.getLinkedInProspects(),
-  });
-
-  const sendConnectionMut = useMutation({
-    mutationFn: (data) => api.sendLinkedInConnection(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['linkedin-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['linkedin-sequences'] });
-      queryClient.invalidateQueries({ queryKey: ['linkedin-prospects'] });
-      toast.success('Connection request sent');
-    },
-    onError: (err) => toast.error('Failed: ' + (err.data?.error || err.message)),
-  });
-
-  if (isLoading) {
-    return <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>;
-  }
-
-  const ds = stats?.dailyUsage || {};
-  const ps = stats?.prospects || {};
-  const ss = stats?.sequences || {};
-
-  const pByStatus = ps.byStatus || {};
-  const sByStatus = ss.byStatus || {};
-
-  const pipeline = [
-    { label: 'NEW', count: pByStatus.NEW || 0, color: 'bg-muted' },
-    { label: 'CONNECTED', count: pByStatus.CONNECTED || 0, color: 'bg-green-400' },
-    { label: 'IN SEQUENCE', count: pByStatus.IN_SEQUENCE || 0, color: 'bg-blue-400' },
-    { label: 'REPLIED', count: pByStatus.REPLIED || 0, color: 'bg-purple-400' },
-    { label: 'CONVERTED', count: pByStatus.CONVERTED || 0, color: 'bg-emerald-400' },
-  ];
-
-  const draftedSeqs = sequences.filter(s => s.status === 'DRAFT');
-  const activeSeqs = sequences.filter(s => s.status === 'ACTIVE');
-
-  return (
-    <div className="space-y-6">
-      {/* Daily Usage Meter */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-card rounded-xl border border-border p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-muted-foreground">Connections Today</span>
-            <Activity className="w-4 h-4 text-muted-foreground" />
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-bold">{ds.connectionsSent || 0}</span>
-            <span className="text-sm text-muted-foreground">/ {ds.connectionLimit || 20}</span>
-          </div>
-          <div className="mt-2 w-full h-2 bg-muted rounded-full overflow-hidden">
-            <div className={cn('h-full rounded-full transition-all', (ds.connectionsSent || 0) >= (ds.connectionLimit || 20) ? 'bg-red-500' : 'bg-green-500')}
-              style={{ width: `${Math.min(100, ((ds.connectionsSent || 0) / (ds.connectionLimit || 20)) * 100)}%` }} />
-          </div>
-          {ds.connectionsRemaining === 0 && (
-            <p className="mt-2 text-xs text-red-500 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> Limit reached</p>
-          )}
-        </div>
-        <div className="bg-card rounded-xl border border-border p-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-muted-foreground">Messages Today</span>
-            <Send className="w-4 h-4 text-muted-foreground" />
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-bold">{ds.messagesSent || 0}</span>
-            <span className="text-sm text-muted-foreground">/ {ds.messageLimit || 50}</span>
-          </div>
-          <div className="mt-2 w-full h-2 bg-muted rounded-full overflow-hidden">
-            <div className={cn('h-full rounded-full transition-all', (ds.messagesSent || 0) >= (ds.messageLimit || 50) ? 'bg-red-500' : 'bg-amber-500')}
-              style={{ width: `${Math.min(100, ((ds.messagesSent || 0) / (ds.messageLimit || 50)) * 100)}%` }} />
-          </div>
-        </div>
-      </div>
-
-      {/* Prospect Pipeline */}
-      <div className="bg-card rounded-xl border border-border p-4">
-        <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-          <TrendingUp className="w-4 h-4 text-primary" /> Prospect Pipeline
-        </h3>
-        <div className="flex gap-2">
-          {pipeline.map(stage => (
-            <div key={stage.label} className="flex-1 text-center">
-              <div className="text-2xl font-bold">{stage.count}</div>
-              <div className="flex items-center justify-center gap-1 mt-0.5">
-                <div className={cn('w-2 h-2 rounded-full', stage.color)} />
-                <span className="text-xs text-muted-foreground">{stage.label}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Sequence Activation */}
-      {draftedSeqs.length > 0 && (
-        <div className="bg-card rounded-xl border border-border p-4">
-          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-            <Send className="w-4 h-4 text-primary" /> Ready to Activate ({draftedSeqs.length})
-          </h3>
-          <div className="space-y-2">
-            {draftedSeqs.slice(0, 5).map(seq => (
-              <div key={seq.id} className="flex items-center justify-between bg-muted/30 rounded-lg px-4 py-3">
-                <div>
-                  <span className="text-sm font-medium">{seq.prospectName}</span>
-                  <span className="text-xs text-muted-foreground ml-2">{seq.company}</span>
-                </div>
-                <button
-                  onClick={() => sendConnectionMut.mutate({ sequenceId: seq.id, prospectId: seq.prospectId || seq.id })}
-                  disabled={sendConnectionMut.isPending || (ds.connectionsSent || 0) >= (ds.connectionLimit || 20)}
-                  className="flex items-center gap-2 px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
-                  <Send className="w-3 h-3" /> Connect
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Active Sequences */}
-      {activeSeqs.length > 0 && (
-        <div className="bg-card rounded-xl border border-border p-4">
-          <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-            <Activity className="w-4 h-4 text-green-600" /> Active Sequences ({activeSeqs.length})
-          </h3>
-          <div className="space-y-2">
-            {activeSeqs.map(seq => (
-              <div key={seq.id} className="flex items-center justify-between bg-green-50 rounded-lg px-4 py-3">
-                <div>
-                  <span className="text-sm font-medium">{seq.prospectName}</span>
-                  <span className="text-xs text-muted-foreground ml-2">{seq.company}</span>
-                </div>
-                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">ACTIVE</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Summary Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        <StatCard label="Total Prospects" value={ps.total || 0} />
-        <StatCard label="Total Sequences" value={ss.total || 0} />
-        <StatCard label="Converted" value={pByStatus.CONVERTED || 0} highlight />
-      </div>
-    </div>
-  );
-}
-
-function StatCard({ label, value, highlight }) {
-  return (
-    <div className={cn('bg-card rounded-xl border border-border p-4', highlight && 'border-emerald-200 bg-emerald-50/50')}>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className={cn('text-2xl font-bold mt-1', highlight && 'text-emerald-600')}>{value}</p>
-    </div>
-  );
-}
-
-// ── Main Page ─────────────────────────────────────────────────────
-
-export default function LinkedInAgent() {
-  const [activeTab, setActiveTab] = useState('sequences');
-  const [showGenerate, setShowGenerate] = useState(false);
-  const [showImport, setShowImport] = useState(false);
-  const [selectedSeq, setSelectedSeq] = useState(null);
-  const queryClient = useQueryClient();
-
   const { data: sequences = [], isLoading: seqLoading } = useQuery({
     queryKey: ['linkedin-sequences'],
-    queryFn: api.getLinkedInSequences,
+    queryFn: () => api.getLinkedInSequences(selectedCampaignId ? { campaignId: selectedCampaignId } : {}),
   });
 
   const { data: prospects = [], isLoading: prospLoading } = useQuery({
     queryKey: ['linkedin-prospects'],
-    queryFn: () => api.getLinkedInProspects(),
+    queryFn: () => api.getLinkedInProspects(selectedCampaignId ? { campaignId: selectedCampaignId } : {}),
+  });
+
+  const { data: campaigns = [], isLoading: campLoading } = useQuery({
+    queryKey: ['linkedin-campaigns'],
+    queryFn: api.getLinkedInCampaigns,
+  });
+
+  const { data: rateLimit } = useQuery({
+    queryKey: ['linkedin-rate-limit'],
+    queryFn: () => api.getLinkedInRateLimit(selectedCampaignId || undefined),
+    refetchInterval: 60000,
+  });
+
+  const { data: messages = [] } = useQuery({
+    queryKey: ['linkedin-messages', selectedCampaignId],
+    queryFn: () => api.getLinkedInMessages(selectedCampaignId ? { campaignId: selectedCampaignId } : {}),
+    enabled: activeTab === 'messages',
   });
 
   const deleteSeq = useMutation({
     mutationFn: api.deleteLinkedInSequence,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['linkedin-sequences'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['linkedin-sequences'] });
+      toast.success('Sequence deleted');
+    },
   });
 
-  const refreshAll = () => {
-    queryClient.invalidateQueries({ queryKey: ['linkedin-sequences'] });
-    queryClient.invalidateQueries({ queryKey: ['linkedin-prospects'] });
-    queryClient.invalidateQueries({ queryKey: ['linkedin-stats'] });
+  const sendMessage = useMutation({
+    mutationFn: ({ sequenceId, messageType }) => api.sendLinkedInMessage({ sequenceId, messageType, campaignId: selectedCampaignId || undefined }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['linkedin-sequences'] });
+      queryClient.invalidateQueries({ queryKey: ['linkedin-rate-limit'] });
+      toast.success('Message sent');
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const activateSeq = useMutation({
+    mutationFn: (id) => api.activateLinkedInSequence(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['linkedin-sequences'] });
+      toast.success('Sequence activated');
+    },
+  });
+
+  const pauseSeq = useMutation({
+    mutationFn: (id) => api.pauseLinkedInSequence(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['linkedin-sequences'] });
+      toast.info('Sequence paused');
+    },
+  });
+
+  const handleSend = (seqId, action) => {
+    if (action === 'pause') {
+      pauseSeq.mutate(seqId);
+    } else if (action === 'resume') {
+      activateSeq.mutate(seqId);
+    } else {
+      sendMessage.mutate({ sequenceId: seqId, messageType: action });
+    }
   };
+
+  const totalActive = sequences.filter(s => s.status === 'ACTIVE').length;
+  const totalCompleted = sequences.filter(s => s.status === 'COMPLETED').length;
+  const totalDraft = sequences.filter(s => s.status === 'DRAFT').length;
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-heading font-bold flex items-center gap-2">
-            <Linkedin className="w-7 h-7 text-primary" /> LinkedIn Outreach Agent
+            <Linkedin className="w-7 h-7 text-primary" /> LinkedIn Outreach
           </h1>
-          <p className="text-muted-foreground text-sm mt-1">Generate personalized connection sequences for CPG/DTC prospects</p>
+          <p className="text-muted-foreground text-sm mt-1">CPG/DTC connection pipeline with day-3 and day-7 follow-ups</p>
         </div>
         <div className="flex gap-2">
           {activeTab === 'prospects' && (
@@ -453,6 +475,10 @@ export default function LinkedInAgent() {
               <Upload className="w-4 h-4" /> Import
             </button>
           )}
+          <button onClick={() => setShowCampaign(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-muted text-foreground rounded-lg text-sm font-medium hover:bg-muted/80">
+            <Target className="w-4 h-4" /> Campaign
+          </button>
           <button onClick={() => setShowGenerate(true)}
             className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90">
             <Sparkles className="w-4 h-4" /> New Sequence
@@ -460,27 +486,45 @@ export default function LinkedInAgent() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-muted/50 rounded-lg p-1">
-        <button onClick={() => setActiveTab('sequences')}
-          className={cn('flex-1 py-2 text-sm font-medium rounded-md transition-colors text-center',
-            activeTab === 'sequences' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
-          Sequences ({sequences.length})
-        </button>
-        <button onClick={() => setActiveTab('prospects')}
-          className={cn('flex-1 py-2 text-sm font-medium rounded-md transition-colors text-center',
-            activeTab === 'prospects' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
-          Prospects ({prospects.length})
-        </button>
-        <button onClick={() => setActiveTab('campaign')}
-          className={cn('flex-1 py-2 text-sm font-medium rounded-md transition-colors text-center',
-            activeTab === 'campaign' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
-          <BarChart3 className="w-4 h-4 inline mr-1" /> Campaign
-        </button>
+      {/* Stats bar */}
+      <div className="grid grid-cols-4 gap-3">
+        <div className="bg-card rounded-xl border border-border p-4">
+          <div className="text-2xl font-bold">{sequences.length}</div>
+          <div className="text-xs text-muted-foreground">Total Sequences</div>
+        </div>
+        <div className="bg-green-50 rounded-xl border border-green-200 p-4">
+          <div className="text-2xl font-bold text-green-700">{totalActive}</div>
+          <div className="text-xs text-green-600">Active</div>
+        </div>
+        <div className="bg-blue-50 rounded-xl border border-blue-200 p-4">
+          <div className="text-2xl font-bold text-blue-700">{totalCompleted}</div>
+          <div className="text-xs text-blue-600">Completed</div>
+        </div>
+        <div className="bg-orange-50 rounded-xl border border-orange-200 p-4">
+          <div className="text-2xl font-bold text-orange-700">{rateLimit?.remaining ?? '—'}</div>
+          <div className="text-xs text-orange-600">Connections Left Today</div>
+        </div>
       </div>
 
-      {/* Campaign Tab */}
-      {activeTab === 'campaign' && <CampaignDashboard />}
+      {/* Tabs */}
+      <div className="flex gap-1 bg-muted/50 rounded-lg p-1">
+        {['dashboard', 'sequences', 'prospects', 'messages'].map(tab => (
+          <button key={tab} onClick={() => setActiveTab(tab)}
+            className={cn('flex-1 py-2 text-sm font-medium rounded-md transition-colors text-center capitalize',
+              activeTab === tab ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      {/* Dashboard Tab */}
+      {activeTab === 'dashboard' && (
+        campLoading ? (
+          <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+        ) : (
+          <CampaignDashboard campaigns={campaigns} sequences={sequences} onSelectCampaign={(id) => { setSelectedCampaignId(id); setActiveTab('sequences'); }} />
+        )
+      )}
 
       {/* Sequences Tab */}
       {activeTab === 'sequences' && (
@@ -506,9 +550,30 @@ export default function LinkedInAgent() {
                     <p className="text-xs text-muted-foreground">
                       {seq.prospectTitle && `${seq.prospectTitle} at `}{seq.company} — {seq.industry}
                     </p>
-                    <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{seq.connectionMsg}</p>
+                    <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Send className="w-3 h-3" /> {seq.sentCount || 0}/3 sent
+                      </span>
+                      {seq.nextSendAt && seq.status === 'ACTIVE' && (
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3 h-3" /> Next: {new Date(seq.nextSendAt).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
+                    {seq.status === 'DRAFT' && (
+                      <button onClick={(e) => { e.stopPropagation(); activateSeq.mutate(seq.id); }}
+                        className="p-2 text-green-600 hover:bg-green-50 rounded-lg" title="Activate">
+                        <Play className="w-4 h-4" />
+                      </button>
+                    )}
+                    {seq.status === 'ACTIVE' && (
+                      <button onClick={(e) => { e.stopPropagation(); pauseSeq.mutate(seq.id); }}
+                        className="p-2 text-orange-600 hover:bg-orange-50 rounded-lg" title="Pause">
+                        <Pause className="w-4 h-4" />
+                      </button>
+                    )}
                     <button onClick={(e) => { e.stopPropagation(); if (confirm('Delete?')) deleteSeq.mutate(seq.id); }}
                       className="p-2 text-muted-foreground hover:text-destructive"><Trash2 className="w-4 h-4" /></button>
                     <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -558,9 +623,47 @@ export default function LinkedInAgent() {
         )
       )}
 
-      {showGenerate && <GenerateSequenceModal onClose={() => setShowGenerate(false)} onGenerated={refreshAll} />}
-      {showImport && <ImportProspectsModal onClose={() => setShowImport(false)} onImported={refreshAll} />}
-      {selectedSeq && <SequenceDetail seq={selectedSeq} onClose={() => setSelectedSeq(null)} onSend={refreshAll} />}
+      {/* Messages Tab */}
+      {activeTab === 'messages' && (
+        messages.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground">
+            <Send className="w-12 h-12 mx-auto mb-3 opacity-30" />
+            <p className="font-medium">No messages sent yet</p>
+          </div>
+        ) : (
+          <div className="bg-card rounded-xl border border-border overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/50">
+                  <th className="text-left px-4 py-2 text-xs font-medium text-muted-foreground">Prospect</th>
+                  <th className="text-left px-4 py-2 text-xs font-medium text-muted-foreground">Type</th>
+                  <th className="text-left px-4 py-2 text-xs font-medium text-muted-foreground">Status</th>
+                  <th className="text-left px-4 py-2 text-xs font-medium text-muted-foreground">Sent At</th>
+                </tr>
+              </thead>
+              <tbody>
+                {messages.map(m => (
+                  <tr key={m.id} className="border-b border-border last:border-0 hover:bg-muted/30">
+                    <td className="px-4 py-2.5 font-medium">{m.prospectName}</td>
+                    <td className="px-4 py-2.5 text-muted-foreground capitalize">{m.messageType}</td>
+                    <td className="px-4 py-2.5">
+                      <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium', STATUS_COLORS[m.status] || 'bg-muted text-muted-foreground')}>{m.status}</span>
+                    </td>
+                    <td className="px-4 py-2.5 text-muted-foreground text-xs">
+                      {m.sentAt ? new Date(m.sentAt).toLocaleString() : m.scheduledFor ? `Scheduled: ${new Date(m.scheduledFor).toLocaleDateString()}` : '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      )}
+
+      {showGenerate && <GenerateSequenceModal campaigns={campaigns} onClose={() => setShowGenerate(false)} onGenerated={() => { queryClient.invalidateQueries({ queryKey: ['linkedin-sequences'] }); setActiveTab('sequences'); }} />}
+      {showImport && <ImportProspectsModal onClose={() => setShowImport(false)} onImported={() => queryClient.invalidateQueries({ queryKey: ['linkedin-prospects'] })} />}
+      {showCampaign && <CampaignModal onClose={() => setShowCampaign(false)} onSaved={() => queryClient.invalidateQueries({ queryKey: ['linkedin-campaigns'] })} />}
+      {selectedSeq && <SequenceDetail seq={selectedSeq} rateLimit={rateLimit} onClose={() => setSelectedSeq(null)} onSend={handleSend} />}
     </div>
   );
 }
