@@ -1,35 +1,11 @@
 // Dashboard stats — single endpoint for the command center
 import prisma from '../config/db.js';
 
-// Simple in-memory cache: key -> { data, timestamp }
-// Dashboard stats change infrequently — cache for 30s to avoid 11 DB round-trips on every load
-const statsCache = new Map();
-const CACHE_TTL_MS = 30_000; // 30 seconds, matching frontend refetchInterval
-
-function getCachedStats(orgId) {
-  const entry = statsCache.get(orgId);
-  if (entry && Date.now() - entry.timestamp < CACHE_TTL_MS) {
-    return entry.data;
-  }
-  return null;
-}
-
-function setCachedStats(orgId, data) {
-  statsCache.set(orgId, { data, timestamp: Date.now() });
-}
-
 export default async function dashboardRoutes(fastify) {
   // GET /api/dashboard/stats — all numbers in one call
   fastify.get('/stats', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
-    // Check cache first
-    const orgId = request.user?.organizationId || 'default';
-    const cached = getCachedStats(orgId);
-    if (cached) {
-      return cached;
-    }
-
     const now = new Date();
 
     const [
@@ -54,9 +30,7 @@ export default async function dashboardRoutes(fastify) {
       // WordPress sites with errors
       wpSitesWithErrors,
       // Overdue tasks (not on blocked projects, standalone)
-      overdueTasks,
-      // Upwork contracts with pending messages (active, recent activity)
-      upworkContracts
+      overdueTasks
     ] = await Promise.all([
       prisma.retainerPlan.findMany({
         where: { retainerStatus: 'ACTIVE' },
@@ -219,24 +193,6 @@ export default async function dashboardRoutes(fastify) {
         },
         orderBy: { dueDate: 'asc' },
         take: 10
-      }),
-      // Active Upwork contracts with pending messages or recent activity
-      prisma.upworkContract.findMany({
-        where: {
-          status: 'ACTIVE',
-          lastMessageAt: { not: null }
-        },
-        select: {
-          id: true,
-          clientName: true,
-          projectName: true,
-          lastMessageAt: true,
-          milestoneStatus: true,
-          currentMilestone: true,
-          upworkUrl: true
-        },
-        orderBy: { lastMessageAt: 'desc' },
-        take: 10
       })
     ]);
 
@@ -279,7 +235,7 @@ export default async function dashboardRoutes(fastify) {
       };
     });
 
-    const result = {
+    return {
       mrr,
       totalOutstanding,
       overdueAmount,
@@ -337,24 +293,7 @@ export default async function dashboardRoutes(fastify) {
         project: t.project?.name || null,
         client: t.project?.client?.name || null,
         assignee: t.assignee?.name || null
-      })),
-      upworkMessages: upworkContracts.map(c => ({
-        id: c.id,
-        clientName: c.clientName,
-        projectName: c.projectName,
-        lastMessageAt: c.lastMessageAt,
-        lastMessageDays: c.lastMessageAt
-          ? Math.floor((Date.now() - new Date(c.lastMessageAt).getTime()) / (1000 * 60 * 60 * 24))
-          : null,
-        milestoneStatus: c.milestoneStatus,
-        currentMilestone: c.currentMilestone,
-        upworkUrl: c.upworkUrl
       }))
     };
-
-    // Cache the result before returning
-    setCachedStats(orgId, result);
-
-    return result;
   });
 }

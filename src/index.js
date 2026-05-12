@@ -1,4 +1,3 @@
-
 // Agency Hub - Main Entry Point
 
 import Fastify from 'fastify';
@@ -52,7 +51,6 @@ import onboardingRoutes from './routes/onboarding.routes.js';
 import retainerRoutes from './routes/retainer.routes.js';
 import reportRoutes from './routes/reports.routes.js';
 import leadRoutes from './routes/leads.routes.js';
-import landingRoutes from './routes/landing.routes.js';
 import credentialRoutes from './routes/credential.routes.js';
 import portalRoutes from './routes/portal.routes.js';
 import templateRoutes from './routes/template.routes.js';
@@ -121,7 +119,6 @@ import integrationRoutes from './routes/integration.routes.js';
 import outreachSchedulerRoutes from './routes/outreach-scheduler.routes.js';
 import referralEngineRoutes from './routes/referral-engine.routes.js';
 import upworkAgentRoutes from './routes/upwork-agent.routes.js';
-import upworkJobsRoutes from './routes/upwork-jobs.routes.js';
 import leadIntelligenceRoutes from './routes/lead-intelligence.routes.js';
 import proposalBuilderRoutes from './routes/proposal-builder.routes.js';
 import coldCallRoutes from './routes/cold-call.routes.js';
@@ -268,6 +265,7 @@ await fastify.register(seoBlogRoutes, { prefix: '/api/seo-blog' });
 await fastify.register(socialContentRoutes, { prefix: '/api/social-content' });
 await fastify.register(leadGenRoutes, { prefix: '/api/lead-gen' });
 await fastify.register(callScreenerRoutes, { prefix: '/api/call-screener' });
+await fastify.register(coldEmailRoutes, { prefix: '/api/cold-email' });
 await fastify.register(linkedinOutreachRoutes, { prefix: '/api/linkedin-outreach' });
 await fastify.register(contentWriterRoutes, { prefix: '/api/content-writer' });
 await fastify.register(emailTriageRoutes, { prefix: '/api/email-triage' });
@@ -279,9 +277,8 @@ await fastify.register(templateRoutes, { prefix: '/api/templates' });
 await fastify.register(portalRoutes, { prefix: '/api/portal' });
 await fastify.register(credentialRoutes, { prefix: '/api/credentials' });
 await fastify.register(leadRoutes, { prefix: '/api/leads' });
-await fastify.register(landingRoutes, { prefix: '/api/leads' });
 await fastify.register(reportRoutes, { prefix: '/api/reports' });
-await fastify.register(retainerRoutes, { prefix: '/api/retainer' });
+await fastify.register(retainerRoutes, { prefix: '/api/retainers' });
 await fastify.register(onboardingRoutes, { prefix: '/api/onboarding' });
 await fastify.register(botRoutes, { prefix: '/api/bot' });
 await fastify.register(approvalRoutes, { prefix: '/api/approvals' });
@@ -315,15 +312,9 @@ initHermesBridge(fastify);
 
 // Static files
 if (!env.isDev) {
-  // Health check endpoint
-  fastify.get("/api/health", async (request, reply) => {
-    return { status: 'ok', timestamp: new Date().toISOString() };
-  });
-
   await fastify.register(fastifyStatic, { root: path.join(__dirname, '../dist'), prefix: '/' });
   fastify.setNotFoundHandler((request, reply) => {
     if (!request.url.startsWith('/api/')) return reply.sendFile('index.html');
-  // Health check endpoint
     reply.status(404).send({ error: 'Not found' });
   });
 }

@@ -1,13 +1,18 @@
 /**
  * Referral Engine Agent for ashbi-platform
  * Manages referral pipeline: network analysis, email generation, tracking, and rewards
- *
+ * 
  * Referral rewards: $250 gift card for clients who refer projects $5K-$15K
  * Reward paid after first payment received
+ * 
+ * Referral one-liner: "If you ever need a web developer, [Your Name] is fantastic — 
+ * they built our site and it's been running great."
  */
 
 import { createDraft } from './gmail-draft.agent.js';
-import prisma from '../config/db.js';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 // Referral reward configuration
 const REFERRAL_REWARD = {
@@ -17,32 +22,48 @@ const REFERRAL_REWARD = {
   PAYMENT_CONDITION: 'paid after first payment received'
 };
 
-const REFERRAL_TIERS = {
-  TIER_1: 'tier_1',
-  TIER_2: 'tier_2',
-  TIER_3: 'tier_3'
-};
-
 // AI Client import - uses ../ai/client.js
 let aiClient = null;
 try {
-  const mod = await import('../ai/client.js');
-  aiClient = mod.default || mod;
+  const module = await import('../ai/client.js');
+  aiClient = module.default || module;
 } catch (err) {
   console.warn('AI client not found, using fallback generation');
+  aiClient = null;
 }
 
 /**
+ * Tier categorization for referral network
+ */
+const REFERRAL_TIERS = {
+  TIER_1: 'tier_1', // Raving fans - highest likelihood to refer
+  TIER_2: 'tier_2', // Satisfied clients - medium referral likelihood
+  TIER_3: 'tier_3'  // Partners - refer when asked
+};
+
+/**
  * Sanitize an email header value to prevent header injection and RFC violations.
+ * Removes control characters, newlines, and trims whitespace.
+ * Encodes non-ASCII characters using RFC 2047 encoded-word syntax.
+ * @param {string} value - The raw header value
+ * @returns {string} Sanitized header value safe for RFC 2822
  */
 function sanitizeEmailHeader(value) {
   if (typeof value !== 'string') return '';
   
+  // Remove any control characters except tabs
   let sanitized = value.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  
+  // Remove any newlines (prevents header injection)
   sanitized = sanitized.replace(/\r?\n|\r/g, ' ');
+  
+  // Collapse multiple spaces
   sanitized = sanitized.replace(/[ \t]+/g, ' ').trim();
   
+  // If there are non-ASCII characters, encode the whole value as RFC 2047
+  // eslint-disable-next-line no-control-regex
   if (/[^\x20-\x7E]/.test(sanitized)) {
+    // Encode using ISO-8859-1 or UTF-8 base64 encoded-word
     const buf = Buffer.from(sanitized, 'utf-8');
     sanitized = '=?UTF-8?B?' + buf.toString('base64') + '?=';
   }
@@ -51,51 +72,50 @@ function sanitizeEmailHeader(value) {
 }
 
 /**
- * Get the primary email for a client from their email mappings
- */
-function getPrimaryEmail(client) {
-  if (!client.emailMappings || client.emailMappings.length === 0) return null;
-  const primary = client.emailMappings.find(m => m.isPrimary);
-  return primary ? primary.emailAddress : client.emailMappings[0].emailAddress;
-}
-
-/**
  * Get referral network - returns clients categorized by referral likelihood
+ * Tier 1: Raving fans (5-star reviews, multiple past projects, engaged)
+ * Tier 2: Satisfied clients (completed projects, no complaints)
+ * Tier 3: Partners (vendors, collaborators who may refer business)
+ * 
+ * @returns {Promise<object>} Network categorized by tiers
  */
 async function getReferralNetwork() {
   try {
+    // Get all clients with their referral data
     const clients = await prisma.client.findMany({
       include: {
-        emailMappings: {
-          select: { emailAddress: true, contactName: true, isPrimary: true }
+        referralsGiven: {
+          select: { id: true, referredClientId: true, status: true }
         },
-        contacts: {
-          select: { name: true, email: true }
+        referralsReceived: {
+          select: { id: true, referrerClientId: true, status: true }
         },
         projects: {
-          select: { id: true, status: true, value: true, completedAt: true }
+          select: { id: true, status: true, value: true }
         }
       }
     });
 
+    // Categorize clients into tiers based on referral likelihood factors
     const tiers = {
-      tier_1: [],
-      tier_2: [],
-      tier_3: []
+      tier_1: [], // Raving fans
+      tier_2: [], // Satisfied clients
+      tier_3: []  // Partners
     };
 
     for (const client of clients) {
       const referralLikelihood = calculateReferralLikelihood(client);
-      const primaryEmail = getPrimaryEmail(client);
-
+      
       const tierEntry = {
         id: client.id,
         name: client.name,
-        email: primaryEmail,
-        company: client.contactPerson || '',
+        email: client.email,
+        company: client.company,
         referralLikelihood,
         totalProjects: client.projects.length,
         completedProjects: client.projects.filter(p => p.status === 'completed').length,
+        referralsGiven: client.referralsGiven.length,
+        referralsReceived: client.referralsReceived.length,
         lastProjectAt: getLastProjectDate(client.projects)
       };
 
@@ -108,6 +128,7 @@ async function getReferralNetwork() {
       }
     }
 
+    // Sort each tier by referral likelihood descending
     tiers.tier_1.sort((a, b) => b.referralLikelihood - a.referralLikelihood);
     tiers.tier_2.sort((a, b) => b.referralLikelihood - a.referralLikelihood);
     tiers.tier_3.sort((a, b) => b.referralLikelihood - a.referralLikelihood);
@@ -130,50 +151,66 @@ async function getReferralNetwork() {
 
 /**
  * Calculate referral likelihood score for a client (0-100)
+ * Factors: project completion, referrals given/received, engagement
+ * 
+ * @param {object} client - Client data
+ * @returns {number} Likelihood score 0-100
  */
 function calculateReferralLikelihood(client) {
   let score = 0;
-
+  
+  // Base score from project completion (0-40 points)
   const completedProjects = client.projects.filter(p => p.status === 'completed').length;
   score += Math.min(completedProjects * 10, 40);
-
+  
+  // Referrals given (0-30 points)
+  score += Math.min(client.referralsGiven.length * 10, 30);
+  
+  // Referrals received indicates network value (0-10 points)
+  score += Math.min(client.referralsReceived.length * 5, 10);
+  
+  // Recent activity bonus (0-20 points)
   const lastProject = getLastProjectDate(client.projects);
   if (lastProject) {
-    const daysSince = Math.floor((Date.now() - new Date(lastProject)) / (1000 * 60 * 60 * 24));
-    if (daysSince <= 90) score += 20;
-    else if (daysSince <= 180) score += 10;
-    else if (daysSince <= 365) score += 5;
+    const daysSinceLastProject = Math.floor((Date.now() - new Date(lastProject)) / (1000 * 60 * 60 * 24));
+    if (daysSinceLastProject <= 90) {
+      score += 20;
+    } else if (daysSinceLastProject <= 180) {
+      score += 10;
+    } else if (daysSinceLastProject <= 365) {
+      score += 5;
+    }
   }
-
-  const hasEmail = getPrimaryEmail(client) !== null;
-  const hasContacts = client.contacts && client.contacts.length > 0;
-  if (hasEmail && hasContacts) score += 20;
-  else if (hasEmail || hasContacts) score += 10;
-
-  if (client.relationshipStatus === 'ACTIVE') score += 20;
-  else if (client.relationshipStatus === 'ARCHIVED') score += 5;
-
+  
   return Math.min(score, 100);
 }
 
 /**
- * Get the most recent project date
+ * Get the most recent project date from projects array
+ * @param {Array} projects - Array of projects
+ * @returns {Date|null} Last project date or null
  */
 function getLastProjectDate(projects) {
   if (!projects || projects.length === 0) return null;
-  const sorted = projects
+  const completed = projects
     .filter(p => p.completedAt)
     .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
-  return sorted.length > 0 ? sorted[0].completedAt : null;
+  return completed.length > 0 ? completed[0].completedAt : null;
 }
 
 /**
- * Generate referral email using AI or template
+ * Generate referral email using AI
+ * Creates a personalized referral ask email
+ * 
+ * @param {string} contactName - Name of the contact to ask for referral
+ * @param {string} company - Company name of the contact
+ * @returns {Promise<object>} Generated email content { subject, body }
  */
 async function generateReferralEmail(contactName, company) {
   try {
     const firstName = contactName.split(' ')[0];
-
+    
+    // Template system for referral emails
     const referralEmailTemplate = {
       subject: 'Quick favor — trusted web developer recommendation',
       body: `Hi ${firstName},
@@ -198,20 +235,19 @@ Best,
 Cameron`
     };
 
-    // Try AI for enhanced personalization
-    if (aiClient) {
+    // Try to use AI client for enhanced personalization
+    if (aiClient && aiClient.generateText) {
       try {
-        const prompt = 'Generate a referral request email for ' + contactName + ' at ' + company + '. '
-          + 'Use this one-liner style: "If you ever need a web developer, [Your Name] is fantastic — they built our site and its been running great." '
-          + 'Include mention of $250 referral reward for $5K-$15K projects, paid after first payment. '
-          + 'Return in format: Subject: <line> followed by blank line then body. Keep it warm and natural, not pushy.';
-
-        const aiResponse = await aiClient.generate(prompt, {
+        const aiResponse = await aiClient.generateText({
+          prompt: `Generate a referral request email for ${contactName} at ${company}. 
+Use this one-liner style: "If you ever need a web developer, [Your Name] is fantastic — they built our site and it's been running great."
+Include mention of $250 referral reward for $5K-$15K projects, paid after first payment. Keep it warm and natural, not pushy.`,
           maxTokens: 300,
           temperature: 0.7
         });
         
         if (aiResponse && aiResponse.text) {
+          // Parse AI response for subject and body
           const lines = aiResponse.text.split('\n');
           const subjectLine = lines.find(l => l.toLowerCase().startsWith('subject:'));
           const emptyIdx = lines.findIndex(l => l === '');
@@ -242,6 +278,12 @@ Cameron`
 
 /**
  * Create a Gmail draft for a referral email
+ * Uses gmail-draft.agent.js to create the draft
+ * 
+ * @param {string} toEmail - Recipient email address
+ * @param {string} subject - Email subject
+ * @param {string} body - Email body content
+ * @returns {Promise<object>} Draft creation result
  */
 async function createDraftForReferral(toEmail, subject, body) {
   try {
@@ -249,7 +291,9 @@ async function createDraftForReferral(toEmail, subject, body) {
       throw new Error('Missing required parameters: toEmail, subject, body');
     }
 
+    // Sanitize email header values to prevent injection and RFC violations
     const sanitizedSubject = sanitizeEmailHeader(subject);
+
     const draftResult = await createDraft(toEmail, sanitizedSubject, body);
 
     return {
@@ -266,28 +310,12 @@ async function createDraftForReferral(toEmail, subject, body) {
 }
 
 /**
- * Generate a unique referral code
- */
-function generateReferralCode() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code = 'REF-';
-  for (let i = 0; i < 8; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return code;
-}
-
-/**
- * Check if project qualifies for reward
- */
-function isRewardEligible(projectValue) {
-  if (!projectValue) return false;
-  return projectValue >= REFERRAL_REWARD.MIN_PROJECT_VALUE
-    && projectValue <= REFERRAL_REWARD.MAX_PROJECT_VALUE;
-}
-
-/**
  * Track a referral in the database
+ * Records the referral from referrer to referred lead
+ * 
+ * @param {string} referrerId - ID of the client making the referral
+ * @param {object} referredLead - Details of the referred lead { name, email, company, projectValue }
+ * @returns {Promise<object>} Created referral record
  */
 async function trackReferral(referrerId, referredLead) {
   try {
@@ -295,47 +323,38 @@ async function trackReferral(referrerId, referredLead) {
       throw new Error('Missing required parameters: referrerId, referredLead');
     }
 
+    // Check if referrer exists
     const referrer = await prisma.client.findUnique({
-      where: { id: referrerId },
-      include: {
-        emailMappings: { select: { emailAddress: true, contactName: true, isPrimary: true } }
-      }
+      where: { id: parseInt(referrerId) }
     });
 
     if (!referrer) {
-      throw new Error('Referrer client not found with ID: ' + referrerId);
+      throw new Error(`Referrer client not found with ID: ${referrerId}`);
     }
 
-    const existingMapping = await prisma.clientEmailMapping.findFirst({
-      where: { emailAddress: referredLead.email },
-      include: { client: true }
+    // Check if referred client already exists (by email)
+    let referredClient = await prisma.client.findUnique({
+      where: { email: referredLead.email }
     });
 
-    let referredClientRecord;
-    if (existingMapping) {
-      referredClientRecord = existingMapping.client;
-    } else {
-      referredClientRecord = await prisma.client.create({
+    // If referred client doesn't exist, create them
+    if (!referredClient) {
+      referredClient = await prisma.client.create({
         data: {
           name: referredLead.name,
-          contactPerson: referredLead.company || '',
-          relationshipStatus: 'LEAD',
-          referralCode: generateReferralCode(),
-          emailMappings: {
-            create: {
-              emailAddress: referredLead.email,
-              contactName: referredLead.name,
-              isPrimary: true
-            }
-          }
+          email: referredLead.email,
+          company: referredLead.company || '',
+          status: 'referral_lead',
+          referralCode: generateReferralCode()
         }
       });
     }
 
+    // Create the referral record
     const referral = await prisma.referral.create({
       data: {
-        referrerClientId: referrerId,
-        referredClientId: referredClientRecord.id,
+        referrerClientId: parseInt(referrerId),
+        referredClientId: referredClient.id,
         status: 'referred',
         referredAt: new Date(),
         projectValue: referredLead.projectValue || null,
@@ -343,12 +362,8 @@ async function trackReferral(referrerId, referredLead) {
         rewardPaid: false
       },
       include: {
-        referrerClient: {
-          select: { id: true, name: true, contactPerson: true, emailMappings: { select: { emailAddress: true, isPrimary: true } } }
-        },
-        referredClient: {
-          select: { id: true, name: true, contactPerson: true, emailMappings: { select: { emailAddress: true, isPrimary: true } } }
-        }
+        referrerClient: { select: { name: true, email: true, company: true } },
+        referredClient: { select: { name: true, email: true, company: true } }
       }
     });
 
@@ -356,8 +371,8 @@ async function trackReferral(referrerId, referredLead) {
       success: true,
       referral: {
         id: referral.id,
-        referrer: { name: referral.referrerClient.name, email: getPrimaryEmail(referral.referrerClient) },
-        referred: { name: referral.referredClient.name, email: getPrimaryEmail(referral.referredClient) },
+        referrer: referral.referrerClient,
+        referred: referral.referredClient,
         status: referral.status,
         rewardEligible: referral.rewardEligible,
         rewardAmount: referral.rewardEligible ? REFERRAL_REWARD.AMOUNT : 0,
@@ -371,81 +386,111 @@ async function trackReferral(referrerId, referredLead) {
 }
 
 /**
+ * Check if a project value qualifies for referral reward
+ * Project must be between $5K and $15K
+ * 
+ * @param {number} projectValue - Project value in dollars
+ * @returns {boolean} Whether reward is eligible
+ */
+function isRewardEligible(projectValue) {
+  if (!projectValue) return false;
+  return projectValue >= REFERRAL_REWARD.MIN_PROJECT_VALUE && 
+         projectValue <= REFERRAL_REWARD.MAX_PROJECT_VALUE;
+}
+
+/**
+ * Generate a unique referral code for a client
+ * @returns {string} Unique referral code
+ */
+function generateReferralCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = 'REF-';
+  for (let i = 0; i < 8; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+}
+
+/**
  * Get top referrers by referral count
+ * Returns clients sorted by number of successful referrals
+ * 
+ * @param {number} limit - Max number of referrers to return (default 10)
+ * @returns {Promise<object>} Top referrers with stats
  */
 async function getTopReferrers(limit = 10) {
   try {
-    const topGroups = await prisma.referral.groupBy({
-      by: ['referrerClientId'],
+    const topReferrers = await prisma.client.findMany({
       where: {
-        status: { in: ['referred', 'converted', 'paid'] }
+        referralsGiven: {
+          some: {
+            status: { in: ['referred', 'converted', 'paid'] }
+          }
+        }
       },
-      _count: { id: true },
-      orderBy: { _count: { id: 'desc' } },
+      include: {
+        referralsGiven: {
+          where: { status: { in: ['referred', 'converted', 'paid'] } },
+          select: {
+            id: true,
+            status: true,
+            referredAt: true,
+            rewardEligible: true,
+            rewardPaid: true,
+            projectValue: true
+          }
+        },
+        projects: {
+          where: { status: 'completed' },
+          select: { id: true, value: true }
+        }
+      },
+      orderBy: {
+        referralsGiven: {
+          _count: 'desc'
+        }
+      },
       take: limit
     });
 
-    if (topGroups.length === 0) {
-      return {
-        referrers: [],
-        summary: {
-          totalReferrers: 0, totalReferralsAllTime: 0,
-          totalConverted: 0, totalRewardsPaid: 0
-        },
-        generatedAt: new Date().toISOString()
-      };
-    }
-
-    const referrerIds = topGroups.map(r => r.referrerClientId);
-    const clients = await prisma.client.findMany({
-      where: { id: { in: referrerIds } },
-      include: {
-        emailMappings: { select: { emailAddress: true, isPrimary: true } },
-        projects: { where: { status: 'completed' }, select: { id: true, value: true } }
-      }
-    });
-
-    const clientMap = new Map(clients.map(c => [c.id, c]));
-
-    const referrerStats = await Promise.all(topGroups.map(async (group) => {
-      const client = clientMap.get(group.referrerClientId);
-      if (!client) return null;
-
-      const referrals = await prisma.referral.findMany({
-        where: { referrerClientId: group.referrerClientId },
-        select: { id: true, status: true, referredAt: true, rewardEligible: true, rewardPaid: true, projectValue: true }
-      });
-
-      const totalReferrals = referrals.length;
-      const convertedReferrals = referrals.filter(r => ['converted', 'paid'].includes(r.status)).length;
-      const rewardsEarned = referrals.filter(r => r.rewardPaid).length;
+    // Calculate stats for each referrer
+    const referrerStats = topReferrers.map(client => {
+      const totalReferrals = client.referralsGiven.length;
+      const convertedReferrals = client.referralsGiven.filter(r => 
+        ['converted', 'paid'].includes(r.status)
+      ).length;
+      const rewardsEarned = client.referralsGiven.filter(r => r.rewardPaid).length;
       const totalProjectValue = client.projects.reduce((sum, p) => sum + (p.value || 0), 0);
-      const lastReferral = referrals.sort((a, b) => new Date(b.referredAt) - new Date(a.referredAt))[0];
 
       return {
         id: client.id,
         name: client.name,
-        email: getPrimaryEmail(client),
-        company: client.contactPerson || '',
+        email: client.email,
+        company: client.company,
         totalReferrals,
         convertedReferrals,
         conversionRate: totalReferrals > 0 ? Math.round((convertedReferrals / totalReferrals) * 100) : 0,
         rewardsEarned,
         totalProjectValue,
-        lastReferralAt: lastReferral?.referredAt || null,
+        lastReferralAt: client.referralsGiven.length > 0 
+          ? client.referralsGiven.sort((a, b) => 
+              new Date(b.referredAt) - new Date(a.referredAt)
+            )[0].referredAt 
+          : null,
         referralCode: client.referralCode
       };
-    }));
+    });
 
-    const validStats = referrerStats.filter(Boolean);
+    // Sort by total referrals descending
+    referrerStats.sort((a, b) => b.totalReferrals - a.totalReferrals);
 
     return {
-      referrers: validStats,
+      referrers: referrerStats,
       summary: {
-        totalReferrers: validStats.length,
-        totalReferralsAllTime: validStats.reduce((s, r) => s + r.totalReferrals, 0),
-        totalConverted: validStats.reduce((s, r) => s + r.convertedReferrals, 0),
-        totalRewardsPaid: validStats.reduce((s, r) => s + r.rewardsEarned, 0)
+        totalReferrers: referrerStats.length,
+        totalReferralsAllTime: referrerStats.reduce((sum, r) => sum + r.totalReferrals, 0),
+        totalConverted: referrerStats.reduce((sum, r) => sum + r.convertedReferrals, 0),
+        totalRewardsPaid: referrerStats.reduce((sum, r) => sum + r.rewardsEarned, 0)
       },
       generatedAt: new Date().toISOString()
     };
@@ -457,6 +502,10 @@ async function getTopReferrers(limit = 10) {
 
 /**
  * Import past clients as referral network contacts
+ * Used to seed the referral network from CSV data
+ * 
+ * @param {Array} contacts - Array of { name, email, company } objects
+ * @returns {Promise<object>} Import results
  */
 async function importContacts(contacts) {
   try {
@@ -473,9 +522,9 @@ async function importContacts(contacts) {
 
     for (const contact of contacts) {
       try {
-        const existing = await prisma.clientEmailMapping.findFirst({
-          where: { emailAddress: contact.email },
-          include: { client: true }
+        // Check if client already exists
+        const existing = await prisma.client.findUnique({
+          where: { email: contact.email }
         });
 
         if (existing) {
@@ -483,19 +532,15 @@ async function importContacts(contacts) {
           continue;
         }
 
+        // Create new client
         const client = await prisma.client.create({
           data: {
             name: contact.name,
-            contactPerson: contact.company || '',
-            relationshipStatus: 'LEAD',
+            email: contact.email,
+            company: contact.company || '',
+            status: 'past_client',
             referralCode: generateReferralCode(),
-            emailMappings: {
-              create: {
-                emailAddress: contact.email,
-                contactName: contact.name,
-                isPrimary: true
-              }
-            }
+            source: 'import'
           }
         });
 
@@ -503,8 +548,8 @@ async function importContacts(contacts) {
         results.clients.push({
           id: client.id,
           name: client.name,
-          email: contact.email,
-          company: contact.company || '',
+          email: client.email,
+          company: client.company,
           referralCode: client.referralCode
         });
       } catch (contactError) {

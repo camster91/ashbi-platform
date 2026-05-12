@@ -307,7 +307,7 @@ export default function ColdEmail() {
         ) : (
           <div className="space-y-2">
             {sequences.map(seq => (
-              <div key={seq.id} role="button" tabIndex={0} onClick={() => openSequence(seq)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { openSequence(seq); e.preventDefault(); } }}
+              <div key={seq.id} onClick={() => openSequence(seq)}
                 className="bg-card rounded-xl border border-border p-4 hover:border-primary/30 transition-colors cursor-pointer group">
                 <div className="flex items-start gap-3">
                   <div className="flex-1 min-w-0">

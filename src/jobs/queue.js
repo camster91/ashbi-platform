@@ -45,8 +45,7 @@ export const QUEUES = {
   ESCALATION: 'escalation',
   NOTIFICATIONS: 'notifications',
   WEEKLY_DIGEST: 'weekly-digest',
-  EMBEDDING: 'embedding',
-  SOCIAL_POSTS: 'social-posts'
+  EMBEDDING: 'embedding'
 };
 
 // Create queues
@@ -56,7 +55,6 @@ export const escalationQueue = new QueueClass(QUEUES.ESCALATION, { connection })
 export const notificationQueue = new QueueClass(QUEUES.NOTIFICATIONS, { connection });
 export const weeklyDigestQueue = new QueueClass(QUEUES.WEEKLY_DIGEST, { connection });
 export const embeddingQueue = new QueueClass(QUEUES.EMBEDDING, { connection });
-export const socialPostsQueue = new QueueClass(QUEUES.SOCIAL_POSTS, { connection });
 
 // Queue event handlers
 const emailQueueEvents = new QueueEventsClass(QUEUES.EMAIL_PROCESSING, { connection });
@@ -125,17 +123,6 @@ export async function queueEmbedding(clientId, content, source, sourceId = null,
 }
 
 /**
- * Queue social post for processing
- */
-export async function queueSocialPost(data) {
-  await socialPostsQueue.add('publish-post', data, {
-    attempts: 3,
-    backoff: { type: 'exponential', delay: 10000 },
-    removeOnComplete: true
-  });
-}
-
-/**
  * Set up recurring jobs
  */
 export async function setupRecurringJobs() {
@@ -155,12 +142,6 @@ export async function setupRecurringJobs() {
   await weeklyDigestQueue.add('generate-weekly-digest', {}, {
     repeat: { pattern: '0 14 * * 1' }, // Monday 9am EST
     jobId: 'recurring-weekly-digest'
-  });
-
-  // Social posts check every minute (processes scheduled posts due for publishing)
-  await socialPostsQueue.add('process-due-posts', {}, {
-    repeat: { every: 60000 }, // 1 minute
-    jobId: 'recurring-social-posts-check'
   });
 
   console.log('Recurring jobs scheduled');

@@ -44,8 +44,8 @@ const PROPOSAL_STATUS = {
 // AI Client import — try ESM import, fall back gracefully
 let aiClient = null;
 try {
-  const mod = await import('../ai/client.js');
-  aiClient = mod.default || mod;
+  const aiModule = await import('../ai/client.js').catch(() => null);
+  aiClient = aiModule?.default || aiModule;
 } catch (err) {
   console.warn('AI client not found, proposal generation will use fallback');
 }
@@ -323,8 +323,6 @@ Return JSON with these exact fields:
  */
 async function generatePdf(proposalHtml) {
   try {
-    const { default: PDFDocument } = await import('pdfkit');
-    
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument({ margin: 50, size: 'LETTER' });
       const chunks = [];
