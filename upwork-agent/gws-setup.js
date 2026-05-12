@@ -209,7 +209,7 @@ async function setup() {
     }
 
   } catch (err) {
-    console.error('Setup error:', err.message);
+    console.warn('Setup warning:', err.message);
     console.log('Leaving browser open — complete setup manually if needed');
     return false;
   }

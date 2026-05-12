@@ -74,6 +74,7 @@ model User {
   timeSessions      TimeSession[]
   calendarEvents    ContentCalendarEvent[] @relation("CalendarEventAssignee")
   apiKeys           ApiKey[]
+  workflows         Workflow[]
 
   @@map("users")
 }
@@ -110,6 +111,7 @@ model Client {
   lastInvoiceStatus  String?
   paymentStatus      String?
   clientNotes        String?
+  referralCode       String?    @unique
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
@@ -140,6 +142,8 @@ model Client {
   wpSites               WPSite[]               @relation("WPSiteClient")
   estimates             Estimate[]
   rateCards             RateCard[]
+  referralsGiven        Referral[]       @relation("ReferrerClient")
+  referralsReceived     Referral[]       @relation("ReferredClient")
 
   @@index([status])
   @@map("clients")
@@ -173,6 +177,7 @@ model Project {
   status         String  @default("STARTING_UP") // STARTING_UP, DESIGN_DEV, ADDING_CONTENT, FINALIZING, LAUNCHED, ON_HOLD, CANCELLED
   health         String  @default("ON_TRACK") // ON_TRACK, NEEDS_ATTENTION, AT_RISK
   healthScore    Int     @default(100)
+  healthHistory  Json?   // Array of {health, score, timestamp} for historical tracking
   aiSummary      String? // AI-generated current status summary
   aiPlan         String? // JSON: AI-generated task plan
   risks          String  @default("[]") // JSON: identified risks
@@ -1004,6 +1009,8 @@ model OutreachLead {
 
   sequence OutreachSequence? @relation(fields: [sequenceId], references: [id], onDelete: SetNull)
 
+  @@index([sequenceId])
+  @@index([status])
   @@map("outreach_leads")
 }
 
@@ -1109,8 +1116,17 @@ model LinkedInSequence {
   connectionMsg String // Connection request message
   followUp1     String // 3-day follow-up
   followUp2     String // 7-day follow-up
-  status        String   @default("DRAFT") // DRAFT | ACTIVE | COMPLETED
+  status        String   @default("DRAFT") // DRAFT | ACTIVE | PAUSED | COMPLETED | FAILED
   notes         String?
+  // Sequence engine fields
+  startedAt      DateTime?
+  nextSendAt     DateTime? // when to send next message in sequence
+  lastSentAt     DateTime?
+  sentCount      Int      @default(0) // how many messages sent (0=connection,1=followup1,2=followup2)
+  // LinkedIn message tracking
+  linkedinConnectionId String?
+  // Campaign link
+  campaignId     String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -1127,10 +1143,56 @@ model LinkedInProspect {
   email       String?
   status      String   @default("NEW") // NEW | CONNECTED | IN_SEQUENCE | REPLIED | CONVERTED
   notes       String?
+  // Link to sequence/campaign
+  sequenceId  String?
+  campaignId  String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  @@index([sequenceId])
+  @@index([campaignId])
+  @@index([status])
   @@map("linkedin_prospects")
+}
+
+model LinkedInCampaign {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  status      String   @default("DRAFT") // DRAFT | ACTIVE | PAUSED | COMPLETED
+  // Rate limiting config
+  maxConnectionsPerDay Int @default(20)
+  // Stats
+  totalProspects      Int @default(0)
+  totalSent           Int @default(0)
+  totalReplied        Int @default(0)
+  totalConverted      Int @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("linkedin_campaigns")
+}
+
+model LinkedInMessage {
+  id             String   @id @default(cuid())
+  sequenceId     String
+  campaignId     String?
+  prospectName   String
+  prospectUrl    String?
+  messageType    String   // connection | followup1 | followup2
+  content        String
+  status         String   @default("PENDING") // PENDING | SENT | FAILED | REPLIED
+  sentAt         DateTime?
+  scheduledFor   DateTime?
+  // LinkedIn API response tracking
+  linkedinMsgId  String?
+  errorMessage   String?
+  createdAt      DateTime @default(now())
+
+  @@index([sequenceId])
+  @@index([campaignId])
+  @@index([status, scheduledFor])
+  @@map("linkedin_messages")
 }
 
 // ==================== COLD EMAIL AGENT ====================
@@ -1170,6 +1232,12 @@ model ColdEmailProspect {
   painPoint     String?
   status        String    @default("NEW") // NEW | CONTACTED | REPLIED | CONVERTED | UNSUBSCRIBED
   sequenceId    String?
+  // Pipeline source: Ashbi | cameronashley
+  source        String    @default("Ashbi")
+  // LinkedIn
+  linkedinUrl   String?
+  // Audit notes for Ashbi outreach (specific observation per brand)
+  auditNotes    String?
   // Tracking fields
   lastEmailStep Int?      @default(0) // Which email step in the sequence was last sent (0-indexed)
   nextEmailAt   DateTime? // When to send the next email
@@ -1202,6 +1270,9 @@ model ColdEmailEvent {
   prospect ColdEmailProspect  @relation(fields: [prospectId], references: [id], onDelete: Cascade)
   sequence ColdEmailSequence? @relation(fields: [sequenceId], references: [id], onDelete: SetNull)
 
+  @@index([mailgunId])
+  @@index([sequenceId])
+  @@index([prospectId, type, createdAt])
   @@map("cold_email_events")
 }
 
@@ -1443,6 +1514,30 @@ model ClientEmailMapping {
 
   @@unique([emailAddress, clientId])
   @@map("client_email_mappings")
+}
+
+// ==================== REFERRALS ====================
+
+model Referral {
+  id                String   @id @default(cuid())
+  referrerClientId  String
+  referrerClient    Client   @relation("ReferrerClient", fields: [referrerClientId], references: [id], onDelete: Cascade)
+  referredClientId  String
+  referredClient    Client   @relation("ReferredClient", fields: [referredClientId], references: [id], onDelete: Cascade)
+  status            String   @default("referred") // referred | converted | paid | cancelled
+  referredAt        DateTime @default(now())
+  projectValue      Float?
+  rewardEligible    Boolean  @default(false)
+  rewardPaid        Boolean  @default(false)
+  rewardPaidAt      DateTime?
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([referrerClientId])
+  @@index([referredClientId])
+  @@index([status])
+  @@map("referrals")
 }
 
 // ==================== PUSH SUBSCRIPTIONS ====================
@@ -1919,4 +2014,75 @@ model Integration {
   updatedAt    DateTime  @updatedAt
 
   @@map("integrations")
+}
+
+// ==================== LEAD INTELLIGENCE ====================
+
+model LeadIntelligence {
+  id             String   @id @default(cuid())
+  name           String
+  email          String?
+  company        String?
+  domain         String?
+  linkedinUrl    String?
+  source         String   // manual, producthunt, kickstarter, shopify, domain_registration, clearbit, hunter
+  qualityScore   Int      @default(0) // 0-100
+  enrichmentData Json     @default("{}") // { industry, size, description, logo, socials, etc. }
+  status         String   @default("NEW") // NEW, SCANNED, QUALIFIED, ENRICHED, CONTACTED, CONVERTED
+  notes          String?
+  lastEnrichedAt DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([domain])
+  @@index([qualityScore])
+  @@index([status])
+  @@index([source])
+  @@map("lead_intelligence")
+}
+
+// ==================== WORKFLOW AUTOMATIONS ====================
+
+model Workflow {
+  id            String   @id @default(cuid())
+  name          String
+  description   String?
+  triggerType   String   // SCHEDULE | WEBHOOK | EVENT
+  triggerConfig Json     // { cronExpression, webhookPath, eventName, etc. }
+  actions       Json     // [{ type, config }]
+  enabled       Boolean  @default(true)
+  lastRun       DateTime?
+  lastStatus    String?  // SUCCESS | FAILED | PARTIAL
+  lastError     String?
+  runCount      Int      @default(0)
+  createdById   String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  createdBy User              @relation(fields: [createdById], references: [id])
+  runs      WorkflowRun[]
+
+  @@index([triggerType])
+  @@index([enabled])
+  @@map("workflows")
+}
+
+model WorkflowRun {
+  id          String   @id @default(cuid())
+  workflowId  String
+  status      String   @default("RUNNING") // RUNNING | SUCCESS | FAILED | PARTIAL
+  startedAt   DateTime @default(now())
+  completedAt DateTime?
+  error       String?
+  triggerData Json?
+  resultData  Json?
+  createdAt   DateTime @default(now())
+
+  // Relations
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([workflowId])
+  @@index([status])
+  @@map("workflow_runs")
 }

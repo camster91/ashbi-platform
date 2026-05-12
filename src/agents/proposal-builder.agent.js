@@ -3,11 +3,8 @@
  * AI generates branded proposals from lead intake data, exports as PDF, creates Gmail draft
  */
 
-import { createDraft } from './gmail-draft.agent.js';
-import { PrismaClient } from '@prisma/client';
-import PDFDocument from 'pdfkit';
-
-const prisma = new PrismaClient();
+import { createDraft, createDraftWithAttachment } from './gmail-draft.agent.js';
+import prisma from '../config/db.js';
 
 // Pricing tiers (hardcoded for now, can be updated via UI)
 const PRICING_TIERS = {
@@ -47,8 +44,8 @@ const PROPOSAL_STATUS = {
 // AI Client import — try ESM import, fall back gracefully
 let aiClient = null;
 try {
-  const aiModule = await import('../ai/client.js').catch(() => null);
-  aiClient = aiModule?.default || aiModule;
+  const mod = await import('../ai/client.js');
+  aiClient = mod.default || mod;
 } catch (err) {
   console.warn('AI client not found, proposal generation will use fallback');
 }
@@ -326,6 +323,8 @@ Return JSON with these exact fields:
  */
 async function generatePdf(proposalHtml) {
   try {
+    const { default: PDFDocument } = await import('pdfkit');
+    
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument({ margin: 50, size: 'LETTER' });
       const chunks = [];
@@ -349,7 +348,7 @@ async function generatePdf(proposalHtml) {
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed) continue;
-
+        
         if (y > 700) {
           doc.addPage();
           y = 50;
@@ -417,7 +416,9 @@ Best,
 Cameron
 Ashbi Design`;
 
-    const draftResult = await createDraft(leadEmail, subject, emailBody);
+    // Create draft with PDF attachment via gmail-draft agent
+    const attachmentName = `Ashbi_Proposal_${proposal.id || Date.now()}.pdf`;
+    const draftResult = await createDraftWithAttachment(leadEmail, subject, emailBody, pdfBuffer, attachmentName);
 
     return {
       success: true,
@@ -426,7 +427,8 @@ Ashbi Design`;
       subject,
       pdfGenerated: true,
       pdfSize: pdfBuffer.length,
-      message: 'Draft created. PDF attachment requires additional API call to attach file.'
+      attachmentName,
+      message: 'Draft created with PDF attachment.'
     };
   } catch (error) {
     console.error('Error creating proposal draft:', error);
