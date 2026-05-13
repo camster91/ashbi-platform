@@ -1212,27 +1212,6 @@ model ColdEmailEvent {
   @@map("cold_email_events")
 }
 
-// ==================== CALL SCREENER AGENT ====================
-
-model CallLog {
-  id              String    @id @default(cuid())
-  callerName      String
-  callerNumber    String?
-  callerCompany   String?
-  screeningScript String? // AI-generated screening questions
-  summaryTemplate String? // AI-generated summary template
-  callSummary     String? // Filled in after call
-  callNotes       String?
-  status          String    @default("PENDING") // PENDING | SCREENED | COMPLETED | FOLLOW_UP_SENT
-  followUpDraftId String? // Reference to follow-up email draft
-  followUpEmail   String? // AI-generated follow-up email
-  calledAt        DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  @@map("call_logs")
-}
-
 // ==================== AI TEAM ====================
 
 model AiTeamMessage {

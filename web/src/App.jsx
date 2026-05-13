@@ -80,7 +80,6 @@ const Bookkeeping = lazy(() => import('./pages/Bookkeeping'));
 const ClientAcquisition = lazy(() => import('./pages/ClientAcquisition'));
 const LeadIntelligence = lazy(() => import('./pages/LeadIntelligence'));
 const ReferralNetwork = lazy(() => import('./pages/ReferralNetwork'));
-const CallBlock = lazy(() => import('./pages/CallBlock'));
 // Cold Email
 const EmailCampaigns = lazy(() => import('./pages/EmailCampaigns'));
 const ColdEmail = lazy(() => import('./pages/ColdEmail'));
@@ -161,7 +160,6 @@ function AppRoutes() {
                   <Route path="/client-acquisition" element={<ClientAcquisition />} />
                   <Route path="/lead-intelligence" element={<LeadIntelligence />} />
                   <Route path="/referral-network" element={<ReferralNetwork />} />
-                  <Route path="/call-block" element={<CallBlock />} />
                   <Route path="/estimates" element={<Estimates />} />
                   <Route path="/schedule" element={<Schedule />} />
                   <Route path="/timesheets" element={<Timesheets />} />

@@ -140,7 +140,6 @@ export default function Layout({ children }) {
     { name: 'LinkedIn', href: '/linkedin', icon: Linkedin },
     { name: 'Outreach', href: '/outreach', icon: Send },
     { name: 'Referral Network', href: '/referral-network', icon: Share2 },
-    { name: 'Call Block', href: '/call-block', icon: Phone },
   ];
 
   // Finance & Docs — collapsible section
