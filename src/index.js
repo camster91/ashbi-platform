@@ -101,6 +101,7 @@ import { startOverdueChecker } from './services/automation.service.js';
 import pipelineRoutes from './routes/pipeline.routes.js';
 import { initHermesBridge } from './agents/hub-hermes.integration.js';
 import timeTrackingRoutes from './routes/time-tracking.routes.js';
+import timeSessionRoutes from './routes/time-session.routes.js';
 import semanticSearchRoutes from './routes/semantic-search.routes.js';
 import adCopyRoutes from './routes/ad-copy.routes.js';
 import creativeBriefRoutes from './routes/creative-brief.routes.js';
@@ -305,6 +306,8 @@ await fastify.register(clientPortalRoutes, { prefix: '/api/client-portal' });
 await fastify.register(wordpressAgentRoutes, { prefix: '/api/wordpress' });
 await fastify.register(gmailRoutes, { prefix: '/api/gmail' });
 await fastify.register(clientAcquisitionRoutes, { prefix: '/api/client-acquisition' });
+await fastify.register(trashRoutes, { prefix: '/api/trash' });
+await fastify.register(timeSessionRoutes, { prefix: '/api/time-sessions' });
 // ... (all other routes would be registered here in a production app, condensed for space)
 
 // Hub-Hermes bridge initialization

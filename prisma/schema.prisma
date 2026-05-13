@@ -1831,12 +1831,15 @@ model TimeSession {
   userId      String
   projectId   String
   taskId      String?
-  startTime   DateTime
+  startTime   DateTime  @default(now())
   endTime     DateTime?
   duration    Int       @default(0) // Duration in minutes (calculated on stop)
   description String?
   billable    Boolean   @default(true)
   isRunning   Boolean   @default(false) // True if timer is currently running
+  pausedAt    DateTime?
+  totalPausedMs Int     @default(0)
+  deletedAt   DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -1851,6 +1854,22 @@ model TimeSession {
 }
 
 // ==================== PROMPT VERSIONS (for AI enhancement) ====================
+
+model SentEmail {
+  id             String   @id @default(cuid())
+  entityType     String   // INVOICE | PROPOSAL | CONTRACT
+  entityId       String   // FK to the invoice/proposal/contract
+  toEmail        String
+  toName         String?
+  subject        String
+  mailgunMessageId String?
+  status         String   // SENT | FAILED
+  error          String?
+  createdAt      DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@map("sent_emails")
+}
 
 model PromptVersion {
   id          String   @id @default(cuid())
