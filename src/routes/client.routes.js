@@ -18,6 +18,7 @@ export default async function clientRoutes(fastify) {
         { domain: { contains: search } }
       ];
     }
+    where.deletedAt = null;
 
     const take = Math.min(parseInt(limit) || 50, 200);
     const skip = parseInt(offset) || 0;
@@ -215,6 +216,41 @@ export default async function clientRoutes(fastify) {
     });
 
     return reply.status(201).send(contact);
+  });
+
+  // Add a quick note to a client
+  fastify.post('/:id/notes', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const { content } = request.body;
+
+    if (!content || !content.trim()) {
+      return reply.status(400).send({ error: 'Note content is required' });
+    }
+
+    const client = await request.prisma.client.findUnique({
+      where: { id },
+      select: { id: true, clientNotes: true }
+    });
+
+    if (!client) {
+      return reply.status(404).send({ error: 'Client not found' });
+    }
+
+    // Append the new note with timestamp
+    const timestamp = new Date().toISOString();
+    const existingNotes = client.clientNotes || '';
+    const updatedNotes = existingNotes
+      ? `${existingNotes}\n[${timestamp}] ${content.trim()}`
+      : `[${timestamp}] ${content.trim()}`;
+
+    await request.prisma.client.update({
+      where: { id },
+      data: { clientNotes: updatedNotes }
+    });
+
+    return reply.send({ success: true, note: { timestamp, content: content.trim() } });
   });
 
   // Get client insights (AI-generated)

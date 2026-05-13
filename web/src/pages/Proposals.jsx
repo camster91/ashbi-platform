@@ -217,7 +217,7 @@ export default function Proposals() {
                       {proposal.validUntil && (
                         <span className="flex items-center gap-1">
                           <Clock className="w-3 h-3" />
-                          Valid until {new Date(proposal.validUntil).toLocaleDateString()}
+                          Valid until {new Date(proposal.validUntil).toLocaleDateString('en-CA')}
                         </span>
                       )}
                     </div>

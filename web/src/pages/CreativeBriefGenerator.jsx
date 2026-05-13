@@ -122,7 +122,7 @@ export default function CreativeBriefGenerator() {
                   </button>
                 </div>
                 <p className="text-sm text-foreground line-clamp-3">{b.content?.substring(0, 150) || 'No content'}</p>
-                <p className="text-xs text-muted-foreground mt-2">{new Date(b.createdAt || b.created_at).toLocaleDateString()}</p>
+                <p className="text-xs text-muted-foreground mt-2">{new Date(b.createdAt || b.created_at).toLocaleDateString('en-CA')}</p>
               </Card>
             ))}
           </div>

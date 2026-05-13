@@ -47,7 +47,7 @@ function formatTime(date) {
   if (minutes < 60) return `${minutes}m ago`;
   if (hours < 24) return `${hours}h ago`;
   if (days < 7) return `${days}d ago`;
-  return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return new Date(date).toLocaleDateString({ month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 export default function ActivityFeedPage() {

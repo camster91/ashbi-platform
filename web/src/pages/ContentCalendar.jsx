@@ -175,7 +175,7 @@ export default function ContentCalendar() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-foreground">{event.title}</p>
                   <p className="text-xs text-muted-foreground">
-                    {new Date(event.publishDate || event.publish_date).toLocaleDateString()} &middot; {event.type}
+                    {new Date(event.publishDate || event.publish_date).toLocaleDateString('en-CA')} &middot; {event.type}
                   </p>
                 </div>
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[event.status] || STATUS_COLORS.draft}`}>
@@ -189,7 +189,13 @@ export default function ContentCalendar() {
 
       {/* Add Event Modal */}
       {showAdd && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowAdd(false)}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={() => setShowAdd(false)}
+          role="button"
+          tabIndex={0}
+          aria-label="Close modal"
+        >
           <div className="bg-card rounded-xl border border-border p-6 w-full max-w-lg mx-4 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-semibold mb-4">Add Content Event</h3>
             <form onSubmit={handleCreate} className="space-y-4">
@@ -234,7 +240,13 @@ export default function ContentCalendar() {
 
       {/* Event Detail Modal */}
       {selectedEvent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setSelectedEvent(null)}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={() => setSelectedEvent(null)}
+          role="button"
+          tabIndex={0}
+          aria-label="Close modal"
+        >
           <div className="bg-card rounded-xl border border-border p-6 w-full max-w-lg mx-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">{selectedEvent.title}</h3>

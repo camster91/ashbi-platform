@@ -5,7 +5,7 @@
  * Cam's ICP: DTC brands, supplement brands, skincare, CPG, packaging design, branding + Shopify
  */
 
-const { createDraft } = require('./gmail-draft.agent');
+import { createDraft } from './gmail-draft.agent.js';
 
 // Environment
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -624,8 +624,8 @@ async function generateProposalForJob(jobId) {
   // Import the proposal generation from upwork-agent
   let generateProposal;
   try {
-    const upworkAgent = require('./upwork-agent.js');
-    generateProposal = upworkAgent.generateProposal;
+    const { generateProposal: gp } = await import('./upwork-agent.js');
+    generateProposal = gp;
   } catch (err) {
     console.warn('Could not load upwork-agent:', err.message);
   }
@@ -759,7 +759,7 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-module.exports = {
+export {
   searchJobs,
   scoreJobRelevance,
   sendTelegramAlert,

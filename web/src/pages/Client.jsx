@@ -206,7 +206,7 @@ export default function Client() {
                           {invoice.dueDate && (
                             <span className="flex items-center gap-1">
                               <Clock className="w-3 h-3" />
-                              Due {new Date(invoice.dueDate).toLocaleDateString()}
+                              Due {new Date(invoice.dueDate).toLocaleDateString('en-CA')}
                             </span>
                           )}
                         </div>

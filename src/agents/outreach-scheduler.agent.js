@@ -9,13 +9,13 @@
  * - Safe Electrical (id 15) gets special handling: pricing sent May 5, next bump May 9
  */
 
-const { createDraft, searchInbox } = require('./gmail-draft.agent');
-const { PrismaClient } = require('@prisma/client');
+import { createDraft, searchInbox } from './gmail-draft.agent.js';
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// Maton API key - use provided key
-const MATON_API_KEY = '09Lw3Ph9eS9PwAQ5Jo6KpJ5qM50csup1iMe4R1SIr7kE_lVh98cuxt2SEFCj86KpduMQEgM8-Je_JumUp7cHAAXASUWRdUtvvNg';
+// Maton API key from environment
+const MATON_API_KEY = process.env.MATON_API_KEY;
 
 // Follow-up configuration
 const FOLLOW_UP_DAYS = {
@@ -366,7 +366,7 @@ async function getSchedulerStatus() {
   };
 }
 
-module.exports = {
+export {
   checkReplies,
   generateFollowUpDrafts,
   generateNewProspectDrafts,

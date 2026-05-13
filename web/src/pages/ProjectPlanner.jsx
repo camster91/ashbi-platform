@@ -231,7 +231,7 @@ export default function ProjectPlanner() {
                       <div className="flex items-center justify-between">
                         <h3 className="font-medium text-foreground">{ms.name}</h3>
                         <span className="text-xs text-muted-foreground">
-                          {ms.dueDate ? new Date(ms.dueDate).toLocaleDateString() : ''}
+                          {ms.dueDate ? new Date(ms.dueDate).toLocaleDateString('en-CA') : ''}
                         </span>
                       </div>
                       {ms.description && <p className="text-sm text-muted-foreground mt-1">{ms.description}</p>}

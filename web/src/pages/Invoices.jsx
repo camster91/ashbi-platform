@@ -814,7 +814,7 @@ function getDaysOverdue(dueDate) {
 }
 
 function formatDate(date) {
-  return new Date(date).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' });
+  return new Date(date).toLocaleDateString({ month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function exportToCSV(invoices) {

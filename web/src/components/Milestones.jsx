@@ -43,7 +43,7 @@ export default function Milestones({ projectId }) {
 
   // Format date
   const formatDate = (date) => {
-    return new Date(date).toLocaleDateString('en-US', {
+    return new Date(date).toLocaleDateString({
       month: 'short',
       day: 'numeric',
       year: 'numeric'

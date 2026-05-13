@@ -130,7 +130,7 @@ export default function Notes({ projectId }) {
               </p>
               <div className="flex items-center justify-between mt-3 text-xs text-gray-400">
                 <span>{note.author?.name}</span>
-                <span>{new Date(note.updatedAt).toLocaleDateString()}</span>
+                <span>{new Date(note.updatedAt).toLocaleDateString('en-CA')}</span>
               </div>
               {note.tags?.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-2">

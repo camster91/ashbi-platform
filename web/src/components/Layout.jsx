@@ -1,4 +1,5 @@
 import GlobalAIChat from './GlobalAIChat';
+import QuickAdd from './QuickAdd';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -28,6 +29,7 @@ import {
   ChevronUp,
   Sparkles,
   Briefcase,
+  Linkedin,
   Key,
   Calculator,
   Calendar,
@@ -67,6 +69,7 @@ export default function Layout({ children }) {
   const { isInstallable, install } = useInstallPrompt();
   const { permission, subscribed, subscribe } = usePushNotifications();
   const [installDismissed, setInstallDismissed] = useState(false);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
 
   // Auto-subscribe to push on login if permission already granted
   useEffect(() => {
@@ -74,6 +77,18 @@ export default function Layout({ children }) {
       subscribe();
     }
   }, [user, permission, subscribed, subscribe]);
+
+  // Cmd+K / Ctrl+K to open Quick Add
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setQuickAddOpen(prev => !prev);
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, []);
 
   const isAdmin = user?.role === 'ADMIN';
 
@@ -121,9 +136,10 @@ export default function Layout({ children }) {
   const growthNav = [
     { name: 'Client Acquisition', href: '/client-acquisition', icon: Target, badge: stats?.activeOutreach },
     { name: 'Lead Intelligence', href: '/lead-intelligence', icon: Search },
+    { name: 'Cold Email', href: '/cold-email', icon: Mail },
+    { name: 'LinkedIn', href: '/linkedin', icon: Linkedin },
     { name: 'Outreach', href: '/outreach', icon: Send },
     { name: 'Referral Network', href: '/referral-network', icon: Share2 },
-    { name: 'Call Block', href: '/call-block', icon: Phone },
   ];
 
   // Finance & Docs — collapsible section
@@ -147,6 +163,7 @@ export default function Layout({ children }) {
     { name: 'Reports', href: '/reports', icon: PieChart },
     { name: 'Credentials', href: '/credentials', icon: Key },
     { name: 'Settings', href: '/settings', icon: Settings },
+    { name: 'Trash', href: '/trash', icon: X },
   ] : [];
 
   // Keyboard shortcuts
@@ -540,7 +557,13 @@ export default function Layout({ children }) {
                 {/* More menu dropdown */}
                 {moreMenuOpen && (
                   <>
-                    <div className="fixed inset-0 z-50 bg-black/5 backdrop-blur-sm" onClick={() => setMoreMenuOpen(false)} aria-hidden="true" />
+                    <div
+          className="fixed inset-0 z-50 bg-black/5 backdrop-blur-sm"
+          onClick={() => setMoreMenuOpen(false)}
+          role="button"
+          tabIndex={0}
+          aria-label="Close menu"
+         />
                     <div className="absolute bottom-full right-2 mb-4 w-64 bg-card/90 backdrop-blur-xl border border-border/40 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-300" role="menu">
                       {/* Quick Actions */}
                       <div className="px-4 py-3 border-b border-border/40">
@@ -666,6 +689,9 @@ export default function Layout({ children }) {
 
       {/* Global AI Chat Widget */}
       <GlobalAIChat />
+
+      {/* Quick Add — Cmd+K command palette */}
+      <QuickAdd open={quickAddOpen} onClose={() => setQuickAddOpen(false)} />
     </div>
   );
 }
@@ -697,7 +723,13 @@ function QuickCreateMenu({ navigate, isAdmin }) {
 
       {open && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div
+          className="fixed inset-0 z-40"
+          onClick={() => setOpen(false)}
+          role="button"
+          tabIndex={0}
+          aria-label="Close sidebar"
+        />
           <div className="absolute right-0 top-full mt-1 w-48 bg-card border border-border rounded-xl shadow-lg z-50 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
             {actions.map(({ label, icon: Icon, href }) => (
               <button

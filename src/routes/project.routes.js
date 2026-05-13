@@ -18,6 +18,7 @@ export default async function projectRoutes(fastify) {
     if (status) where.status = status;
     if (clientId) where.clientId = clientId;
     if (health) where.health = health;
+    where.deletedAt = null;
 
     const take = Math.min(parseInt(limit) || 50, 200);
     const skip = parseInt(offset) || 0;
@@ -291,18 +292,22 @@ export default async function projectRoutes(fastify) {
   }, async (request) => {
     const { id } = request.params;
 
-    // TODO: Implement health history tracking
-    // For now, return current health
     const project = await fastify.prisma.project.findUnique({
       where: { id },
-      select: { health: true, healthScore: true, updatedAt: true }
+      select: { healthHistory: true, health: true, healthScore: true, updatedAt: true }
     });
 
-    return [{
-      health: project.health,
-      score: project.healthScore,
-      timestamp: project.updatedAt
-    }];
+    // If no history exists yet, seed with current health as first entry
+    if (!project.healthHistory || project.healthHistory.length === 0) {
+      const historyEntry = { health: project.health, score: project.healthScore, timestamp: project.updatedAt.toISOString() };
+      await fastify.prisma.project.update({
+        where: { id },
+        data: { healthHistory: [historyEntry] }
+      });
+      return [historyEntry];
+    }
+
+    return project.healthHistory;
   });
 
   // ==================== COMMUNICATIONS ====================

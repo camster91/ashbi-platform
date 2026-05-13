@@ -110,6 +110,7 @@ model Client {
   lastInvoiceStatus  String?
   paymentStatus      String?
   clientNotes        String?
+  deletedAt          DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
@@ -173,6 +174,7 @@ model Project {
   status         String  @default("STARTING_UP") // STARTING_UP, DESIGN_DEV, ADDING_CONTENT, FINALIZING, LAUNCHED, ON_HOLD, CANCELLED
   health         String  @default("ON_TRACK") // ON_TRACK, NEEDS_ATTENTION, AT_RISK
   healthScore    Int     @default(100)
+  healthHistory  Json?   // Array of {health, score, timestamp} for historical tracking
   aiSummary      String? // AI-generated current status summary
   aiPlan         String? // JSON: AI-generated task plan
   risks          String  @default("[]") // JSON: identified risks
@@ -189,6 +191,7 @@ model Project {
   endDate         DateTime?
   completedAt     DateTime?
   isRetainer      Boolean   @default(false)
+  deletedAt          DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -253,6 +256,7 @@ model Task {
   assigneeId     String?
   milestoneId    String?
   dependsOnId    String? // Task dependency — this task depends on another
+  deletedAt          DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
@@ -698,12 +702,14 @@ model RetainerPlan {
   retainerStatus     String    @default("ACTIVE") // ACTIVE | AT_RISK | PAUSED | CANCELLED
   annualValue        Float?
   bonsaiRetainerId   String?
+  deletedAt          DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
   // Relations
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
+  @@index([deletedAt])
   @@map("retainer_plans")
 }
 
@@ -764,8 +770,25 @@ model Proposal {
   clientId      String
   projectId     String?
   createdById   String
+  deletedAt          DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+
+  // Phase 3a: PDF generation & email tracking
+  pdfPath       String?   // Path/URL to stored PDF file
+  pdfGeneratedAt DateTime? // When the PDF was generated
+  sentToEmail   String?   // Recipient email address
+  gmailMessageId String?  // Gmail message ID for sent email
+  gmailThreadId  String?  // Gmail thread ID
+  emailSentAt   DateTime? // When the email was sent
+  emailContent  String?   // JSON: { subject, body, cc, bcc }
+
+  // Phase 3a: AI generation metadata
+  aiGenerated   Boolean   @default(false)
+  aiPrompt      String?   // The prompt used for AI generation
+  aiModel       String?   // AI model that generated the content
+  metadata      String?   // JSON: flexible metadata for extensions
+  draftData     Json?    // Autosave draft state
 
   client    Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
   project   Project?           @relation(fields: [projectId], references: [id])
@@ -804,6 +827,8 @@ model Contract {
   proposalId    String?   @unique
   clientId      String
   createdById   String
+  deletedAt          DateTime?
+  draftData     Json?    // Autosave draft state
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -811,6 +836,7 @@ model Contract {
   client    Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   createdBy User      @relation("ContractCreator", fields: [createdById], references: [id])
 
+  @@index([deletedAt])
   @@map("contracts")
 }
 
@@ -854,6 +880,8 @@ model Invoice {
   projectId             String?
   proposalId            String?
   createdById           String
+  deletedAt          DateTime?
+  draftData         Json?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
@@ -978,11 +1006,13 @@ model OutreachSequence {
   status         String   @default("ACTIVE") // ACTIVE | PAUSED
   targetIndustry String?
   filters        String   @default("{}") // JSON
+  deletedAt          DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   leads OutreachLead[]
 
+  @@index([deletedAt])
   @@map("outreach_sequences")
 }
 
@@ -1142,10 +1172,21 @@ model ColdEmailSequence {
   emails         String   @default("[]") // JSON: array of 5 emails [{subject, body, delayDays}]
   status         String   @default("DRAFT") // DRAFT | ACTIVE | PAUSED | COMPLETED
   targetIndustry String?
+  // Sequence engine fields
+  startedAt      DateTime?
+  completedAt    DateTime?
+  // Stats (denormalized for fast reads)
+  totalSent      Int      @default(0)
+  totalOpened    Int      @default(0)
+  totalClicked   Int      @default(0)
+  totalReplied   Int      @default(0)
+  totalBounced   Int      @default(0)
+  totalProspects Int      @default(0)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   prospects ColdEmailProspect[]
+  events    ColdEmailEvent[]
 
   @@map("cold_email_sequences")
 }
@@ -1159,34 +1200,53 @@ model ColdEmailProspect {
   painPoint     String?
   status        String    @default("NEW") // NEW | CONTACTED | REPLIED | CONVERTED | UNSUBSCRIBED
   sequenceId    String?
+  // Pipeline source: Ashbi | cameronashley
+  source        String    @default("Ashbi")
+  // LinkedIn
+  linkedinUrl   String?
+  // Audit notes for Ashbi outreach (specific observation per brand)
+  auditNotes    String?
+  // Tracking fields
+  lastEmailStep Int?      @default(0) // Which email step in the sequence was last sent (0-indexed)
+  nextEmailAt   DateTime? // When to send the next email
+  openedAt      DateTime?
+  clickedAt     DateTime?
+  bouncedAt     DateTime?
   lastEmailedAt DateTime?
+  emailCount    Int        @default(0) // Total emails sent to this prospect
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   sequence ColdEmailSequence? @relation(fields: [sequenceId], references: [id], onDelete: SetNull)
+  events   ColdEmailEvent[]
 
   @@map("cold_email_prospects")
 }
 
+// ColdEmailEvent — individual send/tracking events per prospect
+model ColdEmailEvent {
+  id          String   @id @default(cuid())
+  prospectId  String
+  sequenceId  String?
+  type        String   // SENT | OPENED | CLICKED | BOUNCED | REPLIED | UNSUBSCRIBED
+  emailStep   Int?     // Which step in the sequence (0-indexed)
+  mailgunId   String?  // Mailgun message ID for tracking
+  mailgunEvent String? // Raw Mailgun event type
+  metadata    String?  // JSON — Mailgun event payload
+  createdAt   DateTime @default(now())
+
+  prospect ColdEmailProspect  @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  sequence ColdEmailSequence? @relation(fields: [sequenceId], references: [id], onDelete: SetNull)
+
+  @@map("cold_email_events")
+}
+
 // ==================== CALL SCREENER AGENT ====================
 
-model CallLog {
-  id              String    @id @default(cuid())
-  callerName      String
-  callerNumber    String?
-  callerCompany   String?
-  screeningScript String? // AI-generated screening questions
-  summaryTemplate String? // AI-generated summary template
-  callSummary     String? // Filled in after call
-  callNotes       String?
-  status          String    @default("PENDING") // PENDING | SCREENED | COMPLETED | FOLLOW_UP_SENT
-  followUpDraftId String? // Reference to follow-up email draft
-  followUpEmail   String? // AI-generated follow-up email
-  calledAt        DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  prospect ColdEmailProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  sequence ColdEmailSequence? @relation(fields: [sequenceId], references: [id], onDelete: SetNull)
 
-  @@map("call_logs")
+  @@map("cold_email_sends")
 }
 
 // ==================== AI TEAM ====================
@@ -1244,6 +1304,26 @@ model UpworkContract {
   @@map("upwork_contracts")
 }
 
+model UpworkProposal {
+  id              String    @id @default(cuid())
+  jobId           String
+  jobTitle        String
+  clientName      String?
+  budget          Float?
+  coverLetter     String
+  status          String    @default("DRAFT")
+  // DRAFT | QUEUED | SUBMITTED | INTERVIEWING | HIRED | DECLINED | WITHDRAWN
+  score           Int?
+  jobUrl          String?
+  submittedAt     DateTime?
+  interviewAt     DateTime?
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("upwork_proposals")
+}
+
 // ==================== EXPENSE TRACKING ====================
 
 model Expense {
@@ -1260,6 +1340,7 @@ model Expense {
   clientId    String?
   projectId   String?
   invoiceId   String?
+  deletedAt          DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -1270,6 +1351,7 @@ model Expense {
   @@index([clientId])
   @@index([projectId])
   @@index([invoiceId])
+  @@index([deletedAt])
   @@map("expenses")
 }
 
@@ -1522,6 +1604,7 @@ model PipelineDeal {
   contactPerson     String?
   source            String? // UPWORK | REFERRAL | WEBSITE | COLD_OUTREACH | OTHER
   lostReason        String?
+  deletedAt          DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -1530,6 +1613,7 @@ model PipelineDeal {
 
   @@index([stageId])
   @@index([clientId])
+  @@index([deletedAt])
   @@map("pipeline_deals")
 }
 
@@ -1747,12 +1831,15 @@ model TimeSession {
   userId      String
   projectId   String
   taskId      String?
-  startTime   DateTime
+  startTime   DateTime  @default(now())
   endTime     DateTime?
   duration    Int       @default(0) // Duration in minutes (calculated on stop)
   description String?
   billable    Boolean   @default(true)
   isRunning   Boolean   @default(false) // True if timer is currently running
+  pausedAt    DateTime?
+  totalPausedMs Int     @default(0)
+  deletedAt   DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -1767,6 +1854,22 @@ model TimeSession {
 }
 
 // ==================== PROMPT VERSIONS (for AI enhancement) ====================
+
+model SentEmail {
+  id             String   @id @default(cuid())
+  entityType     String   // INVOICE | PROPOSAL | CONTRACT
+  entityId       String   // FK to the invoice/proposal/contract
+  toEmail        String
+  toName         String?
+  subject        String
+  mailgunMessageId String?
+  status         String   // SENT | FAILED
+  error          String?
+  createdAt      DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@map("sent_emails")
+}
 
 model PromptVersion {
   id          String   @id @default(cuid())
@@ -1829,11 +1932,13 @@ model Estimate {
   validUntil  DateTime?
   viewToken   String   @unique @default(cuid())
   sentAt      DateTime?
+  deletedAt          DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@index([clientId])
   @@index([status])
+  @@index([deletedAt])
   @@map("estimates")
 }
 

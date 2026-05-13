@@ -12,7 +12,10 @@ export default async function automationRoutes(fastify) {
 
     const activities = await prisma.activity.findMany({
       where: {
-        metadata: { contains: 'WORKFLOW_ENGINE' }
+        OR: [
+          { metadata: { contains: 'WORKFLOW_ENGINE' } },
+          { metadata: { contains: 'WORKFLOW_ACTION' } }
+        ]
       },
       orderBy: { createdAt: 'desc' },
       take: Math.min(parseInt(limit) || 50, 100),
@@ -24,7 +27,10 @@ export default async function automationRoutes(fastify) {
 
     const total = await prisma.activity.count({
       where: {
-        metadata: { contains: 'WORKFLOW_ENGINE' }
+        OR: [
+          { metadata: { contains: 'WORKFLOW_ENGINE' } },
+          { metadata: { contains: 'WORKFLOW_ACTION' } }
+        ]
       }
     });
 

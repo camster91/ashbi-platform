@@ -135,7 +135,7 @@ export default function ClientDashboard() {
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Updated {project.updatedAt ? new Date(project.updatedAt).toLocaleDateString() : 'Never'}
+                    Updated {project.updatedAt ? new Date(project.updatedAt).toLocaleDateString('en-CA') : 'Never'}
                   </p>
                 </button>
               ))}

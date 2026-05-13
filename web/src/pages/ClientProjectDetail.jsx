@@ -101,13 +101,13 @@ export default function ClientProjectDetail() {
               <div>
                 <p className="text-muted-foreground">Started</p>
                 <p className="font-medium text-foreground">
-                  {project.createdAt ? new Date(project.createdAt).toLocaleDateString() : 'N/A'}
+                  {project.createdAt ? new Date(project.createdAt).toLocaleDateString('en-CA') : 'N/A'}
                 </p>
               </div>
               <div>
                 <p className="text-muted-foreground">Last Updated</p>
                 <p className="font-medium text-foreground">
-                  {project.updatedAt ? new Date(project.updatedAt).toLocaleDateString() : 'N/A'}
+                  {project.updatedAt ? new Date(project.updatedAt).toLocaleDateString('en-CA') : 'N/A'}
                 </p>
               </div>
             </div>
@@ -142,7 +142,7 @@ export default function ClientProjectDetail() {
                   <div key={idx} className="border-l-4 border-primary pl-4 py-1.5">
                     <div className="flex justify-between mb-0.5">
                       <p className="font-medium text-sm text-foreground">{msg.sender || 'Team'}</p>
-                      <p className="text-xs text-muted-foreground">{new Date(msg.createdAt).toLocaleDateString()}</p>
+                      <p className="text-xs text-muted-foreground">{new Date(msg.createdAt).toLocaleDateString('en-CA')}</p>
                     </div>
                     <p className="text-sm text-muted-foreground">{msg.body}</p>
                   </div>

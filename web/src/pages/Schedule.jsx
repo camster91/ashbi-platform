@@ -81,7 +81,7 @@ function fmtTime(iso) {
 }
 
 function fmtDateFull(d) {
-  return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  return d.toLocaleDateString({ weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 }
 
 function pad(n) {
@@ -427,7 +427,7 @@ function EventDetailModal({ event, isOpen, onClose, onEdit }) {
           <div className="flex items-center gap-2 text-foreground">
             <Clock className="w-4 h-4 text-muted-foreground" />
             {event.allDay ? (
-              <span>All day &middot; {new Date(event.startTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+              <span>All day &middot; {new Date(event.startTime).toLocaleDateString({ month: 'short', day: 'numeric' })}</span>
             ) : (
               <span>{fmtTime(event.startTime)} &ndash; {fmtTime(event.endTime)}</span>
             )}
@@ -557,7 +557,7 @@ function UpcomingSidebar({ onEventClick }) {
                   <p className="text-sm font-medium text-foreground truncate">{event.title}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {event.allDay
-                      ? new Date(event.startTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                      ? new Date(event.startTime).toLocaleDateString({ month: 'short', day: 'numeric' })
                       : fmtTime(event.startTime)}
                     {' '}
                     <span className={cn('ml-1', style.text)}>{style.label}</span>
@@ -704,9 +704,9 @@ export default function Schedule() {
         <div>
           <h1 className="text-2xl font-heading font-bold text-foreground">Schedule</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {weekDays[0].toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}
+            {weekDays[0].toLocaleDateString({ month: 'long', day: 'numeric' })}
             {' \u2013 '}
-            {weekDays[6].toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+            {weekDays[6].toLocaleDateString({ month: 'long', day: 'numeric', year: 'numeric' })}
           </p>
         </div>
         <div className="flex items-center gap-2">

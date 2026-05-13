@@ -26,7 +26,7 @@ function fmt(n) {
 
 function formatDate(date) {
   if (!date) return '';
-  return new Date(date).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' });
+  return new Date(date).toLocaleDateString({ month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function defaultLineItem() {
