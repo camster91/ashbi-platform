@@ -767,6 +767,21 @@ model Proposal {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  // Phase 3a: PDF generation & email tracking
+  pdfPath       String?   // Path/URL to stored PDF file
+  pdfGeneratedAt DateTime? // When the PDF was generated
+  sentToEmail   String?   // Recipient email address
+  gmailMessageId String?  // Gmail message ID for sent email
+  gmailThreadId  String?  // Gmail thread ID
+  emailSentAt   DateTime? // When the email was sent
+  emailContent  String?   // JSON: { subject, body, cc, bcc }
+
+  // Phase 3a: AI generation metadata
+  aiGenerated   Boolean   @default(false)
+  aiPrompt      String?   // The prompt used for AI generation
+  aiModel       String?   // AI model that generated the content
+  metadata      String?   // JSON: flexible metadata for extensions
+
   client    Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
   project   Project?           @relation(fields: [projectId], references: [id])
   createdBy User               @relation("ProposalCreator", fields: [createdById], references: [id])
@@ -1136,57 +1151,73 @@ model LinkedInProspect {
 // ==================== COLD EMAIL AGENT ====================
 
 model ColdEmailSequence {
-  id             String   @id @default(cuid())
-  name           String
-  serviceType    String // web_design | branding | seo | full_service
-  emails         String   @default("[]") // JSON: array of 5 emails [{subject, body, delayDays}]
-  status         String   @default("DRAFT") // DRAFT | ACTIVE | PAUSED | COMPLETED
-  targetIndustry String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id               String   @id @default(cuid())
+  name             String
+  serviceType      String   // web_design | branding | seo | full_service
+  emails           String   @default("[]") // JSON: array of 5 emails [{subject, body, delayDays}]
+  status           String   @default("DRAFT") // DRAFT | ACTIVE | PAUSED | COMPLETED
+  targetIndustry   String?
+  // Tracking stats (denormalized for dashboard performance)
+  totalSent        Int      @default(0)
+  totalOpened      Int      @default(0)
+  totalClicked     Int      @default(0)
+  totalReplied     Int      @default(0)
+  totalBounced     Int      @default(0)
+  totalUnsubscribed Int     @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   prospects ColdEmailProspect[]
+  sends     ColdEmailSend[]
 
   @@map("cold_email_sequences")
 }
 
 model ColdEmailProspect {
-  id            String    @id @default(cuid())
-  name          String
-  email         String
-  company       String?
-  industry      String?
-  painPoint     String?
-  status        String    @default("NEW") // NEW | CONTACTED | REPLIED | CONVERTED | UNSUBSCRIBED
-  sequenceId    String?
-  lastEmailedAt DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id              String    @id @default(cuid())
+  name            String
+  email           String
+  company         String?
+  industry        String?
+  painPoint       String?
+  status          String    @default("NEW") // NEW | CONTACTED | REPLIED | CONVERTED | UNSUBSCRIBED | BOUNCED
+  sequenceId      String?
+  currentStep     Int       @default(0) // Which email in sequence they're at (0-indexed)
+  lastEmailedAt   DateTime?
+  opened          Boolean   @default(false)
+  clicked         Boolean   @default(false)
+  replied         Boolean   @default(false)
+  bounced         Boolean   @default(false)
+  unsubscribed    Boolean   @default(false)
+  nextScheduledAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   sequence ColdEmailSequence? @relation(fields: [sequenceId], references: [id], onDelete: SetNull)
+  sends   ColdEmailSend[]
 
   @@map("cold_email_prospects")
 }
 
-// ==================== CALL SCREENER AGENT ====================
+model ColdEmailSend {
+  id          String    @id @default(cuid())
+  prospectId  String
+  sequenceId  String?
+  step        Int       // Which email in sequence (0-indexed)
+  subject     String
+  body        String
+  status      String    @default("PENDING") // PENDING | SENT | OPENED | CLICKED | BOUNCED | UNSUBSCRIBED
+  mailgunId   String?   // Mailgun message ID for tracking
+  openedAt    DateTime?
+  clickedAt   DateTime?
+  error       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-model CallLog {
-  id              String    @id @default(cuid())
-  callerName      String
-  callerNumber    String?
-  callerCompany   String?
-  screeningScript String? // AI-generated screening questions
-  summaryTemplate String? // AI-generated summary template
-  callSummary     String? // Filled in after call
-  callNotes       String?
-  status          String    @default("PENDING") // PENDING | SCREENED | COMPLETED | FOLLOW_UP_SENT
-  followUpDraftId String? // Reference to follow-up email draft
-  followUpEmail   String? // AI-generated follow-up email
-  calledAt        DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  prospect ColdEmailProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  sequence ColdEmailSequence? @relation(fields: [sequenceId], references: [id], onDelete: SetNull)
 
-  @@map("call_logs")
+  @@map("cold_email_sends")
 }
 
 // ==================== AI TEAM ====================

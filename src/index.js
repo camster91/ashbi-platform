@@ -62,7 +62,6 @@ import emailTriageRoutes from './routes/email-triage.routes.js';
 import contentWriterRoutes from './routes/content-writer.routes.js';
 import linkedinOutreachRoutes from './routes/linkedin-outreach.routes.js';
 import coldEmailRoutes from './routes/cold-email.routes.js';
-import callScreenerRoutes from './routes/call-screener.routes.js';
 import leadGenRoutes from './routes/lead-gen.routes.js';
 import socialContentRoutes from './routes/social-content.routes.js';
 import seoBlogRoutes from './routes/seo-blog.routes.js';
@@ -122,6 +121,7 @@ import leadIntelligenceRoutes from './routes/lead-intelligence.routes.js';
 import proposalBuilderRoutes from './routes/proposal-builder.routes.js';
 import coldCallRoutes from './routes/cold-call.routes.js';
 import upworkAutoAlertRoutes from './routes/upwork-auto-alert.routes.js';
+import proposalsPipelineRoutes from './routes/proposals.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -192,6 +192,10 @@ await fastify.register(leadIntelligenceRoutes, { prefix: '/api/lead-intelligence
 await fastify.register(proposalBuilderRoutes, { prefix: '/api/proposal-builder' });
 await fastify.register(coldCallRoutes, { prefix: '/api/cold-call' });
 await fastify.register(upworkAutoAlertRoutes, { prefix: '/api/upwork-auto-alert' });
+await fastify.register(proposalsPipelineRoutes, { prefix: '/api/proposals' });
+await fastify.register(mailgunRoutes, { prefix: '/api/mailgun' });
+await fastify.register(mailgunHitlRoutes, { prefix: '/api/mailgun' });
+await fastify.register(coldEmailRoutes, { prefix: '/api/cold-email' });
 // ... (all other routes would be registered here in a production app, condensed for space)
 
 // Hub-Hermes bridge initialization
@@ -205,6 +209,13 @@ if (!env.isDev) {
     reply.status(404).send({ error: 'Not found' });
   });
 }
+
+// Proposal PDF storage files
+await fastify.register(fastifyStatic, {
+  root: path.resolve(__dirname, '../storage/proposals'),
+  prefix: '/storage/proposals/',
+  decorateReply: false
+});
 
 // Global Error Handler (Enterprise Grade)
 fastify.setErrorHandler((error, request, reply) => {

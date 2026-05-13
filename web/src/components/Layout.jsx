@@ -123,7 +123,6 @@ export default function Layout({ children }) {
     { name: 'Lead Intelligence', href: '/lead-intelligence', icon: Search },
     { name: 'Outreach', href: '/outreach', icon: Send },
     { name: 'Referral Network', href: '/referral-network', icon: Share2 },
-    { name: 'Call Block', href: '/call-block', icon: Phone },
   ];
 
   // Finance & Docs — collapsible section
