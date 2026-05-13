@@ -22,7 +22,6 @@ import LandingPage from './pages/LandingPage';
 import LandingPage from './pages/LandingPage';
 
 // Lazy loaded pages
-const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Inbox = lazy(() => import('./pages/Inbox'));
 const Thread = lazy(() => import('./pages/Thread'));
 const Projects = lazy(() => import('./pages/Projects'));
@@ -76,6 +75,7 @@ const Schedule = lazy(() => import('./pages/Schedule'));
 const Timesheets = lazy(() => import('./pages/Timesheets'));
 const RateCards = lazy(() => import('./pages/RateCards'));
 const Bookkeeping = lazy(() => import('./pages/Bookkeeping'));
+const Trash = lazy(() => import('./pages/Trash'));
 // Agent Pages (client acquisition pipeline)
 const ClientAcquisition = lazy(() => import('./pages/ClientAcquisition'));
 const LeadIntelligence = lazy(() => import('./pages/LeadIntelligence'));
@@ -165,6 +165,7 @@ function AppRoutes() {
                   <Route path="/timesheets" element={<Timesheets />} />
                   <Route path="/rate-cards" element={<AdminRoute><RateCards /></AdminRoute>} />
                   <Route path="/bookkeeping" element={<AdminRoute><Bookkeeping /></AdminRoute>} />
+                  <Route path="/trash" element={<AdminRoute><Trash /></AdminRoute>} />
                   <Route path="/upwork-contracts" element={<UpworkContracts />} />
                   <Route path="/credentials" element={<AdminRoute><Credentials /></AdminRoute>} />
                   <Route path="/chat" element={<Chat />} />
