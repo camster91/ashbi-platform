@@ -112,6 +112,9 @@ model Client {
   clientNotes        String?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
+  // Soft delete
+  deletedAt DateTime?
+
 
   // Relations
   contacts              Contact[]
@@ -192,6 +195,12 @@ model Project {
   isRetainer      Boolean   @default(false)
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+  // Soft delete
+  deletedAt DateTime?
+
+  // Autosave draft
+  draftData String? // JSON of unsaved form data
+
 
   // Relations
   client                Client                 @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -256,6 +265,9 @@ model Task {
   dependsOnId    String? // Task dependency — this task depends on another
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+  // Soft delete
+  deletedAt DateTime?
+
 
   // Relations
   project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -513,6 +525,9 @@ model Note {
   authorId  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  // Soft delete
+  deletedAt DateTime?
+
 
   // Relations
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -701,6 +716,12 @@ model RetainerPlan {
   bonsaiRetainerId   String?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
+  // Soft delete
+  deletedAt DateTime?
+
+  // Autosave draft
+  draftData String? // JSON of unsaved form data
+
 
   // Relations
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -773,6 +794,12 @@ model Proposal {
   createdBy User               @relation("ProposalCreator", fields: [createdById], references: [id])
   lineItems ProposalLineItem[]
   contract  Contract?
+  // Soft delete
+  deletedAt DateTime?
+
+  // Autosave draft
+  draftData String? // JSON of unsaved form data
+
 
   @@map("proposals")
 }
@@ -811,6 +838,12 @@ model Contract {
   proposal  Proposal? @relation(fields: [proposalId], references: [id])
   client    Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   createdBy User      @relation("ContractCreator", fields: [createdById], references: [id])
+  // Soft delete
+  deletedAt DateTime?
+
+  // Autosave draft
+  draftData String? // JSON of unsaved form data
+
 
   @@map("contracts")
 }
@@ -864,6 +897,12 @@ model Invoice {
   payments    InvoicePayment[]
   timeEntries TimeEntry[]
   expenses    Expense[]
+  // Soft delete
+  deletedAt DateTime?
+
+  // Autosave draft
+  draftData String? // JSON of unsaved form data
+
 
   @@index([status, dueDate])
   @@index([clientId, status])
@@ -1309,6 +1348,9 @@ model Expense {
   client  Client?  @relation(fields: [clientId], references: [id])
   project Project? @relation(fields: [projectId], references: [id])
   invoice Invoice? @relation(fields: [invoiceId], references: [id])
+  // Soft delete
+  deletedAt DateTime?
+
 
   @@index([clientId])
   @@index([projectId])
@@ -1874,6 +1916,12 @@ model Estimate {
   sentAt      DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  // Soft delete
+  deletedAt DateTime?
+
+  // Autosave draft
+  draftData String? // JSON of unsaved form data
+
 
   @@index([clientId])
   @@index([status])
