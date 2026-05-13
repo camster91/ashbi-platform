@@ -18,6 +18,7 @@ export default async function projectRoutes(fastify) {
     if (status) where.status = status;
     if (clientId) where.clientId = clientId;
     if (health) where.health = health;
+    where.deletedAt = null;
 
     const take = Math.min(parseInt(limit) || 50, 200);
     const skip = parseInt(offset) || 0;

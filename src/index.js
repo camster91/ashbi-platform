@@ -48,6 +48,7 @@ import approvalRoutes from './routes/approvals.routes.js';
 import dashboardRoutes from './routes/dashboard.routes.js';
 import botRoutes from './routes/bot.routes.js';
 import onboardingRoutes from './routes/onboarding.routes.js';
+import trashRoutes from './routes/trash.routes.js';
 import retainerRoutes from './routes/retainer.routes.js';
 import reportRoutes from './routes/reports.routes.js';
 import leadRoutes from './routes/leads.routes.js';
@@ -196,6 +197,7 @@ await fastify.register(proposalsPipelineRoutes, { prefix: '/api/proposals' });
 await fastify.register(mailgunRoutes, { prefix: '/api/mailgun' });
 await fastify.register(mailgunHitlRoutes, { prefix: '/api/mailgun' });
 await fastify.register(coldEmailRoutes, { prefix: '/api/cold-email' });
+await fastify.register(trashRoutes, { prefix: '/api/trash' });
 // ... (all other routes would be registered here in a production app, condensed for space)
 
 // Hub-Hermes bridge initialization

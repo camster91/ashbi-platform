@@ -146,6 +146,7 @@ export default function Layout({ children }) {
     { name: 'Reports', href: '/reports', icon: PieChart },
     { name: 'Credentials', href: '/credentials', icon: Key },
     { name: 'Settings', href: '/settings', icon: Settings },
+    { name: 'Trash', href: '/trash', icon: X },
   ] : [];
 
   // Keyboard shortcuts

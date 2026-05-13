@@ -46,11 +46,11 @@ export default async function proposalRoutes(fastify) {
   }, async (request) => {
     const { clientId, status } = request.query;
 
-    const where = {};
+    const where = { deletedAt: null };
     if (clientId) where.clientId = clientId;
     if (status) where.status = status;
 
-    const proposals = await prisma.proposal.findMany({
+    const proposals = await fastify.prisma.proposal.findMany({
       where,
       include: {
         client: { select: { id: true, name: true } },
@@ -215,7 +215,7 @@ export default async function proposalRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const existing = await prisma.proposal.findUnique({ where: { id } });
+    const existing = await fastify.prisma.proposal.findUnique({ where: { id } });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Proposal not found' });
@@ -225,7 +225,7 @@ export default async function proposalRoutes(fastify) {
       return reply.status(400).send({ error: 'Only DRAFT proposals can be deleted' });
     }
 
-    await prisma.proposal.delete({ where: { id } });
+    await fastify.prisma.proposal.update({ where: { id }, data: { deletedAt: new Date() } });
 
     return { success: true };
   });
@@ -395,5 +395,33 @@ export default async function proposalRoutes(fastify) {
     });
 
     return updated;
+  });
+
+  // ─── PATCH /:id/draft — autosave draft data ───────
+  fastify.patch('/:id/draft', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const { draftData } = request.body;
+
+    await request.prisma.proposal.update({
+      where: { id },
+      data: { draftData }
+    });
+
+    return { success: true };
+  });
+
+  // ─── GET /:id/draft — get autosave draft ───────
+  fastify.get('/:id/draft', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const entity = await request.prisma.proposal.findUnique({
+      where: { id },
+      select: { draftData: true }
+    });
+    if (!entity) return reply.status(404).send({ error: 'Not found' });
+    return { draftData: entity.draftData };
   });
 }

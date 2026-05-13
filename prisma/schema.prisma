@@ -110,6 +110,7 @@ model Client {
   lastInvoiceStatus  String?
   paymentStatus      String?
   clientNotes        String?
+  deletedAt          DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
@@ -189,6 +190,7 @@ model Project {
   endDate         DateTime?
   completedAt     DateTime?
   isRetainer      Boolean   @default(false)
+  deletedAt          DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -253,6 +255,7 @@ model Task {
   assigneeId     String?
   milestoneId    String?
   dependsOnId    String? // Task dependency — this task depends on another
+  deletedAt          DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
@@ -698,12 +701,14 @@ model RetainerPlan {
   retainerStatus     String    @default("ACTIVE") // ACTIVE | AT_RISK | PAUSED | CANCELLED
   annualValue        Float?
   bonsaiRetainerId   String?
+  deletedAt          DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
   // Relations
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
+  @@index([deletedAt])
   @@map("retainer_plans")
 }
 
@@ -764,6 +769,7 @@ model Proposal {
   clientId      String
   projectId     String?
   createdById   String
+  deletedAt          DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -781,6 +787,7 @@ model Proposal {
   aiPrompt      String?   // The prompt used for AI generation
   aiModel       String?   // AI model that generated the content
   metadata      String?   // JSON: flexible metadata for extensions
+  draftData     Json?    // Autosave draft state
 
   client    Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
   project   Project?           @relation(fields: [projectId], references: [id])
@@ -819,6 +826,8 @@ model Contract {
   proposalId    String?   @unique
   clientId      String
   createdById   String
+  deletedAt          DateTime?
+  draftData     Json?    // Autosave draft state
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -826,6 +835,7 @@ model Contract {
   client    Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   createdBy User      @relation("ContractCreator", fields: [createdById], references: [id])
 
+  @@index([deletedAt])
   @@map("contracts")
 }
 
@@ -869,6 +879,8 @@ model Invoice {
   projectId             String?
   proposalId            String?
   createdById           String
+  deletedAt          DateTime?
+  draftData         Json?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
@@ -993,11 +1005,13 @@ model OutreachSequence {
   status         String   @default("ACTIVE") // ACTIVE | PAUSED
   targetIndustry String?
   filters        String   @default("{}") // JSON
+  deletedAt          DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   leads OutreachLead[]
 
+  @@index([deletedAt])
   @@map("outreach_sequences")
 }
 
@@ -1291,6 +1305,7 @@ model Expense {
   clientId    String?
   projectId   String?
   invoiceId   String?
+  deletedAt          DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -1301,6 +1316,7 @@ model Expense {
   @@index([clientId])
   @@index([projectId])
   @@index([invoiceId])
+  @@index([deletedAt])
   @@map("expenses")
 }
 
@@ -1553,6 +1569,7 @@ model PipelineDeal {
   contactPerson     String?
   source            String? // UPWORK | REFERRAL | WEBSITE | COLD_OUTREACH | OTHER
   lostReason        String?
+  deletedAt          DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -1561,6 +1578,7 @@ model PipelineDeal {
 
   @@index([stageId])
   @@index([clientId])
+  @@index([deletedAt])
   @@map("pipeline_deals")
 }
 
@@ -1860,11 +1878,13 @@ model Estimate {
   validUntil  DateTime?
   viewToken   String   @unique @default(cuid())
   sentAt      DateTime?
+  deletedAt          DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   @@index([clientId])
   @@index([status])
+  @@index([deletedAt])
   @@map("estimates")
 }
 

@@ -37,7 +37,7 @@ export default async function invoiceRoutes(fastify) {
   fastify.get('/', { onRequest: [fastify.authenticate] }, async (request) => {
     const { clientId, projectId, status, search, sort = 'createdAt', order = 'desc', limit, offset } = request.query;
 
-    const where = {};
+    const where = { deletedAt: null };
     if (clientId) where.clientId = clientId;
     if (projectId) where.projectId = projectId;
     if (status && status !== 'OVERDUE') where.status = status;
@@ -80,10 +80,11 @@ export default async function invoiceRoutes(fastify) {
     const now = new Date();
     const [allInvoices, overdueInvoices] = await Promise.all([
       fastify.prisma.invoice.findMany({
+        where: { deletedAt: null },
         select: { status: true, total: true, dueDate: true }
       }),
       fastify.prisma.invoice.findMany({
-        where: { status: 'SENT', dueDate: { lt: now } },
+        where: { status: 'SENT', dueDate: { lt: now }, deletedAt: null },
         select: { id: true, total: true }
       })
     ]);
@@ -298,7 +299,7 @@ export default async function invoiceRoutes(fastify) {
 
     return fastify.prisma.invoice.update({
       where: { id: request.params.id },
-      data: { status: 'VOID' }
+      data: { status: 'VOID', deletedAt: new Date() }
     });
   });
 
@@ -578,6 +579,34 @@ export default async function invoiceRoutes(fastify) {
       fastify.log.error({ err }, 'Stripe webhook error');
       return reply.status(400).send({ error: 'Webhook verification failed' });
     }
+  });
+
+  // ─── PATCH /:id/draft — autosave draft data ───────
+  fastify.patch('/:id/draft', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const { draftData } = request.body;
+
+    await request.prisma.invoice.update({
+      where: { id },
+      data: { draftData }
+    });
+
+    return { success: true };
+  });
+
+  // ─── GET /:id/draft — get autosave draft ───────
+  fastify.get('/:id/draft', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const entity = await request.prisma.invoice.findUnique({
+      where: { id },
+      select: { draftData: true }
+    });
+    if (!entity) return reply.status(404).send({ error: 'Not found' });
+    return { draftData: entity.draftData };
   });
 }
 

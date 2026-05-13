@@ -323,4 +323,32 @@ export default async function contractRoutes(fastify) {
     reply.header('Content-Length', pdfBuffer.length);
     return reply.send(pdfBuffer);
   });
+
+  // ─── PATCH /:id/draft — autosave draft data ───────
+  fastify.patch('/:id/draft', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const { draftData } = request.body;
+
+    await request.prisma.contract.update({
+      where: { id },
+      data: { draftData }
+    });
+
+    return { success: true };
+  });
+
+  // ─── GET /:id/draft — get autosave draft ───────
+  fastify.get('/:id/draft', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const entity = await request.prisma.contract.findUnique({
+      where: { id },
+      select: { draftData: true }
+    });
+    if (!entity) return reply.status(404).send({ error: 'Not found' });
+    return { draftData: entity.draftData };
+  });
 }

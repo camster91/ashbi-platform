@@ -1392,6 +1392,17 @@ export const api = {
     return request(`/time-entries/timesheets/weekly${query}`);
   },
   approveTimesheetEntry: (id) => request(`/time-entries/timesheets/${id}/approve`, { method: 'PATCH' }),
+
+  // ─── Generic methods (for pages that need dynamic endpoints) ───
+  get: (endpoint) => request(endpoint),
+  post: (endpoint, body) => request(endpoint, { method: 'POST', body }),
+  put: (endpoint, body) => request(endpoint, { method: 'PUT', body }),
+  del: (endpoint, body) => {
+    if (body) {
+      return request(endpoint, { method: 'DELETE', body });
+    }
+    return request(endpoint, { method: 'DELETE' });
+  },
 };
 
 export default api;
