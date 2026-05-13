@@ -18,6 +18,7 @@ export default async function clientRoutes(fastify) {
         { domain: { contains: search } }
       ];
     }
+    where.deletedAt = null;
 
     const take = Math.min(parseInt(limit) || 50, 200);
     const skip = parseInt(offset) || 0;

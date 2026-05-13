@@ -188,7 +188,10 @@ export default async function expenseRoutes(fastify) {
     });
     if (!existing) return reply.status(404).send({ error: 'Expense not found' });
 
-    await fastify.prisma.expense.delete({ where: { id: request.params.id } });
+    await fastify.prisma.expense.update({
+      where: { id: request.params.id },
+      data: { deletedAt: new Date() }
+    });
     return { success: true };
   });
 }

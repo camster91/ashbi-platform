@@ -48,6 +48,7 @@ import approvalRoutes from './routes/approvals.routes.js';
 import dashboardRoutes from './routes/dashboard.routes.js';
 import botRoutes from './routes/bot.routes.js';
 import onboardingRoutes from './routes/onboarding.routes.js';
+import trashRoutes from './routes/trash.routes.js';
 import retainerRoutes from './routes/retainer.routes.js';
 import reportRoutes from './routes/reports.routes.js';
 import leadRoutes from './routes/leads.routes.js';
@@ -62,7 +63,6 @@ import emailTriageRoutes from './routes/email-triage.routes.js';
 import contentWriterRoutes from './routes/content-writer.routes.js';
 import linkedinOutreachRoutes from './routes/linkedin-outreach.routes.js';
 import coldEmailRoutes from './routes/cold-email.routes.js';
-import callScreenerRoutes from './routes/call-screener.routes.js';
 import leadGenRoutes from './routes/lead-gen.routes.js';
 import socialContentRoutes from './routes/social-content.routes.js';
 import seoBlogRoutes from './routes/seo-blog.routes.js';
@@ -101,6 +101,7 @@ import { startOverdueChecker } from './services/automation.service.js';
 import pipelineRoutes from './routes/pipeline.routes.js';
 import { initHermesBridge } from './agents/hub-hermes.integration.js';
 import timeTrackingRoutes from './routes/time-tracking.routes.js';
+import timeSessionRoutes from './routes/time-session.routes.js';
 import semanticSearchRoutes from './routes/semantic-search.routes.js';
 import adCopyRoutes from './routes/ad-copy.routes.js';
 import creativeBriefRoutes from './routes/creative-brief.routes.js';
@@ -305,6 +306,8 @@ await fastify.register(clientPortalRoutes, { prefix: '/api/client-portal' });
 await fastify.register(wordpressAgentRoutes, { prefix: '/api/wordpress' });
 await fastify.register(gmailRoutes, { prefix: '/api/gmail' });
 await fastify.register(clientAcquisitionRoutes, { prefix: '/api/client-acquisition' });
+await fastify.register(trashRoutes, { prefix: '/api/trash' });
+await fastify.register(timeSessionRoutes, { prefix: '/api/time-sessions' });
 // ... (all other routes would be registered here in a production app, condensed for space)
 
 // Hub-Hermes bridge initialization
@@ -318,6 +321,13 @@ if (!env.isDev) {
     reply.status(404).send({ error: 'Not found' });
   });
 }
+
+// Proposal PDF storage files
+await fastify.register(fastifyStatic, {
+  root: path.resolve(__dirname, '../storage/proposals'),
+  prefix: '/storage/proposals/',
+  decorateReply: false
+});
 
 // Global Error Handler (Enterprise Grade)
 fastify.setErrorHandler((error, request, reply) => {

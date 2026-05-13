@@ -74,7 +74,7 @@ const env = {
   wpBridgeSecret: process.env.WP_BRIDGE_SECRET,
 
   // Notion
-  notionToken: process.env.NOTION_TOKEN,
+  // notionToken: process.env.NOTION_TOKEN,
 
   // Portal
   portalBaseUrl: process.env.PORTAL_BASE_URL || 'https://hub.ashbi.ca',

@@ -7,7 +7,6 @@ import prisma from '../config/db.js';
 const COOLIFY_URL = process.env.COOLIFY_URL || 'http://187.77.26.99:8000';
 const COOLIFY_TOKEN = process.env.COOLIFY_TOKEN;
 const GITHUB_ORG = process.env.GITHUB_ORG || 'camster91';
-const NOTION_TOKEN = process.env.NOTION_TOKEN;
 
 export default async function commandCenterRoutes(fastify) {
 

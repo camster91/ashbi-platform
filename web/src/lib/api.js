@@ -576,6 +576,17 @@ export const api = {
   duplicateProposal: (id) =>
     request(`/proposals/${id}/duplicate`, { method: 'POST' }),
 
+  // ===== PROPOSALS PIPELINE (Phase 3a) =====
+  /** AI-generate a proposal from client + services */
+  aiGenerateProposal: (data) =>
+    request('/proposals/generate', { method: 'POST', body: data }),
+  /** Convert proposal to PDF */
+  proposalGeneratePdf: (id) =>
+    request(`/proposals/${id}/pdf`, { method: 'POST' }),
+  /** Send proposal via Gmail — body: { email, subject, body } */
+  proposalSendViaGmail: (id, data = {}) =>
+    request(`/proposals/${id}/send`, { method: 'POST', body: data }),
+
   // ===== CONTRACTS =====
   getContracts: (params = {}) => {
     const query = new URLSearchParams(params).toString();
@@ -857,6 +868,8 @@ export const api = {
     request('/cold-email/sequences'),
   getColdEmailSequence: (id) =>
     request(`/cold-email/sequences/${id}`),
+  updateColdEmailSequence: (id, data) =>
+    request(`/cold-email/sequences/${id}`, { method: 'PUT', body: data }),
   deleteColdEmailSequence: (id) =>
     request(`/cold-email/sequences/${id}`, { method: 'DELETE' }),
   importColdEmailProspects: (data) =>
@@ -884,10 +897,10 @@ export const api = {
     request('/call-screener/summary', { method: 'POST', body: data }),
   getCallLog: (params = {}) => {
     const query = new URLSearchParams(params).toString();
-    return request(`/call-screener/calls${query ? `?${query}` : ''}`);
+    return request(`/cold-email/sends${query ? `?${query}` : ''}`);
   },
-  generateCallFollowUp: (callId) =>
-    request(`/call-screener/follow-up/${callId}`, { method: 'POST' }),
+  getColdEmailStats: () =>
+    request('/cold-email/stats'),
 
   // ===== LEAD GEN — Lead Pipeline =====
   leadGenFindLeads: (data) =>
@@ -1400,6 +1413,17 @@ export const api = {
     return request(`/time-entries/timesheets/weekly${query}`);
   },
   approveTimesheetEntry: (id) => request(`/time-entries/timesheets/${id}/approve`, { method: 'PATCH' }),
+
+  // ─── Generic methods (for pages that need dynamic endpoints) ───
+  get: (endpoint) => request(endpoint),
+  post: (endpoint, body) => request(endpoint, { method: 'POST', body }),
+  put: (endpoint, body) => request(endpoint, { method: 'PUT', body }),
+  del: (endpoint, body) => {
+    if (body) {
+      return request(endpoint, { method: 'DELETE', body });
+    }
+    return request(endpoint, { method: 'DELETE' });
+  },
 };
 
 export default api;
