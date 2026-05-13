@@ -151,7 +151,33 @@ export async function onProposalApproved(proposalId) {
 
     console.log(`[Automation] Contract created: ${contract.id} from proposal ${proposalId}`);
 
-    // Action 2: Create notification for admin
+    // Action 2: Auto-create pipeline deal from approved proposal
+    try {
+      // Find the first pipeline stage (usually "New" or similar)
+      const defaultStage = await prisma.pipelineStage.findFirst({
+        orderBy: { order: 'asc' },
+        select: { id: true }
+      });
+
+      if (defaultStage) {
+        const deal = await prisma.pipelineDeal.create({
+          data: {
+            title: proposal.title,
+            value: proposal.total,
+            clientId: proposal.clientId,
+            stageId: defaultStage.id,
+            probability: 100, // Won
+            expectedCloseDate: new Date(),
+            notes: `Auto-created from approved proposal ${proposalId}`
+          }
+        });
+        console.log(`[Automation] Pipeline deal created: ${deal.id} from proposal ${proposalId}`);
+      }
+    } catch (dealErr) {
+      console.error(`[Automation] Could not create pipeline deal:`, dealErr.message);
+    }
+
+    // Action 3: Create notification for admin
     await createAdminNotification(
       'PROPOSAL_APPROVED',
       'Proposal Approved',
@@ -318,7 +344,7 @@ export async function checkOverdueInvoices() {
               <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
                 <h2 style="color: #dc2626;">Payment Overdue — Immediate Attention Required</h2>
                 <p>Dear ${contact.name || invoice.client.name},</p>
-                <p>Invoice <strong>${invoice.invoiceNumber}</strong>${invoice.title ? ` (${invoice.title})` : ''} for <strong>$${invoice.total.toFixed(2)}</strong> was due on <strong>${new Date(invoice.dueDate).toLocaleDateString()}</strong> and is now <strong>${daysOverdue} days overdue</strong>.</p>
+                <p>Invoice <strong>${invoice.invoiceNumber}</strong>${invoice.title ? ` (${invoice.title})` : ''} for <strong>$${invoice.total.toFixed(2)}</strong> was due on <strong>${new Date(invoice.dueDate).toLocaleDateString('en-CA')}</strong> and is now <strong>${daysOverdue} days overdue</strong>.</p>
                 <p>Please arrange payment at your earliest convenience to avoid any disruption to ongoing work.</p>
                 ${portalLink ? `
                   <p style="margin-top: 24px;">
@@ -371,7 +397,7 @@ export async function checkOverdueInvoices() {
                 <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
                   <h2 style="color: #1a1a2e;">Payment Reminder</h2>
                   <p>Dear ${contact.name || invoice.client.name},</p>
-                  <p>This is a friendly reminder that invoice <strong>${invoice.invoiceNumber}</strong>${invoice.title ? ` (${invoice.title})` : ''} for <strong>$${invoice.total.toFixed(2)}</strong> was due on <strong>${new Date(invoice.dueDate).toLocaleDateString()}</strong>.</p>
+                  <p>This is a friendly reminder that invoice <strong>${invoice.invoiceNumber}</strong>${invoice.title ? ` (${invoice.title})` : ''} for <strong>$${invoice.total.toFixed(2)}</strong> was due on <strong>${new Date(invoice.dueDate).toLocaleDateString('en-CA')}</strong>.</p>
                   <p>If you've already sent payment, thank you! Otherwise, we'd appreciate it if you could arrange payment at your convenience.</p>
                   ${portalLink ? `
                     <p style="margin-top: 24px;">
@@ -419,6 +445,401 @@ export async function checkOverdueInvoices() {
   }
 }
 
+// ==================== WORKFLOW ENGINE ====================
+
+export async function executeWorkflow(workflow, triggerData = {}) {
+  const { id: workflowId, name, actions, triggerType, triggerConfig } = workflow;
+  const runId = crypto.randomUUID();
+  let status = 'SUCCESS';
+  let error = null;
+  const results = [];
+
+  console.log(`[Workflow] Starting execution: ${name} (${workflowId})`);
+
+  // Create run record
+  const run = await prisma.workflowRun.create({
+    data: {
+      id: runId,
+      workflowId,
+      status: 'RUNNING',
+      triggerData
+    }
+  });
+
+  try {
+    // Execute each action sequentially
+    for (const action of actions) {
+      try {
+        const result = await executeAction(action, triggerData, workflow);
+        results.push({ action: action.type, success: true, result });
+      } catch (err) {
+        console.error(`[Workflow] Action ${action.type} failed:`, err);
+        results.push({ action: action.type, success: false, error: err.message });
+        status = 'PARTIAL';
+        error = err.message;
+      }
+    }
+
+    // Update workflow stats
+    await prisma.workflow.update({
+      where: { id: workflowId },
+      data: {
+        lastRun: new Date(),
+        lastStatus: status,
+        lastError: error,
+        runCount: { increment: 1 }
+      }
+    });
+
+  } catch (err) {
+    console.error(`[Workflow] Execution failed: ${name}`, err);
+    status = 'FAILED';
+    error = err.message;
+  }
+
+  // Complete the run record
+  await prisma.workflowRun.update({
+    where: { id: runId },
+    data: {
+      status,
+      completedAt: new Date(),
+      error,
+      resultData: { results }
+    }
+  });
+
+  console.log(`[Workflow] Completed: ${name} - ${status}`);
+
+  return { runId, status, results, error };
+}
+
+// ==================== ACTION EXECUTORS ====================
+
+async function executeAction(action, triggerData, workflow) {
+  const { type, config } = action;
+
+  // Validate action config schema before execution
+  if (!config || typeof config !== 'object') {
+    throw new Error(`Action config is required and must be an object for action type: ${type}`);
+  }
+
+  const REQUIRED_FIELDS = {
+    SEND_EMAIL: ['to', 'subject'],
+    CREATE_TASK: ['title'],
+    SEND_TELEGRAM: ['chat_id', 'message'],
+    UPDATE_DEAL_STAGE: ['deal_id', 'stage'],
+    WEBHOOK_CALL: ['url', 'method'],
+    CONDITION: ['field', 'operator'],
+  };
+
+  const required = REQUIRED_FIELDS[type];
+  if (required) {
+    const missing = required.filter(f => !config[f]);
+    if (missing.length > 0) {
+      throw new Error(`Action type "${type}" is missing required config field(s): ${missing.join(', ')}`);
+    }
+  }
+
+  switch (type) {
+    case 'SEND_EMAIL':
+      return executeSendEmail(config, triggerData);
+    case 'CREATE_TASK':
+      return executeCreateTask(config, triggerData);
+    case 'SEND_TELEGRAM':
+      return executeSendTelegram(config, triggerData);
+    case 'UPDATE_DEAL_STAGE':
+      return executeUpdateDealStage(config, triggerData);
+    case 'WEBHOOK_CALL':
+      return executeWebhookCall(config, triggerData);
+    case 'CONDITION':
+      return executeCondition(config, triggerData);
+    default:
+      throw new Error(`Unknown action type: ${type}`);
+  }
+}
+
+async function executeSendEmail(config, triggerData) {
+  const { to, subject, body, from } = config;
+
+  // Resolve template variables
+  const resolvedTo = resolveTemplate(to, triggerData);
+  const resolvedSubject = resolveTemplate(subject, triggerData);
+  const resolvedBody = resolveTemplate(body, triggerData);
+
+  if (!resolvedTo || !resolvedSubject) {
+    throw new Error('SEND_EMAIL requires "to" and "subject" config');
+  }
+
+  // If email is configured, send it
+  if (process.env.MAILGUN_API_KEY && process.env.MAILGUN_DOMAIN) {
+    return sendEmail(resolvedTo, resolvedSubject, resolvedBody);
+  }
+
+  // Otherwise just log
+  console.log(`[Workflow] Would send email to ${resolvedTo}: ${resolvedSubject}`);
+  return { simulated: true, to: resolvedTo, subject: resolvedSubject };
+}
+
+async function executeCreateTask(config, triggerData) {
+  const { title, description, projectId, assigneeId, priority = 'NORMAL' } = config;
+
+  const resolvedTitle = resolveTemplate(title, triggerData);
+  const resolvedDesc = resolveTemplate(description || '', triggerData);
+
+  // If projectId is a template like {{clientId}}, resolve it
+  let resolvedProjectId = resolveTemplate(projectId, triggerData);
+  let resolvedAssigneeId = resolveTemplate(assigneeId, triggerData);
+
+  // Validate project exists
+  const project = resolvedProjectId ? await prisma.project.findUnique({ where: { id: resolvedProjectId } }) : null;
+  if (!project && resolvedProjectId) {
+    throw new Error(`Project ${resolvedProjectId} not found`);
+  }
+
+  const task = await prisma.task.create({
+    data: {
+      title: resolvedTitle,
+      description: resolvedDesc,
+      status: 'PENDING',
+      priority,
+      projectId: resolvedProjectId || 'unknown',
+      assigneeId: resolvedAssigneeId || null
+    }
+  });
+
+  await logAutomation('WORKFLOW_ACTION', 'created', 'TASK', task.id, task.title,
+    { workflowName: workflow.name, actionType: 'CREATE_TASK' });
+
+  return { taskId: task.id, title: task.title };
+}
+
+async function executeSendTelegram(config, triggerData) {
+  const { chatId, message } = config;
+
+  const resolvedChatId = resolveTemplate(chatId, triggerData);
+  const resolvedMessage = resolveTemplate(message, triggerData);
+
+  if (!resolvedChatId || !resolvedMessage) {
+    throw new Error('SEND_TELEGRAM requires "chatId" and "message" config');
+  }
+
+  // Check if Telegram bot is configured
+  if (!process.env.TELEGRAM_BOT_TOKEN) {
+    console.log(`[Workflow] Would send Telegram to ${resolvedChatId}: ${resolvedMessage}`);
+    return { simulated: true, chatId: resolvedChatId, message: resolvedMessage };
+  }
+
+  // Send via Telegram API
+  const response = await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      chat_id: resolvedChatId,
+      text: resolvedMessage,
+      parse_mode: 'HTML'
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Telegram API error: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  return { messageId: data.result.message_id };
+}
+
+async function executeUpdateDealStage(config, triggerData) {
+  const { dealId, stage } = config;
+
+  const resolvedDealId = resolveTemplate(dealId, triggerData);
+  const resolvedStage = resolveTemplate(stage, triggerData);
+
+  if (!resolvedDealId || !resolvedStage) {
+    throw new Error('UPDATE_DEAL_STAGE requires "dealId" and "stage" config');
+  }
+
+  // Update pipeline deal stage
+  const deal = await prisma.pipelineDeal.update({
+    where: { id: resolvedDealId },
+    data: { stage: resolvedStage }
+  });
+
+  await logAutomation('WORKFLOW_ACTION', 'updated', 'PIPELINE_DEAL', deal.id, deal.title,
+    { workflowName: workflow.name, newStage: resolvedStage });
+
+  return { dealId: deal.id, newStage: resolvedStage };
+}
+
+async function executeWebhookCall(config, triggerData) {
+  const { url, method = 'POST', headers = {}, body } = config;
+
+  const resolvedUrl = resolveTemplate(url, triggerData);
+  const resolvedBody = resolveTemplate(body || '{}', triggerData);
+
+  const response = await fetch(resolvedUrl, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      ...headers
+    },
+    body: resolvedBody
+  });
+
+  if (!response.ok) {
+    throw new Error(`Webhook call failed: ${response.statusText}`);
+  }
+
+  const data = await response.json().catch(() => null);
+  return { success: true, statusCode: response.status, response: data };
+}
+
+async function executeCondition(config, triggerData) {
+  // Condition actions are evaluated against triggerData
+  // If condition is met, subsequent actions proceed
+  // This is a simple key-value check for now
+  const { field, operator, value } = config;
+
+  const fieldValue = getNestedValue(triggerData, field);
+  let result = false;
+
+  switch (operator) {
+    case 'equals':
+      result = fieldValue == value;
+      break;
+    case 'not_equals':
+      result = fieldValue != value;
+      break;
+    case 'contains':
+      result = String(fieldValue).includes(value);
+      break;
+    case 'greater_than':
+      result = Number(fieldValue) > Number(value);
+      break;
+    case 'less_than':
+      result = Number(fieldValue) < Number(value);
+      break;
+    case 'exists':
+      result = fieldValue !== undefined && fieldValue !== null;
+      break;
+    default:
+      throw new Error(`Unknown operator: ${operator}`);
+  }
+
+  console.log(`[Workflow] Condition: ${field} ${operator} ${value} => ${result}`);
+  return { conditionMet: result, field, operator, value };
+}
+
+// ==================== HELPERS ====================
+
+function resolveTemplate(template, data) {
+  if (typeof template !== 'string') return template;
+
+  // Replace {{field.path}} with data values
+  return template.replace(/\{\{([^}]+)\}\}/g, (match, path) => {
+    const value = getNestedValue(data, path.trim());
+    return value !== undefined ? value : match;
+  });
+}
+
+function getNestedValue(obj, path) {
+  return path.split('.').reduce((current, key) => {
+    return current && current[key] !== undefined ? current[key] : undefined;
+  }, obj);
+}
+
+// ==================== SCHEDULE CHECKER ====================
+
+let scheduleInterval = null;
+
+export function startScheduleChecker() {
+  // Run every minute to check scheduled workflows
+  scheduleInterval = setInterval(async () => {
+    try {
+      const now = new Date();
+
+      // Find enabled SCHEDULE workflows
+      const workflows = await prisma.workflow.findMany({
+        where: {
+          triggerType: 'SCHEDULE',
+          enabled: true
+        }
+      });
+
+      for (const workflow of workflows) {
+        const { cronExpression, lastChecked } = workflow.triggerConfig;
+
+        // Simple cron check - supports basic expressions like "*/5 * * * *"
+        if (shouldRunNow(cronExpression, lastChecked ? new Date(lastChecked) : null)) {
+          console.log(`[Schedule] Running workflow: ${workflow.name}`);
+          await executeWorkflow(workflow, { scheduled: true, cronExpression });
+
+          // Update lastChecked
+          await prisma.workflow.update({
+            where: { id: workflow.id },
+            data: { triggerConfig: { ...workflow.triggerConfig, lastChecked: now.toISOString() } }
+          });
+        }
+      }
+    } catch (err) {
+      console.error('[Schedule] Checker error:', err);
+    }
+  }, 60000); // Every minute
+
+  console.log('[Workflow] Schedule checker started');
+}
+
+export function stopScheduleChecker() {
+  if (scheduleInterval) {
+    clearInterval(scheduleInterval);
+    scheduleInterval = null;
+    console.log('[Workflow] Schedule checker stopped');
+  }
+}
+
+function shouldRunNow(cronExpression, lastChecked) {
+  if (!cronExpression) return false;
+
+  const now = new Date();
+  const parts = cronExpression.split(' ');
+
+  if (parts.length !== 5) return false;
+
+  const [min, hour, dayOfMonth, month, dayOfWeek] = parts;
+
+  // Simple check for "every N minutes" patterns like "*/5 * * * *"
+  if (min.startsWith('*/')) {
+    const interval = parseInt(min.slice(2));
+    if (interval > 0 && now.getMinutes() % interval === 0) {
+      // Also check if we haven't run in the last interval
+      if (!lastChecked || (now - lastChecked) >= (interval * 60 * 1000 * 0.8)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // For exact minute matches
+  const currentMin = now.getMinutes();
+  if (min !== '*' && parseInt(min) !== currentMin) return false;
+
+  const currentHour = now.getHours();
+  if (hour !== '*' && parseInt(hour) !== currentHour) return false;
+
+  const currentDayOfMonth = now.getDate();
+  if (dayOfMonth !== '*' && parseInt(dayOfMonth) !== currentDayOfMonth) return false;
+
+  const currentMonth = now.getMonth() + 1;
+  if (month !== '*' && parseInt(month) !== currentMonth) return false;
+
+  const currentDayOfWeek = now.getDay();
+  if (dayOfWeek !== '*' && parseInt(dayOfWeek) !== currentDayOfWeek) return false;
+
+  // Ensure we don't run more than once per minute
+  if (lastChecked && (now - lastChecked) < 55000) return false;
+
+  return true;
+}
+
 // ==================== START INTERVAL ====================
 
 let overdueInterval = null;
@@ -446,5 +867,358 @@ export function stopOverdueChecker() {
     clearInterval(overdueInterval);
     overdueInterval = null;
     console.log('[Automation] Overdue invoice checker stopped');
+  }
+}
+
+// ==================== WORKFLOW ENGINE ====================
+
+/**
+ * Evaluate conditions against a context object.
+ * Each condition: { field, operator, value }
+ * Supported operators: eq, neq, gt, gte, lt, lte, contains, in, not_in
+ */
+function evaluateConditions(conditions, context) {
+  if (!conditions || conditions.length === 0) return true;
+
+  for (const cond of conditions) {
+    const fieldValue = context[cond.field];
+    const condValue = cond.value;
+
+    switch (cond.operator) {
+      case 'eq': if (fieldValue !== condValue) return false; break;
+      case 'neq': if (fieldValue === condValue) return false; break;
+      case 'gt': if (!(fieldValue > condValue)) return false; break;
+      case 'gte': if (!(fieldValue >= condValue)) return false; break;
+      case 'lt': if (!(fieldValue < condValue)) return false; break;
+      case 'lte': if (!(fieldValue <= condValue)) return false; break;
+      case 'contains': if (!String(fieldValue).includes(String(condValue))) return false; break;
+      case 'in': if (!Array.isArray(condValue) || !condValue.includes(fieldValue)) return false; break;
+      case 'not_in': if (Array.isArray(condValue) && condValue.includes(fieldValue)) return false; break;
+      default:
+        console.warn(`[WorkflowEngine] Unknown operator: ${cond.operator}`);
+        return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Execute a single action against a context.
+ * Action types: send_email, create_task, send_notification, update_deal_stage, trigger_hermes, log_activity
+ */
+async function executeAction(action, context, runId) {
+  const { type, config } = action;
+  const result = { type, status: 'SUCCESS', message: '' };
+
+  try {
+    switch (type) {
+      case 'send_email': {
+        const to = config.to || context.contactEmail;
+        const subject = interpolateTemplate(config.subject || '', context);
+        const body = interpolateTemplate(config.body || '', context);
+        const html = config.html ? interpolateTemplate(config.html, context) : `<p>${body}</p>`;
+        const sent = await sendEmail(to, subject, html);
+        result.status = sent ? 'SUCCESS' : 'FAILED';
+        result.message = sent ? `Email sent to ${to}` : `Failed to send email to ${to}`;
+        break;
+      }
+
+      case 'create_task': {
+        const task = await prisma.task.create({
+          data: {
+            title: interpolateTemplate(config.title, context),
+            description: config.description ? interpolateTemplate(config.description, context) : null,
+            status: 'PENDING',
+            priority: config.priority || 'NORMAL',
+            category: config.category || 'UPCOMING',
+            projectId: config.projectId || context.projectId || null,
+            assigneeId: config.assigneeId || null,
+          }
+        });
+        result.message = `Task "${task.title}" created (${task.id})`;
+        break;
+      }
+
+      case 'send_notification': {
+        await createAdminNotification(
+          config.type || 'WORKFLOW_TRIGGER',
+          interpolateTemplate(config.title, context),
+          interpolateTemplate(config.message, context),
+          { runId, ...context }
+        );
+        result.message = `Notification sent: ${config.title}`;
+        break;
+      }
+
+      case 'update_deal_stage': {
+        if (context.dealId) {
+          await prisma.pipelineDeal.update({
+            where: { id: context.dealId },
+            data: { stage: config.stage }
+          });
+          result.message = `Deal ${context.dealId} moved to ${config.stage}`;
+        } else {
+          result.status = 'FAILED';
+          result.message = 'No dealId in context';
+        }
+        break;
+      }
+
+      case 'trigger_hermes': {
+        const hermesUrl = process.env.HERMES_WEBHOOK_URL || 'http://localhost:8080/webhook';
+        try {
+          const resp = await fetch(hermesUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: config.hermesAction || 'run_workflow',
+              payload: { ...context, workflowAction: config }
+            })
+          });
+          if (!resp.ok) throw new Error(`Hermes responded ${resp.status}`);
+          result.message = `Hermes triggered: ${config.hermesAction}`;
+        } catch (err) {
+          result.status = 'FAILED';
+          result.message = `Hermes trigger failed: ${err.message}`;
+        }
+        break;
+      }
+
+      case 'log_activity': {
+        await logAutomation(
+          'WORKFLOW_ACTION',
+          config.action || 'executed',
+          config.entityType || 'WORKFLOW',
+          context.entityId || runId,
+          context.entityName || config.message || 'Workflow action',
+          { ...context, runId }
+        );
+        result.message = `Activity logged`;
+        break;
+      }
+
+      default:
+        result.status = 'FAILED';
+        result.message = `Unknown action type: ${type}`;
+    }
+  } catch (err) {
+    result.status = 'FAILED';
+    result.message = err.message;
+    console.error(`[WorkflowEngine] Action ${type} failed:`, err);
+  }
+
+  return result;
+}
+
+/**
+ * Simple template interpolation: replaces {{variable}} with context values.
+ */
+function interpolateTemplate(template, context) {
+  if (!template) return '';
+  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => context[key] ?? `{{${key}}}`);
+}
+
+/**
+ * Run a single workflow with optional trigger context.
+ * Returns the WorkflowRun record.
+ */
+export async function runWorkflow(workflowId, context = {}) {
+  const startedAt = Date.now();
+
+  const workflow = await prisma.workflowDefinition.findUnique({
+    where: { id: workflowId }
+  });
+
+  if (!workflow) {
+    throw new Error(`Workflow ${workflowId} not found`);
+  }
+
+  if (!workflow.isActive || workflow.isPaused) {
+    throw new Error(`Workflow ${workflowId} is not active`);
+  }
+
+  let run;
+  try {
+    // Parse configs
+    const conditions = JSON.parse(workflow.conditions || '[]');
+    const actions = JSON.parse(workflow.actions || '[]');
+
+    // Create run record
+    run = await prisma.workflowRun.create({
+      data: {
+        workflowId: workflow.id,
+        status: 'RUNNING',
+        trigger: workflow.trigger,
+        triggerData: JSON.stringify(context),
+        startedAt: new Date()
+      }
+    });
+
+    // Evaluate conditions
+    const conditionsMet = evaluateConditions(conditions, context);
+    if (!conditionsMet) {
+      await prisma.workflowRun.update({
+        where: { id: run.id },
+        data: {
+          status: 'SUCCESS',
+          actions: JSON.stringify([]),
+          completedAt: new Date(),
+          durationMs: Date.now() - startedAt
+        }
+      });
+
+      await prisma.workflowDefinition.update({
+        where: { id: workflowId },
+        data: {
+          runCount: { increment: 1 },
+          lastRunAt: new Date(),
+          lastRunStatus: 'SUCCESS'
+        }
+      });
+
+      return run;
+    }
+
+    // Execute actions
+    const actionResults = [];
+    for (const action of actions) {
+      const result = await executeAction(action, context, run.id);
+      actionResults.push(result);
+    }
+
+    const allSucceeded = actionResults.every(r => r.status === 'SUCCESS');
+    const durationMs = Date.now() - startedAt;
+
+    // Update run record
+    run = await prisma.workflowRun.update({
+      where: { id: run.id },
+      data: {
+        status: allSucceeded ? 'SUCCESS' : 'FAILED',
+        actions: JSON.stringify(actionResults),
+        error: allSucceeded ? null : actionResults.filter(r => r.status === 'FAILED').map(r => r.message).join('; '),
+        completedAt: new Date(),
+        durationMs
+      }
+    });
+
+    // Update workflow stats
+    await prisma.workflowDefinition.update({
+      where: { id: workflowId },
+      data: {
+        runCount: { increment: 1 },
+        lastRunAt: new Date(),
+        lastRunStatus: allSucceeded ? 'SUCCESS' : 'FAILED'
+      }
+    });
+
+  } catch (err) {
+    console.error(`[WorkflowEngine] Workflow ${workflowId} failed:`, err);
+
+    if (run) {
+      await prisma.workflowRun.update({
+        where: { id: run.id },
+        data: {
+          status: 'FAILED',
+          error: err.message,
+          completedAt: new Date(),
+          durationMs: Date.now() - startedAt
+        }
+      });
+    }
+
+    await prisma.workflowDefinition.update({
+      where: { id: workflowId },
+      data: {
+        runCount: { increment: 1 },
+        lastRunAt: new Date(),
+        lastRunStatus: 'FAILED'
+      }
+    });
+
+    throw err;
+  }
+
+  return run;
+}
+
+/**
+ * Run all active schedule-type workflows whose cron expression matches now.
+ */
+export async function runScheduledWorkflows() {
+  const now = new Date();
+  console.log(`[WorkflowEngine] Checking scheduled workflows at ${now.toISOString()}`);
+
+  try {
+    const workflows = await prisma.workflowDefinition.findMany({
+      where: {
+        trigger: 'schedule',
+        isActive: true,
+        isPaused: false
+      }
+    });
+
+    for (const wf of workflows) {
+      try {
+        const config = JSON.parse(wf.triggerConfig || '{}');
+        if (config.cron) {
+          // Simple cron minute/hour matching (full cron parser would be overkill)
+          const cronParts = config.cron.split(/\s+/);
+          const minute = cronParts[0];
+          const hour = cronParts[1];
+          const currentMinute = now.getMinutes();
+          const currentHour = now.getHours();
+
+          let shouldRun = false;
+          if (minute === '*' || minute.split(',').includes(String(currentMinute))) {
+            if (hour === '*' || hour.split(',').includes(String(currentHour))) {
+              shouldRun = true;
+            }
+          }
+
+          if (shouldRun) {
+            console.log(`[WorkflowEngine] Running scheduled workflow: ${wf.name}`);
+            await runWorkflow(wf.id, { triggeredAt: now.toISOString(), trigger: 'schedule' });
+          }
+        }
+      } catch (wfErr) {
+        console.error(`[WorkflowEngine] Error running workflow ${wf.id}:`, wfErr);
+      }
+    }
+  } catch (err) {
+    console.error('[WorkflowEngine] Scheduled workflow check failed:', err);
+  }
+}
+
+/**
+ * Trigger event-based workflows.
+ * Called from route handlers when events fire (proposal_approved, contract_signed, etc.)
+ */
+export async function triggerEventWorkflows(event, context = {}) {
+  console.log(`[WorkflowEngine] Event triggered: ${event}`);
+
+  try {
+    const workflows = await prisma.workflowDefinition.findMany({
+      where: {
+        trigger: event,
+        isActive: true,
+        isPaused: false
+      }
+    });
+
+    const results = [];
+    for (const wf of workflows) {
+      try {
+        const run = await runWorkflow(wf.id, { ...context, event, triggeredAt: new Date().toISOString() });
+        results.push({ workflowId: wf.id, runId: run.id, status: 'SUCCESS' });
+      } catch (wfErr) {
+        results.push({ workflowId: wf.id, status: 'FAILED', error: wfErr.message });
+      }
+    }
+
+    return results;
+  } catch (err) {
+    console.error(`[WorkflowEngine] Event trigger failed for ${event}:`, err);
+    return [];
   }
 }

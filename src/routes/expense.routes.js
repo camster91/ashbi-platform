@@ -1,6 +1,5 @@
 // Expense routes — full CRUD + summary stats
 
-import prisma from '../config/db.js';
 import path from 'path';
 import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
@@ -40,7 +39,7 @@ export default async function expenseRoutes(fastify) {
     }
 
     const [expenses, total] = await Promise.all([
-      fastify.prisma.expense.findMany({
+      fastify.request.prisma.expense.findMany({
         where,
         include: {
           client: { select: { id: true, name: true } },
@@ -50,7 +49,7 @@ export default async function expenseRoutes(fastify) {
         ...(limit ? { take: parseInt(limit) } : {}),
         ...(offset ? { skip: parseInt(offset) } : {}),
       }),
-      fastify.prisma.expense.count({ where }),
+      fastify.request.prisma.expense.count({ where }),
     ]);
 
     return { expenses, total };
@@ -62,7 +61,7 @@ export default async function expenseRoutes(fastify) {
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
-    const monthExpenses = await fastify.prisma.expense.findMany({
+    const monthExpenses = await fastify.request.prisma.expense.findMany({
       where: {
         date: { gte: startOfMonth, lte: endOfMonth }
       }
@@ -77,7 +76,7 @@ export default async function expenseRoutes(fastify) {
     }
 
     // All-time total
-    const allExpenses = await fastify.prisma.expense.aggregate({
+    const allExpenses = await fastify.request.prisma.expense.aggregate({
       _sum: { amount: true },
       _count: true,
     });
@@ -92,7 +91,7 @@ export default async function expenseRoutes(fastify) {
 
   // ─── GET /:id — single expense ─────────────────────────────────────────────
   fastify.get('/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const expense = await fastify.prisma.expense.findUnique({
+    const expense = await fastify.request.prisma.expense.findUnique({
       where: { id: request.params.id },
       include: {
         client: { select: { id: true, name: true } },
@@ -108,7 +107,7 @@ export default async function expenseRoutes(fastify) {
   fastify.post('/', { onRequest: [fastify.authenticate], preHandler: [validateBody(createExpenseSchema)] }, async (request) => {
     const { description, amount, currency, category, date, billable, notes, clientId, projectId, receiptUrl } = request.body;
 
-    const expense = await fastify.prisma.expense.create({
+    const expense = await fastify.request.prisma.expense.create({
       data: {
         description,
         amount: parseFloat(amount),
@@ -151,14 +150,14 @@ export default async function expenseRoutes(fastify) {
 
   // ─── PUT /:id — update expense ─────────────────────────────────────────────
   fastify.put('/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const existing = await fastify.prisma.expense.findUnique({
+    const existing = await fastify.request.prisma.expense.findUnique({
       where: { id: request.params.id }
     });
     if (!existing) return reply.status(404).send({ error: 'Expense not found' });
 
     const { description, amount, currency, category, date, billable, notes, clientId, projectId, receiptUrl } = request.body;
 
-    const expense = await fastify.prisma.expense.update({
+    const expense = await fastify.request.prisma.expense.update({
       where: { id: request.params.id },
       data: {
         ...(description !== undefined && { description }),
@@ -183,12 +182,12 @@ export default async function expenseRoutes(fastify) {
 
   // ─── DELETE /:id — delete expense ──────────────────────────────────────────
   fastify.delete('/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const existing = await fastify.prisma.expense.findUnique({
+    const existing = await fastify.request.prisma.expense.findUnique({
       where: { id: request.params.id }
     });
     if (!existing) return reply.status(404).send({ error: 'Expense not found' });
 
-    await fastify.prisma.expense.delete({ where: { id: request.params.id } });
+    await fastify.request.prisma.expense.delete({ where: { id: request.params.id } });
     return { success: true };
   });
 }

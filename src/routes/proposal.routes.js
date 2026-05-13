@@ -2,7 +2,6 @@
 
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
-import prisma from '../config/db.js';
 import { queueEmbedding } from '../jobs/queue.js';
 
 async function sendProposalEmail(to, clientName, proposalTitle, portalUrl) {
@@ -50,7 +49,7 @@ export default async function proposalRoutes(fastify) {
     if (clientId) where.clientId = clientId;
     if (status) where.status = status;
 
-    const proposals = await prisma.proposal.findMany({
+    const proposals = await request.prisma.proposal.findMany({
       where,
       include: {
         client: { select: { id: true, name: true } },
@@ -72,7 +71,7 @@ export default async function proposalRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const proposal = await prisma.proposal.findUnique({
+    const proposal = await request.prisma.proposal.findUnique({
       where: { id },
       include: {
         client: true,
@@ -111,7 +110,7 @@ export default async function proposalRoutes(fastify) {
     const discount = request.body.discount || 0;
     const total = subtotal - discount;
 
-    const proposal = await prisma.$transaction(async (tx) => {
+    const proposal = await request.prisma.$transaction(async (tx) => {
       const created = await tx.proposal.create({
         data: {
           title,
@@ -152,7 +151,7 @@ export default async function proposalRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const existing = await prisma.proposal.findUnique({ where: { id } });
+    const existing = await request.prisma.proposal.findUnique({ where: { id } });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Proposal not found' });
@@ -171,7 +170,7 @@ export default async function proposalRoutes(fastify) {
     if (projectId !== undefined) data.projectId = projectId || null;
     if (discount !== undefined) data.discount = discount;
 
-    const proposal = await prisma.$transaction(async (tx) => {
+    const proposal = await request.prisma.$transaction(async (tx) => {
       // If lineItems provided, replace them
       if (lineItems) {
         await tx.proposalLineItem.deleteMany({ where: { proposalId: id } });
@@ -203,6 +202,23 @@ export default async function proposalRoutes(fastify) {
         }
       });
 
+      // Create a version snapshot
+      await tx.proposalVersion.create({
+        data: {
+          proposalId: id,
+          createdById: request.user.id,
+          data: {
+            title: updated.title,
+            notes: updated.notes,
+            discount: updated.discount,
+            subtotal: updated.subtotal,
+            total: updated.total,
+            status: updated.status,
+            lineItems: computedLineItems || existing.lineItems
+          }
+        }
+      });
+
       return updated;
     });
 
@@ -215,7 +231,7 @@ export default async function proposalRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const existing = await prisma.proposal.findUnique({ where: { id } });
+    const existing = await request.prisma.proposal.findUnique({ where: { id } });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Proposal not found' });
@@ -225,7 +241,7 @@ export default async function proposalRoutes(fastify) {
       return reply.status(400).send({ error: 'Only DRAFT proposals can be deleted' });
     }
 
-    await prisma.proposal.delete({ where: { id } });
+    await request.prisma.proposal.delete({ where: { id } });
 
     return { success: true };
   });
@@ -236,13 +252,13 @@ export default async function proposalRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const existing = await prisma.proposal.findUnique({ where: { id } });
+    const existing = await request.prisma.proposal.findUnique({ where: { id } });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Proposal not found' });
     }
 
-    const proposal = await prisma.proposal.update({
+    const proposal = await request.prisma.proposal.update({
       where: { id },
       data: {
         status: 'SENT',
@@ -277,7 +293,7 @@ export default async function proposalRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const existing = await prisma.proposal.findUnique({
+    const existing = await request.prisma.proposal.findUnique({
       where: { id },
       include: { lineItems: true }
     });
@@ -286,7 +302,7 @@ export default async function proposalRoutes(fastify) {
       return reply.status(404).send({ error: 'Proposal not found' });
     }
 
-    const proposal = await prisma.$transaction(async (tx) => {
+    const proposal = await request.prisma.$transaction(async (tx) => {
       const created = await tx.proposal.create({
         data: {
           title: `${existing.title} (Copy)`,
@@ -322,11 +338,87 @@ export default async function proposalRoutes(fastify) {
     return reply.status(201).send(proposal);
   });
 
+  // ─── GET /:id/versions — list all versions for a proposal ────────────────
+  fastify.get('/:id/versions', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { id } = request.params;
+
+    const proposal = await request.prisma.proposal.findUnique({ where: { id } });
+    if (!proposal) return reply.status(404).send({ error: 'Proposal not found' });
+
+    const versions = await request.prisma.proposalVersion.findMany({
+      where: { proposalId: id },
+      include: {
+        createdBy: { select: { id: true, name: true } }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    return versions;
+  });
+
+  // ─── POST /:id/versions/:versionId/restore — restore a specific version ───
+  fastify.post('/:id/versions/:versionId/restore', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { id, versionId } = request.params;
+
+    const existing = await request.prisma.proposal.findUnique({ where: { id } });
+    if (!existing) return reply.status(404).send({ error: 'Proposal not found' });
+    if (existing.status !== 'DRAFT') return reply.status(400).send({ error: 'Only DRAFT proposals can be restored to a version' });
+
+    const version = await request.prisma.proposalVersion.findFirst({
+      where: { id: versionId, proposalId: id }
+    });
+    if (!version) return reply.status(404).send({ error: 'Version not found' });
+
+    const versionData = version.data;
+
+    const updated = await request.prisma.$transaction(async (tx) => {
+      // Replace line items
+      await tx.proposalLineItem.deleteMany({ where: { proposalId: id } });
+
+      if (versionData.lineItems && versionData.lineItems.length > 0) {
+        await tx.proposalLineItem.createMany({
+          data: versionData.lineItems.map(item => ({
+            description: item.description,
+            quantity: item.quantity ?? 1,
+            unitPrice: item.unitPrice,
+            total: (item.quantity ?? 1) * item.unitPrice,
+            proposalId: id
+          }))
+        });
+      }
+
+      const restored = await tx.proposal.update({
+        where: { id },
+        data: {
+          title: versionData.title ?? existing.title,
+          notes: versionData.notes ?? existing.notes,
+          discount: versionData.discount ?? existing.discount,
+          subtotal: versionData.subtotal ?? existing.subtotal,
+          total: versionData.total ?? existing.total
+        },
+        include: {
+          client: { select: { id: true, name: true } },
+          project: { select: { id: true, name: true } },
+          lineItems: true,
+          createdBy: { select: { id: true, name: true } }
+        }
+      });
+
+      return restored;
+    });
+
+    return updated;
+  });
+
   // PUBLIC: Client views proposal by viewToken
   fastify.get('/client/:viewToken', async (request, reply) => {
     const { viewToken } = request.params;
 
-    const proposal = await prisma.proposal.findUnique({
+    const proposal = await request.prisma.proposal.findUnique({
       where: { viewToken },
       include: {
         client: true,
@@ -341,7 +433,7 @@ export default async function proposalRoutes(fastify) {
 
     // If status is SENT, update to VIEWED
     if (proposal.status === 'SENT') {
-      await prisma.proposal.update({
+      await request.prisma.proposal.update({
         where: { id: proposal.id },
         data: { status: 'VIEWED' }
       });
@@ -355,7 +447,7 @@ export default async function proposalRoutes(fastify) {
   fastify.post('/client/:viewToken/approve', async (request, reply) => {
     const { viewToken } = request.params;
 
-    const proposal = await prisma.proposal.findUnique({
+    const proposal = await request.prisma.proposal.findUnique({
       where: { viewToken }
     });
 
@@ -363,7 +455,7 @@ export default async function proposalRoutes(fastify) {
       return reply.status(404).send({ error: 'Proposal not found' });
     }
 
-    const updated = await prisma.proposal.update({
+    const updated = await request.prisma.proposal.update({
       where: { id: proposal.id },
       data: {
         status: 'APPROVED',
@@ -378,7 +470,7 @@ export default async function proposalRoutes(fastify) {
   fastify.post('/client/:viewToken/decline', async (request, reply) => {
     const { viewToken } = request.params;
 
-    const proposal = await prisma.proposal.findUnique({
+    const proposal = await request.prisma.proposal.findUnique({
       where: { viewToken }
     });
 
@@ -386,7 +478,7 @@ export default async function proposalRoutes(fastify) {
       return reply.status(404).send({ error: 'Proposal not found' });
     }
 
-    const updated = await prisma.proposal.update({
+    const updated = await request.prisma.proposal.update({
       where: { id: proposal.id },
       data: {
         status: 'DECLINED',
@@ -395,5 +487,34 @@ export default async function proposalRoutes(fastify) {
     });
 
     return updated;
+  });
+
+  // ─── POST /bulk/archive — bulk delete proposals ────────────────────────────
+  fastify.post('/bulk/archive', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const { ids } = request.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return reply.status(400).send({ error: 'ids array is required' });
+    }
+
+    const result = await request.prisma.proposal.deleteMany({
+      where: { id: { in: ids }, status: 'DRAFT' }
+    });
+
+    return { archived: result.count };
+  });
+
+  // ─── POST /bulk/send — bulk send proposals ─────────────────────────────────
+  fastify.post('/bulk/send', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const { ids } = request.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return reply.status(400).send({ error: 'ids array is required' });
+    }
+
+    const result = await request.prisma.proposal.updateMany({
+      where: { id: { in: ids }, status: 'DRAFT' },
+      data: { status: 'SENT', sentAt: new Date() }
+    });
+
+    return { sent: result.count };
   });
 }

@@ -123,7 +123,7 @@ export default function TaskKanban() {
                     </div>
                     {task.dueDate && (
                       <p className="text-xs text-muted-foreground mt-1.5">
-                        Due {new Date(task.dueDate).toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })}
+                        Due {new Date(task.dueDate).toLocaleDateString({ month: 'short', day: 'numeric' })}
                       </p>
                     )}
                   </div>

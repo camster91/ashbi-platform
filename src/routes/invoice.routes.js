@@ -579,6 +579,83 @@ export default async function invoiceRoutes(fastify) {
       return reply.status(400).send({ error: 'Webhook verification failed' });
     }
   });
+
+  // ─── POST /bulk/mark-paid — mark multiple invoices as paid ──────────────────
+  fastify.post('/bulk/mark-paid', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const { ids, paymentMethod } = request.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return reply.status(400).send({ error: 'ids array is required' });
+    }
+
+    const paidDate = new Date();
+    const method = paymentMethod || 'OTHER';
+    let updated = 0;
+
+    for (const id of ids) {
+      const invoice = await fastify.prisma.invoice.findUnique({ where: { id } });
+      if (!invoice || invoice.status === 'PAID' || invoice.status === 'VOID') continue;
+
+      await fastify.prisma.$transaction([
+        fastify.prisma.invoice.update({
+          where: { id },
+          data: { status: 'PAID', paidAt: paidDate, paymentMethod: method }
+        }),
+        fastify.prisma.invoicePayment.create({
+          data: { invoiceId: id, amount: invoice.total, method, paidAt: paidDate }
+        })
+      ]);
+      updated++;
+    }
+
+    return { updated };
+  });
+
+  // ─── POST /bulk/send — send multiple invoices ───────────────────────────────
+  fastify.post('/bulk/send', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const { ids } = request.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return reply.status(400).send({ error: 'ids array is required' });
+    }
+
+    let sent = 0;
+    for (const id of ids) {
+      const invoice = await fastify.prisma.invoice.findUnique({
+        where: { id },
+        include: { client: { include: { contacts: { where: { isPrimary: true }, take: 1 } } } }
+      });
+      if (!invoice || invoice.status !== 'DRAFT') continue;
+
+      await fastify.prisma.invoice.update({
+        where: { id },
+        data: { status: 'SENT', sentAt: new Date() }
+      });
+      sent++;
+    }
+
+    return { sent };
+  });
+
+  // ─── POST /bulk/archive — archive (void) multiple invoices ──────────────────
+  fastify.post('/bulk/archive', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const { ids } = request.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return reply.status(400).send({ error: 'ids array is required' });
+    }
+
+    let archived = 0;
+    for (const id of ids) {
+      const invoice = await fastify.prisma.invoice.findUnique({ where: { id } });
+      if (!invoice || invoice.status === 'PAID' || invoice.status === 'VOID') continue;
+
+      await fastify.prisma.invoice.update({
+        where: { id },
+        data: { status: 'VOID' }
+      });
+      archived++;
+    }
+
+    return { archived };
+  });
 }
 
 // ─── Email stub (Mailgun) ─────────────────────────────────────────────────────

@@ -1,9 +1,20 @@
 // Cold Email Agent routes
+// Phase 1b: Wire Mailgun sending, sequence engine, tracking
 
 import aiClient from '../ai/client.js';
+import { createDraft } from '../agents/gmail-draft.agent.js';
+import {
+  sendSequenceEmailToProspect,
+  processScheduledSends,
+  activateSequence,
+  processMailgunTrackingEvent,
+  getSequenceStats,
+} from '../services/cold-email.service.js';
 
 export default async function coldEmailRoutes(fastify) {
   const { prisma } = fastify;
+
+  // ==================== SEQUENCE GENERATION ====================
 
   // POST /cold-email/sequence — generate cold email sequence (5 emails)
   fastify.post('/sequence', {
@@ -65,6 +76,8 @@ Email 1: Lead with observation about their brand, one line of value. Email 2: Sh
     }
   });
 
+  // ==================== PROSPECT MANAGEMENT ====================
+
   // POST /cold-email/prospects — bulk import prospects
   fastify.post('/prospects', {
     onRequest: [fastify.authenticate]
@@ -86,10 +99,22 @@ Email 1: Lead with observation about their brand, one line of value. Email 2: Sh
           industry: p.industry || null,
           painPoint: p.painPoint || null,
           status: 'NEW',
+          source: p.source || 'Ashbi',
+          linkedinUrl: p.linkedinUrl || null,
+          auditNotes: p.auditNotes || null,
           sequenceId: sequenceId || null
         }
       });
       created.push(prospect);
+    }
+
+    // Update sequence totalProspects count
+    if (sequenceId) {
+      const count = await prisma.coldEmailProspect.count({ where: { sequenceId } });
+      await prisma.coldEmailSequence.update({
+        where: { id: sequenceId },
+        data: { totalProspects: count },
+      });
     }
 
     return { imported: created.length, prospects: created };
@@ -111,6 +136,19 @@ Email 1: Lead with observation about their brand, one line of value. Email 2: Sh
 
     return prospects;
   });
+
+  // PATCH /cold-email/prospects/:id — update prospect status
+  fastify.patch('/prospects/:id', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const prospect = await prisma.coldEmailProspect.update({
+      where: { id: request.params.id },
+      data: { ...request.body, updatedAt: new Date() }
+    });
+    return prospect;
+  });
+
+  // ==================== SEQUENCE MANAGEMENT ====================
 
   // GET /cold-email/sequences — list campaigns
   fastify.get('/sequences', {
@@ -177,14 +215,261 @@ Email 1: Lead with observation about their brand, one line of value. Email 2: Sh
     return { deleted: true };
   });
 
-  // PATCH /cold-email/prospects/:id — update prospect status
-  fastify.patch('/prospects/:id', {
+  // ==================== SEQUENCE ENGINE — NEW ENDPOINTS ====================
+
+  // POST /cold-email/sequences/:id/activate — activate sequence (start sending)
+  fastify.post('/sequences/:id/activate', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
-    const prospect = await prisma.coldEmailProspect.update({
+    try {
+      const sequence = await activateSequence(request.params.id, prisma);
+      return { activated: true, sequenceId: sequence.id, status: 'ACTIVE' };
+    } catch (err) {
+      fastify.log.error('Sequence activation error:', err);
+      const status = err.message.includes('not found') ? 404
+        : err.message.includes('No prospects') ? 400
+        : 500;
+      return reply.status(status).send({ error: err.message });
+    }
+  });
+
+  // POST /cold-email/sequences/:id/pause — pause sequence
+  fastify.post('/sequences/:id/pause', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const sequence = await prisma.coldEmailSequence.update({
       where: { id: request.params.id },
-      data: { ...request.body, updatedAt: new Date() }
+      data: { status: 'PAUSED' },
     });
-    return prospect;
+    return { paused: true, sequenceId: sequence.id };
+  });
+
+  // POST /cold-email/send-to-prospect/:prospectId — send specific email to one prospect
+  fastify.post('/send-to-prospect/:prospectId', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { stepIndex } = request.body || {};
+    const prospect = await prisma.coldEmailProspect.findUnique({
+      where: { id: request.params.prospectId },
+      include: { sequence: true },
+    });
+
+    if (!prospect) return reply.status(404).send({ error: 'Prospect not found' });
+    if (!prospect.sequence) return reply.status(400).send({ error: 'Prospect not assigned to a sequence' });
+
+    const step = stepIndex ?? ((prospect.lastEmailStep ?? -1) + 1);
+    const result = await sendSequenceEmailToProspect(prospect, prospect.sequence, step, prisma);
+
+    if (result.ok) {
+      return { sent: true, prospectId: prospect.id, step, mailgunId: result.id };
+    }
+    return reply.status(500).send({ error: result.error || 'Send failed' });
+  });
+
+  // POST /cold-email/process-queue — cron endpoint to process due sends
+  fastify.post('/process-queue', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    if (request.user.role !== 'ADMIN') {
+      return reply.status(403).send({ error: 'Admin access required' });
+    }
+
+    try {
+      const stats = await processScheduledSends(prisma);
+      return { processed: true, ...stats };
+    } catch (err) {
+      fastify.log.error('Process queue error:', err);
+      return reply.status(500).send({ error: err.message });
+    }
+  });
+
+  // GET /cold-email/stats/:sequenceId — campaign stats dashboard
+  fastify.get('/stats/:sequenceId', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    try {
+      const stats = await getSequenceStats(request.params.sequenceId, prisma);
+      return stats;
+    } catch (err) {
+      fastify.log.error('Stats error:', err);
+      const status = err.message.includes('not found') ? 404 : 500;
+      return reply.status(status).send({ error: err.message });
+    }
+  });
+
+  // ==================== GMAIL DRAFT — Cold Email ====================
+
+  // POST /cold-email/draft — create Gmail draft from a sequence email for a prospect
+  // Does NOT send — Cam reviews in Gmail draft folder first
+  fastify.post('/draft', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { prospectId, stepIndex } = request.body || {};
+
+    if (!prospectId) return reply.status(400).send({ error: 'prospectId is required' });
+
+    // Fetch prospect with sequence
+    const prospect = await prisma.coldEmailProspect.findUnique({
+      where: { id: prospectId },
+      include: { sequence: true }
+    });
+
+    if (!prospect) return reply.status(404).send({ error: 'Prospect not found' });
+    if (!prospect.sequence) return reply.status(400).send({ error: 'Prospect has no sequence assigned' });
+
+    // Parse emails from sequence
+    const emails = JSON.parse(prospect.sequence.emails || '[]');
+    const step = stepIndex ?? 0;
+
+    if (!emails[step]) return reply.status(400).send({ error: `No email at step ${step}` });
+
+    const email = emails[step];
+
+    // Personalize placeholders
+    const personalize = (text) => text
+      .replace(/\{\{company\}\}/g, prospect.company || '')
+      .replace(/\{\{name\}\}/g, prospect.name || '');
+
+    const subject = personalize(email.subject || '');
+    const body = personalize(email.body || '');
+
+    try {
+      const draft = await createDraft(prospect.email, subject, body);
+      return {
+        draftCreated: true,
+        draftId: draft.id,
+        prospectId: prospect.id,
+        prospectEmail: prospect.email,
+        subject,
+        step
+      };
+    } catch (err) {
+      fastify.log.error('Gmail draft error:', err);
+      return reply.status(500).send({ error: 'Failed to create Gmail draft: ' + err.message });
+    }
+  });
+
+  // POST /cold-email/draft-from-sequence — create drafts for all prospects in a sequence
+  // Creates Gmail drafts for ALL prospects at a given step. Cam sends manually.
+  fastify.post('/draft-from-sequence', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { sequenceId, stepIndex = 0 } = request.body || {};
+
+    if (!sequenceId) return reply.status(400).send({ error: 'sequenceId is required' });
+
+    const sequence = await prisma.coldEmailSequence.findUnique({
+      where: { id: sequenceId },
+      include: { prospects: true }
+    });
+
+    if (!sequence) return reply.status(404).send({ error: 'Sequence not found' });
+
+    const emails = JSON.parse(sequence.emails || '[]');
+    if (!emails[stepIndex]) return reply.status(400).send({ error: `No email at step ${stepIndex}` });
+
+    const email = emails[stepIndex];
+
+    const results = [];
+    for (const prospect of sequence.prospects) {
+      const personalize = (text) => text
+        .replace(/\{\{company\}\}/g, prospect.company || '')
+        .replace(/\{\{name\}\}/g, prospect.name || '');
+
+      try {
+        const draft = await createDraft(
+          prospect.email,
+          personalize(email.subject || ''),
+          personalize(email.body || '')
+        );
+        results.push({ prospectId: prospect.id, email: prospect.email, draftId: draft.id, ok: true });
+      } catch (err) {
+        results.push({ prospectId: prospect.id, email: prospect.email, ok: false, error: err.message });
+      }
+    }
+
+    return { sequenceId, step: stepIndex, subject: email.subject, results };
+  });
+
+  // ==================== MAILGUN WEBHOOK FOR TRACKING ====================
+
+  // POST /cold-email/webhook/track — Mailgun tracking webhook (no auth — called by Mailgun)
+  fastify.post('/webhook/track', async (request, reply) => {
+    // Always respond 200 quickly to Mailgun
+    reply.status(200).send({ status: 'ok' });
+
+    try {
+      const body = request.body;
+      const eventData = body['event-data'] || body;
+
+      // Skip if it's a test event or missing event type
+      if (!eventData.event) {
+        fastify.log.warn('[cold-email webhook] No event type in payload');
+        return;
+      }
+
+      await processMailgunTrackingEvent(eventData, prisma);
+    } catch (err) {
+      fastify.log.error('[cold-email webhook] Processing error:', err.message);
+    }
+  });
+
+  // POST /cold-email/webhook/reply — inbound reply webhook (detect prospect replies)
+  fastify.post('/webhook/reply', async (request, reply) => {
+    reply.status(200).send({ status: 'ok' });
+
+    try {
+      const body = request.body;
+      const sender = body.sender || body.from || '';
+      const recipient = body.recipient || '';
+
+      // Extract email from sender
+      const fromEmail = sender.match(/<([^>]+)>/) ? sender.match(/<([^>]+)>/)[1] : sender;
+
+      if (!fromEmail) return;
+
+      // Find matching prospect
+      const prospect = await prisma.coldEmailProspect.findFirst({
+        where: {
+          email: fromEmail,
+          status: { in: ['NEW', 'CONTACTED'] },
+        },
+        orderBy: { lastEmailedAt: 'desc' },
+      });
+
+      if (prospect) {
+        // Mark as replied
+        await prisma.coldEmailProspect.update({
+          where: { id: prospect.id },
+          data: {
+            status: 'REPLIED',
+            nextEmailAt: null, // Stop the sequence
+          },
+        });
+
+        // Create reply event
+        await prisma.coldEmailEvent.create({
+          data: {
+            prospectId: prospect.id,
+            sequenceId: prospect.sequenceId,
+            type: 'REPLIED',
+            emailStep: prospect.lastEmailStep,
+            metadata: JSON.stringify({ sender, recipient, subject: body.subject }),
+          },
+        });
+
+        // Update sequence stats
+        if (prospect.sequenceId) {
+          await prisma.coldEmailSequence.update({
+            where: { id: prospect.sequenceId },
+            data: { totalReplied: { increment: 1 } },
+          });
+        }
+
+        fastify.log.info(`[cold-email] Prospect ${prospect.id} replied — sequence stopped`);
+      }
+    } catch (err) {
+      fastify.log.error('[cold-email webhook/reply] Processing error:', err.message);
+    }
   });
 }

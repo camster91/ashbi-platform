@@ -56,7 +56,7 @@ Details:
 - Contact: ${contactName}
 - Invoice #: ${invoice.invoiceNumber}
 - Amount: $${invoice.total.toLocaleString()}
-- Due date: ${invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : 'N/A'}
+- Due date: ${invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString('en-CA') : 'N/A'}
 - Days overdue: ${daysOverdue}
 - Items: ${invoice.lineItems.map(li => li.description).join(', ')}
 

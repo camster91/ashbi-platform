@@ -1,6 +1,5 @@
 // Webhook routes (email + Stripe)
 
-import prisma from '../config/db.js';
 import { parseEmail } from '../utils/emailParser.js';
 import { processEmailPipeline } from '../services/pipeline.service.js';
 import { handleWebhook } from '../services/stripe.service.js';
@@ -121,7 +120,7 @@ export default async function webhookRoutes(fastify) {
         }
 
         try {
-          const invoice = await prisma.invoice.findUnique({
+          const invoice = await request.prisma.invoice.findUnique({
             where: { id: invoiceId }
           });
 
@@ -138,8 +137,8 @@ export default async function webhookRoutes(fastify) {
           const now = new Date();
 
           // Update invoice and create payment record in a transaction
-          await prisma.$transaction([
-            prisma.invoice.update({
+          await request.prisma.$transaction([
+            request.prisma.invoice.update({
               where: { id: invoiceId },
               data: {
                 status: 'PAID',
@@ -149,7 +148,7 @@ export default async function webhookRoutes(fastify) {
                 paymentNotes: `Stripe checkout session ${session.id}`
               }
             }),
-            prisma.invoicePayment.create({
+            request.prisma.invoicePayment.create({
               data: {
                 amount: (session.amount_total || 0) / 100,
                 method: 'STRIPE',
@@ -174,7 +173,7 @@ export default async function webhookRoutes(fastify) {
         const invoiceId = session.metadata?.invoiceId;
         if (invoiceId) {
           // Clear the expired payment link so a new one can be generated
-          await prisma.invoice.update({
+          await request.prisma.invoice.update({
             where: { id: invoiceId },
             data: { stripePaymentLink: null }
           }).catch(err => {

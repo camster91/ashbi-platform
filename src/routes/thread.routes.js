@@ -1,6 +1,5 @@
 // Thread routes
 
-import prisma from '../config/db.js';
 import { analyzeMessage } from '../services/pipeline.service.js';
 import { assignThread } from '../services/assignment.service.js';
 import { queueEmbedding } from '../jobs/queue.js';
@@ -37,7 +36,7 @@ export default async function threadRoutes(fastify) {
     }
 
     const [threads, total] = await Promise.all([
-      prisma.thread.findMany({
+      request.prisma.thread.findMany({
         where,
         include: {
           client: { select: { id: true, name: true } },
@@ -53,7 +52,7 @@ export default async function threadRoutes(fastify) {
         skip: (page - 1) * limit,
         take: limit
       }),
-      prisma.thread.count({ where })
+      request.prisma.thread.count({ where })
     ]);
 
     return {
@@ -73,12 +72,12 @@ export default async function threadRoutes(fastify) {
     }
 
     // Verify client exists
-    const client = await prisma.client.findUnique({ where: { id: clientId } });
+    const client = await request.prisma.client.findUnique({ where: { id: clientId } });
     if (!client) {
       return reply.status(404).send({ error: 'Client not found' });
     }
 
-    const thread = await prisma.thread.create({
+    const thread = await request.prisma.thread.create({
       data: {
         subject,
         status: 'DRAFT',
@@ -109,7 +108,7 @@ export default async function threadRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const thread = await prisma.thread.findUnique({
+    const thread = await request.prisma.thread.findUnique({
       where: { id },
       include: {
         client: true,
@@ -158,7 +157,7 @@ export default async function threadRoutes(fastify) {
     if (projectId !== undefined) data.projectId = projectId;
     if (clientId !== undefined) data.clientId = clientId;
 
-    const thread = await prisma.thread.update({
+    const thread = await request.prisma.thread.update({
       where: { id },
       data
     });
@@ -177,7 +176,7 @@ export default async function threadRoutes(fastify) {
 
     // Auto-assign using algorithm
     if (autoAssign) {
-      const thread = await prisma.thread.findUnique({
+      const thread = await request.prisma.thread.findUnique({
         where: { id },
         include: { project: true }
       });
@@ -186,7 +185,7 @@ export default async function threadRoutes(fastify) {
       assigneeId = assignment.userId;
     }
 
-    const thread = await prisma.thread.update({
+    const thread = await request.prisma.thread.update({
       where: { id },
       data: { assignedToId: assigneeId },
       include: {
@@ -196,7 +195,7 @@ export default async function threadRoutes(fastify) {
 
     // Notify assigned user
     if (assigneeId) {
-      await prisma.notification.create({
+      await request.prisma.notification.create({
         data: {
           type: 'THREAD_ASSIGNED',
           title: 'New thread assigned',
@@ -219,7 +218,7 @@ export default async function threadRoutes(fastify) {
     const { id } = request.params;
     const { until } = request.body;
 
-    const thread = await prisma.thread.update({
+    const thread = await request.prisma.thread.update({
       where: { id },
       data: {
         status: 'SNOOZED',
@@ -236,7 +235,7 @@ export default async function threadRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const thread = await prisma.thread.update({
+    const thread = await request.prisma.thread.update({
       where: { id },
       data: {
         status: 'RESOLVED',
@@ -254,7 +253,7 @@ export default async function threadRoutes(fastify) {
     const { id } = request.params;
     const { direction, senderEmail, senderName, subject, bodyText, bodyHtml } = request.body;
 
-    const message = await prisma.message.create({
+    const message = await request.prisma.message.create({
       data: {
         direction,
         senderEmail,
@@ -269,7 +268,7 @@ export default async function threadRoutes(fastify) {
     });
 
     // Update thread activity
-    await prisma.thread.update({
+    await request.prisma.thread.update({
       where: { id },
       data: {
         lastActivityAt: new Date(),
@@ -279,7 +278,7 @@ export default async function threadRoutes(fastify) {
 
     // Auto-embed message content for Client Brain
     if (bodyText) {
-      const thread = await prisma.thread.findUnique({ where: { id }, select: { clientId: true } });
+      const thread = await request.prisma.thread.findUnique({ where: { id }, select: { clientId: true } });
       if (thread?.clientId) {
         queueEmbedding(thread.clientId, bodyText.substring(0, 2000), 'THREAD', id, { type: 'message' }).catch(err =>
           console.error('Failed to queue message embedding:', err.message)
@@ -296,7 +295,7 @@ export default async function threadRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const thread = await prisma.thread.findUnique({
+    const thread = await request.prisma.thread.findUnique({
       where: { id },
       include: {
         messages: { orderBy: { receivedAt: 'desc' }, take: 1 },
@@ -311,7 +310,7 @@ export default async function threadRoutes(fastify) {
     const analysis = await analyzeMessage(thread.messages[0], thread, thread.project);
 
     // Update thread with new analysis
-    await prisma.thread.update({
+    await request.prisma.thread.update({
       where: { id },
       data: {
         aiAnalysis: JSON.stringify(analysis),
@@ -332,7 +331,7 @@ export default async function threadRoutes(fastify) {
     const { id } = request.params;
     const { content } = request.body;
 
-    const note = await prisma.internalNote.create({
+    const note = await request.prisma.internalNote.create({
       data: {
         content,
         threadId: id,

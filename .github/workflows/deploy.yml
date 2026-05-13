@@ -12,7 +12,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     steps:
       - name: Deploy to VPS via SSH
-        uses: appleboy/ssh-action@v1.0.3
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: 187.77.26.99
           username: root

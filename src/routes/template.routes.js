@@ -1,6 +1,5 @@
 // Task Template routes
 
-import prisma from '../config/db.js';
 import { safeParse } from '../utils/safeParse.js';
 
 export default async function templateRoutes(fastify) {
@@ -8,7 +7,7 @@ export default async function templateRoutes(fastify) {
   fastify.get('/', {
     onRequest: [fastify.authenticate]
   }, async () => {
-    const templates = await prisma.taskTemplate.findMany({
+    const templates = await request.prisma.taskTemplate.findMany({
       orderBy: { name: 'asc' }
     });
 
@@ -28,7 +27,7 @@ export default async function templateRoutes(fastify) {
       return reply.status(400).send({ error: 'Name and phase are required' });
     }
 
-    const template = await prisma.taskTemplate.create({
+    const template = await request.prisma.taskTemplate.create({
       data: {
         name,
         phase,
@@ -48,12 +47,12 @@ export default async function templateRoutes(fastify) {
   }, async (request, reply) => {
     const { id, projectId } = request.params;
 
-    const template = await prisma.taskTemplate.findUnique({ where: { id } });
+    const template = await request.prisma.taskTemplate.findUnique({ where: { id } });
     if (!template) {
       return reply.status(404).send({ error: 'Template not found' });
     }
 
-    const project = await prisma.project.findUnique({ where: { id: projectId } });
+    const project = await request.prisma.project.findUnique({ where: { id: projectId } });
     if (!project) {
       return reply.status(404).send({ error: 'Project not found' });
     }
@@ -63,9 +62,9 @@ export default async function templateRoutes(fastify) {
       return reply.status(400).send({ error: 'Template has no tasks' });
     }
 
-    const createdTasks = await prisma.$transaction(
+    const createdTasks = await request.prisma.$transaction(
       templateTasks.map((task, index) =>
-        prisma.task.create({
+        request.prisma.task.create({
           data: {
             title: task.title,
             description: task.description || null,
@@ -98,7 +97,7 @@ export default async function templateRoutes(fastify) {
     if (phase !== undefined) data.phase = phase;
     if (tasks !== undefined) data.tasks = JSON.stringify(tasks);
 
-    const template = await prisma.taskTemplate.update({
+    const template = await request.prisma.taskTemplate.update({
       where: { id },
       data
     });
@@ -114,7 +113,7 @@ export default async function templateRoutes(fastify) {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const { id } = request.params;
-    await prisma.taskTemplate.delete({ where: { id } });
+    await request.prisma.taskTemplate.delete({ where: { id } });
     return { success: true };
   });
 }

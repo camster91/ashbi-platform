@@ -1,91 +1,88 @@
 /**
- * Outreach Scheduler Routes for ashbi-platform
+ * Outreach Scheduler Routes for ashbi-platform (Fastify)
  * API endpoints for manual trigger and status checks
  */
-
-import express from 'express';
-const router = express.Router();
 
 import { 
   checkReplies,
   generateFollowUpDrafts,
   runWeeklyCycle,
   getSchedulerStatus
-} from '../agents/outreach-scheduler.agent';
+} from '../agents/outreach-scheduler.agent.js';
 
 /**
- * Simple auth middleware - checks for Authorization header
- * In production, replace with proper JWT/session validation
+ * Auth middleware for Fastify - checks for Authorization header
  */
-function authMiddleware(req, res, next) {
-  const authHeader = req.headers.authorization;
-  
+async function authMiddleware(request, reply) {
+  const authHeader = request.headers.authorization;
+
   if (!authHeader) {
-    return res.status(401).json({ error: 'Authorization header required' });
+    return reply.status(401).send({ error: 'Authorization header required' });
   }
 
   // Simple API key check - in production use proper auth
   const apiKey = authHeader.replace('Bearer ', '');
   const validKey = process.env.OUTREACH_SCHEDULER_API_KEY || 'dev-key';
-  
-  if (apiKey !== validKey) {
-    return res.status(403).json({ error: 'Invalid API key' });
-  }
 
-  next();
+  if (apiKey !== validKey) {
+    return reply.status(403).send({ error: 'Invalid API key' });
+  }
 }
 
 /**
- * POST /outreach-scheduler/run
- * Manually trigger the full weekly outreach cycle
+ * Outreach Scheduler routes registered as a Fastify plugin
  */
-router.post('/run', authMiddleware, async (req, res) => {
-  try {
-    console.log('Manual weekly cycle triggered via API');
-    const result = await runWeeklyCycle();
-    res.json(result);
-  } catch (error) {
-    console.error('Error running weekly cycle:', error);
-    res.status(500).json({ 
-      error: 'Failed to run weekly cycle',
-      message: error.message 
-    });
-  }
-});
+export default async function outreachSchedulerRoutes(fastify, opts) {
+  /**
+   * POST /api/outreach-scheduler/run
+   * Manually trigger the full weekly outreach cycle
+   */
+  fastify.post('/run', { preHandler: authMiddleware }, async (request, reply) => {
+    try {
+      console.log('Manual weekly cycle triggered via API');
+      const result = await runWeeklyCycle();
+      return reply.send(result);
+    } catch (error) {
+      console.error('Error running weekly cycle:', error);
+      return reply.status(500).send({
+        error: 'Failed to run weekly cycle',
+        message: error.message
+      });
+    }
+  });
 
-/**
- * POST /outreach-scheduler/check-replies
- * Check inbox for new replies from outreach leads
- */
-router.post('/check-replies', authMiddleware, async (req, res) => {
-  try {
-    console.log('Checking for replies via API');
-    const result = await checkReplies();
-    res.json(result);
-  } catch (error) {
-    console.error('Error checking replies:', error);
-    res.status(500).json({ 
-      error: 'Failed to check replies',
-      message: error.message 
-    });
-  }
-});
+  /**
+   * POST /api/outreach-scheduler/check-replies
+   * Check inbox for new replies from outreach leads
+   */
+  fastify.post('/check-replies', { preHandler: authMiddleware }, async (request, reply) => {
+    try {
+      console.log('Checking for replies via API');
+      const result = await checkReplies();
+      return reply.send(result);
+    } catch (error) {
+      console.error('Error checking replies:', error);
+      return reply.status(500).send({
+        error: 'Failed to check replies',
+        message: error.message
+      });
+    }
+  });
 
-/**
- * GET /outreach-scheduler/status
- * Get scheduler status, next scheduled run, and prospect stats
- */
-router.get('/status', async (req, res) => {
-  try {
-    const status = await getSchedulerStatus();
-    res.json(status);
-  } catch (error) {
-    console.error('Error getting scheduler status:', error);
-    res.status(500).json({ 
-      error: 'Failed to get scheduler status',
-      message: error.message 
-    });
-  }
-});
-
-export default router;
+  /**
+   * GET /api/outreach-scheduler/status
+   * Get scheduler status, next scheduled run, and prospect stats
+   */
+  fastify.get('/status', async (request, reply) => {
+    try {
+      const status = await getSchedulerStatus();
+      return reply.send(status);
+    } catch (error) {
+      console.error('Error getting scheduler status:', error);
+      return reply.status(500).send({
+        error: 'Failed to get scheduler status',
+        message: error.message
+      });
+    }
+  });
+}

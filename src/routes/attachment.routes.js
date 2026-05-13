@@ -1,6 +1,5 @@
 // File Attachment routes
 
-import prisma from '../config/db.js';
 import path from 'path';
 import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
@@ -43,7 +42,7 @@ export default async function attachmentRoutes(fastify) {
       return [];
     }
 
-    const attachments = await prisma.attachment.findMany({
+    const attachments = await request.prisma.attachment.findMany({
       where: { entityType, entityId },
       include: {
         uploadedBy: { select: { id: true, name: true } }
@@ -82,7 +81,7 @@ export default async function attachmentRoutes(fastify) {
     const buffer = await data.toBuffer();
     await fs.writeFile(filepath, buffer);
 
-    const attachment = await prisma.attachment.create({
+    const attachment = await request.prisma.attachment.create({
       data: {
         filename,
         originalName: data.filename,
@@ -102,10 +101,10 @@ export default async function attachmentRoutes(fastify) {
     if (entityType.value === 'PROJECT' || entityType.value === 'TASK') {
       const projectId = entityType.value === 'PROJECT'
         ? entityId.value
-        : (await prisma.task.findUnique({ where: { id: entityId.value } }))?.projectId;
+        : (await request.prisma.task.findUnique({ where: { id: entityId.value } }))?.projectId;
 
       if (projectId) {
-        await prisma.activity.create({
+        await request.prisma.activity.create({
           data: {
             type: 'FILE_UPLOADED',
             action: 'uploaded',
@@ -128,7 +127,7 @@ export default async function attachmentRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const existing = await prisma.attachment.findUnique({ where: { id } });
+    const existing = await request.prisma.attachment.findUnique({ where: { id } });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Attachment not found' });
@@ -147,7 +146,7 @@ export default async function attachmentRoutes(fastify) {
       // File may not exist
     }
 
-    await prisma.attachment.delete({ where: { id } });
+    await request.prisma.attachment.delete({ where: { id } });
 
     return { success: true };
   });
@@ -162,7 +161,7 @@ export default async function attachmentRoutes(fastify) {
       const file = await fs.readFile(filepath);
 
       // Get mime type from attachment record
-      const attachment = await prisma.attachment.findFirst({
+      const attachment = await request.prisma.attachment.findFirst({
         where: { filename }
       });
 

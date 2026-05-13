@@ -576,11 +576,381 @@ export async function getScheduledCalls() {
   }
 }
 
+/**
+ * Verify a phone number's format and basic validity.
+ * Validates North American numbers (10 or 11 digits with +1 prefix).
+ *
+ * @param {string} phone - Phone number string to validate
+ * @returns {object} { valid: boolean, cleaned: string, type: string, reason?: string }
+ */
+export function verifyPhoneNumber(phone) {
+  if (!phone || typeof phone !== 'string') {
+    return { valid: false, cleaned: '', type: 'unknown', reason: 'No phone number provided' };
+  }
+
+  // Clean the number: strip all non-digit characters
+  const cleaned = phone.replace(/\D/g, '');
+
+  if (cleaned.length === 0) {
+    return { valid: false, cleaned: '', type: 'unknown', reason: 'No digits found in phone number' };
+  }
+
+  // Must be 10 or 11 digits (11-digit must start with 1 for North America)
+  if (cleaned.length === 11) {
+    if (!cleaned.startsWith('1')) {
+      return { valid: false, cleaned, type: 'invalid', reason: '11-digit numbers must start with 1 (North America)' };
+    }
+    const areaCode = cleaned.substring(1, 4);
+    return { valid: true, cleaned, type: 'mobile_or_landline', areaCode, formatted: formatPhoneNumber(cleaned) };
+  }
+
+  if (cleaned.length === 10) {
+    const areaCode = cleaned.substring(0, 3);
+    return { valid: true, cleaned, type: 'mobile_or_landline', areaCode, formatted: formatPhoneNumber(cleaned) };
+  }
+
+  return { valid: false, cleaned, type: 'invalid', reason: `Expected 10 or 11 digits, got ${cleaned.length}` };
+}
+
+/**
+ * Format a cleaned phone number to (XXX) XXX-XXXX
+ */
+function formatPhoneNumber(cleaned) {
+  const digits = cleaned.length === 11 ? cleaned.substring(1) : cleaned;
+  return `(${digits.substring(0, 3)}) ${digits.substring(3, 6)}-${digits.substring(6, 10)}`;
+}
+
+/**
+ * Get the valid business hours window for a given timezone.
+ * Defaults to Eastern time (Toronto). Returns local hour range.
+ *
+ * @param {string} timezone - IANA timezone string (e.g., 'America/Toronto')
+ * @returns {object} { startHour: number, endHour: number, timezone: string }
+ */
+export function getBusinessHoursRange(timezone = 'America/Toronto') {
+  return { startHour: 9, endHour: 17, timezone };
+}
+
+/**
+ * Validate that a call time falls within business hours for the given timezone.
+ * Business hours: 9am–5pm local, Monday–Friday.
+ *
+ * @param {string|Date} dateTime - ISO date string or Date object
+ * @param {string} timezone - IANA timezone string (default: America/Toronto)
+ * @returns {object} { valid: boolean, localHour: number, localDay: string, reason?: string }
+ */
+export function validateCallTime(dateTime, timezone = 'America/Toronto') {
+  const date = typeof dateTime === 'string' ? new Date(dateTime) : dateTime;
+
+  if (isNaN(date.getTime())) {
+    return { valid: false, localHour: -1, localDay: 'unknown', reason: 'Invalid date' };
+  }
+
+  try {
+    // Get local hour and day in the target timezone
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      hour: 'numeric',
+      hour12: false,
+      weekday: 'short'
+    });
+    const parts = formatter.formatToParts(date);
+    const hourPart = parts.find(p => p.type === 'hour');
+    const weekdayPart = parts.find(p => p.type === 'weekday');
+    const localHour = hourPart ? parseInt(hourPart.value) : -1;
+    const localDay = weekdayPart ? weekdayPart.value : 'unknown';
+
+    // Check weekend
+    if (['Sat', 'Sun'].includes(localDay)) {
+      return { valid: false, localHour, localDay, reason: `Cannot call on ${localDay} (weekend)` };
+    }
+
+    // Check business hours (9am–5pm)
+    const { startHour, endHour } = getBusinessHoursRange(timezone);
+    if (localHour < startHour || localHour >= endHour) {
+      return {
+        valid: false,
+        localHour,
+        localDay,
+        reason: `Call time ${localHour}:00 is outside business hours (${startHour}:00–${endHour}:00 ${timezone})`
+      };
+    }
+
+    return { valid: true, localHour, localDay, timezone };
+  } catch (e) {
+    // Fallback: check UTC hour with a rough offset
+    const utcHour = date.getUTCHours();
+    // Toronto is UTC-5 (EST) or UTC-4 (EDT); rough estimate
+    const offset = timezone.includes('America/') ? -5 : 0;
+    const estimatedLocal = ((utcHour + offset) + 24) % 24;
+    const dayOfWeek = date.getUTCDay();
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+
+    if (isWeekend) {
+      return { valid: false, localHour: estimatedLocal, localDay: 'weekend', reason: 'Cannot call on weekends' };
+    }
+    if (estimatedLocal < 9 || estimatedLocal >= 17) {
+      return { valid: false, localHour: estimatedLocal, localDay: 'weekday', reason: `Call time is outside business hours (${estimatedLocal}:00)` };
+    }
+    return { valid: true, localHour: estimatedLocal, localDay: 'weekday', timezone: 'estimated' };
+  }
+}
+
+/**
+ * Schedule a follow-up reminder after an initial call.
+ * Creates a Google Calendar event 3 business days after the original call.
+ *
+ * @param {string} leadId - ColdEmailProspect ID
+ * @param {string} originalEventId - Google Calendar event ID of the original call
+ * @returns {Promise<object>} Follow-up event details
+ */
+export async function scheduleFollowUpReminder(leadId, originalEventId) {
+  const prospect = await prisma.coldEmailProspect.findUnique({
+    where: { id: leadId }
+  });
+
+  if (!prospect) {
+    throw new Error(`Lead not found: ${leadId}`);
+  }
+
+  let phoneData = {};
+  try {
+    if (prospect.painPoint) {
+      phoneData = JSON.parse(prospect.painPoint);
+    }
+  } catch (e) { /* not JSON */ }
+
+  const businessName = prospect.company || prospect.name || 'Unknown Business';
+
+  // Schedule 3 business days from now (skip weekends)
+  const followUpDate = new Date();
+  let daysToAdd = 3;
+  let added = 0;
+  while (added < daysToAdd) {
+    followUpDate.setDate(followUpDate.getDate() + 1);
+    const day = followUpDate.getDay();
+    if (day !== 0 && day !== 6) added++; // Skip weekends
+  }
+  // Set to 10:00 AM
+  followUpDate.setHours(10, 0, 0, 0);
+
+  const startIso = followUpDate.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+  const endTime = new Date(followUpDate.getTime() + 15 * 60 * 1000);
+  const endIso = endTime.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+
+  const eventPayload = {
+    summary: `FOLLOW-UP: ${businessName}`,
+    description: `Follow-up call for ${businessName}\n\nOriginal call event: ${originalEventId || 'N/A'}\nLead ID: ${prospect.id}\nPhone: ${phoneData.phone || 'N/A'}\n\nFollow up on previous conversation. Check if they're interested in next steps.`,
+    start: { dateTime: startIso },
+    end: { dateTime: endIso },
+    reminders: {
+      useDefault: false,
+      overrides: [
+        { method: 'popup', minutes: 10 },
+        { method: 'popup', minutes: 60 }
+      ]
+    }
+  };
+
+  try {
+    const response = await fetch(`${MATON_CALENDAR_BASE}/events`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${MATON_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(eventPayload)
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Maton Calendar API error: ${response.status} ${errorText}`);
+    }
+
+    const event = await response.json();
+
+    // Update the prospect with follow-up info
+    await prisma.coldEmailProspect.update({
+      where: { id: leadId },
+      data: {
+        painPoint: JSON.stringify({
+          ...phoneData,
+          followUpScheduledAt: followUpDate.toISOString(),
+          followUpEventId: event.id || event.eventId
+        })
+      }
+    });
+
+    return {
+      success: true,
+      eventId: event.id || event.eventId,
+      followUpAt: followUpDate.toISOString(),
+      leadId,
+      businessName
+    };
+  } catch (err) {
+    console.error('[ColdCall] scheduleFollowUpReminder error:', err.message);
+    throw err;
+  }
+}
+
+/**
+ * Get call logs with optional limit.
+ *
+ * @param {number} limit - Max number of logs to return (default: 50)
+ * @returns {Promise<Array>} Call log entries
+ */
+export async function getCallLogs(limit = 50) {
+  try {
+    const logs = await prisma.callLog.findMany({
+      orderBy: { calledAt: 'desc' },
+      take: limit
+    });
+    return logs;
+  } catch (err) {
+    console.error('[ColdCall] getCallLogs error:', err.message);
+    return [];
+  }
+}
+
+/**
+ * Get call statistics: calls made, connect rate, meetings booked.
+ *
+ * @returns {Promise<object>} Stats object
+ */
+export async function getCallStats() {
+  try {
+    const [totalCalls, completed, screened, pending, followUpSent] = await Promise.all([
+      prisma.callLog.count(),
+      prisma.callLog.count({ where: { status: 'COMPLETED' } }),
+      prisma.callLog.count({ where: { status: 'SCREENED' } }),
+      prisma.callLog.count({ where: { status: 'PENDING' } }),
+      prisma.callLog.count({ where: { status: 'FOLLOW_UP_SENT' } })
+    ]);
+
+    // Count scheduled calls from ColdEmailProspect
+    const scheduledLeads = await prisma.coldEmailProspect.count({
+      where: { painPoint: { contains: 'callScheduledAt' } }
+    });
+
+    const connectRate = totalCalls > 0
+      ? Math.round(((screened + completed) / totalCalls) * 100)
+      : 0;
+
+    return {
+      totalCalls,
+      completed,
+      screened,
+      pending,
+      followUpSent,
+      scheduledLeads,
+      connectRate,
+      generatedAt: new Date().toISOString()
+    };
+  } catch (err) {
+    console.error('[ColdCall] getCallStats error:', err.message);
+    return {
+      totalCalls: 0,
+      completed: 0,
+      screened: 0,
+      pending: 0,
+      followUpSent: 0,
+      scheduledLeads: 0,
+      connectRate: 0,
+      error: err.message
+    };
+  }
+}
+
+/**
+ * Get the Do Not Call list — leads marked as DNC.
+ *
+ * @returns {Promise<Array>} DNC entries
+ */
+export async function getDNCList() {
+  try {
+    const dncs = await prisma.coldEmailProspect.findMany({
+      where: { status: 'DNC' },
+      select: {
+        id: true,
+        name: true,
+        company: true,
+        industry: true,
+        painPoint: true,
+        updatedAt: true
+      },
+      orderBy: { updatedAt: 'desc' }
+    });
+
+    return dncs.map(d => {
+      let phoneData = {};
+      try {
+        if (d.painPoint) phoneData = JSON.parse(d.painPoint);
+      } catch (e) { /* not JSON */ }
+      return {
+        id: d.id,
+        name: d.name,
+        company: d.company,
+        industry: d.industry,
+        phone: phoneData.phone || null,
+        dncAt: d.updatedAt
+      };
+    });
+  } catch (err) {
+    console.error('[ColdCall] getDNCList error:', err.message);
+    return [];
+  }
+}
+
+/**
+ * Add a lead to the Do Not Call list.
+ *
+ * @param {string} leadId - ColdEmailProspect ID
+ * @returns {Promise<object>} Updated prospect
+ */
+export async function addToDNC(leadId) {
+  const prospect = await prisma.coldEmailProspect.findUnique({
+    where: { id: leadId }
+  });
+
+  if (!prospect) {
+    throw new Error(`Lead not found: ${leadId}`);
+  }
+
+  // Update status to DNC and record reason in painPoint
+  let phoneData = {};
+  try {
+    if (prospect.painPoint) phoneData = JSON.parse(prospect.painPoint);
+  } catch (e) { /* not JSON */ }
+
+  const updated = await prisma.coldEmailProspect.update({
+    where: { id: leadId },
+    data: {
+      status: 'DNC',
+      painPoint: JSON.stringify({
+        ...phoneData,
+        dncAt: new Date().toISOString(),
+        dncReason: 'Marked as Do Not Call'
+      })
+    }
+  });
+
+  return { success: true, leadId, name: updated.name, company: updated.company };
+}
+
 export default {
   lookupPhone,
   addLeadWithPhone,
   generateCallScript,
   scheduleCallBlock,
   runDailyCallBlocks,
-  getScheduledCalls
+  getScheduledCalls,
+  verifyPhoneNumber,
+  validateCallTime,
+  getBusinessHoursRange,
+  scheduleFollowUpReminder,
+  getCallLogs,
+  getCallStats,
+  getDNCList,
+  addToDNC
 };

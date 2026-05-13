@@ -6,12 +6,13 @@
  * Specializations: branding, graphic design, packaging design, Shopify websites
  */
 
-const { createDraft } = require('./gmail-draft.agent');
+import { createDraft } from './gmail-draft.agent.js';
 
 // AI Client import - uses ../ai/client.js
 let aiClient = null;
 try {
-  aiClient = require('../ai/client.js');
+  const module = await import('../ai/client.js');
+  aiClient = module.default;
 } catch (err) {
   console.warn('AI client not found, using fallback generation');
   aiClient = null;
@@ -525,7 +526,7 @@ function getJobAlerts() {
   };
 }
 
-module.exports = {
+export {
   optimizeProfile,
   searchJobs,
   generateProposal,

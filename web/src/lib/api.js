@@ -234,6 +234,8 @@ export const api = {
     request(`/clients/${id}`, { method: 'PUT', body: data }),
   getClientInsights: (id) =>
     request(`/clients/${id}/insights`),
+  addClientNote: (clientId, content) =>
+    request(`/clients/${clientId}/notes`, { method: 'POST', body: { content } }),
 
   // Projects
   getProjects: (params = {}) => {
@@ -467,6 +469,14 @@ export const api = {
   createManualTimeEntry: (data) =>
     request('/time-tracking/manual', { method: 'POST', body: data }),
 
+  // Time Sessions (live timer)
+  startTimeSession: (data) =>
+    request('/time-sessions', { method: 'POST', body: data }),
+  stopTimeSession: (id) =>
+    request(`/time-sessions/${id}/stop`, { method: 'POST' }),
+  getRunningTimeSession: () =>
+    request('/time-sessions/running'),
+
   // Activity Feed
   getProjectActivity: (projectId, params = {}) => {
     const query = new URLSearchParams(params).toString();
@@ -573,6 +583,16 @@ export const api = {
     request(`/proposals/${id}/send`, { method: 'POST' }),
   duplicateProposal: (id) =>
     request(`/proposals/${id}/duplicate`, { method: 'POST' }),
+  // Bulk proposal actions
+  bulkSendProposals: (ids) =>
+    request('/proposals/bulk/send', { method: 'POST', body: { ids } }),
+  bulkArchiveProposals: (ids) =>
+    request('/proposals/bulk/archive', { method: 'POST', body: { ids } }),
+  // Proposal versioning
+  getProposalVersions: (id) =>
+    request(`/proposals/${id}/versions`),
+  restoreProposalVersion: (id, versionId) =>
+    request(`/proposals/${id}/versions/${versionId}/restore`, { method: 'POST' }),
 
   // ===== CONTRACTS =====
   getContracts: (params = {}) => {
@@ -615,6 +635,13 @@ export const api = {
     request(`/invoices/${id}/payment-link`, { method: 'POST' }),
   getInvoicePayments: (id) =>
     request(`/invoices/${id}/payments`),
+  // Bulk invoice actions
+  bulkMarkPaid: (ids, paymentMethod) =>
+    request('/invoices/bulk/mark-paid', { method: 'POST', body: { ids, paymentMethod } }),
+  bulkSendInvoices: (ids) =>
+    request('/invoices/bulk/send', { method: 'POST', body: { ids } }),
+  bulkArchiveInvoices: (ids) =>
+    request('/invoices/bulk/archive', { method: 'POST', body: { ids } }),
   // Line item templates
   getLineItemTemplates: () =>
     request('/invoices/templates'),
@@ -863,6 +890,17 @@ export const api = {
     const query = new URLSearchParams(params).toString();
     return request(`/cold-email/prospects${query ? `?${query}` : ''}`);
   },
+  // Sequence engine
+  activateColdEmailSequence: (sequenceId) =>
+    request(`/cold-email/sequences/${sequenceId}/activate`, { method: 'POST' }),
+  pauseColdEmailSequence: (sequenceId) =>
+    request(`/cold-email/sequences/${sequenceId}/pause`, { method: 'POST' }),
+  sendColdEmailToProspect: (prospectId, stepIndex) =>
+    request(`/cold-email/send-to-prospect/${prospectId}`, { method: 'POST', body: { stepIndex } }),
+  getColdEmailStats: (sequenceId) =>
+    request(`/cold-email/stats/${sequenceId}`),
+  processColdEmailQueue: () =>
+    request('/cold-email/process-queue', { method: 'POST' }),
 
   // ===== CALL SCREENER AGENT =====
   screenCall: (data) =>
@@ -1371,12 +1409,30 @@ export const api = {
   disconnectIntegration: (type) => request(`/integrations/${type}/disconnect`, { method: 'POST' }),
   syncIntegration: (type) => request(`/integrations/${type}/sync`, { method: 'POST' }),
 
+  // ===== NOTION SYNC =====
+  syncNotionAll: () =>
+    request('/notion-sync/sync-all', { method: 'POST' }),
+  syncNotionOne: (pageId) =>
+    request('/notion-sync/sync-one', { method: 'POST', body: { pageId } }),
+  getNotionProjects: () =>
+    request('/notion-sync/projects'),
+  getNotionStatus: () =>
+    request('/notion-sync/status'),
+
   // ===== TIMESHEETS =====
   getWeeklyTimesheet: (weekStart) => {
     const query = weekStart ? `?weekStart=${weekStart}` : '';
     return request(`/time-entries/timesheets/weekly${query}`);
   },
   approveTimesheetEntry: (id) => request(`/time-entries/timesheets/${id}/approve`, { method: 'PATCH' }),
+
+  // ===== AUTOSAVE DRAFT =====
+  saveDraft: (entity, id, data) =>
+    request(`/draft/${entity}/${id}`, { method: 'PUT', body: { data } }),
+  getDraft: (entity, id) =>
+    request(`/draft/${entity}/${id}`),
+  clearDraft: (entity, id) =>
+    request(`/draft/${entity}/${id}`, { method: 'DELETE' }),
 };
 
 export default api;

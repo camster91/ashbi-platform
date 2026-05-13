@@ -1,13 +1,12 @@
 // AI Context settings routes
 
-import prisma from '../config/db.js';
 
 export default async function aiContextRoutes(fastify) {
   // Get all AI context key/value pairs
   fastify.get('/', {
     onRequest: [fastify.authenticate]
   }, async () => {
-    const rows = await prisma.aiContext.findMany({
+    const rows = await request.prisma.aiContext.findMany({
       orderBy: { key: 'asc' }
     });
     return rows;
@@ -23,7 +22,7 @@ export default async function aiContextRoutes(fastify) {
       return reply.status(400).send({ error: 'key and value are required' });
     }
 
-    const row = await prisma.aiContext.upsert({
+    const row = await request.prisma.aiContext.upsert({
       where: { key },
       update: { value },
       create: { key, value }
@@ -39,7 +38,7 @@ export default async function aiContextRoutes(fastify) {
     const { key } = request.params;
 
     try {
-      await prisma.aiContext.delete({ where: { key } });
+      await request.prisma.aiContext.delete({ where: { key } });
       return { success: true };
     } catch {
       return reply.status(404).send({ error: 'Key not found' });
@@ -50,7 +49,7 @@ export default async function aiContextRoutes(fastify) {
   fastify.get('/prompt', {
     onRequest: [fastify.authenticate]
   }, async () => {
-    const rows = await prisma.aiContext.findMany();
+    const rows = await request.prisma.aiContext.findMany();
     const context = rows.reduce((acc, r) => {
       acc[r.key] = r.value;
       return acc;

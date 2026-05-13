@@ -1,6 +1,5 @@
 // Task Comment routes with @mentions
 
-import prisma from '../config/db.js';
 
 export default async function commentRoutes(fastify) {
   // Get comments for a task
@@ -9,7 +8,7 @@ export default async function commentRoutes(fastify) {
   }, async (request) => {
     const { taskId } = request.params;
 
-    const comments = await prisma.taskComment.findMany({
+    const comments = await request.prisma.taskComment.findMany({
       where: { taskId },
       include: {
         author: { select: { id: true, name: true, email: true } }
@@ -35,7 +34,7 @@ export default async function commentRoutes(fastify) {
     }
 
     // Get task to verify it exists and get project
-    const task = await prisma.task.findUnique({
+    const task = await request.prisma.task.findUnique({
       where: { id: taskId },
       include: { project: { select: { id: true, name: true } } }
     });
@@ -53,7 +52,7 @@ export default async function commentRoutes(fastify) {
     }
 
     // Find mentioned users
-    const mentionedUsers = await prisma.user.findMany({
+    const mentionedUsers = await request.prisma.user.findMany({
       where: {
         OR: mentionNames.map(name => ({ name: { contains: name } }))
       }
@@ -61,7 +60,7 @@ export default async function commentRoutes(fastify) {
 
     const mentionIds = mentionedUsers.map(u => u.id);
 
-    const comment = await prisma.taskComment.create({
+    const comment = await request.prisma.taskComment.create({
       data: {
         content,
         mentions: JSON.stringify(mentionIds),
@@ -74,7 +73,7 @@ export default async function commentRoutes(fastify) {
     });
 
     // Log activity
-    await prisma.activity.create({
+    await request.prisma.activity.create({
       data: {
         type: 'TASK_COMMENTED',
         action: 'commented',
@@ -90,7 +89,7 @@ export default async function commentRoutes(fastify) {
     // Notify mentioned users
     for (const user of mentionedUsers) {
       if (user.id !== request.user.id) {
-        await prisma.notification.create({
+        await request.prisma.notification.create({
           data: {
             type: 'MENTION',
             title: 'You were mentioned in a comment',
@@ -114,7 +113,7 @@ export default async function commentRoutes(fastify) {
 
     // Notify task assignee if not the commenter
     if (task.assigneeId && task.assigneeId !== request.user.id && !mentionIds.includes(task.assigneeId)) {
-      await prisma.notification.create({
+      await request.prisma.notification.create({
         data: {
           type: 'TASK_COMMENT',
           title: 'New comment on your task',
@@ -147,7 +146,7 @@ export default async function commentRoutes(fastify) {
     const { id } = request.params;
     const { content } = request.body;
 
-    const existing = await prisma.taskComment.findUnique({ where: { id } });
+    const existing = await request.prisma.taskComment.findUnique({ where: { id } });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Comment not found' });
@@ -165,7 +164,7 @@ export default async function commentRoutes(fastify) {
       mentionNames.push(match[1]);
     }
 
-    const mentionedUsers = await prisma.user.findMany({
+    const mentionedUsers = await request.prisma.user.findMany({
       where: {
         OR: mentionNames.length > 0
           ? mentionNames.map(name => ({ name: { contains: name } }))
@@ -175,7 +174,7 @@ export default async function commentRoutes(fastify) {
 
     const mentionIds = mentionedUsers.map(u => u.id);
 
-    const comment = await prisma.taskComment.update({
+    const comment = await request.prisma.taskComment.update({
       where: { id },
       data: {
         content,
@@ -198,7 +197,7 @@ export default async function commentRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const existing = await prisma.taskComment.findUnique({ where: { id } });
+    const existing = await request.prisma.taskComment.findUnique({ where: { id } });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Comment not found' });
@@ -209,7 +208,7 @@ export default async function commentRoutes(fastify) {
       return reply.status(403).send({ error: 'Cannot delete this comment' });
     }
 
-    await prisma.taskComment.delete({ where: { id } });
+    await request.prisma.taskComment.delete({ where: { id } });
 
     return { success: true };
   });
@@ -226,7 +225,7 @@ export default async function commentRoutes(fastify) {
       where.name = { contains: query };
     }
 
-    const users = await prisma.user.findMany({
+    const users = await request.prisma.user.findMany({
       where,
       select: { id: true, name: true, email: true },
       take: 10

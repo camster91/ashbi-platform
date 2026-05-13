@@ -1,7 +1,6 @@
 // Deal Pipeline routes
 // Migrated from ashbi-hub with auth decorators
 
-import prisma from '../config/db.js';
 import {
   getPipelineStages,
   createStage,

@@ -1,6 +1,5 @@
 // Gmail API routes — bidirectional email via Gmail OAuth
 
-import prisma from '../config/db.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -147,7 +146,7 @@ export default async function gmailRoutes(fastify) {
 
       // Log the sent email to Hub DB
       if (hubThreadId) {
-        await prisma.message.create({
+        await request.prisma.message.create({
           data: {
             direction: 'OUTBOUND',
             senderEmail: 'cameron@ashbi.ca',
@@ -166,7 +165,7 @@ export default async function gmailRoutes(fastify) {
         });
 
         // Update thread status
-        await prisma.thread.update({
+        await request.prisma.thread.update({
           where: { id: hubThreadId },
           data: {
             status: 'AWAITING_RESPONSE',
@@ -200,7 +199,7 @@ export default async function gmailRoutes(fastify) {
       return reply.status(400).send({ error: 'Missing hubThreadId' });
     }
 
-    const thread = await prisma.thread.findUnique({
+    const thread = await request.prisma.thread.findUnique({
       where: { id: hubThreadId },
       include: {
         client: true,

@@ -1,7 +1,6 @@
 // Revenue Dashboard Routes
 // MRR, ARR, collections rate, client breakdown, seasonal trends
 
-import prisma from '../config/db.js';
 
 // Simple in-memory cache
 let cache = null;
@@ -19,7 +18,7 @@ async function buildRevenueDashboard() {
   const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1);
 
   // Fetch all invoices with client info
-  const allInvoices = await prisma.invoice.findMany({
+  const allInvoices = await request.prisma.invoice.findMany({
     include: {
       client: { select: { id: true, name: true, status: true } },
       lineItems: true
@@ -36,7 +35,7 @@ async function buildRevenueDashboard() {
   );
 
   // Also count retainer plans
-  const retainerPlans = await prisma.retainerPlan.findMany({
+  const retainerPlans = await request.prisma.retainerPlan.findMany({
     include: { client: { select: { id: true, name: true, status: true } } }
   });
 
@@ -253,7 +252,7 @@ export default async function revenueRoutes(fastify) {
   }, async (request, reply) => {
     try {
       const now = new Date();
-      const overdueInvoices = await prisma.invoice.findMany({
+      const overdueInvoices = await request.prisma.invoice.findMany({
         where: {
           OR: [
             { status: 'OVERDUE' },
@@ -308,7 +307,7 @@ export default async function revenueRoutes(fastify) {
         monthlyData[key] = { month: key, revenue: 0, invoiceCount: 0 };
       }
 
-      const invoices = await prisma.invoice.findMany({
+      const invoices = await request.prisma.invoice.findMany({
         where: {
           status: 'PAID',
           createdAt: { gte: new Date(now.getFullYear(), now.getMonth() - parseInt(months) + 1, 1) }

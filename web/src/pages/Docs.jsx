@@ -409,7 +409,7 @@ function NoteCard({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        {note.author?.name} · {new Date(note.updatedAt).toLocaleDateString()}
+        {note.author?.name} · {new Date(note.updatedAt).toLocaleDateString('en-CA')}
       </p>
 
       {expanded && (

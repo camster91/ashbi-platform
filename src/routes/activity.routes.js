@@ -1,6 +1,5 @@
 // Activity Feed routes
 
-import prisma from '../config/db.js';
 
 export default async function activityRoutes(fastify) {
   // Get activity feed for a project
@@ -22,7 +21,7 @@ export default async function activityRoutes(fastify) {
     if (userId) where.userId = userId;
     if (before) where.createdAt = { lt: new Date(before) };
 
-    const activities = await prisma.activity.findMany({
+    const activities = await request.prisma.activity.findMany({
       where,
       include: {
         user: { select: { id: true, name: true } }
@@ -57,7 +56,7 @@ export default async function activityRoutes(fastify) {
     if (entityType) where.entityType = entityType;
     if (before) where.createdAt = { lt: new Date(before) };
 
-    const activities = await prisma.activity.findMany({
+    const activities = await request.prisma.activity.findMany({
       where,
       include: {
         user: { select: { id: true, name: true } },
@@ -80,7 +79,7 @@ export default async function activityRoutes(fastify) {
     const { limit: limitParam = '30' } = request.query;
     const limit = parseInt(limitParam);
 
-    const activities = await prisma.activity.findMany({
+    const activities = await request.prisma.activity.findMany({
       where: { userId: request.user.id },
       include: {
         project: { select: { id: true, name: true } }
@@ -112,7 +111,7 @@ export default async function activityRoutes(fastify) {
       where.userId = request.user.id;
     }
 
-    const activities = await prisma.activity.findMany({
+    const activities = await request.prisma.activity.findMany({
       where,
       select: {
         type: true,

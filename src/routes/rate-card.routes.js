@@ -1,4 +1,3 @@
-import prisma from '../config/db.js';
 
 export default async function rateCardRoutes(fastify) {
   // List rate cards
@@ -9,7 +8,7 @@ export default async function rateCardRoutes(fastify) {
     const where = {};
     if (clientId) where.clientId = clientId;
 
-    const rateCards = await prisma.rateCard.findMany({
+    const rateCards = await request.prisma.rateCard.findMany({
       where: {
         OR: [
           where,
@@ -27,7 +26,7 @@ export default async function rateCardRoutes(fastify) {
   fastify.get('/:id', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
-    const rateCard = await prisma.rateCard.findUnique({
+    const rateCard = await request.prisma.rateCard.findUnique({
       where: { id: request.params.id },
       include: { client: { select: { id: true, name: true } } }
     });
@@ -44,13 +43,13 @@ export default async function rateCardRoutes(fastify) {
 
     // If setting as default, unset any existing default
     if (isDefault) {
-      await prisma.rateCard.updateMany({
+      await request.prisma.rateCard.updateMany({
         where: { isDefault: true },
         data: { isDefault: false }
       });
     }
 
-    const rateCard = await prisma.rateCard.create({
+    const rateCard = await request.prisma.rateCard.create({
       data: {
         name,
         clientId: clientId || null,
@@ -68,19 +67,19 @@ export default async function rateCardRoutes(fastify) {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const { id } = request.params;
-    const existing = await prisma.rateCard.findUnique({ where: { id } });
+    const existing = await request.prisma.rateCard.findUnique({ where: { id } });
     if (!existing) return reply.status(404).send({ error: 'Rate card not found' });
 
     const { name, rates, isDefault, clientId } = request.body;
 
     if (isDefault && !existing.isDefault) {
-      await prisma.rateCard.updateMany({
+      await request.prisma.rateCard.updateMany({
         where: { isDefault: true },
         data: { isDefault: false }
       });
     }
 
-    const rateCard = await prisma.rateCard.update({
+    const rateCard = await request.prisma.rateCard.update({
       where: { id },
       data: {
         ...(name !== undefined && { name }),
@@ -99,9 +98,9 @@ export default async function rateCardRoutes(fastify) {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const { id } = request.params;
-    const existing = await prisma.rateCard.findUnique({ where: { id } });
+    const existing = await request.prisma.rateCard.findUnique({ where: { id } });
     if (!existing) return reply.status(404).send({ error: 'Rate card not found' });
-    await prisma.rateCard.delete({ where: { id } });
+    await request.prisma.rateCard.delete({ where: { id } });
     return { success: true };
   });
 }

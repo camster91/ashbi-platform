@@ -18,6 +18,8 @@ import {
 import { api } from '../lib/api';
 import { Button, Card } from '../components/ui';
 import { cn, formatRelativeTime, truncate, getPriorityColor } from '../lib/utils';
+import ComingSoonWrapper from '../components/ComingSoonWrapper';
+import { isComingSoon } from '../lib/featureFlags';
 
 const priorityConfig = {
   CRITICAL: { label: 'Critical', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
@@ -204,6 +206,7 @@ function TaskList({ tasks, emptyMessage, emptyIcon: EmptyIcon, expandable = fals
 }
 
 export default function Upwork() {
+  if (isComingSoon('upwork')) return <ComingSoonWrapper title="Upwork" />;
   const [mode, setMode] = useState('freelance');
   const [subTab, setSubTab] = useState('leads');
 

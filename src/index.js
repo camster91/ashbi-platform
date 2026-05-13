@@ -62,7 +62,6 @@ import emailTriageRoutes from './routes/email-triage.routes.js';
 import contentWriterRoutes from './routes/content-writer.routes.js';
 import linkedinOutreachRoutes from './routes/linkedin-outreach.routes.js';
 import coldEmailRoutes from './routes/cold-email.routes.js';
-import callScreenerRoutes from './routes/call-screener.routes.js';
 import leadGenRoutes from './routes/lead-gen.routes.js';
 import socialContentRoutes from './routes/social-content.routes.js';
 import seoBlogRoutes from './routes/seo-blog.routes.js';
@@ -97,9 +96,11 @@ import automationRoutes from './routes/automation.routes.js';
 import intakeFormRoutes from './routes/intake-form.routes.js';
 import brandRoutes from './routes/brand.routes.js';
 import { startOverdueChecker } from './services/automation.service.js';
+import { startTrashPurgeJob } from './jobs/trash-purge.js';
 import pipelineRoutes from './routes/pipeline.routes.js';
 import { initHermesBridge } from './agents/hub-hermes.integration.js';
 import timeTrackingRoutes from './routes/time-tracking.routes.js';
+import timeSessionRoutes from './routes/time-sessions.routes.js';
 import semanticSearchRoutes from './routes/semantic-search.routes.js';
 import adCopyRoutes from './routes/ad-copy.routes.js';
 import creativeBriefRoutes from './routes/creative-brief.routes.js';
@@ -122,13 +123,31 @@ import leadIntelligenceRoutes from './routes/lead-intelligence.routes.js';
 import proposalBuilderRoutes from './routes/proposal-builder.routes.js';
 import coldCallRoutes from './routes/cold-call.routes.js';
 import upworkAutoAlertRoutes from './routes/upwork-auto-alert.routes.js';
+import clientAcquisitionRoutes from './routes/client-acquisition.routes.js';
+import trashRoutes from './routes/trash.routes.js';
+import draftRoutes from './routes/draft.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+import * as Sentry from '@sentry/node';
 import logger from './utils/logger.js';
 import { initSubscribers } from './subscribers/index.js';
 import { tenancyMiddleware } from './middleware/tenancy.js';
 import { getAuthProvider } from './auth/index.js';
+
+// Initialize Sentry error monitoring
+if (env.sentryDsn) {
+  Sentry.init({
+    dsn: env.sentryDsn,
+    environment: env.nodeEnv,
+    tracesSampleRate: env.isProduction ? 0.2 : 1.0,
+    enabled: true,
+    integrations: [Sentry.fastifyIntegration()],
+  });
+  logger.info('[Sentry] Error monitoring initialized');
+} else {
+  logger.info('[Sentry] No SENTRY_DSN configured — skipping initialization');
+}
 
 // Initialize Fastify
 const fastify = Fastify({
@@ -136,6 +155,11 @@ const fastify = Fastify({
     level: env.isDev ? 'debug' : 'info'
   }
 });
+
+// Attach Sentry error handler (must be after Fastify creation, before plugins/routes)
+if (env.sentryDsn) {
+  Sentry.setupFastifyErrorHandler(fastify);
+}
 
 // Content Type Parser
 fastify.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
@@ -188,10 +212,102 @@ await fastify.register(settingsRoutes, { prefix: '/api/settings' });
 await fastify.register(outreachSchedulerRoutes, { prefix: '/api/outreach-scheduler' });
 await fastify.register(referralEngineRoutes, { prefix: '/api/referral-engine' });
 await fastify.register(upworkAgentRoutes, { prefix: '/api/upwork' });
+await fastify.register(upworkJobsRoutes, { prefix: '/api/upwork-jobs' });
 await fastify.register(leadIntelligenceRoutes, { prefix: '/api/lead-intelligence' });
 await fastify.register(proposalBuilderRoutes, { prefix: '/api/proposal-builder' });
 await fastify.register(coldCallRoutes, { prefix: '/api/cold-call' });
+await fastify.register(coldEmailRoutes, { prefix: '/api/cold-email' });
 await fastify.register(upworkAutoAlertRoutes, { prefix: '/api/upwork-auto-alert' });
+// Route registrations continued
+await fastify.register(wpBridgeRoutes, { prefix: '/api/wp-bridge' });
+await fastify.register(surveyRoutes, { prefix: '/api/surveys' });
+await fastify.register(apiKeyRoutes, { prefix: '/api/api-keys' });
+await fastify.register(estimateRoutes, { prefix: '/api/estimates' });
+await fastify.register(rateCardRoutes, { prefix: '/api/rate-cards' });
+await fastify.register(bookkeepingRoutes, { prefix: '/api/bookkeeping' });
+await fastify.register(integrationRoutes, { prefix: '/api/integrations' });
+await fastify.register(brandRoutes, { prefix: '/api/brand' });
+await fastify.register(pipelineRoutes, { prefix: '/api/pipeline' });
+await fastify.register(timeTrackingRoutes, { prefix: '/api/time-tracking' });
+await fastify.register(timeSessionRoutes, { prefix: '/api/time-sessions' });
+await fastify.register(semanticSearchRoutes, { prefix: '/api/semantic-search' });
+await fastify.register(adCopyRoutes, { prefix: '/api/ad-copy' });
+await fastify.register(creativeBriefRoutes, { prefix: '/api/creative-brief' });
+await fastify.register(seoAuditRoutes, { prefix: '/api/seo-audit' });
+await fastify.register(contentCalendarRoutes, { prefix: '/api/content-calendar' });
+await fastify.register(socialSchedulerRoutes, { prefix: '/api/social-scheduler' });
+await fastify.register(snippetLibraryRoutes, { prefix: '/api/snippet-library' });
+await fastify.register(assetLibraryRoutes, { prefix: '/api/asset-library' });
+await fastify.register(automationRoutes, { prefix: '/api/automations' });
+await fastify.register(intakeFormRoutes, { prefix: '/api/intake-forms' });
+await fastify.register(expenseRoutes, { prefix: '/api/expenses' });
+await fastify.register(commandCenterRoutes, { prefix: '/api/command-center' });
+await fastify.register(pushRoutes, { prefix: '/api/push' });
+await fastify.register(agentsRoutes, { prefix: '/api/agents' });
+await fastify.register(integrationsVpsRoutes, { prefix: '/api/integrations/vps' });
+await fastify.register(integrationsHostingerRoutes, { prefix: '/api/integrations/hostinger' });
+await fastify.register(integrationsGithubRoutes, { prefix: '/api/integrations/github' });
+  await fastify.register(trashRoutes, { prefix: '/api/trash' });
+  await fastify.register(draftRoutes, { prefix: '/api/draft' });
+await fastify.register(clientSuccessAgentRoutes, { prefix: '/api/client-success' });
+await fastify.register(financeAgentRoutes, { prefix: '/api/finance' });
+await fastify.register(opsAgentRoutes, { prefix: '/api/ops' });
+await fastify.register(creativeAgentRoutes, { prefix: '/api/creative' });
+await fastify.register(salesAgentRoutes, { prefix: '/api/sales' });
+await fastify.register(shopifyAgentRoutes, { prefix: '/api/shopify' });
+await fastify.register(upworkMessagesRoutes, { prefix: '/api/upwork-messages' });
+await fastify.register(upworkContractRoutes, { prefix: '/api/upwork-contracts' });
+await fastify.register(aiContextRoutes, { prefix: '/api/ai-context' });
+await fastify.register(revenueRoutes, { prefix: '/api/revenue' });
+await fastify.register(clientHealthRoutes, { prefix: '/api/client-health' });
+await fastify.register(invoiceChaserRoutes, { prefix: '/api/invoice-chaser' });
+await fastify.register(invoiceRoutes, { prefix: '/api/invoices' });
+await fastify.register(contractRoutes, { prefix: '/api/contracts' });
+await fastify.register(proposalRoutes, { prefix: '/api/proposals' });
+await fastify.register(proposalsAiRoutes, { prefix: '/api/proposals-ai' });
+await fastify.register(seoBlogRoutes, { prefix: '/api/seo-blog' });
+await fastify.register(socialContentRoutes, { prefix: '/api/social-content' });
+await fastify.register(leadGenRoutes, { prefix: '/api/lead-gen' });
+await fastify.register(coldEmailRoutes, { prefix: '/api/cold-email' });
+await fastify.register(linkedinOutreachRoutes, { prefix: '/api/linkedin-outreach' });
+await fastify.register(contentWriterRoutes, { prefix: '/api/content-writer' });
+await fastify.register(emailTriageRoutes, { prefix: '/api/email-triage' });
+await fastify.register(aiTeamRoutes, { prefix: '/api/ai-team' });
+await fastify.register(blogRoutes, { prefix: '/api/blog' });
+await fastify.register(socialRoutes, { prefix: '/api/social' });
+await fastify.register(outreachRoutes, { prefix: '/api/outreach' });
+await fastify.register(templateRoutes, { prefix: '/api/templates' });
+await fastify.register(portalRoutes, { prefix: '/api/portal' });
+await fastify.register(credentialRoutes, { prefix: '/api/credentials' });
+await fastify.register(leadRoutes, { prefix: '/api/leads' });
+await fastify.register(reportRoutes, { prefix: '/api/reports' });
+await fastify.register(retainerRoutes, { prefix: '/api/retainers' });
+await fastify.register(onboardingRoutes, { prefix: '/api/onboarding' });
+await fastify.register(botRoutes, { prefix: '/api/bot' });
+await fastify.register(approvalRoutes, { prefix: '/api/approvals' });
+await fastify.register(mailgunHitlRoutes, { prefix: '/api/mailgun-hitl' });
+await fastify.register(mailgunRoutes, { prefix: '/api/mailgun' });
+await fastify.register(messageRoutes, { prefix: '/api/messages' });
+await fastify.register(revisionRoutes, { prefix: '/api/revisions' });
+await fastify.register(calendarRoutes, { prefix: '/api/calendar' });
+await fastify.register(commentRoutes, { prefix: '/api/comments' });
+await fastify.register(activityRoutes, { prefix: '/api/activity' });
+await fastify.register(attachmentRoutes, { prefix: '/api/attachments' });
+await fastify.register(timeRoutes, { prefix: '/api/time' });
+await fastify.register(milestoneRoutes, { prefix: '/api/milestones' });
+await fastify.register(noteRoutes, { prefix: '/api/notes' });
+await fastify.register(ashChatRoutes, { prefix: '/api/ash-chat' });
+await fastify.register(chatRoutes, { prefix: '/api/chat' });
+await fastify.register(analyticsRoutes, { prefix: '/api/analytics' });
+await fastify.register(searchRoutes, { prefix: '/api/search' });
+await fastify.register(teamRoutes, { prefix: '/api/team' });
+await fastify.register(responseRoutes, { prefix: '/api/responses' });
+await fastify.register(threadRoutes, { prefix: '/api/threads' });
+await fastify.register(webhookRoutes, { prefix: '/api/webhooks' });
+await fastify.register(clientPortalRoutes, { prefix: '/api/client-portal' });
+await fastify.register(wordpressAgentRoutes, { prefix: '/api/wordpress' });
+await fastify.register(gmailRoutes, { prefix: '/api/gmail' });
+await fastify.register(clientAcquisitionRoutes, { prefix: '/api/client-acquisition' });
 // ... (all other routes would be registered here in a production app, condensed for space)
 
 // Hub-Hermes bridge initialization
@@ -210,6 +326,7 @@ if (!env.isDev) {
 fastify.setErrorHandler((error, request, reply) => {
   const statusCode = error.statusCode || 500;
   request.log.error({ err: error, userId: request.user?.id, url: request.url, method: request.method, organizationId: request.organizationId }, '🔥 Global Error Caught');
+  Sentry.captureException(error, { extra: { url: request.url, method: request.method, userId: request.user?.id, organizationId: request.organizationId, traceId: request.id } });
   reply.status(statusCode).send({ error: error.name || 'InternalServerError', message: error.message || 'An unexpected error occurred', statusCode, traceId: request.id });
 });
 
@@ -246,6 +363,7 @@ const start = async () => {
     logger.info(`🚀 Agency Hub running at http://localhost:${env.port}`);
     startRecurringInvoicesJob();
     startOverdueChecker();
+    startTrashPurgeJob();
   } catch (err) { fastify.log.error(err); process.exit(1); }
 };
 

@@ -7,6 +7,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      - MATON_API_KEY=${MATON_API_KEY}
     # ⚠️ Production overrides — no database/redis ports exposed to host
     # Postgres and Redis should run in separate stacks without host port mappings.
     # Use internal Docker networks only — never expose data stores to the internet.

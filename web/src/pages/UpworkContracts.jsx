@@ -18,6 +18,8 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
+import ComingSoonWrapper from '../components/ComingSoonWrapper';
+import { isComingSoon } from '../lib/featureFlags';
 
 const statusConfig = {
   ACTIVE: { label: 'Active', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400', icon: CheckCircle2 },
@@ -256,6 +258,7 @@ Draft a brief, professional message checking in on progress or providing an upda
 }
 
 export default function UpworkContracts() {
+  if (isComingSoon('upwork')) return <ComingSoonWrapper title="Upwork Contracts" />;
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);

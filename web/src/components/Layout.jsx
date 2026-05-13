@@ -1,4 +1,5 @@
 import GlobalAIChat from './GlobalAIChat';
+import QuickAdd from './QuickAdd';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -28,6 +29,7 @@ import {
   ChevronUp,
   Sparkles,
   Briefcase,
+  Linkedin,
   Key,
   Calculator,
   Calendar,
@@ -41,15 +43,20 @@ import {
   Phone,
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
-import { Download, Sun, Moon } from 'lucide-react';
+import { Download, Sun, Moon, Command } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
+import { isComingSoon } from '../lib/featureFlags';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import NotificationsDropdown from './NotificationsDropdown';
+import LiveTimer from './LiveTimer';
 import { Button } from './ui';
 import { useInstallPrompt } from '../hooks/useInstallPrompt';
 import { usePushNotifications } from '../hooks/usePushNotifications';
+import { useSocket } from '../hooks/useSocket';
+import OnboardingTour from './OnboardingTour';
 
 export default function Layout({ children }) {
   const location = useLocation();
@@ -66,7 +73,11 @@ export default function Layout({ children }) {
   const sidebarRef = useRef(null);
   const { isInstallable, install } = useInstallPrompt();
   const { permission, subscribed, subscribe } = usePushNotifications();
+  const { socket } = useSocket();
   const [installDismissed, setInstallDismissed] = useState(false);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+
+  const { showModal, closeModal } = useKeyboardShortcuts(navigate);
 
   // Auto-subscribe to push on login if permission already granted
   useEffect(() => {
@@ -74,6 +85,18 @@ export default function Layout({ children }) {
       subscribe();
     }
   }, [user, permission, subscribed, subscribe]);
+
+  // Cmd+K / Ctrl+K to open Quick Add
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setQuickAddOpen(prev => !prev);
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, []);
 
   const isAdmin = user?.role === 'ADMIN';
 
@@ -112,8 +135,8 @@ export default function Layout({ children }) {
   const coreNav = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard, exact: true },
     { name: 'Inbox', href: '/inbox', icon: Inbox, badge: stats?.needsResponse },
-    { name: 'Projects', href: '/projects', icon: FolderOpen },
-    { name: 'Clients', href: '/clients', icon: Users },
+    { name: 'Projects', href: '/projects', icon: FolderOpen, id: 'projects-link' },
+    { name: 'Clients', href: '/clients', icon: Users, id: 'clients-link' },
     { name: 'Invoices', href: '/invoices', icon: Receipt },
   ];
   
@@ -121,20 +144,21 @@ export default function Layout({ children }) {
   const growthNav = [
     { name: 'Client Acquisition', href: '/client-acquisition', icon: Target, badge: stats?.activeOutreach },
     { name: 'Lead Intelligence', href: '/lead-intelligence', icon: Search },
-    { name: 'Outreach', href: '/outreach', icon: Send },
+    { name: 'Cold Email', href: '/cold-email', icon: Mail, soon: isComingSoon('cold-email') },
+    { name: 'LinkedIn', href: '/linkedin', icon: Linkedin },
+    { name: 'Outreach', href: '/outreach', icon: Send, soon: isComingSoon('outreach-scheduler') },
     { name: 'Referral Network', href: '/referral-network', icon: Share2 },
-    { name: 'Call Block', href: '/call-block', icon: Phone },
   ];
 
   // Finance & Docs — collapsible section
   const financeNav = [
     { name: 'Pipeline', href: '/pipeline', icon: Filter },
-    { name: 'Proposals', href: '/proposals', icon: FileText },
+    { name: 'Proposals', href: '/proposals', icon: FileText, id: 'proposals-link' },
     { name: 'Estimates', href: '/estimates', icon: ClipboardList },
     { name: 'Contracts', href: '/contracts', icon: ScrollText },
     { name: 'Expenses', href: '/expenses', icon: Wallet },
     { name: 'Schedule', href: '/schedule', icon: Calendar },
-    { name: 'Upwork', href: '/upwork-contracts', icon: Briefcase },
+    { name: 'Upwork', href: '/upwork-contracts', icon: Briefcase, soon: isComingSoon('upwork') },
   ];
 
   // Admin — collapsible section, only visible to admins
@@ -188,6 +212,7 @@ export default function Layout({ children }) {
           to={item.href}
           onClick={() => setSidebarOpen(false)}
           title={sidebarCollapsed ? item.name : undefined}
+          id={item.id}
           className={cn(
             'flex items-center text-sm font-medium rounded-lg transition-all duration-150',
             sidebarCollapsed ? 'px-2.5 py-2 justify-center' : 'px-3 py-1.5',
@@ -199,6 +224,11 @@ export default function Layout({ children }) {
         >
           <item.icon className={cn('w-4 h-4 shrink-0', !sidebarCollapsed && 'mr-2.5')} />
           {!sidebarCollapsed && <span className="flex-1 truncate">{item.name}</span>}
+          {item.soon && !sidebarCollapsed && (
+            <span className="ml-1.5 px-1 py-0.5 text-[9px] font-semibold rounded bg-muted text-muted-foreground">
+              Soon
+            </span>
+          )}
           {badge > 0 && (
             sidebarCollapsed ? (
               <span className="absolute -top-1 -right-1 w-4 h-4 text-[9px] font-bold rounded-full bg-[#e6f354] text-[#2e2958] flex items-center justify-center">
@@ -449,6 +479,7 @@ export default function Layout({ children }) {
 
           {/* Right side actions */}
           <div className="flex items-center gap-2">
+            <LiveTimer socket={socket} />
             <QuickCreateMenu navigate={navigate} isAdmin={isAdmin} />
             <button
               onClick={toggleTheme}
@@ -540,7 +571,13 @@ export default function Layout({ children }) {
                 {/* More menu dropdown */}
                 {moreMenuOpen && (
                   <>
-                    <div className="fixed inset-0 z-50 bg-black/5 backdrop-blur-sm" onClick={() => setMoreMenuOpen(false)} aria-hidden="true" />
+                    <div
+          className="fixed inset-0 z-50 bg-black/5 backdrop-blur-sm"
+          onClick={() => setMoreMenuOpen(false)}
+          role="button"
+          tabIndex={0}
+          aria-label="Close menu"
+         />
                     <div className="absolute bottom-full right-2 mb-4 w-64 bg-card/90 backdrop-blur-xl border border-border/40 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-300" role="menu">
                       {/* Quick Actions */}
                       <div className="px-4 py-3 border-b border-border/40">
@@ -666,6 +703,54 @@ export default function Layout({ children }) {
 
       {/* Global AI Chat Widget */}
       <GlobalAIChat />
+
+      {/* Quick Add — Cmd+K command palette */}
+      <QuickAdd open={quickAddOpen} onClose={() => setQuickAddOpen(false)} />
+
+      {/* Keyboard Shortcuts Modal */}
+      {showModal && <ShortcutsModal onClose={closeModal} />}
+
+      {/* Onboarding Tour */}
+      {user && <OnboardingTour />}
+    </div>
+  );
+}
+
+function ShortcutsModal({ onClose }) {
+  const shortcuts = [
+    { keys: 'g + c', action: 'Go to Clients' },
+    { keys: 'g + p', action: 'Go to Projects' },
+    { keys: 'g + i', action: 'Go to Invoices' },
+    { keys: 'n + p', action: 'New Project' },
+    { keys: 'n + c', action: 'New Client' },
+    { keys: 'n + i', action: 'New Invoice' },
+    { keys: '?', action: 'Show shortcuts' },
+    { keys: 'Ctrl/Cmd + K', action: 'Quick add' },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-foreground/30 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <h3 className="text-base font-semibold text-foreground">Keyboard Shortcuts</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="px-5 py-3 space-y-2 max-h-[60vh] overflow-y-auto">
+          {shortcuts.map((s) => (
+            <div key={s.keys} className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">{s.action}</span>
+              <kbd className="px-2 py-1 text-xs font-mono font-medium bg-muted border border-border rounded">{s.keys}</kbd>
+            </div>
+          ))}
+        </div>
+        <div className="px-5 py-3 border-t border-border bg-muted/30">
+          <button onClick={onClose} className="w-full py-2 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+            Got it
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -697,7 +782,13 @@ function QuickCreateMenu({ navigate, isAdmin }) {
 
       {open && (
         <>
-          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div
+          className="fixed inset-0 z-40"
+          onClick={() => setOpen(false)}
+          role="button"
+          tabIndex={0}
+          aria-label="Close sidebar"
+        />
           <div className="absolute right-0 top-full mt-1 w-48 bg-card border border-border rounded-xl shadow-lg z-50 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
             {actions.map(({ label, icon: Icon, href }) => (
               <button
