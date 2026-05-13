@@ -1,4 +1,3 @@
-import prisma from '../config/db.js';
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import env from '../config/env.js';
@@ -13,7 +12,7 @@ export default async function estimateRoutes(fastify) {
     if (clientId) where.clientId = clientId;
     if (status) where.status = status;
 
-    const estimates = await prisma.estimate.findMany({
+    const estimates = await request.prisma.estimate.findMany({
       where,
       include: { client: { select: { id: true, name: true } } },
       orderBy: { createdAt: 'desc' }
@@ -26,7 +25,7 @@ export default async function estimateRoutes(fastify) {
   fastify.get('/:id', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
-    const estimate = await prisma.estimate.findUnique({
+    const estimate = await request.prisma.estimate.findUnique({
       where: { id: request.params.id },
       include: { client: { select: { id: true, name: true, email: true } } }
     });
@@ -48,7 +47,7 @@ export default async function estimateRoutes(fastify) {
     const taxAmount = tax || 0;
     const total = subtotal + taxAmount;
 
-    const estimate = await prisma.estimate.create({
+    const estimate = await request.prisma.estimate.create({
       data: {
         clientId,
         title,
@@ -70,7 +69,7 @@ export default async function estimateRoutes(fastify) {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const { id } = request.params;
-    const existing = await prisma.estimate.findUnique({ where: { id } });
+    const existing = await request.prisma.estimate.findUnique({ where: { id } });
     if (!existing) return reply.status(404).send({ error: 'Estimate not found' });
     if (existing.status !== 'DRAFT') return reply.status(400).send({ error: 'Only draft estimates can be edited' });
 
@@ -80,7 +79,7 @@ export default async function estimateRoutes(fastify) {
     const taxAmount = tax ?? existing.tax;
     const total = subtotal + taxAmount;
 
-    const estimate = await prisma.estimate.update({
+    const estimate = await request.prisma.estimate.update({
       where: { id },
       data: {
         ...(title !== undefined && { title }),
@@ -103,9 +102,9 @@ export default async function estimateRoutes(fastify) {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const { id } = request.params;
-    const existing = await prisma.estimate.findUnique({ where: { id } });
+    const existing = await request.prisma.estimate.findUnique({ where: { id } });
     if (!existing) return reply.status(404).send({ error: 'Estimate not found' });
-    await prisma.estimate.delete({ where: { id } });
+    await request.prisma.estimate.delete({ where: { id } });
     return { success: true };
   });
 
@@ -114,14 +113,14 @@ export default async function estimateRoutes(fastify) {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const { id } = request.params;
-    const estimate = await prisma.estimate.findUnique({
+    const estimate = await request.prisma.estimate.findUnique({
       where: { id },
       include: { client: true }
     });
     if (!estimate) return reply.status(404).send({ error: 'Estimate not found' });
     if (estimate.status !== 'DRAFT') return reply.status(400).send({ error: 'Only draft estimates can be sent' });
 
-    const updated = await prisma.estimate.update({
+    const updated = await request.prisma.estimate.update({
       where: { id },
       data: { status: 'SENT', sentAt: new Date() },
       include: { client: { select: { id: true, name: true } } }
@@ -170,7 +169,7 @@ export default async function estimateRoutes(fastify) {
 
   // Public view by token
   fastify.get('/view/:viewToken', async (request, reply) => {
-    const estimate = await prisma.estimate.findUnique({
+    const estimate = await request.prisma.estimate.findUnique({
       where: { viewToken: request.params.viewToken },
       include: { client: { select: { id: true, name: true, email: true } } }
     });
@@ -186,12 +185,12 @@ export default async function estimateRoutes(fastify) {
       return reply.status(400).send({ error: 'Action must be approve or decline' });
     }
 
-    const estimate = await prisma.estimate.findUnique({ where: { viewToken } });
+    const estimate = await request.prisma.estimate.findUnique({ where: { viewToken } });
     if (!estimate) return reply.status(404).send({ error: 'Estimate not found' });
     if (estimate.status !== 'SENT') return reply.status(400).send({ error: 'Estimate is not in a state that can be responded to' });
 
     const newStatus = action === 'approve' ? 'APPROVED' : 'DECLINED';
-    const updated = await prisma.estimate.update({
+    const updated = await request.prisma.estimate.update({
       where: { viewToken },
       data: { status: newStatus }
     });
@@ -204,7 +203,7 @@ export default async function estimateRoutes(fastify) {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const { id } = request.params;
-    const estimate = await prisma.estimate.findUnique({
+    const estimate = await request.prisma.estimate.findUnique({
       where: { id },
       include: { client: { select: { id: true, name: true } } }
     });
@@ -213,7 +212,7 @@ export default async function estimateRoutes(fastify) {
       return reply.status(400).send({ error: 'Only approved or sent estimates can be converted' });
     }
 
-    const proposal = await prisma.proposal.create({
+    const proposal = await request.prisma.proposal.create({
       data: {
         title: estimate.title,
         content: estimate.description || '',
@@ -226,7 +225,7 @@ export default async function estimateRoutes(fastify) {
       }
     });
 
-    await prisma.estimate.update({
+    await request.prisma.estimate.update({
       where: { id },
       data: { status: 'CONVERTED' }
     });

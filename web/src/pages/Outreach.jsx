@@ -7,6 +7,8 @@ import {
   Users, Plus, Search, Play, Pause, Mail, Sparkles, ChevronRight,
   Building2, Tag, Calendar, MoreHorizontal, X, Loader2, Send
 } from 'lucide-react';
+import ComingSoonWrapper from '../components/ComingSoonWrapper';
+import { isComingSoon } from '../lib/featureFlags';
 
 const STATUS_COLORS = {
   NEW: 'bg-blue-100 text-blue-700',
@@ -222,6 +224,7 @@ function CreateSequenceModal({ onClose, onCreated }) {
 }
 
 export default function Outreach() {
+  if (isComingSoon('outreach-scheduler')) return <ComingSoonWrapper title="Outreach Scheduler" />;
   const toast = useToast();
   const [tab, setTab] = useState('leads');
   const [showAddLead, setShowAddLead] = useState(false);

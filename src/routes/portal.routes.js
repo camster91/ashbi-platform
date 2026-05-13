@@ -1,6 +1,5 @@
 // Client Portal routes (public - no auth required, token-based access)
 
-import prisma from '../config/db.js';
 import { safeParse } from '../utils/safeParse.js';
 import { createPaymentLink } from '../services/stripe.service.js';
 import { onProposalApproved, onContractSigned } from '../services/automation.service.js';
@@ -14,7 +13,7 @@ export default async function portalRoutes(fastify) {
   fastify.get('/:token', async (request, reply) => {
     const { token } = request.params;
 
-    const project = await prisma.project.findUnique({
+    const project = await request.prisma.project.findUnique({
       where: { viewToken: token },
       include: {
         client: { select: { name: true } },
@@ -90,7 +89,7 @@ export default async function portalRoutes(fastify) {
   fastify.get('/proposal/:viewToken', async (request, reply) => {
     const { viewToken } = request.params;
 
-    const proposal = await prisma.proposal.findUnique({
+    const proposal = await request.prisma.proposal.findUnique({
       where: { viewToken },
       include: {
         lineItems: true,
@@ -112,7 +111,7 @@ export default async function portalRoutes(fastify) {
 
     // Mark as VIEWED if currently SENT
     if (proposal.status === 'SENT') {
-      await prisma.proposal.update({
+      await request.prisma.proposal.update({
         where: { id: proposal.id },
         data: { status: 'VIEWED' }
       });
@@ -147,7 +146,7 @@ export default async function portalRoutes(fastify) {
   fastify.post('/proposal/:viewToken/approve', async (request, reply) => {
     const { viewToken } = request.params;
 
-    const proposal = await prisma.proposal.findUnique({ where: { viewToken } });
+    const proposal = await request.prisma.proposal.findUnique({ where: { viewToken } });
     if (!proposal) {
       return reply.status(404).send({ error: 'Proposal not found' });
     }
@@ -161,7 +160,7 @@ export default async function portalRoutes(fastify) {
       return reply.status(400).send({ error: 'Proposal has expired' });
     }
 
-    const updated = await prisma.proposal.update({
+    const updated = await request.prisma.proposal.update({
       where: { id: proposal.id },
       data: {
         status: 'APPROVED',
@@ -182,7 +181,7 @@ export default async function portalRoutes(fastify) {
     const { viewToken } = request.params;
     const { reason } = request.body;
 
-    const proposal = await prisma.proposal.findUnique({ where: { viewToken } });
+    const proposal = await request.prisma.proposal.findUnique({ where: { viewToken } });
     if (!proposal) {
       return reply.status(404).send({ error: 'Proposal not found' });
     }
@@ -193,7 +192,7 @@ export default async function portalRoutes(fastify) {
       return reply.status(400).send({ error: 'Proposal already declined' });
     }
 
-    const updated = await prisma.proposal.update({
+    const updated = await request.prisma.proposal.update({
       where: { id: proposal.id },
       data: {
         status: 'DECLINED',
@@ -214,7 +213,7 @@ export default async function portalRoutes(fastify) {
   fastify.get('/contract/:signToken', async (request, reply) => {
     const { signToken } = request.params;
 
-    const contract = await prisma.contract.findUnique({
+    const contract = await request.prisma.contract.findUnique({
       where: { signToken },
       include: {
         client: {
@@ -253,7 +252,7 @@ export default async function portalRoutes(fastify) {
     const { signToken } = request.params;
     const { name, signature } = request.body;
 
-    const contract = await prisma.contract.findUnique({ where: { signToken } });
+    const contract = await request.prisma.contract.findUnique({ where: { signToken } });
     if (!contract) {
       return reply.status(404).send({ error: 'Contract not found' });
     }
@@ -268,7 +267,7 @@ export default async function portalRoutes(fastify) {
     const sigHash = crypto.createHash('sha256').update(signature).digest('hex');
     const now = new Date();
 
-    const updated = await prisma.contract.update({
+    const updated = await request.prisma.contract.update({
       where: { id: contract.id },
       data: {
         status: 'SIGNED',
@@ -298,7 +297,7 @@ export default async function portalRoutes(fastify) {
   fastify.get('/invoice/:viewToken', async (request, reply) => {
     const { viewToken } = request.params;
 
-    const invoice = await prisma.invoice.findUnique({
+    const invoice = await request.prisma.invoice.findUnique({
       where: { viewToken },
       include: {
         lineItems: { orderBy: { position: 'asc' } },
@@ -362,7 +361,7 @@ export default async function portalRoutes(fastify) {
   fastify.post('/invoice/:viewToken/pay', async (request, reply) => {
     const { viewToken } = request.params;
 
-    const invoice = await prisma.invoice.findUnique({ where: { viewToken } });
+    const invoice = await request.prisma.invoice.findUnique({ where: { viewToken } });
     if (!invoice) {
       return reply.status(404).send({ error: 'Invoice not found' });
     }
@@ -385,7 +384,7 @@ export default async function portalRoutes(fastify) {
       }
 
       // Store the payment link and intent ID
-      await prisma.invoice.update({
+      await request.prisma.invoice.update({
         where: { id: invoice.id },
         data: {
           stripePaymentLink: result.paymentLink,
@@ -406,7 +405,7 @@ export default async function portalRoutes(fastify) {
   fastify.get('/form/:viewToken', async (request, reply) => {
     const { viewToken } = request.params;
 
-    const form = await prisma.intakeForm.findUnique({
+    const form = await request.prisma.intakeForm.findUnique({
       where: { viewToken },
       include: {
         client: { select: { name: true } },
@@ -435,7 +434,7 @@ export default async function portalRoutes(fastify) {
     const { viewToken } = request.params;
     const { answers, respondentName, respondentEmail } = request.body;
 
-    const form = await prisma.intakeForm.findUnique({ where: { viewToken } });
+    const form = await request.prisma.intakeForm.findUnique({ where: { viewToken } });
 
     if (!form) {
       return reply.status(404).send({ error: 'Form not found' });
@@ -445,7 +444,7 @@ export default async function portalRoutes(fastify) {
       return reply.status(410).send({ error: 'This form is no longer accepting responses' });
     }
 
-    const response = await prisma.intakeFormResponse.create({
+    const response = await request.prisma.intakeFormResponse.create({
       data: {
         formId: form.id,
         answers: JSON.stringify(answers || {}),
@@ -494,7 +493,7 @@ export default async function portalRoutes(fastify) {
     const dayStart = new Date(date + 'T00:00:00');
     const dayEnd = new Date(date + 'T23:59:59');
 
-    const existingEvents = await prisma.calendarEvent.findMany({
+    const existingEvents = await request.prisma.calendarEvent.findMany({
       where: {
         startTime: { gte: dayStart },
         endTime: { lte: dayEnd }
@@ -560,7 +559,7 @@ export default async function portalRoutes(fastify) {
     }
 
     // Check for conflicts
-    const conflict = await prisma.calendarEvent.findFirst({
+    const conflict = await request.prisma.calendarEvent.findFirst({
       where: {
         AND: [
           { startTime: { lt: endTime } },
@@ -574,7 +573,7 @@ export default async function portalRoutes(fastify) {
     }
 
     // Get or use a system user for createdById (first admin)
-    const adminUser = await prisma.user.findFirst({
+    const adminUser = await request.prisma.user.findFirst({
       where: { role: 'ADMIN' },
       select: { id: true }
     });
@@ -583,7 +582,7 @@ export default async function portalRoutes(fastify) {
       return reply.status(500).send({ error: 'System configuration error' });
     }
 
-    const event = await prisma.calendarEvent.create({
+    const event = await request.prisma.calendarEvent.create({
       data: {
         title: `Booking: ${name}`,
         description: `Client booking\nName: ${name}\nEmail: ${email}${phone ? `\nPhone: ${phone}` : ''}${notes ? `\nNotes: ${notes}` : ''}`,

@@ -1,6 +1,5 @@
 // Notes & Documents routes
 
-import prisma from '../config/db.js';
 
 export default async function noteRoutes(fastify) {
   // List ALL notes across all projects (global docs view)
@@ -20,7 +19,7 @@ export default async function noteRoutes(fastify) {
       ];
     }
 
-    const notes = await prisma.note.findMany({
+    const notes = await request.prisma.note.findMany({
       where,
       include: {
         author: { select: { id: true, name: true } },
@@ -57,7 +56,7 @@ export default async function noteRoutes(fastify) {
       ];
     }
 
-    const notes = await prisma.note.findMany({
+    const notes = await request.prisma.note.findMany({
       where,
       include: {
         author: { select: { id: true, name: true } }
@@ -80,7 +79,7 @@ export default async function noteRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const note = await prisma.note.findUnique({
+    const note = await request.prisma.note.findUnique({
       where: { id },
       include: {
         author: { select: { id: true, name: true } },
@@ -109,7 +108,7 @@ export default async function noteRoutes(fastify) {
       return reply.status(400).send({ error: 'Title is required' });
     }
 
-    const note = await prisma.note.create({
+    const note = await request.prisma.note.create({
       data: {
         title,
         content: content || '',
@@ -125,7 +124,7 @@ export default async function noteRoutes(fastify) {
     });
 
     // Log activity
-    await prisma.activity.create({
+    await request.prisma.activity.create({
       data: {
         type: 'NOTE_CREATED',
         action: 'created',
@@ -150,7 +149,7 @@ export default async function noteRoutes(fastify) {
     const { id } = request.params;
     const { title, content, type, tags, isPinned } = request.body;
 
-    const existing = await prisma.note.findUnique({ where: { id } });
+    const existing = await request.prisma.note.findUnique({ where: { id } });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Note not found' });
@@ -163,7 +162,7 @@ export default async function noteRoutes(fastify) {
     if (tags !== undefined) data.tags = JSON.stringify(tags);
     if (isPinned !== undefined) data.isPinned = isPinned;
 
-    const note = await prisma.note.update({
+    const note = await request.prisma.note.update({
       where: { id },
       data,
       include: {
@@ -172,7 +171,7 @@ export default async function noteRoutes(fastify) {
     });
 
     // Log activity
-    await prisma.activity.create({
+    await request.prisma.activity.create({
       data: {
         type: 'NOTE_UPDATED',
         action: 'updated',
@@ -196,7 +195,7 @@ export default async function noteRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const existing = await prisma.note.findUnique({ where: { id } });
+    const existing = await request.prisma.note.findUnique({ where: { id } });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Note not found' });
@@ -207,7 +206,7 @@ export default async function noteRoutes(fastify) {
       return reply.status(403).send({ error: 'Cannot delete this note' });
     }
 
-    await prisma.note.delete({ where: { id } });
+    await request.prisma.note.delete({ where: { id } });
 
     return { success: true };
   });
@@ -218,13 +217,13 @@ export default async function noteRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const existing = await prisma.note.findUnique({ where: { id } });
+    const existing = await request.prisma.note.findUnique({ where: { id } });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Note not found' });
     }
 
-    const note = await prisma.note.update({
+    const note = await request.prisma.note.update({
       where: { id },
       data: { isPinned: !existing.isPinned }
     });

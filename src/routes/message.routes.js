@@ -1,6 +1,5 @@
 // Multi-platform message paste intake routes
 
-import prisma from '../config/db.js';
 import aiClient from '../ai/client.js';
 
 export default async function messageRoutes(fastify) {
@@ -80,7 +79,7 @@ Respond with JSON:
       const createdTasks = [];
       if (projectId && extracted.actionItems?.length > 0) {
         for (const item of extracted.actionItems) {
-          const task = await prisma.task.create({
+          const task = await request.prisma.task.create({
             data: {
               title: item.task,
               priority: item.priority || 'NORMAL',
@@ -97,13 +96,13 @@ Respond with JSON:
       // Create a thread if there's enough context
       let createdThread = null;
       if (projectId && extracted.summary) {
-        const project = await prisma.project.findUnique({
+        const project = await request.prisma.project.findUnique({
           where: { id: projectId },
           select: { clientId: true }
         });
 
         if (project) {
-          createdThread = await prisma.thread.create({
+          createdThread = await request.prisma.thread.create({
             data: {
               subject: `[${source.toUpperCase()}] ${extracted.summary.substring(0, 100)}`,
               status: 'OPEN',

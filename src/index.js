@@ -48,7 +48,6 @@ import approvalRoutes from './routes/approvals.routes.js';
 import dashboardRoutes from './routes/dashboard.routes.js';
 import botRoutes from './routes/bot.routes.js';
 import onboardingRoutes from './routes/onboarding.routes.js';
-import trashRoutes from './routes/trash.routes.js';
 import retainerRoutes from './routes/retainer.routes.js';
 import reportRoutes from './routes/reports.routes.js';
 import leadRoutes from './routes/leads.routes.js';
@@ -68,7 +67,6 @@ import socialContentRoutes from './routes/social-content.routes.js';
 import seoBlogRoutes from './routes/seo-blog.routes.js';
 import proposalsAiRoutes from './routes/proposals-ai.routes.js';
 import proposalRoutes from './routes/proposal.routes.js';
-import notionSyncRoutes from './routes/notion-sync.routes.js';
 import contractRoutes from './routes/contract.routes.js';
 import invoiceRoutes from './routes/invoice.routes.js';
 import invoiceChaserRoutes from './routes/invoice-chaser.routes.js';
@@ -98,10 +96,11 @@ import automationRoutes from './routes/automation.routes.js';
 import intakeFormRoutes from './routes/intake-form.routes.js';
 import brandRoutes from './routes/brand.routes.js';
 import { startOverdueChecker } from './services/automation.service.js';
+import { startTrashPurgeJob } from './jobs/trash-purge.js';
 import pipelineRoutes from './routes/pipeline.routes.js';
 import { initHermesBridge } from './agents/hub-hermes.integration.js';
 import timeTrackingRoutes from './routes/time-tracking.routes.js';
-import timeSessionRoutes from './routes/time-session.routes.js';
+import timeSessionRoutes from './routes/time-sessions.routes.js';
 import semanticSearchRoutes from './routes/semantic-search.routes.js';
 import adCopyRoutes from './routes/ad-copy.routes.js';
 import creativeBriefRoutes from './routes/creative-brief.routes.js';
@@ -125,6 +124,8 @@ import proposalBuilderRoutes from './routes/proposal-builder.routes.js';
 import coldCallRoutes from './routes/cold-call.routes.js';
 import upworkAutoAlertRoutes from './routes/upwork-auto-alert.routes.js';
 import clientAcquisitionRoutes from './routes/client-acquisition.routes.js';
+import trashRoutes from './routes/trash.routes.js';
+import draftRoutes from './routes/draft.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -225,10 +226,10 @@ await fastify.register(estimateRoutes, { prefix: '/api/estimates' });
 await fastify.register(rateCardRoutes, { prefix: '/api/rate-cards' });
 await fastify.register(bookkeepingRoutes, { prefix: '/api/bookkeeping' });
 await fastify.register(integrationRoutes, { prefix: '/api/integrations' });
-await fastify.register(notionSyncRoutes, { prefix: '/api/notion-sync' });
 await fastify.register(brandRoutes, { prefix: '/api/brand' });
 await fastify.register(pipelineRoutes, { prefix: '/api/pipeline' });
 await fastify.register(timeTrackingRoutes, { prefix: '/api/time-tracking' });
+await fastify.register(timeSessionRoutes, { prefix: '/api/time-sessions' });
 await fastify.register(semanticSearchRoutes, { prefix: '/api/semantic-search' });
 await fastify.register(adCopyRoutes, { prefix: '/api/ad-copy' });
 await fastify.register(creativeBriefRoutes, { prefix: '/api/creative-brief' });
@@ -246,6 +247,8 @@ await fastify.register(agentsRoutes, { prefix: '/api/agents' });
 await fastify.register(integrationsVpsRoutes, { prefix: '/api/integrations/vps' });
 await fastify.register(integrationsHostingerRoutes, { prefix: '/api/integrations/hostinger' });
 await fastify.register(integrationsGithubRoutes, { prefix: '/api/integrations/github' });
+  await fastify.register(trashRoutes, { prefix: '/api/trash' });
+  await fastify.register(draftRoutes, { prefix: '/api/draft' });
 await fastify.register(clientSuccessAgentRoutes, { prefix: '/api/client-success' });
 await fastify.register(financeAgentRoutes, { prefix: '/api/finance' });
 await fastify.register(opsAgentRoutes, { prefix: '/api/ops' });
@@ -265,7 +268,6 @@ await fastify.register(proposalsAiRoutes, { prefix: '/api/proposals-ai' });
 await fastify.register(seoBlogRoutes, { prefix: '/api/seo-blog' });
 await fastify.register(socialContentRoutes, { prefix: '/api/social-content' });
 await fastify.register(leadGenRoutes, { prefix: '/api/lead-gen' });
-await fastify.register(callScreenerRoutes, { prefix: '/api/call-screener' });
 await fastify.register(coldEmailRoutes, { prefix: '/api/cold-email' });
 await fastify.register(linkedinOutreachRoutes, { prefix: '/api/linkedin-outreach' });
 await fastify.register(contentWriterRoutes, { prefix: '/api/content-writer' });
@@ -306,8 +308,6 @@ await fastify.register(clientPortalRoutes, { prefix: '/api/client-portal' });
 await fastify.register(wordpressAgentRoutes, { prefix: '/api/wordpress' });
 await fastify.register(gmailRoutes, { prefix: '/api/gmail' });
 await fastify.register(clientAcquisitionRoutes, { prefix: '/api/client-acquisition' });
-await fastify.register(trashRoutes, { prefix: '/api/trash' });
-await fastify.register(timeSessionRoutes, { prefix: '/api/time-sessions' });
 // ... (all other routes would be registered here in a production app, condensed for space)
 
 // Hub-Hermes bridge initialization
@@ -321,13 +321,6 @@ if (!env.isDev) {
     reply.status(404).send({ error: 'Not found' });
   });
 }
-
-// Proposal PDF storage files
-await fastify.register(fastifyStatic, {
-  root: path.resolve(__dirname, '../storage/proposals'),
-  prefix: '/storage/proposals/',
-  decorateReply: false
-});
 
 // Global Error Handler (Enterprise Grade)
 fastify.setErrorHandler((error, request, reply) => {
@@ -370,6 +363,7 @@ const start = async () => {
     logger.info(`🚀 Agency Hub running at http://localhost:${env.port}`);
     startRecurringInvoicesJob();
     startOverdueChecker();
+    startTrashPurgeJob();
   } catch (err) { fastify.log.error(err); process.exit(1); }
 };
 

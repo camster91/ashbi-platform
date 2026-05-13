@@ -1,6 +1,5 @@
 // Revision round tracking routes
 
-import prisma from '../config/db.js';
 
 export default async function revisionRoutes(fastify) {
   // List revision rounds for a project
@@ -9,7 +8,7 @@ export default async function revisionRoutes(fastify) {
   }, async (request) => {
     const { projectId } = request.params;
 
-    const revisions = await prisma.revisionRound.findMany({
+    const revisions = await request.prisma.revisionRound.findMany({
       where: { projectId },
       orderBy: { roundNumber: 'desc' }
     });
@@ -25,13 +24,13 @@ export default async function revisionRoutes(fastify) {
     const { notes } = request.body || {};
 
     // Get the next round number
-    const lastRound = await prisma.revisionRound.findFirst({
+    const lastRound = await request.prisma.revisionRound.findFirst({
       where: { projectId },
       orderBy: { roundNumber: 'desc' }
     });
     const roundNumber = (lastRound?.roundNumber || 0) + 1;
 
-    const revision = await prisma.revisionRound.create({
+    const revision = await request.prisma.revisionRound.create({
       data: {
         projectId,
         roundNumber,
@@ -54,7 +53,7 @@ export default async function revisionRoutes(fastify) {
     if (status) data.status = status;
     if (notes !== undefined) data.notes = notes;
 
-    const revision = await prisma.revisionRound.update({
+    const revision = await request.prisma.revisionRound.update({
       where: { id },
       data
     });
@@ -68,7 +67,7 @@ export default async function revisionRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const revision = await prisma.revisionRound.update({
+    const revision = await request.prisma.revisionRound.update({
       where: { id },
       data: {
         status: 'APPROVED',

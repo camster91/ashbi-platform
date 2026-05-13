@@ -1,11 +1,10 @@
-import prisma from '../config/db.js';
 
 export default async function integrationRoutes(fastify) {
   // List connected integrations
   fastify.get('/', {
     onRequest: [fastify.authenticate]
   }, async () => {
-    const integrations = await prisma.integration.findMany({
+    const integrations = await request.prisma.integration.findMany({
       orderBy: { type: 'asc' }
     });
     return { integrations };
@@ -16,7 +15,7 @@ export default async function integrationRoutes(fastify) {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const { type } = request.params;
-    const integration = await prisma.integration.findFirst({
+    const integration = await request.prisma.integration.findFirst({
       where: { type: type.toUpperCase() }
     });
     if (!integration) {
@@ -38,7 +37,7 @@ export default async function integrationRoutes(fastify) {
 
     // In production, this would generate OAuth redirect URLs
     // For now, we create a placeholder record
-    const integration = await prisma.integration.upsert({
+    const integration = await request.prisma.integration.upsert({
       where: { id: `${typeUpper}_placeholder` },
       update: { status: 'CONNECTED', lastSyncAt: new Date() },
       create: {
@@ -59,7 +58,7 @@ export default async function integrationRoutes(fastify) {
     const { type } = request.params;
     const typeUpper = type.toUpperCase();
 
-    const integration = await prisma.integration.findFirst({
+    const integration = await request.prisma.integration.findFirst({
       where: { type: typeUpper }
     });
 
@@ -67,7 +66,7 @@ export default async function integrationRoutes(fastify) {
       return reply.status(404).send({ error: 'Integration not found' });
     }
 
-    await prisma.integration.update({
+    await request.prisma.integration.update({
       where: { id: integration.id },
       data: { status: 'DISCONNECTED', accessToken: null, refreshToken: null, orgId: null }
     });
@@ -82,7 +81,7 @@ export default async function integrationRoutes(fastify) {
     const { type } = request.params;
     const typeUpper = type.toUpperCase();
 
-    const integration = await prisma.integration.findFirst({
+    const integration = await request.prisma.integration.findFirst({
       where: { type: typeUpper }
     });
 
@@ -91,7 +90,7 @@ export default async function integrationRoutes(fastify) {
     }
 
     // Update last sync time
-    await prisma.integration.update({
+    await request.prisma.integration.update({
       where: { id: integration.id },
       data: { lastSyncAt: new Date() }
     });

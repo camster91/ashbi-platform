@@ -1,6 +1,5 @@
 // Team management routes
 
-import prisma from '../config/db.js';
 import bcrypt from 'bcrypt';
 
 async function hashPassword(password) {
@@ -12,7 +11,7 @@ export default async function teamRoutes(fastify) {
   fastify.get('/', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
-    const team = await prisma.user.findMany({
+    const team = await request.prisma.user.findMany({
       select: {
         id: true,
         email: true,
@@ -49,12 +48,12 @@ export default async function teamRoutes(fastify) {
     const { email, password, name, role = 'TEAM', skills = [], capacity = 100 } = request.body;
 
     // Check for existing email
-    const existing = await prisma.user.findUnique({ where: { email } });
+    const existing = await request.prisma.user.findUnique({ where: { email } });
     if (existing) {
       return reply.status(400).send({ error: 'Email already registered' });
     }
 
-    const user = await prisma.user.create({
+    const user = await request.prisma.user.create({
       data: {
         email,
         password: await hashPassword(password),
@@ -86,7 +85,7 @@ export default async function teamRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const member = await prisma.user.findUnique({
+    const member = await request.prisma.user.findUnique({
       where: { id },
       select: {
         id: true,
@@ -141,7 +140,7 @@ export default async function teamRoutes(fastify) {
     if (capacity !== undefined) data.capacity = capacity;
     if (isActive !== undefined) data.isActive = isActive;
 
-    const member = await prisma.user.update({
+    const member = await request.prisma.user.update({
       where: { id },
       data,
       select: {
@@ -165,7 +164,7 @@ export default async function teamRoutes(fastify) {
   fastify.get('/workload', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
-    const team = await prisma.user.findMany({
+    const team = await request.prisma.user.findMany({
       where: { isActive: true },
       select: {
         id: true,
@@ -219,7 +218,7 @@ export default async function teamRoutes(fastify) {
     const { id } = request.params;
     const { newPassword } = request.body;
 
-    await prisma.user.update({
+    await request.prisma.user.update({
       where: { id },
       data: { password: await hashPassword(newPassword) }
     });
@@ -231,7 +230,7 @@ export default async function teamRoutes(fastify) {
   fastify.get('/allocations', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
-    const team = await prisma.user.findMany({
+    const team = await request.prisma.user.findMany({
       where: { isActive: true, role: { not: 'BOT' } },
       select: {
         id: true, name: true, role: true, capacity: true, hourlyRate: true,

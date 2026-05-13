@@ -1,6 +1,5 @@
 // Upwork Contract Tracker routes
 
-import prisma from '../config/db.js';
 
 export default async function upworkContractRoutes(fastify) {
   // List all contracts
@@ -11,7 +10,7 @@ export default async function upworkContractRoutes(fastify) {
     const where = {};
     if (status) where.status = status;
 
-    const contracts = await prisma.upworkContract.findMany({
+    const contracts = await request.prisma.upworkContract.findMany({
       where,
       orderBy: [
         { status: 'asc' },
@@ -33,7 +32,7 @@ export default async function upworkContractRoutes(fastify) {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const { id } = request.params;
-    const contract = await prisma.upworkContract.findUnique({ where: { id } });
+    const contract = await request.prisma.upworkContract.findUnique({ where: { id } });
     if (!contract) return reply.status(404).send({ error: 'Contract not found' });
     return contract;
   });
@@ -53,7 +52,7 @@ export default async function upworkContractRoutes(fastify) {
       return reply.status(400).send({ error: 'clientName and projectName are required' });
     }
 
-    const contract = await prisma.upworkContract.create({
+    const contract = await request.prisma.upworkContract.create({
       data: {
         clientName,
         projectName,
@@ -102,7 +101,7 @@ export default async function upworkContractRoutes(fastify) {
       data.lastMessageAt = request.body.lastMessageAt ? new Date(request.body.lastMessageAt) : null;
     }
 
-    const contract = await prisma.upworkContract.update({
+    const contract = await request.prisma.upworkContract.update({
       where: { id },
       data
     });
@@ -115,7 +114,7 @@ export default async function upworkContractRoutes(fastify) {
     onRequest: [fastify.adminOnly]
   }, async (request, reply) => {
     const { id } = request.params;
-    await prisma.upworkContract.delete({ where: { id } });
+    await request.prisma.upworkContract.delete({ where: { id } });
     return { success: true };
   });
 }

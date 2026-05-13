@@ -1,6 +1,5 @@
 // Analytics routes
 
-import prisma from '../config/db.js';
 
 export default async function analyticsRoutes(fastify) {
   fastify.get('/overview', {
@@ -20,14 +19,14 @@ export default async function analyticsRoutes(fastify) {
       threadsThisPeriod,
       resolvedThisPeriod
     ] = await Promise.all([
-      prisma.thread.count(),
-      prisma.thread.count({ where: { status: { not: 'RESOLVED' } } }),
-      prisma.thread.count({ where: { status: 'RESOLVED' } }),
-      prisma.client.count({ where: { status: 'ACTIVE' } }),
-      prisma.project.count({ where: { status: 'ACTIVE' } }),
-      prisma.response.count({ where: { status: 'PENDING_APPROVAL' } }),
-      prisma.thread.count({ where: { createdAt: { gte: startDate } } }),
-      prisma.thread.count({
+      request.prisma.thread.count(),
+      request.prisma.thread.count({ where: { status: { not: 'RESOLVED' } } }),
+      request.prisma.thread.count({ where: { status: 'RESOLVED' } }),
+      request.prisma.client.count({ where: { status: 'ACTIVE' } }),
+      request.prisma.project.count({ where: { status: 'ACTIVE' } }),
+      request.prisma.response.count({ where: { status: 'PENDING_APPROVAL' } }),
+      request.prisma.thread.count({ where: { createdAt: { gte: startDate } } }),
+      request.prisma.thread.count({
         where: {
           status: 'RESOLVED',
           updatedAt: { gte: startDate }
@@ -36,14 +35,14 @@ export default async function analyticsRoutes(fastify) {
     ]);
 
     // Project health breakdown
-    const projectHealth = await prisma.project.groupBy({
+    const projectHealth = await request.prisma.project.groupBy({
       by: ['health'],
       where: { status: 'ACTIVE' },
       _count: true
     });
 
     // Priority breakdown
-    const priorityBreakdown = await prisma.thread.groupBy({
+    const priorityBreakdown = await request.prisma.thread.groupBy({
       by: ['priority'],
       where: { status: { not: 'RESOLVED' } },
       _count: true
@@ -84,7 +83,7 @@ export default async function analyticsRoutes(fastify) {
     startDate.setDate(startDate.getDate() - parseInt(days));
 
     // Get responses with timing data
-    const responses = await prisma.response.findMany({
+    const responses = await request.prisma.response.findMany({
       where: {
         status: 'SENT',
         sentAt: { gte: startDate }
@@ -149,7 +148,7 @@ export default async function analyticsRoutes(fastify) {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - parseInt(days));
 
-    const team = await prisma.user.findMany({
+    const team = await request.prisma.user.findMany({
       where: { isActive: true },
       select: {
         id: true,
@@ -170,7 +169,7 @@ export default async function analyticsRoutes(fastify) {
     });
 
     // Get resolved threads per user
-    const resolvedByUser = await prisma.thread.groupBy({
+    const resolvedByUser = await request.prisma.thread.groupBy({
       by: ['assignedToId'],
       where: {
         status: 'RESOLVED',
@@ -200,7 +199,7 @@ export default async function analyticsRoutes(fastify) {
   fastify.get('/clients', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
-    const clients = await prisma.client.findMany({
+    const clients = await request.prisma.client.findMany({
       where: { status: 'ACTIVE' },
       include: {
         _count: {
@@ -260,23 +259,23 @@ export default async function analyticsRoutes(fastify) {
       projectsByStatus
     ] = await Promise.all([
       // Active projects (not LAUNCHED, CANCELLED)
-      prisma.project.count({
+      request.prisma.project.count({
         where: { status: { notIn: ['LAUNCHED', 'CANCELLED'] } }
       }),
       // Outstanding invoices (SENT + OVERDUE)
-      prisma.invoice.findMany({
+      request.prisma.invoice.findMany({
         where: { status: { in: ['SENT'] } },
         select: { total: true, dueDate: true }
       }),
       // Tasks due this week
-      prisma.task.count({
+      request.prisma.task.count({
         where: {
           status: { not: 'COMPLETED' },
           dueDate: { lte: endOfWeek, gte: now }
         }
       }),
       // Recent activity
-      prisma.activity.findMany({
+      request.prisma.activity.findMany({
         orderBy: { createdAt: 'desc' },
         take: 10,
         include: {
@@ -285,7 +284,7 @@ export default async function analyticsRoutes(fastify) {
         }
       }),
       // Projects by status
-      prisma.project.groupBy({
+      request.prisma.project.groupBy({
         by: ['status'],
         _count: true
       })
@@ -321,13 +320,13 @@ export default async function analyticsRoutes(fastify) {
     startDate.setHours(0, 0, 0, 0);
 
     // Daily thread counts
-    const threads = await prisma.thread.findMany({
+    const threads = await request.prisma.thread.findMany({
       where: { createdAt: { gte: startDate } },
       select: { createdAt: true, status: true, priority: true },
     });
 
     // Daily invoice revenue
-    const invoices = await prisma.invoice.findMany({
+    const invoices = await request.prisma.invoice.findMany({
       where: { status: { in: ['PAID'] }, updatedAt: { gte: startDate } },
       select: { total: true, updatedAt: true },
     });
@@ -373,31 +372,31 @@ export default async function analyticsRoutes(fastify) {
       aiGeneratedResponses,
       approvedAiResponses
     ] = await Promise.all([
-      prisma.thread.count({
+      request.prisma.thread.count({
         where: {
           createdAt: { gte: startDate },
           matchConfidence: { gt: 0 }
         }
       }),
-      prisma.thread.count({
+      request.prisma.thread.count({
         where: {
           createdAt: { gte: startDate },
           matchConfidence: { gte: 0.85 }
         }
       }),
-      prisma.thread.count({
+      request.prisma.thread.count({
         where: {
           createdAt: { gte: startDate },
           needsTriage: true
         }
       }),
-      prisma.response.count({
+      request.prisma.response.count({
         where: {
           createdAt: { gte: startDate },
           aiGenerated: true
         }
       }),
-      prisma.response.count({
+      request.prisma.response.count({
         where: {
           createdAt: { gte: startDate },
           aiGenerated: true,

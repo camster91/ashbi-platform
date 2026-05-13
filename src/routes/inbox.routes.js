@@ -1,6 +1,5 @@
 // Inbox routes
 
-import prisma from '../config/db.js';
 import { safeParse } from '../utils/safeParse.js';
 
 export default async function inboxRoutes(fastify) {
@@ -36,7 +35,7 @@ export default async function inboxRoutes(fastify) {
     }
 
     const [threads, total] = await Promise.all([
-      prisma.thread.findMany({
+      request.prisma.thread.findMany({
         where,
         include: {
           client: { select: { id: true, name: true } },
@@ -67,7 +66,7 @@ export default async function inboxRoutes(fastify) {
         skip: (page - 1) * limit,
         take: limit
       }),
-      prisma.thread.count({ where })
+      request.prisma.thread.count({ where })
     ]);
 
     return {
@@ -85,7 +84,7 @@ export default async function inboxRoutes(fastify) {
   fastify.get('/unmatched', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
-    const unmatched = await prisma.unmatchedEmail.findMany({
+    const unmatched = await request.prisma.unmatchedEmail.findMany({
       where: { status: 'PENDING' },
       orderBy: { createdAt: 'desc' }
     });
@@ -104,7 +103,7 @@ export default async function inboxRoutes(fastify) {
     const { id } = request.params;
     const { clientId, projectId, createNewClient } = request.body;
 
-    const unmatched = await prisma.unmatchedEmail.findUnique({
+    const unmatched = await request.prisma.unmatchedEmail.findUnique({
       where: { id }
     });
 
@@ -117,7 +116,7 @@ export default async function inboxRoutes(fastify) {
     // Create new client if requested
     if (createNewClient) {
       const domain = unmatched.senderEmail.split('@')[1];
-      const client = await prisma.client.create({
+      const client = await request.prisma.client.create({
         data: {
           name: createNewClient.name || domain,
           domain
@@ -126,7 +125,7 @@ export default async function inboxRoutes(fastify) {
       targetClientId = client.id;
 
       // Create contact
-      await prisma.contact.create({
+      await request.prisma.contact.create({
         data: {
           email: unmatched.senderEmail,
           name: unmatched.senderName || unmatched.senderEmail.split('@')[0],
@@ -137,7 +136,7 @@ export default async function inboxRoutes(fastify) {
     }
 
     // Create thread from unmatched email
-    const thread = await prisma.thread.create({
+    const thread = await request.prisma.thread.create({
       data: {
         subject: unmatched.subject,
         clientId: targetClientId,
@@ -160,7 +159,7 @@ export default async function inboxRoutes(fastify) {
     });
 
     // Mark unmatched as resolved
-    await prisma.unmatchedEmail.update({
+    await request.prisma.unmatchedEmail.update({
       where: { id },
       data: {
         status: 'RESOLVED',
@@ -177,7 +176,7 @@ export default async function inboxRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    await prisma.unmatchedEmail.update({
+    await request.prisma.unmatchedEmail.update({
       where: { id },
       data: {
         status: 'IGNORED',
@@ -203,11 +202,11 @@ export default async function inboxRoutes(fastify) {
       critical,
       pendingApproval
     ] = await Promise.all([
-      prisma.thread.count({ where: { ...where, status: { not: 'RESOLVED' } } }),
-      prisma.thread.count({ where: { ...where, status: 'AWAITING_RESPONSE' } }),
-      prisma.thread.count({ where: { ...where, needsTriage: true } }),
-      prisma.thread.count({ where: { ...where, priority: 'CRITICAL', status: { not: 'RESOLVED' } } }),
-      prisma.response.count({ where: { status: 'PENDING_APPROVAL' } })
+      request.prisma.thread.count({ where: { ...where, status: { not: 'RESOLVED' } } }),
+      request.prisma.thread.count({ where: { ...where, status: 'AWAITING_RESPONSE' } }),
+      request.prisma.thread.count({ where: { ...where, needsTriage: true } }),
+      request.prisma.thread.count({ where: { ...where, priority: 'CRITICAL', status: { not: 'RESOLVED' } } }),
+      request.prisma.response.count({ where: { status: 'PENDING_APPROVAL' } })
     ]);
 
     return {

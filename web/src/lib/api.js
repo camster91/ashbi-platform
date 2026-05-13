@@ -469,6 +469,14 @@ export const api = {
   createManualTimeEntry: (data) =>
     request('/time-tracking/manual', { method: 'POST', body: data }),
 
+  // Time Sessions (live timer)
+  startTimeSession: (data) =>
+    request('/time-sessions', { method: 'POST', body: data }),
+  stopTimeSession: (id) =>
+    request(`/time-sessions/${id}/stop`, { method: 'POST' }),
+  getRunningTimeSession: () =>
+    request('/time-sessions/running'),
+
   // Activity Feed
   getProjectActivity: (projectId, params = {}) => {
     const query = new URLSearchParams(params).toString();
@@ -575,17 +583,16 @@ export const api = {
     request(`/proposals/${id}/send`, { method: 'POST' }),
   duplicateProposal: (id) =>
     request(`/proposals/${id}/duplicate`, { method: 'POST' }),
-
-  // ===== PROPOSALS PIPELINE (Phase 3a) =====
-  /** AI-generate a proposal from client + services */
-  aiGenerateProposal: (data) =>
-    request('/proposals/generate', { method: 'POST', body: data }),
-  /** Convert proposal to PDF */
-  proposalGeneratePdf: (id) =>
-    request(`/proposals/${id}/pdf`, { method: 'POST' }),
-  /** Send proposal via Gmail — body: { email, subject, body } */
-  proposalSendViaGmail: (id, data = {}) =>
-    request(`/proposals/${id}/send`, { method: 'POST', body: data }),
+  // Bulk proposal actions
+  bulkSendProposals: (ids) =>
+    request('/proposals/bulk/send', { method: 'POST', body: { ids } }),
+  bulkArchiveProposals: (ids) =>
+    request('/proposals/bulk/archive', { method: 'POST', body: { ids } }),
+  // Proposal versioning
+  getProposalVersions: (id) =>
+    request(`/proposals/${id}/versions`),
+  restoreProposalVersion: (id, versionId) =>
+    request(`/proposals/${id}/versions/${versionId}/restore`, { method: 'POST' }),
 
   // ===== CONTRACTS =====
   getContracts: (params = {}) => {
@@ -628,6 +635,13 @@ export const api = {
     request(`/invoices/${id}/payment-link`, { method: 'POST' }),
   getInvoicePayments: (id) =>
     request(`/invoices/${id}/payments`),
+  // Bulk invoice actions
+  bulkMarkPaid: (ids, paymentMethod) =>
+    request('/invoices/bulk/mark-paid', { method: 'POST', body: { ids, paymentMethod } }),
+  bulkSendInvoices: (ids) =>
+    request('/invoices/bulk/send', { method: 'POST', body: { ids } }),
+  bulkArchiveInvoices: (ids) =>
+    request('/invoices/bulk/archive', { method: 'POST', body: { ids } }),
   // Line item templates
   getLineItemTemplates: () =>
     request('/invoices/templates'),
@@ -868,8 +882,6 @@ export const api = {
     request('/cold-email/sequences'),
   getColdEmailSequence: (id) =>
     request(`/cold-email/sequences/${id}`),
-  updateColdEmailSequence: (id, data) =>
-    request(`/cold-email/sequences/${id}`, { method: 'PUT', body: data }),
   deleteColdEmailSequence: (id) =>
     request(`/cold-email/sequences/${id}`, { method: 'DELETE' }),
   importColdEmailProspects: (data) =>
@@ -897,10 +909,10 @@ export const api = {
     request('/call-screener/summary', { method: 'POST', body: data }),
   getCallLog: (params = {}) => {
     const query = new URLSearchParams(params).toString();
-    return request(`/cold-email/sends${query ? `?${query}` : ''}`);
+    return request(`/call-screener/calls${query ? `?${query}` : ''}`);
   },
-  getColdEmailStats: () =>
-    request('/cold-email/stats'),
+  generateCallFollowUp: (callId) =>
+    request(`/call-screener/follow-up/${callId}`, { method: 'POST' }),
 
   // ===== LEAD GEN — Lead Pipeline =====
   leadGenFindLeads: (data) =>
@@ -1414,16 +1426,13 @@ export const api = {
   },
   approveTimesheetEntry: (id) => request(`/time-entries/timesheets/${id}/approve`, { method: 'PATCH' }),
 
-  // ─── Generic methods (for pages that need dynamic endpoints) ───
-  get: (endpoint) => request(endpoint),
-  post: (endpoint, body) => request(endpoint, { method: 'POST', body }),
-  put: (endpoint, body) => request(endpoint, { method: 'PUT', body }),
-  del: (endpoint, body) => {
-    if (body) {
-      return request(endpoint, { method: 'DELETE', body });
-    }
-    return request(endpoint, { method: 'DELETE' });
-  },
+  // ===== AUTOSAVE DRAFT =====
+  saveDraft: (entity, id, data) =>
+    request(`/draft/${entity}/${id}`, { method: 'PUT', body: { data } }),
+  getDraft: (entity, id) =>
+    request(`/draft/${entity}/${id}`),
+  clearDraft: (entity, id) =>
+    request(`/draft/${entity}/${id}`, { method: 'DELETE' }),
 };
 
 export default api;

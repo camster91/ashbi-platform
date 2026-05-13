@@ -1,7 +1,6 @@
 // Proposal AI Agent — generates full proposals from client intake + project type
 
 import aiClient from '../ai/client.js';
-import prisma from '../config/db.js';
 
 export default async function proposalsAiRoutes(fastify) {
 
@@ -27,7 +26,7 @@ export default async function proposalsAiRoutes(fastify) {
     // Fetch client info if clientId provided
     let clientInfo = { name: clientName || 'Prospective Client', industry: clientIndustry || 'CPG/DTC' };
     if (clientId) {
-      const client = await prisma.client.findUnique({ where: { id: clientId } });
+      const client = await request.prisma.client.findUnique({ where: { id: clientId } });
       if (!client) {
         return reply.status(404).send({ error: 'Client not found' });
       }
@@ -82,7 +81,7 @@ Return JSON:
 
         const subtotal = computedLineItems.reduce((sum, item) => sum + item.total, 0);
 
-        const proposal = await prisma.$transaction(async (tx) => {
+        const proposal = await request.prisma.$transaction(async (tx) => {
           return tx.proposal.create({
             data: {
               title: result.title || `Proposal for ${clientInfo.name}`,

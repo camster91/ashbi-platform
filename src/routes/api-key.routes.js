@@ -1,6 +1,5 @@
 // API Key management routes
 
-import prisma from '../config/db.js';
 import crypto from 'crypto';
 
 const PREFIX = 'ashbi_'; // API keys start with ashbi_ for easy identification
@@ -18,7 +17,7 @@ export default async function apiKeyRoutes(fastify) {
   fastify.get('/', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
-    const keys = await prisma.apiKey.findMany({
+    const keys = await request.prisma.apiKey.findMany({
       where: { userId: request.user.id, isActive: true },
       select: {
         id: true,
@@ -43,7 +42,7 @@ export default async function apiKeyRoutes(fastify) {
     }
 
     // Limit to 5 active keys per user
-    const count = await prisma.apiKey.count({
+    const count = await request.prisma.apiKey.count({
       where: { userId: request.user.id, isActive: true }
     });
     if (count >= 5) {
@@ -53,7 +52,7 @@ export default async function apiKeyRoutes(fastify) {
     const rawKey = generateApiKey();
     const hashed = hashKey(rawKey);
 
-    const apiKey = await prisma.apiKey.create({
+    const apiKey = await request.prisma.apiKey.create({
       data: {
         name: name.trim(),
         key: hashed,
@@ -78,12 +77,12 @@ export default async function apiKeyRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const key = await prisma.apiKey.findUnique({ where: { id } });
+    const key = await request.prisma.apiKey.findUnique({ where: { id } });
     if (!key || key.userId !== request.user.id) {
       return reply.status(404).send({ error: 'API key not found' });
     }
 
-    await prisma.apiKey.update({
+    await request.prisma.apiKey.update({
       where: { id },
       data: { isActive: false }
     });
@@ -107,7 +106,7 @@ export async function authenticateApiKey(request, reply) {
   }
 
   const hashed = hashKey(rawKey);
-  const key = await prisma.apiKey.findUnique({
+  const key = await request.prisma.apiKey.findUnique({
     where: { key: hashed },
     include: { user: true }
   });
@@ -125,7 +124,7 @@ export async function authenticateApiKey(request, reply) {
   }
 
   // Update lastUsedAt
-  await prisma.apiKey.update({
+  await request.prisma.apiKey.update({
     where: { id: key.id },
     data: { lastUsedAt: new Date() }
   }).catch(() => {}); // Don't fail if update fails

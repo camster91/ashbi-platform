@@ -1,6 +1,5 @@
 // Ash AI Chat — persistent conversations with the AI Chief of Staff
 
-import prisma from '../config/db.js';
 import env from '../config/env.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
@@ -97,21 +96,21 @@ export default async function ashChatRoutes(fastify) {
 
     let conversation;
     if (conversationId) {
-      conversation = await prisma.ashConversation.findUnique({ where: { id: conversationId } });
+      conversation = await request.prisma.ashConversation.findUnique({ where: { id: conversationId } });
       if (!conversation) return reply.status(404).send({ error: 'Conversation not found' });
     } else {
       // New conversation — title from first message (truncated)
       const title = message.length > 60 ? message.slice(0, 60) + '…' : message;
-      conversation = await prisma.ashConversation.create({ data: { title } });
+      conversation = await request.prisma.ashConversation.create({ data: { title } });
     }
 
     // Save user message
-    await prisma.ashChatMessage.create({
+    await request.prisma.ashChatMessage.create({
       data: { conversationId: conversation.id, role: 'user', content: message }
     });
 
     // Load conversation history
-    const history = await prisma.ashChatMessage.findMany({
+    const history = await request.prisma.ashChatMessage.findMany({
       where: { conversationId: conversation.id },
       orderBy: { createdAt: 'asc' }
     });
@@ -126,12 +125,12 @@ export default async function ashChatRoutes(fastify) {
     }
 
     // Save assistant response
-    const assistantMsg = await prisma.ashChatMessage.create({
+    const assistantMsg = await request.prisma.ashChatMessage.create({
       data: { conversationId: conversation.id, role: 'assistant', content: aiResponse }
     });
 
     // Update conversation updatedAt
-    await prisma.ashConversation.update({
+    await request.prisma.ashConversation.update({
       where: { id: conversation.id },
       data: { updatedAt: new Date() }
     });
@@ -143,7 +142,7 @@ export default async function ashChatRoutes(fastify) {
   fastify.get('/conversations', {
     onRequest: [fastify.authenticate]
   }, async () => {
-    const conversations = await prisma.ashConversation.findMany({
+    const conversations = await request.prisma.ashConversation.findMany({
       orderBy: { updatedAt: 'desc' },
       include: {
         messages: {
@@ -167,10 +166,10 @@ export default async function ashChatRoutes(fastify) {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const { id } = request.params;
-    const conversation = await prisma.ashConversation.findUnique({ where: { id } });
+    const conversation = await request.prisma.ashConversation.findUnique({ where: { id } });
     if (!conversation) return reply.status(404).send({ error: 'Not found' });
 
-    const messages = await prisma.ashChatMessage.findMany({
+    const messages = await request.prisma.ashChatMessage.findMany({
       where: { conversationId: id },
       orderBy: { createdAt: 'asc' }
     });
@@ -183,7 +182,7 @@ export default async function ashChatRoutes(fastify) {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const { id } = request.params;
-    await prisma.ashConversation.delete({ where: { id } }).catch(() => null);
+    await request.prisma.ashConversation.delete({ where: { id } }).catch(() => null);
     return { success: true };
   });
 }

@@ -2,7 +2,6 @@
 import { createPaymentLink, handleWebhook } from '../services/stripe.service.js';
 import { generateInvoicePdf } from '../utils/generate-invoice-pdf.js';
 import { generateInvoiceNumber } from '../utils/invoice.js';
-import { sendInvoiceCreatedEmail } from '../services/email.service.js';
 import { validateBody, createInvoiceSchema, updateInvoiceSchema, markInvoicePaidSchema, sendInvoiceSchema } from '../validators/schemas.js';
 
 const HST_RATE = 13; // Ontario HST
@@ -38,7 +37,7 @@ export default async function invoiceRoutes(fastify) {
   fastify.get('/', { onRequest: [fastify.authenticate] }, async (request) => {
     const { clientId, projectId, status, search, sort = 'createdAt', order = 'desc', limit, offset } = request.query;
 
-    const where = { deletedAt: null };
+    const where = {};
     if (clientId) where.clientId = clientId;
     if (projectId) where.projectId = projectId;
     if (status && status !== 'OVERDUE') where.status = status;
@@ -81,11 +80,10 @@ export default async function invoiceRoutes(fastify) {
     const now = new Date();
     const [allInvoices, overdueInvoices] = await Promise.all([
       fastify.prisma.invoice.findMany({
-        where: { deletedAt: null },
         select: { status: true, total: true, dueDate: true }
       }),
       fastify.prisma.invoice.findMany({
-        where: { status: 'SENT', dueDate: { lt: now }, deletedAt: null },
+        where: { status: 'SENT', dueDate: { lt: now } },
         select: { id: true, total: true }
       })
     ]);
@@ -300,7 +298,7 @@ export default async function invoiceRoutes(fastify) {
 
     return fastify.prisma.invoice.update({
       where: { id: request.params.id },
-      data: { status: 'VOID', deletedAt: new Date() }
+      data: { status: 'VOID' }
     });
   });
 
@@ -331,12 +329,12 @@ export default async function invoiceRoutes(fastify) {
       fastify.log.warn({ err }, 'Stripe payment link failed — sending without it');
     }
 
-    // Send email via Mailgun (branded template)
+    // Stub Mailgun email send
     const primaryContact = invoice.client?.contacts?.[0];
     if (primaryContact?.email) {
       try {
         const viewUrl = `${process.env.APP_URL || 'https://hub.ashbi.ca'}/portal/invoice/${invoice.viewToken}`;
-        const result = await sendInvoiceEmail({
+        await sendInvoiceEmail({
           to: primaryContact.email,
           name: primaryContact.name,
           invoice,
@@ -344,32 +342,8 @@ export default async function invoiceRoutes(fastify) {
           paymentLink: updateData.stripePaymentLink,
         });
         fastify.log.info(`Invoice email sent to ${primaryContact.email}`);
-
-        // Log sent email
-        await fastify.prisma.sentEmail.create({
-          data: {
-            entityType: 'INVOICE',
-            entityId: invoice.id,
-            toEmail: primaryContact.email,
-            toName: primaryContact.name,
-            subject: `Invoice ${invoice.invoiceNumber} from Ashbi Design`,
-            status: 'SENT',
-          }
-        });
       } catch (emailErr) {
         fastify.log.warn({ emailErr }, 'Email send failed — invoice still marked sent');
-        // Log failed email
-        await fastify.prisma.sentEmail.create({
-          data: {
-            entityType: 'INVOICE',
-            entityId: invoice.id,
-            toEmail: primaryContact.email,
-            toName: primaryContact.name,
-            subject: `Invoice ${invoice.invoiceNumber} from Ashbi Design`,
-            status: 'FAILED',
-            error: emailErr.message,
-          }
-        });
       }
     }
 
@@ -383,59 +357,6 @@ export default async function invoiceRoutes(fastify) {
     });
 
     return { ...flagOverdue(updated), emailSent: !!primaryContact?.email };
-  });
-
-  // ─── POST /:id/resend — resend invoice email ──────────────────────────────
-  fastify.post('/:id/resend', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const invoice = await fastify.prisma.invoice.findUnique({
-      where: { id: request.params.id },
-      include: {
-        client: {
-          include: { contacts: { where: { isPrimary: true }, take: 1 } }
-        },
-      }
-    });
-    if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
-
-    const primaryContact = invoice.client?.contacts?.[0];
-    if (!primaryContact?.email) {
-      return reply.status(400).send({ error: 'No primary contact email' });
-    }
-
-    const viewUrl = `${process.env.APP_URL || 'https://hub.ashbi.ca'}/portal/invoice/${invoice.viewToken}`;
-    try {
-      const result = await sendInvoiceEmail({
-        to: primaryContact.email,
-        name: primaryContact.name,
-        invoice,
-        viewUrl,
-        paymentLink: invoice.stripePaymentLink,
-      });
-      await fastify.prisma.sentEmail.create({
-        data: {
-          entityType: 'INVOICE',
-          entityId: invoice.id,
-          toEmail: primaryContact.email,
-          toName: primaryContact.name,
-          subject: `Invoice ${invoice.invoiceNumber} from Ashbi Design`,
-          status: 'SENT',
-        }
-      });
-      return { ok: true };
-    } catch (emailErr) {
-      await fastify.prisma.sentEmail.create({
-        data: {
-          entityType: 'INVOICE',
-          entityId: invoice.id,
-          toEmail: primaryContact.email,
-          toName: primaryContact.name,
-          subject: `Invoice ${invoice.invoiceNumber} from Ashbi Design`,
-          status: 'FAILED',
-          error: emailErr.message,
-        }
-      });
-      return reply.status(500).send({ error: emailErr.message });
-    }
   });
 
   // ─── GET /:id/pdf — generate and download PDF ──────────────────────────────
@@ -659,40 +580,117 @@ export default async function invoiceRoutes(fastify) {
     }
   });
 
-  // ─── PATCH /:id/draft — autosave draft data ───────
-  fastify.patch('/:id/draft', {
-    onRequest: [fastify.authenticate]
-  }, async (request, reply) => {
-    const { id } = request.params;
-    const { draftData } = request.body;
+  // ─── POST /bulk/mark-paid — mark multiple invoices as paid ──────────────────
+  fastify.post('/bulk/mark-paid', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const { ids, paymentMethod } = request.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return reply.status(400).send({ error: 'ids array is required' });
+    }
 
-    await request.prisma.invoice.update({
-      where: { id },
-      data: { draftData }
-    });
+    const paidDate = new Date();
+    const method = paymentMethod || 'OTHER';
+    let updated = 0;
 
-    return { success: true };
+    for (const id of ids) {
+      const invoice = await fastify.prisma.invoice.findUnique({ where: { id } });
+      if (!invoice || invoice.status === 'PAID' || invoice.status === 'VOID') continue;
+
+      await fastify.prisma.$transaction([
+        fastify.prisma.invoice.update({
+          where: { id },
+          data: { status: 'PAID', paidAt: paidDate, paymentMethod: method }
+        }),
+        fastify.prisma.invoicePayment.create({
+          data: { invoiceId: id, amount: invoice.total, method, paidAt: paidDate }
+        })
+      ]);
+      updated++;
+    }
+
+    return { updated };
   });
 
-  // ─── GET /:id/draft — get autosave draft ───────
-  fastify.get('/:id/draft', {
-    onRequest: [fastify.authenticate]
-  }, async (request, reply) => {
-    const { id } = request.params;
-    const entity = await request.prisma.invoice.findUnique({
-      where: { id },
-      select: { draftData: true }
-    });
-    if (!entity) return reply.status(404).send({ error: 'Not found' });
-    return { draftData: entity.draftData };
+  // ─── POST /bulk/send — send multiple invoices ───────────────────────────────
+  fastify.post('/bulk/send', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const { ids } = request.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return reply.status(400).send({ error: 'ids array is required' });
+    }
+
+    let sent = 0;
+    for (const id of ids) {
+      const invoice = await fastify.prisma.invoice.findUnique({
+        where: { id },
+        include: { client: { include: { contacts: { where: { isPrimary: true }, take: 1 } } } }
+      });
+      if (!invoice || invoice.status !== 'DRAFT') continue;
+
+      await fastify.prisma.invoice.update({
+        where: { id },
+        data: { status: 'SENT', sentAt: new Date() }
+      });
+      sent++;
+    }
+
+    return { sent };
+  });
+
+  // ─── POST /bulk/archive — archive (void) multiple invoices ──────────────────
+  fastify.post('/bulk/archive', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const { ids } = request.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return reply.status(400).send({ error: 'ids array is required' });
+    }
+
+    let archived = 0;
+    for (const id of ids) {
+      const invoice = await fastify.prisma.invoice.findUnique({ where: { id } });
+      if (!invoice || invoice.status === 'PAID' || invoice.status === 'VOID') continue;
+
+      await fastify.prisma.invoice.update({
+        where: { id },
+        data: { status: 'VOID' }
+      });
+      archived++;
+    }
+
+    return { archived };
   });
 }
 
-// ─── Email send ──────────────────────────────────────────────────────────────
+// ─── Email stub (Mailgun) ─────────────────────────────────────────────────────
 async function sendInvoiceEmail({ to, name, invoice, viewUrl, paymentLink }) {
-  if (!process.env.MAILGUN_API_KEY || !process.env.MAILGUN_DOMAIN) return;
+  const MAILGUN_API_KEY = process.env.MAILGUN_API_KEY;
+  const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN;
+  if (!MAILGUN_API_KEY || !MAILGUN_DOMAIN) return; // No-op if not configured
+
   const dueDate = invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString('en-CA', { dateStyle: 'long' }) : 'upon receipt';
-  await sendInvoiceCreatedEmail({ to, clientName: name, invoiceNumber: invoice.invoiceNumber, amount: `$${invoice.total.toLocaleString('en-CA', { minimumFractionDigits: 2 })}`, dueDate, payLink: paymentLink || viewUrl });
+  const formData = new FormData();
+  formData.append('from', `Cameron Ashley <noreply@${MAILGUN_DOMAIN}>`);
+  formData.append('to', `${name} <${to}>`);
+  formData.append('subject', `Invoice ${invoice.invoiceNumber} from Ashbi Design — $${invoice.total.toLocaleString('en-CA', { minimumFractionDigits: 2 })}`);
+  formData.append('html', `
+    <p>Hi ${name},</p>
+    <p>Please find your invoice ${invoice.invoiceNumber} attached below.</p>
+    <p><strong>Amount due: $${invoice.total.toLocaleString('en-CA', { minimumFractionDigits: 2 })} CAD</strong><br>
+    Due: ${dueDate}</p>
+    ${paymentLink ? `<p><a href="${paymentLink}" style="background:#2563eb;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;">Pay Now</a></p>` : ''}
+    <p><a href="${viewUrl}">View invoice online</a></p>
+    ${invoice.notes ? `<p>${invoice.notes}</p>` : ''}
+    <p>Thank you for your business!<br>Cameron Ashley<br>Ashbi Design</p>
+  `);
+
+  const auth = Buffer.from(`api:${MAILGUN_API_KEY}`).toString('base64');
+  const response = await fetch(`https://api.mailgun.net/v3/${MAILGUN_DOMAIN}/messages`, {
+    method: 'POST',
+    headers: { Authorization: `Basic ${auth}` },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`Mailgun error: ${text}`);
+  }
 }
 
 // ─── Invoice HTML/PDF generator ──────────────────────────────────────────────

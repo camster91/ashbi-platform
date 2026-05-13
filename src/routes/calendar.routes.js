@@ -1,6 +1,5 @@
 // Calendar & Meeting routes
 
-import prisma from '../config/db.js';
 
 export default async function calendarRoutes(fastify) {
   // Get calendar events
@@ -32,7 +31,7 @@ export default async function calendarRoutes(fastify) {
     if (projectId) where.projectId = projectId;
     if (type) where.type = type;
 
-    const events = await prisma.calendarEvent.findMany({
+    const events = await request.prisma.calendarEvent.findMany({
       where,
       include: {
         project: { select: { id: true, name: true } },
@@ -62,7 +61,7 @@ export default async function calendarRoutes(fastify) {
     if (startDate) dateWhere.gte = new Date(startDate);
     if (endDate) dateWhere.lte = new Date(endDate);
 
-    const events = await prisma.calendarEvent.findMany({
+    const events = await request.prisma.calendarEvent.findMany({
       where: {
         OR: [
           { createdById: request.user.id },
@@ -91,7 +90,7 @@ export default async function calendarRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const event = await prisma.calendarEvent.findUnique({
+    const event = await request.prisma.calendarEvent.findUnique({
       where: { id },
       include: {
         project: { select: { id: true, name: true } },
@@ -139,7 +138,7 @@ export default async function calendarRoutes(fastify) {
       return reply.status(400).send({ error: 'Start time is required' });
     }
 
-    const event = await prisma.calendarEvent.create({
+    const event = await request.prisma.calendarEvent.create({
       data: {
         title,
         description,
@@ -168,7 +167,7 @@ export default async function calendarRoutes(fastify) {
 
     // Log activity
     if (projectId) {
-      await prisma.activity.create({
+      await request.prisma.activity.create({
         data: {
           type: 'EVENT_CREATED',
           action: 'created',
@@ -184,7 +183,7 @@ export default async function calendarRoutes(fastify) {
     // Notify attendees
     for (const attendeeId of attendeeIds) {
       if (attendeeId !== request.user.id) {
-        await prisma.notification.create({
+        await request.prisma.notification.create({
           data: {
             type: 'EVENT_INVITE',
             title: 'Meeting Invitation',
@@ -218,7 +217,7 @@ export default async function calendarRoutes(fastify) {
       attendeeIds
     } = request.body;
 
-    const existing = await prisma.calendarEvent.findUnique({
+    const existing = await request.prisma.calendarEvent.findUnique({
       where: { id },
       include: { attendees: true }
     });
@@ -245,11 +244,11 @@ export default async function calendarRoutes(fastify) {
     // Handle attendee updates
     if (attendeeIds !== undefined) {
       // Remove old attendees
-      await prisma.eventAttendee.deleteMany({ where: { eventId: id } });
+      await request.prisma.eventAttendee.deleteMany({ where: { eventId: id } });
 
       // Add new attendees
       if (attendeeIds.length > 0) {
-        await prisma.eventAttendee.createMany({
+        await request.prisma.eventAttendee.createMany({
           data: attendeeIds.map(userId => ({ eventId: id, userId }))
         });
 
@@ -259,7 +258,7 @@ export default async function calendarRoutes(fastify) {
 
         for (const attendeeId of newAttendeeIds) {
           if (attendeeId !== request.user.id) {
-            await prisma.notification.create({
+            await request.prisma.notification.create({
               data: {
                 type: 'EVENT_INVITE',
                 title: 'Meeting Invitation',
@@ -273,7 +272,7 @@ export default async function calendarRoutes(fastify) {
       }
     }
 
-    const event = await prisma.calendarEvent.update({
+    const event = await request.prisma.calendarEvent.update({
       where: { id },
       data,
       include: {
@@ -296,7 +295,7 @@ export default async function calendarRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const existing = await prisma.calendarEvent.findUnique({ where: { id } });
+    const existing = await request.prisma.calendarEvent.findUnique({ where: { id } });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Event not found' });
@@ -307,7 +306,7 @@ export default async function calendarRoutes(fastify) {
       return reply.status(403).send({ error: 'Cannot delete this event' });
     }
 
-    await prisma.calendarEvent.delete({ where: { id } });
+    await request.prisma.calendarEvent.delete({ where: { id } });
 
     return { success: true };
   });
@@ -323,7 +322,7 @@ export default async function calendarRoutes(fastify) {
       return reply.status(400).send({ error: 'Invalid RSVP status' });
     }
 
-    const attendee = await prisma.eventAttendee.findUnique({
+    const attendee = await request.prisma.eventAttendee.findUnique({
       where: {
         eventId_userId: {
           eventId: id,
@@ -336,19 +335,19 @@ export default async function calendarRoutes(fastify) {
       return reply.status(404).send({ error: 'You are not invited to this event' });
     }
 
-    await prisma.eventAttendee.update({
+    await request.prisma.eventAttendee.update({
       where: { id: attendee.id },
       data: { status }
     });
 
     // Notify event creator
-    const event = await prisma.calendarEvent.findUnique({
+    const event = await request.prisma.calendarEvent.findUnique({
       where: { id },
       select: { title: true, createdById: true }
     });
 
     if (event && event.createdById !== request.user.id) {
-      await prisma.notification.create({
+      await request.prisma.notification.create({
         data: {
           type: 'EVENT_RSVP',
           title: 'Meeting RSVP',
@@ -369,7 +368,7 @@ export default async function calendarRoutes(fastify) {
     const { limit: limitParam = '5' } = request.query;
     const limit = parseInt(limitParam);
 
-    const events = await prisma.calendarEvent.findMany({
+    const events = await request.prisma.calendarEvent.findMany({
       where: {
         startTime: { gte: new Date() },
         OR: [

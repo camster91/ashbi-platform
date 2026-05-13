@@ -1,6 +1,5 @@
 // Milestone routes
 
-import prisma from '../config/db.js';
 
 export default async function milestoneRoutes(fastify) {
   // List milestones for a project
@@ -13,7 +12,7 @@ export default async function milestoneRoutes(fastify) {
     const where = { projectId };
     if (status) where.status = status;
 
-    const milestones = await prisma.milestone.findMany({
+    const milestones = await request.prisma.milestone.findMany({
       where,
       include: {
         tasks: {
@@ -56,7 +55,7 @@ export default async function milestoneRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const milestone = await prisma.milestone.findUnique({
+    const milestone = await request.prisma.milestone.findUnique({
       where: { id },
       include: {
         project: { select: { id: true, name: true } },
@@ -99,7 +98,7 @@ export default async function milestoneRoutes(fastify) {
       return reply.status(400).send({ error: 'Due date is required' });
     }
 
-    const milestone = await prisma.milestone.create({
+    const milestone = await request.prisma.milestone.create({
       data: {
         name,
         description,
@@ -113,7 +112,7 @@ export default async function milestoneRoutes(fastify) {
     });
 
     // Log activity
-    await prisma.activity.create({
+    await request.prisma.activity.create({
       data: {
         type: 'MILESTONE_CREATED',
         action: 'created',
@@ -126,7 +125,7 @@ export default async function milestoneRoutes(fastify) {
     });
 
     // Create calendar event for milestone
-    await prisma.calendarEvent.create({
+    await request.prisma.calendarEvent.create({
       data: {
         title: `Milestone: ${name}`,
         description: description || `Milestone due date for ${name}`,
@@ -155,7 +154,7 @@ export default async function milestoneRoutes(fastify) {
     const { id } = request.params;
     const { name, description, dueDate, status, color } = request.body;
 
-    const existing = await prisma.milestone.findUnique({ where: { id } });
+    const existing = await request.prisma.milestone.findUnique({ where: { id } });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Milestone not found' });
@@ -175,7 +174,7 @@ export default async function milestoneRoutes(fastify) {
     }
     if (color !== undefined) data.color = color;
 
-    const milestone = await prisma.milestone.update({
+    const milestone = await request.prisma.milestone.update({
       where: { id },
       data,
       include: {
@@ -184,7 +183,7 @@ export default async function milestoneRoutes(fastify) {
     });
 
     // Log activity
-    await prisma.activity.create({
+    await request.prisma.activity.create({
       data: {
         type: status === 'COMPLETED' ? 'MILESTONE_COMPLETED' : 'MILESTONE_UPDATED',
         action: status === 'COMPLETED' ? 'completed' : 'updated',
@@ -213,19 +212,19 @@ export default async function milestoneRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const existing = await prisma.milestone.findUnique({ where: { id } });
+    const existing = await request.prisma.milestone.findUnique({ where: { id } });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Milestone not found' });
     }
 
     // Unlink tasks from milestone before deleting
-    await prisma.task.updateMany({
+    await request.prisma.task.updateMany({
       where: { milestoneId: id },
       data: { milestoneId: null }
     });
 
-    await prisma.milestone.delete({ where: { id } });
+    await request.prisma.milestone.delete({ where: { id } });
 
     return { success: true };
   });
@@ -236,8 +235,8 @@ export default async function milestoneRoutes(fastify) {
   }, async (request, reply) => {
     const { id, taskId } = request.params;
 
-    const milestone = await prisma.milestone.findUnique({ where: { id } });
-    const task = await prisma.task.findUnique({ where: { id: taskId } });
+    const milestone = await request.prisma.milestone.findUnique({ where: { id } });
+    const task = await request.prisma.task.findUnique({ where: { id: taskId } });
 
     if (!milestone) {
       return reply.status(404).send({ error: 'Milestone not found' });
@@ -251,7 +250,7 @@ export default async function milestoneRoutes(fastify) {
       return reply.status(400).send({ error: 'Task must be in the same project as milestone' });
     }
 
-    await prisma.task.update({
+    await request.prisma.task.update({
       where: { id: taskId },
       data: { milestoneId: id }
     });
@@ -265,7 +264,7 @@ export default async function milestoneRoutes(fastify) {
   }, async (request, reply) => {
     const { id, taskId } = request.params;
 
-    await prisma.task.update({
+    await request.prisma.task.update({
       where: { id: taskId },
       data: { milestoneId: null }
     });

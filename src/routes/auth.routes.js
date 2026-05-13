@@ -1,6 +1,5 @@
 // Authentication routes
 
-import prisma from '../config/db.js';
 import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import Mailgun from 'mailgun.js';
@@ -38,7 +37,7 @@ async function verifyPassword(password, hash) {
 async function upgradeHashIfNeeded(userId, password, currentHash) {
   if (!currentHash.startsWith('$2')) {
     const newHash = await hashPassword(password);
-    await prisma.user.update({ where: { id: userId }, data: { password: newHash } });
+    await request.prisma.user.update({ where: { id: userId }, data: { password: newHash } });
   }
 }
 
@@ -88,7 +87,7 @@ export default async function authRoutes(fastify) {
   fastify.get('/me', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
-    const user = await prisma.user.findUnique({
+    const user = await request.prisma.user.findUnique({
       where: { id: request.user.id },
       select: {
         id: true,
@@ -118,7 +117,7 @@ export default async function authRoutes(fastify) {
     const { email, password, name, role = 'TEAM', adminInviteToken } = request.body;
 
     // Check if any users exist
-    const userCount = await prisma.user.count();
+    const userCount = await request.prisma.user.count();
 
     if (userCount === 0) {
       // First user registration — if ADMIN_INVITE_TOKEN env var is set, require it
@@ -144,7 +143,7 @@ export default async function authRoutes(fastify) {
     }
 
     // Check if email already exists
-    const existing = await prisma.user.findUnique({
+    const existing = await request.prisma.user.findUnique({
       where: { email }
     });
 
@@ -155,7 +154,7 @@ export default async function authRoutes(fastify) {
     // First user is always admin; subsequent users use the provided role (validated by Zod)
     const userRole = userCount === 0 ? 'ADMIN' : role;
 
-    const user = await prisma.user.create({
+    const user = await request.prisma.user.create({
       data: {
         email,
         password: await hashPassword(password),
@@ -184,7 +183,7 @@ export default async function authRoutes(fastify) {
     if (skills !== undefined) data.skills = Array.isArray(skills) ? skills : [];
     if (capacity !== undefined) data.capacity = parseInt(capacity) || 40;
 
-    const user = await prisma.user.update({
+    const user = await request.prisma.user.update({
       where: { id: request.user.id },
       data,
       select: { id: true, email: true, name: true, role: true, skills: true, capacity: true }
@@ -199,7 +198,7 @@ export default async function authRoutes(fastify) {
   }, async (request, reply) => {
     const { currentPassword, newPassword } = request.body;
 
-    const user = await prisma.user.findUnique({
+    const user = await request.prisma.user.findUnique({
       where: { id: request.user.id }
     });
 
@@ -207,7 +206,7 @@ export default async function authRoutes(fastify) {
       return reply.status(400).send({ error: 'Current password is incorrect' });
     }
 
-    await prisma.user.update({
+    await request.prisma.user.update({
       where: { id: request.user.id },
       data: { password: await hashPassword(newPassword) }
     });
@@ -224,7 +223,7 @@ export default async function authRoutes(fastify) {
     const { token, email, password } = request.body;
 
     // Find and validate invitation
-    const invitation = await prisma.clientInvitation.findUnique({
+    const invitation = await request.prisma.clientInvitation.findUnique({
       where: { token }
     });
 
@@ -246,7 +245,7 @@ export default async function authRoutes(fastify) {
     }
 
     // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
+    const existingUser = await request.prisma.user.findUnique({
       where: { email }
     });
 
@@ -255,7 +254,7 @@ export default async function authRoutes(fastify) {
     }
 
     // Create user
-    const user = await prisma.user.create({
+    const user = await request.prisma.user.create({
       data: {
         email,
         password: await hashPassword(password),
@@ -267,7 +266,7 @@ export default async function authRoutes(fastify) {
     });
 
     // Mark invitation as used
-    await prisma.clientInvitation.update({
+    await request.prisma.clientInvitation.update({
       where: { id: invitation.id },
       data: { usedAt: new Date() }
     });
@@ -305,7 +304,7 @@ export default async function authRoutes(fastify) {
   }, async (request, reply) => {
     const { email, password } = request.body;
 
-    const user = await prisma.user.findFirst({
+    const user = await request.prisma.user.findFirst({
       where: {
         email,
         role: 'CLIENT'
@@ -362,7 +361,7 @@ export default async function authRoutes(fastify) {
     try {
       const { email } = request.body;
 
-      const user = await prisma.user.findUnique({
+      const user = await request.prisma.user.findUnique({
         where: { email: email.toLowerCase().trim() }
       });
 
@@ -376,7 +375,7 @@ export default async function authRoutes(fastify) {
       const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
       const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-      await prisma.user.update({
+      await request.prisma.user.update({
         where: { id: user.id },
         data: {
           resetToken: resetTokenHash,
@@ -442,7 +441,7 @@ export default async function authRoutes(fastify) {
 
       const resetTokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
-      const user = await prisma.user.findFirst({
+      const user = await request.prisma.user.findFirst({
         where: {
           resetToken: resetTokenHash,
           resetTokenExpiresAt: { gt: new Date() }
@@ -454,7 +453,7 @@ export default async function authRoutes(fastify) {
       }
 
       // Update password and clear reset token
-      await prisma.user.update({
+      await request.prisma.user.update({
         where: { id: user.id },
         data: {
           password: await hashPassword(newPassword),
@@ -484,7 +483,7 @@ export default async function authRoutes(fastify) {
     const { email } = request.body;
 
     // Verify client exists
-    const client = await prisma.client.findUnique({
+    const client = await request.prisma.client.findUnique({
       where: { id: clientId }
     });
 
@@ -493,7 +492,7 @@ export default async function authRoutes(fastify) {
     }
 
     // Check if user already invited
-    const existingInvite = await prisma.clientInvitation.findFirst({
+    const existingInvite = await request.prisma.clientInvitation.findFirst({
       where: {
         email,
         clientId,
@@ -509,7 +508,7 @@ export default async function authRoutes(fastify) {
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-    const invitation = await prisma.clientInvitation.create({
+    const invitation = await request.prisma.clientInvitation.create({
       data: {
         token,
         email,

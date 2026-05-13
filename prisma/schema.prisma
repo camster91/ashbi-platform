@@ -110,9 +110,11 @@ model Client {
   lastInvoiceStatus  String?
   paymentStatus      String?
   clientNotes        String?
-  deletedAt          DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
+  // Soft delete
+  deletedAt DateTime?
+
 
   // Relations
   contacts              Contact[]
@@ -191,9 +193,14 @@ model Project {
   endDate         DateTime?
   completedAt     DateTime?
   isRetainer      Boolean   @default(false)
-  deletedAt          DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+  // Soft delete
+  deletedAt DateTime?
+
+  // Autosave draft
+  draftData String? // JSON of unsaved form data
+
 
   // Relations
   client                Client                 @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -256,9 +263,11 @@ model Task {
   assigneeId     String?
   milestoneId    String?
   dependsOnId    String? // Task dependency — this task depends on another
-  deletedAt          DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+  // Soft delete
+  deletedAt DateTime?
+
 
   // Relations
   project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -516,6 +525,9 @@ model Note {
   authorId  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  // Soft delete
+  deletedAt DateTime?
+
 
   // Relations
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -562,6 +574,8 @@ model TimeEntry {
   userId      String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  // Soft delete
+  deletedAt   DateTime?
 
   // Relations
   task    Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
@@ -702,14 +716,18 @@ model RetainerPlan {
   retainerStatus     String    @default("ACTIVE") // ACTIVE | AT_RISK | PAUSED | CANCELLED
   annualValue        Float?
   bonsaiRetainerId   String?
-  deletedAt          DateTime?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
+  // Soft delete
+  deletedAt DateTime?
+
+  // Autosave draft
+  draftData String? // JSON of unsaved form data
+
 
   // Relations
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
-  @@index([deletedAt])
   @@map("retainer_plans")
 }
 
@@ -751,6 +769,23 @@ model RevisionRound {
   @@map("revision_rounds")
 }
 
+// ==================== PROPOSAL VERSIONS ====================
+
+model ProposalVersion {
+  id         String   @id @default(cuid())
+  proposalId String
+  data       Json
+  createdById String
+  createdAt  DateTime @default(now())
+
+  proposal  Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  createdBy User     @relation(fields: [createdById], references: [id])
+
+  @@index([proposalId])
+  @@index([createdAt])
+  @@map("proposal_versions")
+}
+
 // ==================== PROPOSALS ====================
 
 model Proposal {
@@ -770,31 +805,21 @@ model Proposal {
   clientId      String
   projectId     String?
   createdById   String
-  deletedAt          DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
-
-  // Phase 3a: PDF generation & email tracking
-  pdfPath       String?   // Path/URL to stored PDF file
-  pdfGeneratedAt DateTime? // When the PDF was generated
-  sentToEmail   String?   // Recipient email address
-  gmailMessageId String?  // Gmail message ID for sent email
-  gmailThreadId  String?  // Gmail thread ID
-  emailSentAt   DateTime? // When the email was sent
-  emailContent  String?   // JSON: { subject, body, cc, bcc }
-
-  // Phase 3a: AI generation metadata
-  aiGenerated   Boolean   @default(false)
-  aiPrompt      String?   // The prompt used for AI generation
-  aiModel       String?   // AI model that generated the content
-  metadata      String?   // JSON: flexible metadata for extensions
-  draftData     Json?    // Autosave draft state
 
   client    Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
   project   Project?           @relation(fields: [projectId], references: [id])
   createdBy User               @relation("ProposalCreator", fields: [createdById], references: [id])
   lineItems ProposalLineItem[]
+  versions  ProposalVersion[]
   contract  Contract?
+  // Soft delete
+  deletedAt DateTime?
+
+  // Autosave draft
+  draftData String? // JSON of unsaved form data
+
 
   @@map("proposals")
 }
@@ -827,16 +852,19 @@ model Contract {
   proposalId    String?   @unique
   clientId      String
   createdById   String
-  deletedAt          DateTime?
-  draftData     Json?    // Autosave draft state
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   proposal  Proposal? @relation(fields: [proposalId], references: [id])
   client    Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   createdBy User      @relation("ContractCreator", fields: [createdById], references: [id])
+  // Soft delete
+  deletedAt DateTime?
 
-  @@index([deletedAt])
+  // Autosave draft
+  draftData String? // JSON of unsaved form data
+
+
   @@map("contracts")
 }
 
@@ -880,8 +908,6 @@ model Invoice {
   projectId             String?
   proposalId            String?
   createdById           String
-  deletedAt          DateTime?
-  draftData         Json?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
@@ -891,6 +917,12 @@ model Invoice {
   payments    InvoicePayment[]
   timeEntries TimeEntry[]
   expenses    Expense[]
+  // Soft delete
+  deletedAt DateTime?
+
+  // Autosave draft
+  draftData String? // JSON of unsaved form data
+
 
   @@index([status, dueDate])
   @@index([clientId, status])
@@ -1006,13 +1038,11 @@ model OutreachSequence {
   status         String   @default("ACTIVE") // ACTIVE | PAUSED
   targetIndustry String?
   filters        String   @default("{}") // JSON
-  deletedAt          DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   leads OutreachLead[]
 
-  @@index([deletedAt])
   @@map("outreach_sequences")
 }
 
@@ -1241,14 +1271,6 @@ model ColdEmailEvent {
   @@map("cold_email_events")
 }
 
-// ==================== CALL SCREENER AGENT ====================
-
-  prospect ColdEmailProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
-  sequence ColdEmailSequence? @relation(fields: [sequenceId], references: [id], onDelete: SetNull)
-
-  @@map("cold_email_sends")
-}
-
 // ==================== AI TEAM ====================
 
 model AiTeamMessage {
@@ -1340,18 +1362,19 @@ model Expense {
   clientId    String?
   projectId   String?
   invoiceId   String?
-  deletedAt          DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   client  Client?  @relation(fields: [clientId], references: [id])
   project Project? @relation(fields: [projectId], references: [id])
   invoice Invoice? @relation(fields: [invoiceId], references: [id])
+  // Soft delete
+  deletedAt DateTime?
+
 
   @@index([clientId])
   @@index([projectId])
   @@index([invoiceId])
-  @@index([deletedAt])
   @@map("expenses")
 }
 
@@ -1604,7 +1627,6 @@ model PipelineDeal {
   contactPerson     String?
   source            String? // UPWORK | REFERRAL | WEBSITE | COLD_OUTREACH | OTHER
   lostReason        String?
-  deletedAt          DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -1613,7 +1635,6 @@ model PipelineDeal {
 
   @@index([stageId])
   @@index([clientId])
-  @@index([deletedAt])
   @@map("pipeline_deals")
 }
 
@@ -1831,15 +1852,12 @@ model TimeSession {
   userId      String
   projectId   String
   taskId      String?
-  startTime   DateTime  @default(now())
+  startTime   DateTime
   endTime     DateTime?
   duration    Int       @default(0) // Duration in minutes (calculated on stop)
   description String?
   billable    Boolean   @default(true)
   isRunning   Boolean   @default(false) // True if timer is currently running
-  pausedAt    DateTime?
-  totalPausedMs Int     @default(0)
-  deletedAt   DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
@@ -1854,22 +1872,6 @@ model TimeSession {
 }
 
 // ==================== PROMPT VERSIONS (for AI enhancement) ====================
-
-model SentEmail {
-  id             String   @id @default(cuid())
-  entityType     String   // INVOICE | PROPOSAL | CONTRACT
-  entityId       String   // FK to the invoice/proposal/contract
-  toEmail        String
-  toName         String?
-  subject        String
-  mailgunMessageId String?
-  status         String   // SENT | FAILED
-  error          String?
-  createdAt      DateTime @default(now())
-
-  @@index([entityType, entityId])
-  @@map("sent_emails")
-}
 
 model PromptVersion {
   id          String   @id @default(cuid())
@@ -1932,13 +1934,17 @@ model Estimate {
   validUntil  DateTime?
   viewToken   String   @unique @default(cuid())
   sentAt      DateTime?
-  deletedAt          DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  // Soft delete
+  deletedAt DateTime?
+
+  // Autosave draft
+  draftData String? // JSON of unsaved form data
+
 
   @@index([clientId])
   @@index([status])
-  @@index([deletedAt])
   @@map("estimates")
 }
 
@@ -1967,4 +1973,20 @@ model Integration {
   updatedAt    DateTime  @updatedAt
 
   @@map("integrations")
+}
+
+// ==================== TRASHED ITEMS ====================
+
+model TrashedItem {
+  id        String    @id @default(cuid())
+  entity    String    // CLIENT | PROJECT | INVOICE | PROPOSAL | CONTRACT | EXPENSE | TASK | ESTIMATE | NOTE | RETAINER_PLAN
+  recordId  String
+  data      Json
+  deletedAt DateTime  @default(now())
+  expiresAt DateTime  // 30 days from deletedAt
+  restoredAt DateTime?
+
+  @@index([entity])
+  @@index([expiresAt])
+  @@map("trashed_items")
 }

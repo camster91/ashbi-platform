@@ -11,7 +11,6 @@ import {
   getJobAlerts
 } from '../agents/upwork-agent.js';
 
-import prisma from '../config/db.js';
 
 export default async function upworkAgentRoutes(fastify) {
   /**
@@ -183,7 +182,7 @@ export default async function upworkAgentRoutes(fastify) {
       }
 
       // Save to UpworkProposal table
-      const proposal = await prisma.upworkProposal.create({
+      const proposal = await request.prisma.upworkProposal.create({
         data: {
           jobId,
           jobTitle,
@@ -226,7 +225,7 @@ export default async function upworkAgentRoutes(fastify) {
       const where = {};
       if (status) where.status = status;
 
-      const proposals = await prisma.upworkProposal.findMany({
+      const proposals = await request.prisma.upworkProposal.findMany({
         where,
         orderBy: { createdAt: 'desc' },
         take: limit ? parseInt(limit) : 50
@@ -261,7 +260,7 @@ export default async function upworkAgentRoutes(fastify) {
       }
       if (notes !== undefined) data.notes = notes;
 
-      const proposal = await prisma.upworkProposal.update({
+      const proposal = await request.prisma.upworkProposal.update({
         where: { id },
         data
       });
@@ -286,13 +285,13 @@ export default async function upworkAgentRoutes(fastify) {
     try {
       const [draftCount, queuedCount, submittedCount, interviewingCount, hiredCount, declinedCount, withdrawnCount] =
         await Promise.all([
-          prisma.upworkProposal.count({ where: { status: 'DRAFT' } }),
-          prisma.upworkProposal.count({ where: { status: 'QUEUED' } }),
-          prisma.upworkProposal.count({ where: { status: 'SUBMITTED' } }),
-          prisma.upworkProposal.count({ where: { status: 'INTERVIEWING' } }),
-          prisma.upworkProposal.count({ where: { status: 'HIRED' } }),
-          prisma.upworkProposal.count({ where: { status: 'DECLINED' } }),
-          prisma.upworkProposal.count({ where: { status: 'WITHDRAWN' } })
+          request.prisma.upworkProposal.count({ where: { status: 'DRAFT' } }),
+          request.prisma.upworkProposal.count({ where: { status: 'QUEUED' } }),
+          request.prisma.upworkProposal.count({ where: { status: 'SUBMITTED' } }),
+          request.prisma.upworkProposal.count({ where: { status: 'INTERVIEWING' } }),
+          request.prisma.upworkProposal.count({ where: { status: 'HIRED' } }),
+          request.prisma.upworkProposal.count({ where: { status: 'DECLINED' } }),
+          request.prisma.upworkProposal.count({ where: { status: 'WITHDRAWN' } })
         ]);
 
       const totalSubmitted = submittedCount + interviewingCount + hiredCount + declinedCount;

@@ -1,5 +1,4 @@
 // Dashboard stats — single endpoint for the command center
-import prisma from '../config/db.js';
 
 export default async function dashboardRoutes(fastify) {
   // GET /api/dashboard/stats — all numbers in one call
@@ -32,21 +31,21 @@ export default async function dashboardRoutes(fastify) {
       // Overdue tasks (not on blocked projects, standalone)
       overdueTasks
     ] = await Promise.all([
-      prisma.retainerPlan.findMany({
+      request.prisma.retainerPlan.findMany({
         where: { retainerStatus: 'ACTIVE' },
         select: { monthlyAmountUsd: true }
       }),
-      prisma.invoice.findMany({
+      request.prisma.invoice.findMany({
         where: { status: { in: ['SENT', 'OVERDUE'] } },
         select: { total: true, status: true, dueDate: true }
       }),
-      prisma.project.count({
+      request.prisma.project.count({
         where: { status: { notIn: ['LAUNCHED', 'CANCELLED', 'ON_HOLD'] } }
       }),
-      prisma.approval.count({
+      request.prisma.approval.count({
         where: { status: 'PENDING' }
       }),
-      prisma.activity.findMany({
+      request.prisma.activity.findMany({
         orderBy: { createdAt: 'desc' },
         take: 10,
         include: {
@@ -59,7 +58,7 @@ export default async function dashboardRoutes(fastify) {
           }
         }
       }),
-      prisma.notification.findMany({
+      request.prisma.notification.findMany({
         where: {
           userId: request.user.id,
           read: false
@@ -67,7 +66,7 @@ export default async function dashboardRoutes(fastify) {
         orderBy: { createdAt: 'desc' },
         take: 20
       }),
-      prisma.client.findMany({
+      request.prisma.client.findMany({
         where: {
           status: 'ACTIVE',
           OR: [
@@ -102,7 +101,7 @@ export default async function dashboardRoutes(fastify) {
         }
       }),
       // Projects with AT_RISK or NEEDS_ATTENTION health, or ON_HOLD status
-      prisma.project.findMany({
+      request.prisma.project.findMany({
         where: {
           OR: [
             { health: { in: ['AT_RISK', 'NEEDS_ATTENTION'] } },
@@ -128,7 +127,7 @@ export default async function dashboardRoutes(fastify) {
         take: 10
       }),
       // Untriaged inbox threads (needsTriage or OPEN without resolved status)
-      prisma.thread.findMany({
+      request.prisma.thread.findMany({
         where: {
           OR: [
             { needsTriage: true },
@@ -149,7 +148,7 @@ export default async function dashboardRoutes(fastify) {
         take: 5
       }),
       // WordPress sites with errors or low health
-      prisma.wPSite.findMany({
+      request.prisma.wPSite.findMany({
         where: {
           OR: [
             { status: 'ERROR' },
@@ -171,7 +170,7 @@ export default async function dashboardRoutes(fastify) {
         take: 10
       }),
       // Overdue tasks (due date passed, not completed)
-      prisma.task.findMany({
+      request.prisma.task.findMany({
         where: {
           status: { notIn: ['COMPLETED'] },
           dueDate: { lt: now }

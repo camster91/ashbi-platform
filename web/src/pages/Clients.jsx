@@ -23,7 +23,7 @@ import {
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
 import { useToast } from '../hooks/useToast';
-import { Button, Card } from '../components/ui';
+import { Button, Card, EmptyClients } from '../components/ui';
 import CreateClientModal from '../components/CreateClientModal';
 
 const TIER_HOURS = { '999': 20, '1999': 40, '3999': 80 };
@@ -429,17 +429,14 @@ export default function Clients() {
 
       {/* Client List */}
       {sorted.length === 0 ? (
-        <Card className="p-12 text-center">
-          <Building className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-lg font-medium">
-            {search ? 'No clients match your search' : 'No clients yet'}
-          </h3>
-          {!search && (
-            <p className="text-sm text-muted-foreground mt-1">
-              Use "Onboard Client" to set up a complete client with retainer, or "Add Client" for a quick add.
-            </p>
-          )}
-        </Card>
+        search ? (
+          <Card className="p-12 text-center">
+            <Building className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-medium">No clients match your search</h3>
+          </Card>
+        ) : (
+          <EmptyClients onAddClient={() => document.getElementById('add-client-btn')?.click()} />
+        )
       ) : (
         <div className="rounded-xl border border-border bg-card overflow-hidden">
           <table className="w-full">

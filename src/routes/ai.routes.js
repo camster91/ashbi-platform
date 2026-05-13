@@ -1,6 +1,5 @@
 // AI routes (direct AI interactions)
 
-import prisma from '../config/db.js';
 import aiClient from '../ai/client.js';
 import { buildDraftResponsePrompt } from '../ai/prompts/draftResponse.js';
 import { buildAnalyzeMessagePrompt } from '../ai/prompts/analyzeMessage.js';
@@ -12,7 +11,7 @@ export default async function aiRoutes(fastify) {
   }, async (request, reply) => {
     const { threadId } = request.body;
 
-    const thread = await prisma.thread.findUnique({
+    const thread = await request.prisma.thread.findUnique({
       where: { id: threadId },
       include: {
         client: true,
@@ -49,7 +48,7 @@ export default async function aiRoutes(fastify) {
       const result = await aiClient.chatJSON({ system, prompt, temperature });
 
       // Save the drafts as a response record
-      const response = await prisma.response.create({
+      const response = await request.prisma.response.create({
         data: {
           subject: result.options[0].subject,
           body: result.options[0].body,
@@ -86,7 +85,7 @@ export default async function aiRoutes(fastify) {
   }, async (request, reply) => {
     const { responseId, instruction } = request.body;
 
-    const response = await prisma.response.findUnique({
+    const response = await request.prisma.response.findUnique({
       where: { id: responseId },
       include: {
         thread: {
@@ -128,7 +127,7 @@ Respond with JSON:
       });
 
       // Update the response
-      await prisma.response.update({
+      await request.prisma.response.update({
         where: { id: responseId },
         data: {
           subject: result.subject,
@@ -160,7 +159,7 @@ Respond with JSON:
 
     // Gather relevant context
     if (threadId) {
-      const thread = await prisma.thread.findUnique({
+      const thread = await request.prisma.thread.findUnique({
         where: { id: threadId },
         include: {
           messages: { orderBy: { receivedAt: 'asc' } },
@@ -180,7 +179,7 @@ Respond with JSON:
     }
 
     if (projectId) {
-      const project = await prisma.project.findUnique({
+      const project = await request.prisma.project.findUnique({
         where: { id: projectId },
         include: { client: true }
       });
@@ -193,7 +192,7 @@ Respond with JSON:
     }
 
     if (clientId) {
-      const client = await prisma.client.findUnique({
+      const client = await request.prisma.client.findUnique({
         where: { id: clientId },
         include: {
           projects: true,
@@ -247,7 +246,7 @@ Provide a helpful, concise answer.`;
       return reply.status(400).send({ error: 'projectId and rawNotes are required' });
     }
 
-    const project = await prisma.project.findUnique({
+    const project = await request.prisma.project.findUnique({
       where: { id: projectId },
       include: {
         client: true,
@@ -323,7 +322,7 @@ Respond with JSON:
     let systemContext = '';
 
     // Get active projects summary
-    const projects = await prisma.project.findMany({
+    const projects = await request.prisma.project.findMany({
       where: { status: 'ACTIVE' },
       include: {
         client: true,
@@ -346,7 +345,7 @@ Respond with JSON:
     }
 
     // Get recent threads needing attention
-    const urgentThreads = await prisma.thread.findMany({
+    const urgentThreads = await request.prisma.thread.findMany({
       where: { status: { in: ['OPEN', 'AWAITING_RESPONSE'] } },
       include: { client: true, project: true },
       orderBy: { lastActivityAt: 'desc' },
@@ -362,7 +361,7 @@ Respond with JSON:
     }
 
     // Get overdue tasks
-    const overdueTasks = await prisma.task.findMany({
+    const overdueTasks = await request.prisma.task.findMany({
       where: {
         status: { not: 'COMPLETED' },
         dueDate: { lt: new Date() }
@@ -380,7 +379,7 @@ Respond with JSON:
     }
 
     // Get client retainer status
-    const retainers = await prisma.retainerPlan.findMany({
+    const retainers = await request.prisma.retainerPlan.findMany({
       include: { client: true }
     });
 
@@ -466,7 +465,7 @@ Format the proposal as clean, professional text ready to be sent to a client. Do
   fastify.post('/client-health', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
-    const clients = await prisma.client.findMany({
+    const clients = await request.prisma.client.findMany({
       where: { status: 'ACTIVE' },
       include: {
         threads: {
@@ -548,7 +547,7 @@ Format the proposal as clean, professional text ready to be sent to a client. Do
   fastify.post('/triage-inbox', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
-    const threads = await prisma.thread.findMany({
+    const threads = await request.prisma.thread.findMany({
       where: { status: 'OPEN' },
       include: {
         client: true,
@@ -601,7 +600,7 @@ Respond with JSON:
       for (const item of (result.results || [])) {
         const priority = ['CRITICAL', 'HIGH', 'NORMAL', 'LOW'].includes(item.priority) ? item.priority : 'NORMAL';
 
-        await prisma.thread.update({
+        await request.prisma.thread.update({
           where: { id: item.id },
           data: { priority }
         });
@@ -631,7 +630,7 @@ Respond with JSON:
   }, async (request, reply) => {
     const { projectId } = request.body;
 
-    const project = await prisma.project.findUnique({
+    const project = await request.prisma.project.findUnique({
       where: { id: projectId },
       include: {
         client: true,
@@ -677,7 +676,7 @@ Provide a 2-3 sentence summary of the project's current state.`;
       });
 
       // Update the project summary
-      await prisma.project.update({
+      await request.prisma.project.update({
         where: { id: projectId },
         data: { aiSummary: summary }
       });
@@ -709,7 +708,7 @@ Provide a 2-3 sentence summary of the project's current state.`;
     try {
       // Search projects
       if (q.includes('project') || q.includes('overdue') || q.includes('active') || q.includes('at risk') || q.includes('health')) {
-        const projects = await prisma.project.findMany({
+        const projects = await request.prisma.project.findMany({
           where: {
             OR: [
               { name: { contains: query, mode: 'insensitive' } },
@@ -739,7 +738,7 @@ Provide a 2-3 sentence summary of the project's current state.`;
           taskWhere.dueDate = { lt: new Date() };
         }
 
-        const tasks = await prisma.task.findMany({
+        const tasks = await request.prisma.task.findMany({
           where: Object.keys(taskWhere).length > 0 ? taskWhere : {
             OR: [
               { title: { contains: query, mode: 'insensitive' } },
@@ -762,7 +761,7 @@ Provide a 2-3 sentence summary of the project's current state.`;
 
       // Search clients
       if (q.includes('client') || q.includes('customer')) {
-        const clients = await prisma.client.findMany({
+        const clients = await request.prisma.client.findMany({
           where: {
             OR: [
               { name: { contains: query, mode: 'insensitive' } },
@@ -785,17 +784,17 @@ Provide a 2-3 sentence summary of the project's current state.`;
       // Generic search if no specific category matched
       if (results.length === 0) {
         const [projects, tasks, clients] = await Promise.all([
-          prisma.project.findMany({
+          request.prisma.project.findMany({
             where: { name: { contains: query, mode: 'insensitive' } },
             include: { client: { select: { name: true } } },
             take: 5
           }),
-          prisma.task.findMany({
+          request.prisma.task.findMany({
             where: { title: { contains: query, mode: 'insensitive' } },
             include: { project: { select: { name: true } } },
             take: 5
           }),
-          prisma.client.findMany({
+          request.prisma.client.findMany({
             where: { name: { contains: query, mode: 'insensitive' } },
             take: 5
           })
