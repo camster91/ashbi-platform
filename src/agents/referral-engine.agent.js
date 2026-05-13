@@ -9,8 +9,8 @@
  * they built our site and it's been running great."
  */
 
-const { createDraft } = require('./gmail-draft.agent');
-const { PrismaClient } = require('@prisma/client');
+import { createDraft } from './gmail-draft.agent.js';
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -25,7 +25,8 @@ const REFERRAL_REWARD = {
 // AI Client import - uses ../ai/client.js
 let aiClient = null;
 try {
-  aiClient = require('../ai/client.js');
+  const module = await import('../ai/client.js');
+  aiClient = module.default || module;
 } catch (err) {
   console.warn('AI client not found, using fallback generation');
   aiClient = null;
@@ -39,6 +40,36 @@ const REFERRAL_TIERS = {
   TIER_2: 'tier_2', // Satisfied clients - medium referral likelihood
   TIER_3: 'tier_3'  // Partners - refer when asked
 };
+
+/**
+ * Sanitize an email header value to prevent header injection and RFC violations.
+ * Removes control characters, newlines, and trims whitespace.
+ * Encodes non-ASCII characters using RFC 2047 encoded-word syntax.
+ * @param {string} value - The raw header value
+ * @returns {string} Sanitized header value safe for RFC 2822
+ */
+function sanitizeEmailHeader(value) {
+  if (typeof value !== 'string') return '';
+  
+  // Remove any control characters except tabs
+  let sanitized = value.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+  
+  // Remove any newlines (prevents header injection)
+  sanitized = sanitized.replace(/\r?\n|\r/g, ' ');
+  
+  // Collapse multiple spaces
+  sanitized = sanitized.replace(/[ \t]+/g, ' ').trim();
+  
+  // If there are non-ASCII characters, encode the whole value as RFC 2047
+  // eslint-disable-next-line no-control-regex
+  if (/[^\x20-\x7E]/.test(sanitized)) {
+    // Encode using ISO-8859-1 or UTF-8 base64 encoded-word
+    const buf = Buffer.from(sanitized, 'utf-8');
+    sanitized = '=?UTF-8?B?' + buf.toString('base64') + '?=';
+  }
+  
+  return sanitized;
+}
 
 /**
  * Get referral network - returns clients categorized by referral likelihood
@@ -74,10 +105,6 @@ async function getReferralNetwork() {
 
     for (const client of clients) {
       const referralLikelihood = calculateReferralLikelihood(client);
-      
-      // Tier 1: High likelihood (score >= 80)
-      // Tier 2: Medium likelihood (score >= 50)
-      // Tier 3: Lower likelihood but potential (score < 50)
       
       const tierEntry = {
         id: client.id,
@@ -173,7 +200,7 @@ function getLastProjectDate(projects) {
 
 /**
  * Generate referral email using AI
- * Creates a personalized referral ask email using Pi's referral-engine template style
+ * Creates a personalized referral ask email
  * 
  * @param {string} contactName - Name of the contact to ask for referral
  * @param {string} company - Company name of the contact
@@ -185,7 +212,7 @@ async function generateReferralEmail(contactName, company) {
     
     // Template system for referral emails
     const referralEmailTemplate = {
-      subject: `Quick favor — trusted web developer recommendation`,
+      subject: 'Quick favor — trusted web developer recommendation',
       body: `Hi ${firstName},
 
 I hope you're doing well! I wanted to reach out with a quick ask.
@@ -223,7 +250,8 @@ Include mention of $250 referral reward for $5K-$15K projects, paid after first 
           // Parse AI response for subject and body
           const lines = aiResponse.text.split('\n');
           const subjectLine = lines.find(l => l.toLowerCase().startsWith('subject:'));
-          const bodyLines = lines.slice(lines.findIndex(l => l === '') + 1);
+          const emptyIdx = lines.findIndex(l => l === '');
+          const bodyLines = emptyIdx >= 0 ? lines.slice(emptyIdx + 1) : lines;
           
           return {
             subject: subjectLine ? subjectLine.replace(/^subject:\s*/i, '') : referralEmailTemplate.subject,
@@ -263,13 +291,16 @@ async function createDraftForReferral(toEmail, subject, body) {
       throw new Error('Missing required parameters: toEmail, subject, body');
     }
 
-    const draftResult = await createDraft(toEmail, subject, body);
+    // Sanitize email header values to prevent injection and RFC violations
+    const sanitizedSubject = sanitizeEmailHeader(subject);
+
+    const draftResult = await createDraft(toEmail, sanitizedSubject, body);
 
     return {
       success: true,
       draftId: draftResult.id || draftResult.draft?.id,
       to: toEmail,
-      subject,
+      subject: sanitizedSubject,
       createdAt: new Date().toISOString()
     };
   } catch (error) {
@@ -540,7 +571,7 @@ async function importContacts(contacts) {
   }
 }
 
-module.exports = {
+export {
   getReferralNetwork,
   generateReferralEmail,
   createDraftForReferral,
@@ -548,5 +579,6 @@ module.exports = {
   getTopReferrers,
   importContacts,
   REFERRAL_TIERS,
-  REFERRAL_REWARD
+  REFERRAL_REWARD,
+  sanitizeEmailHeader
 };

@@ -188,10 +188,10 @@ function PostCard({ post, onEdit, onDelete, onPublish }) {
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <Calendar className="w-3.5 h-3.5" />
         {post.scheduledAt
-          ? `Scheduled: ${new Date(post.scheduledAt).toLocaleDateString()}`
+          ? `Scheduled: ${new Date(post.scheduledAt).toLocaleDateString('en-CA')}`
           : post.publishedAt
-          ? `Published: ${new Date(post.publishedAt).toLocaleDateString()}`
-          : `Created: ${new Date(post.createdAt).toLocaleDateString()}`
+          ? `Published: ${new Date(post.publishedAt).toLocaleDateString('en-CA')}`
+          : `Created: ${new Date(post.createdAt).toLocaleDateString('en-CA')}`
         }
       </div>
     </div>

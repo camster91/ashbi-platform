@@ -516,7 +516,7 @@ export default function Expenses() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2 text-sm text-foreground">
                         <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-                        {new Date(expense.date).toLocaleDateString('en-CA')}
+                        {new Date(expense.date).toLocaleDateString()}
                       </div>
                     </td>
                     <td className="px-4 py-3">

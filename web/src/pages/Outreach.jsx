@@ -344,7 +344,7 @@ export default function Outreach() {
                         </span>
                       </td>
                       <td className="px-4 py-3 hidden lg:table-cell text-muted-foreground text-xs">
-                        {lead.lastContactedAt ? new Date(lead.lastContactedAt).toLocaleDateString() : '—'}
+                        {lead.lastContactedAt ? new Date(lead.lastContactedAt).toLocaleDateString('en-CA') : '—'}
                       </td>
                       <td className="px-4 py-3">
                         <button onClick={() => setSelectedLead(lead)}

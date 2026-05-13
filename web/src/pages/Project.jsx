@@ -757,7 +757,7 @@ function ProjectNotes({ projectId }) {
                     ))}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {note.author?.name} · {new Date(note.updatedAt).toLocaleDateString()}
+                    {note.author?.name} · {new Date(note.updatedAt).toLocaleDateString('en-CA')}
                   </p>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">

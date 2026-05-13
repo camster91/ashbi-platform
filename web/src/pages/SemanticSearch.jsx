@@ -156,7 +156,7 @@ export default function SemanticSearch() {
 
       {/* Index Modal */}
       {showIndex && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowIndex(false)}>
+        <div role="button" tabIndex={0} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowIndex(false)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { setShowIndex(false); e.preventDefault(); } }}>
           <div className="bg-card rounded-xl border border-border p-6 w-full max-w-lg mx-4 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <Database className="w-5 h-5" />

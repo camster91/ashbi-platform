@@ -47,7 +47,7 @@ export default function ActivityFeed({ projectId, limit = 20, showProject = fals
     if (minutes < 60) return `${minutes}m ago`;
     if (hours < 24) return `${hours}h ago`;
     if (days < 7) return `${days}d ago`;
-    return new Date(date).toLocaleDateString();
+    return new Date(date).toLocaleDateString('en-CA');
   };
 
   // Generate activity message

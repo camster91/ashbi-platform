@@ -117,7 +117,7 @@ export function formatTaskAssigned(task, user, project, client) {
         },
         {
           name: "Due Date",
-          value: task.dueAt ? new Date(task.dueAt).toLocaleDateString() : "No due date",
+          value: task.dueAt ? new Date(task.dueAt).toLocaleDateString('en-CA') : "No due date",
           inline: true
         },
         {

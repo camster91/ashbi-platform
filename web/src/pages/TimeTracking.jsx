@@ -21,7 +21,7 @@ function durationToHours(duration) {
 }
 
 function fmtDate(d) {
-  return new Date(d).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', year: 'numeric' });
+  return new Date(d).toLocaleDateString({ month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export default function TimeTracking() {

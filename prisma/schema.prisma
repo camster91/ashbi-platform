@@ -174,6 +174,7 @@ model Project {
   status         String  @default("STARTING_UP") // STARTING_UP, DESIGN_DEV, ADDING_CONTENT, FINALIZING, LAUNCHED, ON_HOLD, CANCELLED
   health         String  @default("ON_TRACK") // ON_TRACK, NEEDS_ATTENTION, AT_RISK
   healthScore    Int     @default(100)
+  healthHistory  Json?   // Array of {health, score, timestamp} for historical tracking
   aiSummary      String? // AI-generated current status summary
   aiPlan         String? // JSON: AI-generated task plan
   risks          String  @default("[]") // JSON: identified risks
@@ -1165,68 +1166,82 @@ model LinkedInProspect {
 // ==================== COLD EMAIL AGENT ====================
 
 model ColdEmailSequence {
-  id               String   @id @default(cuid())
-  name             String
-  serviceType      String   // web_design | branding | seo | full_service
-  emails           String   @default("[]") // JSON: array of 5 emails [{subject, body, delayDays}]
-  status           String   @default("DRAFT") // DRAFT | ACTIVE | PAUSED | COMPLETED
-  targetIndustry   String?
-  // Tracking stats (denormalized for dashboard performance)
-  totalSent        Int      @default(0)
-  totalOpened      Int      @default(0)
-  totalClicked     Int      @default(0)
-  totalReplied     Int      @default(0)
-  totalBounced     Int      @default(0)
-  totalUnsubscribed Int     @default(0)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id             String   @id @default(cuid())
+  name           String
+  serviceType    String // web_design | branding | seo | full_service
+  emails         String   @default("[]") // JSON: array of 5 emails [{subject, body, delayDays}]
+  status         String   @default("DRAFT") // DRAFT | ACTIVE | PAUSED | COMPLETED
+  targetIndustry String?
+  // Sequence engine fields
+  startedAt      DateTime?
+  completedAt    DateTime?
+  // Stats (denormalized for fast reads)
+  totalSent      Int      @default(0)
+  totalOpened    Int      @default(0)
+  totalClicked   Int      @default(0)
+  totalReplied   Int      @default(0)
+  totalBounced   Int      @default(0)
+  totalProspects Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   prospects ColdEmailProspect[]
-  sends     ColdEmailSend[]
+  events    ColdEmailEvent[]
 
   @@map("cold_email_sequences")
 }
 
 model ColdEmailProspect {
-  id              String    @id @default(cuid())
-  name            String
-  email           String
-  company         String?
-  industry        String?
-  painPoint       String?
-  status          String    @default("NEW") // NEW | CONTACTED | REPLIED | CONVERTED | UNSUBSCRIBED | BOUNCED
-  sequenceId      String?
-  currentStep     Int       @default(0) // Which email in sequence they're at (0-indexed)
-  lastEmailedAt   DateTime?
-  opened          Boolean   @default(false)
-  clicked         Boolean   @default(false)
-  replied         Boolean   @default(false)
-  bounced         Boolean   @default(false)
-  unsubscribed    Boolean   @default(false)
-  nextScheduledAt DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id            String    @id @default(cuid())
+  name          String
+  email         String
+  company       String?
+  industry      String?
+  painPoint     String?
+  status        String    @default("NEW") // NEW | CONTACTED | REPLIED | CONVERTED | UNSUBSCRIBED
+  sequenceId    String?
+  // Pipeline source: Ashbi | cameronashley
+  source        String    @default("Ashbi")
+  // LinkedIn
+  linkedinUrl   String?
+  // Audit notes for Ashbi outreach (specific observation per brand)
+  auditNotes    String?
+  // Tracking fields
+  lastEmailStep Int?      @default(0) // Which email step in the sequence was last sent (0-indexed)
+  nextEmailAt   DateTime? // When to send the next email
+  openedAt      DateTime?
+  clickedAt     DateTime?
+  bouncedAt     DateTime?
+  lastEmailedAt DateTime?
+  emailCount    Int        @default(0) // Total emails sent to this prospect
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   sequence ColdEmailSequence? @relation(fields: [sequenceId], references: [id], onDelete: SetNull)
-  sends   ColdEmailSend[]
+  events   ColdEmailEvent[]
 
   @@map("cold_email_prospects")
 }
 
-model ColdEmailSend {
-  id          String    @id @default(cuid())
+// ColdEmailEvent — individual send/tracking events per prospect
+model ColdEmailEvent {
+  id          String   @id @default(cuid())
   prospectId  String
   sequenceId  String?
-  step        Int       // Which email in sequence (0-indexed)
-  subject     String
-  body        String
-  status      String    @default("PENDING") // PENDING | SENT | OPENED | CLICKED | BOUNCED | UNSUBSCRIBED
-  mailgunId   String?   // Mailgun message ID for tracking
-  openedAt    DateTime?
-  clickedAt   DateTime?
-  error       String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  type        String   // SENT | OPENED | CLICKED | BOUNCED | REPLIED | UNSUBSCRIBED
+  emailStep   Int?     // Which step in the sequence (0-indexed)
+  mailgunId   String?  // Mailgun message ID for tracking
+  mailgunEvent String? // Raw Mailgun event type
+  metadata    String?  // JSON — Mailgun event payload
+  createdAt   DateTime @default(now())
+
+  prospect ColdEmailProspect  @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  sequence ColdEmailSequence? @relation(fields: [sequenceId], references: [id], onDelete: SetNull)
+
+  @@map("cold_email_events")
+}
+
+// ==================== CALL SCREENER AGENT ====================
 
   prospect ColdEmailProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
   sequence ColdEmailSequence? @relation(fields: [sequenceId], references: [id], onDelete: SetNull)
@@ -1287,6 +1302,26 @@ model UpworkContract {
   updatedAt        DateTime  @updatedAt
 
   @@map("upwork_contracts")
+}
+
+model UpworkProposal {
+  id              String    @id @default(cuid())
+  jobId           String
+  jobTitle        String
+  clientName      String?
+  budget          Float?
+  coverLetter     String
+  status          String    @default("DRAFT")
+  // DRAFT | QUEUED | SUBMITTED | INTERVIEWING | HIRED | DECLINED | WITHDRAWN
+  score           Int?
+  jobUrl          String?
+  submittedAt     DateTime?
+  interviewAt     DateTime?
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("upwork_proposals")
 }
 
 // ==================== EXPENSE TRACKING ====================

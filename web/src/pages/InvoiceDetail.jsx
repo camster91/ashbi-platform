@@ -27,7 +27,7 @@ function fmt(n) {
 
 function formatDate(date) {
   if (!date) return '—';
-  return new Date(date).toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' });
+  return new Date(date).toLocaleDateString({ year: 'numeric', month: 'long', day: 'numeric' });
 }
 
 export default function InvoiceDetail() {

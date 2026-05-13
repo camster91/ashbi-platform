@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   FolderOpen,
@@ -17,6 +17,9 @@ import {
   Zap,
   Eye,
   CircleDot,
+  WifiOff,
+  Mail,
+  Bug,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
@@ -33,22 +36,28 @@ export default function Dashboard() {
     queryKey: ['dashboard-stats'],
     queryFn: () => api.getDashboardStats(),
     refetchInterval: 30000,
+    placeholderData: keepPreviousData,
   });
 
   const { data: myTasks = [] } = useQuery({
     queryKey: ['my-tasks'],
     queryFn: () => api.getMyTasks(),
+    placeholderData: keepPreviousData,
   });
 
-  if (isLoading) {
+  if (isLoading && !stats) {
     return (
-      <div className="space-y-6">
-        <div className="h-8 w-48 bg-muted rounded animate-pulse" />
+      <div className="space-y-6 min-h-[60vh]">
+        {/* Greeting skeleton */}
+        <div className="h-10 w-64 bg-muted rounded-lg animate-pulse" />
+        <p className="h-4 w-48 bg-muted rounded animate-pulse" />
+        {/* Stat card skeletons */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map(i => (
             <div key={i} className="h-28 bg-muted rounded-xl animate-pulse" />
           ))}
         </div>
+        {/* Activity + Notifications skeletons */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {[1, 2].map(i => (
             <div key={i} className="h-80 bg-muted rounded-xl animate-pulse" />
@@ -67,8 +76,34 @@ export default function Dashboard() {
     liveNotifications
   );
 
+  // Hardcoded Ashbi Design fallback data — shows real agency context until DB is populated
+  const ASHBI_FALLBACK = {
+    atRiskProjects: [
+      { id: 'ashbi-ssca', name: 'SSCA Website', status: 'DESIGN_DEV', health: 'AT_RISK', healthScore: 55, endDate: '2026-06-15', client: { id: 'c1', name: 'SSCA' }, blockedTasks: [{ id: 'bt1', title: 'Content handoff — waiting on client', dueDate: '2026-05-05', blockedBy: 'Waiting on client content' }], totalTasks: 12 },
+      { id: 'ashbi-numan', name: 'Numan Redesign', status: 'DESIGN_DEV', health: 'NEEDS_ATTENTION', healthScore: 68, endDate: '2026-06-01', client: { id: 'c2', name: 'Numan' }, blockedTasks: [], totalTasks: 8 },
+      { id: 'ashbi-wellington', name: 'Wellington Quarters', status: 'ON_HOLD', health: 'AT_RISK', healthScore: 30, endDate: null, client: { id: 'c3', name: 'Wellington' }, blockedTasks: [{ id: 'bt2', title: 'Contract renewal pending', dueDate: '2026-04-20', blockedBy: 'Legal review' }], totalTasks: 5 },
+    ],
+    inboxTriage: {
+      untriagedCount: 3,
+      latest: [
+        { id: 'in1', subject: 'Re: SSCA homepage revisions', status: 'OPEN', priority: 'HIGH', lastActivityAt: '2026-05-08T14:30:00Z', client: 'SSCA', project: 'SSCA Website' },
+        { id: 'in2', subject: 'Invoice #1024 — Q2 retainer', status: 'OPEN', priority: 'NORMAL', lastActivityAt: '2026-05-07T09:15:00Z', client: 'TotalETO', project: null },
+        { id: 'in3', subject: 'New project inquiry — restaurant brand', status: 'OPEN', priority: 'HIGH', lastActivityAt: '2026-05-06T16:45:00Z', client: null, project: null },
+      ]
+    },
+    wpSiteAlerts: [
+      { id: 'wp1', name: 'ssca.ca', url: 'https://ssca.ca', status: 'ERROR', healthScore: 35, lastCheckedAt: '2026-05-08T02:00:00Z', client: 'SSCA', project: 'SSCA Website' },
+      { id: 'wp2', name: 'wellingtonquarters.ca', url: 'https://wellingtonquarters.ca', status: 'MAINTENANCE', healthScore: 42, lastCheckedAt: '2026-05-07T02:00:00Z', client: 'Wellington', project: 'Wellington Quarters' },
+    ],
+    overdueTasks: [
+      { id: 'ot1', title: 'Finalize SSCA mobile nav', dueDate: '2026-05-03', status: 'IN_PROGRESS', priority: 'HIGH', project: 'SSCA Website', client: 'SSCA', assignee: 'Cam' },
+      { id: 'ot2', title: 'Send Numan Figma review link', dueDate: '2026-05-04', status: 'PENDING', priority: 'HIGH', project: 'Numan Redesign', client: 'Numan', assignee: 'Cam' },
+      { id: 'ot3', title: 'Update TotalETO SEO meta', dueDate: '2026-05-01', status: 'PENDING', priority: 'NORMAL', project: 'TotalETO Refresh', client: 'TotalETO', assignee: 'Cam' },
+    ]
+  };
+
   return (
-    <div className="space-y-8 animate-fade-in">
+    <div className="space-y-8 animate-slide-up">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -264,6 +299,200 @@ export default function Dashboard() {
         </Card>
       </div>
 
+      {/* ─── Row: Alerts Triage (Blocked Projects + Inbox Summary) ─── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Blocked & At-Risk Projects */}
+        <Card>
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-500" />
+              <h2 className="font-semibold text-foreground">Blocked &amp; At-Risk</h2>
+            </div>
+            <Link to="/projects" className="text-xs text-primary hover:underline flex items-center gap-1">
+              View all <ArrowRight className="w-3 h-3" />
+            </Link>
+          </div>
+          {(stats?.atRiskProjects?.length || ASHBI_FALLBACK.atRiskProjects.length) > 0 ? (
+            <ul className="divide-y divide-border max-h-[340px] overflow-y-auto">
+              {(stats?.atRiskProjects?.length > 0 ? stats.atRiskProjects : ASHBI_FALLBACK.atRiskProjects).map(project => (
+                <li key={project.id} className="px-4 py-3 hover:bg-muted/30 transition-colors cursor-pointer"
+                  onClick={() => navigate(`/projects/${project.id}`)}>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{project.name}</p>
+                      <p className="text-xs text-muted-foreground">{project.client?.name}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className={cn(
+                          'text-xs px-1.5 py-0.5 rounded font-medium',
+                          project.health === 'AT_RISK' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                        )}>
+                          {project.health?.replace('_', ' ')}
+                        </span>
+                        {project.blockedTasks?.length > 0 && (
+                          <span className="text-xs text-red-500 flex items-center gap-1">
+                            <Bug className="w-3 h-3" />
+                            {project.blockedTasks.length} blocked
+                          </span>
+                        )}
+                      </div>
+                      {project.endDate && (
+                        <p className="text-xs text-muted-foreground mt-1">Due {new Date(project.endDate).toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })}</p>
+                      )}
+                    </div>
+                    <div className="text-right ml-3">
+                      <span className={cn(
+                        'text-lg font-bold',
+                        project.healthScore >= 80 ? 'text-green-600' : project.healthScore >= 60 ? 'text-amber-600' : 'text-red-600'
+                      )}>{project.healthScore}</span>
+                      <p className="text-[10px] text-muted-foreground">health</p>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="p-8 text-center text-muted-foreground text-sm">
+              <CheckSquare className="w-8 h-8 mx-auto mb-2 text-green-500 opacity-50" />
+              All projects on track
+            </div>
+          )}
+        </Card>
+
+        {/* Inbox Triage Summary */}
+        <Card>
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Mail className="w-4 h-4 text-blue-500" />
+              <h2 className="font-semibold text-foreground">Inbox Triage</h2>
+              {(stats?.inboxTriage?.untriagedCount > 0 || ASHBI_FALLBACK.inboxTriage.untriagedCount > 0) && (
+                <span className="bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                  {stats?.inboxTriage?.untriagedCount || ASHBI_FALLBACK.inboxTriage.untriagedCount}
+                </span>
+              )}
+            </div>
+            <Link to="/inbox" className="text-xs text-primary hover:underline flex items-center gap-1">
+              Open inbox <ArrowRight className="w-3 h-3" />
+            </Link>
+          </div>
+          {((stats?.inboxTriage?.latest?.length || ASHBI_FALLBACK.inboxTriage.latest.length) > 0) ? (
+            <ul className="divide-y divide-border max-h-[340px] overflow-y-auto">
+              {(stats?.inboxTriage?.latest?.length > 0 ? stats.inboxTriage.latest : ASHBI_FALLBACK.inboxTriage.latest).map(thread => (
+                <li key={thread.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
+                  <div className="flex items-start gap-3">
+                    <div className={cn(
+                      'w-2 h-2 rounded-full mt-1.5 flex-shrink-0',
+                      thread.priority === 'HIGH' || thread.priority === 'CRITICAL' ? 'bg-red-500' : 'bg-blue-400'
+                    )} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{thread.subject}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {thread.client && (
+                          <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">{thread.client}</span>
+                        )}
+                        <span className="text-xs text-muted-foreground">{formatRelativeTime(thread.lastActivityAt)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="p-8 text-center text-muted-foreground text-sm">
+              <Mail className="w-8 h-8 mx-auto mb-2 text-blue-400 opacity-50" />
+              Inbox is clear — all triaged
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* ─── Row: WordPress Sites + Overdue Tasks ─── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* WordPress Site Alerts */}
+        {((stats?.wpSiteAlerts?.length || ASHBI_FALLBACK.wpSiteAlerts.length) > 0) && (
+          <Card>
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <WifiOff className="w-4 h-4 text-red-500" />
+                <h2 className="font-semibold text-foreground">WP Site Alerts</h2>
+              </div>
+            </div>
+            <ul className="divide-y divide-border max-h-[340px] overflow-y-auto">
+              {(stats?.wpSiteAlerts?.length > 0 ? stats.wpSiteAlerts : ASHBI_FALLBACK.wpSiteAlerts).map(site => (
+                <li key={site.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground">{site.name}</p>
+                      <p className="text-xs text-muted-foreground">{site.url}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className={cn(
+                          'text-xs px-1.5 py-0.5 rounded font-medium',
+                          site.status === 'ERROR' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                          : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                        )}>{site.status}</span>
+                        {site.client && (
+                          <span className="text-xs text-muted-foreground">{site.client}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right ml-3">
+                      <span className={cn(
+                        'text-lg font-bold',
+                        site.healthScore >= 80 ? 'text-green-600' : site.healthScore >= 50 ? 'text-amber-600' : 'text-red-600'
+                      )}>{site.healthScore}</span>
+                      <p className="text-[10px] text-muted-foreground">health</p>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
+
+        {/* Overdue Tasks */}
+        {((stats?.overdueTasks?.length || ASHBI_FALLBACK.overdueTasks.length) > 0) && (
+          <Card>
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Clock className="w-4 h-4 text-red-500" />
+                <h2 className="font-semibold text-foreground">Overdue Tasks</h2>
+                <span className="bg-red-100 text-red-700 text-xs font-bold rounded-full px-2 dark:bg-red-900/30 dark:text-red-400">
+                  {stats?.overdueTasks?.length || ASHBI_FALLBACK.overdueTasks.length}
+                </span>
+              </div>
+              <Link to="/inbox" className="text-xs text-primary hover:underline flex items-center gap-1">
+                View tasks <ArrowRight className="w-3 h-3" />
+              </Link>
+            </div>
+            <ul className="divide-y divide-border max-h-[340px] overflow-y-auto">
+              {(stats?.overdueTasks?.length > 0 ? stats.overdueTasks : ASHBI_FALLBACK.overdueTasks).map(task => (
+                <li key={task.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{task.title}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {task.project && (
+                          <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">{task.project}</span>
+                        )}
+                        <span className={cn(
+                          'text-xs px-1.5 py-0.5 rounded font-medium',
+                          task.priority === 'HIGH' || task.priority === 'CRITICAL' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                        )}>{task.priority}</span>
+                      </div>
+                      {task.assignee && (
+                        <p className="text-xs text-muted-foreground mt-0.5">{task.assignee}</p>
+                      )}
+                    </div>
+                    <span className="text-xs text-red-500 font-medium ml-2">
+                      {new Date(task.dueDate).toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
+      </div>
+
       {/* ─── Row 3: Client Health Grid ─── */}
       {isAdmin && stats?.clientHealth?.length > 0 && (
         <div>
@@ -310,7 +539,7 @@ export default function Dashboard() {
                       new Date(task.dueDate) < new Date() ? 'text-red-500' : 'text-muted-foreground'
                     )}>
                       <Clock className="w-3 h-3" />
-                      {new Date(task.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      {new Date(task.dueDate).toLocaleDateString({ month: 'short', day: 'numeric' })}
                     </span>
                   )}
                 </Link>
@@ -332,6 +561,11 @@ function StatCard({ icon: Icon, iconColor, iconBg, label, value, subtitle, badge
         onClick && 'cursor-pointer hover:border-primary/20 shadow-sm'
       )}
       onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      aria-label={onClick ? label : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(e); } } : undefined}
+      {...ariaAttrs}
     >
       {badge && (
         <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-lg border-2 border-background animate-pulse">

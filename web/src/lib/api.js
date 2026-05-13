@@ -234,6 +234,8 @@ export const api = {
     request(`/clients/${id}`, { method: 'PUT', body: data }),
   getClientInsights: (id) =>
     request(`/clients/${id}/insights`),
+  addClientNote: (clientId, content) =>
+    request(`/clients/${clientId}/notes`, { method: 'POST', body: { content } }),
 
   // Projects
   getProjects: (params = {}) => {
@@ -876,15 +878,24 @@ export const api = {
     const query = new URLSearchParams(params).toString();
     return request(`/cold-email/prospects${query ? `?${query}` : ''}`);
   },
-  updateColdEmailProspect: (id, data) =>
-    request(`/cold-email/prospects/${id}`, { method: 'PATCH', body: data }),
-  sendColdEmail: (prospectId, data) =>
-    request(`/cold-email/send/${prospectId}`, { method: 'POST', body: data }),
-  launchColdEmailSequence: (sequenceId) =>
-    request(`/cold-email/launch/${sequenceId}`, { method: 'POST' }),
-  advanceColdEmailSequence: (sequenceId) =>
-    request(`/cold-email/advance/${sequenceId}`, { method: 'POST' }),
-  getColdEmailSends: (params = {}) => {
+  // Sequence engine
+  activateColdEmailSequence: (sequenceId) =>
+    request(`/cold-email/sequences/${sequenceId}/activate`, { method: 'POST' }),
+  pauseColdEmailSequence: (sequenceId) =>
+    request(`/cold-email/sequences/${sequenceId}/pause`, { method: 'POST' }),
+  sendColdEmailToProspect: (prospectId, stepIndex) =>
+    request(`/cold-email/send-to-prospect/${prospectId}`, { method: 'POST', body: { stepIndex } }),
+  getColdEmailStats: (sequenceId) =>
+    request(`/cold-email/stats/${sequenceId}`),
+  processColdEmailQueue: () =>
+    request('/cold-email/process-queue', { method: 'POST' }),
+
+  // ===== CALL SCREENER AGENT =====
+  screenCall: (data) =>
+    request('/call-screener/screen', { method: 'POST', body: data }),
+  saveCallSummary: (data) =>
+    request('/call-screener/summary', { method: 'POST', body: data }),
+  getCallLog: (params = {}) => {
     const query = new URLSearchParams(params).toString();
     return request(`/cold-email/sends${query ? `?${query}` : ''}`);
   },
@@ -1385,6 +1396,16 @@ export const api = {
   connectIntegration: (type) => request(`/integrations/${type}/connect`, { method: 'POST' }),
   disconnectIntegration: (type) => request(`/integrations/${type}/disconnect`, { method: 'POST' }),
   syncIntegration: (type) => request(`/integrations/${type}/sync`, { method: 'POST' }),
+
+  // ===== NOTION SYNC =====
+  syncNotionAll: () =>
+    request('/notion-sync/sync-all', { method: 'POST' }),
+  syncNotionOne: (pageId) =>
+    request('/notion-sync/sync-one', { method: 'POST', body: { pageId } }),
+  getNotionProjects: () =>
+    request('/notion-sync/projects'),
+  getNotionStatus: () =>
+    request('/notion-sync/status'),
 
   // ===== TIMESHEETS =====
   getWeeklyTimesheet: (weekStart) => {

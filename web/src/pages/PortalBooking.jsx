@@ -39,7 +39,7 @@ function MiniCalendar({ selectedDate, onSelect }) {
   const prevMonth = () => setViewMonth(new Date(year, month - 1, 1));
   const nextMonth = () => setViewMonth(new Date(year, month + 1, 1));
 
-  const monthLabel = viewMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const monthLabel = viewMonth.toLocaleDateString({ month: 'long', year: 'numeric' });
 
   const cells = [];
   for (let i = 0; i < firstDay; i++) {
@@ -165,7 +165,7 @@ export default function PortalBooking() {
               <div className="flex items-center gap-2 text-slate-700">
                 <Calendar className="w-4 h-4 text-slate-500" />
                 <span className="text-sm font-medium">
-                  {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', {
+                  {new Date(selectedDate + 'T00:00:00').toLocaleDateString({
                     weekday: 'long',
                     month: 'long',
                     day: 'numeric',
@@ -317,7 +317,7 @@ export default function PortalBooking() {
             <div className="flex items-center gap-4 px-4 py-3 rounded-lg bg-slate-50 border border-slate-100 text-sm text-slate-600">
               <div className="flex items-center gap-1.5">
                 <Calendar className="w-4 h-4 text-slate-400" />
-                {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', {
+                {new Date(selectedDate + 'T00:00:00').toLocaleDateString({
                   weekday: 'short',
                   month: 'short',
                   day: 'numeric',

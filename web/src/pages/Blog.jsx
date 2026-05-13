@@ -355,8 +355,8 @@ export default function Blog() {
                   <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
                     <Clock className="w-3 h-3" />
                     {post.publishedAt
-                      ? `Published ${new Date(post.publishedAt).toLocaleDateString()}`
-                      : `Created ${new Date(post.createdAt).toLocaleDateString()}`
+                      ? `Published ${new Date(post.publishedAt).toLocaleDateString('en-CA')}`
+                      : `Created ${new Date(post.createdAt).toLocaleDateString('en-CA')}`
                     }
                   </div>
                 </div>
