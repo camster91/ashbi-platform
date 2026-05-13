@@ -1,5 +1,4 @@
 // Push Notification Routes
-import prisma from '../config/db.js';
 import { getVapidPublicKey, sendPushToAll } from '../utils/web-push.js';
 
 export default async function pushRoutes(fastify) {
@@ -19,12 +18,12 @@ export default async function pushRoutes(fastify) {
     }
 
     // Upsert: update if endpoint exists, create if not
-    const existing = await prisma.pushSubscription.findFirst({
+    const existing = await request.prisma.pushSubscription.findFirst({
       where: { endpoint }
     });
 
     if (existing) {
-      await prisma.pushSubscription.update({
+      await request.prisma.pushSubscription.update({
         where: { id: existing.id },
         data: {
           keys: JSON.stringify(keys),
@@ -33,7 +32,7 @@ export default async function pushRoutes(fastify) {
         }
       });
     } else {
-      await prisma.pushSubscription.create({
+      await request.prisma.pushSubscription.create({
         data: {
           endpoint,
           keys: JSON.stringify(keys),
@@ -54,7 +53,7 @@ export default async function pushRoutes(fastify) {
       return reply.status(400).send({ error: 'Endpoint required' });
     }
 
-    await prisma.pushSubscription.deleteMany({
+    await request.prisma.pushSubscription.deleteMany({
       where: { endpoint, userId: request.user.id }
     });
 

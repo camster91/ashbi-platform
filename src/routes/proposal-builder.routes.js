@@ -18,7 +18,6 @@ import {
   PROPOSAL_STATUS
 } from '../agents/proposal-builder.agent.js';
 
-import prisma from '../config/db.js';
 
 export default async function proposalBuilderRoutes(fastify) {
 

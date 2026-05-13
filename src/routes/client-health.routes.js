@@ -1,6 +1,8 @@
 // Client Health Bot Routes
 // Scores clients based on engagement, payment history, project activity, and communication
 
+// SECURITY TODO: This route still imports global prisma.
+// It should be refactored to pass prisma as parameter to helper functions.
 import prisma from '../config/db.js';
 
 // Health scoring weights

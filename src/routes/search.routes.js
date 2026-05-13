@@ -1,6 +1,5 @@
 // Search routes
 
-import prisma from '../config/db.js';
 import aiClient from '../ai/client.js';
 
 export default async function searchRoutes(fastify) {
@@ -34,7 +33,7 @@ export default async function searchRoutes(fastify) {
       if (clientId) threadWhere.clientId = clientId;
       if (projectId) threadWhere.projectId = projectId;
 
-      results.threads = await prisma.thread.findMany({
+      results.threads = await request.prisma.thread.findMany({
         where: threadWhere,
         include: {
           client: { select: { id: true, name: true } },
@@ -47,7 +46,7 @@ export default async function searchRoutes(fastify) {
     }
 
     if (searchAll || type === 'clients') {
-      results.clients = await prisma.client.findMany({
+      results.clients = await request.prisma.client.findMany({
         where: {
           OR: [
             { name: { contains: q } },
@@ -67,7 +66,7 @@ export default async function searchRoutes(fastify) {
       };
       if (clientId) projectWhere.clientId = clientId;
 
-      results.projects = await prisma.project.findMany({
+      results.projects = await request.prisma.project.findMany({
         where: projectWhere,
         include: {
           client: { select: { id: true, name: true } }
@@ -84,7 +83,7 @@ export default async function searchRoutes(fastify) {
         ]
       };
 
-      results.messages = await prisma.message.findMany({
+      results.messages = await request.prisma.message.findMany({
         where: messageWhere,
         include: {
           thread: {
@@ -121,7 +120,7 @@ export default async function searchRoutes(fastify) {
     const { limit: limitParam = '5' } = request.query;
     const limit = parseInt(limitParam);
 
-    const thread = await prisma.thread.findUnique({
+    const thread = await request.prisma.thread.findUnique({
       where: { id: threadId },
       include: {
         messages: { orderBy: { receivedAt: 'desc' }, take: 1 }
@@ -140,7 +139,7 @@ export default async function searchRoutes(fastify) {
     }
 
     // Search for threads with similar keywords
-    const similarThreads = await prisma.thread.findMany({
+    const similarThreads = await request.prisma.thread.findMany({
       where: {
         id: { not: threadId },
         OR: keywords.slice(0, 5).map(keyword => ({
@@ -180,7 +179,7 @@ export default async function searchRoutes(fastify) {
     const sources = [];
 
     if (projectId) {
-      const project = await prisma.project.findUnique({
+      const project = await request.prisma.project.findUnique({
         where: { id: projectId },
         include: { client: true, threads: { take: 10, orderBy: { lastActivityAt: 'desc' }, include: { messages: { take: 1, orderBy: { receivedAt: 'desc' } } } } }
       });
@@ -195,7 +194,7 @@ export default async function searchRoutes(fastify) {
     }
 
     if (clientId) {
-      const client = await prisma.client.findUnique({
+      const client = await request.prisma.client.findUnique({
         where: { id: clientId },
         include: { projects: true, threads: { take: 10, orderBy: { lastActivityAt: 'desc' } } }
       });
@@ -212,7 +211,7 @@ export default async function searchRoutes(fastify) {
     if (!context) {
       const keywords = question.split(/\s+/).filter(w => w.length > 3).slice(0, 5);
       if (keywords.length > 0) {
-        const threads = await prisma.thread.findMany({
+        const threads = await request.prisma.thread.findMany({
           where: { OR: keywords.map(k => ({ subject: { contains: k } })) },
           take: 10,
           orderBy: { lastActivityAt: 'desc' },

@@ -2,6 +2,8 @@
 // GET /api/command-center   - single endpoint that aggregates all integration data
 // Returns all panels in one response for the dashboard
 
+// SECURITY TODO: This route still imports global prisma.
+// It should be refactored to pass prisma as parameter to helper functions.
 import prisma from '../config/db.js';
 
 const COOLIFY_URL = process.env.COOLIFY_URL || 'http://187.77.26.99:8000';

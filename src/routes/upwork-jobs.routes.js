@@ -3,7 +3,6 @@
  * API endpoints for tracking Upwork jobs and drafting cover letters
  */
 
-import prisma from '../config/db.js';
 
 export default async function upworkJobsRoutes(fastify) {
 
@@ -21,7 +20,7 @@ export default async function upworkJobsRoutes(fastify) {
       const where = {};
       if (status) where.status = status;
 
-      const jobs = await prisma.upworkJob.findMany({
+      const jobs = await request.prisma.upworkJob.findMany({
         where,
         orderBy: { createdAt: 'desc' },
         take: limit ? parseInt(limit) : 50,
@@ -49,7 +48,7 @@ export default async function upworkJobsRoutes(fastify) {
   }, async (request, reply) => {
     try {
       const { id } = request.params;
-      const job = await prisma.upworkJob.findUnique({
+      const job = await request.prisma.upworkJob.findUnique({
         where: { id },
         include: { drafts: { orderBy: { createdAt: 'desc' } } }
       });
@@ -76,12 +75,12 @@ export default async function upworkJobsRoutes(fastify) {
       }
 
       // Check for duplicate URL
-      const existing = await prisma.upworkJob.findUnique({ where: { url } });
+      const existing = await request.prisma.upworkJob.findUnique({ where: { url } });
       if (existing) {
         return reply.status(409).send({ error: 'Job with this URL already exists', job: existing });
       }
 
-      const job = await prisma.upworkJob.create({
+      const job = await request.prisma.upworkJob.create({
         data: {
           url,
           title,
@@ -120,7 +119,7 @@ export default async function upworkJobsRoutes(fastify) {
       if (clientName !== undefined) data.clientName = clientName;
       if (score !== undefined) data.score = score ? parseInt(score) : null;
 
-      const job = await prisma.upworkJob.update({
+      const job = await request.prisma.upworkJob.update({
         where: { id },
         data,
         include: { drafts: { orderBy: { createdAt: 'desc' }, take: 1 } }
@@ -142,7 +141,7 @@ export default async function upworkJobsRoutes(fastify) {
   }, async (request, reply) => {
     try {
       const { id } = request.params;
-      await prisma.upworkJob.delete({ where: { id } });
+      await request.prisma.upworkJob.delete({ where: { id } });
       return reply.send({ success: true, message: 'Job deleted' });
     } catch (error) {
       request.log.error(error, 'Error deleting job');
@@ -161,7 +160,7 @@ export default async function upworkJobsRoutes(fastify) {
   }, async (request, reply) => {
     try {
       const { jobId } = request.params;
-      const drafts = await prisma.upworkDraftProposal.findMany({
+      const drafts = await request.prisma.upworkDraftProposal.findMany({
         where: { jobId },
         orderBy: { createdAt: 'desc' }
       });
@@ -188,10 +187,10 @@ export default async function upworkJobsRoutes(fastify) {
       }
 
       // Verify job exists
-      const job = await prisma.upworkJob.findUnique({ where: { id: jobId } });
+      const job = await request.prisma.upworkJob.findUnique({ where: { id: jobId } });
       if (!job) return reply.status(404).send({ error: 'Job not found' });
 
-      const draft = await prisma.upworkDraftProposal.create({
+      const draft = await request.prisma.upworkDraftProposal.create({
         data: {
           jobId,
           coverLetter,
@@ -223,7 +222,7 @@ export default async function upworkJobsRoutes(fastify) {
       if (proposedRate !== undefined) data.proposedRate = proposedRate;
       if (status !== undefined) data.status = status;
 
-      const draft = await prisma.upworkDraftProposal.update({
+      const draft = await request.prisma.upworkDraftProposal.update({
         where: { id },
         data
       });
@@ -244,7 +243,7 @@ export default async function upworkJobsRoutes(fastify) {
   }, async (request, reply) => {
     try {
       const { id } = request.params;
-      await prisma.upworkDraftProposal.delete({ where: { id } });
+      await request.prisma.upworkDraftProposal.delete({ where: { id } });
       return reply.send({ success: true, message: 'Draft deleted' });
     } catch (error) {
       request.log.error(error, 'Error deleting draft');
@@ -263,7 +262,7 @@ export default async function upworkJobsRoutes(fastify) {
       const { jobId } = request.params;
 
       // Update job status to APPLIED
-      const job = await prisma.upworkJob.update({
+      const job = await request.prisma.upworkJob.update({
         where: { id: jobId },
         data: { status: 'APPLIED' },
         include: { drafts: { orderBy: { createdAt: 'desc' }, take: 1 } }
@@ -271,7 +270,7 @@ export default async function upworkJobsRoutes(fastify) {
 
       // Mark the latest draft as SUBMITTED
       if (job.drafts.length > 0) {
-        await prisma.upworkDraftProposal.update({
+        await request.prisma.upworkDraftProposal.update({
           where: { id: job.drafts[0].id },
           data: { status: 'SUBMITTED' }
         });

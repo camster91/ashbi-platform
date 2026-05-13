@@ -1,6 +1,5 @@
 // Automation history routes
 
-import prisma from '../config/db.js';
 
 export default async function automationRoutes(fastify) {
   // All routes require admin auth
@@ -10,7 +9,7 @@ export default async function automationRoutes(fastify) {
   fastify.get('/history', async (request, reply) => {
     const { limit = 50, offset = 0 } = request.query;
 
-    const activities = await prisma.activity.findMany({
+    const activities = await request.prisma.activity.findMany({
       where: {
         OR: [
           { metadata: { contains: 'WORKFLOW_ENGINE' } },
@@ -25,7 +24,7 @@ export default async function automationRoutes(fastify) {
       }
     });
 
-    const total = await prisma.activity.count({
+    const total = await request.prisma.activity.count({
       where: {
         OR: [
           { metadata: { contains: 'WORKFLOW_ENGINE' } },

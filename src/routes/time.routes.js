@@ -1,6 +1,5 @@
 // Time Tracking routes
 
-import prisma from '../config/db.js';
 
 export default async function timeRoutes(fastify) {
   // Get time entries for a project
@@ -34,7 +33,7 @@ export default async function timeRoutes(fastify) {
     }
 
     const [entries, total] = await Promise.all([
-      prisma.timeEntry.findMany({
+      request.prisma.timeEntry.findMany({
         where,
         include: {
           user: { select: { id: true, name: true } },
@@ -44,16 +43,16 @@ export default async function timeRoutes(fastify) {
         skip: (page - 1) * limit,
         take: limit
       }),
-      prisma.timeEntry.count({ where })
+      request.prisma.timeEntry.count({ where })
     ]);
 
     // Calculate totals
-    const aggregates = await prisma.timeEntry.aggregate({
+    const aggregates = await request.prisma.timeEntry.aggregate({
       where,
       _sum: { duration: true }
     });
 
-    const billableAggregates = await prisma.timeEntry.aggregate({
+    const billableAggregates = await request.prisma.timeEntry.aggregate({
       where: { ...where, billable: true },
       _sum: { duration: true }
     });
@@ -86,7 +85,7 @@ export default async function timeRoutes(fastify) {
       if (endDate) where.date.lte = new Date(endDate);
     }
 
-    const entries = await prisma.timeEntry.findMany({
+    const entries = await request.prisma.timeEntry.findMany({
       where,
       include: {
         project: { select: { id: true, name: true } },
@@ -136,7 +135,7 @@ export default async function timeRoutes(fastify) {
       return reply.status(400).send({ error: 'Duration must be a positive number' });
     }
 
-    const entry = await prisma.timeEntry.create({
+    const entry = await request.prisma.timeEntry.create({
       data: {
         description,
         duration: parseInt(duration),
@@ -154,7 +153,7 @@ export default async function timeRoutes(fastify) {
     });
 
     // Log activity
-    await prisma.activity.create({
+    await request.prisma.activity.create({
       data: {
         type: 'TIME_LOGGED',
         action: 'created',
@@ -177,7 +176,7 @@ export default async function timeRoutes(fastify) {
     const { id } = request.params;
     const { duration, description, date, billable, taskId } = request.body;
 
-    const existing = await prisma.timeEntry.findUnique({ where: { id } });
+    const existing = await request.prisma.timeEntry.findUnique({ where: { id } });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Time entry not found' });
@@ -195,7 +194,7 @@ export default async function timeRoutes(fastify) {
     if (billable !== undefined) data.billable = billable;
     if (taskId !== undefined) data.taskId = taskId;
 
-    const entry = await prisma.timeEntry.update({
+    const entry = await request.prisma.timeEntry.update({
       where: { id },
       data,
       include: {
@@ -213,7 +212,7 @@ export default async function timeRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const existing = await prisma.timeEntry.findUnique({ where: { id } });
+    const existing = await request.prisma.timeEntry.findUnique({ where: { id } });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Time entry not found' });
@@ -224,7 +223,7 @@ export default async function timeRoutes(fastify) {
       return reply.status(403).send({ error: 'Cannot delete this time entry' });
     }
 
-    await prisma.timeEntry.delete({ where: { id } });
+    await request.prisma.timeEntry.delete({ where: { id } });
 
     return { success: true };
   });
@@ -248,7 +247,7 @@ export default async function timeRoutes(fastify) {
       if (endDate) where.date.lte = new Date(endDate);
     }
 
-    const entries = await prisma.timeEntry.findMany({
+    const entries = await request.prisma.timeEntry.findMany({
       where,
       include: {
         project: { select: { id: true, name: true } },
@@ -317,7 +316,7 @@ export default async function timeRoutes(fastify) {
     const where = { date: { gte: start, lt: end } };
     if (request.user.role !== 'ADMIN') where.userId = request.user.id;
 
-    const entries = await prisma.timeEntry.findMany({
+    const entries = await request.prisma.timeEntry.findMany({
       where,
       include: {
         user: { select: { id: true, name: true, hourlyRate: true } },
@@ -359,10 +358,10 @@ export default async function timeRoutes(fastify) {
     }
 
     const { id } = request.params;
-    const existing = await prisma.timeEntry.findUnique({ where: { id } });
+    const existing = await request.prisma.timeEntry.findUnique({ where: { id } });
     if (!existing) return reply.status(404).send({ error: 'Time entry not found' });
 
-    const entry = await prisma.timeEntry.update({
+    const entry = await request.prisma.timeEntry.update({
       where: { id },
       data: { approvedById: request.user.id }
     });

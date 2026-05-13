@@ -2,7 +2,6 @@
 
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
-import prisma from '../config/db.js';
 import { queueEmbedding } from '../jobs/queue.js';
 
 async function sendProposalEmail(to, clientName, proposalTitle, portalUrl) {
@@ -50,7 +49,7 @@ export default async function proposalRoutes(fastify) {
     if (clientId) where.clientId = clientId;
     if (status) where.status = status;
 
-    const proposals = await prisma.proposal.findMany({
+    const proposals = await request.prisma.proposal.findMany({
       where,
       include: {
         client: { select: { id: true, name: true } },
@@ -72,7 +71,7 @@ export default async function proposalRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const proposal = await prisma.proposal.findUnique({
+    const proposal = await request.prisma.proposal.findUnique({
       where: { id },
       include: {
         client: true,
@@ -111,7 +110,7 @@ export default async function proposalRoutes(fastify) {
     const discount = request.body.discount || 0;
     const total = subtotal - discount;
 
-    const proposal = await prisma.$transaction(async (tx) => {
+    const proposal = await request.prisma.$transaction(async (tx) => {
       const created = await tx.proposal.create({
         data: {
           title,
@@ -152,7 +151,7 @@ export default async function proposalRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const existing = await prisma.proposal.findUnique({ where: { id } });
+    const existing = await request.prisma.proposal.findUnique({ where: { id } });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Proposal not found' });
@@ -171,7 +170,7 @@ export default async function proposalRoutes(fastify) {
     if (projectId !== undefined) data.projectId = projectId || null;
     if (discount !== undefined) data.discount = discount;
 
-    const proposal = await prisma.$transaction(async (tx) => {
+    const proposal = await request.prisma.$transaction(async (tx) => {
       // If lineItems provided, replace them
       if (lineItems) {
         await tx.proposalLineItem.deleteMany({ where: { proposalId: id } });
@@ -215,7 +214,7 @@ export default async function proposalRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const existing = await prisma.proposal.findUnique({ where: { id } });
+    const existing = await request.prisma.proposal.findUnique({ where: { id } });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Proposal not found' });
@@ -225,7 +224,7 @@ export default async function proposalRoutes(fastify) {
       return reply.status(400).send({ error: 'Only DRAFT proposals can be deleted' });
     }
 
-    await prisma.proposal.delete({ where: { id } });
+    await request.prisma.proposal.delete({ where: { id } });
 
     return { success: true };
   });
@@ -236,13 +235,13 @@ export default async function proposalRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const existing = await prisma.proposal.findUnique({ where: { id } });
+    const existing = await request.prisma.proposal.findUnique({ where: { id } });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Proposal not found' });
     }
 
-    const proposal = await prisma.proposal.update({
+    const proposal = await request.prisma.proposal.update({
       where: { id },
       data: {
         status: 'SENT',
@@ -277,7 +276,7 @@ export default async function proposalRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const existing = await prisma.proposal.findUnique({
+    const existing = await request.prisma.proposal.findUnique({
       where: { id },
       include: { lineItems: true }
     });
@@ -286,7 +285,7 @@ export default async function proposalRoutes(fastify) {
       return reply.status(404).send({ error: 'Proposal not found' });
     }
 
-    const proposal = await prisma.$transaction(async (tx) => {
+    const proposal = await request.prisma.$transaction(async (tx) => {
       const created = await tx.proposal.create({
         data: {
           title: `${existing.title} (Copy)`,
@@ -326,7 +325,7 @@ export default async function proposalRoutes(fastify) {
   fastify.get('/client/:viewToken', async (request, reply) => {
     const { viewToken } = request.params;
 
-    const proposal = await prisma.proposal.findUnique({
+    const proposal = await request.prisma.proposal.findUnique({
       where: { viewToken },
       include: {
         client: true,
@@ -341,7 +340,7 @@ export default async function proposalRoutes(fastify) {
 
     // If status is SENT, update to VIEWED
     if (proposal.status === 'SENT') {
-      await prisma.proposal.update({
+      await request.prisma.proposal.update({
         where: { id: proposal.id },
         data: { status: 'VIEWED' }
       });
@@ -355,7 +354,7 @@ export default async function proposalRoutes(fastify) {
   fastify.post('/client/:viewToken/approve', async (request, reply) => {
     const { viewToken } = request.params;
 
-    const proposal = await prisma.proposal.findUnique({
+    const proposal = await request.prisma.proposal.findUnique({
       where: { viewToken }
     });
 
@@ -363,7 +362,7 @@ export default async function proposalRoutes(fastify) {
       return reply.status(404).send({ error: 'Proposal not found' });
     }
 
-    const updated = await prisma.proposal.update({
+    const updated = await request.prisma.proposal.update({
       where: { id: proposal.id },
       data: {
         status: 'APPROVED',
@@ -378,7 +377,7 @@ export default async function proposalRoutes(fastify) {
   fastify.post('/client/:viewToken/decline', async (request, reply) => {
     const { viewToken } = request.params;
 
-    const proposal = await prisma.proposal.findUnique({
+    const proposal = await request.prisma.proposal.findUnique({
       where: { viewToken }
     });
 
@@ -386,7 +385,7 @@ export default async function proposalRoutes(fastify) {
       return reply.status(404).send({ error: 'Proposal not found' });
     }
 
-    const updated = await prisma.proposal.update({
+    const updated = await request.prisma.proposal.update({
       where: { id: proposal.id },
       data: {
         status: 'DECLINED',

@@ -1,6 +1,5 @@
 // Credentials Vault routes
 
-import prisma from '../config/db.js';
 import { encrypt, decrypt } from '../utils/crypto.js';
 
 export default async function credentialRoutes(fastify) {
@@ -15,7 +14,7 @@ export default async function credentialRoutes(fastify) {
     if (projectId) where.projectId = projectId;
     if (category) where.category = category;
 
-    const credentials = await prisma.credential.findMany({
+    const credentials = await request.prisma.credential.findMany({
       where,
       include: {
         client: { select: { id: true, name: true } },
@@ -37,7 +36,7 @@ export default async function credentialRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const credential = await prisma.credential.findUnique({
+    const credential = await request.prisma.credential.findUnique({
       where: { id },
       include: {
         client: { select: { id: true, name: true } },
@@ -61,7 +60,7 @@ export default async function credentialRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const credential = await prisma.credential.findUnique({
+    const credential = await request.prisma.credential.findUnique({
       where: { id },
       select: { password: true }
     });
@@ -83,7 +82,7 @@ export default async function credentialRoutes(fastify) {
       return reply.status(400).send({ error: 'Label and password are required' });
     }
 
-    const credential = await prisma.credential.create({
+    const credential = await request.prisma.credential.create({
       data: {
         label,
         username: username || null,
@@ -123,7 +122,7 @@ export default async function credentialRoutes(fastify) {
     if (clientId !== undefined) data.clientId = clientId || null;
     if (projectId !== undefined) data.projectId = projectId || null;
 
-    const credential = await prisma.credential.update({
+    const credential = await request.prisma.credential.update({
       where: { id },
       data,
       include: {
@@ -144,7 +143,7 @@ export default async function credentialRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    await prisma.credential.delete({ where: { id } });
+    await request.prisma.credential.delete({ where: { id } });
     return { success: true };
   });
 }

@@ -1,6 +1,5 @@
 // AI Team Routes — 7 specialized AI agents with chat interfaces
 
-import prisma from '../config/db.js';
 import { getProvider } from '../ai/providers/index.js';
 
 const AGENTS = [
@@ -126,7 +125,7 @@ export default async function aiTeamRoutes(fastify) {
     let contextParts = [];
 
     if (clientId) {
-      const client = await prisma.client.findUnique({
+      const client = await request.prisma.client.findUnique({
         where: { id: clientId },
         include: { contacts: true, projects: { select: { id: true, name: true, status: true } } },
       });
@@ -136,7 +135,7 @@ export default async function aiTeamRoutes(fastify) {
     }
 
     if (projectId) {
-      const project = await prisma.project.findUnique({
+      const project = await request.prisma.project.findUnique({
         where: { id: projectId },
         include: { client: { select: { name: true } } },
       });
@@ -171,7 +170,7 @@ export default async function aiTeamRoutes(fastify) {
       { agentRole, role: 'USER', content: message, clientId: clientId || null, projectId: projectId || null },
       { agentRole, role: 'ASSISTANT', content: response, clientId: clientId || null, projectId: projectId || null },
     ];
-    await prisma.aiTeamMessage.createMany({ data: saveData });
+    await request.prisma.aiTeamMessage.createMany({ data: saveData });
 
     return { response };
   });
@@ -179,7 +178,7 @@ export default async function aiTeamRoutes(fastify) {
   // GET /ai-team/history/:agentRole — recent chat history for an agent
   fastify.get('/history/:agentRole', { onRequest: [fastify.authenticate] }, async (request) => {
     const { agentRole } = request.params;
-    const messages = await prisma.aiTeamMessage.findMany({
+    const messages = await request.prisma.aiTeamMessage.findMany({
       where: { agentRole },
       orderBy: { createdAt: 'desc' },
       take: 50,

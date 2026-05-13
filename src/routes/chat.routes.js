@@ -1,6 +1,5 @@
 // Project Chat routes - Real-time team messaging
 
-import prisma from '../config/db.js';
 
 export default async function chatRoutes(fastify) {
   // Get chat messages for a project (paginated)
@@ -20,7 +19,7 @@ export default async function chatRoutes(fastify) {
       where.createdAt = { gt: new Date(after) };
     }
 
-    const messages = await prisma.chatMessage.findMany({
+    const messages = await request.prisma.chatMessage.findMany({
       where,
       include: {
         author: { select: { id: true, name: true, email: true } },
@@ -64,7 +63,7 @@ export default async function chatRoutes(fastify) {
       mentions.push(match[1]);
     }
 
-    const message = await prisma.chatMessage.create({
+    const message = await request.prisma.chatMessage.create({
       data: {
         content,
         type,
@@ -81,7 +80,7 @@ export default async function chatRoutes(fastify) {
     });
 
     // Log activity
-    await prisma.activity.create({
+    await request.prisma.activity.create({
       data: {
         type: 'CHAT_MESSAGE',
         action: 'created',
@@ -95,13 +94,13 @@ export default async function chatRoutes(fastify) {
 
     // Notify mentioned users
     if (mentions.length > 0) {
-      const mentionedUsers = await prisma.user.findMany({
+      const mentionedUsers = await request.prisma.user.findMany({
         where: { name: { in: mentions }, isActive: true }
       });
 
       for (const user of mentionedUsers) {
         if (user.id !== request.user.id) {
-          await prisma.notification.create({
+          await request.prisma.notification.create({
             data: {
               type: 'MENTION',
               title: 'You were mentioned',
@@ -134,7 +133,7 @@ export default async function chatRoutes(fastify) {
     const { projectId, messageId } = request.params;
     const { content } = request.body;
 
-    const existing = await prisma.chatMessage.findUnique({
+    const existing = await request.prisma.chatMessage.findUnique({
       where: { id: messageId }
     });
 
@@ -146,7 +145,7 @@ export default async function chatRoutes(fastify) {
       return reply.status(403).send({ error: 'Can only edit your own messages' });
     }
 
-    const message = await prisma.chatMessage.update({
+    const message = await request.prisma.chatMessage.update({
       where: { id: messageId },
       data: {
         content,
@@ -171,7 +170,7 @@ export default async function chatRoutes(fastify) {
   }, async (request, reply) => {
     const { projectId, messageId } = request.params;
 
-    const existing = await prisma.chatMessage.findUnique({
+    const existing = await request.prisma.chatMessage.findUnique({
       where: { id: messageId }
     });
 
@@ -184,7 +183,7 @@ export default async function chatRoutes(fastify) {
       return reply.status(403).send({ error: 'Cannot delete this message' });
     }
 
-    await prisma.chatMessage.delete({ where: { id: messageId } });
+    await request.prisma.chatMessage.delete({ where: { id: messageId } });
 
     // Broadcast deletion
     fastify.io.to(`project:${projectId}`).emit('chat:deleted', { messageId });
@@ -204,7 +203,7 @@ export default async function chatRoutes(fastify) {
     }
 
     // Check if reaction already exists
-    const existing = await prisma.chatReaction.findUnique({
+    const existing = await request.prisma.chatReaction.findUnique({
       where: {
         messageId_userId_emoji: {
           messageId,
@@ -218,7 +217,7 @@ export default async function chatRoutes(fastify) {
       return reply.status(400).send({ error: 'Reaction already exists' });
     }
 
-    const reaction = await prisma.chatReaction.create({
+    const reaction = await request.prisma.chatReaction.create({
       data: {
         emoji,
         messageId,
@@ -245,7 +244,7 @@ export default async function chatRoutes(fastify) {
   }, async (request, reply) => {
     const { projectId, messageId, emoji } = request.params;
 
-    await prisma.chatReaction.deleteMany({
+    await request.prisma.chatReaction.deleteMany({
       where: {
         messageId,
         userId: request.user.id,

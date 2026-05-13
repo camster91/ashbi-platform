@@ -1,6 +1,5 @@
 // Client Portal Routes — passwordless magic-link auth + full portal experience
 
-import prisma from '../config/db.js';
 import { generateInvoicePdf } from '../utils/generate-invoice-pdf.js';
 import env from '../config/env.js';
 import path from 'path';
@@ -87,7 +86,7 @@ export default async function clientPortalRoutes(fastify) {
   }, async (request, reply) => {
     const { email } = request.body;
 
-    const contact = await prisma.contact.findFirst({
+    const contact = await request.prisma.contact.findFirst({
       where: { email: email.toLowerCase().trim() },
       include: { client: true }
     });
@@ -154,8 +153,8 @@ export default async function clientPortalRoutes(fastify) {
     const { contactId, clientId } = request.clientUser;
 
     const [contact, client] = await Promise.all([
-      prisma.contact.findUnique({ where: { id: contactId }, select: { name: true, email: true } }),
-      prisma.client.findUnique({ where: { id: clientId }, select: { name: true, contactPerson: true } })
+      request.prisma.contact.findUnique({ where: { id: contactId }, select: { name: true, email: true } }),
+      request.prisma.client.findUnique({ where: { id: clientId }, select: { name: true, contactPerson: true } })
     ]);
 
     if (!contact || !client) {
@@ -171,7 +170,7 @@ export default async function clientPortalRoutes(fastify) {
   fastify.get('/client-portal/projects', { preHandler: clientAuth }, async (request, reply) => {
     const { clientId } = request.clientUser;
 
-    const projects = await prisma.project.findMany({
+    const projects = await request.prisma.project.findMany({
       where: { clientId, status: { notIn: ['CANCELLED'] } },
       select: {
         id: true,
@@ -190,7 +189,7 @@ export default async function clientPortalRoutes(fastify) {
     });
 
     const withProgress = await Promise.all(projects.map(async (p) => {
-      const completedCount = await prisma.task.count({
+      const completedCount = await request.prisma.task.count({
         where: { projectId: p.id, status: 'COMPLETED' }
       });
       const totalCount = p._count.tasks;
@@ -210,7 +209,7 @@ export default async function clientPortalRoutes(fastify) {
     const { clientId } = request.clientUser;
     const { id } = request.params;
 
-    const project = await prisma.project.findFirst({
+    const project = await request.prisma.project.findFirst({
       where: { id, clientId },
       select: {
         id: true,
@@ -232,7 +231,7 @@ export default async function clientPortalRoutes(fastify) {
       return reply.status(404).send({ error: 'Project not found' });
     }
 
-    const completedCount = await prisma.task.count({
+    const completedCount = await request.prisma.task.count({
       where: { projectId: id, status: 'COMPLETED' }
     });
 
@@ -250,12 +249,12 @@ export default async function clientPortalRoutes(fastify) {
     const { id } = request.params;
 
     // Verify project belongs to client
-    const project = await prisma.project.findFirst({ where: { id, clientId } });
+    const project = await request.prisma.project.findFirst({ where: { id, clientId } });
     if (!project) {
       return reply.status(404).send({ error: 'Project not found' });
     }
 
-    const tasks = await prisma.task.findMany({
+    const tasks = await request.prisma.task.findMany({
       where: { projectId: id, parentId: null },
       select: {
         id: true,
@@ -295,7 +294,7 @@ export default async function clientPortalRoutes(fastify) {
     const { id } = request.params;
     const { limit = '50', before, after } = request.query;
 
-    const project = await prisma.project.findFirst({ where: { id, clientId } });
+    const project = await request.prisma.project.findFirst({ where: { id, clientId } });
     if (!project) {
       return reply.status(404).send({ error: 'Project not found' });
     }
@@ -304,7 +303,7 @@ export default async function clientPortalRoutes(fastify) {
     if (before) where.createdAt = { lt: new Date(before) };
     else if (after) where.createdAt = { gt: new Date(after) };
 
-    const messages = await prisma.chatMessage.findMany({
+    const messages = await request.prisma.chatMessage.findMany({
       where,
       include: {
         author: { select: { id: true, name: true, email: true } }
@@ -325,20 +324,20 @@ export default async function clientPortalRoutes(fastify) {
     const { id } = request.params;
     const { content, type } = request.body;
 
-    const project = await prisma.project.findFirst({ where: { id, clientId } });
+    const project = await request.prisma.project.findFirst({ where: { id, clientId } });
     if (!project) {
       return reply.status(404).send({ error: 'Project not found' });
     }
 
     // Find or create a user for the contact to use as author
-    const contact = await prisma.contact.findUnique({ where: { id: contactId } });
-    let authorUser = await prisma.user.findFirst({
+    const contact = await request.prisma.contact.findUnique({ where: { id: contactId } });
+    let authorUser = await request.prisma.user.findFirst({
       where: { email: contact.email }
     });
 
     // If no user exists for this contact, create a minimal one
     if (!authorUser) {
-      authorUser = await prisma.user.create({
+      authorUser = await request.prisma.user.create({
         data: {
           email: contact.email,
           name: contact.name,
@@ -349,7 +348,7 @@ export default async function clientPortalRoutes(fastify) {
       });
     }
 
-    const message = await prisma.chatMessage.create({
+    const message = await request.prisma.chatMessage.create({
       data: {
         content,
         type,
@@ -380,12 +379,12 @@ export default async function clientPortalRoutes(fastify) {
     const { clientId } = request.clientUser;
     const { id } = request.params;
 
-    const project = await prisma.project.findFirst({ where: { id, clientId } });
+    const project = await request.prisma.project.findFirst({ where: { id, clientId } });
     if (!project) {
       return reply.status(404).send({ error: 'Project not found' });
     }
 
-    const documents = await prisma.attachment.findMany({
+    const documents = await request.prisma.attachment.findMany({
       where: { entityType: 'PROJECT', entityId: id },
       include: {
         uploadedBy: { select: { id: true, name: true } }
@@ -401,7 +400,7 @@ export default async function clientPortalRoutes(fastify) {
     const { clientId, contactId } = request.clientUser;
     const { id } = request.params;
 
-    const project = await prisma.project.findFirst({ where: { id, clientId } });
+    const project = await request.prisma.project.findFirst({ where: { id, clientId } });
     if (!project) {
       return reply.status(404).send({ error: 'Project not found' });
     }
@@ -429,10 +428,10 @@ export default async function clientPortalRoutes(fastify) {
     await fs.writeFile(filepath, buffer);
 
     // Find or create user for the contact
-    const contact = await prisma.contact.findUnique({ where: { id: contactId } });
-    let authorUser = await prisma.user.findFirst({ where: { email: contact.email } });
+    const contact = await request.prisma.contact.findUnique({ where: { id: contactId } });
+    let authorUser = await request.prisma.user.findFirst({ where: { email: contact.email } });
     if (!authorUser) {
-      authorUser = await prisma.user.create({
+      authorUser = await request.prisma.user.create({
         data: {
           email: contact.email,
           name: contact.name,
@@ -444,7 +443,7 @@ export default async function clientPortalRoutes(fastify) {
     }
 
     // Save attachment record
-    const attachment = await prisma.attachment.create({
+    const attachment = await request.prisma.attachment.create({
       data: {
         filename,
         originalName: data.filename,
@@ -468,14 +467,14 @@ export default async function clientPortalRoutes(fastify) {
     const { clientId } = request.clientUser;
     const { docId } = request.params;
 
-    const doc = await prisma.attachment.findUnique({ where: { id: docId } });
+    const doc = await request.prisma.attachment.findUnique({ where: { id: docId } });
     if (!doc) {
       return reply.status(404).send({ error: 'Document not found' });
     }
 
     // Verify the document belongs to a project owned by this client
     if (doc.entityType === 'PROJECT') {
-      const project = await prisma.project.findFirst({
+      const project = await request.prisma.project.findFirst({
         where: { id: doc.entityId, clientId }
       });
       if (!project) {
@@ -493,7 +492,7 @@ export default async function clientPortalRoutes(fastify) {
       // File may already be deleted, continue
     }
 
-    await prisma.attachment.delete({ where: { id: docId } });
+    await request.prisma.attachment.delete({ where: { id: docId } });
 
     return { success: true };
   });
@@ -504,7 +503,7 @@ export default async function clientPortalRoutes(fastify) {
   fastify.get('/client-portal/invoices', { preHandler: clientAuth }, async (request, reply) => {
     const { clientId } = request.clientUser;
 
-    const invoices = await prisma.invoice.findMany({
+    const invoices = await request.prisma.invoice.findMany({
       where: { clientId },
       select: {
         id: true,
@@ -530,7 +529,7 @@ export default async function clientPortalRoutes(fastify) {
     const { clientId } = request.clientUser;
     const { id } = request.params;
 
-    const invoice = await prisma.invoice.findFirst({
+    const invoice = await request.prisma.invoice.findFirst({
       where: { id, clientId },
       include: {
         client: true,
@@ -557,7 +556,7 @@ export default async function clientPortalRoutes(fastify) {
   fastify.get('/client-portal/retainer', { preHandler: clientAuth }, async (request, reply) => {
     const { clientId } = request.clientUser;
 
-    const retainer = await prisma.retainerPlan.findUnique({
+    const retainer = await request.prisma.retainerPlan.findUnique({
       where: { clientId }
     });
 
@@ -587,7 +586,7 @@ export default async function clientPortalRoutes(fastify) {
     const { clientId } = request.clientUser;
 
     // Get all project IDs for this client
-    const projects = await prisma.project.findMany({
+    const projects = await request.prisma.project.findMany({
       where: { clientId, status: { notIn: ['CANCELLED'] } },
       select: { id: true }
     });
@@ -598,7 +597,7 @@ export default async function clientPortalRoutes(fastify) {
     const weekAgo = new Date();
     weekAgo.setDate(weekAgo.getDate() - 7);
 
-    const recentMessages = await prisma.chatMessage.count({
+    const recentMessages = await request.prisma.chatMessage.count({
       where: {
         projectId: { in: projectIds },
         createdAt: { gte: weekAgo },
@@ -606,7 +605,7 @@ export default async function clientPortalRoutes(fastify) {
       }
     });
 
-    const upcomingDeadlines = await prisma.task.count({
+    const upcomingDeadlines = await request.prisma.task.count({
       where: {
         projectId: { in: projectIds },
         dueDate: {

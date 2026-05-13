@@ -1,3 +1,5 @@
+// SECURITY TODO: This route still imports global prisma.
+// It should be refactored to pass prisma as parameter to helper functions.
 import prisma from '../config/db.js';
 
 export default async function bookkeepingRoutes(fastify) {

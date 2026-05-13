@@ -1,13 +1,12 @@
 // Response routes (drafts and approvals)
 
-import prisma from '../config/db.js';
 
 export default async function responseRoutes(fastify) {
   // Get all pending approval responses (admin only)
   fastify.get('/pending', {
     onRequest: [fastify.adminOnly]
   }, async (request) => {
-    const responses = await prisma.response.findMany({
+    const responses = await request.prisma.response.findMany({
       where: { status: 'PENDING_APPROVAL' },
       include: {
         thread: {
@@ -34,7 +33,7 @@ export default async function responseRoutes(fastify) {
     const { threadId } = request.params;
     const { subject, body, tone, aiGenerated = false, aiOptions } = request.body;
 
-    const response = await prisma.response.create({
+    const response = await request.prisma.response.create({
       data: {
         subject,
         body,
@@ -56,7 +55,7 @@ export default async function responseRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const response = await prisma.response.findUnique({
+    const response = await request.prisma.response.findUnique({
       where: { id },
       include: {
         thread: {
@@ -87,7 +86,7 @@ export default async function responseRoutes(fastify) {
     const { id } = request.params;
     const { subject, body, tone } = request.body;
 
-    const existing = await prisma.response.findUnique({ where: { id } });
+    const existing = await request.prisma.response.findUnique({ where: { id } });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Response not found' });
@@ -98,7 +97,7 @@ export default async function responseRoutes(fastify) {
       return reply.status(400).send({ error: 'Cannot edit response in current status' });
     }
 
-    const response = await prisma.response.update({
+    const response = await request.prisma.response.update({
       where: { id },
       data: {
         subject,
@@ -118,7 +117,7 @@ export default async function responseRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const existing = await prisma.response.findUnique({ where: { id } });
+    const existing = await request.prisma.response.findUnique({ where: { id } });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Response not found' });
@@ -128,19 +127,19 @@ export default async function responseRoutes(fastify) {
       return reply.status(400).send({ error: 'Response already submitted' });
     }
 
-    const response = await prisma.response.update({
+    const response = await request.prisma.response.update({
       where: { id },
       data: { status: 'PENDING_APPROVAL' },
       include: { thread: true }
     });
 
     // Notify admins
-    const admins = await prisma.user.findMany({
+    const admins = await request.prisma.user.findMany({
       where: { role: 'ADMIN', isActive: true }
     });
 
     for (const admin of admins) {
-      await prisma.notification.create({
+      await request.prisma.notification.create({
         data: {
           type: 'RESPONSE_PENDING',
           title: 'Response needs approval',
@@ -162,7 +161,7 @@ export default async function responseRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const existing = await prisma.response.findUnique({ where: { id } });
+    const existing = await request.prisma.response.findUnique({ where: { id } });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Response not found' });
@@ -172,7 +171,7 @@ export default async function responseRoutes(fastify) {
       return reply.status(400).send({ error: 'Response not pending approval' });
     }
 
-    const response = await prisma.response.update({
+    const response = await request.prisma.response.update({
       where: { id },
       data: {
         status: 'APPROVED',
@@ -186,7 +185,7 @@ export default async function responseRoutes(fastify) {
     });
 
     // Notify the drafter
-    await prisma.notification.create({
+    await request.prisma.notification.create({
       data: {
         type: 'RESPONSE_APPROVED',
         title: 'Response approved',
@@ -208,7 +207,7 @@ export default async function responseRoutes(fastify) {
     const { id } = request.params;
     const { reason } = request.body;
 
-    const existing = await prisma.response.findUnique({ where: { id } });
+    const existing = await request.prisma.response.findUnique({ where: { id } });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Response not found' });
@@ -218,7 +217,7 @@ export default async function responseRoutes(fastify) {
       return reply.status(400).send({ error: 'Response not pending approval' });
     }
 
-    const response = await prisma.response.update({
+    const response = await request.prisma.response.update({
       where: { id },
       data: {
         status: 'REJECTED',
@@ -231,7 +230,7 @@ export default async function responseRoutes(fastify) {
     });
 
     // Notify the drafter
-    await prisma.notification.create({
+    await request.prisma.notification.create({
       data: {
         type: 'RESPONSE_REJECTED',
         title: 'Response needs revision',
@@ -252,7 +251,7 @@ export default async function responseRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const existing = await prisma.response.findUnique({ where: { id } });
+    const existing = await request.prisma.response.findUnique({ where: { id } });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Response not found' });
@@ -262,7 +261,7 @@ export default async function responseRoutes(fastify) {
       return reply.status(400).send({ error: 'Response not approved' });
     }
 
-    const response = await prisma.response.update({
+    const response = await request.prisma.response.update({
       where: { id },
       data: {
         status: 'SENT',
@@ -271,7 +270,7 @@ export default async function responseRoutes(fastify) {
     });
 
     // Update thread status
-    await prisma.thread.update({
+    await request.prisma.thread.update({
       where: { id: response.threadId },
       data: {
         status: 'OPEN',

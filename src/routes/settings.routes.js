@@ -1,6 +1,5 @@
 // Settings routes (assignment rules, templates, configuration)
 
-import prisma from '../config/db.js';
 import { safeParse } from '../utils/safeParse.js';
 
 export default async function settingsRoutes(fastify) {
@@ -10,7 +9,7 @@ export default async function settingsRoutes(fastify) {
   fastify.get('/assignment-rules', {
     onRequest: [fastify.authenticate]
   }, async () => {
-    const rules = await prisma.assignmentRule.findMany({
+    const rules = await request.prisma.assignmentRule.findMany({
       orderBy: [
         { priority: 'desc' },
         { name: 'asc' }
@@ -29,7 +28,7 @@ export default async function settingsRoutes(fastify) {
   }, async (request, reply) => {
     const { name, type, conditions, assignToId, priority = 0, isActive = true } = request.body;
 
-    const rule = await prisma.assignmentRule.create({
+    const rule = await request.prisma.assignmentRule.create({
       data: {
         name,
         type,
@@ -61,7 +60,7 @@ export default async function settingsRoutes(fastify) {
     if (priority !== undefined) data.priority = priority;
     if (isActive !== undefined) data.isActive = isActive;
 
-    const rule = await prisma.assignmentRule.update({
+    const rule = await request.prisma.assignmentRule.update({
       where: { id },
       data
     });
@@ -78,7 +77,7 @@ export default async function settingsRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    await prisma.assignmentRule.delete({
+    await request.prisma.assignmentRule.delete({
       where: { id }
     });
 
@@ -97,7 +96,7 @@ export default async function settingsRoutes(fastify) {
     if (category) where.category = category;
     if (activeOnly === 'true') where.isActive = true;
 
-    const templates = await prisma.template.findMany({
+    const templates = await request.prisma.template.findMany({
       where,
       orderBy: [
         { category: 'asc' },
@@ -117,7 +116,7 @@ export default async function settingsRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const template = await prisma.template.findUnique({
+    const template = await request.prisma.template.findUnique({
       where: { id }
     });
 
@@ -137,7 +136,7 @@ export default async function settingsRoutes(fastify) {
   }, async (request, reply) => {
     const { name, category, subject, body, variables = [], isActive = true } = request.body;
 
-    const template = await prisma.template.create({
+    const template = await request.prisma.template.create({
       data: {
         name,
         category,
@@ -169,7 +168,7 @@ export default async function settingsRoutes(fastify) {
     if (variables) data.variables = JSON.stringify(variables);
     if (isActive !== undefined) data.isActive = isActive;
 
-    const template = await prisma.template.update({
+    const template = await request.prisma.template.update({
       where: { id },
       data
     });
@@ -186,7 +185,7 @@ export default async function settingsRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    await prisma.template.delete({
+    await request.prisma.template.delete({
       where: { id }
     });
 
@@ -200,7 +199,7 @@ export default async function settingsRoutes(fastify) {
     const { id } = request.params;
     const { variables = {} } = request.body;
 
-    const template = await prisma.template.findUnique({
+    const template = await request.prisma.template.findUnique({
       where: { id }
     });
 
