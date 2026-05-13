@@ -1,6 +1,9 @@
 import { cn } from '../../lib/utils';
 import Button from './Button';
-import { Inbox, FolderOpen, Search, Mail, FileText, Users, Bell, CheckCircle } from 'lucide-react';
+import {
+  Inbox, FolderOpen, Search, Mail, FileText, Users, Bell, CheckCircle,
+  Receipt, DollarSign, ClipboardList,
+} from 'lucide-react';
 
 const icons = {
   inbox: Inbox,
@@ -11,6 +14,9 @@ const icons = {
   team: Users,
   notifications: Bell,
   success: CheckCircle,
+  invoice: Receipt,
+  expense: DollarSign,
+  tasks: ClipboardList,
 };
 
 export default function EmptyState({
@@ -22,6 +28,7 @@ export default function EmptyState({
   onAction,
   secondaryAction,
   className,
+  illustration,
 }) {
   const Icon = icons[iconName] || Inbox;
 
@@ -33,18 +40,24 @@ export default function EmptyState({
         className
       )}
     >
-      <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
-        <Icon className="w-8 h-8 text-muted-foreground" />
-      </div>
-      
+      {illustration ? (
+        <div className="mb-4 text-muted-foreground/40 dark:text-muted-foreground/30">
+          {illustration}
+        </div>
+      ) : (
+        <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
+          <Icon className="w-8 h-8 text-muted-foreground" />
+        </div>
+      )}
+
       <h3 className="font-heading font-semibold text-lg text-foreground mb-1">
         {title}
       </h3>
-      
+
       <p className="text-sm text-muted-foreground max-w-sm mb-6">
         {description}
       </p>
-      
+
       {(actionLabel || onAction) && (
         <div className="flex items-center gap-3">
           {actionLabel && (
@@ -117,6 +130,66 @@ export function EmptyTeam({ onInvite }) {
       description="Invite your team to collaborate on projects and handle client requests."
       actionLabel="Invite Team Member"
       onAction={onInvite}
+    />
+  );
+}
+
+export function EmptyClients({ onAddClient }) {
+  return (
+    <EmptyState
+      icon="team"
+      title="No clients yet"
+      description="Add your first client to start managing projects, proposals, and invoices."
+      actionLabel="Add Client"
+      onAction={onAddClient}
+    />
+  );
+}
+
+export function EmptyInvoices({ onCreateInvoice }) {
+  return (
+    <EmptyState
+      icon="invoice"
+      title="No invoices yet"
+      description="Create your first invoice to start billing clients for your work."
+      actionLabel="Create Invoice"
+      onAction={onCreateInvoice}
+    />
+  );
+}
+
+export function EmptyProposals({ onCreateProposal }) {
+  return (
+    <EmptyState
+      icon="document"
+      title="No proposals yet"
+      description="Create your first proposal to send professional quotes to clients."
+      actionLabel="Create Proposal"
+      onAction={onCreateProposal}
+    />
+  );
+}
+
+export function EmptyExpenses({ onAddExpense }) {
+  return (
+    <EmptyState
+      icon="expense"
+      title="No expenses yet"
+      description="Track your business expenses to keep an eye on costs and profitability."
+      actionLabel="Add Expense"
+      onAction={onAddExpense}
+    />
+  );
+}
+
+export function EmptyTasks({ onCreateTask }) {
+  return (
+    <EmptyState
+      icon="tasks"
+      title="No tasks yet"
+      description="Create your first task to break down work into manageable pieces."
+      actionLabel="Create Task"
+      onAction={onCreateTask}
     />
   );
 }

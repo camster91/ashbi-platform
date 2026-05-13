@@ -767,6 +767,23 @@ model RevisionRound {
   @@map("revision_rounds")
 }
 
+// ==================== PROPOSAL VERSIONS ====================
+
+model ProposalVersion {
+  id         String   @id @default(cuid())
+  proposalId String
+  data       Json
+  createdById String
+  createdAt  DateTime @default(now())
+
+  proposal  Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  createdBy User     @relation(fields: [createdById], references: [id])
+
+  @@index([proposalId])
+  @@index([createdAt])
+  @@map("proposal_versions")
+}
+
 // ==================== PROPOSALS ====================
 
 model Proposal {
@@ -793,6 +810,7 @@ model Proposal {
   project   Project?           @relation(fields: [projectId], references: [id])
   createdBy User               @relation("ProposalCreator", fields: [createdById], references: [id])
   lineItems ProposalLineItem[]
+  versions  ProposalVersion[]
   contract  Contract?
   // Soft delete
   deletedAt DateTime?

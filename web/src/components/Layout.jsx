@@ -49,9 +49,12 @@ import { useTheme } from '../hooks/useTheme';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
 import NotificationsDropdown from './NotificationsDropdown';
+import LiveTimer from './LiveTimer';
 import { Button } from './ui';
 import { useInstallPrompt } from '../hooks/useInstallPrompt';
 import { usePushNotifications } from '../hooks/usePushNotifications';
+import { useSocket } from '../hooks/useSocket';
+import OnboardingTour from './OnboardingTour';
 
 export default function Layout({ children }) {
   const location = useLocation();
@@ -68,6 +71,7 @@ export default function Layout({ children }) {
   const sidebarRef = useRef(null);
   const { isInstallable, install } = useInstallPrompt();
   const { permission, subscribed, subscribe } = usePushNotifications();
+  const { socket } = useSocket();
   const [installDismissed, setInstallDismissed] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
 
@@ -127,8 +131,8 @@ export default function Layout({ children }) {
   const coreNav = [
     { name: 'Dashboard', href: '/', icon: LayoutDashboard, exact: true },
     { name: 'Inbox', href: '/inbox', icon: Inbox, badge: stats?.needsResponse },
-    { name: 'Projects', href: '/projects', icon: FolderOpen },
-    { name: 'Clients', href: '/clients', icon: Users },
+    { name: 'Projects', href: '/projects', icon: FolderOpen, id: 'projects-link' },
+    { name: 'Clients', href: '/clients', icon: Users, id: 'clients-link' },
     { name: 'Invoices', href: '/invoices', icon: Receipt },
   ];
   
@@ -145,7 +149,7 @@ export default function Layout({ children }) {
   // Finance & Docs — collapsible section
   const financeNav = [
     { name: 'Pipeline', href: '/pipeline', icon: Filter },
-    { name: 'Proposals', href: '/proposals', icon: FileText },
+    { name: 'Proposals', href: '/proposals', icon: FileText, id: 'proposals-link' },
     { name: 'Estimates', href: '/estimates', icon: ClipboardList },
     { name: 'Contracts', href: '/contracts', icon: ScrollText },
     { name: 'Expenses', href: '/expenses', icon: Wallet },
@@ -204,6 +208,7 @@ export default function Layout({ children }) {
           to={item.href}
           onClick={() => setSidebarOpen(false)}
           title={sidebarCollapsed ? item.name : undefined}
+          id={item.id}
           className={cn(
             'flex items-center text-sm font-medium rounded-lg transition-all duration-150',
             sidebarCollapsed ? 'px-2.5 py-2 justify-center' : 'px-3 py-1.5',
@@ -465,6 +470,7 @@ export default function Layout({ children }) {
 
           {/* Right side actions */}
           <div className="flex items-center gap-2">
+            <LiveTimer socket={socket} />
             <QuickCreateMenu navigate={navigate} isAdmin={isAdmin} />
             <button
               onClick={toggleTheme}
@@ -691,6 +697,9 @@ export default function Layout({ children }) {
 
       {/* Quick Add — Cmd+K command palette */}
       <QuickAdd open={quickAddOpen} onClose={() => setQuickAddOpen(false)} />
+
+      {/* Onboarding Tour */}
+      {user && <OnboardingTour />}
     </div>
   );
 }

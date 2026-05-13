@@ -469,6 +469,14 @@ export const api = {
   createManualTimeEntry: (data) =>
     request('/time-tracking/manual', { method: 'POST', body: data }),
 
+  // Time Sessions (live timer)
+  startTimeSession: (data) =>
+    request('/time-sessions', { method: 'POST', body: data }),
+  stopTimeSession: (id) =>
+    request(`/time-sessions/${id}/stop`, { method: 'POST' }),
+  getRunningTimeSession: () =>
+    request('/time-sessions/running'),
+
   // Activity Feed
   getProjectActivity: (projectId, params = {}) => {
     const query = new URLSearchParams(params).toString();
@@ -575,6 +583,16 @@ export const api = {
     request(`/proposals/${id}/send`, { method: 'POST' }),
   duplicateProposal: (id) =>
     request(`/proposals/${id}/duplicate`, { method: 'POST' }),
+  // Bulk proposal actions
+  bulkSendProposals: (ids) =>
+    request('/proposals/bulk/send', { method: 'POST', body: { ids } }),
+  bulkArchiveProposals: (ids) =>
+    request('/proposals/bulk/archive', { method: 'POST', body: { ids } }),
+  // Proposal versioning
+  getProposalVersions: (id) =>
+    request(`/proposals/${id}/versions`),
+  restoreProposalVersion: (id, versionId) =>
+    request(`/proposals/${id}/versions/${versionId}/restore`, { method: 'POST' }),
 
   // ===== CONTRACTS =====
   getContracts: (params = {}) => {
@@ -617,6 +635,13 @@ export const api = {
     request(`/invoices/${id}/payment-link`, { method: 'POST' }),
   getInvoicePayments: (id) =>
     request(`/invoices/${id}/payments`),
+  // Bulk invoice actions
+  bulkMarkPaid: (ids, paymentMethod) =>
+    request('/invoices/bulk/mark-paid', { method: 'POST', body: { ids, paymentMethod } }),
+  bulkSendInvoices: (ids) =>
+    request('/invoices/bulk/send', { method: 'POST', body: { ids } }),
+  bulkArchiveInvoices: (ids) =>
+    request('/invoices/bulk/archive', { method: 'POST', body: { ids } }),
   // Line item templates
   getLineItemTemplates: () =>
     request('/invoices/templates'),

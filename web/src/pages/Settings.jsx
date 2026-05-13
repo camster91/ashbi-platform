@@ -22,6 +22,7 @@ import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import { Button, Card } from '../components/ui';
+import { resetOnboarding } from '../components/OnboardingTour';
 
 function Section({ icon: Icon, title, description, children }) {
   return (
@@ -607,6 +608,22 @@ export default function Settings() {
           </div>
         </Section>
       )}
+
+      {/* Onboarding Tour */}
+      <Section icon={RefreshCw} title="Onboarding Tour" description="Replay the guided introduction">
+        <p className="text-sm text-muted-foreground mb-3">
+          If you missed the tour or want to see it again, you can restart it here.
+        </p>
+        <Button
+          variant="outline"
+          onClick={() => {
+            resetOnboarding();
+            toast.success('Tour reset', 'It will show on your next page load');
+          }}
+        >
+          Restart Tour
+        </Button>
+      </Section>
 
       {/* Account info */}
       <div className="text-xs text-muted-foreground text-center pb-4">
