@@ -125,6 +125,7 @@ import coldCallRoutes from './routes/cold-call.routes.js';
 import upworkAutoAlertRoutes from './routes/upwork-auto-alert.routes.js';
 import clientAcquisitionRoutes from './routes/client-acquisition.routes.js';
 import trashRoutes from './routes/trash.routes.js';
+import draftRoutes from './routes/draft.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -246,7 +247,8 @@ await fastify.register(agentsRoutes, { prefix: '/api/agents' });
 await fastify.register(integrationsVpsRoutes, { prefix: '/api/integrations/vps' });
 await fastify.register(integrationsHostingerRoutes, { prefix: '/api/integrations/hostinger' });
 await fastify.register(integrationsGithubRoutes, { prefix: '/api/integrations/github' });
-await fastify.register(trashRoutes, { prefix: '/api/trash' });
+  await fastify.register(trashRoutes, { prefix: '/api/trash' });
+  await fastify.register(draftRoutes, { prefix: '/api/draft' });
 await fastify.register(clientSuccessAgentRoutes, { prefix: '/api/client-success' });
 await fastify.register(financeAgentRoutes, { prefix: '/api/finance' });
 await fastify.register(opsAgentRoutes, { prefix: '/api/ops' });

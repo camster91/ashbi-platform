@@ -22,6 +22,7 @@ import {
 import { api } from '../lib/api';
 import { useToast } from '../hooks/useToast';
 import { Button, Card } from '../components/ui';
+import useAutosave from '../hooks/useAutosave';
 
 function computeDiff(oldData, newData) {
   const changes = [];
@@ -273,7 +274,25 @@ export default function ProposalDetail() {
   const [title, setTitle] = useState('');
   const [discount, setDiscount] = useState(0);
 
+  // Autosave tracking — whenever we have editing data, persist it
+  const draftFormData = { title, notes, discount, lineItems };
+  const { draft, isSaving: draftSaving, lastSaved, clearDraft } = useAutosave('proposal', id, draftFormData, 500);
+
   const startEdit = () => {
+    // If there's an unsaved draft and it differs from current server data, offer to restore
+    if (draft && draft.lineItems) {
+      const restore = window.confirm('Unsaved draft found. Restore draft?\n(Choose Cancel to discard and start fresh)');
+      if (restore) {
+        setLineItems(draft.lineItems || []);
+        setNotes(draft.notes || '');
+        setTitle(draft.title || '');
+        setDiscount(draft.discount || 0);
+        setEditing(true);
+        setTab('details');
+        toast.info('Draft restored from auto-save');
+        return;
+      }
+    }
     setLineItems(proposal.lineItems || []);
     setNotes(proposal.notes || '');
     setTitle(proposal.title);
@@ -323,6 +342,7 @@ export default function ProposalDetail() {
       unitPrice: parseFloat(li.unitPrice) || 0,
     }));
     updateMutation.mutate({ title, notes, discount: parseFloat(discount) || 0, lineItems: items });
+    clearDraft(); // wipe autosave after explicit save
   };
 
   if (isLoading) {
@@ -381,6 +401,9 @@ export default function ProposalDetail() {
           )}
           {editing && (
             <>
+              <span className="text-xs text-muted-foreground self-center mr-2">
+                {draftSaving ? 'Saving draft...' : lastSaved ? `Saved ${new Date(lastSaved).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}` : ''}
+              </span>
               <Button variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
               <Button
                 leftIcon={<Save className="w-4 h-4" />}

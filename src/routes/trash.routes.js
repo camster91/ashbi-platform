@@ -49,7 +49,10 @@ export default async function trashRoutes(fastify) {
     if (!prismaModel) return reply.status(500).send({ error: 'Unknown entity type' });
 
     // Check if parent record still exists (not permanently deleted)
-    const existing = await prismaModel.findUnique({ where: { id: trashed.recordId } });
+    // Use explicit deletedAt filter to bypass soft-delete auto-filtering
+    const existing = await prismaModel.findUnique({
+      where: { id: trashed.recordId, deletedAt: { not: null } }
+    });
     if (!existing) {
       return reply.status(404).send({ error: 'Original record no longer exists' });
     }

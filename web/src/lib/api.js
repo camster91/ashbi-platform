@@ -1425,6 +1425,14 @@ export const api = {
     return request(`/time-entries/timesheets/weekly${query}`);
   },
   approveTimesheetEntry: (id) => request(`/time-entries/timesheets/${id}/approve`, { method: 'PATCH' }),
+
+  // ===== AUTOSAVE DRAFT =====
+  saveDraft: (entity, id, data) =>
+    request(`/draft/${entity}/${id}`, { method: 'PUT', body: { data } }),
+  getDraft: (entity, id) =>
+    request(`/draft/${entity}/${id}`),
+  clearDraft: (entity, id) =>
+    request(`/draft/${entity}/${id}`, { method: 'DELETE' }),
 };
 
 export default api;
