@@ -7,6 +7,8 @@ import {
   Mail, Sparkles, Loader2, X, Plus, Trash2, Upload, Copy, Check,
   ChevronRight, Clock, Users, Eye, Edit3
 } from 'lucide-react';
+import ComingSoonWrapper from '../components/ComingSoonWrapper';
+import { isComingSoon } from '../lib/featureFlags';
 
 const STATUS_COLORS = {
   DRAFT: 'bg-yellow-100 text-yellow-700',
@@ -226,6 +228,7 @@ function SequenceDetail({ sequence, onClose }) {
 }
 
 export default function ColdEmail() {
+  if (isComingSoon('cold-email')) return <ComingSoonWrapper title="Cold Email" />;
   const [activeTab, setActiveTab] = useState('sequences');
   const [showGenerate, setShowGenerate] = useState(false);
   const [showImport, setShowImport] = useState(false);

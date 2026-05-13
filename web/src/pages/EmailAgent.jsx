@@ -7,6 +7,8 @@ import {
   Mail, Sparkles, Loader2, X, Check, Archive, Tag, Edit3,
   RefreshCw, Send, ChevronRight, AlertTriangle, User, Clock
 } from 'lucide-react';
+import ComingSoonWrapper from '../components/ComingSoonWrapper';
+import { isComingSoon } from '../lib/featureFlags';
 
 const TAG_COLORS = {
   'needs-reply': 'bg-red-100 text-red-700',
@@ -183,6 +185,7 @@ function EmailDetail({ item, onClose, onUpdated }) {
 }
 
 export default function EmailAgent() {
+  if (isComingSoon('email-triage')) return <ComingSoonWrapper title="Email Triage" />;
   const toast = useToast();
   const [selectedItem, setSelectedItem] = useState(null);
   const [tagFilter, setTagFilter] = useState('');

@@ -4,6 +4,8 @@ import { Plus, ExternalLink, Trash2, Edit2, Check, X, FileText, Clock } from 'lu
 import { api } from '../lib/api';
 import { Button, Card } from '../components/ui';
 import { cn, formatRelativeTime } from '../lib/utils';
+import ComingSoonWrapper from '../components/ComingSoonWrapper';
+import { isComingSoon } from '../lib/featureFlags';
 
 const STATUS_CONFIG = {
   DRAFT: { label: 'Draft', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400', badge: 'bg-amber-500' },
@@ -304,6 +306,7 @@ function JobRow({ job, onEditDraft, onApply }) {
 }
 
 export default function UpworkJobs() {
+  if (isComingSoon('upwork')) return <ComingSoonWrapper title="Upwork Jobs" />;
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingDraft, setEditingDraft] = useState(null); // null | { jobId, draft }
   const [filterStatus, setFilterStatus] = useState('');

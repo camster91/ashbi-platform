@@ -43,11 +43,13 @@ import {
   Phone,
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
-import { Download, Sun, Moon } from 'lucide-react';
+import { Download, Sun, Moon, Command } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../hooks/useTheme';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
+import { isComingSoon } from '../lib/featureFlags';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import NotificationsDropdown from './NotificationsDropdown';
 import LiveTimer from './LiveTimer';
 import { Button } from './ui';
@@ -74,6 +76,8 @@ export default function Layout({ children }) {
   const { socket } = useSocket();
   const [installDismissed, setInstallDismissed] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+
+  const { showModal, closeModal } = useKeyboardShortcuts(navigate);
 
   // Auto-subscribe to push on login if permission already granted
   useEffect(() => {
@@ -140,9 +144,9 @@ export default function Layout({ children }) {
   const growthNav = [
     { name: 'Client Acquisition', href: '/client-acquisition', icon: Target, badge: stats?.activeOutreach },
     { name: 'Lead Intelligence', href: '/lead-intelligence', icon: Search },
-    { name: 'Cold Email', href: '/cold-email', icon: Mail },
+    { name: 'Cold Email', href: '/cold-email', icon: Mail, soon: isComingSoon('cold-email') },
     { name: 'LinkedIn', href: '/linkedin', icon: Linkedin },
-    { name: 'Outreach', href: '/outreach', icon: Send },
+    { name: 'Outreach', href: '/outreach', icon: Send, soon: isComingSoon('outreach-scheduler') },
     { name: 'Referral Network', href: '/referral-network', icon: Share2 },
   ];
 
@@ -154,7 +158,7 @@ export default function Layout({ children }) {
     { name: 'Contracts', href: '/contracts', icon: ScrollText },
     { name: 'Expenses', href: '/expenses', icon: Wallet },
     { name: 'Schedule', href: '/schedule', icon: Calendar },
-    { name: 'Upwork', href: '/upwork-contracts', icon: Briefcase },
+    { name: 'Upwork', href: '/upwork-contracts', icon: Briefcase, soon: isComingSoon('upwork') },
   ];
 
   // Admin — collapsible section, only visible to admins
@@ -220,6 +224,11 @@ export default function Layout({ children }) {
         >
           <item.icon className={cn('w-4 h-4 shrink-0', !sidebarCollapsed && 'mr-2.5')} />
           {!sidebarCollapsed && <span className="flex-1 truncate">{item.name}</span>}
+          {item.soon && !sidebarCollapsed && (
+            <span className="ml-1.5 px-1 py-0.5 text-[9px] font-semibold rounded bg-muted text-muted-foreground">
+              Soon
+            </span>
+          )}
           {badge > 0 && (
             sidebarCollapsed ? (
               <span className="absolute -top-1 -right-1 w-4 h-4 text-[9px] font-bold rounded-full bg-[#e6f354] text-[#2e2958] flex items-center justify-center">
@@ -698,8 +707,50 @@ export default function Layout({ children }) {
       {/* Quick Add — Cmd+K command palette */}
       <QuickAdd open={quickAddOpen} onClose={() => setQuickAddOpen(false)} />
 
+      {/* Keyboard Shortcuts Modal */}
+      {showModal && <ShortcutsModal onClose={closeModal} />}
+
       {/* Onboarding Tour */}
       {user && <OnboardingTour />}
+    </div>
+  );
+}
+
+function ShortcutsModal({ onClose }) {
+  const shortcuts = [
+    { keys: 'g + c', action: 'Go to Clients' },
+    { keys: 'g + p', action: 'Go to Projects' },
+    { keys: 'g + i', action: 'Go to Invoices' },
+    { keys: 'n + p', action: 'New Project' },
+    { keys: 'n + c', action: 'New Client' },
+    { keys: 'n + i', action: 'New Invoice' },
+    { keys: '?', action: 'Show shortcuts' },
+    { keys: 'Ctrl/Cmd + K', action: 'Quick add' },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-foreground/30 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+          <h3 className="text-base font-semibold text-foreground">Keyboard Shortcuts</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="px-5 py-3 space-y-2 max-h-[60vh] overflow-y-auto">
+          {shortcuts.map((s) => (
+            <div key={s.keys} className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">{s.action}</span>
+              <kbd className="px-2 py-1 text-xs font-mono font-medium bg-muted border border-border rounded">{s.keys}</kbd>
+            </div>
+          ))}
+        </div>
+        <div className="px-5 py-3 border-t border-border bg-muted/30">
+          <button onClick={onClose} className="w-full py-2 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
+            Got it
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
