@@ -96,6 +96,7 @@ import automationRoutes from './routes/automation.routes.js';
 import intakeFormRoutes from './routes/intake-form.routes.js';
 import brandRoutes from './routes/brand.routes.js';
 import { startOverdueChecker } from './services/automation.service.js';
+import { startTrashPurgeJob } from './jobs/trash-purge.js';
 import pipelineRoutes from './routes/pipeline.routes.js';
 import { initHermesBridge } from './agents/hub-hermes.integration.js';
 import timeTrackingRoutes from './routes/time-tracking.routes.js';
@@ -122,6 +123,7 @@ import proposalBuilderRoutes from './routes/proposal-builder.routes.js';
 import coldCallRoutes from './routes/cold-call.routes.js';
 import upworkAutoAlertRoutes from './routes/upwork-auto-alert.routes.js';
 import clientAcquisitionRoutes from './routes/client-acquisition.routes.js';
+import trashRoutes from './routes/trash.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -242,6 +244,7 @@ await fastify.register(agentsRoutes, { prefix: '/api/agents' });
 await fastify.register(integrationsVpsRoutes, { prefix: '/api/integrations/vps' });
 await fastify.register(integrationsHostingerRoutes, { prefix: '/api/integrations/hostinger' });
 await fastify.register(integrationsGithubRoutes, { prefix: '/api/integrations/github' });
+await fastify.register(trashRoutes, { prefix: '/api/trash' });
 await fastify.register(clientSuccessAgentRoutes, { prefix: '/api/client-success' });
 await fastify.register(financeAgentRoutes, { prefix: '/api/finance' });
 await fastify.register(opsAgentRoutes, { prefix: '/api/ops' });
@@ -356,6 +359,7 @@ const start = async () => {
     logger.info(`🚀 Agency Hub running at http://localhost:${env.port}`);
     startRecurringInvoicesJob();
     startOverdueChecker();
+    startTrashPurgeJob();
   } catch (err) { fastify.log.error(err); process.exit(1); }
 };
 

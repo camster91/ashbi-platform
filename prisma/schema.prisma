@@ -1954,3 +1954,19 @@ model Integration {
 
   @@map("integrations")
 }
+
+// ==================== TRASHED ITEMS ====================
+
+model TrashedItem {
+  id        String    @id @default(cuid())
+  entity    String    // CLIENT | PROJECT | INVOICE | PROPOSAL | CONTRACT | EXPENSE | TASK | ESTIMATE | NOTE | RETAINER_PLAN
+  recordId  String
+  data      Json
+  deletedAt DateTime  @default(now())
+  expiresAt DateTime  // 30 days from deletedAt
+  restoredAt DateTime?
+
+  @@index([entity])
+  @@index([expiresAt])
+  @@map("trashed_items")
+}
