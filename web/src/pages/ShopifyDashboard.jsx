@@ -11,11 +11,8 @@ import {
   ExternalLink,
   RefreshCw
 } from 'lucide-react';
-import ComingSoonWrapper from '../components/ComingSoonWrapper';
-import { isComingSoon } from '../lib/featureFlags';
 
 export default function ShopifyDashboard() {
-  if (isComingSoon('shopify')) return <ComingSoonWrapper title="Shopify" />;
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);

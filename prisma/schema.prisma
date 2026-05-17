@@ -71,6 +71,7 @@ model User {
   invoices          Invoice[]              @relation("InvoiceCreator")
   pushSubscriptions PushSubscription[]
   snippets          Snippet[]
+  proposalVersions  ProposalVersion[]
   timeSessions      TimeSession[]
   calendarEvents    ContentCalendarEvent[] @relation("CalendarEventAssignee")
   apiKeys           ApiKey[]

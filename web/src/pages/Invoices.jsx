@@ -5,7 +5,6 @@ import {
   Receipt, Plus, Send, DollarSign, Clock, CheckCircle, AlertTriangle,
   ExternalLink, CreditCard, FileText, Filter, Search, Download,
   TrendingUp, ArrowUpRight, MoreVertical, Trash2, Eye, RefreshCw,
-  Archive, CheckSquare, Square,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
@@ -42,7 +41,6 @@ export default function Invoices() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreate, setShowCreate] = useState(initCreate);
   const [activeTab, setActiveTab] = useState('list'); // 'list' | 'collections'
-  const [selected, setSelected] = useState([]);
 
   const [form, setForm] = useState({
     clientId: initClientId,
@@ -115,26 +113,6 @@ export default function Invoices() {
   const deleteMutation = useMutation({
     mutationFn: (id) => api.deleteInvoice(id),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['invoices'] }),
-  });
-
-  const bulkArchiveMutation = useMutation({
-    mutationFn: (ids) => api.bulkArchiveInvoices(ids),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['invoices'] });
-      setSelected([]);
-      toast.success('Invoices archived');
-    },
-    onError: (err) => toast.error('Failed to archive invoices', err.message),
-  });
-
-  const bulkMarkPaidMutation = useMutation({
-    mutationFn: (ids) => api.bulkMarkPaid(ids, 'BANK'),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['invoices'] });
-      setSelected([]);
-      toast.success('Invoices marked as paid');
-    },
-    onError: (err) => toast.error('Failed to mark paid', err.message),
   });
 
   // Form helpers
@@ -322,30 +300,11 @@ export default function Invoices() {
             </Card>
           ) : (
             <div className="space-y-2">
-              {/* Select all */}
-              <div className="flex items-center gap-2 px-1">
-                <button
-                  onClick={() =>
-                    setSelected(selected.length === sortedInvoices.length ? [] : sortedInvoices.map(i => i.id))
-                  }
-                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  {selected.length === sortedInvoices.length ? (
-                    <><CheckSquare className="w-4 h-4" /> Unselect all</>
-                  ) : (
-                    <><Square className="w-4 h-4" /> Select all</>
-                  )}
-                </button>
-                {selected.length > 0 && <span className="text-xs text-muted-foreground">{selected.length} selected</span>}
-              </div>
-
               {sortedInvoices.map((invoice) => (
                 <InvoiceRow
                   key={invoice.id}
                   invoice={invoice}
                   isAdmin={isAdmin}
-                  selected={selected.includes(invoice.id)}
-                  onToggle={() => setSelected(prev => prev.includes(invoice.id) ? prev.filter(id => id !== invoice.id) : [...prev, invoice.id])}
                   onView={() => navigate(`/invoices/${invoice.id}`)}
                   onSend={() => sendMutation.mutate(invoice.id)}
                   onMarkPaid={() => markPaidMutation.mutate({ id: invoice.id, data: { paymentMethod: 'BANK' } })}
@@ -361,33 +320,12 @@ export default function Invoices() {
           )}
         </>
       )}
-
-      {/* Bulk Action Bar */}
-      {selected.length > 0 && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 px-4 py-3 bg-card border border-border rounded-xl shadow-lg">
-          <span className="text-sm font-medium text-foreground">{selected.length} selected</span>
-          <div className="h-4 w-px bg-border" />
-          <Button size="sm" variant="outline" onClick={() => bulkMarkPaidMutation.mutate(selected)} loading={bulkMarkPaidMutation.isPending}>
-            Mark Paid
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => bulkArchiveMutation.mutate(selected)} loading={bulkArchiveMutation.isPending}>
-            Archive
-          </Button>
-          <Button size="sm" variant="ghost" className="text-destructive" onClick={() => {
-            if (window.confirm(`Delete ${selected.length} invoices?`)) {
-              Promise.all(selected.map(id => deleteMutation.mutateAsync(id))).then(() => setSelected([]));
-            }
-          }}>
-            Delete
-          </Button>
-        </div>
-      )}
     </div>
   );
 }
 
 // ─── Invoice Row ─────────────────────────────────────────────────────────────
-function InvoiceRow({ invoice, isAdmin, selected, onToggle, onView, onSend, onMarkPaid, onDelete, sendLoading }) {
+function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, sendLoading }) {
   const displayStatus = invoice.isOverdue ? 'OVERDUE' : invoice.status;
   const config = STATUS_CONFIG[displayStatus] || STATUS_CONFIG.DRAFT;
   const StatusIcon = config.icon;
@@ -395,11 +333,8 @@ function InvoiceRow({ invoice, isAdmin, selected, onToggle, onView, onSend, onMa
   return (
     <Card className={`p-4 hover:shadow-sm transition-shadow cursor-pointer ${invoice.isOverdue ? 'border-red-500/30' : ''}`}>
       {/* Mobile Layout */}
-      <div className="sm:hidden">
-        <div className="flex items-start gap-2 mb-2" onClick={onView}>
-          <div onClick={(e) => { e.stopPropagation(); onToggle(); }} className="pt-0.5">
-            {selected ? <CheckSquare className="w-4 h-4 text-primary" /> : <Square className="w-4 h-4 text-muted-foreground" />}
-          </div>
+      <div className="sm:hidden" onClick={onView}>
+        <div className="flex items-start justify-between gap-2 mb-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <span className="font-mono font-semibold text-foreground">{invoice.invoiceNumber}</span>
@@ -444,9 +379,6 @@ function InvoiceRow({ invoice, isAdmin, selected, onToggle, onView, onSend, onMa
 
       {/* Desktop Layout */}
       <div className="hidden sm:flex items-center gap-4">
-        <div onClick={(e) => { e.stopPropagation(); onToggle(); }} className="shrink-0">
-          {selected ? <CheckSquare className="w-4 h-4 text-primary" /> : <Square className="w-4 h-4 text-muted-foreground" />}
-        </div>
         <div className="flex-1 min-w-0" onClick={onView}>
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-mono font-semibold text-foreground">{invoice.invoiceNumber}</span>

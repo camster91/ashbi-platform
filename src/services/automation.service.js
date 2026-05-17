@@ -907,7 +907,7 @@ function evaluateConditions(conditions, context) {
  * Execute a single action against a context.
  * Action types: send_email, create_task, send_notification, update_deal_stage, trigger_hermes, log_activity
  */
-async function executeAction(action, context, runId) {
+async function executeWorkflowAction(action, context, runId) {
   const { type, config } = action;
   const result = { type, status: 'SUCCESS', message: '' };
 
@@ -1083,7 +1083,7 @@ export async function runWorkflow(workflowId, context = {}) {
     // Execute actions
     const actionResults = [];
     for (const action of actions) {
-      const result = await executeAction(action, context, run.id);
+      const result = await executeWorkflowAction(action, context, run.id);
       actionResults.push(result);
     }
 

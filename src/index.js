@@ -123,6 +123,7 @@ import leadIntelligenceRoutes from './routes/lead-intelligence.routes.js';
 import proposalBuilderRoutes from './routes/proposal-builder.routes.js';
 import coldCallRoutes from './routes/cold-call.routes.js';
 import upworkAutoAlertRoutes from './routes/upwork-auto-alert.routes.js';
+import upworkJobsRoutes from './routes/upwork-jobs.routes.js';
 import clientAcquisitionRoutes from './routes/client-acquisition.routes.js';
 import trashRoutes from './routes/trash.routes.js';
 import draftRoutes from './routes/draft.routes.js';
@@ -216,7 +217,6 @@ await fastify.register(upworkJobsRoutes, { prefix: '/api/upwork-jobs' });
 await fastify.register(leadIntelligenceRoutes, { prefix: '/api/lead-intelligence' });
 await fastify.register(proposalBuilderRoutes, { prefix: '/api/proposal-builder' });
 await fastify.register(coldCallRoutes, { prefix: '/api/cold-call' });
-await fastify.register(coldEmailRoutes, { prefix: '/api/cold-email' });
 await fastify.register(upworkAutoAlertRoutes, { prefix: '/api/upwork-auto-alert' });
 // Route registrations continued
 await fastify.register(wpBridgeRoutes, { prefix: '/api/wp-bridge' });
@@ -312,6 +312,10 @@ await fastify.register(clientAcquisitionRoutes, { prefix: '/api/client-acquisiti
 
 // Hub-Hermes bridge initialization
 initHermesBridge(fastify);
+
+fastify.get('/api/health', async () => {
+  return { status: 'ok', timestamp: new Date().toISOString() };
+});
 
 // Static files
 if (!env.isDev) {

@@ -17,9 +17,6 @@ import {
   Save,
   RefreshCw,
   Pencil,
-  Archive,
-  CheckSquare,
-  Square,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useToast } from '../hooks/useToast';
@@ -41,7 +38,6 @@ export default function Proposals() {
   const [showCreate, setShowCreate] = useState(searchParams.get('create') === 'true');
   const [showGenerator, setShowGenerator] = useState(false);
   const [filterStatus, setFilterStatus] = useState('');
-  const [selected, setSelected] = useState([]);
 
   const { data: proposals = [], isLoading } = useQuery({
     queryKey: ['proposals', filterStatus],
@@ -78,26 +74,6 @@ export default function Proposals() {
       toast.success('Proposal duplicated');
     },
     onError: () => toast.error('Failed to duplicate proposal'),
-  });
-
-  const bulkSendMutation = useMutation({
-    mutationFn: (ids) => api.bulkSendProposals(ids),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['proposals'] });
-      setSelected([]);
-      toast.success('Proposals sent');
-    },
-    onError: () => toast.error('Failed to send proposals'),
-  });
-
-  const bulkArchiveMutation = useMutation({
-    mutationFn: (ids) => api.bulkArchiveProposals(ids),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['proposals'] });
-      setSelected([]);
-      toast.success('Proposals archived');
-    },
-    onError: () => toast.error('Failed to archive proposals'),
   });
 
   const [form, setForm] = useState({ clientId: '', title: '', notes: '' });

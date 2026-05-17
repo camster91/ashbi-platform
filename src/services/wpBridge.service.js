@@ -46,7 +46,7 @@ export async function registerSite(data) {
       adminUrl: `${siteUrl}/wp-admin`,
       wpVersion: wordpressVersion,
       phpVersion,
-      pluginCount: activePlugins || 0,
+      pluginCount: Array.isArray(activePlugins) ? activePlugins.length : (activePlugins || 0),
       theme,
       clientId: clientId || undefined,
       projectId: projectId || undefined,

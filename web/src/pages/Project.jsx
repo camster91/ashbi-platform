@@ -469,6 +469,7 @@ export default function Project() {
                   <option value="email">Email</option>
                   <option value="slack">Slack</option>
                   <option value="upwork">Upwork</option>
+                  <option value="notion">Notion</option>
                   <option value="other">Other</option>
                 </select>
               </div>

@@ -19,9 +19,9 @@ import PortalEstimate from './pages/PortalEstimate';
 import ClientPortal from './pages/ClientPortal';
 import Landing from './pages/Landing';
 import LandingPage from './pages/LandingPage';
-import LandingPage from './pages/LandingPage';
 
 // Lazy loaded pages
+const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Inbox = lazy(() => import('./pages/Inbox'));
 const Thread = lazy(() => import('./pages/Thread'));
 const Projects = lazy(() => import('./pages/Projects'));
@@ -43,6 +43,7 @@ const InvoiceDetail = lazy(() => import('./pages/InvoiceDetail'));
 const Expenses = lazy(() => import('./pages/Expenses'));
 const Pipeline = lazy(() => import('./pages/Pipeline'));
 const UpworkContracts = lazy(() => import('./pages/UpworkContracts'));
+const UpworkJobs = lazy(() => import('./pages/UpworkJobs'));
 const Credentials = lazy(() => import('./pages/Credentials'));
 const Chat = lazy(() => import('./pages/Chat'));
 const AiContextSettings = lazy(() => import('./pages/AiContextSettings'));
@@ -75,11 +76,11 @@ const Schedule = lazy(() => import('./pages/Schedule'));
 const Timesheets = lazy(() => import('./pages/Timesheets'));
 const RateCards = lazy(() => import('./pages/RateCards'));
 const Bookkeeping = lazy(() => import('./pages/Bookkeeping'));
-const Trash = lazy(() => import('./pages/Trash'));
 // Agent Pages (client acquisition pipeline)
 const ClientAcquisition = lazy(() => import('./pages/ClientAcquisition'));
 const LeadIntelligence = lazy(() => import('./pages/LeadIntelligence'));
 const ReferralNetwork = lazy(() => import('./pages/ReferralNetwork'));
+const CallBlock = lazy(() => import('./pages/CallBlock'));
 // Cold Email
 const EmailCampaigns = lazy(() => import('./pages/EmailCampaigns'));
 const ColdEmail = lazy(() => import('./pages/ColdEmail'));
@@ -126,7 +127,6 @@ function AppRoutes() {
           <Route path="/client/dashboard" element={<ClientPortal />} />
           <Route path="/landing" element={<Landing />} />
           <Route path="/" element={<LandingPage />} />
-          <Route path="/" element={<LandingPage />} />
       <Route
         path="/*"
         element={
@@ -160,13 +160,14 @@ function AppRoutes() {
                   <Route path="/client-acquisition" element={<ClientAcquisition />} />
                   <Route path="/lead-intelligence" element={<LeadIntelligence />} />
                   <Route path="/referral-network" element={<ReferralNetwork />} />
+                  <Route path="/call-block" element={<CallBlock />} />
                   <Route path="/estimates" element={<Estimates />} />
                   <Route path="/schedule" element={<Schedule />} />
                   <Route path="/timesheets" element={<Timesheets />} />
                   <Route path="/rate-cards" element={<AdminRoute><RateCards /></AdminRoute>} />
                   <Route path="/bookkeeping" element={<AdminRoute><Bookkeeping /></AdminRoute>} />
-                  <Route path="/trash" element={<AdminRoute><Trash /></AdminRoute>} />
                   <Route path="/upwork-contracts" element={<UpworkContracts />} />
+                  <Route path="/upwork" element={<UpworkJobs />} />
                   <Route path="/credentials" element={<AdminRoute><Credentials /></AdminRoute>} />
                   <Route path="/chat" element={<Chat />} />
                   <Route path="/admin/settings/ai-context" element={<AdminRoute><AiContextSettings /></AdminRoute>} />

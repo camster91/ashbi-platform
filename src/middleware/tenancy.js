@@ -21,6 +21,7 @@ export async function tenancyMiddleware(request, reply) {
     // Exempt Auth, Health, and Public Portal from strict isolation
     if (
       request.url.startsWith('/api/auth') || 
+      request.url.startsWith('/api/wp-bridge') ||
       request.url.startsWith('/api/portal') ||
       request.url.startsWith('/api/client-acquisition/config') ||
       request.url.startsWith('/api/client-acquisition/intake') ||

@@ -27,24 +27,6 @@ const TRIGGER_CONFIG = {
   }
 };
 
-const TRIGGER_TYPES = [
-  { value: 'schedule', label: 'Schedule (Cron)', icon: Clock },
-  { value: 'webhook', label: 'Webhook', icon: Code },
-  { value: 'event:proposal_approved', label: 'Event: Proposal Approved', icon: FileText },
-  { value: 'event:contract_signed', label: 'Event: Contract Signed', icon: FileSignature },
-  { value: 'event:new_lead', label: 'Event: New Lead', icon: Zap },
-  { value: 'event:invoice_overdue', label: 'Event: Invoice Overdue', icon: AlertTriangle },
-];
-
-const ACTION_TYPES = [
-  { value: 'send_email', label: 'Send Email' },
-  { value: 'create_task', label: 'Create Task' },
-  { value: 'send_notification', label: 'Send Notification' },
-  { value: 'update_deal_stage', label: 'Update Deal Stage' },
-  { value: 'trigger_hermes', label: 'Trigger Hermes Agent' },
-  { value: 'log_activity', label: 'Log Activity' },
-];
-
 function formatTime(date) {
   const now = new Date();
   const diff = now - new Date(date);
@@ -87,10 +69,6 @@ export default function Automations() {
   const automations = data?.automations || [];
   const total = data?.total || 0;
   const totalPages = Math.ceil(total / limit);
-
-  const wfList = workflows || [];
-  const activeCount = wfList.filter(w => w.isActive && !w.isPaused).length;
-  const pausedCount = wfList.filter(w => w.isPaused).length;
 
   return (
     <div className="space-y-6">

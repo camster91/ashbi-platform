@@ -1,7 +1,7 @@
 // Ashbi Hub Service Worker
-const CACHE_NAME = 'hub-v2';
-const STATIC_CACHE = 'hub-static-v2';
-const API_CACHE = 'hub-api-v2';
+const CACHE_NAME = 'hub-v3';
+const STATIC_CACHE = 'hub-static-v3';
+const API_CACHE = 'hub-api-v3';
 
 // App shell files to cache on install
 const APP_SHELL = [
