@@ -10,6 +10,7 @@
  */
 
 import { createDraft } from './gmail-draft.agent.js';
+import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -406,7 +407,7 @@ function generateReferralCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = 'REF-';
   for (let i = 0; i < 8; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
+    code += chars.charAt(crypto.randomInt(chars.length));
   }
   return code;
 }
