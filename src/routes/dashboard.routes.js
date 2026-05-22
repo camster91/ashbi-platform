@@ -6,6 +6,10 @@ export default async function dashboardRoutes(fastify) {
     onRequest: [fastify.authenticate]
   }, async (request) => {
     const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfWeek = new Date(startOfDay);
+    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay()); // Sunday
+    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
 
     const [
       // MRR — sum of monthlyAmountUsd for active retainers
@@ -29,7 +33,24 @@ export default async function dashboardRoutes(fastify) {
       // WordPress sites with errors
       wpSitesWithErrors,
       // Overdue tasks (not on blocked projects, standalone)
-      overdueTasks
+      overdueTasks,
+      // ── NEW ──
+      // Time tracking: today + this week
+      timeToday,
+      timeThisWeek,
+      userCapacity,
+      // Calendar events (upcoming 7 days)
+      upcomingEvents,
+      // Outreach funnel stats
+      outreachStats,
+      // Cold email stats
+      coldEmailStats,
+      // LinkedIn stats
+      linkedInStats,
+      // Revenue history (last 6 months)
+      revenueHistory,
+      // All WP sites (for health heatmap)
+      allWpSites
     ] = await Promise.all([
       request.prisma.retainerPlan.findMany({
         where: { retainerStatus: 'ACTIVE' },
@@ -192,6 +213,75 @@ export default async function dashboardRoutes(fastify) {
         },
         orderBy: { dueDate: 'asc' },
         take: 10
+      }),
+      // ── NEW QUERIES ──
+      // Time tracking: today's entries for current user
+      request.prisma.timeEntry.findMany({
+        where: {
+          userId: request.user.id,
+          date: { gte: startOfDay }
+        },
+        select: { duration: true, billable: true }
+      }),
+      // Time tracking: this week's entries for current user
+      request.prisma.timeEntry.findMany({
+        where: {
+          userId: request.user.id,
+          date: { gte: startOfWeek }
+        },
+        select: { duration: true, billable: true }
+      }),
+      // Current user capacity (used for "available bandwidth" calc)
+      request.prisma.user.findUnique({
+        where: { id: request.user.id },
+        select: { capacity: true, name: true }
+      }),
+      // Upcoming calendar events (next 7 days)
+      request.prisma.calendarEvent.findMany({
+        where: {
+          startTime: { gte: now, lt: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000) }
+        },
+        select: {
+          id: true, title: true, startTime: true, endTime: true,
+          type: true, color: true, location: true, isAllDay: true,
+          project: { select: { id: true, name: true } }
+        },
+        orderBy: { startTime: 'asc' },
+        take: 10
+      }),
+      // Outreach pipeline: funnel counts
+      request.prisma.outreachLead.groupBy({
+        by: ['status'],
+        _count: { id: true }
+      }),
+      // Cold email stats: aggregate from prospect statuses
+      request.prisma.coldEmailProspect.groupBy({
+        by: ['status'],
+        _count: { id: true }
+      }),
+      // LinkedIn stats: aggregate from sequence statuses
+      request.prisma.linkedinSequence.groupBy({
+        by: ['status'],
+        _count: { id: true }
+      }),
+      // Revenue history: last 6 months of paid invoices
+      request.prisma.invoice.findMany({
+        where: {
+          status: 'PAID',
+          paidAt: { gte: sixMonthsAgo }
+        },
+        select: { total: true, paidAt: true },
+        orderBy: { paidAt: 'asc' }
+      }),
+      // All WP sites for health heatmap (not just errors)
+      request.prisma.wPSite.findMany({
+        select: {
+          id: true, name: true, url: true, status: true,
+          healthScore: true, lastCheckedAt: true,
+          client: { select: { name: true } },
+          project: { select: { name: true } }
+        },
+        orderBy: { healthScore: 'asc' }
       })
     ]);
 
@@ -292,6 +382,70 @@ export default async function dashboardRoutes(fastify) {
         project: t.project?.name || null,
         client: t.project?.client?.name || null,
         assignee: t.assignee?.name || null
+      })),
+      // ── NEW WIDGET DATA ──
+      // Time tracking for current user
+      timeTracking: {
+        today: timeToday.reduce((sum, e) => sum + (e.duration || 0), 0),
+        todayBillable: timeToday.filter(e => e.billable).reduce((sum, e) => sum + (e.duration || 0), 0),
+        week: timeThisWeek.reduce((sum, e) => sum + (e.duration || 0), 0),
+        weekBillable: timeThisWeek.filter(e => e.billable).reduce((sum, e) => sum + (e.duration || 0), 0),
+        capacity: userCapacity?.capacity ?? 100,
+        userName: userCapacity?.name ?? null,
+        weekGoalHours: 40
+      },
+      // Upcoming calendar events
+      upcomingEvents: upcomingEvents.map(e => ({
+        id: e.id,
+        title: e.title,
+        startTime: e.startTime,
+        endTime: e.endTime,
+        type: e.type,
+        color: e.color,
+        location: e.location,
+        isAllDay: e.isAllDay,
+        project: e.project?.name || null
+      })),
+      // Outreach pipeline funnel
+      outreach: outreachStats.reduce((acc, row) => {
+        acc[row.status.toLowerCase()] = row._count.id;
+        return acc;
+      }, {}),
+      // Cold email stats
+      coldEmail: coldEmailStats.reduce((acc, row) => {
+        acc[row.status.toLowerCase()] = row._count.id;
+        return acc;
+      }, {}),
+      // LinkedIn outreach stats
+      linkedIn: linkedInStats.reduce((acc, row) => {
+        acc[row.status.toLowerCase()] = row._count.id;
+        return acc;
+      }, {}),
+      // Revenue sparkline data: grouped by month
+      revenueHistory: (() => {
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const grouped = {};
+        revenueHistory.forEach(inv => {
+          const d = new Date(inv.paidAt);
+          const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          grouped[key] = (grouped[key] || 0) + (inv.total || 0);
+        });
+        return Object.entries(grouped).map(([key, total]) => ({
+          month: months[parseInt(key.split('-')[1]) - 1],
+          year: key.split('-')[0],
+          total: Math.round(total * 100) / 100
+        }));
+      })(),
+      // All WP sites for heatmap
+      wpSites: allWpSites.map(s => ({
+        id: s.id,
+        name: s.name,
+        url: s.url,
+        status: s.status,
+        healthScore: s.healthScore,
+        lastCheckedAt: s.lastCheckedAt,
+        client: s.client?.name || null,
+        project: s.project?.name || null
       }))
     };
   });

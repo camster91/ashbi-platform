@@ -26,6 +26,11 @@ import { useAuth } from '../hooks/useAuth';
 import { useSocket } from '../hooks/useSocket';
 import { Card } from '../components/ui';
 import { formatRelativeTime, cn } from '../lib/utils';
+import TimeTrackerWidget from '../components/widgets/TimeTrackerWidget';
+import UpcomingEventsWidget from '../components/widgets/UpcomingEventsWidget';
+import OutreachFunnelWidget from '../components/widgets/OutreachFunnelWidget';
+import RevenueSparklineWidget from '../components/widgets/RevenueSparklineWidget';
+import WPSiteHealthWidget from '../components/widgets/WPSiteHealthWidget';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -592,6 +597,25 @@ export default function Dashboard() {
           </Card>
         )}
       </div>
+
+      {/* ─── NEW WIDGET ROW: Time + Events + Outreach + Revenue ─── */}
+      {stats && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
+          <TimeTrackerWidget data={stats?.timeTracking} />
+          <UpcomingEventsWidget events={stats?.upcomingEvents} />
+          <OutreachFunnelWidget
+            outreach={stats?.outreach}
+            coldEmail={stats?.coldEmail}
+            linkedIn={stats?.linkedIn}
+          />
+          <RevenueSparklineWidget data={stats?.revenueHistory} />
+        </div>
+      )}
+
+      {/* ─── NEW: WP Site Health Heatmap ─── */}
+      {stats?.wpSites?.length > 0 && (
+        <WPSiteHealthWidget sites={stats.wpSites} />
+      )}
 
       {/* ─── Row 3: Client Health Grid ─── */}
       {isAdmin && stats?.clientHealth?.length > 0 && (
