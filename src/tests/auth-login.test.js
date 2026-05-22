@@ -57,7 +57,7 @@ describe('Auth Login Flow - Live API Tests', () => {
       if (isRateLimited(status)) return; // skip on rate limit
 
       assert.equal(status, 401);
-      assert.equal(data.error, 'Invalid credentials');
+      assert.equal(data.error, 'Invalid credentials or inactive account');
     });
 
     it('should validate request body schema', async () => {

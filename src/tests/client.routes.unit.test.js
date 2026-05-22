@@ -6,6 +6,8 @@
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import Fastify from 'fastify';
+import cookie from '@fastify/cookie';
+import jwt from '@fastify/jwt';
 import clientRoutes from '../routes/client.routes.js';
 
 describe('Client Routes (Unit)', () => {
@@ -14,10 +16,21 @@ describe('Client Routes (Unit)', () => {
 
   beforeEach(async () => {
     fastify = Fastify();
+
+    // Register necessary plugins
+    await fastify.register(cookie);
+    await fastify.register(jwt, { secret: 'test-secret', cookie: { cookieName: 'token', signed: false } });
     
     // Mock authentication
     fastify.decorate('authenticate', async (request, reply) => {
       request.user = { id: 'user-1', role: 'ADMIN', email: 'admin@example.com' };
+    });
+
+    // Mock adminOnly, if used
+    fastify.decorate('adminOnly', async (request, reply) => {
+        if (request.user?.role !== 'ADMIN') {
+            return reply.status(403).send({ error: 'Admin access required' });
+        }
     });
 
     // Mock Prisma
@@ -37,10 +50,18 @@ describe('Client Routes (Unit)', () => {
       },
       thread: {
         findMany: async () => []
+      },
+      invoice: {
+        findMany: async () => []
       }
     };
     
     fastify.decorate('prisma', mockPrisma);
+    
+    // Inject mock prisma into request (production does this via tenancyMiddleware preHandler hook)
+    fastify.addHook('preHandler', async (request) => {
+      request.prisma = mockPrisma;
+    });
     
     // Register routes
     await fastify.register(clientRoutes);
