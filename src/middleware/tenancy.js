@@ -15,22 +15,22 @@ export async function tenancyMiddleware(request, reply) {
     return;
   }
 
+  // Exempt Auth, Health, and Public Portal from strict isolation
+  if (
+    request.url.startsWith('/api/auth') || 
+    request.url.startsWith('/api/wp-bridge') ||
+    request.url.startsWith('/api/portal') ||
+    request.url.startsWith('/api/client-acquisition/config') ||
+    request.url.startsWith('/api/client-acquisition/intake') ||
+    request.url === '/api/health'
+  ) {
+    request.prisma = prisma; // Use global for auth/portal/health/public routes
+    return;
+  }
+
   const organizationId = request.user?.organizationId || request.headers['x-org-id'];
 
   if (!organizationId) {
-    // Exempt Auth, Health, and Public Portal from strict isolation
-    if (
-      request.url.startsWith('/api/auth') || 
-      request.url.startsWith('/api/wp-bridge') ||
-      request.url.startsWith('/api/portal') ||
-      request.url.startsWith('/api/client-acquisition/config') ||
-      request.url.startsWith('/api/client-acquisition/intake') ||
-      request.url === '/api/health'
-    ) {
-      request.prisma = prisma; // Use global for auth/portal/health/public routes
-      return;
-    }
-
     logger.warn({ url: request.url }, '🚫 Tenancy: Organization context missing');
     return reply.status(403).send({ 
       error: 'Organization context required',

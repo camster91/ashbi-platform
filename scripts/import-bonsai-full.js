@@ -29,7 +29,7 @@ const prisma = new PrismaClient();
 const DRY_RUN = process.argv.includes('--dry-run');
 
 // === CSV Directory ===
-const CSV_DIR = '/home/camst/.openclaw/workspace/bonsai-export';
+const CSV_DIR = '/Users/biancabienaime/.openclaw/workspace/bonsai-export';
 
 // === Skip list for test/dummy clients ===
 const SKIP_CLIENTS = new Set([

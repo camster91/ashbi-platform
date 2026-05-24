@@ -3,10 +3,12 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Lock, ArrowLeft, Check } from 'lucide-react';
 import { Button } from '../components/ui';
 import { cn } from '../lib/utils';
+import { useTranslation } from '../hooks/useTranslation';
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [token] = useState(searchParams.get('token'));
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -17,21 +19,21 @@ export default function ResetPassword() {
 
   useEffect(() => {
     if (!token) {
-      setError('Invalid reset link');
+      setError(t('errors.verification'));
     }
-  }, [token]);
+  }, [token, t]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError(t('auth.passwordMismatch'));
       return;
     }
 
     if (password.length < 8) {
-      setError('Password must be at least 8 characters');
+      setError(t('common.passwordMin'));
       return;
     }
 
@@ -46,7 +48,7 @@ export default function ResetPassword() {
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || 'Reset failed');
+        throw new Error(data.error || t('errors.default'));
       }
 
       setSuccess(true);
@@ -63,14 +65,14 @@ export default function ResetPassword() {
         <div className="w-full max-w-md text-center space-y-6">
           <div>
             <h1 className="text-2xl font-heading font-bold text-foreground mb-2">
-              Invalid reset link
+              {t('errors.verification')}
             </h1>
             <p className="text-muted-foreground">
-              This password reset link is invalid or has expired.
+              {t('auth.invalidLink')}
             </p>
           </div>
           <Button onClick={() => navigate('/forgot-password')} className="w-full">
-            Request a new reset link
+            {t('auth.sendResetLink')}
           </Button>
         </div>
       </div>
@@ -86,24 +88,24 @@ export default function ResetPassword() {
           className="flex items-center gap-2 text-primary hover:text-primary-600 font-medium mb-8 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to login
+          {t('common.back')}
         </button>
 
         {!success ? (
           <div className="space-y-8 animate-slide-up">
             <div className="text-center">
               <h1 className="text-3xl font-heading font-bold text-foreground mb-2">
-                Create new password
+                {t('auth.createNewPassword')}
               </h1>
               <p className="text-muted-foreground">
-                Enter a strong password to secure your account.
+                {t('auth.passwordStrength')}
               </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-2">
                 <label htmlFor="password" className="text-sm font-medium text-foreground">
-                  New password
+                  {t('auth.newPasswordLabel')}
                 </label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
@@ -112,7 +114,7 @@ export default function ResetPassword() {
                     type={showPassword ? 'text' : 'password'}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter your new password"
+                    placeholder={t('auth.passwordPlaceholder')}
                     className={cn(
                       'w-full pl-11 pr-4 py-3 bg-muted border-0 rounded-xl',
                       'text-foreground placeholder:text-muted-foreground',
@@ -123,13 +125,13 @@ export default function ResetPassword() {
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Must be at least 8 characters
+                  {t('common.passwordMin')}
                 </p>
               </div>
 
               <div className="space-y-2">
                 <label htmlFor="confirm" className="text-sm font-medium text-foreground">
-                  Confirm password
+                  {t('auth.confirmPasswordLabel')}
                 </label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
@@ -138,7 +140,7 @@ export default function ResetPassword() {
                     type={showPassword ? 'text' : 'password'}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Confirm your password"
+                    placeholder={t('auth.confirmPassword')}
                     className={cn(
                       'w-full pl-11 pr-4 py-3 bg-muted border-0 rounded-xl',
                       'text-foreground placeholder:text-muted-foreground',
@@ -157,7 +159,7 @@ export default function ResetPassword() {
                   onChange={(e) => setShowPassword(e.target.checked)}
                   className="w-4 h-4 rounded border-border text-primary focus:ring-primary/20"
                 />
-                <span className="text-muted-foreground">Show password</span>
+                <span className="text-muted-foreground">{t('auth.showPassword')}</span>
               </label>
 
               {error && (
@@ -175,7 +177,7 @@ export default function ResetPassword() {
                 isLoading={isLoading}
                 className="w-full"
               >
-                Reset password
+                {t('auth.resetPassword')}
               </Button>
             </form>
           </div>
@@ -187,10 +189,10 @@ export default function ResetPassword() {
 
             <div>
               <h2 className="text-2xl font-heading font-bold text-foreground mb-2">
-                Password reset
+                {t('auth.passwordResetSuccess')}
               </h2>
               <p className="text-muted-foreground">
-                Your password has been successfully reset. You can now log in with your new password.
+                {t('auth.passwordResetComplete')}
               </p>
             </div>
 
@@ -199,7 +201,7 @@ export default function ResetPassword() {
               size="lg"
               className="w-full"
             >
-              Return to login
+              {t('auth.returnToLogin')}
             </Button>
           </div>
         )}

@@ -25,6 +25,7 @@ export function createScopedPrisma(prisma, organizationId) {
 
   return new Proxy(softPrisma, {
     get(target, modelName) {
+      if (modelName === Symbol.for('__proxy__')) return true;
       const model = target[modelName];
       
       // If not a scoped model or not a Prisma model, return as-is (still has soft-delete)

@@ -18,7 +18,7 @@ try {
   aiClient = null;
 }
 
-// Profile rewrite content from /home/camst/upwork-profile-rewrite.md
+// Profile rewrite content from /Users/biancabienaime/upwork-profile-rewrite.md
 const PROFILE_CONTENT = {
   headline: 'Brand Designer + Shopify Developer for DTC Brands',
   overview: `Your brand is only as strong as the connection between what it looks like
@@ -100,7 +100,7 @@ async function optimizeProfile() {
       earnedIt: PROFILE_CONTENT.earnedIt
     },
     meta: {
-      source: '/home/camst/upwork-profile-rewrite.md',
+      source: '/Users/biancabienaime/upwork-profile-rewrite.md',
       generatedAt: new Date().toISOString()
     }
   };

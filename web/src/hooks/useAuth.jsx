@@ -34,7 +34,7 @@ export function AuthProvider({ children }) {
     const { user: userData } = await api.login(email, password);
     if (mountedRef.current) {
       setUser(userData);
-      navigate('/');
+      navigate('/dashboard');
     }
     return userData;
   }, [navigate]);

@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { Mail, ArrowLeft } from 'lucide-react';
 import { Button } from '../components/ui';
 import { cn } from '../lib/utils';
+import { useTranslation } from '../hooks/useTranslation';
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
@@ -25,7 +27,7 @@ export default function ForgotPassword() {
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || 'Request failed');
+        throw new Error(data.error || t('auth.somethingWentWrong'));
       }
 
       setSubmitted(true);
@@ -45,24 +47,24 @@ export default function ForgotPassword() {
           className="flex items-center gap-2 text-primary hover:text-primary-600 font-medium mb-8 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to login
+          {t('common.back')}
         </button>
 
         {!submitted ? (
           <div className="space-y-8 animate-slide-up">
             <div className="text-center">
               <h1 className="text-3xl font-heading font-bold text-foreground mb-2">
-                Reset your password
+                {t('auth.resetPassword')}
               </h1>
               <p className="text-muted-foreground">
-                Enter your email address and we'll send you a link to reset your password.
+                {t('auth.resetInstructions')}
               </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-2">
                 <label htmlFor="email" className="text-sm font-medium text-foreground">
-                  Email address
+                  {t('auth.emailLabel')}
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
@@ -71,7 +73,7 @@ export default function ForgotPassword() {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="your@email.com"
+                    placeholder={t('auth.emailPlaceholder')}
                     className={cn(
                       'w-full pl-11 pr-4 py-3 bg-muted border-0 rounded-xl',
                       'text-foreground placeholder:text-muted-foreground',
@@ -98,7 +100,7 @@ export default function ForgotPassword() {
                 isLoading={isLoading}
                 className="w-full"
               >
-                Send reset link
+                {t('auth.sendResetLink')}
               </Button>
             </form>
           </div>
@@ -110,13 +112,13 @@ export default function ForgotPassword() {
 
             <div>
               <h2 className="text-2xl font-heading font-bold text-foreground mb-2">
-                Check your email
+                {t('auth.checkYourEmail')}
               </h2>
               <p className="text-muted-foreground">
-                We've sent a password reset link to <span className="font-semibold text-foreground">{email}</span>
+                {t('auth.resetSent')} <span className="font-semibold text-foreground">{email}</span>
               </p>
               <p className="text-muted-foreground text-sm mt-2">
-                The link will expire in 24 hours.
+                {t('auth.linkExpiresIn')}
               </p>
             </div>
 
@@ -130,7 +132,7 @@ export default function ForgotPassword() {
                   }}
                   className="text-primary hover:text-primary-600 font-medium transition-colors"
                 >
-                  try again
+                  {t('auth.tryAgain')}
                 </button>
               </p>
 
@@ -139,7 +141,7 @@ export default function ForgotPassword() {
                 variant="outline"
                 className="w-full"
               >
-                Return to login
+                {t('auth.returnToLogin')}
               </Button>
             </div>
           </div>

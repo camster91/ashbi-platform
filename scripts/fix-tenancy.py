@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import os, re
 
-ROUTE_DIR = '/home/camst/.hermes/worktrees/ashbi-platform/src/routes'
+ROUTE_DIR = '/Users/biancabienaime/.hermes/worktrees/ashbi-platform/src/routes'
 
 SPECIAL_CASES = {
     # files with helper functions outside handlers that need prisma param

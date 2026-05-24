@@ -7,6 +7,15 @@
 
 const WITH_DELETED = Symbol('withDeleted');
 
+const SOFT_DELETE_MODELS = new Set([
+  'client','project','invoice','proposal','contract','expense',
+  'task','retainerPlan','timeEntry','estimate','note','thread',
+  'response','notification','internalNote','chatMessage','chatReaction',
+  'attachment','activity','taskComment','calendarEvent','eventAttendee',
+  'snippet','proposalVersion','timeSession','contentCalendarEvent',
+  'apiKey','trash'
+]);
+
 /**
  * Wraps a Prisma client to add soft-delete behavior:
  * - delete() sets deletedAt instead of removing rows
@@ -21,6 +30,9 @@ export function withSoftDelete(prisma) {
       }
       if (typeof target[model] !== 'object') {
         return Reflect.get(target, model, receiver);
+      }
+      if (!SOFT_DELETE_MODELS.has(model)) {
+        return target[model];
       }
       return new Proxy(target[model], {
         get(t, key) {

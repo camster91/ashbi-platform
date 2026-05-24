@@ -2,11 +2,11 @@ const fs = require('fs');
 const path = require('path');
 
 const files = require('child_process')
-  .execSync("grep -rl 'import prisma from' src/routes/", { cwd: '/home/camst/.hermes/worktrees/ashbi-platform' })
+  .execSync("grep -rl 'import prisma from' src/routes/", { cwd: '/Users/biancabienaime/.hermes/worktrees/ashbi-platform' })
   .toString()
   .trim()
   .split('\n')
-  .map(f => path.resolve('/home/camst/.hermes/worktrees/ashbi-platform', f));
+  .map(f => path.resolve('/Users/biancabienaime/.hermes/worktrees/ashbi-platform', f));
 
 const results = {
   modified: [],
@@ -87,16 +87,16 @@ for (const file of files) {
 }
 
 console.log('=== IMPORTS REMOVED ===');
-results.importRemoved.forEach(f => console.log(path.relative('/home/camst/.hermes/worktrees/ashbi-platform', f)));
+results.importRemoved.forEach(f => console.log(path.relative('/Users/biancabienaime/.hermes/worktrees/ashbi-platform', f)));
 
 console.log('\n=== FLAGGED (standalone functions still need import) ===');
-results.flagged.forEach(r => console.log(path.relative('/home/camst/.hermes/worktrees/ashbi-platform', r.file) + ' — ' + r.reason));
+results.flagged.forEach(r => console.log(path.relative('/Users/biancabienaime/.hermes/worktrees/ashbi-platform', r.file) + ' — ' + r.reason));
 
 console.log('\n=== ERRORS ===');
-results.errors.forEach(r => console.log(path.relative('/home/camst/.hermes/worktrees/ashbi-platform', r.file) + ' — ' + r.reason));
+results.errors.forEach(r => console.log(path.relative('/Users/biancabienaime/.hermes/worktrees/ashbi-platform', r.file) + ' — ' + r.reason));
 
 console.log('\n=== MODIFIED (prisma. replaced in handlers) ===');
-results.modified.forEach(f => console.log(path.relative('/home/camst/.hermes/worktrees/ashbi-platform', f)));
+results.modified.forEach(f => console.log(path.relative('/Users/biancabienaime/.hermes/worktrees/ashbi-platform', f)));
 
 console.log('\n=== NO CHANGE NEEDED ===');
-results.noChangeNeeded.forEach(f => console.log(path.relative('/home/camst/.hermes/worktrees/ashbi-platform', f)));
+results.noChangeNeeded.forEach(f => console.log(path.relative('/Users/biancabienaime/.hermes/worktrees/ashbi-platform', f)));

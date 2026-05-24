@@ -18,7 +18,7 @@ Deploys and monitors autonomous outreach agents (Upwork, LinkedIn, SEO, Sales) l
 
 ### 1. Configuration Review
 **Constraints:**
-- You MUST review the corresponding agent script in `/home/camst/Ashbi-Design/agents/` or `/home/camst/Ashbi-Design/upwork-agent/`.
+- You MUST review the corresponding agent script in `/Users/biancabienaime/Ashbi-Design/agents/` or `/Users/biancabienaime/Ashbi-Design/upwork-agent/`.
 - You MUST verify that the agent is using the `gemini` provider and is configured to utilize the maximum allowed tokens/limits.
 
 ### 2. Agent Deployment

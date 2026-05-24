@@ -12,7 +12,7 @@ function LandingPage() {
   });
 
   useEffect(() => {
-    api.get('/client-acquisition/config')
+    api.request('/client-acquisition/config')
       .then(d => { setConfig(d); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
