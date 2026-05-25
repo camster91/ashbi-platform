@@ -155,6 +155,9 @@ async function request(endpoint, options = {}) {
 }
 
 export const api = {
+  // Raw request helper
+  request,
+
   // Auth
   login: (email, password) =>
     request('/auth/login', { method: 'POST', body: { email, password } }),
