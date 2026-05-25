@@ -17,7 +17,6 @@ import PortalBooking from './pages/PortalBooking';
 import PortalIntakeForm from './pages/PortalIntakeForm';
 import PortalEstimate from './pages/PortalEstimate';
 import ClientPortal from './pages/ClientPortal';
-import Login from './pages/Login';
 
 function RootRedirect() {
   const { user, isLoading } = useAuth();
