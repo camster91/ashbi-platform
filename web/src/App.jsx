@@ -17,8 +17,13 @@ import PortalBooking from './pages/PortalBooking';
 import PortalIntakeForm from './pages/PortalIntakeForm';
 import PortalEstimate from './pages/PortalEstimate';
 import ClientPortal from './pages/ClientPortal';
-import Landing from './pages/Landing';
-import LandingPage from './pages/LandingPage';
+import Login from './pages/Login';
+
+function RootRedirect() {
+  const { user, isLoading } = useAuth();
+  if (isLoading) return <PageLoader />;
+  return user ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />;
+}
 
 // Lazy loaded pages
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -125,8 +130,7 @@ function AppRoutes() {
           <Route path="/client-portal" element={<ClientPortal />} />
           <Route path="/client/login" element={<ClientPortal />} />
           <Route path="/client/dashboard" element={<ClientPortal />} />
-          <Route path="/landing" element={<Landing />} />
-          <Route path="/" element={<LandingPage />} />
+          <Route path="/" element={<RootRedirect />} />
       <Route
         path="/*"
         element={
