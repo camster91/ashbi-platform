@@ -22,7 +22,7 @@ describe('Card Component', () => {
     const { container } = render(<Card isInteractive>Interactive</Card>);
     const card = container.firstChild;
     expect(card.className).toContain('cursor-pointer');
-    expect(card.className).toContain('hover:-translate-y-1');
+    expect(card.className).toContain('hover-lift');
   });
 
   it('renders sub-components correctly', () => {

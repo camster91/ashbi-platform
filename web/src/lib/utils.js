@@ -8,7 +8,7 @@ export function cn(...inputs) {
 export function formatDate(date) {
   if (!date) return '';
   const d = new Date(date);
-  return d.toLocaleDateString({
+  return d.toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
     year: d.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined,
