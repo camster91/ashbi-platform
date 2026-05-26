@@ -21,7 +21,7 @@ export function createScopedPrisma(prisma, organizationId) {
   const softPrisma = withSoftDelete(prisma);
 
   // List of models that should be scoped to an organization
-  const scopedModels = ['client', 'project', 'user', 'thread', 'task', 'invoice'];
+  const scopedModels = ['client', 'project', 'user'];
 
   return new Proxy(softPrisma, {
     get(target, modelName) {
