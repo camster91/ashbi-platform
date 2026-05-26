@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  User,
   MessageSquare,
   CheckSquare,
   Plus,
@@ -10,9 +9,6 @@ import {
   ToggleRight,
   X,
   Save,
-  AlertTriangle,
-  UserCheck,
-  Clock,
   LayoutGrid,
   BarChart3,
 } from 'lucide-react';

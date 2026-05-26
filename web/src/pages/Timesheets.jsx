@@ -2,20 +2,13 @@ import { useState, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ChevronLeft, ChevronRight, Clock, CheckCircle2, XCircle,
-  ChevronDown, ChevronUp, DollarSign, Users, CalendarDays
+  DollarSign, Users, CalendarDays
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useToast } from '../hooks/useToast';
 import { Card, Button } from '../components/ui';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-function formatMinutes(m) {
-  if (!m) return '0:00';
-  const h = Math.floor(m / 60);
-  const min = m % 60;
-  return `${h}:${min.toString().padStart(2, '0')}`;
-}
 
 function formatHours(m) {
   if (!m) return '0.0';
@@ -68,11 +61,6 @@ export default function Timesheets() {
     queryFn: () => api.getWeeklyTimesheet(weekStart.toISOString()),
   });
 
-  const { data: team } = useQuery({
-    queryKey: ['team'],
-    queryFn: () => api.getTeam(),
-  });
-
   const approveMutation = useMutation({
     mutationFn: (id) => api.approveTimesheetEntry(id),
     onSuccess: () => {
@@ -91,7 +79,7 @@ export default function Timesheets() {
     onError: () => toast.error('Rejection failed'),
   });
 
-  const timesheets = data?.timesheets ?? [];
+  const timesheets = useMemo(() => data?.timesheets ?? [], [data]);
 
   // Grand totals across all users
   const grandTotals = useMemo(() => {

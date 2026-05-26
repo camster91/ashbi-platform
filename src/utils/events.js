@@ -7,6 +7,7 @@ import logger from './logger.js';
  * This singleton enables a pub/sub pattern across the application,
  * allowing us to decouple core business logic from secondary 
  * side-effects like notifications, AI processing, and third-party syncs.
+ * @extends {import('events').EventEmitter}
  */
 class EventBus extends EventEmitter {
   emit(event, ...args) {
