@@ -332,15 +332,15 @@ export default function Dashboard() {
       </div>
 
       {/* ─── Row: Upwork Messages ─── */}
-      {stats?.upworkMessages?.length > 0 && (
+      {(stats?.upworkMessages || []).length > 0 && (
         <Card>
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Users className="w-4 h-4 text-green-600" />
               <h2 className="font-semibold text-foreground">Upwork Messages</h2>
-              {stats.upworkMessages.filter(m => m.lastMessageDays !== null && m.lastMessageDays >= 3).length > 0 && (
+              {(stats?.upworkMessages || []).filter(m => m.lastMessageDays !== null && m.lastMessageDays >= 3).length > 0 && (
                 <span className="bg-amber-500 text-white text-xs font-bold rounded-full px-2 py-0.5">
-                  {stats.upworkMessages.filter(m => m.lastMessageDays !== null && m.lastMessageDays >= 3).length} pending
+                  {(stats?.upworkMessages || []).filter(m => m.lastMessageDays !== null && m.lastMessageDays >= 3).length} pending
                 </span>
               )}
             </div>
@@ -354,7 +354,7 @@ export default function Dashboard() {
             </a>
           </div>
           <ul className="divide-y divide-border max-h-[340px] overflow-y-auto">
-            {stats.upworkMessages.map(msg => {
+            {(stats?.upworkMessages || []).map(msg => {
               const daysSince = msg.lastMessageDays;
               const needsResponse = daysSince !== null && daysSince >= 2;
               return (
