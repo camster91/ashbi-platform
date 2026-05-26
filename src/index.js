@@ -182,6 +182,25 @@ await fastify.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } });
 await fastify.register(rateLimit, { global: true, max: 100, timeWindow: '1 minute', skipOnError: true });
 await fastify.register(jwt, { secret: env.jwtSecret, cookie: { cookieName: 'token', signed: false } });
 
+// JWT verification hook — runs for ALL /api/* requests BEFORE tenancyMiddleware
+fastify.addHook('onRequest', async (request, reply) => {
+  if (!request.url.startsWith('/api/')) return;
+  // Skip auth-exempt routes
+  if (
+    request.url.startsWith('/api/auth') ||
+    request.url.startsWith('/api/wp-bridge') ||
+    request.url.startsWith('/api/portal') ||
+    request.url.startsWith('/api/client-acquisition/config') ||
+    request.url.startsWith('/api/client-acquisition/intake') ||
+    request.url === '/api/health'
+  ) return;
+  try {
+    await request.jwtVerify();
+  } catch {
+    // No valid token — let route-specific auth handle 401
+  }
+});
+
 // Auth decorators
 fastify.decorate('authenticate', async (request, reply) => {
   try { await request.jwtVerify(); } catch (err) { return reply.status(401).send({ error: 'Unauthorized' }); }

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
-import { useToast, toast } from '../hooks/useToast';
+import { useToast } from '../hooks/useToast';
 import {
   Mail, Sparkles, Loader2, X, Plus, Trash2, Upload, Copy, Check,
   ChevronRight, Clock, Users, Eye, Edit3
