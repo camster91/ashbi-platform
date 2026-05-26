@@ -1,3 +1,4 @@
+import { validateBody, createRetainerSchema, updateRetainerSchema, logRetainerHoursSchema, generateRetainerInvoiceSchema } from '../validators/schemas.js';
 // Retainer plan routes — track hours & revision rounds per client
 import { generateInvoiceNumber } from '../utils/invoice.js';
 

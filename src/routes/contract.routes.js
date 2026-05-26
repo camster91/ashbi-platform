@@ -52,7 +52,7 @@ export default async function contractRoutes(fastify) {
   // POST / — create contract
   // Body: { clientId, title, templateType, content?, proposalId? }
   // If no content provided and templateType given, use template with client name
-  fastify.post('/', { onRequest: [fastify.authenticate] }, async (request) => {
+  fastify.post('/', { onRequest: [fastify.authenticate], preHandler: [validateBody(createContractSchema)] }, async (request) => {
     const { clientId, title, templateType, content, proposalId } = request.body;
 
     let contractContent = content;

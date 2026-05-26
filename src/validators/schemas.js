@@ -329,6 +329,74 @@ export function validate(schema, data) {
   return { data: null, error: errors.join('; ') };
 }
 
+
+// ── Contract schemas ───────────────────────────────────────────────────────
+export const createContractSchema = z.object({
+  clientId: cuidId,
+  title: z.string().min(1).max(200),
+  templateType: z.enum(['RETAINER', 'PROJECT', 'HOURLY', 'FIXED']).optional(),
+  content: z.string().max(50000).optional(),
+  proposalId: cuidId.optional(),
+});
+
+export const updateContractDraftSchema = z.object({
+  draftData: z.string().min(1).max(50000),
+});
+
+// ── Estimate schemas ───────────────────────────────────────────────────────
+const estimateLineItemSchema = z.object({
+  description: z.string().min(1).max(500),
+  quantity: z.number().positive(),
+  rate: z.number().nonnegative(),
+});
+
+export const createEstimateSchema = z.object({
+  clientId: cuidId,
+  title: z.string().min(1).max(200),
+  description: z.string().max(5000).optional(),
+  lineItems: z.array(estimateLineItemSchema).optional().default([]),
+  tax: z.number().nonnegative().optional().default(0),
+  validUntil: z.string().datetime().optional(),
+});
+
+export const updateEstimateSchema = z.object({
+  title: z.string().min(1).max(200).optional(),
+  description: z.string().max(5000).optional(),
+  lineItems: z.array(estimateLineItemSchema).optional(),
+  tax: z.number().nonnegative().optional(),
+  validUntil: z.string().datetime().nullable().optional(),
+  status: z.enum(['DRAFT', 'SENT', 'VIEWED', 'APPROVED', 'DECLINED', 'EXPIRED']).optional(),
+}).refine(val => Object.keys(val).length > 0, { message: 'At least one field must be provided' });
+
+// ── Retainer schemas ───────────────────────────────────────────────────────
+export const createRetainerSchema = z.object({
+  clientId: cuidId,
+  tier: z.enum(['BASIC', 'STANDARD', 'PREMIUM', 'ENTERPRISE']),
+  hoursPerMonth: z.number().positive(),
+  monthlyAmountUsd: z.number().nonnegative().optional(),
+  monthlyAmountCad: z.number().nonnegative().optional(),
+});
+
+export const updateRetainerSchema = z.object({
+  tier: z.enum(['BASIC', 'STANDARD', 'PREMIUM', 'ENTERPRISE']).optional(),
+  hoursPerMonth: z.number().positive().optional(),
+  monthlyAmountUsd: z.number().nonnegative().optional(),
+  monthlyAmountCad: z.number().nonnegative().optional(),
+  resetHours: z.boolean().optional(),
+}).refine(val => Object.keys(val).length > 0, { message: 'At least one field must be provided' });
+
+export const logRetainerHoursSchema = z.object({
+  hours: z.number().positive(),
+  description: z.string().max(500).optional(),
+  projectId: cuidId.optional(),
+});
+
+export const generateRetainerInvoiceSchema = z.object({
+  currency: z.enum(['USD', 'CAD']).optional().default('USD'),
+  daysUntilDue: z.number().int().positive().optional().default(30),
+  resetHours: z.boolean().optional().default(false),
+});
+
 // ── Helper: Fastify preValidation hook from Zod schema ─────────────────────
 // Usage: { preHandler: [fastify.authenticate, validateBody(createProjectSchema)] }
 export function validateBody(schema) {

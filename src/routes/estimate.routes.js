@@ -1,6 +1,7 @@
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import env from '../config/env.js';
+import { validateBody, createEstimateSchema, updateEstimateSchema } from '../validators/schemas.js';
 
 export default async function estimateRoutes(fastify) {
   // List estimates
@@ -35,7 +36,8 @@ export default async function estimateRoutes(fastify) {
 
   // Create estimate
   fastify.post('/', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: [validateBody(createEstimateSchema)]
   }, async (request, reply) => {
     const { clientId, title, description, lineItems, tax, validUntil } = request.body;
     if (!clientId || !title) {
@@ -66,7 +68,8 @@ export default async function estimateRoutes(fastify) {
 
   // Update estimate
   fastify.put('/:id', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: [validateBody(updateEstimateSchema)]
   }, async (request, reply) => {
     const { id } = request.params;
     const existing = await request.prisma.estimate.findUnique({ where: { id } });
