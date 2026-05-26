@@ -47,6 +47,7 @@ const Expenses = lazy(() => import('./pages/Expenses'));
 const Pipeline = lazy(() => import('./pages/Pipeline'));
 const UpworkContracts = lazy(() => import('./pages/UpworkContracts'));
 const UpworkJobs = lazy(() => import('./pages/UpworkJobs'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Credentials = lazy(() => import('./pages/Credentials'));
 const Chat = lazy(() => import('./pages/Chat'));
 const AiContextSettings = lazy(() => import('./pages/AiContextSettings'));
