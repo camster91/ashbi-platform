@@ -101,7 +101,7 @@ export default function CreateProjectModal({ isOpen, onClose, preselectedClientI
               className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
             >
               <option value="">Select a client</option>
-              {clients?.map((client) => (
+              {(clients?.clients || []).map((client) => (
                 <option key={client.id} value={client.id}>
                   {client.name}
                 </option>
@@ -134,7 +134,7 @@ export default function CreateProjectModal({ isOpen, onClose, preselectedClientI
               className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
             >
               <option value="">No default owner</option>
-              {team?.map((member) => (
+              {(team?.team || []).map((member) => (
                 <option key={member.id} value={member.id}>
                   {member.name} ({member.role})
                 </option>
