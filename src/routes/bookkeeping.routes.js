@@ -1,6 +1,4 @@
-// SECURITY TODO: This route still imports global prisma.
 // It should be refactored to pass prisma as parameter to helper functions.
-import prisma from '../config/db.js';
 
 export default async function bookkeepingRoutes(fastify) {
   // Get unified transaction list
@@ -23,7 +21,7 @@ export default async function bookkeepingRoutes(fastify) {
     if (clientId) invoiceFilter.clientId = clientId;
     if (Object.keys(dateFilter).length > 0) invoiceFilter.createdAt = dateFilter;
 
-    const invoices = await prisma.invoice.findMany({
+    const invoices = await request.request.prisma.invoice.findMany({
       where: invoiceFilter,
       include: { client: { select: { id: true, name: true } } },
       orderBy: { createdAt: 'desc' }
@@ -47,7 +45,7 @@ export default async function bookkeepingRoutes(fastify) {
     const paymentFilter = {};
     if (Object.keys(dateFilter).length > 0) paymentFilter.paidAt = dateFilter;
 
-    const payments = await prisma.invoicePayment.findMany({
+    const payments = await request.request.prisma.invoicePayment.findMany({
       where: paymentFilter,
       include: { invoice: { include: { client: { select: { id: true, name: true } } } } },
       orderBy: { paidAt: 'desc' }
@@ -72,7 +70,7 @@ export default async function bookkeepingRoutes(fastify) {
     if (clientId) expenseFilter.clientId = clientId;
     if (Object.keys(dateFilter).length > 0) expenseFilter.date = dateFilter;
 
-    const expenses = await prisma.expense.findMany({
+    const expenses = await request.request.prisma.expense.findMany({
       where: expenseFilter,
       include: { client: { select: { id: true, name: true } } },
       orderBy: { date: 'desc' }
@@ -121,7 +119,7 @@ export default async function bookkeepingRoutes(fastify) {
     const invoiceFilter = { status: { not: 'VOID' } };
     if (Object.keys(dateFilter).length > 0) invoiceFilter.createdAt = dateFilter;
 
-    const invoiceStats = await prisma.invoice.aggregate({
+    const invoiceStats = await request.request.prisma.invoice.aggregate({
       where: invoiceFilter,
       _sum: { total: true },
       _count: true
@@ -131,7 +129,7 @@ export default async function bookkeepingRoutes(fastify) {
     const paidFilter = {};
     if (Object.keys(dateFilter).length > 0) paidFilter.paidAt = dateFilter;
 
-    const paymentStats = await prisma.invoicePayment.aggregate({
+    const paymentStats = await request.request.prisma.invoicePayment.aggregate({
       where: paidFilter,
       _sum: { amount: true },
       _count: true
@@ -141,7 +139,7 @@ export default async function bookkeepingRoutes(fastify) {
     const expenseFilter = {};
     if (Object.keys(dateFilter).length > 0) expenseFilter.date = dateFilter;
 
-    const expenseStats = await prisma.expense.aggregate({
+    const expenseStats = await request.request.prisma.expense.aggregate({
       where: expenseFilter,
       _sum: { amount: true },
       _count: true
@@ -170,7 +168,7 @@ export default async function bookkeepingRoutes(fastify) {
     onRequest: [fastify.authenticate]
   }, async (request) => {
     // Outstanding invoices
-    const outstandingInvoices = await prisma.invoice.findMany({
+    const outstandingInvoices = await request.request.prisma.invoice.findMany({
       where: { status: { in: ['SENT', 'OVERDUE'] } },
       include: { client: { select: { id: true, name: true } } }
     });

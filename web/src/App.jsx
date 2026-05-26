@@ -25,7 +25,6 @@ function RootRedirect() {
 }
 
 // Lazy loaded pages
-const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Inbox = lazy(() => import('./pages/Inbox'));
 const Thread = lazy(() => import('./pages/Thread'));
 const Projects = lazy(() => import('./pages/Projects'));
@@ -84,11 +83,14 @@ const Bookkeeping = lazy(() => import('./pages/Bookkeeping'));
 const ClientAcquisition = lazy(() => import('./pages/ClientAcquisition'));
 const LeadIntelligence = lazy(() => import('./pages/LeadIntelligence'));
 const ReferralNetwork = lazy(() => import('./pages/ReferralNetwork'));
+<<<<<<< HEAD
 const CallBlock = lazy(() => import('./pages/CallBlock'));
 // Cold Email
 const EmailCampaigns = lazy(() => import('./pages/EmailCampaigns'));
 const ColdEmail = lazy(() => import('./pages/ColdEmail'));
 const LinkedInAgent = lazy(() => import('./pages/LinkedInAgent'));
+=======
+>>>>>>> 64cbcc8 (chore: remove call screener and notion sync features)
 
 function PageLoader() {
   return (
@@ -163,7 +165,6 @@ function AppRoutes() {
                   <Route path="/client-acquisition" element={<ClientAcquisition />} />
                   <Route path="/lead-intelligence" element={<LeadIntelligence />} />
                   <Route path="/referral-network" element={<ReferralNetwork />} />
-                  <Route path="/call-block" element={<CallBlock />} />
                   <Route path="/estimates" element={<Estimates />} />
                   <Route path="/schedule" element={<Schedule />} />
                   <Route path="/timesheets" element={<Timesheets />} />

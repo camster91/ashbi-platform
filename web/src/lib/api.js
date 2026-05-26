@@ -597,6 +597,17 @@ export const api = {
   restoreProposalVersion: (id, versionId) =>
     request(`/proposals/${id}/versions/${versionId}/restore`, { method: 'POST' }),
 
+  // ===== PROPOSALS PIPELINE (Phase 3a) =====
+  /** AI-generate a proposal from client + services */
+  aiGenerateProposal: (data) =>
+    request('/proposals/generate', { method: 'POST', body: data }),
+  /** Convert proposal to PDF */
+  proposalGeneratePdf: (id) =>
+    request(`/proposals/${id}/pdf`, { method: 'POST' }),
+  /** Send proposal via Gmail — body: { email, subject, body } */
+  proposalSendViaGmail: (id, data = {}) =>
+    request(`/proposals/${id}/send`, { method: 'POST', body: data }),
+
   // ===== CONTRACTS =====
   getContracts: (params = {}) => {
     const query = new URLSearchParams(params).toString();
@@ -885,6 +896,8 @@ export const api = {
     request('/cold-email/sequences'),
   getColdEmailSequence: (id) =>
     request(`/cold-email/sequences/${id}`),
+  updateColdEmailSequence: (id, data) =>
+    request(`/cold-email/sequences/${id}`, { method: 'PUT', body: data }),
   deleteColdEmailSequence: (id) =>
     request(`/cold-email/sequences/${id}`, { method: 'DELETE' }),
   importColdEmailProspects: (data) =>
@@ -893,6 +906,7 @@ export const api = {
     const query = new URLSearchParams(params).toString();
     return request(`/cold-email/prospects${query ? `?${query}` : ''}`);
   },
+<<<<<<< HEAD
   // Sequence engine
   activateColdEmailSequence: (sequenceId) =>
     request(`/cold-email/sequences/${sequenceId}/activate`, { method: 'POST' }),
@@ -911,11 +925,22 @@ export const api = {
   saveCallSummary: (data) =>
     request('/call-screener/summary', { method: 'POST', body: data }),
   getCallLog: (params = {}) => {
+=======
+  updateColdEmailProspect: (id, data) =>
+    request(`/cold-email/prospects/${id}`, { method: 'PATCH', body: data }),
+  sendColdEmail: (prospectId, data) =>
+    request(`/cold-email/send/${prospectId}`, { method: 'POST', body: data }),
+  launchColdEmailSequence: (sequenceId) =>
+    request(`/cold-email/launch/${sequenceId}`, { method: 'POST' }),
+  advanceColdEmailSequence: (sequenceId) =>
+    request(`/cold-email/advance/${sequenceId}`, { method: 'POST' }),
+  getColdEmailSends: (params = {}) => {
+>>>>>>> 64cbcc8 (chore: remove call screener and notion sync features)
     const query = new URLSearchParams(params).toString();
-    return request(`/call-screener/calls${query ? `?${query}` : ''}`);
+    return request(`/cold-email/sends${query ? `?${query}` : ''}`);
   },
-  generateCallFollowUp: (callId) =>
-    request(`/call-screener/follow-up/${callId}`, { method: 'POST' }),
+  getColdEmailStats: () =>
+    request('/cold-email/stats'),
 
   // ===== LEAD GEN — Lead Pipeline =====
   leadGenFindLeads: (data) =>

@@ -2,7 +2,7 @@
 // GET /api/command-center   - single endpoint that aggregates all integration data
 // Returns all panels in one response for the dashboard
 
-// SECURITY TODO: This route still imports global prisma.
+// SECURITY TODO: This route still imports global request.prisma.
 // It should be refactored to pass prisma as parameter to helper functions.
 import prisma from '../config/db.js';
 
@@ -128,7 +128,7 @@ async function fetchHubTasks() {
     today.setHours(0, 0, 0, 0);
 
     const [todayTasks, overdueTasks, inProgressTasks] = await Promise.all([
-      prisma.task.findMany({
+      request.prisma.task.findMany({
         where: {
           dueDate: { gte: today, lt: new Date(today.getTime() + 86400000) },
           status: { not: 'DONE' }
@@ -137,13 +137,13 @@ async function fetchHubTasks() {
         take: 10,
         orderBy: { priority: 'desc' }
       }),
-      prisma.task.count({
+      request.prisma.task.count({
         where: {
           dueDate: { lt: today },
           status: { notIn: ['DONE', 'CANCELLED'] }
         }
       }),
-      prisma.task.count({
+      request.prisma.task.count({
         where: { status: 'IN_PROGRESS' }
       })
     ]);
@@ -169,7 +169,7 @@ async function fetchHubTasks() {
 
 async function fetchRecentActivity() {
   try {
-    const activity = await prisma.activity?.findMany({
+    const activity = await request.request.prisma.activity?.findMany({
       take: 10,
       orderBy: { createdAt: 'desc' },
       include: { user: { select: { name: true } } }

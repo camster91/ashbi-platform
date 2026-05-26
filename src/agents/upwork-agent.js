@@ -155,7 +155,6 @@ async function searchJobs(filters = {}) {
       ? queryParts.join(' OR ') 
       : 'branding packaging Shopify';
 
-    // TODO: Integrate with Upwork API when available
     // For now, return mock data structure that matches Upwork API response
     // When Upwork API is available, use:
     // const response = await fetch(`https://api.upwork.com/v2/jobs/search?q=${encodeURIComponent(searchQuery)}`, {...});
