@@ -14,7 +14,7 @@ function useProjects() {
   const [projects, setProjects] = useState([]);
   useEffect(() => {
     let cancelled = false;
-    api.projects.getProjects({ limit: '50' }).then(data => {
+    api.getProjects({ limit: '50' }).then(data => {
       if (!cancelled) setProjects(data?.projects || []);
     }).catch(() => {});
     return () => { cancelled = true; };
@@ -26,7 +26,7 @@ function useClients() {
   const [clients, setClients] = useState([]);
   useEffect(() => {
     let cancelled = false;
-    api.clients.getClients({ limit: '50' }).then(data => {
+    api.getClients({ limit: '50' }).then(data => {
       if (!cancelled) setClients(data?.clients || []);
     }).catch(() => {});
     return () => { cancelled = true; };
@@ -87,7 +87,7 @@ export default function QuickAdd({ open, onClose }) {
 
     try {
       if (activeTab === 'project') {
-        const res = await api.projects.createProject({
+        const res = await api.createProject({
           name: name.trim(),
           clientId: clientId || undefined,
           status: 'LEAD',
@@ -97,7 +97,7 @@ export default function QuickAdd({ open, onClose }) {
       } else if (activeTab === 'task') {
         const pid = projectId || (projects?.[0]?.id);
         if (!pid) { setError('Select a project'); setSaving(false); return; }
-        const res = await api.tasks.createQuickTask(pid, {
+        const res = await api.createQuickTask(pid, {
           title: name.trim(),
           status: 'TODO',
         });
@@ -105,7 +105,7 @@ export default function QuickAdd({ open, onClose }) {
         setTimeout(onClose, 1200);
       } else if (activeTab === 'client') {
         if (!email.trim()) { setError('Email is required'); setSaving(false); return; }
-        await api.clients.createClient({
+        await api.createClient({
           name: name.trim(),
           contacts: [{ email: email.trim(), isPrimary: true }],
         });
