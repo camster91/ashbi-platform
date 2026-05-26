@@ -32,7 +32,8 @@ export default async function retainerRoutes(fastify) {
 
   // POST /retainer — create a retainer plan for a client
   fastify.post('/retainer', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: [validateBody(createRetainerSchema)]
   }, async (request, reply) => {
     if (request.user.role !== 'ADMIN') {
       return reply.status(403).send({ error: 'Admin access required' });
@@ -74,7 +75,8 @@ export default async function retainerRoutes(fastify) {
 
   // PUT /retainer/:clientId — update a retainer plan
   fastify.put('/retainer/:clientId', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: [validateBody(updateRetainerSchema)]
   }, async (request, reply) => {
     if (request.user.role !== 'ADMIN') {
       return reply.status(403).send({ error: 'Admin access required' });
@@ -132,7 +134,8 @@ export default async function retainerRoutes(fastify) {
 
   // POST /retainer/:clientId/log-hours — log time and update hoursUsed
   fastify.post('/retainer/:clientId/log-hours', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: [validateBody(logRetainerHoursSchema)]
   }, async (request, reply) => {
     if (request.user.role !== 'BOT' && request.user.role !== 'ADMIN') {
       return reply.status(403).send({ error: 'Admin or Bot access required' });
