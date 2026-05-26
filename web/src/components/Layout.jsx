@@ -33,6 +33,7 @@ import {
   Key,
   Calculator,
   Calendar,
+  Mail,
   Clock,
   CreditCard,
   BookOpen,
