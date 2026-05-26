@@ -1,10 +1,6 @@
 // Client Health Bot Routes
 // Scores clients based on engagement, payment history, project activity, and communication
 
-// SECURITY TODO: This route still imports global request.prisma.
-// It should be refactored to pass prisma as parameter to helper functions.
-import prisma from '../config/db.js';
-
 // Health scoring weights
 const WEIGHTS = {
   paymentHistory: 0.35,    // 35% - most important
@@ -14,7 +10,7 @@ const WEIGHTS = {
 };
 
 // Calculate health score for a single client
-async function calculateClientHealth(client) {
+async function calculateClientHealth(client, prisma) {
   const now = new Date();
   const thirtyDaysAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
   const ninetyDaysAgo = new Date(now - 90 * 24 * 60 * 60 * 1000);
@@ -22,7 +18,7 @@ async function calculateClientHealth(client) {
   // --- Payment Health (35%) ---
   let paymentScore = 100;
 
-  const invoices = await request.request.prisma.invoice.findMany({
+  const invoices = await prisma.invoice.findMany({
     where: { clientId: client.id },
     orderBy: { createdAt: 'desc' },
     take: 20
@@ -47,7 +43,7 @@ async function calculateClientHealth(client) {
   // --- Project Activity (25%) ---
   let activityScore = 50;
 
-  const activeProjects = await request.request.prisma.project.findMany({
+  const activeProjects = await prisma.project.findMany({
     where: {
       clientId: client.id,
       status: { notIn: ['CANCELLED', 'LAUNCHED'] }
@@ -59,7 +55,7 @@ async function calculateClientHealth(client) {
 
   if (activeProjects.length > 0) activityScore += 30;
 
-  const recentThreads = await request.request.prisma.thread.count({
+  const recentThreads = await prisma.thread.count({
     where: { clientId: client.id, createdAt: { gte: thirtyDaysAgo } }
   });
   activityScore += Math.min(20, recentThreads * 5);
@@ -68,11 +64,11 @@ async function calculateClientHealth(client) {
   // --- Communication Frequency (20%) ---
   let commScore = 50;
 
-  const recentMessages = await request.request.prisma.thread.count({
+  const recentMessages = await prisma.thread.count({
     where: { clientId: client.id, updatedAt: { gte: thirtyDaysAgo } }
   });
 
-  const oldMessages = await request.request.prisma.thread.count({
+  const oldMessages = await prisma.thread.count({
     where: {
       clientId: client.id,
       updatedAt: { gte: ninetyDaysAgo, lt: thirtyDaysAgo }
@@ -87,7 +83,7 @@ async function calculateClientHealth(client) {
   // --- Retainer Stability (20%) ---
   let retainerScore = 50;
 
-  const retainer = await request.request.prisma.retainerPlan.findUnique({
+  const retainer = await prisma.retainerPlan.findUnique({
     where: { clientId: client.id }
   });
 
@@ -177,13 +173,13 @@ export default async function clientHealthRoutes(fastify) {
       const { status = 'ACTIVE' } = request.query;
       const where = status !== 'ALL' ? { status } : {};
 
-      const clients = await request.request.prisma.client.findMany({
+      const clients = await request.prisma.client.findMany({
         where,
         orderBy: { name: 'asc' }
       });
 
       const healthScores = await Promise.all(
-        clients.map(client => calculateClientHealth(client))
+        clients.map(client => calculateClientHealth(client, request.prisma))
       );
 
       healthScores.sort((a, b) => a.healthScore - b.healthScore);
@@ -211,13 +207,13 @@ export default async function clientHealthRoutes(fastify) {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     try {
-      const clients = await request.request.prisma.client.findMany({
+      const clients = await request.prisma.client.findMany({
         where: { status: 'ACTIVE' },
         orderBy: { name: 'asc' }
       });
 
       const healthScores = await Promise.all(
-        clients.map(client => calculateClientHealth(client))
+        clients.map(client => calculateClientHealth(client, request.prisma))
       );
 
       const atRisk = healthScores
@@ -236,13 +232,13 @@ export default async function clientHealthRoutes(fastify) {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     try {
-      const clients = await request.request.prisma.client.findMany({
+      const clients = await request.prisma.client.findMany({
         where: { status: 'ACTIVE' },
         orderBy: { name: 'asc' }
       });
 
       const healthScores = await Promise.all(
-        clients.map(client => calculateClientHealth(client))
+        clients.map(client => calculateClientHealth(client, request.prisma))
       );
 
       const actions = [];
@@ -286,15 +282,15 @@ export default async function clientHealthRoutes(fastify) {
 
       let clients;
       if (clientId) {
-        const client = await request.request.prisma.client.findUnique({ where: { id: clientId } });
+        const client = await request.prisma.client.findUnique({ where: { id: clientId } });
         if (!client) return reply.status(404).send({ error: 'Client not found' });
         clients = [client];
       } else {
-        clients = await request.request.prisma.client.findMany({ where: { status: 'ACTIVE' } });
+        clients = await request.prisma.client.findMany({ where: { status: 'ACTIVE' } });
       }
 
       const healthScores = await Promise.all(
-        clients.map(client => calculateClientHealth(client))
+        clients.map(client => calculateClientHealth(client, request.prisma))
       );
 
       return {
@@ -314,9 +310,9 @@ export default async function clientHealthRoutes(fastify) {
   }, async (request, reply) => {
     try {
       const { clientId } = request.params;
-      const client = await request.request.prisma.client.findUnique({ where: { id: clientId } });
+      const client = await request.prisma.client.findUnique({ where: { id: clientId } });
       if (!client) return reply.status(404).send({ error: 'Client not found' });
-      const health = await calculateClientHealth(client);
+      const health = await calculateClientHealth(client, request.prisma);
       return health;
     } catch (err) {
       fastify.log.error(err);

@@ -224,7 +224,45 @@ export const proposalDeclineSchema = z.object({
   reason: z.string().max(2000).optional(),
 });
 
-// ── Client Portal schemas ─────────────────────────────────────────────────
+// ── Upwork Contract schemas ────────────────────────────────────────────────
+export const createUpworkContractSchema = z.object({
+  clientName: z.string().min(1).max(200),
+  projectName: z.string().min(1).max(200),
+  platform: z.enum(['UPWORK', 'DIRECT']).optional().default('UPWORK'),
+  contractType: z.enum(['FIXED', 'HOURLY']).optional().default('FIXED'),
+  totalBudget: z.number().nonnegative().optional().default(0),
+  hourlyRate: z.number().positive().optional(),
+  status: z.enum(['ACTIVE', 'PAUSED', 'COMPLETED', 'CANCELLED']).optional().default('ACTIVE'),
+  currentMilestone: z.string().max(200).optional(),
+  milestoneAmount: z.number().nonnegative().optional(),
+  milestoneStatus: z.enum(['PENDING', 'SUBMITTED', 'APPROVED', 'OVERDUE']).optional(),
+  milestoneDueDate: z.string().datetime().optional(),
+  lastMessageAt: z.string().datetime().optional(),
+  notes: z.string().max(5000).optional(),
+  upworkUrl: z.string().url().max(2048).optional(),
+});
+
+export const updateUpworkContractSchema = z.object({
+  clientName: z.string().min(1).max(200).optional(),
+  projectName: z.string().min(1).max(200).optional(),
+  platform: z.enum(['UPWORK', 'DIRECT']).optional(),
+  contractType: z.enum(['FIXED', 'HOURLY']).optional(),
+  totalBudget: z.number().nonnegative().optional(),
+  hourlyRate: z.number().positive().optional(),
+  status: z.enum(['ACTIVE', 'PAUSED', 'COMPLETED', 'CANCELLED']).optional(),
+  currentMilestone: z.string().max(200).optional(),
+  milestoneAmount: z.number().nonnegative().optional(),
+  milestoneStatus: z.enum(['PENDING', 'SUBMITTED', 'APPROVED', 'OVERDUE']).optional(),
+  milestoneDueDate: z.string().datetime().nullable().optional(),
+  lastMessageAt: z.string().datetime().nullable().optional(),
+  notes: z.string().max(5000).optional(),
+  upworkUrl: z.string().url().max(2048).optional(),
+}).refine(val => Object.keys(val).length > 0, { message: 'At least one field must be provided' });
+
+// ── Client Health schemas ──────────────────────────────────────────────────
+export const recalculateHealthSchema = z.object({
+  clientId: cuidId.optional(),
+});
 export const clientPortalMessageSchema = z.object({
   content: z.string().min(1).max(10000),
   type: z.enum(['TEXT', 'IMAGE', 'FILE']).optional().default('TEXT'),

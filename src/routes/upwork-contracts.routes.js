@@ -1,5 +1,5 @@
 // Upwork Contract Tracker routes
-
+import { validateBody, createUpworkContractSchema, updateUpworkContractSchema } from '../validators/schemas.js';
 
 export default async function upworkContractRoutes(fastify) {
   // List all contracts
@@ -39,7 +39,8 @@ export default async function upworkContractRoutes(fastify) {
 
   // Add contract
   fastify.post('/', {
-    onRequest: [fastify.adminOnly]
+    onRequest: [fastify.adminOnly],
+    preHandler: [validateBody(createUpworkContractSchema)]
   }, async (request, reply) => {
     const {
       clientName, projectName, platform, contractType,
@@ -76,7 +77,8 @@ export default async function upworkContractRoutes(fastify) {
 
   // Update contract
   fastify.put('/:id', {
-    onRequest: [fastify.adminOnly]
+    onRequest: [fastify.adminOnly],
+    preHandler: [validateBody(updateUpworkContractSchema)]
   }, async (request, reply) => {
     const { id } = request.params;
     const data = {};
