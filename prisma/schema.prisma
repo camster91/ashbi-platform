@@ -1212,7 +1212,6 @@ model LinkedInProspect {
 // ==================== COLD EMAIL AGENT ====================
 
 model ColdEmailSequence {
-<<<<<<< HEAD
   id             String   @id @default(cuid())
   name           String
   serviceType    String // web_design | branding | seo | full_service
@@ -1234,32 +1233,11 @@ model ColdEmailSequence {
 
   prospects ColdEmailProspect[]
   events    ColdEmailEvent[]
-=======
-  id               String   @id @default(cuid())
-  name             String
-  serviceType      String   // web_design | branding | seo | full_service
-  emails           String   @default("[]") // JSON: array of 5 emails [{subject, body, delayDays}]
-  status           String   @default("DRAFT") // DRAFT | ACTIVE | PAUSED | COMPLETED
-  targetIndustry   String?
-  // Tracking stats (denormalized for dashboard performance)
-  totalSent        Int      @default(0)
-  totalOpened      Int      @default(0)
-  totalClicked     Int      @default(0)
-  totalReplied     Int      @default(0)
-  totalBounced     Int      @default(0)
-  totalUnsubscribed Int     @default(0)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-
-  prospects ColdEmailProspect[]
-  sends     ColdEmailSend[]
->>>>>>> 64cbcc8 (chore: remove call screener and notion sync features)
 
   @@map("cold_email_sequences")
 }
 
 model ColdEmailProspect {
-<<<<<<< HEAD
   id            String    @id @default(cuid())
   name          String
   email         String
@@ -1287,34 +1265,10 @@ model ColdEmailProspect {
 
   sequence ColdEmailSequence? @relation(fields: [sequenceId], references: [id], onDelete: SetNull)
   events   ColdEmailEvent[]
-=======
-  id              String    @id @default(cuid())
-  name            String
-  email           String
-  company         String?
-  industry        String?
-  painPoint       String?
-  status          String    @default("NEW") // NEW | CONTACTED | REPLIED | CONVERTED | UNSUBSCRIBED | BOUNCED
-  sequenceId      String?
-  currentStep     Int       @default(0) // Which email in sequence they're at (0-indexed)
-  lastEmailedAt   DateTime?
-  opened          Boolean   @default(false)
-  clicked         Boolean   @default(false)
-  replied         Boolean   @default(false)
-  bounced         Boolean   @default(false)
-  unsubscribed    Boolean   @default(false)
-  nextScheduledAt DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  sequence ColdEmailSequence? @relation(fields: [sequenceId], references: [id], onDelete: SetNull)
-  sends   ColdEmailSend[]
->>>>>>> 64cbcc8 (chore: remove call screener and notion sync features)
 
   @@map("cold_email_prospects")
 }
 
-<<<<<<< HEAD
 // ColdEmailEvent — individual send/tracking events per prospect
 model ColdEmailEvent {
   id          String   @id @default(cuid())
@@ -1331,27 +1285,6 @@ model ColdEmailEvent {
   sequence ColdEmailSequence? @relation(fields: [sequenceId], references: [id], onDelete: SetNull)
 
   @@map("cold_email_events")
-=======
-model ColdEmailSend {
-  id          String    @id @default(cuid())
-  prospectId  String
-  sequenceId  String?
-  step        Int       // Which email in sequence (0-indexed)
-  subject     String
-  body        String
-  status      String    @default("PENDING") // PENDING | SENT | OPENED | CLICKED | BOUNCED | UNSUBSCRIBED
-  mailgunId   String?   // Mailgun message ID for tracking
-  openedAt    DateTime?
-  clickedAt   DateTime?
-  error       String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  prospect ColdEmailProspect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
-  sequence ColdEmailSequence? @relation(fields: [sequenceId], references: [id], onDelete: SetNull)
-
-  @@map("cold_email_sends")
->>>>>>> 64cbcc8 (chore: remove call screener and notion sync features)
 }
 
 // ==================== AI TEAM ====================
