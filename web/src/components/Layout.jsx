@@ -113,7 +113,7 @@ export default function Layout({ children }) {
     refetchInterval: 60000,
   });
 
-  const activeProjectCount = projects?.filter(
+  const activeProjectCount = projects?.projects?.filter(
     p => !['LAUNCHED', 'CANCELLED'].includes(p.status)
   ).length || 0;
 
