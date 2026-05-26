@@ -83,14 +83,11 @@ const Bookkeeping = lazy(() => import('./pages/Bookkeeping'));
 const ClientAcquisition = lazy(() => import('./pages/ClientAcquisition'));
 const LeadIntelligence = lazy(() => import('./pages/LeadIntelligence'));
 const ReferralNetwork = lazy(() => import('./pages/ReferralNetwork'));
-<<<<<<< HEAD
 const CallBlock = lazy(() => import('./pages/CallBlock'));
 // Cold Email
 const EmailCampaigns = lazy(() => import('./pages/EmailCampaigns'));
 const ColdEmail = lazy(() => import('./pages/ColdEmail'));
 const LinkedInAgent = lazy(() => import('./pages/LinkedInAgent'));
-=======
->>>>>>> 64cbcc8 (chore: remove call screener and notion sync features)
 
 function PageLoader() {
   return (

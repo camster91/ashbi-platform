@@ -906,7 +906,6 @@ export const api = {
     const query = new URLSearchParams(params).toString();
     return request(`/cold-email/prospects${query ? `?${query}` : ''}`);
   },
-<<<<<<< HEAD
   // Sequence engine
   activateColdEmailSequence: (sequenceId) =>
     request(`/cold-email/sequences/${sequenceId}/activate`, { method: 'POST' }),
@@ -925,17 +924,6 @@ export const api = {
   saveCallSummary: (data) =>
     request('/call-screener/summary', { method: 'POST', body: data }),
   getCallLog: (params = {}) => {
-=======
-  updateColdEmailProspect: (id, data) =>
-    request(`/cold-email/prospects/${id}`, { method: 'PATCH', body: data }),
-  sendColdEmail: (prospectId, data) =>
-    request(`/cold-email/send/${prospectId}`, { method: 'POST', body: data }),
-  launchColdEmailSequence: (sequenceId) =>
-    request(`/cold-email/launch/${sequenceId}`, { method: 'POST' }),
-  advanceColdEmailSequence: (sequenceId) =>
-    request(`/cold-email/advance/${sequenceId}`, { method: 'POST' }),
-  getColdEmailSends: (params = {}) => {
->>>>>>> 64cbcc8 (chore: remove call screener and notion sync features)
     const query = new URLSearchParams(params).toString();
     return request(`/cold-email/sends${query ? `?${query}` : ''}`);
   },
