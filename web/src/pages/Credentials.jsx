@@ -63,18 +63,21 @@ export default function Credentials() {
 
   const { data: credentials = [], isLoading } = useQuery({
     queryKey: ['credentials', filterCategory, filterClient],
-    queryFn: () => {
+    queryFn: async () => {
       const params = {};
       if (filterCategory) params.category = filterCategory;
       if (filterClient) params.clientId = filterClient;
-      return api.getCredentials(params);
+      const res = await api.getCredentials(params);
+      return res.credentials || [];
     },
   });
 
-  const { data: clients = [] } = useQuery({
+  const { data: clientsData = {} } = useQuery({
     queryKey: ['clients'],
-    queryFn: () => api.getClients(),
+    queryFn: async () => api.getClients(),
   });
+
+  const clients = clientsData.clients || [];
 
   const createMutation = useMutation({
     mutationFn: (data) => api.createCredential(data),
