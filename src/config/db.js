@@ -54,12 +54,16 @@ function isDeletedAtExplicit(args) {
 
 function softDeleteFilter({ model, operation, args, query }) {
   if (isDeletedAtExplicit(args)) {
-    return query(args); // user is explicitly querying deletedAt
+    return query(args);
   }
   if (args?.where) {
     args.where = { ...args.where, deletedAt: null };
   } else {
     args = { ...args, where: { deletedAt: null } };
+  }
+  // Enforce default pagination limit on findMany
+  if (operation === 'findMany' && (!args.take || args.take > 100)) {
+    args = { ...args, take: 100 };
   }
   return query(args);
 }

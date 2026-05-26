@@ -182,7 +182,11 @@ export default async function ashChatRoutes(fastify) {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const { id } = request.params;
-    await request.prisma.ashConversation.delete({ where: { id } }).catch(() => null);
+    try {
+      await request.prisma.ashConversation.delete({ where: { id } });
+    } catch (err) {
+      fastify.log.warn('Failed to delete ashConversation:', err.message);
+    }
     return { success: true };
   });
 }

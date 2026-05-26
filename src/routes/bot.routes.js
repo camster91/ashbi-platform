@@ -747,10 +747,14 @@ export default async function botRoutes(fastify) {
 
   // POST /system/restart-gateway — safely restart OpenClaw gateway via watchdog
   fastify.post('/system/restart-gateway', { preHandler: requireBotAuth }, async (request, reply) => {
-    const { exec } = await import('child_process');
-    const watchdogScript = 'C:/Users/camst/.openclaw/workspace/watchdog/openclaw-watchdog.js';
+    const watchdogScript = process.env.WATCHDOG_SCRIPT || path.join(os.homedir(), '.openclaw', 'workspace', 'watchdog', 'openclaw-watchdog.js');
+    const scriptPath = path.resolve(watchdogScript);
     
-    exec(`node "${watchdogScript}" restart`, (err) => {
+    if (!scriptPath.startsWith(os.homedir())) {
+      return reply.status(400).send({ error: 'Invalid watchdog path' });
+    }
+    
+    exec(`node "${scriptPath}" restart`, (err) => {
       if (err) fastify.log.error('Watchdog restart error:', err.message);
     });
 
