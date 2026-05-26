@@ -11,9 +11,8 @@
 
 import { createDraft } from './gmail-draft.agent.js';
 import crypto from 'crypto';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/db.js';
 
-const prisma = new PrismaClient();
 
 // Referral reward configuration
 const REFERRAL_REWARD = {

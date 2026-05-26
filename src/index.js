@@ -123,14 +123,10 @@ import leadIntelligenceRoutes from './routes/lead-intelligence.routes.js';
 import proposalBuilderRoutes from './routes/proposal-builder.routes.js';
 import coldCallRoutes from './routes/cold-call.routes.js';
 import upworkAutoAlertRoutes from './routes/upwork-auto-alert.routes.js';
-<<<<<<< HEAD
 import upworkJobsRoutes from './routes/upwork-jobs.routes.js';
 import clientAcquisitionRoutes from './routes/client-acquisition.routes.js';
 import trashRoutes from './routes/trash.routes.js';
 import draftRoutes from './routes/draft.routes.js';
-=======
-import proposalsPipelineRoutes from './routes/proposals.routes.js';
->>>>>>> 64cbcc8 (chore: remove call screener and notion sync features)
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -180,7 +176,7 @@ fastify.addContentTypeParser('application/json', { parseAs: 'string' }, (req, bo
 
 // Plugins
 await fastify.register(compress, { global: true });
-await fastify.register(cors, { origin: env.isDev ? true : env.corsOrigins, credentials: true });
+await fastify.register(cors, { origin: env.isDev ? ['http://localhost:3000', 'http://localhost:5173'] : env.corsOrigins, credentials: true });
 await fastify.register(cookie);
 await fastify.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } });
 await fastify.register(rateLimit, { global: true, max: 100, timeWindow: '1 minute', skipOnError: true });
@@ -241,7 +237,6 @@ await fastify.register(leadIntelligenceRoutes, { prefix: '/api/lead-intelligence
 await fastify.register(proposalBuilderRoutes, { prefix: '/api/proposal-builder' });
 await fastify.register(coldCallRoutes, { prefix: '/api/cold-call' });
 await fastify.register(upworkAutoAlertRoutes, { prefix: '/api/upwork-auto-alert' });
-<<<<<<< HEAD
 // Route registrations continued
 await fastify.register(wpBridgeRoutes, { prefix: '/api/wp-bridge' });
 await fastify.register(surveyRoutes, { prefix: '/api/surveys' });
@@ -332,12 +327,6 @@ await fastify.register(clientPortalRoutes, { prefix: '/api/client-portal' });
 await fastify.register(wordpressAgentRoutes, { prefix: '/api/wordpress' });
 await fastify.register(gmailRoutes, { prefix: '/api/gmail' });
 await fastify.register(clientAcquisitionRoutes, { prefix: '/api/client-acquisition' });
-=======
-await fastify.register(proposalsPipelineRoutes, { prefix: '/api/proposals' });
-await fastify.register(mailgunRoutes, { prefix: '/api/mailgun' });
-await fastify.register(mailgunHitlRoutes, { prefix: '/api/mailgun' });
-await fastify.register(coldEmailRoutes, { prefix: '/api/cold-email' });
->>>>>>> 64cbcc8 (chore: remove call screener and notion sync features)
 // ... (all other routes would be registered here in a production app, condensed for space)
 
 // Hub-Hermes bridge initialization

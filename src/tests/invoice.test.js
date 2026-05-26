@@ -6,12 +6,11 @@ import assert from 'node:assert/strict';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import jwt from '@fastify/jwt';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/db.js';
 import invoiceRoutes from '../routes/invoice.routes.js';
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
-const prisma = new PrismaClient();
 let fastify;
 let authToken;
 let testClientId;

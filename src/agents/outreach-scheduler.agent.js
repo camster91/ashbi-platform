@@ -10,9 +10,8 @@
  */
 
 import { createDraft, searchInbox } from './gmail-draft.agent.js';
-import { PrismaClient } from '@prisma/client';
+import prisma from '../config/db.js';
 
-const prisma = new PrismaClient();
 
 // Maton API key from environment
 const MATON_API_KEY = process.env.MATON_API_KEY;
