@@ -918,18 +918,6 @@ export const api = {
   processColdEmailQueue: () =>
     request('/cold-email/process-queue', { method: 'POST' }),
 
-  // ===== CALL SCREENER AGENT =====
-  screenCall: (data) =>
-    request('/call-screener/screen', { method: 'POST', body: data }),
-  saveCallSummary: (data) =>
-    request('/call-screener/summary', { method: 'POST', body: data }),
-  getCallLog: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/cold-email/sends${query ? `?${query}` : ''}`);
-  },
-  getColdEmailStats: () =>
-    request('/cold-email/stats'),
-
   // ===== LEAD GEN — Lead Pipeline =====
   leadGenFindLeads: (data) =>
     request('/lead-gen/find-leads', { method: 'POST', body: data }),
@@ -1424,16 +1412,6 @@ export const api = {
   connectIntegration: (type) => request(`/integrations/${type}/connect`, { method: 'POST' }),
   disconnectIntegration: (type) => request(`/integrations/${type}/disconnect`, { method: 'POST' }),
   syncIntegration: (type) => request(`/integrations/${type}/sync`, { method: 'POST' }),
-
-  // ===== NOTION SYNC =====
-  syncNotionAll: () =>
-    request('/notion-sync/sync-all', { method: 'POST' }),
-  syncNotionOne: (pageId) =>
-    request('/notion-sync/sync-one', { method: 'POST', body: { pageId } }),
-  getNotionProjects: () =>
-    request('/notion-sync/projects'),
-  getNotionStatus: () =>
-    request('/notion-sync/status'),
 
   // ===== TIMESHEETS =====
   getWeeklyTimesheet: (weekStart) => {
