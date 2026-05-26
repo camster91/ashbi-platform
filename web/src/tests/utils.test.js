@@ -14,7 +14,7 @@ import {
   getProjectStatusColor,
   getProjectStatusLabel,
   getSentimentIcon
-} from '../lib/utils';
+} from '../lib/utils.js';
 
 describe('Frontend Utils', () => {
   describe('cn', () => {

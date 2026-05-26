@@ -65,15 +65,19 @@ before(async () => {
 });
 
 after(async () => {
-  await prisma.contract.deleteMany({ where: { clientId: testClientId } });
-  await prisma.proposalLineItem.deleteMany({ where: { proposal: { clientId: testClientId } } });
-  await prisma.proposal.deleteMany({ where: { clientId: testClientId } });
-  await prisma.task.deleteMany({ where: { projectId: testProjectId } });
-  await prisma.project.delete({ where: { id: testProjectId } });
-  await prisma.contact.deleteMany({ where: { clientId: testClientId } });
-  await prisma.client.delete({ where: { id: testClientId } });
-  await prisma.user.delete({ where: { id: testUserId } });
-  await prisma.$disconnect();
+  try {
+    await prisma.contract.deleteMany({ where: { clientId: testClientId } });
+    await prisma.proposalLineItem.deleteMany({ where: { proposal: { clientId: testClientId } } });
+    await prisma.proposal.deleteMany({ where: { clientId: testClientId } });
+    await prisma.task.deleteMany({ where: { projectId: testProjectId } });
+    await prisma.project.delete({ where: { id: testProjectId } }).catch(() => null);
+    await prisma.contact.deleteMany({ where: { clientId: testClientId } });
+    await prisma.client.delete({ where: { id: testClientId } }).catch(() => null);
+    await prisma.user.delete({ where: { id: testUserId } }).catch(() => null);
+    await prisma.$disconnect();
+  } catch (err) {
+    // DB cleanup errors are non-fatal in test teardown
+  }
   await fastify.close();
 });
 

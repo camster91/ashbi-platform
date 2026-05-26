@@ -34,6 +34,19 @@ jobs:
   backend-tests:
     name: Backend Unit Tests
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: testdb
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
     steps:
       - uses: actions/checkout@v6
       - name: Setup Node.js
@@ -43,12 +56,16 @@ jobs:
           cache: 'npm'
       - name: Install dependencies
         run: npm install
+      - name: Setup database
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://postgres:testpass@localhost:5432/testdb
       - name: Run Backend Tests
         run: npm test
         env:
           NODE_ENV: test
           JWT_SECRET: test-secret
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+          DATABASE_URL: postgresql://postgres:testpass@localhost:5432/testdb
           
   frontend-tests:
     name: Frontend Unit Tests
