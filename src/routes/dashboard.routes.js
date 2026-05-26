@@ -260,7 +260,7 @@ export default async function dashboardRoutes(fastify) {
         _count: { id: true }
       }),
       // LinkedIn stats: aggregate from sequence statuses
-      request.prisma.linkedinSequence.groupBy({
+      request.prisma.linkedInSequence.groupBy({
         by: ['status'],
         _count: { id: true }
       }),
