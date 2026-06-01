@@ -1694,7 +1694,8 @@ model WPSite {
   bridgeVersion String?
   ttfb          Int?
   dbSize        BigInt?
-  diskUsage     BigInt?
+  diskBytes     BigInt?
+  diskUsagePct  Float?
   pluginUpdates Int       @default(0)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt

@@ -51,7 +51,7 @@ export async function listSites(userId) {
  * Register a new WP site
  */
 export async function registerSite(data) {
-  const { siteUrl, siteName, wordpressVersion, phpVersion, activePlugins, theme, clientId, projectId, bridgeVersion, ttfb, dbSize, diskUsage, pluginUpdates } = data;
+  const { siteUrl, siteName, wordpressVersion, phpVersion, activePlugins, theme, clientId, projectId, bridgeVersion, ttfb, dbSize, diskBytes, diskUsagePct, pluginUpdates } = data;
 
   return prisma.wPSite.create({
     data: {
@@ -65,7 +65,8 @@ export async function registerSite(data) {
       bridgeVersion: bridgeVersion || null,
       ttfb: typeof ttfb === 'number' ? ttfb : null,
       dbSize: dbSize ? BigInt(dbSize) : null,
-      diskUsage: diskUsage ? BigInt(diskUsage) : null,
+      diskBytes: diskBytes ? BigInt(diskBytes) : null,
+      diskUsagePct: typeof diskUsagePct === 'number' ? diskUsagePct : null,
       pluginUpdates: typeof pluginUpdates === 'number' ? pluginUpdates : 0,
       clientId: clientId || undefined,
       projectId: projectId || undefined,
@@ -98,7 +99,8 @@ export async function updateSiteHealth(siteUrl, healthData) {
       bridgeVersion: healthData.bridgeVersion || site.bridgeVersion,
       ttfb: typeof healthData.ttfb === 'number' ? healthData.ttfb : site.ttfb,
       dbSize: healthData.dbSize ? BigInt(healthData.dbSize) : site.dbSize,
-      diskUsage: healthData.diskUsage ? BigInt(healthData.diskUsage) : site.diskUsage,
+      diskBytes: healthData.diskBytes ? BigInt(healthData.diskBytes) : site.diskBytes,
+      diskUsagePct: typeof healthData.diskUsagePct === 'number' ? healthData.diskUsagePct : site.diskUsagePct,
       pluginUpdates: typeof healthData.pluginUpdates === 'number' ? healthData.pluginUpdates : site.pluginUpdates,
       lastCheckedAt: new Date(),
       alerts: JSON.stringify(healthData.alerts || [])
@@ -113,6 +115,17 @@ export async function recordBackup(siteUrl, report) {
   const site = await prisma.wPSite.findFirst({ where: { url: siteUrl } });
   if (!site) throw new Error('Site not found');
 
+  // The plugin now sends 'manifest' as the parsed object (with dbSize/filesSize),
+  // and also as top-level 'dbSize'/'filesSize'. Prefer top-level, fall back to manifest.
+  const manifestObj = (report.manifest && typeof report.manifest === 'object') ? report.manifest : null;
+  const dbSizeRaw    = report.dbSize ?? manifestObj?.dbSize ?? null;
+  const filesSizeRaw = report.filesSize ?? manifestObj?.filesSize ?? null;
+
+  // Serialize the manifest object for storage; store filename if it's a string
+  const manifestJson = manifestObj
+    ? JSON.stringify(manifestObj)
+    : (typeof report.manifest === 'string' ? report.manifest : null);
+
   return prisma.wPBackup.create({
     data: {
       siteId: site.id,
@@ -122,11 +135,9 @@ export async function recordBackup(siteUrl, report) {
       filesSuccess: !!report.filesSuccess,
       dbFile: report.dbFile || null,
       filesFile: report.filesFile || null,
-      manifest: typeof report.manifest === 'string'
-        ? report.manifest
-        : (report.manifest ? JSON.stringify(report.manifest) : null),
-      dbSize: report.manifest?.dbSize ? BigInt(report.manifest.dbSize) : (report.dbSize ? BigInt(report.dbSize) : null),
-      filesSize: report.manifest?.filesSize ? BigInt(report.manifest.filesSize) : (report.filesSize ? BigInt(report.filesSize) : null)
+      manifest: manifestJson,
+      dbSize: dbSizeRaw ? BigInt(dbSizeRaw) : null,
+      filesSize: filesSizeRaw ? BigInt(filesSizeRaw) : null
     }
   });
 }
