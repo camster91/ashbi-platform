@@ -3,6 +3,22 @@
 
 import prisma from '../config/db.js';
 import crypto from 'crypto';
+import env from '../config/env.js';
+
+/**
+ * Verify shared secret using constant-time compare. Returns true if valid.
+ */
+function verifySecret(secretKey) {
+  if (!secretKey || !env.wpBridgeSecret) return false;
+  try {
+    return crypto.timingSafeEqual(
+      Buffer.from(String(secretKey)),
+      Buffer.from(String(env.wpBridgeSecret))
+    );
+  } catch {
+    return false;
+  }
+}
 
 /**
  * List all registered WP sites with health summary
@@ -35,9 +51,7 @@ export async function listSites(userId) {
  * Register a new WP site
  */
 export async function registerSite(data) {
-  const { siteUrl, siteName, wordpressVersion, phpVersion, activePlugins, theme, clientId, projectId } = data;
-
-  const secretKey = crypto.randomBytes(32).toString('hex');
+  const { siteUrl, siteName, wordpressVersion, phpVersion, activePlugins, theme, clientId, projectId, bridgeVersion, ttfb, dbSize, diskUsage, pluginUpdates } = data;
 
   return prisma.wPSite.create({
     data: {
@@ -48,6 +62,11 @@ export async function registerSite(data) {
       phpVersion,
       pluginCount: Array.isArray(activePlugins) ? activePlugins.length : (activePlugins || 0),
       theme,
+      bridgeVersion: bridgeVersion || null,
+      ttfb: typeof ttfb === 'number' ? ttfb : null,
+      dbSize: dbSize ? BigInt(dbSize) : null,
+      diskUsage: diskUsage ? BigInt(diskUsage) : null,
+      pluginUpdates: typeof pluginUpdates === 'number' ? pluginUpdates : 0,
       clientId: clientId || undefined,
       projectId: projectId || undefined,
       status: 'ACTIVE',
@@ -70,17 +89,164 @@ export async function updateSiteHealth(siteUrl, healthData) {
   return prisma.wPSite.update({
     where: { id: site.id },
     data: {
-      wpVersion: healthData.wordpressVersion || site.wpVersion,
+      wpVersion: healthData.wordpressVersion || healthData.wpVersion || site.wpVersion,
       phpVersion: healthData.phpVersion || site.phpVersion,
       pluginCount: healthData.pluginCount ?? site.pluginCount,
       theme: healthData.theme || site.theme,
       healthScore: healthData.healthScore ?? site.healthScore,
       status: healthData.status || site.status,
+      bridgeVersion: healthData.bridgeVersion || site.bridgeVersion,
+      ttfb: typeof healthData.ttfb === 'number' ? healthData.ttfb : site.ttfb,
+      dbSize: healthData.dbSize ? BigInt(healthData.dbSize) : site.dbSize,
+      diskUsage: healthData.diskUsage ? BigInt(healthData.diskUsage) : site.diskUsage,
+      pluginUpdates: typeof healthData.pluginUpdates === 'number' ? healthData.pluginUpdates : site.pluginUpdates,
       lastCheckedAt: new Date(),
       alerts: JSON.stringify(healthData.alerts || [])
     }
   });
 }
+
+/**
+ * Record a backup event from the bridge plugin (v1.7.0+)
+ */
+export async function recordBackup(siteUrl, report) {
+  const site = await prisma.wPSite.findFirst({ where: { url: siteUrl } });
+  if (!site) throw new Error('Site not found');
+
+  return prisma.wPBackup.create({
+    data: {
+      siteId: site.id,
+      siteUrl,
+      timestamp: report.timestamp ? new Date(report.timestamp) : new Date(),
+      dbSuccess: !!report.dbSuccess,
+      filesSuccess: !!report.filesSuccess,
+      dbFile: report.dbFile || null,
+      filesFile: report.filesFile || null,
+      manifest: report.manifest || null,
+      dbSize: report.manifest?.dbSize ? BigInt(report.manifest.dbSize) : null,
+      filesSize: report.manifest?.filesSize ? BigInt(report.manifest.filesSize) : null
+    }
+  });
+}
+
+/**
+ * Upsert a monthly maintenance report (v1.7.0+)
+ */
+export async function recordReport(siteUrl, report) {
+  const site = await prisma.wPSite.findFirst({ where: { url: siteUrl } });
+  if (!site) throw new Error('Site not found');
+
+  const month = report.month || new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
+
+  return prisma.wPReport.upsert({
+    where: { siteId_month: { siteId: site.id, month } },
+    create: {
+      siteId: site.id,
+      siteUrl,
+      month,
+      uptime: JSON.stringify(report.uptime || {}),
+      updates: JSON.stringify(report.updates || {}),
+      cleanup: JSON.stringify(report.cleanup || {}),
+      hours: JSON.stringify(report.hours || {}),
+      ssl: JSON.stringify(report.ssl || {}),
+      payload: JSON.stringify(report)
+    },
+    update: {
+      uptime: JSON.stringify(report.uptime || {}),
+      updates: JSON.stringify(report.updates || {}),
+      cleanup: JSON.stringify(report.cleanup || {}),
+      hours: JSON.stringify(report.hours || {}),
+      ssl: JSON.stringify(report.ssl || {}),
+      payload: JSON.stringify(report)
+    }
+  });
+}
+
+/**
+ * Log a site alert (v1.7.0+)
+ */
+export async function recordAlert(siteUrl, alertType, details) {
+  const site = await prisma.wPSite.findFirst({ where: { url: siteUrl } });
+  return prisma.wPAlert.create({
+    data: {
+      siteId: site?.id || null,
+      siteUrl,
+      alertType,
+      details: JSON.stringify(details || {})
+    }
+  });
+}
+
+/**
+ * Get recent alerts for a site
+ */
+export async function getAlerts(siteUrl, limit = 50) {
+  return prisma.wPAlert.findMany({
+    where: { siteUrl },
+    orderBy: { createdAt: 'desc' },
+    take: limit
+  });
+}
+
+/**
+ * Get recent backups for a site
+ */
+export async function getBackups(siteUrl, limit = 20) {
+  return prisma.wPBackup.findMany({
+    where: { siteUrl },
+    orderBy: { timestamp: 'desc' },
+    take: limit
+  });
+}
+
+/**
+ * Get reports for a site
+ */
+export async function getReports(siteUrl) {
+  return prisma.wPReport.findMany({
+    where: { siteUrl },
+    orderBy: { createdAt: 'desc' },
+    take: 12
+  });
+}
+
+/**
+ * Log support hours for retainer tracking
+ */
+export async function logSupportHours(siteUrl, hours, description, month) {
+  const site = await prisma.wPSite.findFirst({ where: { url: siteUrl } });
+  return prisma.supportHourEntry.create({
+    data: {
+      siteUrl,
+      clientId: site?.clientId || null,
+      projectId: site?.projectId || null,
+      month: month || new Date().toISOString().slice(0, 7),
+      hours: Number(hours) || 0,
+      description: description || null,
+      source: 'plugin'
+    }
+  });
+}
+
+/**
+ * Aggregate support hours for a client or site in a given month
+ */
+export async function getSupportHoursSummary({ siteUrl, clientId, month }) {
+  const where = {};
+  if (siteUrl) where.siteUrl = siteUrl;
+  if (clientId) where.clientId = clientId;
+  if (month) where.month = month;
+
+  const entries = await prisma.supportHourEntry.findMany({
+    where,
+    orderBy: { createdAt: 'desc' }
+  });
+
+  const total = entries.reduce((sum, e) => sum + e.hours, 0);
+  return { total, count: entries.length, entries };
+}
+
+export { verifySecret };
 
 /**
  * Delete a site
