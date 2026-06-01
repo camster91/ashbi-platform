@@ -122,9 +122,11 @@ export async function recordBackup(siteUrl, report) {
       filesSuccess: !!report.filesSuccess,
       dbFile: report.dbFile || null,
       filesFile: report.filesFile || null,
-      manifest: report.manifest || null,
-      dbSize: report.manifest?.dbSize ? BigInt(report.manifest.dbSize) : null,
-      filesSize: report.manifest?.filesSize ? BigInt(report.manifest.filesSize) : null
+      manifest: typeof report.manifest === 'string'
+        ? report.manifest
+        : (report.manifest ? JSON.stringify(report.manifest) : null),
+      dbSize: report.manifest?.dbSize ? BigInt(report.manifest.dbSize) : (report.dbSize ? BigInt(report.dbSize) : null),
+      filesSize: report.manifest?.filesSize ? BigInt(report.manifest.filesSize) : (report.filesSize ? BigInt(report.filesSize) : null)
     }
   });
 }
