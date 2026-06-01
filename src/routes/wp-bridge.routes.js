@@ -33,7 +33,7 @@ export default async function wpBridgeRoutes(fastify) {
     }
     if (!siteUrl) return reply.status(400).send({ error: 'siteUrl is required' });
     const site = await registerSite(request.body);
-    return reply.status(201).send({ success: true, site });
+    return reply.status(201).send({ success: true, site: serializeBigInt(site) });
   });
 
   fastify.put('/', async (request, reply) => {
@@ -44,7 +44,7 @@ export default async function wpBridgeRoutes(fastify) {
     if (!siteUrl) return reply.status(400).send({ error: 'siteUrl is required' });
     try {
       const result = await updateSiteHealth(siteUrl, healthData);
-      return { success: true, health: result };
+      return { success: true, health: serializeBigInt(result) };
     } catch (error) {
       return reply.status(404).send({ error: error.message });
     }
@@ -74,7 +74,7 @@ export default async function wpBridgeRoutes(fastify) {
     if (!siteUrl) return reply.status(400).send({ error: 'siteUrl is required' });
     try {
       const r = await recordReport(siteUrl, report || {});
-      return reply.status(201).send({ success: true, report: r });
+      return reply.status(201).send({ success: true, report: serializeBigInt(r) });
     } catch (error) {
       return reply.status(404).send({ error: error.message });
     }
