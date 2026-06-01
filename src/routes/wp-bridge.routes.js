@@ -16,6 +16,10 @@ import {
 } from '../services/wpBridge.service.js';
 
 export default async function wpBridgeRoutes(fastify) {
+  // Convert BigInt values (dbSize, filesSize) to strings for JSON serialization
+  const serializeBigInt = (obj) =>
+    JSON.parse(JSON.stringify(obj, (_, v) => (typeof v === 'bigint' ? v.toString() : v)));
+
   fastify.get('/', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
@@ -55,7 +59,7 @@ export default async function wpBridgeRoutes(fastify) {
     if (!siteUrl) return reply.status(400).send({ error: 'siteUrl is required' });
     try {
       const backup = await recordBackup(siteUrl, report || {});
-      return reply.status(201).send({ success: true, backup });
+      return reply.status(201).send({ success: true, backup: serializeBigInt(backup) });
     } catch (error) {
       return reply.status(404).send({ error: error.message });
     }
