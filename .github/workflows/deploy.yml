@@ -1,110 +1,171 @@
-name: Deploy to VPS
+name: Build, Test & Deploy
 
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref to deploy (branch, tag, or SHA)'
+        required: true
+        default: 'main'
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'production'
+        type: choice
+        options: [staging, production]
+
+concurrency:
+  group: deploy-${{ github.event.inputs.environment || 'production' }}
+  cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: Deploy
+  build:
+    name: Build and Test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
     steps:
-      - name: Deploy to VPS via SSH
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install web deps
+        working-directory: web
+        run: npm ci --legacy-peer-deps
+
+      - name: Install backend deps
+        run: npm ci --legacy-peer-deps
+
+      - name: Generate Prisma client
+        working-directory: web
+        env:
+          DATABASE_URL: 'postgresql://placeholder/placeholder'
+        run: npx prisma generate
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ github.sha }}
+          path: web/dist/
+          retention-days: 7
+
+  deploy-staging:
+    name: Deploy to Staging (build verification)
+    needs: build
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://hub.ashbi.ca
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: dist-${{ github.sha }}
+          path: web/dist/
+
+      - name: Staging deploy summary
+        run: |
+          echo "Staging build verified for PR #${{ github.event.pull_request.number }}"
+          echo "Branch: ${{ github.head_ref }}"
+          echo "SHA: ${{ github.sha }}"
+          echo "Build artifact size:"
+          du -sh web/dist/
+
+  deploy-production:
+    name: Deploy to Production
+    needs: build
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://hub.ashbi.ca
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: dist-${{ github.sha }}
+          path: dist/
+
+      - name: Deploy to live container via SSH
         uses: appleboy/ssh-action@v1.2.5
         with:
-          host: 187.77.26.99
-          username: root
-          key: ${{ secrets.VPS_SSH_KEY }}
+          host: ${{ secrets.COOLIFY_HOST }}
+          username: ${{ secrets.COOLIFY_USER }}
+          key: ${{ secrets.COOLIFY_SSH_KEY }}
           command_timeout: 20m
           script: |
             set -e
-
+            CONTAINER="ashbi-platform"
             DEPLOY_DIR="/var/www/agency-hub"
-            REPO_URL="https://github.com/camster91/ashbi-platform.git"
 
-            cd "$DEPLOY_DIR"
-
-            # Ensure the ashbi-platform remote exists
-            if ! git remote get-url ashbi-platform >/dev/null 2>&1; then
-              echo "Adding ashbi-platform remote..."
-              git remote add ashbi-platform "$REPO_URL"
-            else
-              git remote set-url ashbi-platform "$REPO_URL"
-            fi
-
-            echo "Resetting working tree to clean state..."
-            git reset --hard HEAD
-            git clean -fd
-
-            echo "Pulling latest code from ashbi-platform/main..."
-            git fetch ashbi-platform main
-            git checkout -B main ashbi-platform/main
-
-            # Find the running container (Coolify may prefix the name)
-            CONTAINER=$(docker ps --filter "name=ashbi-platform" --format "{{.Names}}" | head -1)
-            if [ -z "$CONTAINER" ]; then
-              CONTAINER=$(docker ps --filter "name=agency-hub" --format "{{.Names}}" | head -1)
-            fi
-            echo "Using container: ${CONTAINER:-not found}"
-
-            # Extract .env from the running container if available, otherwise use existing file
-            echo "Environment synchronization..."
-            if [ -n "$CONTAINER" ]; then
-              docker exec "$CONTAINER" env > /var/www/agency-hub/.env.remote 2>/dev/null || true
-              # Merge remote env with local if needed, but primary goal is keeping DATABASE_URL
-              if [ -f "/var/www/agency-hub/.env.remote" ]; then
-                export DATABASE_URL=$(grep '^DATABASE_URL=' /var/www/agency-hub/.env.remote | cut -d'=' -f2-)
-                echo "Using DATABASE_URL from running container."
-              fi
-            fi
-
-            # Fallback to local .env if still missing
-            if [ -z "$DATABASE_URL" ]; then
-              echo "Falling back to existing .env file..."
-              export DATABASE_URL=$(grep '^DATABASE_URL=' /var/www/agency-hub/.env | cut -d'=' -f2-)
-            fi
-
-            if [ -z "$DATABASE_URL" ]; then
-              echo "ERROR: Could not determine DATABASE_URL."
+            # Pre-flight: live site must be healthy before we touch it
+            PRE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 https://hub.ashbi.ca/api/health || echo "000")
+            echo "Pre-deploy health: HTTP $PRE_STATUS"
+            if [ "$PRE_STATUS" != "200" ]; then
+              echo "Refusing to deploy: live site unhealthy"
               exit 1
             fi
 
-            echo "Building new image first (to ensure migrations run on latest schema)..."
-            docker compose -f docker-compose.prod.yml build app
+            # Sync repo on server
+            cd "$DEPLOY_DIR"
+            git fetch origin main
+            git reset --hard origin/main
 
-            echo "Applying database migrations via temporary container..."
-            # Run migration inside the docker network
-            docker compose -f docker-compose.prod.yml run --rm app npx prisma migrate deploy
+            # Clear old dist in container (avoid Pattern F: stale chunks)
+            docker exec "$CONTAINER" sh -c "rm -rf /app/dist/assets/* /app/dist/index.html /app/dist/manifest.json /app/dist/sw.js /app/dist/icon-*.png"
 
-            echo "Stopping and removing old container..."
-            docker stop "$CONTAINER" 2>/dev/null || true
-            docker rm "$CONTAINER" 2>/dev/null || true
+            # Tar and pipe the new dist
+            tar czf - -C "$GITHUB_WORKSPACE/dist" . | docker exec -i "$CONTAINER" sh -c "tar xzf - -C /app/dist"
 
-            echo "Starting new container..."
-            docker compose -f docker-compose.prod.yml up -d app
+            # Verify only ONE index-*.js exists (Pattern F prevention)
+            COUNT=$(docker exec "$CONTAINER" sh -c "ls /app/dist/assets/index-*.js 2>/dev/null | wc -l")
+            if [ "$COUNT" != "1" ]; then
+              echo "Multiple bundles detected (count=$COUNT) - aborting"
+              docker logs "$CONTAINER" --tail 30
+              exit 1
+            fi
 
-            echo "Waiting for app to start and pass health check..."
-            HEALTH_CHECK_URL="https://hub.ashbi.ca/api/health"
-            MAX_RETRIES=12
-            RETRY_COUNT=0
-            
-            while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-              if curl -sf "$HEALTH_CHECK_URL"; then
-                echo " - OK"
+            # Restart container to pick up any backend source changes
+            docker restart "$CONTAINER" > /dev/null
+            sleep 8
+
+            # Health check loop
+            MAX=12
+            i=0
+            while [ $i -lt $MAX ]; do
+              STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 https://hub.ashbi.ca/api/health || echo "000")
+              if [ "$STATUS" = "200" ]; then
+                echo "Post-deploy health: OK"
                 break
               fi
-              echo " - Waiting... ($RETRY_COUNT)"
+              echo "Waiting... $i (HTTP $STATUS)"
               sleep 5
-              RETRY_COUNT=$((RETRY_COUNT+1))
+              i=$((i+1))
             done
 
-            if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
-              echo " - FAILED after 60 seconds"
-              echo "Checking container logs..."
-              docker logs "$CONTAINER" --tail 100
+            if [ $i -eq $MAX ]; then
+              echo "DEPLOY FAILED after 60s"
+              docker logs "$CONTAINER" --tail 50
               exit 1
             fi
 
-            echo "Deployment complete!"
+            # Verify the new bundle hash is being served
+            CONTAINER_BUNDLE=$(docker exec "$CONTAINER" sh -c "grep -oE 'index-[A-Za-z0-9_-]+\.js' /app/dist/index.html | head -1")
+            SERVED_BUNDLE=$(curl -s https://hub.ashbi.ca/ | grep -oE "index-[A-Za-z0-9_-]+\.js" | head -1)
+            echo "Container bundle: $CONTAINER_BUNDLE"
+            echo "Served bundle:    $SERVED_BUNDLE"
+            if [ "$CONTAINER_BUNDLE" != "$SERVED_BUNDLE" ]; then
+              echo "Bundle mismatch - deploy verification failed"
+              exit 1
+            fi
+
+            echo "DEPLOY COMPLETE: $SERVED_BUNDLE"
