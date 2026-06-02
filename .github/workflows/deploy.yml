@@ -115,18 +115,14 @@ jobs:
               exit 1
             fi
 
-            # Sync repo on server
             cd "$DEPLOY_DIR"
             git fetch origin main
             git reset --hard origin/main
 
-            # Clear old dist in container (avoid Pattern F: stale chunks)
             docker exec "$CONTAINER" sh -c "rm -rf /app/dist/assets/* /app/dist/index.html /app/dist/manifest.json /app/dist/sw.js /app/dist/icon-*.png"
 
-            # Tar and pipe the new dist
             tar czf - -C "$GITHUB_WORKSPACE/dist" . | docker exec -i "$CONTAINER" sh -c "tar xzf - -C /app/dist"
 
-            # Verify only ONE index-*.js exists (Pattern F prevention)
             COUNT=$(docker exec "$CONTAINER" sh -c "ls /app/dist/assets/index-*.js 2>/dev/null | wc -l")
             if [ "$COUNT" != "1" ]; then
               echo "Multiple bundles detected (count=$COUNT) - aborting"
@@ -134,11 +130,9 @@ jobs:
               exit 1
             fi
 
-            # Restart container to pick up any backend source changes
             docker restart "$CONTAINER" > /dev/null
             sleep 8
 
-            # Health check loop
             MAX=12
             i=0
             while [ $i -lt $MAX ]; do
@@ -158,7 +152,6 @@ jobs:
               exit 1
             fi
 
-            # Verify the new bundle hash is being served
             CONTAINER_BUNDLE=$(docker exec "$CONTAINER" sh -c "grep -oE 'index-[A-Za-z0-9_-]+\.js' /app/dist/index.html | head -1")
             SERVED_BUNDLE=$(curl -s https://hub.ashbi.ca/ | grep -oE "index-[A-Za-z0-9_-]+\.js" | head -1)
             echo "Container bundle: $CONTAINER_BUNDLE"
