@@ -3,7 +3,7 @@ export default async function integrationRoutes(fastify) {
   // List connected integrations
   fastify.get('/', {
     onRequest: [fastify.authenticate]
-  }, async () => {
+  }, async (request) => {
     const integrations = await request.prisma.integration.findMany({
       orderBy: { type: 'asc' }
     });

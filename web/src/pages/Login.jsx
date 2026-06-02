@@ -91,7 +91,7 @@ export default function Login() {
       </div>
 
       {/* Right side - Login form */}
-      <div className="flex-1 flex items-center justify-center p-4 sm:p-8 lg:p-12 bg-background">
+      <main className="flex-1 flex items-center justify-center p-4 sm:p-8 lg:p-12 bg-background">
         <div className="w-full max-w-md space-y-8 animate-slide-up">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
@@ -160,6 +160,8 @@ export default function Login() {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-pressed={showPassword}
                     className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors"
                   >
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
@@ -217,10 +219,12 @@ export default function Login() {
 
           {/* Language switcher */}
           <div className="flex items-center justify-center gap-2 pt-4">
-            <Globe className="w-4 h-4 text-muted-foreground" />
+            <Globe className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
             <select
+              id="language-switcher"
               value={currentLang}
               onChange={(e) => setLang(e.target.value)}
+              aria-label="Language"
               className="text-sm bg-transparent border-none text-muted-foreground focus:ring-0 cursor-pointer"
             >
               {languages.map((lang) => (
@@ -231,7 +235,7 @@ export default function Login() {
             </select>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

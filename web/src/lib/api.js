@@ -917,7 +917,6 @@ export const api = {
     request(`/cold-email/stats/${sequenceId}`),
   processColdEmailQueue: () =>
     request('/cold-email/process-queue', { method: 'POST' }),
-
   // ===== LEAD GEN — Lead Pipeline =====
   leadGenFindLeads: (data) =>
     request('/lead-gen/find-leads', { method: 'POST', body: data }),

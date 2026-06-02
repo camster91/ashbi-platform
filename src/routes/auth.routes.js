@@ -45,7 +45,7 @@ export default async function authRoutes(fastify) {
   const authRateLimit = {
     config: {
       rateLimit: {
-        max: 5,
+        max: 20,
         timeWindow: '15 minutes',
         keyGenerator: (req) => req.ip
       }

@@ -28,7 +28,7 @@
 
     /* Muted */
     --muted: 75 30% 95%;
-    --muted-foreground: 250 20% 45%;
+    --muted-foreground: 250 25% 32%;
 
     /* Destructive */
     --destructive: 0 84% 60%;
@@ -85,7 +85,7 @@
 
     /* Muted */
     --muted: 250 30% 18%;
-    --muted-foreground: 250 20% 60%;
+    --muted-foreground: 250 18% 70%;
 
     /* Destructive */
     --destructive: 0 63% 31%;

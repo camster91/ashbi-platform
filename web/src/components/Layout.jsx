@@ -759,6 +759,7 @@ function ShortcutsModal({ onClose }) {
 
 function QuickCreateMenu({ navigate, isAdmin }) {
   const [open, setOpen] = useState(false);
+  const containerRef = useRef(null);
 
   const actions = [
     { label: 'New Project', icon: FolderOpen, href: '/projects?create=true' },
@@ -768,10 +769,31 @@ function QuickCreateMenu({ navigate, isAdmin }) {
     { label: 'New Note', icon: BookOpen, href: '/docs?create=true' },
   ].filter(a => !a.adminOnly || isAdmin);
 
+  // Close on outside click + Escape
+  useEffect(() => {
+    if (!open) return;
+    function handlePointerDown(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    }
+    function handleKeyDown(e) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
+
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <button
         onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-haspopup="menu"
         className={cn(
           'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full transition-colors',
           open ? 'bg-[#e6f354] text-[#2e2958]' : 'bg-[#e6f354] text-[#2e2958] hover:bg-[#d0dd9a]'
@@ -783,27 +805,22 @@ function QuickCreateMenu({ navigate, isAdmin }) {
       </button>
 
       {open && (
-        <>
-          <div
-          className="fixed inset-0 z-40"
-          onClick={() => setOpen(false)}
-          role="button"
-          tabIndex={0}
-          aria-label="Close sidebar"
-        />
-          <div className="absolute right-0 top-full mt-1 w-48 bg-card border border-border rounded-xl shadow-lg z-50 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
-            {actions.map(({ label, icon: Icon, href }) => (
-              <button
-                key={label}
-                onClick={() => { navigate(href); setOpen(false); }}
-                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-muted transition-colors text-left"
-              >
-                <Icon className="w-4 h-4 text-muted-foreground" />
-                {label}
-              </button>
-            ))}
-          </div>
-        </>
+        <div
+          className="absolute right-0 top-full mt-1 w-48 bg-card border border-border rounded-xl shadow-lg z-50 overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150"
+          role="menu"
+        >
+          {actions.map(({ label, icon: Icon, href }) => (
+            <button
+              key={label}
+              onClick={() => { navigate(href); setOpen(false); }}
+              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-muted transition-colors text-left"
+              role="menuitem"
+            >
+              <Icon className="w-4 h-4 text-muted-foreground" />
+              {label}
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );
