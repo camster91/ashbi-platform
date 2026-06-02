@@ -43,10 +43,10 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: Generate Prisma client
-        working-directory: web
         env:
           DATABASE_URL: 'postgresql://placeholder/placeholder'
         run: npx prisma generate
+        with:
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
