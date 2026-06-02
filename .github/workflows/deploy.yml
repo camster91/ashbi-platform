@@ -47,6 +47,10 @@ jobs:
           DATABASE_URL: 'postgresql://placeholder/placeholder'
         run: npx prisma generate
 
+      - name: Build web bundle
+        working-directory: web
+        run: npx vite build
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
