@@ -44,7 +44,7 @@
     "@opentelemetry/auto-instrumentations-node": "^0.76.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.218.0",
     "@opentelemetry/sdk-node": "^0.218.0",
-    "@prisma/client": "^7.7.0",
+    "@prisma/client": "7.8.0",
     "@radix-ui/react-avatar": "^1.1.1",
     "@radix-ui/react-dialog": "^1.1.2",
     "@radix-ui/react-dropdown-menu": "^2.1.2",
@@ -109,7 +109,8 @@
     "tsx": "^4.22.3",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.46.0",
-    "vitest": "^4.1.7"
+    "vitest": "^4.1.7",
+    "prisma": "7.8.0"
   },
   "engines": {
     "node": ">=20.0.0"
