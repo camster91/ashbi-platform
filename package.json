@@ -75,7 +75,7 @@
     "ioredis": "^5.10.1",
     "lucide-react": "^0.460.0",
     "mailgun.js": "^10.2.2",
-    "mailparser": "^3.7.1",
+    "mailparser": "^3.9.11",
     "pdfkit": "^0.18.0",
     "pino": "^10.3.1",
     "pino-pretty": "^13.1.3",
