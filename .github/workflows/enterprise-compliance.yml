@@ -36,10 +36,12 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        # Use pgvector/pgvector:pg16-alpine — schema.prisma declares
+        # Use pgvector/pgvector:pg16 — schema.prisma declares
         # `extensions = [vector]`, which requires the pgvector extension.
-        # The stock postgres:16-alpine image doesn't ship it.
-        image: pgvector/pgvector:pg16-alpine
+        # The stock postgres:16-alpine image doesn't ship it. pgvector
+        # publishes pg16 as `pg16` (debian bookworm); there is no
+        # `-alpine` tag for pg16 (only `pg16-trixie` and `pg16-bookworm`).
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_PASSWORD: testpass
           POSTGRES_DB: testdb
