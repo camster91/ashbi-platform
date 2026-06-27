@@ -18,17 +18,17 @@ const SOFT_DELETE_MODELS = new Set([
 ]);
 
 // Prisma 7: lazy proxy to defer PrismaClient construction
-const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
+const globalForPrisma = /** @type {{ prisma?: PrismaClient }} */ (globalThis);
 const buildBase = () => new PrismaClient({
   log: process.env.NODE_ENV === 'development'
     ? ['query', 'info', 'warn', 'error']
     : ['warn', 'error'],
 });
-const base: PrismaClient = new Proxy({} as PrismaClient, {
+const base = new Proxy({}, {
   get(_target, prop) {
     const client = (globalForPrisma.prisma ??= buildBase());
-    const value = (client as unknown as Record<string | symbol, unknown>)[prop];
-    return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(client) : value;
+    const value = /** @type {any} */ (client)[prop];
+    return typeof value === 'function' ? value.bind(client) : value;
   },
 });
 
@@ -92,12 +92,12 @@ async function softDeleteWriteMany({ model, operation, args, query }) {
 }
 
 // Lazy prisma export - defer $extends until first use
-const globalForExtended = globalThis as unknown as { prisma: ReturnType<typeof buildExtension> | undefined };
-export const prisma: ReturnType<typeof buildExtension> = new Proxy({} as ReturnType<typeof buildExtension>, {
+const globalForExtended = /** @type {{ prisma?: ReturnType<typeof buildExtension> }} */ (globalThis);
+export const prisma = new Proxy({}, {
   get(_target, prop) {
     const client = (globalForExtended.prisma ??= buildExtension());
-    const value = (client as unknown as Record<string | symbol, unknown>)[prop];
-    return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(client) : value;
+    const value = /** @type {any} */ (client)[prop];
+    return typeof value === 'function' ? value.bind(client) : value;
   },
 });
 // Also export base for admin ops that need to see deleted records

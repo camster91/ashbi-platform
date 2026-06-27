@@ -5,17 +5,20 @@ import prisma from '../config/db.js';
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
-const TABLE_MAP = {
-  CLIENT: 'clients',
-  PROJECT: 'projects',
-  INVOICE: 'invoices',
-  PROPOSAL: 'proposals',
-  CONTRACT: 'contracts',
-  EXPENSE: 'expenses',
-  TASK: 'tasks',
-  ESTIMATE: 'estimates',
-  NOTE: 'notes',
-  RETAINER_PLAN: 'retainer_plans',
+// Map soft-delete enum to Prisma model delegate. We use the model API (not raw SQL)
+// so Prisma parameterizes the query — no string interpolation, no SQL-injection surface.
+// Adding a new entity here requires a corresponding model on the Prisma client.
+const ENTITY_TO_MODEL = {
+  CLIENT: 'client',
+  PROJECT: 'project',
+  INVOICE: 'invoice',
+  PROPOSAL: 'proposal',
+  CONTRACT: 'contract',
+  EXPENSE: 'expense',
+  TASK: 'task',
+  ESTIMATE: 'estimate',
+  NOTE: 'note',
+  RETAINER_PLAN: 'retainerPlan',
 };
 
 async function purgeExpiredTrash() {
@@ -39,9 +42,11 @@ async function purgeExpiredTrash() {
 
     for (const item of expired) {
       try {
-        const table = TABLE_MAP[item.entity];
-        if (table) {
-          await prisma.$executeRawUnsafe(`DELETE FROM "${table}" WHERE id = $1`, item.recordId);
+        const modelName = ENTITY_TO_MODEL[item.entity];
+        const delegate = modelName && prisma[modelName];
+        if (delegate) {
+          // Use model API — Prisma parameterizes via prepared statement.
+          await delegate.delete({ where: { id: item.recordId } });
         }
         await prisma.trashedItem.delete({ where: { id: item.id } });
         console.log(`[trash-purge] Purged ${item.entity} ${item.recordId}`);

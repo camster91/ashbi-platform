@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, MessageSquare, Plus, Trash2, Loader2, Bot, User } from 'lucide-react';
-import DOMPurify from 'dompurify';
+import { safeHtml } from '../lib/safeHtml';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
 
@@ -251,7 +251,7 @@ export default function Chat() {
                 {msg.role === 'assistant' && !msg.isError ? (
                   <div
                     className="prose prose-sm max-w-none text-foreground"
-                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(renderMarkdown(msg.content)) }}
+                    dangerouslySetInnerHTML={{ __html: safeHtml(renderMarkdown(msg.content)) }}
                   />
                 ) : (
                   <p className="whitespace-pre-wrap">{msg.content}</p>

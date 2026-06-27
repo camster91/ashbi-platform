@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import DOMPurify from 'dompurify';
+import { safeHtml } from '../lib/safeHtml';
 import {
   Sparkles,
   CheckCircle,
@@ -223,14 +223,7 @@ export default function PortalContract() {
           <div
             className="prose prose-slate max-w-none prose-headings:font-bold prose-h1:text-2xl prose-h2:text-xl prose-p:text-slate-600 prose-li:text-slate-600"
             dangerouslySetInnerHTML={{
-              __html: DOMPurify.sanitize(contract.content || contract.htmlContent || '', {
-                ALLOWED_TAGS: [
-                  'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'br', 'hr',
-                  'ul', 'ol', 'li', 'strong', 'em', 'u', 'a', 'blockquote',
-                  'table', 'thead', 'tbody', 'tr', 'th', 'td', 'div', 'span',
-                ],
-                ALLOWED_ATTR: ['href', 'target', 'rel', 'class', 'style'],
-              }),
+              __html: safeHtml(contract.content || contract.htmlContent || '', { mode: 'strict' }),
             }}
           />
         </div>
