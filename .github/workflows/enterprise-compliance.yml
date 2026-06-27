@@ -57,7 +57,17 @@ jobs:
       - name: Install dependencies
         run: npm install
       - name: Setup database
-        run: npx prisma migrate deploy
+        # Use `db push` (not `migrate deploy`) because the migration history
+        # has no baseline — the earliest migration in this repo
+        # (20260318_add_credentials_templates_portal) ALTERs "projects" but
+        # never CREATEs it, so `migrate deploy` against a fresh DB fails with
+        # `relation "projects" does not exist`. The baseline migration was
+        # intentionally removed (commit 3df7615) because it conflicted with
+        # the existing production schema. For CI test databases we sync
+        # directly from schema.prisma; production runs continue to use
+        # `prisma migrate deploy` via scripts/start.sh against an already-
+        # bootstrapped database.
+        run: npx prisma db push --skip-generate
         env:
           DATABASE_URL: postgresql://postgres:testpass@localhost:5432/testdb
       - name: Run Backend Tests
