@@ -1,12 +1,20 @@
 /**
  * Project Routes Unit Tests
+ *
+ * Imports project.routes.js which transitively loads ai/client.js and
+ * jobs/queue.js — those have module-eval side effects (Anthropic SDK init,
+ * BullMQ queue init) that hang in CI without API keys. Skip unless
+ * ASHBI_RUN_HEAVY_TESTS=1.
  */
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import Fastify from 'fastify';
 import projectRoutes from '../routes/project.routes.js';
+import { shouldSkipHeavyTests } from './_test-skip.js';
 
-describe('Project Routes (Unit)', () => {
+const skip = shouldSkipHeavyTests();
+
+describe('Project Routes (Unit)', { skip }, () => {
   let fastify;
   let mockPrisma;
 
