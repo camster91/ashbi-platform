@@ -2,14 +2,14 @@
 
 /**
  * Bonsai → Agency Hub Full Import Script
- * 
+ *
  * Imports: Clients, Contacts, Projects, Invoices, Time Entries, Expenses
  * from Bonsai CSV exports into the Agency Hub database.
- * 
+ *
  * Usage:
  *   node scripts/import-bonsai-full.js --dry-run   # Preview only
  *   node scripts/import-bonsai-full.js              # Live import
- * 
+ *
  * Idempotent — safe to run multiple times. Uses upsert/dedup on:
  *   - Clients: by email or name
  *   - Projects: by bonsaiProjectId
@@ -18,14 +18,19 @@
  *   - Expenses: by description + date + amount
  */
 
-import { PrismaClient } from '@prisma/client';
+// Prisma 7 ESM + driver adapter setup.
+import prismaPkg from '@prisma/client';
+const { PrismaClient } = prismaPkg;
+import { PrismaPg } from '@prisma/adapter-pg';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import csvParser from 'csv-parser';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+});
 const DRY_RUN = process.argv.includes('--dry-run');
 
 // === CSV Directory ===

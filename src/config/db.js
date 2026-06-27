@@ -1,11 +1,24 @@
 // Prisma Client with Soft Delete + Autosave Interception
 // Import: import prisma from '../config/db.js'
 
-import { PrismaClient } from '@prisma/client';
+// @prisma/client is a CommonJS module (no "type": "module" in its package.json),
+// so Node's ESM loader can't statically resolve `import { PrismaClient }` from it
+// — it throws "Named export 'PrismaClient' not found". Default-import the package
+// and destructure on the runtime side. Prisma 7's ESM story is still settling;
+// this is the canonical workaround until they publish an ESM build.
+import prismaPkg from '@prisma/client';
+const { PrismaClient } = prismaPkg;
+
+// Prisma 7 removed the implicit `datasource db { url }` config that the old
+// PrismaClient would pick up automatically. Now the client requires either
+// a driver adapter (`adapter:`) or `accelerateUrl` in its options — passing
+// only `log:` throws "PrismaClient needs non-empty, valid PrismaClientOptions".
+// Use the official pg driver adapter and pass DATABASE_URL through it.
+import { PrismaPg } from '@prisma/adapter-pg';
 
 const SOFT_DELETE_MODELS = new Set([
   'client',
-  'project', 
+  'project',
   'invoice',
   'proposal',
   'contract',
@@ -18,17 +31,18 @@ const SOFT_DELETE_MODELS = new Set([
 ]);
 
 // Prisma 7: lazy proxy to defer PrismaClient construction
-const globalForPrisma = globalThis as unknown as { prisma: PrismaClient | undefined };
+const globalForPrisma = /** @type {{ prisma?: PrismaClient }} */ (globalThis);
 const buildBase = () => new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
   log: process.env.NODE_ENV === 'development'
     ? ['query', 'info', 'warn', 'error']
     : ['warn', 'error'],
 });
-const base: PrismaClient = new Proxy({} as PrismaClient, {
+const base = new Proxy({}, {
   get(_target, prop) {
     const client = (globalForPrisma.prisma ??= buildBase());
-    const value = (client as unknown as Record<string | symbol, unknown>)[prop];
-    return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(client) : value;
+    const value = /** @type {any} */ (client)[prop];
+    return typeof value === 'function' ? value.bind(client) : value;
   },
 });
 
@@ -92,12 +106,12 @@ async function softDeleteWriteMany({ model, operation, args, query }) {
 }
 
 // Lazy prisma export - defer $extends until first use
-const globalForExtended = globalThis as unknown as { prisma: ReturnType<typeof buildExtension> | undefined };
-export const prisma: ReturnType<typeof buildExtension> = new Proxy({} as ReturnType<typeof buildExtension>, {
+const globalForExtended = /** @type {{ prisma?: ReturnType<typeof buildExtension> }} */ (globalThis);
+export const prisma = new Proxy({}, {
   get(_target, prop) {
     const client = (globalForExtended.prisma ??= buildExtension());
-    const value = (client as unknown as Record<string | symbol, unknown>)[prop];
-    return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(client) : value;
+    const value = /** @type {any} */ (client)[prop];
+    return typeof value === 'function' ? value.bind(client) : value;
   },
 });
 // Also export base for admin ops that need to see deleted records

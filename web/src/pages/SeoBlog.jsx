@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import DOMPurify from 'dompurify';
+import { safeHtml } from '../lib/safeHtml';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
 import {
@@ -130,7 +130,7 @@ function PostPreviewModal({ post, onClose }) {
         )}
         <div className="prose prose-sm max-w-none">
           <div dangerouslySetInnerHTML={{
-            __html: DOMPurify.sanitize((post.content || '')
+            __html: safeHtml((post.content || '')
               .replace(/^### (.*$)/gm, '<h3>$1</h3>')
               .replace(/^## (.*$)/gm, '<h2>$1</h2>')
               .replace(/^# (.*$)/gm, '<h1>$1</h1>')

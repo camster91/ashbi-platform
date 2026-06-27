@@ -36,7 +36,12 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16-alpine
+        # Use pgvector/pgvector:pg16 — schema.prisma declares
+        # `extensions = [vector]`, which requires the pgvector extension.
+        # The stock postgres:16-alpine image doesn't ship it. pgvector
+        # publishes pg16 as `pg16` (debian bookworm); there is no
+        # `-alpine` tag for pg16 (only `pg16-trixie` and `pg16-bookworm`).
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_PASSWORD: testpass
           POSTGRES_DB: testdb
@@ -56,8 +61,26 @@ jobs:
           cache: 'npm'
       - name: Install dependencies
         run: npm install
+      - name: Generate Prisma client
+        # Required before any test that touches @prisma/client — the runtime
+        # resolves to .prisma/client/default which only exists after this step.
+        # No postinstall hook in package.json runs it automatically.
+        run: npx prisma generate
       - name: Setup database
-        run: npx prisma migrate deploy
+        # Use `db push` (not `migrate deploy`) because the migration history
+        # has no baseline — the earliest migration in this repo
+        # (20260318_add_credentials_templates_portal) ALTERs "projects" but
+        # never CREATEs it, so `migrate deploy` against a fresh DB fails with
+        # `relation "projects" does not exist`. The baseline migration was
+        # intentionally removed (commit 3df7615) because it conflicted with
+        # the existing production schema. For CI test databases we sync
+        # directly from schema.prisma; production runs continue to use
+        # `prisma migrate deploy` via scripts/start.sh against an already-
+        # bootstrapped database.
+        # Note: Prisma 7 removed `--skip-generate`; client gen is handled by
+        # the npm install postinstall hook (`prisma generate`) so a plain
+        # `db push` is correct here.
+        run: npx prisma db push
         env:
           DATABASE_URL: postgresql://postgres:testpass@localhost:5432/testdb
       - name: Run Backend Tests

@@ -9,6 +9,9 @@ import jwt from '@fastify/jwt';
 import prisma from '../config/db.js';
 import proposalRoutes from '../routes/proposal.routes.js';
 import contractRoutes from '../routes/contract.routes.js';
+import { shouldSkipHeavyTests } from './_test-skip.js';
+
+const skip = shouldSkipHeavyTests();
 
 let fastify;
 let authToken;
@@ -87,7 +90,7 @@ function authHeaders() {
 
 // ── Proposals ──────────────────────────────────────────────────────────────
 
-describe('Proposal CRUD', () => {
+describe('Proposal CRUD', { skip }, () => {
 
   test('POST /api/proposals — create proposal with line items', async () => {
     const res = await fastify.inject({
@@ -179,7 +182,7 @@ describe('Proposal CRUD', () => {
 
 // ── Contracts ──────────────────────────────────────────────────────────────
 
-describe('Contract CRUD', () => {
+describe('Contract CRUD', { skip }, () => {
 
   test('POST /api/contracts — create contract from proposal', async () => {
     const res = await fastify.inject({

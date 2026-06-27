@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { CheckCircle, XCircle, Clock, Eye, ChevronRight, Mail, FileText, Send, DollarSign, Megaphone, Code } from 'lucide-react';
-import DOMPurify from 'dompurify';
+import { safeHtml } from '../lib/safeHtml';
 import { api } from '../lib/api';
 import { Button } from '../components/ui';
 
@@ -40,7 +40,7 @@ function ContentPreview({ content, type }) {
         {parsed.subject && <p><span className="font-medium text-muted-foreground">Subject:</span> <span className="text-foreground">{parsed.subject}</span></p>}
         {parsed.body && (
           <div className="mt-3 p-3 bg-muted rounded border border-border max-h-64 overflow-y-auto prose prose-sm dark:prose-invert text-sm">
-            <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(parsed.body) }} />
+            <div dangerouslySetInnerHTML={{ __html: safeHtml(parsed.body) }} />
           </div>
         )}
       </div>
@@ -49,7 +49,7 @@ function ContentPreview({ content, type }) {
   if (typeof parsed === 'string') {
     return (
       <div className="p-3 bg-muted rounded border border-border max-h-64 overflow-y-auto prose prose-sm dark:prose-invert text-sm">
-        <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(parsed) }} />
+        <div dangerouslySetInnerHTML={{ __html: safeHtml(parsed) }} />
       </div>
     );
   }

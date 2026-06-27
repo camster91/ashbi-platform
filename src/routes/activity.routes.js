@@ -1,5 +1,6 @@
 // Activity Feed routes
 
+import { clampTake } from '../utils/query-limits.js';
 
 export default async function activityRoutes(fastify) {
   // Get activity feed for a project
@@ -14,7 +15,7 @@ export default async function activityRoutes(fastify) {
       before
     } = request.query;
 
-    const limit = parseInt(limitParam);
+    const limit = clampTake(limitParam);
     const where = { projectId };
 
     if (type) where.type = type;
@@ -48,7 +49,7 @@ export default async function activityRoutes(fastify) {
       before
     } = request.query;
 
-    const limit = parseInt(limitParam);
+    const limit = clampTake(limitParam);
     const where = {};
 
     if (projectId) where.projectId = projectId;
@@ -77,7 +78,7 @@ export default async function activityRoutes(fastify) {
     onRequest: [fastify.authenticate]
   }, async (request) => {
     const { limit: limitParam = '30' } = request.query;
-    const limit = parseInt(limitParam);
+    const limit = clampTake(limitParam);
 
     const activities = await request.prisma.activity.findMany({
       where: { userId: request.user.id },

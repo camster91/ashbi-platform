@@ -12,13 +12,18 @@
  * Cron overnight: full sync at 5am UTC
  */
 
-import { PrismaClient } from '@prisma/client';
+// Prisma 7 ESM + driver adapter setup.
+import prismaPkg from '@prisma/client';
+const { PrismaClient } = prismaPkg;
+import { PrismaPg } from '@prisma/adapter-pg';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+});
 
 // ==================== CONFIG ====================
 

@@ -380,7 +380,8 @@ Respond with JSON:
 
     // Get client retainer status
     const retainers = await request.prisma.retainerPlan.findMany({
-      include: { client: true }
+      include: { client: true },
+      take: 200
     });
 
     if (retainers.length > 0) {
@@ -470,18 +471,22 @@ Format the proposal as clean, professional text ready to be sent to a client. Do
       include: {
         threads: {
           where: { status: { not: 'RESOLVED' } },
-          orderBy: { lastActivityAt: 'desc' }
+          orderBy: { lastActivityAt: 'desc' },
+          take: 5
         },
         projects: {
           where: { status: 'ACTIVE' },
           include: {
             tasks: {
-              where: { status: { not: 'COMPLETED' } }
+              where: { status: { not: 'COMPLETED' } },
+              take: 20
             }
-          }
+          },
+          take: 50
         },
         retainerPlan: true
-      }
+      },
+      take: 200
     });
 
     const now = new Date();
@@ -553,7 +558,8 @@ Format the proposal as clean, professional text ready to be sent to a client. Do
         client: true,
         project: true,
         messages: { orderBy: { receivedAt: 'desc' }, take: 1 }
-      }
+      },
+      take: 200
     });
 
     if (threads.length === 0) {
@@ -642,7 +648,8 @@ Respond with JSON:
           }
         },
         tasks: {
-          where: { status: { not: 'COMPLETED' } }
+          where: { status: { not: 'COMPLETED' } },
+          take: 50
         }
       }
     });

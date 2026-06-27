@@ -30,7 +30,6 @@ function sanitizeEmailHeader(value) {
   sanitized = sanitized.replace(/[ \t]+/g, ' ').trim();
 
   // If there are non-ASCII characters, encode the whole value as RFC 2047
-  // eslint-disable-next-line no-control-regex
   if (/[^\x20-\x7E]/.test(sanitized)) {
     const buf = Buffer.from(sanitized, 'utf-8');
     sanitized = '=?UTF-8?B?' + buf.toString('base64') + '?=';

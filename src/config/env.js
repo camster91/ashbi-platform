@@ -46,7 +46,7 @@ const env = {
   databaseUrl: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/ashbi',
 
   // Integrations
-  coolifyUrl: process.env.COOLIFY_URL || 'http://187.77.26.99:8000',
+  coolifyUrl: process.env.COOLIFY_URL || null,
   coolifyToken: process.env.COOLIFY_TOKEN,
   githubToken: process.env.GITHUB_TOKEN,
   githubOrg: process.env.GITHUB_ORG || 'camster91',
@@ -115,6 +115,7 @@ if (!env.isDev) {
     'REDIS_URL',
     'MAILGUN_API_KEY',
     'MAILGUN_SIGNING_KEY',
+    'COOLIFY_URL',
   ];
   const missing = requiredInProduction.filter(key => !process.env[key]);
   if (missing.length > 0) {

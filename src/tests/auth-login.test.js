@@ -7,9 +7,15 @@
  *
  * Run with: node --test src/tests/auth-login.test.js
  * Requires: hub.ashbi.ca must be accessible
+ *
+ * In CI these tests auto-skip — see _live-api-skip.js. Force-run by
+ * setting ASHBI_RUN_LIVE_API_TESTS=1.
  */
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { shouldSkipLiveApiTests } from './_test-skip.js';
+
+const skip = shouldSkipLiveApiTests();
 
 const API_BASE = 'https://hub.ashbi.ca/api';
 
@@ -27,7 +33,7 @@ function isRateLimited(status) {
   return status === 429;
 }
 
-describe('Auth Login Flow - Live API Tests', () => {
+describe('Auth Login Flow - Live API Tests', { skip }, () => {
 
   describe('GET /auth/me', () => {
     it('should return 401 with "Unauthorized" (not "API key required")', async () => {

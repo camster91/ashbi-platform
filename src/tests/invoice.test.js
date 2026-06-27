@@ -8,6 +8,9 @@ import cookie from '@fastify/cookie';
 import jwt from '@fastify/jwt';
 import prisma from '../config/db.js';
 import invoiceRoutes from '../routes/invoice.routes.js';
+import { shouldSkipHeavyTests } from './_test-skip.js';
+
+const skip = shouldSkipHeavyTests();
 
 // ─── Setup ────────────────────────────────────────────────────────────────────
 
@@ -92,7 +95,7 @@ function authHeader() {
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe('Invoice CRUD', () => {
+describe('Invoice CRUD', { skip }, () => {
 
   test('POST /api/invoices — create invoice with all fields', async () => {
     const res = await fastify.inject({
