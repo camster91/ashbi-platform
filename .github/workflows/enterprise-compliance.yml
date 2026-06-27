@@ -67,7 +67,10 @@ jobs:
         # directly from schema.prisma; production runs continue to use
         # `prisma migrate deploy` via scripts/start.sh against an already-
         # bootstrapped database.
-        run: npx prisma db push --skip-generate
+        # Note: Prisma 7 removed `--skip-generate`; client gen is handled by
+        # the npm install postinstall hook (`prisma generate`) so a plain
+        # `db push` is correct here.
+        run: npx prisma db push
         env:
           DATABASE_URL: postgresql://postgres:testpass@localhost:5432/testdb
       - name: Run Backend Tests
