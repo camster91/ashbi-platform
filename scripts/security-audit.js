@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 // Security audit script for Agency Hub
 
-// @prisma/client is CJS — default-import + destructure (Prisma 7 ESM workaround).
+// Prisma 7 ESM + driver adapter setup.
 import prismaPkg from '@prisma/client';
 const { PrismaClient } = prismaPkg;
+import { PrismaPg } from '@prisma/adapter-pg';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+});
 
 const AUTHORIZED_ADMINS = [
   'cameron@ashbi.ca',

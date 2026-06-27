@@ -3,11 +3,6 @@
 /**
  * Import Bonsai clients, projects, and invoices into Agency Hub
  *
- * @prisma/client is CJS — default-import + destructure (Prisma 7 ESM workaround).
- */
-import prismaPkg from '@prisma/client';
-const { PrismaClient } = prismaPkg;
- *
  * Usage: node scripts/import-bonsai.js
  *
  * Reads from:
@@ -23,13 +18,19 @@ const { PrismaClient } = prismaPkg;
  *       Set DATABASE_URL in your .env to point to the production database.
  */
 
-import { PrismaClient } from '@prisma/client';
+// Prisma 7 ESM + driver adapter setup — @prisma/client is CJS, and v7 requires
+// an adapter (no more implicit URL config). Same pattern as src/config/db.js.
+import prismaPkg from '@prisma/client';
+const { PrismaClient } = prismaPkg;
+import { PrismaPg } from '@prisma/adapter-pg';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+});
 
 // === CONFIG ===
 // Update these paths if the CSV files are in a different location

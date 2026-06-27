@@ -3,11 +3,6 @@
 /**
  * Gmail -> Hub Sync
  *
- * @prisma/client is CJS — default-import + destructure (Prisma 7 ESM workaround).
- */
-import prismaPkg from '@prisma/client';
-const { PrismaClient } = prismaPkg;
- *
  * Pulls emails from the last 48hrs from cameron@ashbi.ca inbox,
  * matches senders to Hub clients/contacts, stores via Prisma,
  * and applies AI triage tags.
@@ -17,13 +12,18 @@ const { PrismaClient } = prismaPkg;
  * Cron overnight: full sync at 5am UTC
  */
 
-import { PrismaClient } from '@prisma/client';
+// Prisma 7 ESM + driver adapter setup.
+import prismaPkg from '@prisma/client';
+const { PrismaClient } = prismaPkg;
+import { PrismaPg } from '@prisma/adapter-pg';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+});
 
 // ==================== CONFIG ====================
 

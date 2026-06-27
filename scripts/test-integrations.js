@@ -2,13 +2,16 @@
 
 // Integration test script for Discord/OpenClaw sync
 
-// @prisma/client is CJS — default-import + destructure (Prisma 7 ESM workaround).
+// Prisma 7 ESM + driver adapter setup.
 import prismaPkg from '@prisma/client';
 const { PrismaClient } = prismaPkg;
+import { PrismaPg } from '@prisma/adapter-pg';
 import { emitHubEvent } from '../src/events/hub-events.js';
 import { setupEventListeners } from '../src/events/hub-events.js';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+});
 
 async function testIntegrations() {
   console.log('🧪 Testing Agency Hub Integrations...\n');
