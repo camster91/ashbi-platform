@@ -1,11 +1,17 @@
 // Prisma Client with Soft Delete + Autosave Interception
 // Import: import prisma from '../config/db.js'
 
-import { PrismaClient } from '@prisma/client';
+// @prisma/client is a CommonJS module (no "type": "module" in its package.json),
+// so Node's ESM loader can't statically resolve `import { PrismaClient }` from it
+// — it throws "Named export 'PrismaClient' not found". Default-import the package
+// and destructure on the runtime side. Prisma 7's ESM story is still settling;
+// this is the canonical workaround until they publish an ESM build.
+import prismaPkg from '@prisma/client';
+const { PrismaClient } = prismaPkg;
 
 const SOFT_DELETE_MODELS = new Set([
   'client',
-  'project', 
+  'project',
   'invoice',
   'proposal',
   'contract',
