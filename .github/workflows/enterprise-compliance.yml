@@ -36,7 +36,10 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16-alpine
+        # Use pgvector/pgvector:pg16-alpine — schema.prisma declares
+        # `extensions = [vector]`, which requires the pgvector extension.
+        # The stock postgres:16-alpine image doesn't ship it.
+        image: pgvector/pgvector:pg16-alpine
         env:
           POSTGRES_PASSWORD: testpass
           POSTGRES_DB: testdb
