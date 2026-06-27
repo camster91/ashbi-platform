@@ -3,10 +3,10 @@
 // GET /api/integrations/github/deploys - trigger deploy via Coolify
 // POST /api/integrations/github/deploy - trigger a deploy
 
+import env from '../config/env.js';
+
 const GITHUB_API = 'https://api.github.com';
 const GITHUB_ORG = process.env.GITHUB_ORG || 'camster91';
-const COOLIFY_URL = process.env.COOLIFY_URL || 'http://localhost:8000';
-const COOLIFY_TOKEN = process.env.COOLIFY_TOKEN;
 
 function githubHeaders() {
   const token = process.env.GITHUB_TOKEN;
@@ -16,7 +16,15 @@ function githubHeaders() {
 }
 
 async function coolifyHeaders() {
-  return { 'Authorization': `Bearer ${COOLIFY_TOKEN}`, 'Content-Type': 'application/json' };
+  return { 'Authorization': `Bearer ${env.coolifyToken}`, 'Content-Type': 'application/json' };
+}
+
+function coolifyBaseUrl(reply) {
+  if (!env.coolifyUrl) {
+    reply.status(503).send({ error: 'COOLIFY_URL not configured' });
+    return null;
+  }
+  return env.coolifyUrl.replace(/\/$/, '');
 }
 
 export default async function githubRoutes(fastify) {
@@ -97,9 +105,11 @@ export default async function githubRoutes(fastify) {
   fastify.get('/deploys', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
+    const baseUrl = coolifyBaseUrl(reply);
+    if (!baseUrl) return;
     try {
       const headers = await coolifyHeaders();
-      const appsRes = await fetch(`${COOLIFY_URL}/api/v1/applications`, { headers });
+      const appsRes = await fetch(`${baseUrl}/api/v1/applications`, { headers });
       if (!appsRes.ok) {
         return reply.status(502).send({ error: 'Coolify API error', detail: await appsRes.text() });
       }
@@ -115,10 +125,12 @@ export default async function githubRoutes(fastify) {
   fastify.post('/deploy/:appUuid', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
+    const baseUrl = coolifyBaseUrl(reply);
+    if (!baseUrl) return;
     const { appUuid } = request.params;
     try {
       const headers = await coolifyHeaders();
-      const res = await fetch(`${COOLIFY_URL}/api/v1/deploy?uuid=${appUuid}&force=false`, {
+      const res = await fetch(`${baseUrl}/api/v1/deploy?uuid=${appUuid}&force=false`, {
         method: 'GET',
         headers
       });

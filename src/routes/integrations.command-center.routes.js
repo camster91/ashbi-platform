@@ -1,13 +1,13 @@
 // Command Center Aggregate Route
 // GET /api/command-center   - single endpoint that aggregates all integration data
 // Returns all panels in one response for the dashboard
+//
+// Multi-tenancy: all DB access in helper functions flows through `request.prisma`
+// (the tenant-scoped proxy installed by tenancyMiddleware) — passed in as the
+// first argument. No global prisma import.
 
-// SECURITY TODO: This route still imports global request.prisma.
-// It should be refactored to pass prisma as parameter to helper functions.
-import prisma from '../config/db.js';
+import env from '../config/env.js';
 
-const COOLIFY_URL = process.env.COOLIFY_URL || 'http://187.77.26.99:8000';
-const COOLIFY_TOKEN = process.env.COOLIFY_TOKEN;
 const GITHUB_ORG = process.env.GITHUB_ORG || 'camster91';
 
 export default async function commandCenterRoutes(fastify) {
@@ -18,8 +18,8 @@ export default async function commandCenterRoutes(fastify) {
     const results = await Promise.allSettled([
       fetchGithubSummary(),
       fetchVpsSummary(),
-      fetchHubTasks(),
-      fetchRecentActivity(),
+      fetchHubTasks(request),
+      fetchRecentActivity(request),
     ]);
 
     const [github, vps, tasks, activity] = results.map(r =>
@@ -88,14 +88,17 @@ async function fetchGithubSummary() {
 }
 
 async function fetchVpsSummary() {
-  if (!COOLIFY_TOKEN) return { error: 'COOLIFY_TOKEN not set', health: 'yellow' };
+  const coolifyUrl = env.coolifyUrl;
+  const coolifyToken = env.coolifyToken;
+  if (!coolifyUrl) return { error: 'COOLIFY_URL not set', health: 'yellow' };
+  if (!coolifyToken) return { error: 'COOLIFY_TOKEN not set', health: 'yellow' };
 
   try {
     const headers = {
-      'Authorization': `Bearer ${COOLIFY_TOKEN}`,
+      'Authorization': `Bearer ${coolifyToken}`,
       'Content-Type': 'application/json'
     };
-    const res = await fetch(`${COOLIFY_URL}/api/v1/applications`, { headers, signal: AbortSignal.timeout(8000) });
+    const res = await fetch(`${coolifyUrl}/api/v1/applications`, { headers, signal: AbortSignal.timeout(8000) });
     if (!res.ok) return { error: `Coolify ${res.status}`, health: 'yellow' };
 
     const apps = await res.json();
@@ -122,7 +125,7 @@ async function fetchVpsSummary() {
   }
 }
 
-async function fetchHubTasks() {
+async function fetchHubTasks(request) {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -167,16 +170,16 @@ async function fetchHubTasks() {
   }
 }
 
-async function fetchRecentActivity() {
+async function fetchRecentActivity(request) {
   try {
-    const activity = await request.request.prisma.activity?.findMany({
+    const activity = await request.prisma.activity?.findMany({
       take: 10,
       orderBy: { createdAt: 'desc' },
       include: { user: { select: { name: true } } }
     }).catch(() => []);
 
     return {
-      items: activity.map(a => ({
+      items: (activity || []).map(a => ({
         id: a.id,
         type: a.type,
         description: a.entityName || a.action,
