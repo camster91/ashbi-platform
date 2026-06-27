@@ -2,14 +2,25 @@
 // GET /api/integrations/vps/health     - Coolify apps status, container health, disk, uptime
 // POST /api/integrations/vps/restart/:appUuid  - restart an app
 
-const COOLIFY_URL = process.env.COOLIFY_URL || 'http://187.77.26.99:8000';
-const COOLIFY_TOKEN = process.env.COOLIFY_TOKEN;
+import env from '../config/env.js';
 
-function headers() {
+function authHeaders() {
   return {
-    'Authorization': `Bearer ${COOLIFY_TOKEN}`,
+    'Authorization': `Bearer ${env.coolifyToken}`,
     'Content-Type': 'application/json'
   };
+}
+
+/**
+ * Returns the configured Coolify base URL, or sends a 503 reply and returns
+ * null if COOLIFY_URL is unset. Callers must `return` on null.
+ */
+function coolifyBaseUrl(reply) {
+  if (!env.coolifyUrl) {
+    reply.status(503).send({ error: 'COOLIFY_URL not configured' });
+    return null;
+  }
+  return env.coolifyUrl.replace(/\/$/, '');
 }
 
 export default async function vpsRoutes(fastify) {
@@ -18,13 +29,15 @@ export default async function vpsRoutes(fastify) {
   fastify.get('/health', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
+    const baseUrl = coolifyBaseUrl(reply);
+    if (!baseUrl) return;
     try {
-      const h = headers();
+      const h = authHeaders();
 
       // Fetch in parallel: applications, services, servers
       const [appsRes, serversRes] = await Promise.allSettled([
-        fetch(`${COOLIFY_URL}/api/v1/applications`, { headers: h }),
-        fetch(`${COOLIFY_URL}/api/v1/servers`, { headers: h }),
+        fetch(`${baseUrl}/api/v1/applications`, { headers: h }),
+        fetch(`${baseUrl}/api/v1/servers`, { headers: h }),
       ]);
 
       let apps = [];
@@ -76,9 +89,11 @@ export default async function vpsRoutes(fastify) {
   fastify.get('/apps/:uuid', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
+    const baseUrl = coolifyBaseUrl(reply);
+    if (!baseUrl) return;
     const { uuid } = request.params;
     try {
-      const res = await fetch(`${COOLIFY_URL}/api/v1/applications/${uuid}`, { headers: headers() });
+      const res = await fetch(`${baseUrl}/api/v1/applications/${uuid}`, { headers: authHeaders() });
       if (!res.ok) return reply.status(502).send({ error: 'Coolify error' });
       return await res.json();
     } catch (err) {
@@ -90,11 +105,13 @@ export default async function vpsRoutes(fastify) {
   fastify.post('/restart/:uuid', {
     onRequest: [fastify.adminOnly]
   }, async (request, reply) => {
+    const baseUrl = coolifyBaseUrl(reply);
+    if (!baseUrl) return;
     const { uuid } = request.params;
     try {
-      const res = await fetch(`${COOLIFY_URL}/api/v1/applications/${uuid}/restart`, {
+      const res = await fetch(`${baseUrl}/api/v1/applications/${uuid}/restart`, {
         method: 'GET',
-        headers: headers()
+        headers: authHeaders()
       });
       const data = await res.json().catch(() => ({}));
       return { success: res.ok, data, restartedAt: new Date().toISOString() };
@@ -108,11 +125,13 @@ export default async function vpsRoutes(fastify) {
   fastify.post('/stop/:uuid', {
     onRequest: [fastify.adminOnly]
   }, async (request, reply) => {
+    const baseUrl = coolifyBaseUrl(reply);
+    if (!baseUrl) return;
     const { uuid } = request.params;
     try {
-      const res = await fetch(`${COOLIFY_URL}/api/v1/applications/${uuid}/stop`, {
+      const res = await fetch(`${baseUrl}/api/v1/applications/${uuid}/stop`, {
         method: 'GET',
-        headers: headers()
+        headers: authHeaders()
       });
       const data = await res.json().catch(() => ({}));
       return { success: res.ok, data };
@@ -125,11 +144,13 @@ export default async function vpsRoutes(fastify) {
   fastify.post('/start/:uuid', {
     onRequest: [fastify.adminOnly]
   }, async (request, reply) => {
+    const baseUrl = coolifyBaseUrl(reply);
+    if (!baseUrl) return;
     const { uuid } = request.params;
     try {
-      const res = await fetch(`${COOLIFY_URL}/api/v1/applications/${uuid}/start`, {
+      const res = await fetch(`${baseUrl}/api/v1/applications/${uuid}/start`, {
         method: 'GET',
-        headers: headers()
+        headers: authHeaders()
       });
       const data = await res.json().catch(() => ({}));
       return { success: res.ok, data };
@@ -142,11 +163,13 @@ export default async function vpsRoutes(fastify) {
   fastify.get('/logs/:uuid', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
+    const baseUrl = coolifyBaseUrl(reply);
+    if (!baseUrl) return;
     const { uuid } = request.params;
     const { lines = 100 } = request.query;
     try {
-      const res = await fetch(`${COOLIFY_URL}/api/v1/applications/${uuid}/logs?lines=${lines}`, {
-        headers: headers()
+      const res = await fetch(`${baseUrl}/api/v1/applications/${uuid}/logs?lines=${lines}`, {
+        headers: authHeaders()
       });
       if (!res.ok) return reply.status(502).send({ error: 'Coolify error' });
       const data = await res.json();
