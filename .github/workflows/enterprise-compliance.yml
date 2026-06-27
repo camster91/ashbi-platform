@@ -61,6 +61,11 @@ jobs:
           cache: 'npm'
       - name: Install dependencies
         run: npm install
+      - name: Generate Prisma client
+        # Required before any test that touches @prisma/client — the runtime
+        # resolves to .prisma/client/default which only exists after this step.
+        # No postinstall hook in package.json runs it automatically.
+        run: npx prisma generate
       - name: Setup database
         # Use `db push` (not `migrate deploy`) because the migration history
         # has no baseline — the earliest migration in this repo
