@@ -3,6 +3,11 @@
 /**
  * Import Bonsai clients, projects, and invoices into Agency Hub
  *
+ * @prisma/client is CJS — default-import + destructure (Prisma 7 ESM workaround).
+ */
+import prismaPkg from '@prisma/client';
+const { PrismaClient } = prismaPkg;
+ *
  * Usage: node scripts/import-bonsai.js
  *
  * Reads from:

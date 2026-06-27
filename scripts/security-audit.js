@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // Security audit script for Agency Hub
 
-import { PrismaClient } from '@prisma/client';
+// @prisma/client is CJS — default-import + destructure (Prisma 7 ESM workaround).
+import prismaPkg from '@prisma/client';
+const { PrismaClient } = prismaPkg;
 
 const prisma = new PrismaClient();
 

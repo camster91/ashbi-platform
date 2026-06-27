@@ -2,6 +2,11 @@
 
 /**
  * Bonsai → Agency Hub Full Import Script
+ *
+ * @prisma/client is CJS — default-import + destructure (Prisma 7 ESM workaround).
+ */
+import prismaPkg from '@prisma/client';
+const { PrismaClient } = prismaPkg;
  * 
  * Imports: Clients, Contacts, Projects, Invoices, Time Entries, Expenses
  * from Bonsai CSV exports into the Agency Hub database.

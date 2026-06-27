@@ -3,6 +3,11 @@
 /**
  * Gmail -> Hub Sync
  *
+ * @prisma/client is CJS — default-import + destructure (Prisma 7 ESM workaround).
+ */
+import prismaPkg from '@prisma/client';
+const { PrismaClient } = prismaPkg;
+ *
  * Pulls emails from the last 48hrs from cameron@ashbi.ca inbox,
  * matches senders to Hub clients/contacts, stores via Prisma,
  * and applies AI triage tags.
