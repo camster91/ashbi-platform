@@ -11,6 +11,9 @@ jobs:
   backup:
     name: Database Backup
     runs-on: ubuntu-latest
+    timeout-minutes: 30  # Cap runtime — hung pg_dump / stuck TCP would otherwise run until GitHub's 6-hour hard limit
+    permissions:
+      contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7

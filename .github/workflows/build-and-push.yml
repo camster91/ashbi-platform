@@ -69,7 +69,10 @@ jobs:
           else
             TAG="${REF#refs/heads/}"
           fi
-          SHA_SHORT="${{ github.event.pull_request.head.sha || github.sha }}" | head -c 7
+          # SHA_SHORT — the pull_request.head.sha branch was previously
+          # shadowed by the second line on every run (GitHub Actions replaces
+          # the same variable in the same step), so the PR case was dead
+          # code. The current main-branch SHA is what we tag releases with.
           SHA_SHORT=$(echo "${{ github.sha }}" | head -c 7)
           echo "image=ghcr.io/camster91/${REPO_NAME}" >> $GITHUB_OUTPUT
           echo "tag=${TAG}" >> $GITHUB_OUTPUT

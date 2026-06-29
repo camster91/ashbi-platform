@@ -30,6 +30,8 @@ jobs:
   build:
     name: Build & Test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read  # deploy uses raw curl with COOLIFY_TOKEN; GITHUB_TOKEN only needs read
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -89,7 +91,7 @@ jobs:
           fi
           HTTP_CODE=$(curl -s --fail-with-body -o /tmp/deploy-resp.json -w "%{http_code}" --max-time 60 \
             -X POST \
-            -H "$(printf 'Auth%szation: %s %s' ori Bear "${COOLIFY_TOKEN}")" \
+            -H "Authorization: Bearer ${COOLIFY_TOKEN}" \
             -H "Content-Type: application/json" \
             "${COOLIFY_URL}/api/v1/applications/${COOLIFY_APP_UUID}/start")
           echo "Response code: ${HTTP_CODE}"
