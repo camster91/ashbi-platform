@@ -3,7 +3,7 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { safeParse } from '../utils/safeParse.js';
+import { safeParse } from '../../utils/safeParse.js';
 
 describe('safeParse Utility', () => {
   test('should parse valid JSON', () => {

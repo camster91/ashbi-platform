@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import jwt from '@fastify/jwt';
-import clientRoutes from '../routes/client.routes.js';
+import clientRoutes from '../../routes/client.routes.js';
 
 describe('Client Routes (Unit)', () => {
   let fastify;

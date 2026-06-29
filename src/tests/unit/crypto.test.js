@@ -3,7 +3,7 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { encrypt, decrypt } from '../utils/crypto.js';
+import { encrypt, decrypt } from '../../utils/crypto.js';
 
 // Set environment variable for testing
 process.env.CREDENTIALS_KEY = 'test-secret-key-1234567890';

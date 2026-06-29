@@ -15,12 +15,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const routesDir = path.join(__dirname, '..', 'routes');
+const routesDir = path.join(__dirname, '..', '..', 'routes');
 
 // ── Schema validation tests ─────────────────────────────────────────────────
 
 // Import schemas for validation testing
-const schemasModule = await import('../validators/schemas.js');
+const schemasModule = await import('../../validators/schemas.js');
 
 // Individual named exports
 const {
@@ -241,7 +241,7 @@ describe('Route File Validation Coverage', () => {
   }
 
   it('should have validation schemas defined', () => {
-    const schemasPath = path.join(__dirname, '..', 'validators', 'schemas.js');
+    const schemasPath = path.join(__dirname, '..', '..', 'validators', 'schemas.js');
     assert.ok(fs.existsSync(schemasPath), 'validators/schemas.js should exist');
 
     const content = fs.readFileSync(schemasPath, 'utf-8');
@@ -307,11 +307,12 @@ describe('Route File Validation Coverage', () => {
       const message = routesWithoutValidation
         .map(r => `  ${r.route}: ${r.mutations} mutation endpoints without validation`)
         .join('\n');
-      console.warn(`\n⚠️  Routes lacking input validation:\n${message}`);
-      console.warn(`\nRecommendation: Add Zod validateBody preHandler to these routes.`);
+      assert.fail(
+        `Found ${routesWithoutValidation.length} route(s) with mutation endpoints lacking input validation:\n${message}\n` +
+        `\nAdd Zod validateBody preHandler to these mutation endpoints.`
+      );
     }
 
-    // This is a documentation test, not a hard failure during migration
-    assert.ok(true, `Found ${routesWithoutValidation.length} routes without validation (warned)`);
+    assert.equal(routesWithoutValidation.length, 0, 'All mutation routes must have Zod input validation');
   });
 });

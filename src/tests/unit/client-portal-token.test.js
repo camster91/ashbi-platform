@@ -16,8 +16,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const clientPortalPath = path.join(__dirname, '..', 'routes', 'client-portal.routes.js');
-const portalPath = path.join(__dirname, '..', 'routes', 'portal.routes.js');
+const clientPortalPath = path.join(__dirname, '..', '..', 'routes', 'client-portal.routes.js');
+const portalPath = path.join(__dirname, '..', '..', 'routes', 'portal.routes.js');
 
 describe('Client Portal Token Security', () => {
   describe('client-portal.routes.js', () => {

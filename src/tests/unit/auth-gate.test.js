@@ -13,7 +13,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const routesDir = path.join(__dirname, '..', 'routes');
+const routesDir = path.join(__dirname, '..', '..', 'routes');
 
 // Public routes that don't need auth
 const PUBLIC_ROUTES = [
@@ -123,15 +123,13 @@ describe('Auth Gate Tests', () => {
         )
         .join('\n');
 
-      // Log the issues but don't fail the test yet since we're still migrating
-      console.warn(`\n⚠️  Routes missing auth decorators:\n${message}`);
-      console.warn(`\nThese routes need 'onRequest: [fastify.authenticate]' added.`);
+      assert.fail(
+        `Found ${allIssues.length} route(s) missing auth decorators:\n${message}\n` +
+        `\nAdd 'onRequest: [fastify.authenticate]' or 'preHandler: [fastify.authenticate]' to these endpoints.`
+      );
     }
 
-    // During migration, we don't fail the test, just warn
-    // Once all routes are migrated, change this to:
-    // assert.equal(allIssues.length, 0, `Found routes missing auth: ${JSON.stringify(allIssues)}`);
-    assert.ok(true, 'Auth gate check completed (warnings only during migration)');
+    assert.equal(allIssues.length, 0, 'All non-public routes must have auth decorators');
   });
 
   it('should have consistent auth pattern', () => {

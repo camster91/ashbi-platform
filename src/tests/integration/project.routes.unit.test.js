@@ -9,8 +9,8 @@
 import { test, describe, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import Fastify from 'fastify';
-import projectRoutes from '../routes/project.routes.js';
-import { shouldSkipHeavyTests } from './_test-skip.js';
+import projectRoutes from '../../routes/project.routes.js';
+import { shouldSkipHeavyTests } from '../_test-skip.js';
 
 const skip = shouldSkipHeavyTests();
 

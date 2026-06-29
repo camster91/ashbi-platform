@@ -18,10 +18,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const routesDir = path.join(__dirname, '..', 'routes');
+const routesDir = path.join(__dirname, '..', '..', 'routes');
 
 // Import schemas for allowlist testing
-const schemasModule = await import('../validators/schemas.js');
+const schemasModule = await import('../../validators/schemas.js');
 const schemas = schemasModule.schemas;
 const fileUpload = schemasModule.fileUpload;
 const ALLOWED_UPLOAD_EXTENSIONS = fileUpload.ALLOWED_EXTENSIONS;
@@ -210,7 +210,7 @@ describe('File Upload Validation', () => {
       // Even with UUID filenames, the extension from the user upload
       // determines how the file might be served later
       const schemas_content = fs.readFileSync(
-        path.join(__dirname, '..', 'validators', 'schemas.js'), 'utf-8'
+        path.join(__dirname, '..', '..', 'validators', 'schemas.js'), 'utf-8'
       );
 
       assert.ok(

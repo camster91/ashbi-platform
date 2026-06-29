@@ -13,7 +13,7 @@
  */
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { shouldSkipLiveApiTests } from './_test-skip.js';
+import { shouldSkipLiveApiTests } from '../_test-skip.js';
 
 const skip = shouldSkipLiveApiTests();
 

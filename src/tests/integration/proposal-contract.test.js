@@ -6,10 +6,10 @@ import assert from 'node:assert/strict';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import jwt from '@fastify/jwt';
-import prisma from '../config/db.js';
-import proposalRoutes from '../routes/proposal.routes.js';
-import contractRoutes from '../routes/contract.routes.js';
-import { shouldSkipHeavyTests } from './_test-skip.js';
+import prisma from '../../config/db.js';
+import proposalRoutes from '../../routes/proposal.routes.js';
+import contractRoutes from '../../routes/contract.routes.js';
+import { shouldSkipHeavyTests } from '../_test-skip.js';
 
 const skip = shouldSkipHeavyTests();
 
