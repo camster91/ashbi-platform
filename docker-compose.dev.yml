@@ -1,0 +1,22 @@
+# Local development override for docker-compose.yml.
+#
+# Adds host port mappings for Postgres (5432) and Redis (6379) so you can
+# `psql` / `redis-cli` against the running containers from the host. NEVER
+# use this overlay in production — the database and cache would be reachable
+# from the network.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# The base docker-compose.yml is safe by default (no exposed data ports),
+# so even running just `docker compose up` on a developer's machine will
+# not publish the database.
+
+services:
+  postgres:
+    ports:
+      - "5432:5432"
+
+  redis:
+    ports:
+      - "6379:6379"

@@ -31,6 +31,15 @@ COPY --from=frontend-builder /app/web/dist ./dist
 COPY src/ ./src/
 COPY scripts/ ./scripts/
 
+# SECURITY: Run as the unprivileged `node` user (UID 1000 in the node:alpine
+# base image). Previously the container ran as UID 0 (root), so any RCE in
+# node / vite / fastify would have full control inside the container.
+# node:alpine ships the `node` user and group at UID/GID 1000 already.
+# Ensure /app is owned by `node` (npm install / prisma generate above run as
+# root, but the resulting /app contents must be readable+writable by `node`).
+RUN chown -R node:node /app
+USER node
+
 # Default environment
 ENV NODE_ENV=production
 ENV PORT=3002
