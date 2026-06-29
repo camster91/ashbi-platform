@@ -89,6 +89,9 @@ const ReferralNetwork = lazy(() => import('./pages/ReferralNetwork'));
 const EmailCampaigns = lazy(() => import('./pages/EmailCampaigns'));
 const ColdEmail = lazy(() => import('./pages/ColdEmail'));
 const LinkedInAgent = lazy(() => import('./pages/LinkedInAgent'));
+// Side-nav targets that previously had no route (UX audit finding)
+const Outreach = lazy(() => import('./pages/Outreach'));
+const Trash = lazy(() => import('./pages/Trash'));
 
 function PageLoader() {
   return (
@@ -177,6 +180,8 @@ function AppRoutes() {
                   <Route path="/admin/brand" element={<AdminRoute><BrandSettings /></AdminRoute>} />
                   <Route path="/admin/reports" element={<AdminRoute><Reports /></AdminRoute>} />
                   <Route path="/reports" element={<AdminRoute><Reports /></AdminRoute>} />
+                  <Route path="/outreach" element={<AdminRoute><Outreach /></AdminRoute>} />
+                  <Route path="/trash" element={<AdminRoute><Trash /></AdminRoute>} />
                   <Route path="/activity" element={<ActivityFeed />} />
                   <Route path="/automations" element={<AdminRoute><Automations /></AdminRoute>} />
                   <Route path="/docs" element={<Docs />} />

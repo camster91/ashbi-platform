@@ -460,6 +460,7 @@ function ProjectDetail({ projectId, token, onBack }) {
   const [error, setError] = useState('');
   const [chatInput, setChatInput] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState(null);
   const [documents, setDocuments] = useState([]);
   const chatEndRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -506,24 +507,32 @@ function ProjectDetail({ projectId, token, onBack }) {
   async function handleFileUpload(files) {
     if (!files || files.length === 0) return;
     setUploading(true);
+    setUploadError(null);
+    const failed = [];
     try {
       for (const file of files) {
         const formData = new FormData();
         formData.append('file', file);
-        await fetch(`${API}/api/client-portal/projects/${projectId}/upload`, {
+        const res = await fetch(`${API}/api/client-portal/projects/${projectId}/upload`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` },
           body: formData
         });
+        if (!res.ok) {
+          failed.push({ name: file.name, status: res.status });
+        }
       }
-      // Refresh documents
+      // Refresh documents list regardless — partial success is still a refresh
       const res = await fetch(`${API}/api/client-portal/projects/${projectId}/documents`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
       setDocuments(Array.isArray(data) ? data : []);
-    } catch {
-      // Silently handle upload errors
+      if (failed.length > 0) {
+        setUploadError(`${failed.length} file(s) failed to upload — ${failed.map(f => f.name).join(', ')}`);
+      }
+    } catch (err) {
+      setUploadError(err?.message ?? 'Upload failed — please try again');
     } finally {
       setUploading(false);
     }
@@ -531,13 +540,20 @@ function ProjectDetail({ projectId, token, onBack }) {
 
   async function handleDeleteDoc(docId) {
     try {
-      await fetch(`${API}/api/client-portal/documents/${docId}`, {
+      const res = await fetch(`${API}/api/client-portal/documents/${docId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
-      setDocuments(prev => prev.filter(d => d.id !== docId));
-    } catch {
-      // Silently handle
+      // Only remove from local state on confirmed success — previously this
+      // removed optimistically, leaving the user with a ghost-success when
+      // the server rejected (auth, 404, etc.).
+      if (res.ok) {
+        setDocuments(prev => prev.filter(d => d.id !== docId));
+      } else {
+        setUploadError(`Delete failed (${res.status}) — please refresh and try again`);
+      }
+    } catch (err) {
+      setUploadError(err?.message ?? 'Delete failed — please try again');
     }
   }
 
@@ -734,6 +750,41 @@ function ProjectDetail({ projectId, token, onBack }) {
             <p className="cp-text-muted" style={{ fontSize: '0.8rem' }}>PDF, images, documents — up to 50MB</p>
           </div>
 
+          {/* Upload error — surfaced so the user sees what failed instead of a ghost-success */}
+          {uploadError && (
+            <div
+              role="alert"
+              className="cp-card"
+              style={{
+                padding: '0.75rem 1rem',
+                borderLeft: `4px solid ${BRAND.danger}`,
+                background: '#fef2f2',
+                color: BRAND.danger,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: '1rem',
+              }}
+            >
+              <span style={{ fontSize: '0.875rem' }}>{uploadError}</span>
+              <button
+                onClick={() => setUploadError(null)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: BRAND.danger,
+                  cursor: 'pointer',
+                  fontSize: '1.25rem',
+                  lineHeight: 1,
+                  padding: '0 0.25rem',
+                }}
+                aria-label="Dismiss error"
+              >
+                ×
+              </button>
+            </div>
+          )}
+
           {/* Document list */}
           {documents.length === 0 ? (
             <div className="cp-card" style={{ padding: '2rem', textAlign: 'center' }}>
@@ -830,6 +881,7 @@ function DocumentsTab({ projects, token }) {
   const [selectedProjectId, setSelectedProjectId] = useState(projects[0]?.id || '');
   const [documents, setDocuments] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState(null);
   const [loading, setLoading] = useState(false);
   const fileInputRef = useRef(null);
 
@@ -848,34 +900,50 @@ function DocumentsTab({ projects, token }) {
   async function handleFileUpload(files) {
     if (!files || files.length === 0 || !selectedProjectId) return;
     setUploading(true);
+    setUploadError(null);
+    const failed = [];
     try {
       for (const file of files) {
         const formData = new FormData();
         formData.append('file', file);
-        await fetch(`${API}/api/client-portal/projects/${selectedProjectId}/upload`, {
+        const res = await fetch(`${API}/api/client-portal/projects/${selectedProjectId}/upload`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${token}` },
           body: formData
         });
+        if (!res.ok) {
+          failed.push({ name: file.name, status: res.status });
+        }
       }
-      // Refresh
       const res = await fetch(`${API}/api/client-portal/projects/${selectedProjectId}/documents`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
       setDocuments(Array.isArray(data) ? data : []);
-    } catch { /* silent */ }
-    finally { setUploading(false); }
+      if (failed.length > 0) {
+        setUploadError(`${failed.length} file(s) failed to upload — ${failed.map(f => f.name).join(', ')}`);
+      }
+    } catch (err) {
+      setUploadError(err?.message ?? 'Upload failed — please try again');
+    } finally {
+      setUploading(false);
+    }
   }
 
   async function handleDeleteDoc(docId) {
     try {
-      await fetch(`${API}/api/client-portal/documents/${docId}`, {
+      const res = await fetch(`${API}/api/client-portal/documents/${docId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
-      setDocuments(prev => prev.filter(d => d.id !== docId));
-    } catch { /* silent */ }
+      if (res.ok) {
+        setDocuments(prev => prev.filter(d => d.id !== docId));
+      } else {
+        setUploadError(`Delete failed (${res.status}) — please refresh and try again`);
+      }
+    } catch (err) {
+      setUploadError(err?.message ?? 'Delete failed — please try again');
+    }
   }
 
   return (

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   Sparkles,
@@ -27,6 +27,8 @@ function MiniCalendar({ selectedDate, onSelect }) {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
+  // Ref + index for keyboard navigation (arrow keys move focus across days)
+  const gridRef = useRef(null);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -41,9 +43,33 @@ function MiniCalendar({ selectedDate, onSelect }) {
 
   const monthLabel = viewMonth.toLocaleDateString({ month: 'long', year: 'numeric' });
 
+  // Keyboard navigation across the day grid. Arrow keys move focus by ±1 day
+  // (left/right) or ±7 days (up/down). Home/End jump to start/end of week.
+  // Enter/Space select the focused day. PageUp/PageDown change month.
+  const handleGridKeyDown = (e) => {
+    const focusable = Array.from(gridRef.current?.querySelectorAll('[role="gridcell"]:not([disabled])') ?? []);
+    const currentIndex = focusable.indexOf(document.activeElement);
+    if (currentIndex === -1 && !['PageUp','PageDown','Home','End'].includes(e.key)) return;
+    const total = focusable.length;
+    let nextIndex = currentIndex;
+    switch (e.key) {
+      case 'ArrowRight': nextIndex = Math.min(currentIndex + 1, total - 1); break;
+      case 'ArrowLeft': nextIndex = Math.max(currentIndex - 1, 0); break;
+      case 'ArrowDown': nextIndex = Math.min(currentIndex + 7, total - 1); break;
+      case 'ArrowUp': nextIndex = Math.max(currentIndex - 7, 0); break;
+      case 'Home': nextIndex = currentIndex - (currentIndex % 7); break;
+      case 'End': nextIndex = Math.min(currentIndex + (6 - (currentIndex % 7)), total - 1); break;
+      case 'PageUp': e.preventDefault(); prevMonth(); return;
+      case 'PageDown': e.preventDefault(); nextMonth(); return;
+      default: return;
+    }
+    e.preventDefault();
+    focusable[nextIndex]?.focus();
+  };
+
   const cells = [];
   for (let i = 0; i < firstDay; i++) {
-    cells.push(<div key={`empty-${i}`} />);
+    cells.push(<div key={`empty-${i}`} role="gridcell" aria-hidden="true" />);
   }
   for (let d = 1; d <= daysInMonth; d++) {
     const date = new Date(year, month, d);
@@ -56,7 +82,12 @@ function MiniCalendar({ selectedDate, onSelect }) {
       <button
         key={d}
         type="button"
+        role="gridcell"
+        aria-selected={isSelected}
+        aria-label={`${date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}${isToday ? ', today' : ''}${isSelected ? ', selected' : ''}`}
+        aria-pressed={isSelected}
         disabled={isPast}
+        tabIndex={isSelected || (!selectedDate && d === 1) ? 0 : -1}
         onClick={() => onSelect(dateStr)}
         className={cn(
           'w-10 h-10 rounded-lg text-sm font-medium transition-all',
@@ -72,30 +103,38 @@ function MiniCalendar({ selectedDate, onSelect }) {
   }
 
   return (
-    <div>
+    <div role="group" aria-label={`Calendar, ${monthLabel}`}>
       <div className="flex items-center justify-between mb-4">
         <button
           type="button"
           onClick={prevMonth}
+          aria-label={`Previous month, ${new Date(year, month - 1, 1).toLocaleDateString({ month: 'long', year: 'numeric' })}`}
           className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors"
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
-        <span className="text-sm font-semibold text-slate-800">{monthLabel}</span>
+        <span className="text-sm font-semibold text-slate-800" aria-live="polite">{monthLabel}</span>
         <button
           type="button"
           onClick={nextMonth}
+          aria-label={`Next month, ${new Date(year, month + 1, 1).toLocaleDateString({ month: 'long', year: 'numeric' })}`}
           className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors"
         >
           <ChevronRight className="w-4 h-4" />
         </button>
       </div>
-      <div className="grid grid-cols-7 gap-1 text-center mb-2">
+      <div className="grid grid-cols-7 gap-1 text-center mb-2" role="row">
         {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => (
-          <div key={day} className="text-xs font-medium text-slate-400 py-1">{day}</div>
+          <div key={day} role="columnheader" className="text-xs font-medium text-slate-400 py-1">{day}</div>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-1 place-items-center">
+      <div
+        ref={gridRef}
+        role="grid"
+        aria-label={`Days in ${monthLabel}`}
+        onKeyDown={handleGridKeyDown}
+        className="grid grid-cols-7 gap-1 place-items-center"
+      >
         {cells}
       </div>
     </div>
