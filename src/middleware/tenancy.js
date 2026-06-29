@@ -28,7 +28,10 @@ export async function tenancyMiddleware(request, reply) {
     return;
   }
 
-  const organizationId = request.user?.organizationId || request.headers['x-org-id'];
+  // SECURITY: Derive organizationId from the verified JWT only.
+  // The x-org-id header fallback was a tenant-spoofing vector (C5) — any
+  // authenticated user could send x-org-id: <other-tenant> and read their data.
+  const organizationId = request.user?.organizationId;
 
   if (!organizationId) {
     logger.warn({ url: request.url }, '🚫 Tenancy: Organization context missing');

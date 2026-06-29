@@ -42,6 +42,16 @@ const env = {
   // Credentials vault encryption key
   credentialsKey: process.env.CREDENTIALS_KEY,
 
+  // Observability
+  // Sentry DSN for error tracking. Optional — if not set, Sentry.captureException
+  // calls are no-ops. The src/index.js code path reads this directly.
+  sentryDsn: process.env.SENTRY_DSN,
+
+  // Hermes webhook signature secret. Required for verifying inbound webhooks
+  // from the Hermes notification system. If unset in production, the webhook
+  // endpoint will reject all requests (returns 503).
+  hermesWebhookSecret: process.env.HERMES_WEBHOOK_SECRET,
+
   // Database
   databaseUrl: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/ashbi',
 
@@ -106,6 +116,23 @@ if (!env.isDev) {
   const missingCritical = critical.filter(key => !process.env[key]);
   if (missingCritical.length > 0) {
     throw new Error(`Missing critical environment variables: ${missingCritical.join(', ')}`);
+  }
+
+  // Reject placeholder values that ship in .env.example — a copy-paste deploy
+  // would otherwise start with a known-secret JWT. The previous check only
+  // failed on missing env, not on placeholder equality.
+  const placeholders = {
+    JWT_SECRET: 'your-secret-key-change-in-production',
+    CREDENTIALS_KEY: 'your-credentials-key-change-in-production',
+  };
+  const placeholderHits = Object.entries(placeholders)
+    .filter(([key, placeholder]) => process.env[key] === placeholder)
+    .map(([key]) => key);
+  if (placeholderHits.length > 0) {
+    throw new Error(
+      `Refusing to start with placeholder env values: ${placeholderHits.join(', ')}. ` +
+      `Replace these in your production env (see .env.example).`
+    );
   }
 
   // Required in production — log warning but allow degraded startup

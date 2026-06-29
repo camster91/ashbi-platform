@@ -11,7 +11,10 @@ import {
 } from '../agents/outreach-scheduler.agent.js';
 
 /**
- * Auth middleware for Fastify - checks for Authorization header
+ * Auth middleware for Fastify - checks for Authorization header.
+ * The previous `|| 'dev-key'` fallback was a C3 vulnerability. Now if the
+ * API key env var is missing the endpoint returns 503 instead of accepting
+ * `Bearer dev-key`.
  */
 async function authMiddleware(request, reply) {
   const authHeader = request.headers.authorization;
@@ -22,7 +25,12 @@ async function authMiddleware(request, reply) {
 
   // Simple API key check - in production use proper auth
   const apiKey = authHeader.replace('Bearer ', '');
-  const validKey = process.env.OUTREACH_SCHEDULER_API_KEY || 'dev-key';
+  const validKey = process.env.OUTREACH_SCHEDULER_API_KEY;
+
+  if (!validKey) {
+    request.log?.error?.('OUTREACH_SCHEDULER_API_KEY not configured');
+    return reply.status(503).send({ error: 'Service not configured' });
+  }
 
   if (apiKey !== validKey) {
     return reply.status(403).send({ error: 'Invalid API key' });
@@ -73,7 +81,7 @@ export default async function outreachSchedulerRoutes(fastify, opts) {
    * GET /api/outreach-scheduler/status
    * Get scheduler status, next scheduled run, and prospect stats
    */
-  fastify.get('/status', async (request, reply) => {
+  fastify.get('/status', { preHandler: authMiddleware }, async (request, reply) => {
     try {
       const status = await getSchedulerStatus();
       return reply.send(status);

@@ -16,8 +16,10 @@ import {
 } from '../agents/referral-engine.agent.js';
 
 /**
- * Simple auth preHandler - checks for Authorization header
- * In production, replace with proper JWT/session validation
+ * Simple auth preHandler - checks for Authorization header.
+ * In production, the API key MUST be set via REFERRAL_ENGINE_API_KEY.
+ * The previous `|| 'dev-key'` fallback was a C3 vulnerability — anyone with
+ * knowledge of the codebase could authenticate with `Bearer dev-key`.
  */
 async function authPreHandler(request, reply) {
   const authHeader = request.headers.authorization;
@@ -28,7 +30,12 @@ async function authPreHandler(request, reply) {
 
   // Simple API key check - in production use proper auth
   const apiKey = authHeader.replace('Bearer ', '');
-  const validKey = process.env.REFERRAL_ENGINE_API_KEY || 'dev-key';
+  const validKey = process.env.REFERRAL_ENGINE_API_KEY;
+
+  if (!validKey) {
+    request.log?.error?.('REFERRAL_ENGINE_API_KEY not configured');
+    return reply.status(503).send({ error: 'Service not configured' });
+  }
 
   if (apiKey !== validKey) {
     return reply.status(403).send({ error: 'Invalid API key' });
@@ -154,7 +161,7 @@ export default async function referralEngineRoutes(fastify) {
    * Get referral stats: total referrals, close rate, top referrers
    * Query params: limit (default 10)
    */
-  fastify.get('/stats', async (request, reply) => {
+  fastify.get('/stats', { preHandler: [authPreHandler] }, async (request, reply) => {
     try {
       const limit = parseInt(request.query.limit) || 10;
       const topReferrersResult = await getTopReferrers(limit);
