@@ -41,7 +41,7 @@ export default async function mailgunRoutes(fastify) {
     }
   });
 
-  fastify.post('/', async (request, reply) => {
+  fastify.post('/', { config: { public: true } }, async (request, reply) => {
     try {
       const body = request.body;
 

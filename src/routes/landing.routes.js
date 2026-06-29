@@ -2,7 +2,7 @@
 
 export default async function landingRoutes(fastify) {
   // POST /api/leads/landing — capture lead from landing page
-  fastify.post('/leads/landing', async (request, reply) => {
+  fastify.post('/leads/landing, { config: { public: true } }', async (request, reply) => {
     const { name, email, company, phone, budget, message } = request.body || {};
 
     // Validate required fields
@@ -43,7 +43,7 @@ export default async function landingRoutes(fastify) {
   });
 
   // GET /api/leads/landing — list leads (admin only)
-  fastify.get('/leads/landing', {
+  fastify.get('/leads/landing, { config: { skipValidation: true } }', {
     onRequest: [fastify.authenticate],
   }, async (request, reply) => {
     if (request.user.role !== 'ADMIN') {

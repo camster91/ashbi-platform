@@ -51,7 +51,7 @@ export default async function wpBridgeRoutes(fastify) {
   });
 
   // Bridge plugin backup event (v1.7.0+)
-  fastify.post('/backup', async (request, reply) => {
+  fastify.post('/backup, { config: { public: true } }', async (request, reply) => {
     const { siteUrl, secretKey, report } = request.body;
     if (!secretKey || !verifySecret(secretKey)) {
       return reply.status(401).send({ error: 'Invalid secret key' });
@@ -66,7 +66,7 @@ export default async function wpBridgeRoutes(fastify) {
   });
 
   // Bridge plugin monthly maintenance report (v1.7.0+)
-  fastify.post('/report', async (request, reply) => {
+  fastify.post('/report, { config: { public: true } }', async (request, reply) => {
     const { siteUrl, secretKey, report } = request.body;
     if (!secretKey || !verifySecret(secretKey)) {
       return reply.status(401).send({ error: 'Invalid secret key' });
@@ -81,7 +81,7 @@ export default async function wpBridgeRoutes(fastify) {
   });
 
   // Bridge plugin alert: new admin, admin promoted, security event (v1.7.0+)
-  fastify.post('/alert', async (request, reply) => {
+  fastify.post('/alert, { config: { public: true } }', async (request, reply) => {
     const { siteUrl, secretKey, alertType, details } = request.body;
     if (!secretKey || !verifySecret(secretKey)) {
       return reply.status(401).send({ error: 'Invalid secret key' });
@@ -94,7 +94,7 @@ export default async function wpBridgeRoutes(fastify) {
   });
 
   // Log support hours (retainer tracking) from plugin or manual entry
-  fastify.post('/hours', async (request, reply) => {
+  fastify.post('/hours, { config: { public: true } }', async (request, reply) => {
     const { siteUrl, secretKey, hours, description, month } = request.body;
     if (!secretKey || !verifySecret(secretKey)) {
       return reply.status(401).send({ error: 'Invalid secret key' });

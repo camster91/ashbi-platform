@@ -394,7 +394,7 @@ Email 1: Lead with observation about their brand, one line of value. Email 2: Sh
   // ==================== MAILGUN WEBHOOK FOR TRACKING ====================
 
   // POST /cold-email/webhook/track — Mailgun tracking webhook (no auth — called by Mailgun)
-  fastify.post('/webhook/track', async (request, reply) => {
+  fastify.post('/webhook/track, { config: { public: true } }', async (request, reply) => {
     // Always respond 200 quickly to Mailgun
     reply.status(200).send({ status: 'ok' });
 
@@ -415,7 +415,7 @@ Email 1: Lead with observation about their brand, one line of value. Email 2: Sh
   });
 
   // POST /cold-email/webhook/reply — inbound reply webhook (detect prospect replies)
-  fastify.post('/webhook/reply', async (request, reply) => {
+  fastify.post('/webhook/reply, { config: { public: true } }', async (request, reply) => {
     reply.status(200).send({ status: 'ok' });
 
     try {

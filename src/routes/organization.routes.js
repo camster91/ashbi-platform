@@ -1,8 +1,15 @@
 // Organization management routes (Master Admin only)
 
 export default async function organizationRoutes(fastify) {
-  // Only Master Admins can manage organizations
+  // Only Master Admins can manage organizations. Compose the standard
+  // `fastify.authenticate` (JWT verification) with an inline admin-only
+  // check — keeps the auth gate recognizable to `tests/unit/auth-gate.test.js`.
   fastify.addHook('onRequest', async (request, reply) => {
+    try {
+      await fastify.authenticate(request, reply);
+    } catch (err) {
+      return reply.status(401).send({ error: 'Unauthorized' });
+    }
     if (request.user?.role !== 'ADMIN') {
       return reply.status(403).send({ error: 'Master Admin access required' });
     }

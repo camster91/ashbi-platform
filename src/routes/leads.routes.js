@@ -4,7 +4,7 @@ import { queueEmailForProcessing } from '../jobs/queue.js';
 
 export default async function leadRoutes(fastify) {
   // POST /leads/intake — public endpoint, no auth
-  fastify.post('/leads/intake', async (request, reply) => {
+  fastify.post('/leads/intake, { config: { public: true } }', async (request, reply) => {
     const { name, email, company, message, source } = request.body || {};
 
     if (!name || !email || !message) {

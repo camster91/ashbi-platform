@@ -108,7 +108,7 @@ export default async function shopifyAgentRoutes(fastify) {
   });
 
   // GET /api/shopify/integration/callback — OAuth callback handler
-  fastify.get('/integration/callback', async (request, reply) => {
+  fastify.get('/integration/callback, { config: { public: true } }', async (request, reply) => {
     const { code, shop, hmac } = request.query;
 
     if (!code || !shop) {

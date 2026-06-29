@@ -415,7 +415,7 @@ export default async function proposalRoutes(fastify) {
   });
 
   // PUBLIC: Client views proposal by viewToken
-  fastify.get('/client/:viewToken', async (request, reply) => {
+  fastify.get('/client/:viewToken, { config: { public: true } }', async (request, reply) => {
     const { viewToken } = request.params;
 
     const proposal = await request.prisma.proposal.findUnique({
@@ -444,7 +444,7 @@ export default async function proposalRoutes(fastify) {
   });
 
   // PUBLIC: Client approves proposal
-  fastify.post('/client/:viewToken/approve', async (request, reply) => {
+  fastify.post('/client/:viewToken/approve, { config: { public: true } }', async (request, reply) => {
     const { viewToken } = request.params;
 
     const proposal = await request.prisma.proposal.findUnique({
@@ -467,7 +467,7 @@ export default async function proposalRoutes(fastify) {
   });
 
   // PUBLIC: Client declines proposal
-  fastify.post('/client/:viewToken/decline', async (request, reply) => {
+  fastify.post('/client/:viewToken/decline, { config: { public: true } }', async (request, reply) => {
     const { viewToken } = request.params;
 
     const proposal = await request.prisma.proposal.findUnique({

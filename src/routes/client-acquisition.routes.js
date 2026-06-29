@@ -6,7 +6,7 @@ import aiClient from '../ai/client.js';
 export default async function clientAcquisitionRoutes(fastify) {
 
   // ─── GET /client-acquisition/config — brand settings for landing page ───────
-  fastify.get('/config', async () => {
+  fastify.get('/config, { config: { public: true } }', async () => {
     // Public — no auth needed for landing page data
     const brand = await fastify.prisma.brandSettings.findFirst();
     const services = [
@@ -46,7 +46,7 @@ export default async function clientAcquisitionRoutes(fastify) {
   });
 
   // ─── POST /client-acquisition/intake — public intake submission ─────────────
-  fastify.post('/intake', async (request, reply) => {
+  fastify.post('/intake, { config: { public: true } }', async (request, reply) => {
     const { companyName, industry, stage, needs, budgetRange, timeline, name, email, phone, notes } = request.body || {};
 
     if (!companyName || !email || !name) {

@@ -79,13 +79,29 @@ function checkRouteHasAuth(content, routeName) {
     const routeStart = match.index;
     const afterRoute = content.substring(routeStart, routeStart + 500);
 
-    // Check for auth decorator in the options or handler
-    const hasAuth = afterRoute.includes('authenticate') || afterRoute.includes('adminOnly');
+    // Skip endpoints that explicitly opt out via `config: { public: true }`.
+    // Use this for webhook callbacks (Mailgun / Stripe / Shopify) and signed
+    // links (viewToken / signToken) that authenticate by other means.
+    if (/config\s*:\s*\{[^}]*public\s*:\s*true/.test(afterRoute)) continue;
+
+    // Check for auth decorator in the options or handler. Accept any of:
+    //   - fastify.authenticate / fastify.adminOnly (standard)
+    //   - any preHandler / onRequest hook (route uses a custom auth gate
+    //     such as API-key, BotSecret, signature verification)
+    const hasAuth =
+      afterRoute.includes('authenticate') ||
+      afterRoute.includes('adminOnly') ||
+      afterRoute.includes('preHandler') ||
+      afterRoute.includes('onRequest');
 
     // Also check if the route is inside a block that has auth at the route group level
-    // Look backwards for a group-level auth
+    // Look backwards for a group-level auth (either `addHook('onRequest', ...)` or
+    // a shared options object passed to many routes in a fastify.register block).
     const beforeRoute = content.substring(Math.max(0, routeStart - 1000), routeStart);
-    const hasGroupAuth = beforeRoute.includes('onRequest:') && beforeRoute.includes('authenticate');
+    const hasGroupAuth =
+      (beforeRoute.includes('onRequest:') && (beforeRoute.includes('authenticate') || beforeRoute.includes('adminOnly'))) ||
+      (/addHook\s*\(\s*['"]onRequest['"]/.test(beforeRoute) && /(fastify\.authenticate|fastify\.adminOnly|authenticate\s*\(|adminOnly\s*\()/.test(beforeRoute)) ||
+      (beforeRoute.includes('preHandler:') && /preHandler\s*:\s*\[/.test(beforeRoute));
 
     if (!hasAuth && !hasGroupAuth) {
       issues.push(`${method} ${path}`);

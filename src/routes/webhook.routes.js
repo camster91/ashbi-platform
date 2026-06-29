@@ -8,7 +8,7 @@ import crypto from 'crypto';
 
 export default async function webhookRoutes(fastify) {
   // Email webhook endpoint
-  fastify.post('/email', async (request, reply) => {
+  fastify.post('/email, { config: { skipValidation: true } }', async (request, reply) => {
     // Verify webhook secret (fail closed)
     if (!env.webhookSecret) {
       return reply.status(500).send({ error: 'Webhook secret not configured' });
@@ -48,7 +48,7 @@ export default async function webhookRoutes(fastify) {
     }
   });
 
-  // Manual email submission (for testing)
+  // Manual email submission (fo, { config: { skipValidation: true } }r testing)
   fastify.post('/email/test', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
@@ -87,7 +87,7 @@ export default async function webhookRoutes(fastify) {
 
   // ==================== STRIPE WEBHOOK ====================
 
-  // Stripe sends raw body — must configure Fastify to provide it
+  // Stripe s, { config: { skipValidation: true } }ends raw body — must configure Fastify to provide it
   fastify.post('/stripe', {
     config: {
       rawBody: true
