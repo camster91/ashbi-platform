@@ -116,4 +116,26 @@ export const prisma = new Proxy({}, {
 });
 // Also export base for admin ops that need to see deleted records
 export { base as rawPrisma };
-export default prisma;
+
+// SECURITY: Wrap the default export in an outer Proxy that resolves to the
+// per-request scoped prisma (set by `src/middleware/tenancy.js` via
+// AsyncLocalStorage) when called from a route handler, and to the lazy
+// soft-delete prisma otherwise.
+//
+// This closes the C1/C2 audit findings: 50+ service/agent files import
+// `prisma from '../config/db.js'` directly. Previously every one of them
+// bypassed tenancy and could read cross-tenant data. With this wrapper, the
+// import is unchanged but the resolved client is automatically scoped.
+//
+// Background jobs (no Fastify request) see the lazy soft-delete prisma, so
+// they must continue to filter queries explicitly by organizationId.
+import { getRequestPrisma } from '../utils/request-context.js';
+export default new Proxy({}, {
+  get(_target, prop) {
+    // Resolve to the per-request scoped client if we are inside a request,
+    // otherwise fall back to the soft-delete-extended lazy prisma.
+    const client = getRequestPrisma() ?? prisma;
+    const value = /** @type {any} */ (client)[prop];
+    return typeof value === 'function' ? value.bind(client) : value;
+  },
+});

@@ -214,7 +214,20 @@ fastify.decorate('adminOnly', async (request, reply) => {
 });
 
 // Infrastructure
-fastify.decorate('prisma', prisma);
+// SECURITY: Decorate `fastify.prisma` with a Proxy that resolves to the
+// per-request scoped prisma (set by tenancy middleware via AsyncLocalStorage)
+// when accessed from a route handler, and to the raw soft-delete-extended
+// prisma otherwise. This matches the wrapping done on `db.js`'s default
+// export — every call to `fastify.prisma.X.findMany()` now auto-scopes when
+// the request has an organizationId.
+import { getRequestPrisma } from './utils/request-context.js';
+fastify.decorate('prisma', new Proxy({}, {
+  get(_t, prop) {
+    const client = getRequestPrisma() ?? prisma;
+    const value = /** @type {any} */ (client)[prop];
+    return typeof value === 'function' ? value.bind(client) : value;
+  },
+}));
 fastify.decorate('auth', getAuthProvider(fastify));
 fastify.addHook('preHandler', tenancyMiddleware);
 fastify.decorate('authenticateWithApiKey', authenticateApiKey);
