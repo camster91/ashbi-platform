@@ -186,8 +186,17 @@ export async function processEmailPipeline(emailData) {
 /**
  * Step 1: Parse email and match to client/project
  */
-async function parseAndMatchEmail(emailData) {
-  // Get all clients and contacts for matching
+// Cache the (active clients + contacts) lookup that powers inbound-email
+// matching. Previously this ran on every inbound email: 2 full findMany()s
+// per message. Cache for 60s — clients/contacts change infrequently, but a
+// stale-by-60s match is fine for routing.
+const CLIENTS_CACHE_TTL_MS = 60_000;
+let _clientsCache = null; // { expiresAt, clients, contacts }
+
+async function getClientsAndContacts() {
+  if (_clientsCache && _clientsCache.expiresAt > Date.now()) {
+    return { clients: _clientsCache.clients, contacts: _clientsCache.contacts };
+  }
   const [clients, contacts] = await Promise.all([
     prisma.client.findMany({
       where: { status: 'ACTIVE' },
@@ -195,8 +204,21 @@ async function parseAndMatchEmail(emailData) {
     }),
     prisma.contact.findMany({
       select: { email: true, name: true, clientId: true }
-    })
+    }),
   ]);
+  _clientsCache = {
+    expiresAt: Date.now() + CLIENTS_CACHE_TTL_MS,
+    clients,
+    contacts,
+  };
+  return { clients, contacts };
+}
+
+async function parseAndMatchEmail(emailData) {
+  // Performance: clients + contacts are cached for 60s (see getClientsAndContacts).
+  // The previous implementation hit prisma twice on every inbound email — at
+  // Mailgun webhook scale (hundreds of messages/min) this dominated latency.
+  const { clients, contacts } = await getClientsAndContacts();
 
   const { system, prompt, temperature } = buildParseEmailPrompt({
     email: emailData,

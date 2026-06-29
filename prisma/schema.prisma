@@ -333,6 +333,8 @@ model Thread {
   @@index([status])
   @@index([assignedToId])
   @@index([status, assignedToId])
+  
+  @@index([createdAt])
   @@map("threads")
 }
 
@@ -398,6 +400,9 @@ model Response {
   draftedBy  User   @relation("DraftedBy", fields: [draftedById], references: [id])
   approvedBy User?  @relation("ApprovedBy", fields: [approvedById], references: [id])
 
+  
+  @@index([status])
+  @@index([createdAt])
   @@map("responses")
 }
 
@@ -433,6 +438,8 @@ model AssignmentRule {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
+  
+  @@index([isActive])
   @@map("assignment_rules")
 }
 
@@ -467,6 +474,9 @@ model UnmatchedEmail {
   resolvedAt        DateTime?
   createdAt         DateTime  @default(now())
 
+  
+  @@index([createdAt])
+  @@index([senderEmail])
   @@map("unmatched_emails")
 }
 
@@ -586,6 +596,8 @@ model TimeEntry {
   @@index([projectId])
   @@index([userId])
   @@index([invoiceId])
+  
+  @@index([userId, date])
   @@map("time_entries")
 }
 
@@ -675,6 +687,9 @@ model CalendarEvent {
   createdBy User            @relation("EventCreator", fields: [createdById], references: [id])
   attendees EventAttendee[]
 
+  
+  @@index([startTime])
+  @@index([projectId, startTime])
   @@map("calendar_events")
 }
 
@@ -728,6 +743,9 @@ model RetainerPlan {
   // Relations
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
+  
+  @@index([retainerStatus])
+  @@index([clientId, retainerStatus])
   @@map("retainer_plans")
 }
 
@@ -836,6 +854,10 @@ model Proposal {
   draftData String? // JSON of unsaved form data
 
 
+  
+  @@index([status])
+  @@index([clientId, status])
+  @@index([validUntil])
   @@map("proposals")
 }
 
@@ -880,6 +902,9 @@ model Contract {
   draftData String? // JSON of unsaved form data
 
 
+  
+  @@index([status])
+  @@index([clientId, status])
   @@map("contracts")
 }
 
@@ -1058,6 +1083,8 @@ model OutreachSequence {
 
   leads OutreachLead[]
 
+  
+  @@index([status])
   @@map("outreach_sequences")
 }
 
@@ -1079,6 +1106,9 @@ model OutreachLead {
 
   sequence OutreachSequence? @relation(fields: [sequenceId], references: [id], onDelete: SetNull)
 
+  
+  @@index([status])
+  @@index([lastContactedAt, status])
   @@map("outreach_leads")
 }
 
@@ -1114,6 +1144,8 @@ model BlogPost {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
+  
+  @@index([status, publishedAt])
   @@map("blog_posts")
 }
 
@@ -1134,6 +1166,9 @@ model EmailTriageItem {
 
   drafts EmailTriageDraft[]
 
+  
+  @@index([status])
+  @@index([createdAt])
   @@map("email_triage_items")
 }
 
@@ -1189,6 +1224,8 @@ model LinkedInSequence {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  
+  @@index([status])
   @@map("linkedin_sequences")
 }
 
@@ -1205,6 +1242,9 @@ model LinkedInProspect {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  
+  @@index([status])
+  @@index([createdAt])
   @@map("linkedin_prospects")
 }
 
@@ -1265,6 +1305,10 @@ model ColdEmailProspect {
   sequence ColdEmailSequence? @relation(fields: [sequenceId], references: [id], onDelete: SetNull)
   events   ColdEmailEvent[]
 
+  
+  @@index([nextEmailAt, status])
+  @@index([status])
+  @@index([createdAt])
   @@map("cold_email_prospects")
 }
 
@@ -1283,6 +1327,9 @@ model ColdEmailEvent {
   prospect ColdEmailProspect  @relation(fields: [prospectId], references: [id], onDelete: Cascade)
   sequence ColdEmailSequence? @relation(fields: [sequenceId], references: [id], onDelete: SetNull)
 
+  
+  @@index([mailgunId])
+  @@index([prospectId, type])
   @@map("cold_email_events")
 }
 
@@ -1705,6 +1752,8 @@ model WPSite {
   reports   WPReport[]
   alertsLog WPAlert[]
 
+  
+  @@index([status])
   @@map("wp_sites")
 }
 

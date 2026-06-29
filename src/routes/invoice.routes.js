@@ -77,36 +77,40 @@ export default async function invoiceRoutes(fastify) {
   });
 
   async function getStats() {
+    // Performance: previously this ran `findMany({ select })` with no `where`
+    // and pulled every invoice row to compute aggregates in JS — a full table
+    // scan on every GET /api/invoices call. Replace with `groupBy` so the
+    // database does the aggregation server-side. The overdue total still
+    // needs a separate aggregation since it depends on `dueDate < now`.
     const now = new Date();
-    const [allInvoices, overdueInvoices] = await Promise.all([
-      fastify.prisma.invoice.findMany({
-        select: { status: true, total: true, dueDate: true }
+    const [byStatus, overdueAgg] = await Promise.all([
+      fastify.prisma.invoice.groupBy({
+        by: ['status'],
+        _count: { _all: true },
+        _sum: { total: true },
       }),
-      fastify.prisma.invoice.findMany({
+      fastify.prisma.invoice.aggregate({
         where: { status: 'SENT', dueDate: { lt: now } },
-        select: { id: true, total: true }
-      })
+        _count: { _all: true },
+        _sum: { total: true },
+      }),
     ]);
 
     const stats = {
       draft: { count: 0, amount: 0 },
       sent: { count: 0, amount: 0 },
       paid: { count: 0, amount: 0 },
-      overdue: { count: overdueInvoices.length, amount: 0 },
+      overdue: { count: overdueAgg._count._all, amount: overdueAgg._sum.total ?? 0 },
       void: { count: 0, amount: 0 },
       totalOutstanding: 0,
     };
 
-    for (const inv of allInvoices) {
-      const s = inv.status.toLowerCase();
-      if (stats[s]) {
-        stats[s].count++;
-        stats[s].amount += inv.total;
+    for (const row of byStatus) {
+      const key = row.status.toLowerCase();
+      if (stats[key]) {
+        stats[key].count = row._count._all;
+        stats[key].amount = row._sum.total ?? 0;
       }
-    }
-
-    for (const inv of overdueInvoices) {
-      stats.overdue.amount += inv.total;
     }
 
     stats.totalOutstanding = stats.sent.amount + stats.overdue.amount;

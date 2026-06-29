@@ -62,6 +62,10 @@ export default async function taskRoutes(fastify) {
   fastify.get('/my', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
+    // Performance: cap the page at 200 tasks to bound latency for users with
+    // thousands of open tasks. Caller can use pagination params if they need
+    // more — previously this returned every assigned task with no `take`.
+    const { limit = '200', offset = '0' } = request.query ?? {};
     const tasks = await fastify.prisma.task.findMany({
       where: {
         assigneeId: request.user.id,
@@ -79,7 +83,9 @@ export default async function taskRoutes(fastify) {
       orderBy: [
         { priority: 'asc' },
         { dueDate: 'asc' }
-      ]
+      ],
+      take: Math.min(parseInt(limit, 10) || 200, 500),
+      skip: parseInt(offset, 10) || 0,
     });
 
     // Group by category
