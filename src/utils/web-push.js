@@ -1,4 +1,17 @@
 // Web Push Notifications (VAPID)
+//
+// Key source priority (highest wins):
+//   1. VAPID_PUBLIC_KEY + VAPID_PRIVATE_KEY env vars (production / Coolify)
+//   2. .vapid-keys.json file at repo root (local dev convenience)
+//   3. webpush.generateVAPIDKeys() — last resort, persisted to disk so
+//      the same key survives restarts.
+//
+// Pre-fix drift: code only checked step 2, while .env.example declared
+// step 1. Deployments that set env vars would still hit step 2/3 and
+// either generate a new ephemeral key per container restart (breaking
+// push subscriptions across redeploys) or fail when the file wasn't
+// writable. This commit unifies on the env-var-first pattern that
+// .env.example already documented.
 import webpush from 'web-push';
 import prisma from '../config/db.js';
 import fs from 'fs';
@@ -10,25 +23,43 @@ const VAPID_KEYS_PATH = path.join(__dirname, '../../.vapid-keys.json');
 
 let vapidKeys = null;
 
-export function initVapid() {
-  // Try loading existing keys
+function tryLoadFromEnv() {
+  const pub = process.env.VAPID_PUBLIC_KEY;
+  const priv = process.env.VAPID_PRIVATE_KEY;
+  if (pub && priv) return { publicKey: pub, privateKey: priv, source: 'env' };
+  return null;
+}
+
+function tryLoadFromFile() {
   try {
     if (fs.existsSync(VAPID_KEYS_PATH)) {
-      vapidKeys = JSON.parse(fs.readFileSync(VAPID_KEYS_PATH, 'utf8'));
+      const parsed = JSON.parse(fs.readFileSync(VAPID_KEYS_PATH, 'utf8'));
+      if (parsed?.publicKey && parsed?.privateKey) return { ...parsed, source: 'file' };
     }
   } catch (e) {
-    console.warn('Could not load VAPID keys, generating new ones');
+    console.warn('VAPID: could not read', VAPID_KEYS_PATH, '-', e.message);
   }
+  return null;
+}
 
-  // Generate if missing
+export function initVapid() {
+  // 1. Env vars (production path)
+  vapidKeys = tryLoadFromEnv()
+    || (vapidKeys = tryLoadFromFile())
+    || null;
+
+  // 3. Generate + persist as last resort
   if (!vapidKeys) {
-    vapidKeys = webpush.generateVAPIDKeys();
+    const generated = webpush.generateVAPIDKeys();
+    vapidKeys = { ...generated, source: 'generated' };
     try {
-      fs.writeFileSync(VAPID_KEYS_PATH, JSON.stringify(vapidKeys, null, 2));
-      console.log('Generated new VAPID keys');
+      fs.writeFileSync(VAPID_KEYS_PATH, JSON.stringify({ publicKey: generated.publicKey, privateKey: generated.privateKey }, null, 2));
+      console.log('VAPID: generated new keys and persisted to', VAPID_KEYS_PATH);
     } catch (e) {
-      console.warn('Could not persist VAPID keys:', e.message);
+      console.warn('VAPID: could not persist generated keys:', e.message, '- subscription IDs will rotate on every restart');
     }
+  } else {
+    console.log(`VAPID: loaded existing keys from ${vapidKeys.source === 'env' ? 'env vars' : 'file ' + VAPID_KEYS_PATH}`);
   }
 
   webpush.setVapidDetails(

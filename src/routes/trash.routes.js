@@ -1,17 +1,6 @@
 // Trash routes — soft deleted items management
 
-const ENTITY_MAP = {
-  CLIENT: 'client',
-  PROJECT: 'project',
-  INVOICE: 'invoice',
-  PROPOSAL: 'proposal',
-  CONTRACT: 'contract',
-  EXPENSE: 'expense',
-  TASK: 'task',
-  ESTIMATE: 'estimate',
-  NOTE: 'note',
-  RETAINER_PLAN: 'retainerPlan',
-};
+import ENTITY_MAP from '../utils/entity-map.js';
 
 export default async function trashRoutes(fastify) {
   // GET /api/trash — list recently deleted items grouped by entity

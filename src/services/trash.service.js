@@ -1,19 +1,7 @@
 // Trash service — soft delete helper
 
 import prisma from '../config/db.js';
-
-const ENTITY_MAP = {
-  CLIENT: 'client',
-  PROJECT: 'project',
-  INVOICE: 'invoice',
-  PROPOSAL: 'proposal',
-  CONTRACT: 'contract',
-  EXPENSE: 'expense',
-  TASK: 'task',
-  ESTIMATE: 'estimate',
-  NOTE: 'note',
-  RETAINER_PLAN: 'retainerPlan',
-};
+import ENTITY_MAP from '../utils/entity-map.js';
 
 /**
  * Soft-delete a record by setting deletedAt and creating a TrashedItem entry.
