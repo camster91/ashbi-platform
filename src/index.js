@@ -68,7 +68,6 @@ import commandCenterRoutes from './routes/integrations.command-center.routes.js'
 import expenseRoutes from './routes/expense.routes.js';
 import { startRecurringInvoicesJob } from './jobs/recurring-invoices.js';
 import automationRoutes from './routes/automation.routes.js';
-import intakeFormRoutes from './routes/intake-form.routes.js';
 import brandRoutes from './routes/brand.routes.js';
 import { startOverdueChecker } from './services/automation.service.js';
 import { startTrashPurgeJob } from './jobs/trash-purge.js';
@@ -79,7 +78,6 @@ import timeSessionRoutes from './routes/time-sessions.routes.js';
 import semanticSearchRoutes from './routes/semantic-search.routes.js';
 import creativeBriefRoutes from './routes/creative-brief.routes.js';
 import assetLibraryRoutes from './routes/asset-library.routes.js';
-import surveyRoutes from './routes/survey.routes.js';
 import apiKeyRoutes, { authenticateApiKey } from './routes/api-key.routes.js';
 import estimateRoutes from './routes/estimate.routes.js';
 import rateCardRoutes from './routes/rate-card.routes.js';
@@ -205,7 +203,6 @@ await fastify.register(notificationRoutes, { prefix: '/api/notifications' });
 await fastify.register(settingsRoutes, { prefix: '/api/settings' });
 await fastify.register(proposalBuilderRoutes, { prefix: '/api/proposal-builder' });
 // Route registrations continued
-await fastify.register(surveyRoutes, { prefix: '/api/surveys' });
 await fastify.register(apiKeyRoutes, { prefix: '/api/api-keys' });
 await fastify.register(estimateRoutes, { prefix: '/api/estimates' });
 await fastify.register(rateCardRoutes, { prefix: '/api/rate-cards' });
@@ -218,7 +215,6 @@ await fastify.register(semanticSearchRoutes, { prefix: '/api/semantic-search' })
 await fastify.register(creativeBriefRoutes, { prefix: '/api/creative-brief' });
 await fastify.register(assetLibraryRoutes, { prefix: '/api/asset-library' });
 await fastify.register(automationRoutes, { prefix: '/api/automations' });
-await fastify.register(intakeFormRoutes, { prefix: '/api/intake-forms' });
 await fastify.register(expenseRoutes, { prefix: '/api/expenses' });
 await fastify.register(commandCenterRoutes, { prefix: '/api/command-center' });
 await fastify.register(pushRoutes, { prefix: '/api/push' });

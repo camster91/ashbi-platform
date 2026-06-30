@@ -54,7 +54,6 @@ const Docs = lazy(() => import('./pages/Docs'));
 const GanttView = lazy(() => import('./pages/GanttView'));
 const ProjectPlanner = lazy(() => import('./pages/ProjectPlanner'));
 const ProjectTemplates = lazy(() => import('./pages/ProjectTemplates'));
-const IntakeForms = lazy(() => import('./pages/IntakeForms'));
 const Automations = lazy(() => import('./pages/Automations'));
 // Admin / Finance
 const BrandSettings = lazy(() => import('./pages/BrandSettings'));
@@ -167,8 +166,7 @@ function AppRoutes() {
                   <Route path="/project-planner" element={<ProjectPlanner />} />
                   <Route path="/project-templates" element={<ProjectTemplates />} />
                   <Route path="/gantt" element={<GanttView />} />
-                  <Route path="/intake-forms" element={<IntakeForms />} />
-                  <Route path="/retainers" element={<AdminRoute><Retainers /></AdminRoute>} />
+                                    <Route path="/retainers" element={<AdminRoute><Retainers /></AdminRoute>} />
                   <Route path="/invoice-chaser" element={<AdminRoute><InvoiceChaser /></AdminRoute>} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/revenue" element={<AdminRoute><Revenue /></AdminRoute>} />
