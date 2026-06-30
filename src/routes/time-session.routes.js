@@ -3,7 +3,8 @@
 export default async function timeSessionRoutes(fastify) {
   // Start a new timer session
   fastify.post('/start', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(timeSessionStartNewSchema),
   }, async (request, reply) => {
     const { taskId, projectId, description, billable } = request.body;
     const userId = request.user.id;

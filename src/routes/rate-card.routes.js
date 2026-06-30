@@ -1,4 +1,6 @@
 
+import { validateBody, rateCardSchema } from '../validators/schemas.js';
+
 export default async function rateCardRoutes(fastify) {
   // List rate cards
   fastify.get('/', {
@@ -36,7 +38,8 @@ export default async function rateCardRoutes(fastify) {
 
   // Create rate card
   fastify.post('/', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(rateCardSchema),
   }, async (request, reply) => {
     const { name, clientId, rates, isDefault } = request.body;
     if (!name) return reply.status(400).send({ error: 'Name is required' });
@@ -64,7 +67,8 @@ export default async function rateCardRoutes(fastify) {
 
   // Update rate card
   fastify.put('/:id', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(rateCardSchema.partial()),
   }, async (request, reply) => {
     const { id } = request.params;
     const existing = await request.prisma.rateCard.findUnique({ where: { id } });

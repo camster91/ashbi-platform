@@ -1,11 +1,13 @@
 // Multi-platform message paste intake routes
 
 import aiClient from '../ai/client.js';
+import {validateBody, messagePasteSchema} from '../validators/schemas.js';
 
 export default async function messageRoutes(fastify) {
   // Paste content from any platform and extract structured data
   fastify.post('/messages/paste', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(messagePasteSchema),
   }, async (request, reply) => {
     const { content, source = 'other', projectId } = request.body;
 

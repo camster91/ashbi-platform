@@ -1,5 +1,6 @@
 // Notes & Documents routes
 
+import { validateBody, noteProjectCreateSchema, noteUpdateV2Schema } from '../validators/schemas.js';
 
 export default async function noteRoutes(fastify) {
   // List ALL notes across all projects (global docs view)
@@ -99,7 +100,8 @@ export default async function noteRoutes(fastify) {
 
   // Create note
   fastify.post('/projects/:projectId/notes', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(noteProjectCreateSchema),
   }, async (request, reply) => {
     const { projectId } = request.params;
     const { title, content, type = 'NOTE', tags = [], isPinned = false } = request.body;
@@ -144,7 +146,8 @@ export default async function noteRoutes(fastify) {
 
   // Update note
   fastify.put('/notes/:id', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(noteUpdateV2Schema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { title, content, type, tags, isPinned } = request.body;

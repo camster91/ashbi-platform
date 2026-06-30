@@ -1,7 +1,7 @@
 // Client routes
 
 import { safeParse } from '../utils/safeParse.js';
-import { validateBody, createClientSchema, updateClientSchema } from '../validators/schemas.js';
+import {validateBody, createClientSchema, updateClientSchema, clientContactSchema} from '../validators/schemas.js';
 
 export default async function clientRoutes(fastify) {
   // List all clients
@@ -192,7 +192,8 @@ export default async function clientRoutes(fastify) {
 
   // Add contact to client
   fastify.post('/:id/contacts', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(clientContactSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { email, name, role, isPrimary = false } = request.body;

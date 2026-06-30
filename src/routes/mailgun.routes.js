@@ -5,11 +5,13 @@ import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import { processEmailPipeline } from '../services/pipeline.service.js';
 import env from '../config/env.js';
+import {validateBody, mailgunSendSchema} from '../validators/schemas.js';
 
 export default async function mailgunRoutes(fastify) {
   // POST /mailgun/send — manually send an email (admin only)
   fastify.post('/send', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(mailgunSendSchema),
   }, async (request, reply) => {
     if (request.user.role !== 'ADMIN') {
       return reply.status(403).send({ error: 'Admin access required' });

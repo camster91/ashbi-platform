@@ -1,4 +1,4 @@
-import { validateBody, createRetainerSchema, updateRetainerSchema, logRetainerHoursSchema, generateRetainerInvoiceSchema } from '../validators/schemas.js';
+import { validateBody, createRetainerSchema, updateRetainerSchema, logRetainerHoursSchema, generateRetainerInvoiceSchema, retainerGenerateInvoiceSchema } from '../validators/schemas.js';
 // Retainer plan routes — track hours & revision rounds per client
 import { generateInvoiceNumber } from '../utils/invoice.js';
 
@@ -216,7 +216,8 @@ export default async function retainerRoutes(fastify) {
 
   // POST /retainer/:clientId/generate-invoice — create a monthly retainer invoice
   fastify.post('/retainer/:clientId/generate-invoice', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(retainerGenerateInvoiceSchema),
   }, async (request, reply) => {
     if (request.user.role !== 'ADMIN') {
       return reply.status(403).send({ error: 'Admin access required' });

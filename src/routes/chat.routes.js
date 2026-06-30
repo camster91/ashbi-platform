@@ -1,5 +1,6 @@
 // Project Chat routes - Real-time team messaging
 
+import { validateBody, chatMessageCreateSchema, chatMessageUpdateSchema, chatReactionCreateSchema } from '../validators/schemas.js';
 
 export default async function chatRoutes(fastify) {
   // Get chat messages for a project (paginated)
@@ -46,7 +47,8 @@ export default async function chatRoutes(fastify) {
 
   // Send a chat message
   fastify.post('/projects/:projectId/messages', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(chatMessageCreateSchema),
   }, async (request, reply) => {
     const { projectId } = request.params;
     const { content, type = 'TEXT', metadata, parentId } = request.body;
@@ -128,7 +130,8 @@ export default async function chatRoutes(fastify) {
 
   // Edit a message
   fastify.put('/projects/:projectId/messages/:messageId', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(chatMessageUpdateSchema),
   }, async (request, reply) => {
     const { projectId, messageId } = request.params;
     const { content } = request.body;
@@ -193,7 +196,8 @@ export default async function chatRoutes(fastify) {
 
   // Add reaction to message
   fastify.post('/projects/:projectId/messages/:messageId/reactions', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(chatReactionCreateSchema),
   }, async (request, reply) => {
     const { projectId, messageId } = request.params;
     const { emoji } = request.body;

@@ -2,7 +2,7 @@
 // RAG-powered search across client memories
 // Migrated from ashbi-hub with Prisma and auth decorators
 
-import {
+import {import { validateBody, semanticSearchEmbedSchema} from '../validators/schemas.js';
   searchSimilar,
   storeEmbedding,
   rebuildClientBrain,
@@ -25,7 +25,8 @@ export default async function semanticSearchRoutes(fastify) {
 
   // Add an embedding manually
   fastify.post('/embed', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(semanticSearchEmbedSchema),
   }, async (request, reply) => {
     const { clientId, content, source, sourceId, metadata } = request.body;
 
@@ -48,7 +49,8 @@ export default async function semanticSearchRoutes(fastify) {
 
   // Delete embeddings for a specific source
   fastify.delete('/embeddings/:source/:sourceId', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(semanticSearchEmbedSchema),
   }, async (request) => {
     const { source, sourceId } = request.params;
     await deleteEmbeddings(source, sourceId);

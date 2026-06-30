@@ -1,11 +1,13 @@
 // Client Onboarding API routes
 
 import { onboardClient } from '../services/onboarding.service.js';
+import {validateBody, onboardingClientSchema} from '../validators/schemas.js';
 
 export default async function onboardingRoutes(fastify) {
   // POST /onboarding/client — create client with full onboarding setup
   fastify.post('/onboarding/client', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(onboardingClientSchema),
   }, async (request, reply) => {
     if (request.user.role !== 'BOT' && request.user.role !== 'ADMIN') {
       return reply.status(403).send({ error: 'Admin or Bot access required' });

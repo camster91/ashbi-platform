@@ -1,6 +1,7 @@
 // AI Team Routes — 7 specialized AI agents with chat interfaces
 
 import { getProvider } from '../ai/providers/index.js';
+import {validateBody, aiTeamMessageSchema} from '../validators/schemas.js';
 
 const AGENTS = [
   {
@@ -113,7 +114,9 @@ export default async function aiTeamRoutes(fastify) {
   });
 
   // POST /ai-team/chat — send message to an agent
-  fastify.post('/chat', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.post('/chat', { onRequest: [fastify.authenticate],
+    preHandler: validateBody(aiTeamMessageSchema),
+  }, async (request, reply) => {
     const { agentRole, message, clientId, projectId, history = [] } = request.body;
 
     const agent = AGENT_MAP[agentRole];

@@ -3,7 +3,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { validateBody } from '../validators/schemas.js';
+import {validateBody, gmailDraftReplySchema} from '../validators/schemas.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -193,7 +193,8 @@ export default async function gmailRoutes(fastify) {
    * Body: { hubThreadId }
    */
   fastify.post('/draft-reply', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(gmailDraftReplySchema),
   }, async (request, reply) => {
     const { hubThreadId } = request.body;
 

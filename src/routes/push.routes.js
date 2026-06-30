@@ -1,5 +1,6 @@
 // Push Notification Routes
 import { getVapidPublicKey, sendPushToAll } from '../utils/web-push.js';
+import {validateBody, pushSendSchema, pushSubscribeSchema, pushUnsubscribeSchema} from '../validators/schemas.js';
 
 export default async function pushRoutes(fastify) {
   // Get VAPID public key (no auth needed — frontend needs this to subscribe)
@@ -9,7 +10,8 @@ export default async function pushRoutes(fastify) {
 
   // Subscribe to push notifications
   fastify.post('/subscribe', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(pushSubscribeSchema),
   }, async (request, reply) => {
     const { endpoint, keys } = request.body || {};
 
@@ -46,7 +48,8 @@ export default async function pushRoutes(fastify) {
 
   // Unsubscribe
   fastify.post('/unsubscribe', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(pushUnsubscribeSchema),
   }, async (request, reply) => {
     const { endpoint } = request.body || {};
     if (!endpoint) {
@@ -62,7 +65,8 @@ export default async function pushRoutes(fastify) {
 
   // Send push to all (admin only) — for testing
   fastify.post('/send', {
-    onRequest: [fastify.adminOnly]
+    onRequest: [fastify.adminOnly],
+    preHandler: validateBody(pushSendSchema),
   }, async (request) => {
     const { title, body, url } = request.body || {};
     const sent = await sendPushToAll({

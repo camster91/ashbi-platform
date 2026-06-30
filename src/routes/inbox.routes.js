@@ -1,6 +1,7 @@
 // Inbox routes
 
 import { safeParse } from '../utils/safeParse.js';
+import {validateBody, inboxUnmatchedAssignSchema} from '../validators/schemas.js';
 
 export default async function inboxRoutes(fastify) {
   // Get inbox (all threads with filters)
@@ -98,7 +99,8 @@ export default async function inboxRoutes(fastify) {
 
   // Assign unmatched email to client/project
   fastify.post('/unmatched/:id/assign', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(inboxUnmatchedAssignSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { clientId, projectId, createNewClient } = request.body;

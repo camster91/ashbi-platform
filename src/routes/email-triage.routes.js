@@ -1,7 +1,7 @@
 // Email Triage Agent routes
 
 import aiClient from '../ai/client.js';
-import { validateBody } from '../validators/schemas.js';
+import {validateBody, emailTriageDraftUpdateSchema} from '../validators/schemas.js';
 
 export default async function emailTriageRoutes(fastify) {
   const { prisma } = fastify;
@@ -180,7 +180,8 @@ Option 1: Standard professional reply. Option 2: Shorter/friendlier alternative.
 
   // PUT /email-agent/update-draft/:draftId — edit a draft before approving
   fastify.put('/update-draft/:draftId', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(emailTriageDraftUpdateSchema),
   }, async (request, reply) => {
     const { draftId } = request.params;
     const { subject, body } = request.body || {};

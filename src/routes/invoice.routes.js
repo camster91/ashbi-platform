@@ -2,15 +2,7 @@
 import { createPaymentLink, handleWebhook } from '../services/stripe.service.js';
 import { generateInvoicePdf } from '../utils/generate-invoice-pdf.js';
 import { generateInvoiceNumber } from '../utils/invoice.js';
-import {
-  validateBody,
-  createInvoiceSchema,
-  updateInvoiceSchema,
-  markInvoicePaidSchema,
-  sendInvoiceSchema,
-  lineItemTemplateCreateSchema,
-  invoiceBulkIdsSchema,
-} from '../validators/schemas.js';
+import {validateBody, createInvoiceSchema, updateInvoiceSchema, markInvoicePaidSchema, sendInvoiceSchema, lineItemTemplateCreateSchema, invoiceBulkIdsSchema, invoiceBulkArchiveSchema} from '../validators/schemas.js';
 
 const HST_RATE = 13; // Ontario HST
 
@@ -657,7 +649,9 @@ export default async function invoiceRoutes(fastify) {
   });
 
   // ─── POST /bulk/archive — archive (void) multiple invoices ──────────────────
-  fastify.post('/bulk/archive', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.post('/bulk/archive', { onRequest: [fastify.authenticate],
+    preHandler: validateBody(invoiceBulkArchiveSchema),
+  }, async (request, reply) => {
     const { ids } = request.body;
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return reply.status(400).send({ error: 'ids array is required' });

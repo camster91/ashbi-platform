@@ -8,6 +8,10 @@ import {
   updateAsset,
   deleteAsset,
   searchAssets,
+  validateBody,
+  assetCreateSchema,
+  assetUpdateSchema,
+  assetGuidelineCreateSchema,
   getBrandSettings,
   updateBrandSettings
 } from '../services/assetLibrary.service.js';
@@ -32,7 +36,8 @@ export default async function assetLibraryRoutes(fastify) {
 
   // Create an asset
   fastify.post('/assets', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(assetCreateSchema),
   }, async (request, reply) => {
     const asset = await createAsset(request.body);
     return reply.status(201).send(asset);
@@ -40,7 +45,8 @@ export default async function assetLibraryRoutes(fastify) {
 
   // Update an asset
   fastify.patch('/assets/:id', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(assetUpdateSchema),
   }, async (request) => {
     return updateAsset(request.params.id, request.body);
   });
@@ -71,7 +77,8 @@ export default async function assetLibraryRoutes(fastify) {
 
   // Update brand settings
   fastify.post('/guidelines', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(assetGuidelineCreateSchema),
   }, async (request) => {
     return updateBrandSettings(request.body);
   });

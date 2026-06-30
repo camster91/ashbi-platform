@@ -5,6 +5,7 @@ import { processEmailPipeline } from '../services/pipeline.service.js';
 import { handleWebhook } from '../services/stripe.service.js';
 import env from '../config/env.js';
 import crypto from 'crypto';
+import {validateBody, webhookEmailTestSchema} from '../validators/schemas.js';
 
 export default async function webhookRoutes(fastify) {
   // Email webhook endpoint
@@ -50,7 +51,8 @@ export default async function webhookRoutes(fastify) {
 
   // Manual email submission (fo, { config: { skipValidation: true } }r testing)
   fastify.post('/email/test', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(webhookEmailTestSchema),
   }, async (request, reply) => {
     if (request.user.role !== 'ADMIN') {
       return reply.status(403).send({ error: 'Admin access required' });

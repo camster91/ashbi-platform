@@ -60,6 +60,7 @@ export default async function landingRoutes(fastify) {
   // PATCH /api/leads/landing/:id — update lead status
   fastify.patch('/leads/landing/:id', {
     onRequest: [fastify.authenticate],
+    preHandler: validateBody(landingLeadUpdateSchema),
   }, async (request, reply) => {
     if (request.user.role !== 'ADMIN') {
       return reply.status(403).send({ error: 'Admin access required' });

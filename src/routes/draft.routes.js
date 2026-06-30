@@ -18,7 +18,8 @@ function getDraftField(entity) {
 export default async function draftRoutes(fastify) {
   // Save draft
   fastify.put('/:entity/:id', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(draftUpsertSchema),
   }, async (request, reply) => {
     const { entity, id } = request.params;
     const { data } = request.body;
@@ -71,7 +72,8 @@ export default async function draftRoutes(fastify) {
 
   // Clear draft
   fastify.delete('/:entity/:id', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(draftUpsertSchema),
   }, async (request, reply) => {
     const { entity, id } = request.params;
 

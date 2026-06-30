@@ -1,8 +1,7 @@
 // Time Tracking routes
 // Migrated from ashbi-hub with auth decorators and service layer
 
-import {
-import { validateBody } from '../validators/schemas.js';
+import {import { validateBody, timeSessionStartNewSchema} from '../validators/schemas.js';
   startTimer,
   stopTimer,
   stopAllRunningTimers,
@@ -15,7 +14,8 @@ import { validateBody } from '../validators/schemas.js';
 export default async function timeTrackingRoutes(fastify) {
   // Start a timer
   fastify.post('/start', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(timeSessionStartNewSchema),
   }, async (request, reply) => {
     const { projectId, taskId, description } = request.body;
     const userId = request.user.id;

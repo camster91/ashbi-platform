@@ -1,7 +1,7 @@
 // Team management routes
 
 import bcrypt from 'bcrypt';
-import { validateBody } from '../validators/schemas.js';
+import { validateBody, teamInviteSchema, teamResetPasswordSchema } from '../validators/schemas.js';
 
 async function hashPassword(password) {
   return bcrypt.hash(password, 12);
@@ -44,7 +44,8 @@ export default async function teamRoutes(fastify) {
 
   // Create team member (admin only)
   fastify.post('/', {
-    onRequest: [fastify.adminOnly]
+    onRequest: [fastify.adminOnly],
+    preHandler: validateBody(teamInviteSchema),
   }, async (request, reply) => {
     const { email, password, name, role = 'TEAM', skills = [], capacity = 100 } = request.body;
 
@@ -215,7 +216,8 @@ export default async function teamRoutes(fastify) {
 
   // Reset password (admin only)
   fastify.post('/:id/reset-password', {
-    onRequest: [fastify.adminOnly]
+    onRequest: [fastify.adminOnly],
+    preHandler: validateBody(teamResetPasswordSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { newPassword } = request.body;

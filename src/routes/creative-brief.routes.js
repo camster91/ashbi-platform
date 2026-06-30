@@ -1,8 +1,7 @@
 // Creative Brief Generator routes
 // Migrated from ashbi-hub with auth decorators and Prisma service layer
 
-import {
-import { validateBody } from '../validators/schemas.js';
+import {import { validateBody, creativeBriefGenerateSchema} from '../validators/schemas.js';
   generateCreativeBrief,
   getBriefs,
   getBrief,
@@ -21,7 +20,8 @@ export default async function creativeBriefRoutes(fastify) {
 
   // Generate a creative brief using AI with RAG context
   fastify.post('/generate', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(creativeBriefGenerateSchema),
   }, async (request, reply) => {
     const { clientId, projectType, notes } = request.body;
     if (!clientId) return reply.status(400).send({ error: 'clientId is required' });

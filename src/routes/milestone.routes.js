@@ -1,5 +1,6 @@
 // Milestone routes
 
+import { validateBody, milestoneCreateSchema, milestoneUpdateSchema } from '../validators/schemas.js';
 
 export default async function milestoneRoutes(fastify) {
   // List milestones for a project
@@ -85,7 +86,8 @@ export default async function milestoneRoutes(fastify) {
 
   // Create milestone
   fastify.post('/projects/:projectId/milestones', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(milestoneCreateSchema),
   }, async (request, reply) => {
     const { projectId } = request.params;
     const { name, description, dueDate, color } = request.body;
@@ -149,7 +151,8 @@ export default async function milestoneRoutes(fastify) {
 
   // Update milestone
   fastify.put('/milestones/:id', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(milestoneUpdateSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { name, description, dueDate, status, color } = request.body;

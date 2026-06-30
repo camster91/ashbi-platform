@@ -1,5 +1,6 @@
 // Calendar & Meeting routes
 
+import { validateBody, calendarEventCreateSchema, calendarEventUpdateSchema } from '../validators/schemas.js';
 
 export default async function calendarRoutes(fastify) {
   // Get calendar events
@@ -115,7 +116,8 @@ export default async function calendarRoutes(fastify) {
 
   // Create event / meeting
   fastify.post('/calendar', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(calendarEventCreateSchema),
   }, async (request, reply) => {
     const {
       title,
@@ -202,7 +204,8 @@ export default async function calendarRoutes(fastify) {
 
   // Update event
   fastify.put('/calendar/:id', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(calendarEventUpdateSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const {
@@ -313,7 +316,8 @@ export default async function calendarRoutes(fastify) {
 
   // RSVP to event
   fastify.post('/calendar/:id/rsvp', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(calendarRsvpSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { status } = request.body; // ACCEPTED, DECLINED, TENTATIVE

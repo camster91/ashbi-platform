@@ -1,5 +1,6 @@
 // Task Comment routes with @mentions
 
+import { validateBody, commentCreateSchema } from '../validators/schemas.js';
 
 export default async function commentRoutes(fastify) {
   // Get comments for a task
@@ -24,7 +25,8 @@ export default async function commentRoutes(fastify) {
 
   // Add comment to task
   fastify.post('/tasks/:taskId/comments', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(commentCreateSchema),
   }, async (request, reply) => {
     const { taskId } = request.params;
     const { content } = request.body;
@@ -141,7 +143,8 @@ export default async function commentRoutes(fastify) {
 
   // Update comment
   fastify.put('/comments/:id', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(commentCreateSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { content } = request.body;

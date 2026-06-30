@@ -1322,3 +1322,256 @@ export const assignmentRuleBulkSchema = z.object({
     isActive: z.boolean().default(true),
   })).min(1).max(50),
 });
+
+// ── Final batch (43 endpoints) ────────────────────────────────────────────
+export const assetCreateSchema = z.object({
+  name: z.string().min(1).max(200),
+  url: z.string().url().max(2048),
+  type: z.enum(['IMAGE', 'VIDEO', 'DOCUMENT', 'FONT', 'COLOR', 'OTHER']).default('IMAGE'),
+  tags: z.array(z.string().max(50)).max(50).optional(),
+  // Loose metadata — client-specific fields like dimensions, color tokens
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const assetUpdateSchema = assetCreateSchema.partial();
+
+export const assetGuidelineCreateSchema = z.object({
+  title: z.string().min(1).max(200),
+  body: z.string().min(1).max(50_000),
+  category: z.string().max(100).optional(),
+});
+
+export const chatReactionCreateSchema = z.object({
+  emoji: z.string().min(1).max(20),
+});
+
+export const contractDraftUpdateSchema = z.object({
+  draftData: z.string().max(50_000),
+  status: z.enum(['DRAFT', 'PENDING_SIGNATURE']).optional(),
+});
+
+export const creativeBriefGenerateSchema = z.object({
+  clientId: cuidId.optional(),
+  brief: z.string().min(1).max(20_000),
+  // Output style
+  tone: z.enum(['professional', 'friendly', 'concise']).default('professional'),
+});
+
+export const credentialCreateSchema = credentialSchema; // alias for routes that import a different name
+
+export const draftUpsertSchema = z.object({
+  data: z.string().min(1).max(100_000),
+});
+
+export const emailTriageDraftUpdateSchema = z.object({
+  subject: z.string().max(500).optional(),
+  body: z.string().min(1).max(50_000),
+});
+
+export const gmailDraftReplySchema = z.object({
+  // Body text for the reply draft — bodyText takes a single string
+  body: z.string().min(1).max(50_000),
+  threadId: cuidId.optional(),
+});
+
+export const inboxUnmatchedAssignSchema = z.object({
+  clientId: cuidId.optional(),
+  // If creating a brand-new client for the unmatched email
+  createNewClient: z.boolean().optional(),
+});
+
+export const invoiceBulkArchiveSchema = z.object({
+  ids: z.array(cuidId).min(1).max(100),
+});
+
+export const landingLeadUpdateSchema = z.object({
+  status: z.enum(['NEW', 'CONTACTED', 'QUALIFIED', 'CONVERTED', 'ARCHIVED']).optional(),
+  notes: z.string().max(10_000).optional(),
+});
+
+export const mailgunSendSchema = z.object({
+  to: z.string().email().max(255),
+  subject: z.string().min(1).max(500),
+  text: z.string().min(1).max(100_000),
+  html: z.string().max(500_000).optional(),
+  // Optional Mailgun domain override
+  domain: z.string().max(255).optional(),
+});
+
+export const messagePasteSchema = z.object({
+  bodyText: z.string().min(1).max(100_000),
+  bodyHtml: z.string().max(500_000).optional(),
+  subject: z.string().max(500).optional(),
+  senderEmail: z.string().email().max(255),
+  senderName: z.string().min(1).max(200),
+});
+
+export const milestoneCreateSchema = z.object({
+  name: z.string().min(1).max(200),
+  description: z.string().max(2_000).optional(),
+  dueDate: z.string().datetime().optional(),
+  color: z.string().max(20).optional(),
+});
+
+export const milestoneUpdateSchema = milestoneCreateSchema.extend({
+  status: z.enum(['PLANNED', 'IN_PROGRESS', 'COMPLETED', 'BLOCKED']).optional(),
+});
+
+export const noteProjectCreateSchema = z.object({
+  title: z.string().min(1).max(200).optional(),
+  content: z.string().min(1).max(50_000),
+  type: z.enum(['NOTE', 'REMINDER', 'TASK', 'IDEA']).default('NOTE'),
+  tags: z.array(z.string().max(50)).max(20).optional(),
+  isPinned: z.boolean().default(false),
+});
+
+export const noteUpdateV2Schema = z.object({
+  title: z.string().min(1).max(200).optional(),
+  content: z.string().min(1).max(50_000).optional(),
+  type: z.enum(['NOTE', 'REMINDER', 'TASK', 'IDEA']).optional(),
+  tags: z.array(z.string().max(50)).max(20).optional(),
+  isPinned: z.boolean().optional(),
+});
+
+export const onboardingClientSchema = z.object({
+  name: z.string().min(1).max(200),
+  email: z.string().email().max(255),
+  company: z.string().max(200).optional(),
+  projectType: z.string().max(100).optional(),
+  budget: z.number().positive().max(10_000_000).optional(),
+  timeline: z.string().max(200).optional(),
+  notes: z.string().max(10_000).optional(),
+});
+
+export const pushSubscribeSchema = z.object({
+  endpoint: z.string().url().max(2048),
+  keys: z.object({
+    p256dh: z.string().min(1).max(500),
+    auth: z.string().min(1).max(100),
+  }),
+});
+
+export const pushUnsubscribeSchema = z.object({
+  endpoint: z.string().url().max(2048),
+});
+
+export const pushSendSchema = z.object({
+  // Send to specific user(s), or broadcast
+  userId: cuidId.optional(),
+  // If omitted, broadcast to all subscribers
+  broadcast: z.boolean().optional(),
+  payload: z.object({
+    title: z.string().min(1).max(200),
+    body: z.string().min(1).max(5_000),
+    icon: z.string().url().max(2048).optional(),
+    url: z.string().url().max(2048).optional(),
+  }),
+});
+
+export const rateCardSchema = z.object({
+  name: z.string().min(1).max(200),
+  description: z.string().max(2_000).optional(),
+  // Hourly rate
+  hourlyRate: z.number().nonnegative().max(10_000).optional(),
+  // Project-flat rate
+  flatRate: z.number().nonnegative().max(10_000_000).optional(),
+  // Categories this rate card applies to
+  categories: z.array(z.string().max(100)).max(50).optional(),
+  isActive: z.boolean().default(true),
+  // Actual RateCard model fields (clientId, rates, isDefault)
+  clientId: cuidId.optional(),
+  // rates is a JSON array of {serviceName, unit, rate, description}
+  rates: z.array(z.object({
+    serviceName: z.string().min(1).max(200),
+    unit: z.string().min(1).max(20).default('hr'),
+    rate: z.number().nonnegative().max(10_000_000),
+    description: z.string().max(500).optional(),
+  })).max(100).default([]),
+  isDefault: z.boolean().default(false),
+});
+
+export const revisionCreateNewSchema = z.object({
+  notes: z.string().min(1).max(5_000),
+});
+
+export const revisionUpdateStatusSchema = z.object({
+  status: z.enum(['PENDING', 'IN_REVIEW', 'APPROVED', 'REJECTED']),
+  notes: z.string().max(5_000).optional(),
+});
+
+export const semanticSearchEmbedSchema = z.object({
+  clientId: cuidId,
+  content: z.string().min(1).max(50_000),
+  source: z.string().min(1).max(100),
+  sourceId: cuidId.optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const teamCreateSchema = teamInviteSchema; // alias
+
+export const teamResetPasswordSchema = z.object({
+  newPassword: password,
+});
+
+export const taskTemplateCreateSchema = z.object({
+  name: z.string().min(1).max(200),
+  phase: z.string().min(1).max(100).optional(),
+  // JSON array of task definitions
+  tasks: z.array(z.object({
+    title: z.string().min(1).max(500),
+    description: z.string().max(5_000).optional(),
+    estimatedTime: z.number().int().positive().max(1000).optional(),
+    priority: z.enum(['LOW', 'NORMAL', 'HIGH', 'CRITICAL']).default('NORMAL'),
+  })).min(1).max(100),
+});
+
+export const timeSessionStartNewSchema = z.object({
+  projectId: cuidId,
+  taskId: cuidId.optional(),
+  description: z.string().max(2_000).optional(),
+  billable: z.boolean().default(true),
+});
+
+export const timeEntryCreateNewSchema = timeEntryCreateSchema; // alias
+
+export const timeEntryUpdateNewSchema = timeEntryUpdateSchema; // alias
+
+export const webhookEmailTestSchema = z.object({
+  to: z.string().email().max(255),
+  subject: z.string().min(1).max(500).default('Test email from Hub'),
+  body: z.string().min(1).max(50_000).default('This is a test email sent from the Hub webhook test endpoint.'),
+});
+
+// ── Final 8 endpoints (mixed shapes) ───────────────────────────────────────
+export const calendarEventCreateSchema = z.object({
+  title: z.string().min(1).max(200),
+  description: z.string().max(10_000).optional(),
+  startTime: z.string().datetime(),
+  endTime: z.string().datetime(),
+  type: z.enum(['MEETING', 'TASK', 'REMINDER', 'BLOCKED_TIME', 'OTHER']).default('MEETING'),
+  location: z.string().max(500).optional(),
+  isAllDay: z.boolean().default(false),
+  color: z.string().max(20).optional(),
+  // Optional linking
+  projectId: cuidId.optional(),
+  clientId: cuidId.optional(),
+});
+
+export const calendarEventUpdateSchema = calendarEventCreateSchema.partial();
+
+export const credentialUpsertSchema = z.object({
+  label: z.string().min(1).max(200),
+  username: z.string().min(1).max(200).optional(),
+  password: z.string().min(1).max(1000),
+  url: z.string().url().max(2048).optional(),
+  notes: z.string().max(5_000).optional(),
+  category: z.string().min(1).max(50).optional(),
+  clientId: cuidId.optional(),
+  projectId: cuidId.optional(),
+});
+
+export const retainerGenerateInvoiceSchema = z.object({
+  currency: z.enum(['USD', 'CAD', 'EUR', 'GBP']).default('USD'),
+  daysUntilDue: z.number().int().positive().max(180).default(30),
+  resetHours: z.boolean().default(false),
+});

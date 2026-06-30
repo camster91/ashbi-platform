@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import PDFDocument from 'pdfkit';
 import { sendContractSignEmail } from '../services/email.service.js';
 import { getContractTemplate, renderTemplate } from '../services/contractTemplates.service.js';
-import { validateBody, createContractSchema, updateContractDraftSchema } from '../validators/schemas.js';
+import {validateBody, createContractSchema, updateContractDraftSchema, contractDraftUpdateSchema} from '../validators/schemas.js';
 
 async function sendContractEmail(to, clientName, contractTitle, signUrl) {
   if (!process.env.MAILGUN_API_KEY || !process.env.MAILGUN_DOMAIN) return;
@@ -301,7 +301,8 @@ export default async function contractRoutes(fastify) {
 
   // ─── PATCH /:id/draft — autosave draft data ───────
   fastify.patch('/:id/draft', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(contractDraftUpdateSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { draftData } = request.body;

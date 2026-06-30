@@ -1,5 +1,6 @@
 // Revision round tracking routes
 
+import { validateBody, revisionCreateNewSchema, revisionUpdateStatusSchema } from '../validators/schemas.js';
 
 export default async function revisionRoutes(fastify) {
   // List revision rounds for a project
@@ -18,7 +19,8 @@ export default async function revisionRoutes(fastify) {
 
   // Create a new revision round
   fastify.post('/projects/:projectId/revisions', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(revisionCreateNewSchema),
   }, async (request, reply) => {
     const { projectId } = request.params;
     const { notes } = request.body || {};
@@ -44,7 +46,8 @@ export default async function revisionRoutes(fastify) {
 
   // Update a revision round
   fastify.put('/revisions/:id', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(revisionUpdateStatusSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { status, notes } = request.body;

@@ -1,7 +1,7 @@
 // Task Template routes
 
 import { safeParse } from '../utils/safeParse.js';
-import { validateBody } from '../validators/schemas.js';
+import { validateBody, taskTemplateCreateSchema } from '../validators/schemas.js';
 
 export default async function templateRoutes(fastify) {
   // List all templates
@@ -20,7 +20,8 @@ export default async function templateRoutes(fastify) {
 
   // Create template
   fastify.post('/', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(taskTemplateCreateSchema),
   }, async (request, reply) => {
     const { name, phase, tasks } = request.body;
 

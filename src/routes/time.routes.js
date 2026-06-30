@@ -1,5 +1,6 @@
 // Time Tracking routes
 
+import { validateBody, timeEntryCreateNewSchema, timeEntryUpdateNewSchema } from '../validators/schemas.js';
 
 export default async function timeRoutes(fastify) {
   // Get time entries for a project
@@ -123,7 +124,8 @@ export default async function timeRoutes(fastify) {
 
   // Create time entry
   fastify.post('/time-entries', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(timeEntryCreateNewSchema),
   }, async (request, reply) => {
     const { projectId, taskId, duration, description, date, billable = true } = request.body;
 
@@ -171,7 +173,8 @@ export default async function timeRoutes(fastify) {
 
   // Update time entry
   fastify.put('/time-entries/:id', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(timeEntryUpdateNewSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { duration, description, date, billable, taskId } = request.body;
