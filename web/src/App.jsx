@@ -51,7 +51,6 @@ const AiContextSettings = lazy(() => import('./pages/AiContextSettings'));
 const CommandCenter = lazy(() => import('./pages/CommandCenter'));
 const Docs = lazy(() => import('./pages/Docs'));
 // Project Tools
-const GanttView = lazy(() => import('./pages/GanttView'));
 const ProjectPlanner = lazy(() => import('./pages/ProjectPlanner'));
 const ProjectTemplates = lazy(() => import('./pages/ProjectTemplates'));
 const Automations = lazy(() => import('./pages/Automations'));
@@ -71,10 +70,8 @@ const Schedule = lazy(() => import('./pages/Schedule'));
 const Timesheets = lazy(() => import('./pages/Timesheets'));
 const RateCards = lazy(() => import('./pages/RateCards'));
 // Agent Pages (client acquisition pipeline)
-const ClientAcquisition = lazy(() => import('./pages/ClientAcquisition'));
 
 // Cold Email
-const EmailCampaigns = lazy(() => import('./pages/EmailCampaigns'));
 // Side-nav targets that previously had no route (UX audit finding)
 const Trash = lazy(() => import('./pages/Trash'));
 
@@ -147,8 +144,7 @@ function AppRoutes() {
                   <Route path="/invoices/:id" element={<InvoiceDetail />} />
                   <Route path="/expenses" element={<Expenses />} />
                   <Route path="/pipeline" element={<Pipeline />} />
-                  <Route path="/client-acquisition" element={<ClientAcquisition />} />
-                                                      <Route path="/estimates" element={<Estimates />} />
+                                                                        <Route path="/estimates" element={<Estimates />} />
                   <Route path="/schedule" element={<Schedule />} />
                   <Route path="/timesheets" element={<Timesheets />} />
                   <Route path="/rate-cards" element={<AdminRoute><RateCards /></AdminRoute>} />
@@ -165,13 +161,11 @@ function AppRoutes() {
                   <Route path="/docs" element={<Docs />} />
                   <Route path="/project-planner" element={<ProjectPlanner />} />
                   <Route path="/project-templates" element={<ProjectTemplates />} />
-                  <Route path="/gantt" element={<GanttView />} />
-                                    <Route path="/retainers" element={<AdminRoute><Retainers /></AdminRoute>} />
+                                                      <Route path="/retainers" element={<AdminRoute><Retainers /></AdminRoute>} />
                   <Route path="/invoice-chaser" element={<AdminRoute><InvoiceChaser /></AdminRoute>} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/revenue" element={<AdminRoute><Revenue /></AdminRoute>} />
-                                    <Route path="/email-campaigns" element={<AdminRoute><EmailCampaigns /></AdminRoute>} />
-                                                      <Route path="/notifications" element={<Notifications />} />
+                                                                                          <Route path="/notifications" element={<Notifications />} />
                   {/* Advanced Features */}
                   <Route path="/assets" element={<AssetLibrary />} />
                   <Route path="/wp-sites" element={<WPSites />} />

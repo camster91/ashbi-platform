@@ -59,7 +59,6 @@ import invoiceRoutes from './routes/invoice.routes.js';
 import invoiceChaserRoutes from './routes/invoice-chaser.routes.js';
 import aiContextRoutes from './routes/ai-context.routes.js';
 import gmailRoutes from './routes/gmail.routes.js';
-import integrationsGithubRoutes from './routes/integrations.github.routes.js';
 import integrationsVpsRoutes from './routes/integrations.vps.routes.js';
 import integrationsHostingerRoutes from './routes/integrations.hostinger.routes.js';
 import pushRoutes from './routes/push.routes.js';
@@ -83,7 +82,6 @@ import estimateRoutes from './routes/estimate.routes.js';
 import rateCardRoutes from './routes/rate-card.routes.js';
 import integrationRoutes from './routes/integration.routes.js';
 import proposalBuilderRoutes from './routes/proposal-builder.routes.js';
-import clientAcquisitionRoutes from './routes/client-acquisition.routes.js';
 import trashRoutes from './routes/trash.routes.js';
 import draftRoutes from './routes/draft.routes.js';
 
@@ -218,9 +216,6 @@ await fastify.register(automationRoutes, { prefix: '/api/automations' });
 await fastify.register(expenseRoutes, { prefix: '/api/expenses' });
 await fastify.register(commandCenterRoutes, { prefix: '/api/command-center' });
 await fastify.register(pushRoutes, { prefix: '/api/push' });
-await fastify.register(integrationsVpsRoutes, { prefix: '/api/integrations/vps' });
-await fastify.register(integrationsHostingerRoutes, { prefix: '/api/integrations/hostinger' });
-await fastify.register(integrationsGithubRoutes, { prefix: '/api/integrations/github' });
   await fastify.register(trashRoutes, { prefix: '/api/trash' });
   await fastify.register(draftRoutes, { prefix: '/api/draft' });
 await fastify.register(aiContextRoutes, { prefix: '/api/ai-context' });
@@ -257,7 +252,6 @@ await fastify.register(threadRoutes, { prefix: '/api/threads' });
 await fastify.register(webhookRoutes, { prefix: '/api/webhooks' });
 await fastify.register(clientPortalRoutes, { prefix: '/api/client-portal' });
 await fastify.register(gmailRoutes, { prefix: '/api/gmail' });
-await fastify.register(clientAcquisitionRoutes, { prefix: '/api/client-acquisition' });
 // ... (all other routes would be registered here in a production app, condensed for space)
 
 // Hub-Hermes bridge initialization
