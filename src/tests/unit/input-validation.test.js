@@ -322,32 +322,23 @@ describe('Route File Validation Coverage', () => {
     }
 
     if (routesWithoutValidation.length > 0) {
-      // TODO(phase-5-followup): 98 mutation endpoints lack Zod validation.
-      // These are real input-validation gaps that need `validateBody` +
-      // schemas from `src/validators/schemas.js` added to each endpoint.
-      // The full sweep was started but is too large for one commit — it
-      // requires defining per-endpoint Zod schemas for every CRUD mutation
-      // across the route surface. Logging as warnings so we have visibility
-      // without blocking the rest of CI; track progress in the test
-      // summary below.
+      // Phase 5 sweep landed — every mutation endpoint is now either:
+      //   - validated with validateBody(SCHEMA)
+      //   - explicitly opted out via config: { skipValidation: true }
+      //   - explicitly public via config: { public: true }
+      //   - URL-param-only (no request.body access)
+      // Fail loud if this list is non-empty — re-enable strict assertion.
       const totalEndpoints = routesWithoutValidation.reduce((sum, r) => sum + r.mutations, 0);
       const message = routesWithoutValidation
         .map(r => `  ${r.route}: ${r.mutations} mutation endpoints without validation`)
         .join('\n');
-      console.warn(
-        `\n⚠️  ${routesWithoutValidation.length} routes have ${totalEndpoints} ` +
-        `mutation endpoints without Zod validation:\n${message}\n` +
-        `These need validateBody preHandler + Zod schemas. Phase 5 followup.\n`
+      assert.fail(
+        `Found ${routesWithoutValidation.length} routes with ${totalEndpoints} ` +
+        `mutation endpoints lacking validation:\n${message}\n` +
+        `\nFix: add 'preHandler: validateBody(SCHEMA)' or one of:\n` +
+        `     config: { skipValidation: true }   — for webhook-style endpoints\n` +
+        `     config: { public: true }            — for public signed-link endpoints`
       );
-
-      // Surface as a soft assert so the count is visible in test output but
-      // does not block green builds. Re-enable strict assertion once the
-      // sweep is complete.
-      assert.ok(
-        true,
-        `input-validation coverage: ${totalEndpoints} unvalidated endpoints across ${routesWithoutValidation.length} routes (warnings only — Phase 5 followup)`
-      );
-      return;
     }
 
     assert.equal(routesWithoutValidation.length, 0, 'All mutation routes must have Zod input validation');
