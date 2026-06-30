@@ -141,15 +141,6 @@ export default function Layout({ children }) {
     { name: 'Invoices', href: '/invoices', icon: Receipt },
   ];
   
-  // Client Growth — collapsible section for acquisition pipeline
-  const growthNav = [
-    { name: 'Client Acquisition', href: '/client-acquisition', icon: Target, badge: stats?.activeOutreach },
-    { name: 'Lead Intelligence', href: '/lead-intelligence', icon: Search },
-    { name: 'Cold Email', href: '/cold-email', icon: Mail, soon: isComingSoon('cold-email') },
-    { name: 'LinkedIn', href: '/linkedin', icon: Linkedin },
-    { name: 'Outreach', href: '/outreach', icon: Send, soon: isComingSoon('outreach-scheduler') },
-    { name: 'Referral Network', href: '/referral-network', icon: Share2 },
-  ];
 
   // Finance & Docs — collapsible section
   const financeNav = [
@@ -159,7 +150,6 @@ export default function Layout({ children }) {
     { name: 'Contracts', href: '/contracts', icon: ScrollText },
     { name: 'Expenses', href: '/expenses', icon: Wallet },
     { name: 'Schedule', href: '/schedule', icon: Calendar },
-    { name: 'Upwork', href: '/upwork-contracts', icon: Briefcase, soon: isComingSoon('upwork') },
   ];
 
   // Admin — collapsible section, only visible to admins
@@ -350,7 +340,6 @@ export default function Layout({ children }) {
             </div>
 
             <div className="border-t border-white/10 pt-2 space-y-1">
-              {renderCollapsibleSection('growth', 'Client Growth', growthNav)}
               {renderCollapsibleSection('finance', 'Finance & Docs', financeNav)}
               {adminNav.length > 0 && renderCollapsibleSection('admin', 'Admin', adminNav)}
             </div>

@@ -45,8 +45,6 @@ const Invoices = lazy(() => import('./pages/Invoices'));
 const InvoiceDetail = lazy(() => import('./pages/InvoiceDetail'));
 const Expenses = lazy(() => import('./pages/Expenses'));
 const Pipeline = lazy(() => import('./pages/Pipeline'));
-const UpworkContracts = lazy(() => import('./pages/UpworkContracts'));
-const UpworkJobs = lazy(() => import('./pages/UpworkJobs'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Credentials = lazy(() => import('./pages/Credentials'));
 const Chat = lazy(() => import('./pages/Chat'));
@@ -82,15 +80,10 @@ const RateCards = lazy(() => import('./pages/RateCards'));
 const Bookkeeping = lazy(() => import('./pages/Bookkeeping'));
 // Agent Pages (client acquisition pipeline)
 const ClientAcquisition = lazy(() => import('./pages/ClientAcquisition'));
-const LeadIntelligence = lazy(() => import('./pages/LeadIntelligence'));
-const ReferralNetwork = lazy(() => import('./pages/ReferralNetwork'));
 
 // Cold Email
 const EmailCampaigns = lazy(() => import('./pages/EmailCampaigns'));
-const ColdEmail = lazy(() => import('./pages/ColdEmail'));
-const LinkedInAgent = lazy(() => import('./pages/LinkedInAgent'));
 // Side-nav targets that previously had no route (UX audit finding)
-const Outreach = lazy(() => import('./pages/Outreach'));
 const Trash = lazy(() => import('./pages/Trash'));
 
 function PageLoader() {
@@ -164,24 +157,19 @@ function AppRoutes() {
                   <Route path="/expenses" element={<Expenses />} />
                   <Route path="/pipeline" element={<Pipeline />} />
                   <Route path="/client-acquisition" element={<ClientAcquisition />} />
-                  <Route path="/lead-intelligence" element={<LeadIntelligence />} />
-                  <Route path="/referral-network" element={<ReferralNetwork />} />
-                  <Route path="/estimates" element={<Estimates />} />
+                                                      <Route path="/estimates" element={<Estimates />} />
                   <Route path="/schedule" element={<Schedule />} />
                   <Route path="/timesheets" element={<Timesheets />} />
                   <Route path="/rate-cards" element={<AdminRoute><RateCards /></AdminRoute>} />
                   <Route path="/bookkeeping" element={<AdminRoute><Bookkeeping /></AdminRoute>} />
-                  <Route path="/upwork-contracts" element={<UpworkContracts />} />
-                  <Route path="/upwork" element={<UpworkJobs />} />
-                  <Route path="/credentials" element={<AdminRoute><Credentials /></AdminRoute>} />
+                                                      <Route path="/credentials" element={<AdminRoute><Credentials /></AdminRoute>} />
                   <Route path="/chat" element={<Chat />} />
                   <Route path="/admin/settings/ai-context" element={<AdminRoute><AiContextSettings /></AdminRoute>} />
                   <Route path="/admin/command-center" element={<AdminRoute><CommandCenter /></AdminRoute>} />
                   <Route path="/admin/brand" element={<AdminRoute><BrandSettings /></AdminRoute>} />
                   <Route path="/admin/reports" element={<AdminRoute><Reports /></AdminRoute>} />
                   <Route path="/reports" element={<AdminRoute><Reports /></AdminRoute>} />
-                  <Route path="/outreach" element={<AdminRoute><Outreach /></AdminRoute>} />
-                  <Route path="/trash" element={<AdminRoute><Trash /></AdminRoute>} />
+                                    <Route path="/trash" element={<AdminRoute><Trash /></AdminRoute>} />
                   <Route path="/activity" element={<ActivityFeed />} />
                   <Route path="/automations" element={<AdminRoute><Automations /></AdminRoute>} />
                   <Route path="/docs" element={<Docs />} />
@@ -195,9 +183,7 @@ function AppRoutes() {
                   <Route path="/revenue" element={<AdminRoute><Revenue /></AdminRoute>} />
                   <Route path="/client-health" element={<AdminRoute><ClientHealth /></AdminRoute>} />
                   <Route path="/email-campaigns" element={<AdminRoute><EmailCampaigns /></AdminRoute>} />
-                  <Route path="/cold-email" element={<ColdEmail />} />
-                  <Route path="/linkedin" element={<LinkedInAgent />} />
-                  <Route path="/notifications" element={<Notifications />} />
+                                                      <Route path="/notifications" element={<Notifications />} />
                   {/* Advanced Features */}
                   <Route path="/assets" element={<AssetLibrary />} />
                   <Route path="/wp-sites" element={<WPSites />} />
