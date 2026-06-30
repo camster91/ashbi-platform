@@ -1,5 +1,6 @@
 // AI Context settings routes
 
+import { validateBody, aiContextUpsertSchema } from '../validators/schemas.js';
 
 export default async function aiContextRoutes(fastify) {
   // Get all AI context key/value pairs
@@ -14,7 +15,8 @@ export default async function aiContextRoutes(fastify) {
 
   // Update or create a key/value pair
   fastify.post('/', {
-    onRequest: [fastify.adminOnly]
+    onRequest: [fastify.adminOnly],
+    preHandler: validateBody(aiContextUpsertSchema),
   }, async (request, reply) => {
     const { key, value } = request.body;
 

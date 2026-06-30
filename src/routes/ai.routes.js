@@ -3,11 +3,25 @@
 import aiClient from '../ai/client.js';
 import { buildDraftResponsePrompt } from '../ai/prompts/draftResponse.js';
 import { buildAnalyzeMessagePrompt } from '../ai/prompts/analyzeMessage.js';
+import {
+  validateBody,
+  aiDraftResponseSchema,
+  aiRefineResponseSchema,
+  aiAskSchema,
+  aiDraftUpdateSchema,
+  aiChatSchema,
+  aiGenerateProposalSchema,
+  aiClientHealthSchema,
+  aiTriageInboxSchema,
+  aiSummarizeProjectSchema,
+  aiQuerySchema,
+} from '../validators/schemas.js';
 
 export default async function aiRoutes(fastify) {
   // Generate response drafts for a thread
   fastify.post('/draft-response', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(aiDraftResponseSchema),
   }, async (request, reply) => {
     const { threadId } = request.body;
 
@@ -81,7 +95,8 @@ export default async function aiRoutes(fastify) {
 
   // Refine an existing response with AI
   fastify.post('/refine-response', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(aiRefineResponseSchema),
   }, async (request, reply) => {
     const { responseId, instruction } = request.body;
 
@@ -151,7 +166,8 @@ Respond with JSON:
 
   // Ask AI a question about a thread/project
   fastify.post('/ask', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(aiAskSchema),
   }, async (request, reply) => {
     const { question, threadId, projectId, clientId } = request.body;
 
@@ -238,7 +254,8 @@ Provide a helpful, concise answer.`;
 
   // Draft a polished client-facing status update email
   fastify.post('/draft-update', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(aiDraftUpdateSchema),
   }, async (request, reply) => {
     const { projectId, rawNotes, includeRevisionStatus = false } = request.body;
 
@@ -310,7 +327,8 @@ Respond with JSON:
 
   // ==================== AI CHAT ====================
   fastify.post('/chat', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(aiChatSchema),
   }, async (request, reply) => {
     const { message, context } = request.body;
 
@@ -417,7 +435,8 @@ ${context ? `Additional context from user: ${context}` : ''}`;
 
   // ==================== PROPOSAL GENERATOR ====================
   fastify.post('/generate-proposal', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(aiGenerateProposalSchema),
   }, async (request, reply) => {
     const { clientName, projectType, budgetRange, notes } = request.body;
 
@@ -464,7 +483,8 @@ Format the proposal as clean, professional text ready to be sent to a client. Do
 
   // ==================== CLIENT HEALTH ====================
   fastify.post('/client-health', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(aiClientHealthSchema),
   }, async (request, reply) => {
     const clients = await request.prisma.client.findMany({
       where: { status: 'ACTIVE' },
@@ -550,7 +570,8 @@ Format the proposal as clean, professional text ready to be sent to a client. Do
 
   // ==================== INBOX TRIAGE ====================
   fastify.post('/triage-inbox', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(aiTriageInboxSchema),
   }, async (request, reply) => {
     const threads = await request.prisma.thread.findMany({
       where: { status: 'OPEN' },
@@ -632,7 +653,8 @@ Respond with JSON:
 
   // Generate project summary
   fastify.post('/summarize-project', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(aiSummarizeProjectSchema),
   }, async (request, reply) => {
     const { projectId } = request.body;
 
@@ -700,7 +722,8 @@ Provide a 2-3 sentence summary of the project's current state.`;
 
   // ==================== NATURAL LANGUAGE QUERY ====================
   fastify.post('/query', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(aiQuerySchema),
   }, async (request, reply) => {
     const { query } = request.body;
 

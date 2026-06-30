@@ -1,6 +1,15 @@
 // Settings routes (assignment rules, templates, configuration)
 
 import { safeParse } from '../utils/safeParse.js';
+import {
+  validateBody,
+  assignmentRuleCreateSchema,
+  assignmentRuleUpdateSchema,
+  templateCreateSchema,
+  templateUpdateSchema,
+  templateRenderSchema,
+  aiProviderSwitchSchema,
+} from '../validators/schemas.js';
 
 export default async function settingsRoutes(fastify) {
   // ==================== ASSIGNMENT RULES ====================
@@ -24,7 +33,8 @@ export default async function settingsRoutes(fastify) {
 
   // Create assignment rule
   fastify.post('/assignment-rules', {
-    onRequest: [fastify.adminOnly]
+    onRequest: [fastify.adminOnly],
+    preHandler: validateBody(assignmentRuleCreateSchema),
   }, async (request, reply) => {
     const { name, type, conditions, assignToId, priority = 0, isActive = true } = request.body;
 
@@ -47,7 +57,8 @@ export default async function settingsRoutes(fastify) {
 
   // Update assignment rule
   fastify.put('/assignment-rules/:id', {
-    onRequest: [fastify.adminOnly]
+    onRequest: [fastify.adminOnly],
+    preHandler: validateBody(assignmentRuleUpdateSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { name, type, conditions, assignToId, priority, isActive } = request.body;
@@ -132,7 +143,8 @@ export default async function settingsRoutes(fastify) {
 
   // Create template
   fastify.post('/templates', {
-    onRequest: [fastify.adminOnly]
+    onRequest: [fastify.adminOnly],
+    preHandler: validateBody(templateCreateSchema),
   }, async (request, reply) => {
     const { name, category, subject, body, variables = [], isActive = true } = request.body;
 
@@ -155,7 +167,8 @@ export default async function settingsRoutes(fastify) {
 
   // Update template
   fastify.put('/templates/:id', {
-    onRequest: [fastify.adminOnly]
+    onRequest: [fastify.adminOnly],
+    preHandler: validateBody(templateUpdateSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { name, category, subject, body, variables, isActive } = request.body;
@@ -194,7 +207,8 @@ export default async function settingsRoutes(fastify) {
 
   // Render template with variables
   fastify.post('/templates/:id/render', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(templateRenderSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { variables = {} } = request.body;
@@ -257,7 +271,8 @@ export default async function settingsRoutes(fastify) {
 
   // Switch AI provider at runtime (admin only)
   fastify.post('/ai-provider', {
-    onRequest: [fastify.adminOnly]
+    onRequest: [fastify.adminOnly],
+    preHandler: validateBody(aiProviderSwitchSchema),
   }, async (request, reply) => {
     const { provider, model } = request.body;
     if (!provider || !['claude', 'gemini', 'ollama'].includes(provider)) {
