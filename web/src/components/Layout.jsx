@@ -155,11 +155,8 @@ export default function Layout({ children }) {
   // Admin — collapsible section, only visible to admins
   const adminNav = isAdmin ? [
     { name: 'Team', href: '/team', icon: UserCog },
-    { name: 'Revenue', href: '/revenue', icon: TrendingUp },
     { name: 'Timesheets', href: '/timesheets', icon: Clock },
     { name: 'Rate Cards', href: '/rate-cards', icon: CreditCard },
-    { name: 'Bookkeeping', href: '/bookkeeping', icon: BookOpen },
-    { name: 'Reports', href: '/reports', icon: PieChart },
     { name: 'Credentials', href: '/credentials', icon: Key },
     { name: 'Settings', href: '/settings', icon: Settings },
     { name: 'Trash', href: '/trash', icon: X },

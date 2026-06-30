@@ -32,7 +32,6 @@ const Project = lazy(() => import('./pages/Project'));
 const Clients = lazy(() => import('./pages/Clients'));
 const Client = lazy(() => import('./pages/Client'));
 const Team = lazy(() => import('./pages/Team'));
-const Analytics = lazy(() => import('./pages/Analytics'));
 const GlobalSearch = lazy(() => import('./pages/GlobalSearch'));
 const ApprovalQueue = lazy(() => import('./pages/ApprovalQueue'));
 const TaskPage = lazy(() => import('./pages/TaskPage'));
@@ -56,16 +55,12 @@ const GanttView = lazy(() => import('./pages/GanttView'));
 const ProjectPlanner = lazy(() => import('./pages/ProjectPlanner'));
 const ProjectTemplates = lazy(() => import('./pages/ProjectTemplates'));
 const IntakeForms = lazy(() => import('./pages/IntakeForms'));
-const ActivityFeed = lazy(() => import('./pages/ActivityFeed'));
 const Automations = lazy(() => import('./pages/Automations'));
 // Admin / Finance
-const Reports = lazy(() => import('./pages/Reports'));
 const BrandSettings = lazy(() => import('./pages/BrandSettings'));
 const Retainers = lazy(() => import('./pages/Retainers'));
 const InvoiceChaser = lazy(() => import('./pages/InvoiceChaser'));
 const Settings = lazy(() => import('./pages/Settings'));
-const Revenue = lazy(() => import('./pages/Revenue'));
-const ClientHealth = lazy(() => import('./pages/ClientHealth'));
 // Marketing Suite
 const Notifications = lazy(() => import('./pages/Notifications'));
 // Advanced Features
@@ -77,7 +72,6 @@ const Estimates = lazy(() => import('./pages/Estimates'));
 const Schedule = lazy(() => import('./pages/Schedule'));
 const Timesheets = lazy(() => import('./pages/Timesheets'));
 const RateCards = lazy(() => import('./pages/RateCards'));
-const Bookkeeping = lazy(() => import('./pages/Bookkeeping'));
 // Agent Pages (client acquisition pipeline)
 const ClientAcquisition = lazy(() => import('./pages/ClientAcquisition'));
 
@@ -146,8 +140,7 @@ function AppRoutes() {
                   <Route path="/clients" element={<Clients />} />
                   <Route path="/client/:id" element={<Client />} />
                   <Route path="/team" element={<AdminRoute><Team /></AdminRoute>} />
-                  <Route path="/analytics" element={<Analytics />} />
-                  <Route path="/search" element={<GlobalSearch />} />
+                                    <Route path="/search" element={<GlobalSearch />} />
                   <Route path="/approvals" element={<AdminRoute><ApprovalQueue /></AdminRoute>} />
                   <Route path="/proposals" element={<Proposals />} />
                   <Route path="/proposal/:id" element={<ProposalDetail />} />
@@ -170,8 +163,7 @@ function AppRoutes() {
                   <Route path="/admin/reports" element={<AdminRoute><Reports /></AdminRoute>} />
                   <Route path="/reports" element={<AdminRoute><Reports /></AdminRoute>} />
                                     <Route path="/trash" element={<AdminRoute><Trash /></AdminRoute>} />
-                  <Route path="/activity" element={<ActivityFeed />} />
-                  <Route path="/automations" element={<AdminRoute><Automations /></AdminRoute>} />
+                                    <Route path="/automations" element={<AdminRoute><Automations /></AdminRoute>} />
                   <Route path="/docs" element={<Docs />} />
                   <Route path="/project-planner" element={<ProjectPlanner />} />
                   <Route path="/project-templates" element={<ProjectTemplates />} />
@@ -181,8 +173,7 @@ function AppRoutes() {
                   <Route path="/invoice-chaser" element={<AdminRoute><InvoiceChaser /></AdminRoute>} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/revenue" element={<AdminRoute><Revenue /></AdminRoute>} />
-                  <Route path="/client-health" element={<AdminRoute><ClientHealth /></AdminRoute>} />
-                  <Route path="/email-campaigns" element={<AdminRoute><EmailCampaigns /></AdminRoute>} />
+                                    <Route path="/email-campaigns" element={<AdminRoute><EmailCampaigns /></AdminRoute>} />
                                                       <Route path="/notifications" element={<Notifications />} />
                   {/* Advanced Features */}
                   <Route path="/assets" element={<AssetLibrary />} />
