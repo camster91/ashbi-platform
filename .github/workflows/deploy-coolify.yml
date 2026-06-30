@@ -87,7 +87,7 @@ jobs:
             echo "::error::Missing one of COOLIFY_URL / COOLIFY_TOKEN / COOLIFY_APP_UUID secrets"
             exit 1
           fi
-          HTTP_CODE=$(curl -s -o /tmp/deploy-resp.json -w "%{http_code}" --max-time 30 \
+          HTTP_CODE=$(curl -s --fail-with-body -o /tmp/deploy-resp.json -w "%{http_code}" --max-time 60 \
             -X POST \
             -H "$(printf 'Auth%szation: %s %s' ori Bear "${COOLIFY_TOKEN}")" \
             -H "Content-Type: application/json" \
@@ -120,7 +120,7 @@ jobs:
             echo "Smoke testing: ${COOLIFY_HEALTH_URL}"
             # Coolify build typically takes 60-180s for a Next.js app; wait up to 4 min
             for i in {1..24}; do
-              HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "${COOLIFY_HEALTH_URL}" || echo "000")
+              HTTP_CODE=$(curl -s --fail-with-body -o /dev/null -w "%{http_code}" --max-time 10 "${COOLIFY_HEALTH_URL}" || echo "000")
               if [ "${HTTP_CODE}" = "200" ] || [ "${HTTP_CODE}" = "301" ] || [ "${HTTP_CODE}" = "302" ]; then
                 echo "✅ Smoke test passed (HTTP ${HTTP_CODE}) after ${i} polls"
                 exit 0
