@@ -65,7 +65,6 @@ const Settings = lazy(() => import('./pages/Settings'));
 const Notifications = lazy(() => import('./pages/Notifications'));
 // Advanced Features
 const AssetLibrary = lazy(() => import('./pages/AssetLibrary'));
-const WPSites = lazy(() => import('./pages/WPSites'));
 const SemanticSearch = lazy(() => import('./pages/SemanticSearch'));
 // New Features
 const Estimates = lazy(() => import('./pages/Estimates'));
