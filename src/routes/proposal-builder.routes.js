@@ -17,6 +17,12 @@ import {
   PRICING_TIERS,
   PROPOSAL_STATUS
 } from '../agents/proposal-builder.agent.js';
+import {
+  validateBody,
+  proposalBuilderGenerateSchema,
+  proposalBuilderEmailSchema,
+  proposalBuilderUpdateSchema,
+} from '../validators/schemas.js';
 
 
 export default async function proposalBuilderRoutes(fastify) {
@@ -26,7 +32,8 @@ export default async function proposalBuilderRoutes(fastify) {
    * AI-generate a full proposal from lead data
    */
   fastify.post('/generate', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(proposalBuilderGenerateSchema),
   }, async (request, reply) => {
     try {
       const { name, company, email, projectType, budget, timeline, notes, clientId } = request.body || {};
@@ -87,7 +94,8 @@ export default async function proposalBuilderRoutes(fastify) {
    * Generate PDF and create Gmail draft with proposal attached
    */
   fastify.post('/:id/send', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(proposalBuilderEmailSchema),
   }, async (request, reply) => {
     try {
       const proposalId = request.params.id;
@@ -262,7 +270,8 @@ export default async function proposalBuilderRoutes(fastify) {
    * Update proposal content
    */
   fastify.put('/:id', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(proposalBuilderUpdateSchema),
   }, async (request, reply) => {
     try {
       const proposalId = request.params.id;

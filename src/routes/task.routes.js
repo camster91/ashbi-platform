@@ -1,6 +1,15 @@
 // Task routes
 
-import { validateBody, createTaskSchema, updateTaskSchema } from '../validators/schemas.js';
+import {
+  validateBody,
+  createTaskSchema,
+  updateTaskSchema,
+  taskUpdateSchema,
+  taskBulkUpdateSchema,
+  taskNoteCreateSchema,
+  taskNoteUpdateSchema,
+  taskDependencyCreateSchema,
+} from '../validators/schemas.js';
 import bus, { EVENTS } from '../utils/events.js';
 
 export default async function taskRoutes(fastify) {
@@ -230,7 +239,8 @@ export default async function taskRoutes(fastify) {
 
   // Bulk update task categories (for drag-drop reordering)
   fastify.post('/bulk-update', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(taskBulkUpdateSchema),
   }, async (request, reply) => {
     const { updates } = request.body;
 
@@ -326,7 +336,8 @@ export default async function taskRoutes(fastify) {
 
   // Update task content (Notion-style blocks)
   fastify.put('/:id/content', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(taskNoteCreateSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { content, title, icon, coverImage, properties } = request.body;
@@ -352,7 +363,8 @@ export default async function taskRoutes(fastify) {
 
   // Create subpage (Notion-style)
   fastify.post('/:id/subpage', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(taskNoteUpdateSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { title, icon, content } = request.body;
@@ -502,7 +514,8 @@ export default async function taskRoutes(fastify) {
 
   // Set task dependency
   fastify.put('/:id/dependency', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(taskDependencyCreateSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { dependsOnId } = request.body;
@@ -640,7 +653,8 @@ export default async function taskRoutes(fastify) {
 
   // Move task between Kanban columns
   fastify.post('/:id/move', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(z.object({ status: z.enum(['TODO', 'IN_PROGRESS', 'BLOCKED', 'REVIEW', 'COMPLETED']) })),
   }, async (request) => {
     const { id } = request.params;
     const { status } = request.body;
@@ -667,7 +681,7 @@ export default async function taskRoutes(fastify) {
   // Quick task create (for Kanban "Add Task" button)
   fastify.post('/:projectId/quick', {
     onRequest: [fastify.authenticate],
-    preHandler: [validateBody(createTaskSchema)],
+    preHandler: [validateBody(taskCreateQuickSchema)],
   }, async (request) => {
     const { projectId } = request.params;
     const { title, assigneeId, priority = 'NORMAL' } = request.body;

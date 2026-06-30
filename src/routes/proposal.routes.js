@@ -3,6 +3,12 @@
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import { queueEmbedding } from '../jobs/queue.js';
+import {
+  validateBody,
+  proposalCreateSchema,
+  proposalUpdateSchema,
+  proposalBulkIdsSchema,
+} from '../validators/schemas.js';
 
 async function sendProposalEmail(to, clientName, proposalTitle, portalUrl) {
   if (!process.env.MAILGUN_API_KEY || !process.env.MAILGUN_DOMAIN) return;
@@ -91,13 +97,10 @@ export default async function proposalRoutes(fastify) {
 
   // Create proposal
   fastify.post('/', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(proposalCreateSchema),
   }, async (request, reply) => {
     const { clientId, title, lineItems, notes, validUntil, projectId } = request.body;
-
-    if (!clientId || !title || !lineItems || lineItems.length === 0) {
-      return reply.status(400).send({ error: 'clientId, title, and at least one lineItem are required' });
-    }
 
     const computedLineItems = lineItems.map(item => ({
       description: item.description,
@@ -147,7 +150,8 @@ export default async function proposalRoutes(fastify) {
 
   // Update proposal (DRAFT only)
   fastify.put('/:id', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(proposalUpdateSchema),
   }, async (request, reply) => {
     const { id } = request.params;
 
@@ -490,7 +494,10 @@ export default async function proposalRoutes(fastify) {
   });
 
   // ─── POST /bulk/archive — bulk delete proposals ────────────────────────────
-  fastify.post('/bulk/archive', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.post('/bulk/archive', {
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(proposalBulkIdsSchema),
+  }, async (request, reply) => {
     const { ids } = request.body;
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return reply.status(400).send({ error: 'ids array is required' });
@@ -504,7 +511,10 @@ export default async function proposalRoutes(fastify) {
   });
 
   // ─── POST /bulk/send — bulk send proposals ─────────────────────────────────
-  fastify.post('/bulk/send', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.post('/bulk/send', {
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(proposalBulkIdsSchema),
+  }, async (request, reply) => {
     const { ids } = request.body;
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return reply.status(400).send({ error: 'ids array is required' });

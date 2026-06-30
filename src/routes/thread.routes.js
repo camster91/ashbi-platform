@@ -3,6 +3,15 @@
 import { analyzeMessage } from '../services/pipeline.service.js';
 import { assignThread } from '../services/assignment.service.js';
 import { queueEmbedding } from '../jobs/queue.js';
+import {
+  validateBody,
+  threadCreateSchema,
+  threadUpdateSchema,
+  threadAssignSchema,
+  threadSnoozeSchema,
+  threadMessageCreateSchema,
+  threadNoteCreateSchema,
+} from '../validators/schemas.js';
 
 export default async function threadRoutes(fastify) {
   // List threads with filters
@@ -63,13 +72,10 @@ export default async function threadRoutes(fastify) {
 
   // Create new outbound thread (for drafting client communications)
   fastify.post('/', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(threadCreateSchema),
   }, async (request, reply) => {
     const { subject, clientId, projectId, priority, assignedToId } = request.body;
-
-    if (!subject || !clientId) {
-      return reply.status(400).send({ error: 'subject and clientId are required' });
-    }
 
     // Verify client exists
     const client = await request.prisma.client.findUnique({ where: { id: clientId } });
@@ -146,7 +152,8 @@ export default async function threadRoutes(fastify) {
 
   // Update thread
   fastify.put('/:id', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(threadUpdateSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { status, priority, projectId, clientId } = request.body;
@@ -167,7 +174,8 @@ export default async function threadRoutes(fastify) {
 
   // Assign thread to user
   fastify.post('/:id/assign', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(threadAssignSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { userId, autoAssign } = request.body;
@@ -213,7 +221,8 @@ export default async function threadRoutes(fastify) {
 
   // Snooze thread
   fastify.post('/:id/snooze', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(threadSnoozeSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { until } = request.body;
@@ -248,7 +257,8 @@ export default async function threadRoutes(fastify) {
 
   // Add message to thread (manual)
   fastify.post('/:id/messages', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(threadMessageCreateSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { direction, senderEmail, senderName, subject, bodyText, bodyHtml } = request.body;
@@ -326,7 +336,8 @@ export default async function threadRoutes(fastify) {
 
   // Add internal note
   fastify.post('/:id/notes', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(threadNoteCreateSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { content } = request.body;

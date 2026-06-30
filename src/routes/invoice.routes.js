@@ -2,7 +2,15 @@
 import { createPaymentLink, handleWebhook } from '../services/stripe.service.js';
 import { generateInvoicePdf } from '../utils/generate-invoice-pdf.js';
 import { generateInvoiceNumber } from '../utils/invoice.js';
-import { validateBody, createInvoiceSchema, updateInvoiceSchema, markInvoicePaidSchema, sendInvoiceSchema } from '../validators/schemas.js';
+import {
+  validateBody,
+  createInvoiceSchema,
+  updateInvoiceSchema,
+  markInvoicePaidSchema,
+  sendInvoiceSchema,
+  lineItemTemplateCreateSchema,
+  invoiceBulkIdsSchema,
+} from '../validators/schemas.js';
 
 const HST_RATE = 13; // Ontario HST
 
@@ -131,7 +139,10 @@ export default async function invoiceRoutes(fastify) {
   });
 
   // ─── POST /templates — create template ─────────────────────────────────────
-  fastify.post('/templates', { onRequest: [fastify.authenticate] }, async (request) => {
+  fastify.post('/templates', {
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(lineItemTemplateCreateSchema),
+  }, async (request) => {
     const { name, description, itemType = 'LABOR', unitPrice, unit = 'hr' } = request.body;
     return fastify.prisma.lineItemTemplate.create({
       data: { name, description, itemType, unitPrice: parseFloat(unitPrice), unit }
@@ -585,7 +596,10 @@ export default async function invoiceRoutes(fastify) {
   });
 
   // ─── POST /bulk/mark-paid — mark multiple invoices as paid ──────────────────
-  fastify.post('/bulk/mark-paid', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.post('/bulk/mark-paid', {
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(bulkMarkPaidSchema),
+  }, async (request, reply) => {
     const { ids, paymentMethod } = request.body;
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return reply.status(400).send({ error: 'ids array is required' });
@@ -615,7 +629,10 @@ export default async function invoiceRoutes(fastify) {
   });
 
   // ─── POST /bulk/send — send multiple invoices ───────────────────────────────
-  fastify.post('/bulk/send', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.post('/bulk/send', {
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(invoiceBulkIdsSchema),
+  }, async (request, reply) => {
     const { ids } = request.body;
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return reply.status(400).send({ error: 'ids array is required' });

@@ -4,7 +4,16 @@ import { refreshProjectPlan, getProjectBudgetMetrics } from '../services/project
 import { safeParse } from '../utils/safeParse.js';
 import { queueEmbedding } from '../jobs/queue.js';
 import aiClient from '../ai/client.js';
-import { validateBody, createProjectSchema, updateProjectSchema } from '../validators/schemas.js';
+import {
+  validateBody,
+  createProjectSchema,
+  updateProjectSchema,
+  taskCreateSchema,
+  projectContextUpdateSchema,
+  projectAiPlanSchema,
+  projectTemplateSaveSchema,
+  projectFromTemplateSchema,
+} from '../validators/schemas.js';
 import bus, { EVENTS } from '../utils/events.js';
 
 export default async function projectRoutes(fastify) {
@@ -252,7 +261,8 @@ export default async function projectRoutes(fastify) {
 
   // Create task in project
   fastify.post('/:id/tasks', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: [validateBody(taskCreateSchema)],
   }, async (request, reply) => {
     const { id } = request.params;
     const {
@@ -385,7 +395,8 @@ export default async function projectRoutes(fastify) {
 
   // POST /:id/context — update project context (human notes)
   fastify.post('/:id/context', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(projectContextUpdateSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { humanNotes } = request.body || {};
@@ -412,14 +423,11 @@ export default async function projectRoutes(fastify) {
 
   // POST /:id/ai-plan — Generate full project plan with AI
   fastify.post('/:id/ai-plan', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(projectAiPlanSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { brief, projectType } = request.body || {};
-
-    if (!brief) {
-      return reply.status(400).send({ error: 'Project brief is required' });
-    }
 
     const project = await fastify.prisma.project.findUnique({
       where: { id },
@@ -563,13 +571,10 @@ Brief: ${brief}`;
 
   // POST /templates — Save current project as template
   fastify.post('/templates', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(projectTemplateSaveSchema),
   }, async (request, reply) => {
     const { projectId, name, description, projectType } = request.body || {};
-
-    if (!name) {
-      return reply.status(400).send({ error: 'Template name is required' });
-    }
 
     let tasksData = [];
     let milestonesData = [];
@@ -658,13 +663,10 @@ Brief: ${brief}`;
 
   // POST /from-template — Create project from template
   fastify.post('/from-template', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(projectFromTemplateSchema),
   }, async (request, reply) => {
     const { templateId, clientId, name } = request.body || {};
-
-    if (!templateId || !clientId || !name) {
-      return reply.status(400).send({ error: 'templateId, clientId, and name are required' });
-    }
 
     const template = await fastify.prisma.projectTemplate.findUnique({ where: { id: templateId } });
     if (!template) {

@@ -1,5 +1,11 @@
 // Response routes (drafts and approvals)
 
+import {
+  validateBody,
+  responseCreateSchema,
+  responseUpdateSchema,
+  responseRejectSchema,
+} from '../validators/schemas.js';
 
 export default async function responseRoutes(fastify) {
   // Get all pending approval responses (admin only)
@@ -28,7 +34,8 @@ export default async function responseRoutes(fastify) {
 
   // Create draft response for thread
   fastify.post('/:threadId/drafts', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(responseCreateSchema),
   }, async (request, reply) => {
     const { threadId } = request.params;
     const { subject, body, tone, aiGenerated = false, aiOptions } = request.body;
@@ -81,7 +88,8 @@ export default async function responseRoutes(fastify) {
 
   // Update response draft
   fastify.put('/:id', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(responseUpdateSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { subject, body, tone } = request.body;
@@ -202,7 +210,8 @@ export default async function responseRoutes(fastify) {
 
   // Reject response (admin only)
   fastify.post('/:id/reject', {
-    onRequest: [fastify.adminOnly]
+    onRequest: [fastify.adminOnly],
+    preHandler: validateBody(responseRejectSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { reason } = request.body;
