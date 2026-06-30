@@ -30,8 +30,6 @@ export default async function dashboardRoutes(fastify) {
       atRiskProjects,
       // Untriaged inbox threads
       untriagedThreads,
-      // WordPress sites with errors
-      wpSitesWithErrors,
       // Overdue tasks (not on blocked projects, standalone)
       overdueTasks,
       // ── NEW ──
@@ -41,16 +39,8 @@ export default async function dashboardRoutes(fastify) {
       userCapacity,
       // Calendar events (upcoming 7 days)
       upcomingEvents,
-      // Outreach funnel stats
-      outreachStats,
-      // Cold email stats
-      coldEmailStats,
-      // LinkedIn stats
-      linkedInStats,
       // Revenue history (last 6 months)
-      revenueHistory,
-      // All WP sites (for health heatmap)
-      allWpSites
+      revenueHistory
     ] = await Promise.all([
       request.prisma.retainerPlan.findMany({
         where: { retainerStatus: 'ACTIVE' },
@@ -168,28 +158,6 @@ export default async function dashboardRoutes(fastify) {
         orderBy: { lastActivityAt: 'desc' },
         take: 5
       }),
-      // WordPress sites with errors or low health
-      request.prisma.wPSite.findMany({
-        where: {
-          OR: [
-            { status: 'ERROR' },
-            { healthScore: { lt: 60 } },
-            { status: 'MAINTENANCE' }
-          ]
-        },
-        select: {
-          id: true,
-          name: true,
-          url: true,
-          status: true,
-          healthScore: true,
-          lastCheckedAt: true,
-          client: { select: { id: true, name: true } },
-          project: { select: { id: true, name: true } }
-        },
-        orderBy: { healthScore: 'asc' },
-        take: 10
-      }),
       // Overdue tasks (due date passed, not completed)
       request.prisma.task.findMany({
         where: {
@@ -249,21 +217,6 @@ export default async function dashboardRoutes(fastify) {
         orderBy: { startTime: 'asc' },
         take: 10
       }),
-      // Outreach pipeline: funnel counts
-      request.prisma.outreachLead.groupBy({
-        by: ['status'],
-        _count: { id: true }
-      }),
-      // Cold email stats: aggregate from prospect statuses
-      request.prisma.coldEmailProspect.groupBy({
-        by: ['status'],
-        _count: { id: true }
-      }),
-      // LinkedIn stats: aggregate from sequence statuses
-      request.prisma.linkedInSequence.groupBy({
-        by: ['status'],
-        _count: { id: true }
-      }),
       // Revenue history: last 6 months of paid invoices
       request.prisma.invoice.findMany({
         where: {
@@ -272,16 +225,6 @@ export default async function dashboardRoutes(fastify) {
         },
         select: { total: true, paidAt: true },
         orderBy: { paidAt: 'asc' }
-      }),
-      // All WP sites for health heatmap (not just errors)
-      request.prisma.wPSite.findMany({
-        select: {
-          id: true, name: true, url: true, status: true,
-          healthScore: true, lastCheckedAt: true,
-          client: { select: { name: true } },
-          project: { select: { name: true } }
-        },
-        orderBy: { healthScore: 'asc' }
       })
     ]);
 
@@ -363,16 +306,14 @@ export default async function dashboardRoutes(fastify) {
           project: t.project?.name || null
         }))
       },
-      wpSiteAlerts: wpSitesWithErrors.map(s => ({
-        id: s.id,
-        name: s.name,
-        url: s.url,
-        status: s.status,
-        healthScore: s.healthScore,
-        lastCheckedAt: s.lastCheckedAt,
-        client: s.client?.name || null,
-        project: s.project?.name || null
-      })),
+      // wpSiteAlerts + wpSites kept as empty arrays for backward compat with the
+      // dashboard frontend widgets that may still reference these keys. Pre-strip-down
+      // had WordPress / Outreach funnel widgets populated from these — with the
+      // Batches 1-6 cuts they no longer fetch from the dropped models. Frontend
+      // widgets no-op on empty arrays (OutreachFunnelWidget and WPSiteHealthWidget
+      // both return null when their data is empty).
+      wpSiteAlerts: [],
+      wpSites: [],
       overdueTasks: overdueTasks.map(t => ({
         id: t.id,
         title: t.title,
@@ -406,21 +347,11 @@ export default async function dashboardRoutes(fastify) {
         isAllDay: e.isAllDay,
         project: e.project?.name || null
       })),
-      // Outreach pipeline funnel
-      outreach: outreachStats.reduce((acc, row) => {
-        acc[row.status.toLowerCase()] = row._count.id;
-        return acc;
-      }, {}),
-      // Cold email stats
-      coldEmail: coldEmailStats.reduce((acc, row) => {
-        acc[row.status.toLowerCase()] = row._count.id;
-        return acc;
-      }, {}),
-      // LinkedIn outreach stats
-      linkedIn: linkedInStats.reduce((acc, row) => {
-        acc[row.status.toLowerCase()] = row._count.id;
-        return acc;
-      }, {}),
+      // Outreach / Cold Email / LinkedIn stats kept as empty objects for backward
+      // compat with OutreachFunnelWidget (returns null when all three are empty).
+      outreach: {},
+      coldEmail: {},
+      linkedIn: {},
       // Revenue sparkline data: grouped by month
       revenueHistory: (() => {
         const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -435,18 +366,7 @@ export default async function dashboardRoutes(fastify) {
           year: key.split('-')[0],
           total: Math.round(total * 100) / 100
         }));
-      })(),
-      // All WP sites for heatmap
-      wpSites: allWpSites.map(s => ({
-        id: s.id,
-        name: s.name,
-        url: s.url,
-        status: s.status,
-        healthScore: s.healthScore,
-        lastCheckedAt: s.lastCheckedAt,
-        client: s.client?.name || null,
-        project: s.project?.name || null
-      }))
+      })()
     };
   });
 }

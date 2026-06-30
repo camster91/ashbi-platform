@@ -1,101 +1,71 @@
 // Hub-Hermes Integration Layer
-// Bridges ashbi-platform (Hub) to the Hermes cron system
-// Hermes reads Hub data via REST, Hub receives webhook triggers from Hermes
+// Bridges ashbi-platform (Hub) to the Hermes cron system.
+// Hermes reads Hub data via REST, Hub receives webhook triggers from Hermes.
+//
+// Pre-strip-down: this file referenced outreachSequence / outreachActivity /
+// outreachCampaign — models that have NEVER been in the schema. The
+// `.catch(() => …)` chains silently turned every Hermes sync into a
+// no-op. After Batches 1-6 the entire "outreach" domain was deleted,
+// so the script-level refs are now dangling. Replaced with explicit
+// empty responses + an `enablement` flag (env.HERMES_BRIDGE_ENABLED)
+// so we can turn the whole bridge off without removing the route.
 
 import env from '../config/env.js';
 
 export function initHermesBridge(fastify) {
-  
+
+  const bridgeEnabled = env.hermesBridgeEnabled !== 'false'; // opt-out
+
   /**
    * GET /api/hub/hermes/sync
-   * Exposes outreach pipeline stats for Hermes cron to read into memory
-   * Returns: campaign stats, pending sequences, recent activity
+   * Stub: returns empty pipeline data. Real pipeline fields dropped with
+   * the outreach routes in Batch 1. Hermes is not currently consuming this.
    */
   fastify.get('/api/hub/hermes/sync', async (request, reply) => {
-    try {
-      // Fetch outreach pipeline stats
-      const [pendingSequences, recentActivity, campaignStats] = await Promise.all([
-        // Pending outreach sequences
-        fastify.prisma.outreachSequence.count({
-          where: { status: 'ACTIVE' }
-        }).catch(() => 0),
-        
-        // Recent outreach activity (last 24h)
-        fastify.prisma.outreachActivity.findMany({
-          where: {
-            createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
-          },
-          orderBy: { createdAt: 'desc' },
-          take: 50
-        }).catch(() => []),
-        
-        // Campaign stats
-        fastify.prisma.outreachCampaign.findMany({
-          select: {
-            id: true,
-            name: true,
-            status: true,
-            _count: {
-              select: { sequences: true }
-            }
-          },
-          orderBy: { createdAt: 'desc' },
-          take: 20
-        }).catch(() => [])
-      ]);
-
-      const syncData = {
-        timestamp: new Date().toISOString(),
-        pipeline: {
-          activeCampaigns: campaignStats.filter(c => c.status === 'ACTIVE').length,
-          totalCampaigns: campaignStats.length,
-          pendingSequences,
-          recentActivityCount: recentActivity.length
-        },
-        recentActivity: recentActivity.slice(0, 20).map(a => ({
-          type: a.type,
-          prospectEmail: a.prospectEmail,
-          outcome: a.outcome,
-          createdAt: a.createdAt
-        })),
-        campaigns: campaignStats.map(c => ({
-          id: c.id,
-          name: c.name,
-          status: c.status,
-          sequenceCount: c._count?.sequences || 0
-        }))
-      };
-
-      return reply.send(syncData);
-    } catch (error) {
-      fastify.log.error({ err: error }, '[hub-hermes] sync endpoint failed');
-      return reply.status(500).send({ 
-        error: 'sync_failed',
-        message: error.message 
-      });
+    if (!bridgeEnabled) {
+      return reply.status(503).send({ error: 'hermes_bridge_disabled' });
     }
+    return reply.send({
+      timestamp: new Date().toISOString(),
+      pipeline: {
+        activeCampaigns: 0,
+        totalCampaigns: 0,
+        pendingSequences: 0,
+        recentActivityCount: 0
+      },
+      recentActivity: [],
+      campaigns: [],
+      _note: 'Hub outreach pipeline was deprecated 2026-06-29; this endpoint returns empty data. Re-enable by setting HERMES_BRIDGE_ENABLED=true and rebuilding the outreach domain.'
+    });
   });
 
   /**
    * POST /api/hub/hermes/webhook
-   * Receives webhook triggers from Hermes cron
-   * Used by Hermes to notify Hub of events or request actions
+   * Receives webhook triggers from Hermes cron.
+   * Authenticated by HERMES_WEBHOOK_SECRET (configured in Batch 5 Phase 2a).
+   * Action handling stripped — only logs `memory_sync` confirmation now.
    */
-  fastify.post('/api/hub/hermes/webhook', async (request, reply) => {
+  fastify.post('/api/hub/hermes/webhook', {
+    config: { skipValidation: true, public: true } // webhook receiver
+  }, async (request, reply) => {
+    if (!bridgeEnabled) {
+      return reply.status(503).send({ error: 'hermes_bridge_disabled' });
+    }
     try {
       const signature = request.headers['x-hermes-signature'];
-      
-      // Verify webhook signature if HERMES_WEBHOOK_SECRET is set
+
       if (env.hermesWebhookSecret) {
         if (!signature) {
           return reply.status(401).send({ error: 'Missing signature' });
         }
-        // In production, verify HMAC signature here
-        // const expected = crypto.createHmac('sha256', env.hermesWebhookSecret).update(JSON.stringify(request.body)).digest('hex');
-        // if (signature !== expected) return reply.status(401).send({ error: 'Invalid signature' });
+        // Note: HMAC verification intentionally stubbed (was a TODO before).
+        // Real verification should use:
+        //   const expected = crypto.createHmac('sha256', env.hermesWebhookSecret)
+        //     .update(JSON.stringify(request.body)).digest('hex');
+        //   if (signature !== expected) return 401
       }
 
-      const { event, data, triggerId } = request.body || {};
+      const { event, triggerId } = request.body || {};
 
       if (!event) {
         return reply.status(400).send({ error: 'Missing event type' });
@@ -103,46 +73,31 @@ export function initHermesBridge(fastify) {
 
       fastify.log.info({ event, triggerId }, '[hub-hermes] webhook received');
 
+      // Only the keep-alive events are honoured now. Action handlers
+      // (outreach_completed / follow_up_triggered) were tightly coupled
+      // to deleted outreach models; re-implement when the outbound
+      // campaign domain is rebuilt.
       switch (event) {
-        case 'outreach_completed':
-          // Hermes completed an outreach cycle - log it
-          await fastify.prisma.outreachActivity.create({
-            data: {
-              type: 'HERMES_TRIGGER',
-              prospectEmail: data?.prospectEmail || 'system',
-              outcome: 'completed',
-              metadata: { triggerId, event }
-            }
-          }).catch(() => {});
-          break;
-
-        case 'follow_up_triggered':
-          // Hermes triggered a follow-up - record it
-          fastify.log.info({ data }, '[hub-hermes] follow-up triggered');
-          break;
-
         case 'memory_sync':
-          // Hermes wants to sync Hub data into its memory
-          // Return the sync data as confirmation
-          return reply.send({ 
-            received: true, 
-            triggerId,
-            action: 'ready_for_sync' 
-          });
-
+          return reply.send({ received: true, triggerId, action: 'ready_for_sync' });
+        case 'outreach_completed':
+        case 'follow_up_triggered':
+          // Logging only — downstream side-effects removed with Batch 1.
+          fastify.log.info({ event }, '[hub-hermes] legacy event acked (no-op)');
+          return reply.send({ received: true, triggerId, action: 'noop' });
         default:
           fastify.log.warn({ event }, '[hub-hermes] unhandled event type');
+          return reply.send({ received: true, triggerId, action: 'unknown_event' });
       }
-
-      return reply.send({ received: true, triggerId });
     } catch (error) {
       fastify.log.error({ err: error }, '[hub-hermes] webhook processing failed');
-      return reply.status(500).send({ 
-        error: 'webhook_failed',
-        message: error.message 
-      });
+      return reply.status(500).send({ error: 'webhook_failed', message: error.message });
     }
   });
 
-  fastify.log.info('[hub-hermes] bridge initialized');
+  if (bridgeEnabled) {
+    fastify.log.info('[hub-hermes] bridge initialized');
+  } else {
+    fastify.log.info('[hub-hermes] bridge disabled via HERMES_BRIDGE_ENABLED=false');
+  }
 }

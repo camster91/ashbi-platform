@@ -52,6 +52,10 @@ const env = {
   // endpoint will reject all requests (returns 503).
   hermesWebhookSecret: process.env.HERMES_WEBHOOK_SECRET,
 
+  // Hermes bridge enablement (set to 'false' in .env to turn off the
+  // hub-hermes integration entirely). Defaults to enabled.
+  hermesBridgeEnabled: process.env.HERMES_BRIDGE_ENABLED,
+
   // Database
   databaseUrl: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/ashbi',
 
