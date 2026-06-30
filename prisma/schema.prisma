@@ -28,69 +28,62 @@ model Organization {
 
   @@map("organizations")
 }
-
-// ==================== USERS & AUTH ====================
-
 model User {
-  id                  String    @id @default(cuid())
+  id                  String        @id @default(cuid())
   organizationId      String? // Set for all users to support multi-tenancy
   organization        Organization? @relation(fields: [organizationId], references: [id])
-  email               String    @unique
+  email               String        @unique
   name                String
   password            String
-  role                String    @default("TEAM") // ADMIN, TEAM, CLIENT, or BOT
+  role                String        @default("TEAM") // ADMIN, TEAM, CLIENT, or BOT
   clientId            String? // Set for CLIENT role users
-  skills              String    @default("[]") // JSON array of skills
-  capacity            Int       @default(100) // Percentage available
-  isActive            Boolean   @default(true)
-  hourlyRate          Float?    @default(50)
+  skills              String        @default("[]") // JSON array of skills
+  capacity            Int           @default(100) // Percentage available
+  isActive            Boolean       @default(true)
+  hourlyRate          Float?        @default(50)
   resetToken          String?
   resetTokenExpiresAt DateTime?
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
 
   // Relations
-  assignedThreads   Thread[]               @relation("AssignedTo")
-  assignedTasks     Task[]                 @relation("TaskAssignee")
-  draftedResponses  Response[]             @relation("DraftedBy")
-  approvedResponses Response[]             @relation("ApprovedBy")
+  assignedThreads   Thread[]           @relation("AssignedTo")
+  assignedTasks     Task[]             @relation("TaskAssignee")
+  draftedResponses  Response[]         @relation("DraftedBy")
+  approvedResponses Response[]         @relation("ApprovedBy")
   notifications     Notification[]
   internalNotes     InternalNote[]
-  chatMessages      ChatMessage[]          @relation("ChatAuthor")
+  chatMessages      ChatMessage[]      @relation("ChatAuthor")
   chatReactions     ChatReaction[]
-  notes             Note[]                 @relation("NoteAuthor")
+  notes             Note[]             @relation("NoteAuthor")
   timeEntries       TimeEntry[]
   attachments       Attachment[]
   activities        Activity[]
-  taskComments      TaskComment[]          @relation("CommentAuthor")
-  createdEvents     CalendarEvent[]        @relation("EventCreator")
+  taskComments      TaskComment[]      @relation("CommentAuthor")
+  createdEvents     CalendarEvent[]    @relation("EventCreator")
   eventAttendees    EventAttendee[]
-  proposals         Proposal[]             @relation("ProposalCreator")
-  contracts         Contract[]             @relation("ContractCreator")
-  invoices          Invoice[]              @relation("InvoiceCreator")
+  proposals         Proposal[]         @relation("ProposalCreator")
+  contracts         Contract[]         @relation("ContractCreator")
+  invoices          Invoice[]          @relation("InvoiceCreator")
   pushSubscriptions PushSubscription[]
   snippets          Snippet[]
   proposalVersions  ProposalVersion[]
   timeSessions      TimeSession[]
-  calendarEvents    ContentCalendarEvent[] @relation("CalendarEventAssignee")
   apiKeys           ApiKey[]
 
   @@map("users")
 }
-
-// ==================== CLIENTS ====================
-
 model Client {
-  id                  String  @id @default(cuid())
+  id                  String        @id @default(cuid())
   organizationId      String?
   organization        Organization? @relation(fields: [organizationId], references: [id])
   name                String
-  domain              String? @unique
-  status              String  @default("ACTIVE") // ACTIVE, PAUSED, CHURNED
-  communicationPrefs  String  @default("{}") // JSON: tone, frequency, etc.
-  satisfactionSignals String  @default("{}") // JSON: sentiment trends
+  domain              String?       @unique
+  status              String        @default("ACTIVE") // ACTIVE, PAUSED, CHURNED
+  communicationPrefs  String        @default("{}") // JSON: tone, frequency, etc.
+  satisfactionSignals String        @default("{}") // JSON: sentiment trends
   slaOverrides        String? // JSON: custom SLA rules
-  knowledgeBase       String  @default("[]") // JSON: brand guidelines, specs, etc.
+  knowledgeBase       String        @default("[]") // JSON: brand guidelines, specs, etc.
 
   // Bonsai migration fields
   bonsaiClientId     String? // Original Bonsai client ID
@@ -113,41 +106,34 @@ model Client {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   // Soft delete
-  deletedAt DateTime?
-
+  deletedAt          DateTime?
 
   // Relations
-  contacts              Contact[]
-  projects              Project[]
-  threads               Thread[]
-  retainerPlan          RetainerPlan?
-  reports               Report[]
-  proposals             Proposal[]
-  contracts             Contract[]
-  invoices              Invoice[]
-  credentials           Credential[]
-  aiTeamMessages        AiTeamMessage[]
-  expenses              Expense[]
-  revenueSnapshots      RevenueSnapshot[]
-  emailMappings         ClientEmailMapping[]
-  intakeForms           IntakeForm[]
-  pipelineDeals         PipelineDeal[]
-  surveyResponses       SurveyResponse[]
-  creativeBriefs        CreativeBrief[]
-  adCopies              AdCopy[]
-  contentCalendarEvents ContentCalendarEvent[]
-  seoAudits             SEOAudit[]
-  assets                Asset[]
-  clientEmbeddings      ClientEmbedding[]
-  invitations           ClientInvitation[]
-  wpSites               WPSite[]               @relation("WPSiteClient")
-  estimates             Estimate[]
-  rateCards             RateCard[]
+  contacts         Contact[]
+  projects         Project[]
+  threads          Thread[]
+  retainerPlan     RetainerPlan?
+  reports          Report[]
+  proposals        Proposal[]
+  contracts        Contract[]
+  invoices         Invoice[]
+  credentials      Credential[]
+  aiTeamMessages   AiTeamMessage[]
+  expenses         Expense[]
+  revenueSnapshots RevenueSnapshot[]
+  emailMappings    ClientEmailMapping[]
+  intakeForms      IntakeForm[]
+  pipelineDeals    PipelineDeal[]
+  creativeBriefs   CreativeBrief[]
+  assets           Asset[]
+  clientEmbeddings ClientEmbedding[]
+  invitations      ClientInvitation[]
+  estimates        Estimate[]
+  rateCards        RateCard[]
 
   @@index([status])
   @@map("clients")
 }
-
 model Contact {
   id        String   @id @default(cuid())
   email     String
@@ -164,25 +150,22 @@ model Contact {
   @@unique([email, clientId])
   @@map("contacts")
 }
-
-// ==================== PROJECTS ====================
-
 model Project {
-  id             String  @id @default(cuid())
+  id             String        @id @default(cuid())
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id])
   name           String
   description    String?
-  status         String  @default("STARTING_UP") // STARTING_UP, DESIGN_DEV, ADDING_CONTENT, FINALIZING, LAUNCHED, ON_HOLD, CANCELLED
-  health         String  @default("ON_TRACK") // ON_TRACK, NEEDS_ATTENTION, AT_RISK
-  healthScore    Int     @default(100)
-  healthHistory  Json?   // Array of {health, score, timestamp} for historical tracking
+  status         String        @default("STARTING_UP") // STARTING_UP, DESIGN_DEV, ADDING_CONTENT, FINALIZING, LAUNCHED, ON_HOLD, CANCELLED
+  health         String        @default("ON_TRACK") // ON_TRACK, NEEDS_ATTENTION, AT_RISK
+  healthScore    Int           @default(100)
+  healthHistory  Json? // Array of {health, score, timestamp} for historical tracking
   aiSummary      String? // AI-generated current status summary
   aiPlan         String? // JSON: AI-generated task plan
-  risks          String  @default("[]") // JSON: identified risks
+  risks          String        @default("[]") // JSON: identified risks
   defaultOwnerId String?
   clientId       String
-  viewToken      String? @unique @default(cuid())
+  viewToken      String?       @unique @default(cuid())
 
   // Bonsai migration fields
   bonsaiProjectId String?
@@ -196,42 +179,36 @@ model Project {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   // Soft delete
-  deletedAt DateTime?
+  deletedAt       DateTime?
 
   // Autosave draft
   draftData String? // JSON of unsaved form data
 
-
   // Relations
-  client                Client                 @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  threads               Thread[]
-  tasks                 Task[]
-  chatMessages          ChatMessage[]
-  notes                 Note[]
-  milestones            Milestone[]
-  timeEntries           TimeEntry[]
-  activities            Activity[]
-  calendarEvents        CalendarEvent[]
-  revisionRounds        RevisionRound[]
-  proposals             Proposal[]
-  credentials           Credential[]
-  aiTeamMessages        AiTeamMessage[]
-  expenses              Expense[]
-  approvals             Approval[]
-  communications        ProjectCommunication[]
-  context               ProjectContext?
-  contentCalendarEvents ContentCalendarEvent[]
-  wpSite                WPSite?
-  seoAudits             SEOAudit[]
-  adCopies              AdCopy[]
-  creativeBriefs        CreativeBrief[]
-  timeSessions          TimeSession[]
+  client         Client                 @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  threads        Thread[]
+  tasks          Task[]
+  chatMessages   ChatMessage[]
+  notes          Note[]
+  milestones     Milestone[]
+  timeEntries    TimeEntry[]
+  activities     Activity[]
+  calendarEvents CalendarEvent[]
+  revisionRounds RevisionRound[]
+  proposals      Proposal[]
+  credentials    Credential[]
+  aiTeamMessages AiTeamMessage[]
+  expenses       Expense[]
+  approvals      Approval[]
+  communications ProjectCommunication[]
+  context        ProjectContext?
+  creativeBriefs CreativeBrief[]
+  timeSessions   TimeSession[]
 
   @@index([clientId])
   @@index([status])
   @@map("projects")
 }
-
 model Task {
   id          String  @id @default(cuid())
   title       String
@@ -266,8 +243,7 @@ model Task {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   // Soft delete
-  deletedAt DateTime?
-
+  deletedAt      DateTime?
 
   // Relations
   project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -295,9 +271,6 @@ model Task {
   @@index([projectId, status])
   @@map("tasks")
 }
-
-// ==================== THREADS & MESSAGES ====================
-
 model Thread {
   id              String    @id @default(cuid())
   subject         String
@@ -333,11 +306,9 @@ model Thread {
   @@index([status])
   @@index([assignedToId])
   @@index([status, assignedToId])
-  
   @@index([createdAt])
   @@map("threads")
 }
-
 model Message {
   id          String    @id @default(cuid())
   direction   String // INBOUND or OUTBOUND
@@ -361,7 +332,6 @@ model Message {
   @@index([receivedAt])
   @@map("messages")
 }
-
 model InternalNote {
   id        String   @id @default(cuid())
   content   String
@@ -375,9 +345,6 @@ model InternalNote {
 
   @@map("internal_notes")
 }
-
-// ==================== RESPONSES & APPROVAL ====================
-
 model Response {
   id              String    @id @default(cuid())
   status          String    @default("DRAFT") // DRAFT, PENDING_APPROVAL, APPROVED, REJECTED, SENT
@@ -400,14 +367,10 @@ model Response {
   draftedBy  User   @relation("DraftedBy", fields: [draftedById], references: [id])
   approvedBy User?  @relation("ApprovedBy", fields: [approvedById], references: [id])
 
-  
   @@index([status])
   @@index([createdAt])
   @@map("responses")
 }
-
-// ==================== NOTIFICATIONS ====================
-
 model Notification {
   id        String    @id @default(cuid())
   userId    String
@@ -424,9 +387,6 @@ model Notification {
   @@index([userId, createdAt])
   @@map("notifications")
 }
-
-// ==================== CONFIGURATION ====================
-
 model AssignmentRule {
   id         String   @id @default(cuid())
   name       String
@@ -438,11 +398,9 @@ model AssignmentRule {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  
   @@index([isActive])
   @@map("assignment_rules")
 }
-
 model Template {
   id        String   @id @default(cuid())
   name      String
@@ -456,9 +414,6 @@ model Template {
 
   @@map("templates")
 }
-
-// ==================== UNMATCHED QUEUE ====================
-
 model UnmatchedEmail {
   id                String    @id @default(cuid())
   senderEmail       String
@@ -474,14 +429,10 @@ model UnmatchedEmail {
   resolvedAt        DateTime?
   createdAt         DateTime  @default(now())
 
-  
   @@index([createdAt])
   @@index([senderEmail])
   @@map("unmatched_emails")
 }
-
-// ==================== PROJECT CHAT ====================
-
 model ChatMessage {
   id        String    @id @default(cuid())
   content   String
@@ -506,7 +457,6 @@ model ChatMessage {
   @@index([projectId, createdAt])
   @@map("chat_messages")
 }
-
 model ChatReaction {
   id        String   @id @default(cuid())
   emoji     String
@@ -521,23 +471,19 @@ model ChatReaction {
   @@unique([messageId, userId, emoji])
   @@map("chat_reactions")
 }
-
-// ==================== NOTES & DOCUMENTS ====================
-
 model Note {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   title     String
   content   String // Rich text / Markdown content
-  type      String   @default("NOTE") // NOTE, MEETING_NOTES, WIKI, DOC
-  isPinned  Boolean  @default(false)
-  tags      String   @default("[]") // JSON array of tags
+  type      String    @default("NOTE") // NOTE, MEETING_NOTES, WIKI, DOC
+  isPinned  Boolean   @default(false)
+  tags      String    @default("[]") // JSON array of tags
   projectId String
   authorId  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   // Soft delete
   deletedAt DateTime?
-
 
   // Relations
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -545,9 +491,6 @@ model Note {
 
   @@map("notes")
 }
-
-// ==================== MILESTONES ====================
-
 model Milestone {
   id          String    @id @default(cuid())
   name        String
@@ -566,24 +509,21 @@ model Milestone {
 
   @@map("milestones")
 }
-
-// ==================== TIME TRACKING ====================
-
 model TimeEntry {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   description String?
   duration    Int // Duration in minutes
-  date        DateTime @default(now())
-  billable    Boolean  @default(true)
+  date        DateTime  @default(now())
+  billable    Boolean   @default(true)
   hourlyRate  Float? // Override rate for this entry
-  source      String   @default("MANUAL")
-  invoiced    Boolean  @default(false) // Has this been included in an invoice?
+  source      String    @default("MANUAL")
+  invoiced    Boolean   @default(false) // Has this been included in an invoice?
   invoiceId   String? // Link to invoice if billed
   taskId      String?
   projectId   String
   userId      String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
   // Soft delete
   deletedAt   DateTime?
 
@@ -596,13 +536,9 @@ model TimeEntry {
   @@index([projectId])
   @@index([userId])
   @@index([invoiceId])
-  
   @@index([userId, date])
   @@map("time_entries")
 }
-
-// ==================== FILE ATTACHMENTS ====================
-
 model Attachment {
   id            String   @id @default(cuid())
   filename      String
@@ -621,9 +557,6 @@ model Attachment {
 
   @@map("attachments")
 }
-
-// ==================== ACTIVITY FEED ====================
-
 model Activity {
   id         String   @id @default(cuid())
   type       String // TASK_CREATED, TASK_COMPLETED, CHAT_MESSAGE, NOTE_CREATED, etc.
@@ -645,9 +578,6 @@ model Activity {
   @@index([entityType, entityId])
   @@map("activities")
 }
-
-// ==================== TASK COMMENTS ====================
-
 model TaskComment {
   id        String   @id @default(cuid())
   content   String
@@ -663,9 +593,6 @@ model TaskComment {
 
   @@map("task_comments")
 }
-
-// ==================== CALENDAR & MEETINGS ====================
-
 model CalendarEvent {
   id          String   @id @default(cuid())
   title       String
@@ -687,12 +614,10 @@ model CalendarEvent {
   createdBy User            @relation("EventCreator", fields: [createdById], references: [id])
   attendees EventAttendee[]
 
-  
   @@index([startTime])
   @@index([projectId, startTime])
   @@map("calendar_events")
 }
-
 model EventAttendee {
   id        String   @id @default(cuid())
   status    String   @default("PENDING") // PENDING, ACCEPTED, DECLINED, TENTATIVE
@@ -707,9 +632,6 @@ model EventAttendee {
   @@unique([eventId, userId])
   @@map("event_attendees")
 }
-
-// ==================== RETAINER PLANS ====================
-
 model RetainerPlan {
   id                String   @id @default(cuid())
   clientId          String   @unique
@@ -734,23 +656,18 @@ model RetainerPlan {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
   // Soft delete
-  deletedAt DateTime?
+  deletedAt          DateTime?
 
   // Autosave draft
   draftData String? // JSON of unsaved form data
 
-
   // Relations
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
-  
   @@index([retainerStatus])
   @@index([clientId, retainerStatus])
   @@map("retainer_plans")
 }
-
-// ==================== REPORTS ====================
-
 model Report {
   id          String    @id @default(cuid())
   type        String    @default("WEEKLY")
@@ -766,9 +683,6 @@ model Report {
 
   @@map("reports")
 }
-
-// ==================== REVISION ROUNDS ====================
-
 model RevisionRound {
   id          String    @id @default(cuid())
   roundNumber Int
@@ -786,15 +700,12 @@ model RevisionRound {
   @@unique([projectId, roundNumber])
   @@map("revision_rounds")
 }
-
-// ==================== PROPOSAL VERSIONS ====================
-
 model ProposalVersion {
-  id         String   @id @default(cuid())
-  proposalId String
-  data       Json
+  id          String   @id @default(cuid())
+  proposalId  String
+  data        Json
   createdById String
-  createdAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
 
   proposal  Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
   createdBy User     @relation(fields: [createdById], references: [id])
@@ -803,9 +714,6 @@ model ProposalVersion {
   @@index([createdAt])
   @@map("proposal_versions")
 }
-
-// ==================== PROPOSALS ====================
-
 model Proposal {
   id            String    @id @default(cuid())
   title         String
@@ -827,19 +735,19 @@ model Proposal {
   updatedAt     DateTime  @updatedAt
 
   // Phase 3a: PDF generation & email tracking
-  pdfPath       String?   // Path/URL to stored PDF file
+  pdfPath        String? // Path/URL to stored PDF file
   pdfGeneratedAt DateTime? // When the PDF was generated
-  sentToEmail   String?   // Recipient email address
-  gmailMessageId String?  // Gmail message ID for sent email
-  gmailThreadId  String?  // Gmail thread ID
-  emailSentAt   DateTime? // When the email was sent
-  emailContent  String?   // JSON: { subject, body, cc, bcc }
+  sentToEmail    String? // Recipient email address
+  gmailMessageId String? // Gmail message ID for sent email
+  gmailThreadId  String? // Gmail thread ID
+  emailSentAt    DateTime? // When the email was sent
+  emailContent   String? // JSON: { subject, body, cc, bcc }
 
   // Phase 3a: AI generation metadata
-  aiGenerated   Boolean   @default(false)
-  aiPrompt      String?   // The prompt used for AI generation
-  aiModel       String?   // AI model that generated the content
-  metadata      String?   // JSON: flexible metadata for extensions
+  aiGenerated Boolean @default(false)
+  aiPrompt    String? // The prompt used for AI generation
+  aiModel     String? // AI model that generated the content
+  metadata    String? // JSON: flexible metadata for extensions
 
   client    Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
   project   Project?           @relation(fields: [projectId], references: [id])
@@ -853,14 +761,11 @@ model Proposal {
   // Autosave draft
   draftData String? // JSON of unsaved form data
 
-
-  
   @@index([status])
   @@index([clientId, status])
   @@index([validUntil])
   @@map("proposals")
 }
-
 model ProposalLineItem {
   id          String   @id @default(cuid())
   description String
@@ -872,9 +777,6 @@ model ProposalLineItem {
 
   @@map("proposal_line_items")
 }
-
-// ==================== CONTRACTS ====================
-
 model Contract {
   id            String    @id @default(cuid())
   title         String
@@ -901,15 +803,10 @@ model Contract {
   // Autosave draft
   draftData String? // JSON of unsaved form data
 
-
-  
   @@index([status])
   @@index([clientId, status])
   @@map("contracts")
 }
-
-// ==================== INVOICES ====================
-
 model Invoice {
   id            String    @id @default(cuid())
   invoiceNumber String    @unique
@@ -958,17 +855,15 @@ model Invoice {
   timeEntries TimeEntry[]
   expenses    Expense[]
   // Soft delete
-  deletedAt DateTime?
+  deletedAt   DateTime?
 
   // Autosave draft
   draftData String? // JSON of unsaved form data
-
 
   @@index([status, dueDate])
   @@index([clientId, status])
   @@map("invoices")
 }
-
 model InvoiceLineItem {
   id          String  @id @default(cuid())
   description String
@@ -982,7 +877,6 @@ model InvoiceLineItem {
 
   @@map("invoice_line_items")
 }
-
 model InvoicePayment {
   id            String   @id @default(cuid())
   amount        Float
@@ -997,7 +891,6 @@ model InvoicePayment {
 
   @@map("invoice_payments")
 }
-
 model LineItemTemplate {
   id          String   @id @default(cuid())
   name        String
@@ -1011,9 +904,6 @@ model LineItemTemplate {
 
   @@map("line_item_templates")
 }
-
-// ==================== WEEKLY DIGEST ====================
-
 model WeeklyDigest {
   id                  String   @id @default(cuid())
   weekStart           DateTime
@@ -1030,9 +920,6 @@ model WeeklyDigest {
 
   @@map("weekly_digests")
 }
-
-// ==================== CREDENTIALS VAULT ====================
-
 model Credential {
   id        String   @id @default(cuid())
   label     String
@@ -1053,9 +940,6 @@ model Credential {
   @@index([projectId])
   @@map("credentials")
 }
-
-// ==================== TASK TEMPLATES ====================
-
 model TaskTemplate {
   id        String   @id @default(cuid())
   name      String
@@ -1066,11 +950,6 @@ model TaskTemplate {
 
   @@map("task_templates")
 }
-
-// ==================== MARKETING AGENTS ====================
-
-// Outreach Agent
-
 model OutreachSequence {
   id             String   @id @default(cuid())
   name           String
@@ -1081,76 +960,9 @@ model OutreachSequence {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  leads OutreachLead[]
-
-  
   @@index([status])
   @@map("outreach_sequences")
 }
-
-model OutreachLead {
-  id              String    @id @default(cuid())
-  name            String
-  company         String?
-  email           String
-  linkedinUrl     String?
-  title           String?
-  industry        String?
-  status          String    @default("NEW") // NEW | CONTACTED | REPLIED | CONVERTED | DEAD
-  source          String    @default("MANUAL") // MANUAL | HUNTER | IMPORT
-  notes           String?
-  lastContactedAt DateTime?
-  sequenceId      String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  sequence OutreachSequence? @relation(fields: [sequenceId], references: [id], onDelete: SetNull)
-
-  
-  @@index([status])
-  @@index([lastContactedAt, status])
-  @@map("outreach_leads")
-}
-
-// Social Agent
-
-model SocialPost {
-  id          String    @id @default(cuid())
-  platform    String // INSTAGRAM | LINKEDIN | FACEBOOK
-  content     String
-  imagePrompt String?
-  status      String    @default("DRAFT") // DRAFT | SCHEDULED | PUBLISHED
-  scheduledAt DateTime?
-  publishedAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  @@map("social_posts")
-}
-
-// Blog Agent
-
-model BlogPost {
-  id              String    @id @default(cuid())
-  title           String
-  slug            String    @unique
-  content         String // Markdown
-  excerpt         String?
-  status          String    @default("DRAFT") // DRAFT | APPROVED | PUBLISHED
-  targetKeyword   String?
-  metaDescription String?
-  wordpressPostId String?
-  publishedAt     DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  
-  @@index([status, publishedAt])
-  @@map("blog_posts")
-}
-
-// ==================== EMAIL TRIAGE AGENT ====================
-
 model EmailTriageItem {
   id          String   @id @default(cuid())
   subject     String
@@ -1166,12 +978,10 @@ model EmailTriageItem {
 
   drafts EmailTriageDraft[]
 
-  
   @@index([status])
   @@index([createdAt])
   @@map("email_triage_items")
 }
-
 model EmailTriageDraft {
   id        String   @id @default(cuid())
   option    Int      @default(1) // 1 or 2
@@ -1187,154 +997,6 @@ model EmailTriageDraft {
 
   @@map("email_triage_drafts")
 }
-
-// ==================== CONTENT AGENT ====================
-
-model ContentDraft {
-  id          String    @id @default(cuid())
-  type        String // BLOG | SOCIAL | LINKEDIN_ARTICLE
-  title       String?
-  content     String
-  platform    String? // LINKEDIN | INSTAGRAM | FACEBOOK (for SOCIAL type)
-  brief       String? // Original brief/topic
-  keywords    String? // Target keywords
-  status      String    @default("DRAFT") // DRAFT | APPROVED | PUBLISHED
-  approvedAt  DateTime?
-  publishedAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  @@map("content_drafts")
-}
-
-// ==================== LINKEDIN OUTREACH AGENT ====================
-
-model LinkedInSequence {
-  id            String   @id @default(cuid())
-  prospectName  String
-  prospectTitle String?
-  company       String?
-  industry      String?
-  linkedinUrl   String?
-  connectionMsg String // Connection request message
-  followUp1     String // 3-day follow-up
-  followUp2     String // 7-day follow-up
-  status        String   @default("DRAFT") // DRAFT | ACTIVE | COMPLETED
-  notes         String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  
-  @@index([status])
-  @@map("linkedin_sequences")
-}
-
-model LinkedInProspect {
-  id          String   @id @default(cuid())
-  name        String
-  title       String?
-  company     String?
-  industry    String?
-  linkedinUrl String?
-  email       String?
-  status      String   @default("NEW") // NEW | CONNECTED | IN_SEQUENCE | REPLIED | CONVERTED
-  notes       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  
-  @@index([status])
-  @@index([createdAt])
-  @@map("linkedin_prospects")
-}
-
-// ==================== COLD EMAIL AGENT ====================
-
-model ColdEmailSequence {
-  id             String   @id @default(cuid())
-  name           String
-  serviceType    String // web_design | branding | seo | full_service
-  emails         String   @default("[]") // JSON: array of 5 emails [{subject, body, delayDays}]
-  status         String   @default("DRAFT") // DRAFT | ACTIVE | PAUSED | COMPLETED
-  targetIndustry String?
-  // Sequence engine fields
-  startedAt      DateTime?
-  completedAt    DateTime?
-  // Stats (denormalized for fast reads)
-  totalSent      Int      @default(0)
-  totalOpened    Int      @default(0)
-  totalClicked   Int      @default(0)
-  totalReplied   Int      @default(0)
-  totalBounced   Int      @default(0)
-  totalProspects Int      @default(0)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  prospects ColdEmailProspect[]
-  events    ColdEmailEvent[]
-
-  @@map("cold_email_sequences")
-}
-
-model ColdEmailProspect {
-  id            String    @id @default(cuid())
-  name          String
-  email         String
-  company       String?
-  industry      String?
-  painPoint     String?
-  status        String    @default("NEW") // NEW | CONTACTED | REPLIED | CONVERTED | UNSUBSCRIBED
-  sequenceId    String?
-  // Pipeline source: Ashbi | cameronashley
-  source        String    @default("Ashbi")
-  // LinkedIn
-  linkedinUrl   String?
-  // Audit notes for Ashbi outreach (specific observation per brand)
-  auditNotes    String?
-  // Tracking fields
-  lastEmailStep Int?      @default(0) // Which email step in the sequence was last sent (0-indexed)
-  nextEmailAt   DateTime? // When to send the next email
-  openedAt      DateTime?
-  clickedAt     DateTime?
-  bouncedAt     DateTime?
-  lastEmailedAt DateTime?
-  emailCount    Int        @default(0) // Total emails sent to this prospect
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  sequence ColdEmailSequence? @relation(fields: [sequenceId], references: [id], onDelete: SetNull)
-  events   ColdEmailEvent[]
-
-  
-  @@index([nextEmailAt, status])
-  @@index([status])
-  @@index([createdAt])
-  @@map("cold_email_prospects")
-}
-
-// ColdEmailEvent — individual send/tracking events per prospect
-model ColdEmailEvent {
-  id          String   @id @default(cuid())
-  prospectId  String
-  sequenceId  String?
-  type        String   // SENT | OPENED | CLICKED | BOUNCED | REPLIED | UNSUBSCRIBED
-  emailStep   Int?     // Which step in the sequence (0-indexed)
-  mailgunId   String?  // Mailgun message ID for tracking
-  mailgunEvent String? // Raw Mailgun event type
-  metadata    String?  // JSON — Mailgun event payload
-  createdAt   DateTime @default(now())
-
-  prospect ColdEmailProspect  @relation(fields: [prospectId], references: [id], onDelete: Cascade)
-  sequence ColdEmailSequence? @relation(fields: [sequenceId], references: [id], onDelete: SetNull)
-
-  
-  @@index([mailgunId])
-  @@index([prospectId, type])
-  @@map("cold_email_events")
-}
-
-// ==================== AI TEAM ====================
-
 model AiTeamMessage {
   id        String   @id @default(cuid())
   agentRole String // WEB_DESIGNER, WEB_DEVELOPER, PROJECT_MANAGER, MARKETING_MANAGER, SALES, LEGAL, BRANDING_EXPERT
@@ -1350,9 +1012,6 @@ model AiTeamMessage {
   @@index([agentRole, createdAt])
   @@map("ai_team_messages")
 }
-
-// ==================== AI CONTEXT SETTINGS ====================
-
 model AiContext {
   id        String   @id @default(cuid())
   key       String   @unique
@@ -1362,54 +1021,6 @@ model AiContext {
 
   @@map("ai_context")
 }
-
-// ==================== UPWORK CONTRACT TRACKER ====================
-
-model UpworkContract {
-  id               String    @id @default(cuid())
-  clientName       String
-  projectName      String
-  platform         String    @default("UPWORK") // UPWORK | DIRECT
-  contractType     String    @default("FIXED") // FIXED | HOURLY
-  totalBudget      Float     @default(0)
-  hourlyRate       Float?
-  status           String    @default("ACTIVE") // ACTIVE | PAUSED | COMPLETED | CANCELLED
-  currentMilestone String?
-  milestoneAmount  Float?
-  milestoneStatus  String? // PENDING | SUBMITTED | APPROVED | OVERDUE
-  milestoneDueDate DateTime?
-  lastMessageAt    DateTime?
-  lastMessageDays  Int?
-  notes            String?
-  upworkUrl        String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-
-  @@map("upwork_contracts")
-}
-
-model UpworkProposal {
-  id              String    @id @default(cuid())
-  jobId           String
-  jobTitle        String
-  clientName      String?
-  budget          Float?
-  coverLetter     String
-  status          String    @default("DRAFT")
-  // DRAFT | QUEUED | SUBMITTED | INTERVIEWING | HIRED | DECLINED | WITHDRAWN
-  score           Int?
-  jobUrl          String?
-  submittedAt     DateTime?
-  interviewAt     DateTime?
-  notes           String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  @@map("upwork_proposals")
-}
-
-// ==================== EXPENSE TRACKING ====================
-
 model Expense {
   id          String   @id @default(cuid())
   description String
@@ -1427,21 +1038,17 @@ model Expense {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  client  Client?  @relation(fields: [clientId], references: [id])
-  project Project? @relation(fields: [projectId], references: [id])
-  invoice Invoice? @relation(fields: [invoiceId], references: [id])
+  client    Client?   @relation(fields: [clientId], references: [id])
+  project   Project?  @relation(fields: [projectId], references: [id])
+  invoice   Invoice?  @relation(fields: [invoiceId], references: [id])
   // Soft delete
   deletedAt DateTime?
-
 
   @@index([clientId])
   @@index([projectId])
   @@index([invoiceId])
   @@map("expenses")
 }
-
-// ==================== REVENUE SNAPSHOTS (MRR/ARR) ====================
-
 model RevenueSnapshot {
   id                     String   @id @default(cuid())
   month                  String // YYYY-MM e.g. "2026-03"
@@ -1468,9 +1075,6 @@ model RevenueSnapshot {
   @@unique([month, clientId])
   @@map("revenue_snapshots")
 }
-
-// ==================== APPROVALS ====================
-
 model Approval {
   id         String    @id @default(cuid())
   type       String // EMAIL | PROPOSAL | CONTRACT | DEPLOY | POST | INVOICE | COPY | OTHER
@@ -1495,9 +1099,6 @@ model Approval {
   @@index([createdAt])
   @@map("approvals")
 }
-
-// ==================== EMAIL COMMUNICATIONS & CONTEXT ====================
-
 model ProjectCommunication {
   id             String   @id @default(cuid())
   projectId      String
@@ -1523,7 +1124,6 @@ model ProjectCommunication {
   @@index([gmailMessageId])
   @@map("project_communications")
 }
-
 model ProjectContext {
   id                String    @id @default(cuid())
   projectId         String    @unique
@@ -1539,7 +1139,6 @@ model ProjectContext {
 
   @@map("project_contexts")
 }
-
 model ClientEmailMapping {
   id           String   @id @default(cuid())
   clientId     String
@@ -1554,9 +1153,6 @@ model ClientEmailMapping {
   @@unique([emailAddress, clientId])
   @@map("client_email_mappings")
 }
-
-// ==================== PUSH SUBSCRIPTIONS ====================
-
 model PushSubscription {
   id        String   @id @default(cuid())
   endpoint  String   @unique
@@ -1569,9 +1165,6 @@ model PushSubscription {
 
   @@map("push_subscriptions")
 }
-
-// ==================== ASH AI CHAT ====================
-
 model AshConversation {
   id        String           @id @default(cuid())
   title     String?
@@ -1581,7 +1174,6 @@ model AshConversation {
 
   @@map("ash_conversations")
 }
-
 model AshChatMessage {
   id             String          @id @default(cuid())
   conversationId String
@@ -1592,9 +1184,6 @@ model AshChatMessage {
 
   @@map("ash_chat_messages")
 }
-
-// ==================== PROJECT TEMPLATES ====================
-
 model ProjectTemplate {
   id          String   @id @default(cuid())
   name        String
@@ -1607,9 +1196,6 @@ model ProjectTemplate {
 
   @@map("project_templates")
 }
-
-// ==================== INTAKE FORMS ====================
-
 model IntakeForm {
   id          String   @id @default(cuid())
   name        String
@@ -1626,7 +1212,6 @@ model IntakeForm {
 
   @@map("intake_forms")
 }
-
 model IntakeFormResponse {
   id              String   @id @default(cuid())
   formId          String
@@ -1640,9 +1225,6 @@ model IntakeFormResponse {
 
   @@map("intake_form_responses")
 }
-
-// ==================== BRAND SETTINGS ====================
-
 model BrandSettings {
   id             String  @id @default(cuid())
   companyName    String  @default("Ashbi Design")
@@ -1660,9 +1242,6 @@ model BrandSettings {
 
   @@map("brand_settings")
 }
-
-// ==================== DEAL PIPELINE (from ashbi-hub) ====================
-
 model PipelineStage {
   id          String   @id @default(cuid())
   name        String
@@ -1676,7 +1255,6 @@ model PipelineStage {
 
   @@map("pipeline_stages")
 }
-
 model PipelineDeal {
   id                String    @id @default(cuid())
   title             String
@@ -1699,127 +1277,6 @@ model PipelineDeal {
   @@index([clientId])
   @@map("pipeline_deals")
 }
-
-// ==================== NPS SURVEYS (from ashbi-hub) ====================
-
-model SurveyResponse {
-  id              String   @id @default(cuid())
-  clientId        String
-  score           Int // 0-10 NPS score
-  category        String // PROMOTER | PASSIVE | DETRACTOR
-  comment         String?
-  respondentName  String?
-  respondentEmail String?
-  createdAt       DateTime @default(now())
-
-  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
-
-  @@index([clientId])
-  @@index([createdAt])
-  @@map("survey_responses")
-}
-
-// ==================== WORDPRESS SITE BRIDGE (from ashbi-hub) ====================
-
-model WPSite {
-  id            String    @id @default(cuid())
-  name          String
-  url           String
-  adminUrl      String?
-  clientId      String?
-  projectId     String?   @unique
-  status        String    @default("ACTIVE") // ACTIVE | MAINTENANCE | OFFLINE | ERROR
-  wpVersion     String?
-  phpVersion    String?
-  pluginCount   Int       @default(0)
-  theme         String?
-  lastCheckedAt DateTime?
-  healthScore   Int       @default(100) // 0-100
-  alerts        String    @default("[]") // JSON: array of alert objects
-  magicLoginUrl String?
-  bridgeVersion String?
-  ttfb          Int?
-  dbSize        BigInt?
-  diskBytes     BigInt?
-  diskUsagePct  Float?
-  pluginUpdates Int       @default(0)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  client    Client?    @relation("WPSiteClient", fields: [clientId], references: [id])
-  project   Project?   @relation(fields: [projectId], references: [id])
-  backups   WPBackup[]
-  reports   WPReport[]
-  alertsLog WPAlert[]
-
-  
-  @@index([status])
-  @@map("wp_sites")
-}
-
-// Per-site backup records from the bridge plugin (v1.7.0+)
-model WPBackup {
-  id           String   @id @default(cuid())
-  siteId       String
-  siteUrl      String
-  timestamp    DateTime
-  dbSuccess    Boolean
-  filesSuccess Boolean
-  dbFile       String?
-  filesFile    String?
-  manifest     String?
-  dbSize       BigInt?
-  filesSize    BigInt?
-  createdAt    DateTime @default(now())
-
-  site WPSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
-
-  @@index([siteId])
-  @@index([siteUrl])
-  @@index([timestamp])
-  @@map("wp_backups")
-}
-
-// Monthly maintenance report delivered by the bridge plugin (v1.7.0+)
-model WPReport {
-  id        String   @id @default(cuid())
-  siteId    String
-  siteUrl   String
-  month     String
-  uptime    String?  // JSON: { total, ok, failed, pct }
-  updates   String?  // JSON: { plugins, themes, core }
-  cleanup   String?  // JSON: { revisions, spam_comments, trash_posts, expired_tokens }
-  hours     String?  // JSON: { available, used, remaining, banked, log }
-  ssl       String?  // JSON: { status, days }
-  payload   String?  // Full raw payload
-  createdAt DateTime @default(now())
-
-  site WPSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
-
-  @@unique([siteId, month])
-  @@index([siteUrl])
-  @@index([createdAt])
-  @@map("wp_reports")
-}
-
-// Support-hour alerts: new admin, promotions, security events (v1.7.0+)
-model WPAlert {
-  id        String   @id @default(cuid())
-  siteId    String?
-  siteUrl   String
-  alertType String
-  details   String   @default("{}")
-  createdAt DateTime @default(now())
-
-  site WPSite? @relation(fields: [siteId], references: [id], onDelete: SetNull)
-
-  @@index([siteUrl])
-  @@index([alertType])
-  @@index([createdAt])
-  @@map("wp_alerts")
-}
-
-// Support hour ledger (retainer usage tracked by plugin and reported to hub)
 model SupportHourEntry {
   id          String   @id @default(cuid())
   siteUrl     String
@@ -1837,9 +1294,6 @@ model SupportHourEntry {
   @@index([clientId])
   @@map("support_hours")
 }
-
-// ==================== CREATIVE BRIEFS (from ashbi-hub) ====================
-
 model CreativeBrief {
   id             String   @id @default(cuid())
   title          String
@@ -1862,81 +1316,6 @@ model CreativeBrief {
   @@index([clientId])
   @@map("creative_briefs")
 }
-
-// ==================== AD COPY GENERATOR (from ashbi-hub) ====================
-
-model AdCopy {
-  id          String   @id @default(cuid())
-  clientId    String?
-  projectId   String?
-  headline    String
-  body        String
-  cta         String? // Call-to-action text
-  platform    String   @default("GOOGLE") // GOOGLE | FACEBOOK | INSTAGRAM | LINKEDIN | TIKTOK
-  audience    String? // Target audience description
-  tone        String? // Professional | Casual | Urgent | Friendly
-  status      String   @default("DRAFT") // DRAFT | APPROVED | ACTIVE | PAUSED
-  aiGenerated Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  client  Client?  @relation(fields: [clientId], references: [id])
-  project Project? @relation(fields: [projectId], references: [id])
-
-  @@map("ad_copies")
-}
-
-// ==================== CONTENT CALENDAR (from ashbi-hub) ====================
-
-model ContentCalendarEvent {
-  id          String    @id @default(cuid())
-  title       String
-  description String?
-  contentType String    @default("BLOG") // BLOG | SOCIAL | EMAIL | VIDEO | PODCAST
-  status      String    @default("IDEA") // IDEA | DRAFT | IN_REVIEW | SCHEDULED | PUBLISHED
-  platform    String? // Blog | LinkedIn | Instagram | Email | etc.
-  scheduledAt DateTime?
-  publishedAt DateTime?
-  contentUrl  String? // URL of published content
-  clientId    String?
-  projectId   String?
-  assigneeId  String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  client   Client?  @relation(fields: [clientId], references: [id])
-  project  Project? @relation(fields: [projectId], references: [id])
-  assignee User?    @relation("CalendarEventAssignee", fields: [assigneeId], references: [id])
-
-  @@index([scheduledAt])
-  @@map("content_calendar_events")
-}
-
-// ==================== SEO AUDITS (from ashbi-hub) ====================
-
-model SEOAudit {
-  id          String   @id @default(cuid())
-  url         String
-  title       String? // Page title
-  score       Int      @default(0) // 0-100
-  issues      String   @default("[]") // JSON: array of issue objects
-  suggestions String   @default("[]") // JSON: array of suggestion objects
-  keywords    String   @default("[]") // JSON: target keywords
-  clientId    String?
-  projectId   String?
-  status      String   @default("PENDING") // PENDING | COMPLETED | FAILED
-  aiGenerated Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  client  Client?  @relation(fields: [clientId], references: [id])
-  project Project? @relation(fields: [projectId], references: [id])
-
-  @@map("seo_audits")
-}
-
-// ==================== SNIPPET LIBRARY (from ashbi-hub) ====================
-
 model Snippet {
   id          String   @id @default(cuid())
   title       String
@@ -1955,9 +1334,6 @@ model Snippet {
 
   @@map("snippets")
 }
-
-// ==================== ASSET LIBRARY (from ashbi-hub) ====================
-
 model Asset {
   id           String   @id @default(cuid())
   name         String
@@ -1978,9 +1354,6 @@ model Asset {
 
   @@map("assets")
 }
-
-// ==================== CLIENT EMBEDDINGS (RAG / Client Brain) ====================
-
 model ClientEmbedding {
   id        String                      @id @default(cuid())
   clientId  String
@@ -1998,9 +1371,6 @@ model ClientEmbedding {
   @@index([source])
   @@map("client_embeddings")
 }
-
-// ==================== TIME SESSIONS (from ashbi-hub) ====================
-
 model TimeSession {
   id          String    @id @default(cuid())
   userId      String
@@ -2024,9 +1394,6 @@ model TimeSession {
   @@index([isRunning])
   @@map("time_sessions")
 }
-
-// ==================== PROMPT VERSIONS (for AI enhancement) ====================
-
 model PromptVersion {
   id          String   @id @default(cuid())
   name        String // e.g., "analyzeMessage", "draftResponse"
@@ -2041,7 +1408,6 @@ model PromptVersion {
   @@unique([name, version])
   @@map("prompt_versions")
 }
-
 model ClientInvitation {
   id        String    @id @default(cuid())
   token     String    @unique
@@ -2055,7 +1421,6 @@ model ClientInvitation {
 
   @@map("client_invitations")
 }
-
 model ApiKey {
   id         String    @id @default(cuid())
   name       String
@@ -2071,53 +1436,47 @@ model ApiKey {
 
   @@map("api_keys")
 }
-
-// ==================== ESTIMATES ====================
-
 model Estimate {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   clientId    String
-  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client      Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   title       String
   description String?
-  status      String   @default("DRAFT") // DRAFT, SENT, APPROVED, DECLINED, CONVERTED
-  lineItems   Json     @default("[]") // [{description, quantity, rate, amount}]
-  subtotal    Float    @default(0)
-  tax         Float    @default(0)
-  total       Float    @default(0)
+  status      String    @default("DRAFT") // DRAFT, SENT, APPROVED, DECLINED, CONVERTED
+  lineItems   Json      @default("[]") // [{description, quantity, rate, amount}]
+  subtotal    Float     @default(0)
+  tax         Float     @default(0)
+  total       Float     @default(0)
   validUntil  DateTime?
-  viewToken   String   @unique @default(cuid())
+  viewToken   String    @unique @default(cuid())
   sentAt      DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
   // Soft delete
-  deletedAt DateTime?
+  deletedAt   DateTime?
 
   // Autosave draft
   draftData String? // JSON of unsaved form data
-
 
   @@index([clientId])
   @@index([status])
   @@map("estimates")
 }
-
 model RateCard {
-  id          String   @id @default(cuid())
-  name        String
-  clientId    String?
-  client      Client?  @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  rates       Json     @default("[]") // [{serviceName, unit, rate, description}]
-  isDefault   Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  name      String
+  clientId  String?
+  client    Client?  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  rates     Json     @default("[]") // [{serviceName, unit, rate, description}]
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("rate_cards")
 }
-
 model Integration {
   id           String    @id @default(cuid())
-  type         String    // QUICKBOOKS, XERO
+  type         String // QUICKBOOKS, XERO
   accessToken  String?
   refreshToken String?
   orgId        String?
@@ -2128,16 +1487,13 @@ model Integration {
 
   @@map("integrations")
 }
-
-// ==================== TRASHED ITEMS ====================
-
 model TrashedItem {
-  id        String    @id @default(cuid())
-  entity    String    // CLIENT | PROJECT | INVOICE | PROPOSAL | CONTRACT | EXPENSE | TASK | ESTIMATE | NOTE | RETAINER_PLAN
-  recordId  String
-  data      Json
-  deletedAt DateTime  @default(now())
-  expiresAt DateTime  // 30 days from deletedAt
+  id         String    @id @default(cuid())
+  entity     String // CLIENT | PROJECT | INVOICE | PROPOSAL | CONTRACT | EXPENSE | TASK | ESTIMATE | NOTE | RETAINER_PLAN
+  recordId   String
+  data       Json
+  deletedAt  DateTime  @default(now())
+  expiresAt  DateTime // 30 days from deletedAt
   restoredAt DateTime?
 
   @@index([entity])
