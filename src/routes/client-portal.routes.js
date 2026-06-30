@@ -107,7 +107,9 @@ export default async function clientPortalRoutes(fastify) {
   // POST /api/client-portal/verify-token
   // Exchanges a magic-link token for an httpOnly secure cookie
   // This avoids JWT tokens appearing in browser history / Referer headers
-  fastify.post('/client-portal/verify-token', async (request, reply) => {
+  fastify.post('/client-portal/verify-token', {
+    preHandler: validateBody(clientPortalTokenRedeemSchema),
+  }, async (request, reply) => {
     const { token } = request.body || {};
 
     if (!token) {

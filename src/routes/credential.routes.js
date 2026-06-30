@@ -1,6 +1,7 @@
 // Credentials Vault routes
 
 import { encrypt, decrypt } from '../utils/crypto.js';
+import { validateBody } from '../validators/schemas.js';
 
 export default async function credentialRoutes(fastify) {
   // List credentials with optional filters (admin only)
@@ -107,7 +108,8 @@ export default async function credentialRoutes(fastify) {
 
   // Update credential (admin only)
   fastify.put('/:id', {
-    onRequest: [fastify.adminOnly]
+    onRequest: [fastify.adminOnly],
+    preHandler: validateBody(credentialSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { label, username, password, url, notes, category, clientId, projectId } = request.body;
@@ -139,7 +141,8 @@ export default async function credentialRoutes(fastify) {
 
   // Delete credential (admin only)
   fastify.delete('/:id', {
-    onRequest: [fastify.adminOnly]
+    onRequest: [fastify.adminOnly],
+    preHandler: validateBody(credentialSchema),
   }, async (request, reply) => {
     const { id } = request.params;
 

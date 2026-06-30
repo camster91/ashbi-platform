@@ -220,7 +220,8 @@ export default async function clientRoutes(fastify) {
 
   // Add a quick note to a client
   fastify.post('/:id/notes', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(clientNoteCreateSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { content } = request.body;

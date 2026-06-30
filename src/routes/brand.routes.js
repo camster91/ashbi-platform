@@ -3,6 +3,7 @@
 import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
+import { validateBody } from '../validators/schemas.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -20,7 +21,9 @@ export default async function brandRoutes(fastify) {
   });
 
   // ─── PUT / — update brand settings (admin only) ─────────────────────────────
-  fastify.put('/', { onRequest: [fastify.adminOnly] }, async (request, reply) => {
+  fastify.put('/', { onRequest: [fastify.adminOnly],
+    preHandler: validateBody(brandSettingsSchema),
+  }, async (request, reply) => {
     const {
       companyName, primaryColor, accentColor, address, phone, email,
       website, taxId, invoiceFooter, proposalFooter, contractHeader,

@@ -1,6 +1,7 @@
 // Search routes
 
 import aiClient from '../ai/client.js';
+import { validateBody } from '../validators/schemas.js';
 
 export default async function searchRoutes(fastify) {
   // Global search
@@ -166,7 +167,8 @@ export default async function searchRoutes(fastify) {
 
   // Natural language query (AI-powered)
   fastify.post('/ask', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(searchAskSchema),
   }, async (request, reply) => {
     const { question, clientId, projectId } = request.body;
 

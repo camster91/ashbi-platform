@@ -4,6 +4,7 @@
 // POST /api/time-sessions/:id/stop — stop a running timer
 
 import {
+import { validateBody } from '../validators/schemas.js';
   startTimer,
   stopTimer,
   getRunningTimer
@@ -12,7 +13,8 @@ import {
 export default async function timeSessionRoutes(fastify) {
   // Start a new timer (stops previous one automatically via service)
   fastify.post('/', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(timeSessionStartSchema),
   }, async (request, reply) => {
     const { projectId, taskId, description } = request.body;
     const userId = request.user.id;

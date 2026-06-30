@@ -102,7 +102,8 @@ export default async function estimateRoutes(fastify) {
 
   // Delete estimate
   fastify.delete('/:id', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(estimateUpdateSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const existing = await request.prisma.estimate.findUnique({ where: { id } });

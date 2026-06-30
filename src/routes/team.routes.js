@@ -1,6 +1,7 @@
 // Team management routes
 
 import bcrypt from 'bcrypt';
+import { validateBody } from '../validators/schemas.js';
 
 async function hashPassword(password) {
   return bcrypt.hash(password, 12);
@@ -128,7 +129,8 @@ export default async function teamRoutes(fastify) {
 
   // Update team member
   fastify.put('/:id', {
-    onRequest: [fastify.adminOnly]
+    onRequest: [fastify.adminOnly],
+    preHandler: validateBody(teamUpdateSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { name, role, skills, capacity, isActive } = request.body;

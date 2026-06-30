@@ -2,6 +2,7 @@
 // Migrated from ashbi-hub with auth decorators and Prisma service layer
 
 import {
+import { validateBody } from '../validators/schemas.js';
   generateCreativeBrief,
   getBriefs,
   getBrief,
@@ -46,14 +47,16 @@ export default async function creativeBriefRoutes(fastify) {
 
   // Update a brief
   fastify.patch('/:id', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(creativeBriefUpdateSchema),
   }, async (request) => {
     return updateBrief(request.params.id, request.body);
   });
 
   // Delete a brief
   fastify.delete('/:id', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(creativeBriefUpdateSchema),
   }, async (request) => {
     await deleteBrief(request.params.id);
     return { success: true };

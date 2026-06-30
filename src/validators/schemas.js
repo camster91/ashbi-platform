@@ -918,3 +918,407 @@ export const projectFromTemplateSchema = z.object({
   clientId: cuidId,
   name: z.string().min(1).max(200),
 });
+
+// ── Comments (task comments) ───────────────────────────────────────────────
+export const commentCreateSchema = z.object({
+  content: z.string().min(1).max(10_000),
+  mentions: z.array(cuidId).max(50).optional(),
+});
+
+// ── Contracts (DocuSign replacement) ──────────────────────────────────────
+export const contractCreateSchema = z.object({
+  clientId: cuidId,
+  title: z.string().min(1).max(200),
+  templateType: z.enum(['RETAINER', 'PROJECT', 'NDA', 'CUSTOM']),
+  content: z.string().min(1).max(100_000),
+  proposalId: cuidId.optional(),
+  validUntil: z.string().datetime().optional(),
+});
+
+export const contractUpdateSchema = z.object({
+  title: z.string().min(1).max(200).optional(),
+  content: z.string().min(1).max(100_000).optional(),
+  draftData: z.string().max(50_000).optional(),
+});
+
+export const contractSignNewSchema = z.object({
+  signerName: z.string().min(1).max(200),
+  agreement: z.boolean(), // explicit acceptance
+  signatureData: z.string().max(50_000).optional(), // drawn / typed signature
+});
+
+// ── Creative Brief (feeds proposal builder) ──────────────────────────────
+export const creativeBriefCreateSchema = z.object({
+  clientId: cuidId,
+  projectType: z.string().min(1).max(100),
+  notes: z.string().max(20_000).optional(),
+  targetAudience: z.string().max(5_000).optional(),
+  brandGuidelines: z.string().max(20_000).optional(),
+  deliverables: z.array(z.string().max(500)).max(50).optional(),
+});
+
+export const creativeBriefUpdateSchema = z.object({
+  projectType: z.string().min(1).max(100).optional(),
+  notes: z.string().max(20_000).optional(),
+  targetAudience: z.string().max(5_000).optional(),
+  brandGuidelines: z.string().max(20_000).optional(),
+  deliverables: z.array(z.string().max(500)).max(50).optional(),
+});
+
+// ── Credentials (encrypted vault) ─────────────────────────────────────────
+export const credentialSchema = z.object({
+  label: z.string().min(1).max(200),
+  username: z.string().min(1).max(200).optional(),
+  password: z.string().min(1).max(1000), // pre-encryption; service encrypts
+  url: z.string().url().max(2048).optional(),
+  notes: z.string().max(5_000).optional(),
+  category: z.string().min(1).max(50).optional(),
+  clientId: cuidId.optional(),
+  projectId: cuidId.optional(),
+});
+
+// ── Draft responses (Notion-style inline drafts) ──────────────────────────
+export const draftSchema = z.object({
+  data: z.string().min(1).max(100_000), // JSON or markdown content
+});
+
+// ── Email triage ──────────────────────────────────────────────────────────
+export const emailTriageScanSchema = z.object({
+  // Currently the route accepts no body, but pre-strip-down extended it
+  // to optionally take a date range. Keep room for it.
+  sinceIso: z.string().datetime().optional(),
+  maxThreads: z.number().int().min(1).max(100).default(50),
+});
+
+export const emailTriageUpdateSchema = z.object({
+  subject: z.string().max(500).optional(),
+  body: z.string().max(50_000).optional(),
+  tags: z.array(z.string().max(50)).max(20).optional(),
+  status: z.enum(['NEEDS_REPLY', 'INFO_ONLY', 'URGENT', 'DONE']).optional(),
+});
+
+// ── Estimates (pre-sale quotes) ──────────────────────────────────────────
+export const estimateCreateSchema = z.object({
+  clientId: cuidId,
+  title: z.string().min(1).max(200),
+  description: z.string().max(10_000).optional(),
+  lineItems: z.array(invoiceLineItemInputSchema).min(1).max(100),
+  tax: z.number().nonnegative().max(100).default(0),
+  validUntil: z.string().datetime().optional(),
+});
+
+export const estimateUpdateSchema = estimateCreateSchema.partial();
+
+export const estimateActionSchema = z.object({
+  action: z.enum(['approve', 'decline']),
+  notes: z.string().max(1_000).optional(),
+});
+
+// ── Expense (already has createExpenseSchema, add update + bulk) ─────────
+export const expenseUpdateSchema = z.object({
+  description: z.string().min(1).max(500).optional(),
+  amount: z.number().positive().max(10_000_000).optional(),
+  currency: z.enum(['USD', 'CAD', 'EUR', 'GBP']).optional(),
+  category: z.string().min(1).max(50).optional(),
+  date: z.string().datetime().optional(),
+  billable: z.boolean().optional(),
+  notes: z.string().max(5_000).optional(),
+});
+
+// ── Gmail drafts / replies ────────────────────────────────────────────────
+export const gmailSendSchema = z.object({
+  to: z.string().email().max(255),
+  subject: z.string().min(1).max(500),
+  body: z.string().min(1).max(50_000),
+  threadId: cuidId.optional(),
+  in_reply_to: z.string().max(500).optional(),
+  references: z.string().max(500).optional(),
+  hubThreadId: cuidId.optional(),
+});
+
+export const gmailReplySchema = z.object({
+  hubThreadId: cuidId,
+  body: z.string().min(1).max(50_000).optional(),
+});
+
+// ── Inbox ────────────────────────────────────────────────────────────────
+export const inboxAssignSchema = z.object({
+  clientId: cuidId.optional(),
+  projectId: cuidId.optional(),
+  createNewClient: z.boolean().optional(),
+});
+
+// ── Integration ──────────────────────────────────────────────────────────
+export const integrationUpdateSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  config: z.record(z.string(), z.unknown()).optional(),
+  enabled: z.boolean().optional(),
+});
+
+// ── Milestone ────────────────────────────────────────────────────────────
+export const milestoneSchema = z.object({
+  name: z.string().min(1).max(200),
+  description: z.string().max(2_000).optional(),
+  dueDate: z.string().datetime().optional(),
+  status: z.enum(['PLANNED', 'IN_PROGRESS', 'COMPLETED', 'BLOCKED']).optional(),
+  color: z.string().max(20).optional(),
+});
+
+// ── Note (sticky note widget) ─────────────────────────────────────────────
+export const noteCreateSchema = z.object({
+  title: z.string().min(1).max(200).optional(),
+  content: z.string().min(1).max(50_000),
+  type: z.enum(['NOTE', 'REMINDER', 'TASK', 'IDEA']).default('NOTE'),
+  tags: z.array(z.string().max(50)).max(20).optional(),
+  isPinned: z.boolean().default(false),
+  // Optional association
+  clientId: cuidId.optional(),
+  projectId: cuidId.optional(),
+});
+
+export const noteUpdateSchema = z.object({
+  title: z.string().min(1).max(200).optional(),
+  content: z.string().min(1).max(50_000).optional(),
+  type: z.enum(['NOTE', 'REMINDER', 'TASK', 'IDEA']).optional(),
+  tags: z.array(z.string().max(50)).max(20).optional(),
+  isPinned: z.boolean().optional(),
+});
+
+// ── Organization (multi-tenant admin) ────────────────────────────────────
+export const organizationCreateSchema = z.object({
+  name: z.string().min(1).max(200),
+  slug: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/, 'lowercase letters, numbers, hyphens'),
+  plan: z.enum(['FREE', 'PRO', 'ENTERPRISE']).default('FREE'),
+});
+
+// ── Retainer (subscription plan / client retainer) ───────────────────────
+export const retainerPlanCreateSchema = z.object({
+  clientId: cuidId,
+  monthlyHours: z.number().positive().max(1000).optional(),
+  monthlyAmountUsd: z.number().positive().max(1_000_000),
+  tier: z.enum(['BASIC', 'GROWTH', 'SCALE']).default('BASIC'),
+  startDate: z.string().datetime().optional(),
+});
+
+// ── Revision (revision rounds) ────────────────────────────────────────────
+export const revisionCreateSchema = z.object({
+  notes: z.string().min(1).max(5_000),
+});
+
+export const revisionUpdateSchema = z.object({
+  status: z.enum(['PENDING', 'IN_REVIEW', 'APPROVED', 'REJECTED']),
+  notes: z.string().max(5_000).optional(),
+});
+
+// ── Search / Semantic Search ─────────────────────────────────────────────
+export const searchAskSchema = z.object({
+  question: z.string().min(1).max(2_000),
+  clientId: cuidId.optional(),
+  projectId: cuidId.optional(),
+});
+
+export const semanticSearchCreateSchema = z.object({
+  clientId: cuidId.optional(),
+  content: z.string().min(1).max(50_000),
+  source: z.string().min(1).max(100),
+  sourceId: cuidId.optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+// ── Team (user management) ───────────────────────────────────────────────
+export const teamInviteSchema = z.object({
+  email: z.string().email().max(255),
+  password: password,
+  name: z.string().min(1).max(100),
+  role: z.enum(['ADMIN', 'STAFF', 'CLIENT']).default('STAFF'),
+  skills: z.array(z.string().max(50)).max(50).optional(),
+  capacity: z.number().int().min(0).max(200).default(100),
+});
+
+export const teamUpdateSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  role: z.enum(['ADMIN', 'STAFF', 'CLIENT']).optional(),
+  skills: z.array(z.string().max(50)).max(50).optional(),
+  capacity: z.number().int().min(0).max(200).optional(),
+  isActive: z.boolean().optional(),
+});
+
+export const teamPasswordResetSchema = z.object({
+  newPassword: password,
+});
+
+// ── TaskTemplate (saved task templates per project) ──────────────────────
+export const taskTemplateSchema = z.object({
+  name: z.string().min(1).max(200),
+  phase: z.string().min(1).max(100).optional(),
+  tasks: z.array(z.object({
+    title: z.string().min(1).max(500),
+    description: z.string().max(5_000).optional(),
+    estimatedTime: z.number().int().positive().max(1000).optional(),
+    priority: z.enum(['LOW', 'NORMAL', 'HIGH', 'CRITICAL']).default('NORMAL'),
+  })).min(1).max(100),
+});
+
+// ── Time tracking ────────────────────────────────────────────────────────
+export const timeEntryCreateSchema = z.object({
+  projectId: cuidId,
+  taskId: cuidId.optional(),
+  duration: z.number().positive().max(86_400), // max 24h
+  description: z.string().max(2_000).optional(),
+  date: z.string().datetime().optional(),
+  billable: z.boolean().default(true),
+});
+
+export const timeEntryUpdateSchema = z.object({
+  duration: z.number().positive().max(86_400).optional(),
+  description: z.string().max(2_000).optional(),
+  date: z.string().datetime().optional(),
+  billable: z.boolean().optional(),
+  taskId: cuidId.nullable().optional(),
+});
+
+export const timeSessionStartSchema = z.object({
+  taskId: cuidId.optional(),
+  projectId: cuidId,
+  description: z.string().max(2_000).optional(),
+  billable: z.boolean().default(true),
+});
+
+export const timeSessionUpdateSchema = z.object({
+  projectId: cuidId.optional(),
+  taskId: cuidId.optional(),
+  description: z.string().max(2_000).optional(),
+});
+
+// ── Attachment ───────────────────────────────────────────────────────────
+export const attachmentCreateSchema = z.object({
+  // File metadata + S3 key — the binary upload is via multipart route
+  // which has separate validation (see ALLOWED_EXTENSIONS in schemas.js)
+  filename: z.string().min(1).max(255),
+  mimeType: z.string().min(1).max(100),
+  size: z.number().int().positive().max(50 * 1024 * 1024), // 50MB
+  entityType: z.enum(['CLIENT', 'PROJECT', 'TASK', 'INVOICE', 'CONTRACT', 'PROPOSAL', 'THREAD', 'MESSAGE', 'NOTE']),
+  entityId: cuidId,
+});
+
+// ── Brand settings ───────────────────────────────────────────────────────
+export const brandSettingsSchema = z.object({
+  primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'hex color like #1a2b3c').optional(),
+  secondaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+  logoUrl: z.string().url().max(2048).optional(),
+  companyName: z.string().min(1).max(200).optional(),
+  tagline: z.string().max(500).optional(),
+  fontFamily: z.string().max(100).optional(),
+});
+
+// ── Calendar (event RSVP) ────────────────────────────────────────────────
+export const calendarRsvpSchema = z.object({
+  status: z.enum(['ACCEPTED', 'DECLINED', 'TENTATIVE']),
+});
+
+// ── Chat (Ash chat + simple chat) ─────────────────────────────────────────
+export const chatMessageCreateSchema = z.object({
+  content: z.string().min(1).max(50_000),
+  type: z.enum(['TEXT', 'IMAGE', 'FILE', 'SYSTEM']).default('TEXT'),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+  parentId: cuidId.optional(),
+});
+
+export const chatMessageUpdateSchema = z.object({
+  content: z.string().min(1).max(50_000),
+});
+
+export const chatReactionSchema = z.object({
+  emoji: z.string().min(1).max(20),
+});
+
+// ── Client + ClientPortal ────────────────────────────────────────────────
+export const clientCreateSchema = z.object({
+  name: z.string().min(1).max(200),
+  domain: z.string().max(255).optional(),
+  status: z.enum(['PROSPECT', 'ACTIVE', 'ARCHIVED']).default('PROSPECT'),
+});
+
+export const clientContactSchema = z.object({
+  email: z.string().email().max(255),
+  name: z.string().min(1).max(200),
+  role: z.string().max(100).optional(),
+  isPrimary: z.boolean().default(false),
+});
+
+export const clientNoteCreateSchema = z.object({
+  content: z.string().min(1).max(10_000),
+});
+
+export const clientPortalEmailSchema = z.object({
+  email: z.string().email().max(255),
+});
+
+export const clientPortalTokenRedeemSchema = z.object({
+  token: z.string().min(1).max(500),
+});
+
+export const clientPortalMessageNewSchema = z.object({
+  content: z.string().min(1).max(10_000),
+  type: z.enum(['TEXT', 'FILE', 'INVOICE_REPLY', 'CONTRACT_REPLY']).default('TEXT'),
+});
+
+// ── Landing (public lead form) ───────────────────────────────────────────
+export const landingLeadSchema = z.object({
+  name: z.string().min(1).max(200),
+  email: z.string().email().max(255),
+  company: z.string().max(200).optional(),
+  phone: z.string().max(50).optional(),
+  budget: z.number().positive().max(10_000_000).optional(),
+  message: z.string().max(10_000).optional(),
+});
+
+// ── Invoice Chaser ───────────────────────────────────────────────────────
+export const invoiceChaserSchema = z.object({
+  invoiceId: cuidId,
+  message: z.string().max(5_000).optional(),
+});
+
+// ── API key (programmatic access tokens) ─────────────────────────────────
+export const apiKeyCreateSchema = z.object({
+  name: z.string().min(1).max(100),
+  expiresAt: z.string().datetime().optional(),
+});
+
+// ── Ash Chat ─────────────────────────────────────────────────────────────
+export const ashChatMessageSchema = z.object({
+  content: z.string().min(1).max(50_000),
+  // Optional context — thread, project, client references
+  threadId: cuidId.optional(),
+  projectId: cuidId.optional(),
+  clientId: cuidId.optional(),
+});
+
+// ── AI Team ──────────────────────────────────────────────────────────────
+export const aiTeamMessageSchema = z.object({
+  agentRole: z.enum(['PLANNER', 'RESEARCHER', 'WRITER', 'CRITIC', 'CLIENT_VOICE', 'OPS']),
+  message: z.string().min(1).max(20_000),
+  clientId: cuidId.optional(),
+  projectId: cuidId.optional(),
+  history: z.array(z.object({
+    role: z.enum(['user', 'assistant']),
+    content: z.string().min(1).max(20_000),
+  })).max(20).optional(),
+});
+
+// ── Settings (assignment rules + remaining) ──────────────────────────────
+export const assignmentRuleBulkSchema = z.object({
+  rules: z.array(z.object({
+    id: cuidId.optional(),
+    name: z.string().min(1).max(200),
+    type: z.enum(['LEAD_SOURCE', 'PROJECT_TYPE', 'CLIENT_TAG', 'DEAL_SIZE']),
+    conditions: z.array(z.object({
+      field: z.string().min(1).max(50),
+      op: z.enum(['equals', 'not_equals', 'contains', 'gt', 'lt', 'in']),
+      value: z.unknown(),
+    })).min(1).max(20),
+    assignToId: cuidId,
+    priority: z.number().int().min(0).max(1000).default(0),
+    isActive: z.boolean().default(true),
+  })).min(1).max(50),
+});

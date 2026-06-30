@@ -149,7 +149,9 @@ export default async function expenseRoutes(fastify) {
   });
 
   // ─── PUT /:id — update expense ─────────────────────────────────────────────
-  fastify.put('/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.put('/:id', { onRequest: [fastify.authenticate],
+    preHandler: validateBody(expenseUpdateSchema),
+  }, async (request, reply) => {
     const existing = await fastify.request.prisma.expense.findUnique({
       where: { id: request.params.id }
     });
@@ -181,7 +183,9 @@ export default async function expenseRoutes(fastify) {
   });
 
   // ─── DELETE /:id — delete expense ──────────────────────────────────────────
-  fastify.delete('/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.delete('/:id', { onRequest: [fastify.authenticate],
+    preHandler: validateBody(expenseUpdateSchema),
+  }, async (request, reply) => {
     const existing = await fastify.request.prisma.expense.findUnique({
       where: { id: request.params.id }
     });

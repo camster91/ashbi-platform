@@ -1,5 +1,7 @@
 // Organization management routes (Master Admin only)
 
+import { validateBody, organizationCreateSchema } from '../validators/schemas.js';
+
 export default async function organizationRoutes(fastify) {
   // Only Master Admins can manage organizations. Compose the standard
   // `fastify.authenticate` (JWT verification) with an inline admin-only
@@ -27,8 +29,10 @@ export default async function organizationRoutes(fastify) {
   });
 
   // POST /api/organizations
-  fastify.post('/', async (request, reply) => {
-    const { name, slug, plan = 'FREE' } = request.body;
+  fastify.post('/', {
+    preHandler: validateBody(organizationCreateSchema),
+  }, async (request, reply) => {
+    const { name, slug, plan } = request.body;
 
     const organization = await fastify.prisma.organization.create({
       data: { name, slug, plan }

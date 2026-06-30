@@ -1,6 +1,7 @@
 // Task Template routes
 
 import { safeParse } from '../utils/safeParse.js';
+import { validateBody } from '../validators/schemas.js';
 
 export default async function templateRoutes(fastify) {
   // List all templates
@@ -87,7 +88,8 @@ export default async function templateRoutes(fastify) {
 
   // Update template
   fastify.put('/:id', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(taskTemplateSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { name, phase, tasks } = request.body;
@@ -110,7 +112,8 @@ export default async function templateRoutes(fastify) {
 
   // Delete template
   fastify.delete('/:id', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(taskTemplateSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     await request.prisma.taskTemplate.delete({ where: { id } });

@@ -1,13 +1,15 @@
 // Email Triage Agent routes
 
 import aiClient from '../ai/client.js';
+import { validateBody } from '../validators/schemas.js';
 
 export default async function emailTriageRoutes(fastify) {
   const { prisma } = fastify;
 
   // POST /email-agent/scan — scan inbox and triage unread messages
   fastify.post('/scan', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(emailTriageScanSchema),
   }, async (request, reply) => {
     // Pull recent unread threads from DB (placeholder until Gmail OAuth)
     const threads = await prisma.thread.findMany({

@@ -1,6 +1,7 @@
 // API Key management routes
 
 import crypto from 'crypto';
+import { validateBody } from '../validators/schemas.js';
 
 const PREFIX = 'ashbi_'; // API keys start with ashbi_ for easy identification
 
@@ -33,7 +34,8 @@ export default async function apiKeyRoutes(fastify) {
 
   // Create a new API key
   fastify.post('/', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(apiKeyCreateSchema),
   }, async (request, reply) => {
     const { name, expiresAt } = request.body || {};
 

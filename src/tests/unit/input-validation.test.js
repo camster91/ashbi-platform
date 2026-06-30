@@ -305,7 +305,11 @@ describe('Route File Validation Coverage', () => {
         const block = content.substring(m.index, m.index + 500);
         const hasValidation = block.includes('validateBody') || block.includes('schema:');
         const hasSkip = /config\s*:\s*\{[^}]*skipValidation\s*:\s*true/.test(block);
-        return !hasValidation && !hasSkip;
+        if (hasValidation || hasSkip) return false;
+        // Only flag if the handler actually reads request.body. URL-param-only
+        // endpoints (DELETE /:id, POST /:id/resolve, etc) don't take a body
+        // so validation adds nothing.
+        return /request\.body/.test(block);
       });
 
       if (unvalidated.length > 0) {

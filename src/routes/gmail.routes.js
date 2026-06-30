@@ -3,6 +3,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { validateBody } from '../validators/schemas.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -100,7 +101,8 @@ export default async function gmailRoutes(fastify) {
    * - in_reply_to: Message-ID header of the email being replied to
    */
   fastify.post('/send', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(gmailSendSchema),
   }, async (request, reply) => {
     const { to, subject, body, threadId, in_reply_to, references, hubThreadId } = request.body;
 

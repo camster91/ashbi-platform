@@ -1,13 +1,15 @@
 // Invoice Chaser Agent — drafts payment reminder emails for overdue invoices
 
 import aiClient from '../ai/client.js';
+import { validateBody } from '../validators/schemas.js';
 
 export default async function invoiceChaserRoutes(fastify) {
   const { prisma } = fastify;
 
   // POST /invoice-chaser/chase — generate reminder emails for overdue invoices
   fastify.post('/chase', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(invoiceChaserSchema),
   }, async (request, reply) => {
     const { invoiceId } = request.body || {};
 

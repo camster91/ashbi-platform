@@ -2,6 +2,7 @@
 // Migrated from ashbi-hub with auth decorators and service layer
 
 import {
+import { validateBody } from '../validators/schemas.js';
   startTimer,
   stopTimer,
   stopAllRunningTimers,
@@ -50,7 +51,8 @@ export default async function timeTrackingRoutes(fastify) {
 
   // Create a manual time entry
   fastify.post('/manual', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(timeEntryCreateSchema),
   }, async (request, reply) => {
     const userId = request.user.id;
     const { projectId } = request.body;
