@@ -350,9 +350,22 @@ export default async function wpBridgeRoutes(fastify) {
     }
   });
 
+  const fleetMagicLoginSchema = z.object({
+    user_id: z.coerce.number().int().positive(),
+    targetSites: targetSitesField,
+    targetAll: targetAllField
+  }).superRefine((data, ctx) => {
+    if (data.targetAll !== true && (!Array.isArray(data.targetSites) || data.targetSites.length === 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Either targetAll=true or a non-empty targetSites[] is required'
+      });
+    }
+  });
+
   const fleetOpsListQuerySchema = z.object({
     limit: z.coerce.number().int().min(1).max(500).optional().default(50),
-    op_type: z.enum(['file_patch', 'command', 'option_set']).optional()
+    op_type: z.enum(['file_patch', 'command', 'option_set', 'magic_login']).optional()
   });
 
   function ensureAdminSecretConfigured(reply) {
@@ -474,6 +487,57 @@ export default async function wpBridgeRoutes(fastify) {
     }
   });
 
+  // POST /api/wp-bridge/fleet/magic-login
+  // Body: { user_id, targetSites | targetAll }
+  // Per-site plugin endpoint: POST {siteUrl}/wp-json/ashbi/v1/magic-login with
+  // { user_id } body (HMAC-signed by fanOutOneSite, same wire format as
+  // file/patch / command / option/set). Plugin is expected to return a JSON
+  // payload with `url` (the magic-login URL).
+  //
+  // Response shape differs from the other fleet ops: each result is
+  //   { siteUrl, url? } on success, { siteUrl, error? } on failure
+  // so the UI can show a copy-to-clipboard link per site without the generic
+  // httpStatus / elapsedMs envelope.
+  fastify.post('/fleet/magic-login', {
+    onRequest: [fastify.authenticate, fastify.adminOnly],
+    preHandler: validateBody(fleetMagicLoginSchema)
+  }, async (request, reply) => {
+    if (!ensureAdminSecretConfigured(reply)) return;
+    const { user_id: userId, targetSites, targetAll } = request.body;
+    let sites;
+    try {
+      sites = await resolveTargetSites({ targetAll, targetSites });
+    } catch (err) {
+      request.log && request.log.error && request.log.error({ err }, '[fleet/magic-login] resolveTargetSites failed');
+      return reply.status(500).send({ error: 'Failed to resolve target sites' });
+    }
+    if (sites.length === 0) {
+      return reply.status(404).send({ error: 'No matching sites found' });
+    }
+    try {
+      const raw = await executeFleetOp({
+        opType: 'magic_login',
+        // Only forward user_id to the plugin (hub-side routing metadata is
+        // stripped by buildPerSiteRequest).
+        payload: { user_id: userId },
+        targetSites: sites,
+        endpoint: 'magic-login',
+        createdBy: request.user.id,
+        timeoutMs: PER_SITE_TIMEOUT_MS
+      });
+      return {
+        opId: raw.opId,
+        total: raw.total,
+        succeeded: raw.succeeded,
+        failed: raw.failed,
+        results: raw.results.map(reshapeMagicLoginResult)
+      };
+    } catch (err) {
+      request.log && request.log.error && request.log.error({ err }, '[fleet/magic-login] fan-out failed');
+      return reply.status(500).send({ error: 'Fleet operation failed', message: err.message });
+    }
+  });
+
   // GET /api/wp-bridge/fleet/ops?limit=50&op_type=file_patch
   // Returns recent fleet ops with target/success/failure counts. Used by the
   // WPSites "Fleet Ops history" tab.
@@ -490,6 +554,23 @@ export default async function wpBridgeRoutes(fastify) {
       return reply.status(500).send({ error: 'Failed to list fleet ops' });
     }
   });
+}
+
+// Reshape a generic fan-out result into the magic-login response shape:
+//   ok  + body.url present -> { siteUrl, url }
+//   ok  + body.url missing -> { siteUrl, error: '...' }
+//   err                     -> { siteUrl, error }
+// Exported for tests + used by the magic-login route handler.
+export function reshapeMagicLoginResult(r) {
+  if (!r) return { siteUrl: '', error: 'empty result' };
+  if (r.status === 'ok') {
+    const body = r.output && r.output.body;
+    if (body && typeof body === 'object' && typeof body.url === 'string' && body.url.length > 0) {
+      return { siteUrl: r.siteUrl, url: body.url };
+    }
+    return { siteUrl: r.siteUrl, error: 'plugin response missing url field' };
+  }
+  return { siteUrl: r.siteUrl, error: r.error || 'unknown error' };
 }
 
 // =============================================================================

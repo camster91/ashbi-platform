@@ -1345,6 +1345,32 @@ export const api = {
   getWPAlerts: (siteUrl, limit = 5) =>
     request(`/wp-bridge/alerts?siteUrl=${encodeURIComponent(siteUrl)}&limit=${limit}`),
 
+  // Plan 7 — fleet ops orchestrator helpers (Plan 8 wraps these in the UI tab)
+  // Each helper accepts a body of the same shape as the hub-side endpoint:
+  //   { ...pluginFields, targetSites?: string[] | null, targetAll?: boolean, dryRun?: boolean }
+  // If neither targetSites nor targetAll is supplied, the call sends
+  // targetAll=true (the UI's "Apply to all sites" default).
+  postWPFleetFilePatch: (data) => {
+    const body = { targetAll: true, ...data };
+    return request('/wp-bridge/fleet/file/patch', { method: 'POST', body });
+  },
+  postWPFleetCommand: (data) => {
+    const body = { targetAll: true, ...data };
+    return request('/wp-bridge/fleet/command', { method: 'POST', body });
+  },
+  postWPFleetOptionSet: (data) => {
+    const body = { targetAll: true, ...data };
+    return request('/wp-bridge/fleet/option/set', { method: 'POST', body });
+  },
+  postWPFleetMagicLogin: (data) => {
+    const body = { targetAll: true, ...data };
+    return request('/wp-bridge/fleet/magic-login', { method: 'POST', body });
+  },
+  getWPFleetOps: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/wp-bridge/fleet/ops${query ? `?${query}` : ''}`);
+  },
+
   // ===== SURVEYS / NPS =====
   submitSurvey: (data) =>
     request('/surveys/submit', { method: 'POST', body: data }),
