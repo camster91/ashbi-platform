@@ -1671,3 +1671,25 @@ model WPAlert {
   @@index([createdAt])
   @@map("wp_alerts")
 }
+
+// Fleet ops audit log (Plan 7) — one row per hub-side fan-out call
+// (file/patch, command, option/set). Records who ran what, how many sites
+// were targeted, and how many succeeded/failed. Per-site results live in
+// the wp_backups/wp_alerts tables the plugin already writes; this table is
+// the hub-side orchestration ledger.
+model WPFleetOp {
+  id           String    @id @default(cuid())
+  opType       String // 'file_patch' | 'command' | 'option_set'
+  payload      Json // original request body
+  targetCount  Int
+  successCount Int       @default(0)
+  failureCount Int       @default(0)
+  createdBy    String // user id from JWT
+  createdAt    DateTime  @default(now())
+  completedAt  DateTime?
+
+  @@index([createdAt(sort: Desc)])
+  @@index([opType])
+  @@index([createdBy])
+  @@map("wp_fleet_ops")
+}
