@@ -1,6 +1,8 @@
 import { Readable } from 'node:stream';
 import crypto from 'crypto';
+import { z } from 'zod';
 import env from '../config/env.js';
+import { validateBody, validateQuery } from '../validators/schemas.js';
 import {
   registerSite,
   updateSiteHealth,
@@ -18,6 +20,12 @@ import {
   getFleetStatus,
   postFleetDigestToSlack
 } from '../services/wpBridge.service.js';
+import {
+  executeFleetOp,
+  resolveTargetSites,
+  listFleetOps,
+  PER_SITE_TIMEOUT_MS
+} from '../services/fleetOps.service.js';
 
 // Capture the unparsed HTTP body into request.rawBody so the HMAC verify can
 // recompute sha256(timestamp + raw_body) the same way the plugin did. Used
@@ -285,6 +293,216 @@ export default async function wpBridgeRoutes(fastify) {
         request.log.error({ err }, '[fleet-digest] post failed');
       }
       return reply.status(502).send({ error: err.message || 'Slack post failed' });
+    }
+  });
+
+  // ====================== FLEET OPS ORCHESTRATOR (Plan 7) ======================
+  // Hub-side fan-out: one admin request → N concurrent plugin requests, each
+  // HMAC-signed with the shared secret. Each endpoint records exactly one
+  // audit row in wp_fleet_ops (regardless of success/failure breakdown) and
+  // returns aggregated { opId, total, succeeded, failed, results }.
+  //
+  // Endpoint mapping (hub → plugin):
+  //   POST /api/wp-bridge/fleet/file/patch    -> POST {siteUrl}/wp-json/ashbi/v1/file/patch
+  //   POST /api/wp-bridge/fleet/command       -> POST {siteUrl}/wp-json/ashbi/v1/command
+  //   POST /api/wp-bridge/fleet/option/set    -> POST {siteUrl}/wp-json/ashbi/v1/option/set
+  //
+  // All three share a common shape:
+  //   Body: { ...pluginFields, targetSites: string[] | null, targetAll?: boolean, dryRun?: boolean }
+  //     - targetAll=true OR targetSites=[url,...] selects sites; both empty -> 400.
+  //     - dryRun (file/patch only) reports what WOULD be sent without POSTing.
+
+  // Inline Zod schemas for the fleet-ops endpoints. Schemas live here (next
+  // to the routes that use them) instead of in src/validators/ so this
+  // task stays within its constrained scope (prisma/, src/routes/,
+  // src/services/, src/lib/, src/tests/unit/).
+  const targetSitesField = z.array(z.string().min(1).max(2048)).nullable().optional();
+  const targetAllField = z.boolean().optional();
+
+  const fleetFilePatchSchema = z.object({
+    filePath: z.string().min(1).max(2048),
+    find: z.string().min(1).max(65535),
+    replace: z.string().max(65535),
+    targetSites: targetSitesField,
+    targetAll: targetAllField,
+    dryRun: z.boolean().optional()
+  }).superRefine((data, ctx) => {
+    if (data.targetAll !== true && (!Array.isArray(data.targetSites) || data.targetSites.length === 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Either targetAll=true or a non-empty targetSites[] is required'
+      });
+    }
+  });
+
+  const fleetCommandSchema = z.object({
+    cmd: z.string().min(1).max(65535),
+    targetSites: targetSitesField,
+    targetAll: targetAllField
+  }).superRefine((data, ctx) => {
+    if (data.targetAll !== true && (!Array.isArray(data.targetSites) || data.targetSites.length === 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Either targetAll=true or a non-empty targetSites[] is required'
+      });
+    }
+  });
+
+  const fleetOptionSetSchema = z.object({
+    name: z.string().min(1).max(255),
+    // value can be any JSON-serialisable scalar/object/array. We use
+    // z.unknown() to keep the schema permissive; the route handler rejects
+    // explicit `undefined` (which JSON.stringify drops silently).
+    value: z.unknown(),
+    targetSites: targetSitesField,
+    targetAll: targetAllField
+  }).superRefine((data, ctx) => {
+    if (data.targetAll !== true && (!Array.isArray(data.targetSites) || data.targetSites.length === 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Either targetAll=true or a non-empty targetSites[] is required'
+      });
+    }
+  });
+
+  const fleetOpsListQuerySchema = z.object({
+    limit: z.coerce.number().int().min(1).max(500).optional().default(50),
+    op_type: z.enum(['file_patch', 'command', 'option_set']).optional()
+  });
+
+  function ensureAdminSecretConfigured(reply) {
+    if (!env.wpBridgeSecret) {
+      reply.status(503).send({
+        error: 'WP_BRIDGE_SECRET is not configured on the hub',
+        code: 'WP_BRIDGE_SECRET_MISSING'
+      });
+      return false;
+    }
+    return true;
+  }
+
+  // POST /api/wp-bridge/fleet/file/patch
+  // Body: { filePath, find, replace, targetSites | targetAll, dryRun? }
+  fastify.post('/fleet/file/patch', {
+    onRequest: [fastify.authenticate, fastify.adminOnly],
+    preHandler: validateBody(fleetFilePatchSchema)
+  }, async (request, reply) => {
+    if (!ensureAdminSecretConfigured(reply)) return;
+    const { filePath, find, replace, targetSites, targetAll, dryRun } = request.body;
+    let sites;
+    try {
+      sites = await resolveTargetSites({ targetAll, targetSites });
+    } catch (err) {
+      request.log && request.log.error && request.log.error({ err }, '[fleet/file/patch] resolveTargetSites failed');
+      return reply.status(500).send({ error: 'Failed to resolve target sites' });
+    }
+    if (sites.length === 0) {
+      return reply.status(404).send({ error: 'No matching sites found' });
+    }
+    try {
+      const result = await executeFleetOp({
+        opType: 'file_patch',
+        payload: { filePath, find, replace },
+        targetSites: sites,
+        endpoint: 'file/patch',
+        createdBy: request.user.id,
+        dryRun: !!dryRun,
+        timeoutMs: PER_SITE_TIMEOUT_MS
+      });
+      return result;
+    } catch (err) {
+      request.log && request.log.error && request.log.error({ err }, '[fleet/file/patch] fan-out failed');
+      return reply.status(500).send({ error: 'Fleet operation failed', message: err.message });
+    }
+  });
+
+  // POST /api/wp-bridge/fleet/command
+  // Body: { cmd, targetSites | targetAll }
+  fastify.post('/fleet/command', {
+    onRequest: [fastify.authenticate, fastify.adminOnly],
+    preHandler: validateBody(fleetCommandSchema)
+  }, async (request, reply) => {
+    if (!ensureAdminSecretConfigured(reply)) return;
+    const { cmd, targetSites, targetAll } = request.body;
+    let sites;
+    try {
+      sites = await resolveTargetSites({ targetAll, targetSites });
+    } catch (err) {
+      request.log && request.log.error && request.log.error({ err }, '[fleet/command] resolveTargetSites failed');
+      return reply.status(500).send({ error: 'Failed to resolve target sites' });
+    }
+    if (sites.length === 0) {
+      return reply.status(404).send({ error: 'No matching sites found' });
+    }
+    try {
+      const result = await executeFleetOp({
+        opType: 'command',
+        payload: { cmd },
+        targetSites: sites,
+        endpoint: 'command',
+        createdBy: request.user.id,
+        timeoutMs: PER_SITE_TIMEOUT_MS
+      });
+      return result;
+    } catch (err) {
+      request.log && request.log.error && request.log.error({ err }, '[fleet/command] fan-out failed');
+      return reply.status(500).send({ error: 'Fleet operation failed', message: err.message });
+    }
+  });
+
+  // POST /api/wp-bridge/fleet/option/set
+  // Body: { name, value, targetSites | targetAll }
+  fastify.post('/fleet/option/set', {
+    onRequest: [fastify.authenticate, fastify.adminOnly],
+    preHandler: validateBody(fleetOptionSetSchema)
+  }, async (request, reply) => {
+    if (!ensureAdminSecretConfigured(reply)) return;
+    const { name, value, targetSites, targetAll } = request.body;
+    // value can be any JSON-serialisable type (string|number|boolean|object|array|null);
+    // we just check that it's not undefined (which JSON.stringify drops silently).
+    if (value === undefined) {
+      return reply.status(400).send({ error: 'value is required (cannot be undefined)' });
+    }
+    let sites;
+    try {
+      sites = await resolveTargetSites({ targetAll, targetSites });
+    } catch (err) {
+      request.log && request.log.error && request.log.error({ err }, '[fleet/option/set] resolveTargetSites failed');
+      return reply.status(500).send({ error: 'Failed to resolve target sites' });
+    }
+    if (sites.length === 0) {
+      return reply.status(404).send({ error: 'No matching sites found' });
+    }
+    try {
+      const result = await executeFleetOp({
+        opType: 'option_set',
+        payload: { name, value },
+        targetSites: sites,
+        endpoint: 'option/set',
+        createdBy: request.user.id,
+        timeoutMs: PER_SITE_TIMEOUT_MS
+      });
+      return result;
+    } catch (err) {
+      request.log && request.log.error && request.log.error({ err }, '[fleet/option/set] fan-out failed');
+      return reply.status(500).send({ error: 'Fleet operation failed', message: err.message });
+    }
+  });
+
+  // GET /api/wp-bridge/fleet/ops?limit=50&op_type=file_patch
+  // Returns recent fleet ops with target/success/failure counts. Used by the
+  // WPSites "Fleet Ops history" tab.
+  fastify.get('/fleet/ops', {
+    onRequest: [fastify.authenticate, fastify.adminOnly],
+    preHandler: validateQuery(fleetOpsListQuerySchema)
+  }, async (request, reply) => {
+    const { limit, op_type: opType } = request.query;
+    try {
+      const ops = await listFleetOps({ limit, opType });
+      return { ops };
+    } catch (err) {
+      request.log && request.log.error && request.log.error({ err }, '[fleet/ops] list failed');
+      return reply.status(500).send({ error: 'Failed to list fleet ops' });
     }
   });
 }
