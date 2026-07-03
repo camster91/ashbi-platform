@@ -1333,6 +1333,17 @@ export const api = {
     request(`/wp-bridge?id=${id}`, { method: 'DELETE' }),
   generateWPMagicLogin: (siteId) =>
     request(`/wp-bridge/magic-login?siteId=${siteId}`),
+  // Plan 6 — fleet dashboard helpers
+  getWPFleetStatus: () =>
+    request('/wp-bridge/fleet/status'),
+  postWPFleetDigest: () =>
+    request('/wp-bridge/fleet/digest', { method: 'POST' }),
+  getWPBackups: (siteUrl, limit = 5) =>
+    request(`/wp-bridge/backups?siteUrl=${encodeURIComponent(siteUrl)}&limit=${limit}`),
+  getWPReports: (siteUrl) =>
+    request(`/wp-bridge/reports?siteUrl=${encodeURIComponent(siteUrl)}`),
+  getWPAlerts: (siteUrl, limit = 5) =>
+    request(`/wp-bridge/alerts?siteUrl=${encodeURIComponent(siteUrl)}&limit=${limit}`),
 
   // ===== SURVEYS / NPS =====
   submitSurvey: (data) =>

@@ -87,6 +87,11 @@ const env = {
   // WP Bridge
   wpBridgeSecret: process.env.WP_BRIDGE_SECRET,
 
+  // Slack incoming webhook for the WP-bridge daily fleet digest.
+  // Empty / unset disables the digest (the manual POST endpoint will
+  // return 503 with code SLACK_WEBHOOK_MISSING).
+  slackWebhookUrl: process.env.SLACK_WEBHOOK_URL,
+
   // Notion
   // notionToken: process.env.NOTION_TOKEN,
 
