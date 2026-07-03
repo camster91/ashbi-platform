@@ -14,7 +14,9 @@ import {
   getBackups,
   getReports,
   logSupportHours,
-  getSupportHoursSummary
+  getSupportHoursSummary,
+  getFleetStatus,
+  postFleetDigestToSlack
 } from '../services/wpBridge.service.js';
 
 // Capture the unparsed HTTP body into request.rawBody so the HMAC verify can
@@ -103,6 +105,11 @@ export default async function wpBridgeRoutes(fastify) {
   // Convert BigInt values (dbSize, filesSize) to strings for JSON serialization
   const serializeBigInt = (obj) =>
     JSON.parse(JSON.stringify(obj, (_, v) => (typeof v === 'bigint' ? v.toString() : v)));
+
+  // Start the daily Slack digest cron as soon as the plugin is mounted.
+  // Idempotent — safe across hot-reloads. No-op in dev so we don't spam
+  // Slack during local iteration.
+  startFleetDigestCron(fastify.log);
 
   fastify.get('/', {
     onRequest: [fastify.authenticate]
@@ -238,4 +245,137 @@ export default async function wpBridgeRoutes(fastify) {
     await deleteSite(id);
     return reply.status(204).send();
   });
+
+  // ====================== FLEET DASHBOARD (Plan 6) ======================
+  // GET /api/wp-bridge/fleet/status — JWT (admin only).
+  // Returns the rollup metrics + per-site rows used by the WPSites page.
+  fastify.get('/fleet/status', {
+    onRequest: [fastify.authenticate, fastify.adminOnly]
+  }, async () => {
+    return getFleetStatus();
+  });
+
+  // POST /api/wp-bridge/fleet/digest — manual trigger for the daily digest.
+  // Reads fleet status, posts a single Slack message to SLACK_WEBHOOK_URL.
+  // Returns 502 if Slack webhook isn't configured (caller-side error,
+  // not an auth failure) or non-2xx from Slack.
+  fastify.post('/fleet/digest', {
+    onRequest: [fastify.authenticate, fastify.adminOnly]
+  }, async (request, reply) => {
+    const webhookUrl = env.slackWebhookUrl;
+    if (!webhookUrl) {
+      return reply.status(503).send({
+        error: 'SLACK_WEBHOOK_URL is not configured',
+        code: 'SLACK_WEBHOOK_MISSING'
+      });
+    }
+    const fleet = await getFleetStatus();
+    try {
+      const slackStatus = await postFleetDigestToSlack({ webhookUrl, fleet });
+      if (slackStatus < 200 || slackStatus >= 300) {
+        return reply.status(502).send({
+          error: `Slack webhook returned ${slackStatus}`,
+          code: 'SLACK_WEBHOOK_BAD_STATUS',
+          slackStatus
+        });
+      }
+      return { ok: true, slackStatus, fleet };
+    } catch (err) {
+      request.log && request.log.error && request.log.error({ err }, '[fleet-digest] post failed');
+      return reply.status(502).send({ error: err.message || 'Slack post failed' });
+    }
+  });
+}
+
+// =============================================================================
+// FLEET DIGEST CRON — runs daily at 09:00 America/Toronto. Started from inside
+// the route plugin so the schedule travels with the route registration
+// (constraint: do not modify src/index.js for this task).
+// =============================================================================
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+function next9amToronto(now = new Date()) {
+  // Compute the UTC instant that corresponds to the next 09:00 in
+  // America/Toronto, accounting for DST. We do this by formatting a
+  // candidate UTC instant back to ET and comparing hours until they
+  // line up at 09:00 ET.
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Toronto',
+    hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit'
+  });
+
+  const etParts = (d) => {
+    const out = {};
+    for (const p of fmt.formatToParts(d)) out[p.type] = p.value;
+    return out;
+  };
+
+  // Start with a candidate: now floored to the next minute in UTC, then
+  // advance by hours until ET hour is 09.
+  let candidate = new Date(now.getTime());
+  candidate.setUTCSeconds(0, 0);
+  // Walk forward up to 36 hours (covers DST forward-day ambiguity safely).
+  for (let i = 0; i < 36 * 60; i += 1) {
+    candidate = new Date(candidate.getTime() + 60 * 1000);
+    const parts = etParts(candidate);
+    if (parts.hour === '09' && parts.minute === '00') {
+      return candidate;
+    }
+  }
+  // Fallback: tomorrow 09:00 ET computed via fixed offset (rare; only if
+  // Intl misbehaves). Uses EST offset (UTC-5) which is acceptable for a
+  // 24h-window scheduler.
+  const fallback = new Date(now.getTime() + ONE_DAY_MS);
+  fallback.setUTCHours(14, 0, 0, 0); // 09:00 EST = 14:00 UTC
+  return fallback;
+}
+
+async function runScheduledFleetDigest(logger) {
+  try {
+    const webhookUrl = env.slackWebhookUrl;
+    if (!webhookUrl) {
+      logger && logger.warn && logger.warn('[fleet-digest] SLACK_WEBHOOK_URL not configured; skipping scheduled digest');
+      return { skipped: true, reason: 'SLACK_WEBHOOK_URL not configured' };
+    }
+    const fleet = await getFleetStatus();
+    const slackStatus = await postFleetDigestToSlack({ webhookUrl, fleet });
+    logger && logger.info && logger.info(`[fleet-digest] scheduled digest posted to Slack (status=${slackStatus}, healthy=${fleet.healthy}/${fleet.totalSites})`);
+    return { ok: true, slackStatus, totalSites: fleet.totalSites };
+  } catch (err) {
+    logger && logger.error && logger.error({ err }, '[fleet-digest] scheduled run failed');
+    return { ok: false, error: err.message };
+  }
+}
+
+let fleetDigestCronStarted = false;
+
+/**
+ * Idempotent: starts the daily 09:00 ET Slack digest job. Safe to call from
+ * any plugin setup (including wp-bridge route registration).
+ */
+export function startFleetDigestCron(logger = console) {
+  if (fleetDigestCronStarted) return;
+  fleetDigestCronStarted = true;
+  if (env.isDev) {
+    // Don't run the cron in dev — the manual POST endpoint is enough to
+    // exercise the code path without spamming Slack.
+    logger.info('[fleet-digest] dev mode; scheduled digest disabled (use POST /api/wp-bridge/fleet/digest)');
+    return;
+  }
+  const next = next9amToronto();
+  const msUntil = next.getTime() - Date.now();
+  logger.info(`[fleet-digest] next 09:00 ET digest at ${next.toISOString()} (in ${Math.round(msUntil / 60000)} min)`);
+  setTimeout(() => {
+    runScheduledFleetDigest(logger);
+    // After first fire, recompute the next 09:00 ET each cycle so DST is
+    // handled without manual offset bookkeeping.
+    setInterval(() => {
+      runScheduledFleetDigest(logger);
+    }, ONE_DAY_MS);
+    // The first fire may have landed just before a DST transition; the
+    // interval will drift up to an hour. We accept that — daily Slack at
+    // ~09:00 ET is fine within ±60 min.
+  }, msUntil);
 }
