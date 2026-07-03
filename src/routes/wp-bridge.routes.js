@@ -35,7 +35,7 @@ const captureRawBodyHook = async (request, _reply, payload) => {
 // sent with 401) on rejection, falsy on acceptance.
 const HMAC_REPLAY_WINDOW_SECONDS = 300;
 
-const verifyBackupHmac = (request, reply) => {
+const verifyBackupHmac = async (request, reply) => {
   const headerSig = request.headers['x-ashbi-signature'];
   if (!headerSig || typeof headerSig !== 'string' || !headerSig.startsWith('sha256=')) {
     reply.status(401).send({ error: 'Missing or malformed X-Ashbi-Signature header' });
@@ -81,7 +81,9 @@ const verifyBackupHmac = (request, reply) => {
     reply.status(401).send({ error: 'Invalid signature' });
     return reply;
   }
-  // accept (no reply sent)
+  // accept: returning a Promise (because this function is `async`) is what
+  // actually advances the Fastify v5 hook runner chain. Returning
+  // `undefined` synchronously leaves the chain hung.
 };
 
 export default async function wpBridgeRoutes(fastify) {
