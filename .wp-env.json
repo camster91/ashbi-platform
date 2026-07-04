@@ -2,7 +2,7 @@
   "core": "WordPress/WordPress#6.6",
   "phpVersion": "8.2",
   "plugins": [
-    "wp-content/plugins/ashbi-agency-wp-bridge"
+    "./wp-content/plugins/ashbi-agency-wp-bridge"
   ],
   "config": {
     "WP_DEBUG": true,
