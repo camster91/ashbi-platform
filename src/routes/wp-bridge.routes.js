@@ -18,7 +18,12 @@ import {
   logSupportHours,
   getSupportHoursSummary,
   getFleetStatus,
-  postFleetDigestToSlack
+  postFleetDigestToSlack,
+  recordMagicLoginEvent,
+  getMagicLoginLog,
+  checkMagicLoginRateLimit,
+  findMagicLoginSite,
+  sha256TokenHash
 } from '../services/wpBridge.service.js';
 import {
   executeFleetOp,
@@ -585,6 +590,116 @@ export default async function wpBridgeRoutes(fastify) {
         request.log.error({ err }, '[fleet/ops] list failed');
       }
       return reply.status(500).send({ error: 'Failed to list fleet ops' });
+    }
+  });
+
+  // ==========================================================================
+  // Magic-login ManageWP-grade endpoints (Plan 11 / PR-F).
+  // The plugin owns the token lifecycle; the hub owns the audit feed, the
+  // per-fleet rate-limit guard, and the proxy into /magic-login/revoke on
+  // each site. Both endpoints below require admin-level JWT (the same gate
+  // as the rest of /api/wp-bridge/* after PR-D removed the blanket exemption).
+  // ==========================================================================
+
+  // GET /api/wp-bridge/magic-login/log?siteId=...&limit=100
+  // Returns the last `limit` magic-login audit rows for a site (or fleet-wide
+  // when siteId is omitted). Drives the WPSites "Recent Logins" tab.
+  fastify.get('/magic-login/log', {
+    onRequest: [fastify.authenticate, fastify.adminOnly]
+  }, async (request, reply) => {
+    const { siteId, siteUrl, status, limit } = request.query || {};
+
+    if (status && !['issued', 'consumed', 'revoked', 'rejected'].includes(status)) {
+      return reply.status(400).send({ error: 'status must be one of issued|consumed|revoked|rejected' });
+    }
+    if (siteId && typeof siteId !== 'string') {
+      return reply.status(400).send({ error: 'siteId must be a string' });
+    }
+    const cap = Math.min(Math.max(1, parseInt(limit, 10) || 100), 500);
+
+    try {
+      const entries = await getMagicLoginLog({
+        siteId: siteId || null,
+        siteUrl: siteUrl || null,
+        status: status || null,
+        limit: cap
+      });
+      return { entries, count: entries.length, limit: cap };
+    } catch (err) {
+      request.log && request.log.error && request.log.error({ err }, '[magic-login/log] list failed');
+      return reply.status(500).send({ error: 'Failed to read magic-login log' });
+    }
+  });
+
+  // POST /api/wp-bridge/magic-login/revoke
+  // Body: { siteId, token }  OR  { siteUrl, token }
+  // Forwards the revocation to the plugin over HMAC and persists a hub-side
+  // audit row with status='revoked'. Used by the WPSites Recent Logins tab
+  // "Revoke" button (post-PR-F).
+  fastify.post('/magic-login/revoke', {
+    onRequest: [fastify.authenticate, fastify.adminOnly],
+    preHandler: validateBody(z.object({
+      siteId: z.string().min(1).optional(),
+      siteUrl: z.string().url().optional(),
+      token: z.string().min(8)
+    }).refine((d) => Boolean(d.siteId) || Boolean(d.siteUrl), {
+      message: 'siteId or siteUrl is required'
+    }))
+  }, async (request, reply) => {
+    if (!ensureAdminSecretConfigured(reply)) return;
+    const { siteId, siteUrl, token } = request.body;
+    let site;
+    try {
+      site = await findMagicLoginSite({ siteId, siteUrl });
+    } catch (err) {
+      request.log && request.log.error && request.log.error({ err }, '[magic-login/revoke] resolve failed');
+      return reply.status(500).send({ error: 'Failed to resolve site' });
+    }
+    if (!site) return reply.status(404).send({ error: 'Site not found' });
+
+    // Per-fleet rate limit (5/hr default). Revocations are lightweight but
+    // we still cap the volume so an admin hot-keying the kill-switch
+    // doesn't drown the plugin endpoint.
+    const rl = await checkMagicLoginRateLimit({ siteId: site.id });
+    if (!rl.allowed) {
+      reply.header('Retry-After', String(rl.retryAfterSeconds));
+      return reply.status(429).send({
+        error: 'Magic-login rate limit exceeded',
+        retryAfterSeconds: rl.retryAfterSeconds
+      });
+    }
+
+    try {
+      const raw = await executeFleetOp({
+        opType: 'magic_login_revoke',
+        payload: { token },
+        targetSites: [site],
+        endpoint: 'magic-login/revoke',
+        createdBy: request.user.id,
+        timeoutMs: PER_SITE_TIMEOUT_MS
+      });
+      const result = raw.results && raw.results[0];
+      const pluginResponse = result && result.output && result.output.body;
+      const ok = result && result.status === 'ok';
+
+      await recordMagicLoginEvent({
+        siteId: site.id,
+        siteUrl: site.url,
+        hubUserId: request.user.id,
+        ip: request.ip || '0.0.0.0',
+        status: 'revoked',
+        reason: 'manual_revoke',
+        tokenHash: sha256TokenHash(token)
+      });
+
+      return {
+        ok,
+        siteUrl: site.url,
+        pluginResponse: pluginResponse || null
+      };
+    } catch (err) {
+      request.log && request.log.error && request.log.error({ err }, '[magic-login/revoke] fan-out failed');
+      return reply.status(500).send({ error: 'Revoke failed', message: err.message });
     }
   });
 }
