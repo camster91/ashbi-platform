@@ -1,9 +1,8 @@
 {
-  "//": "wp-env config for the magic-login E2E smoke test. Mounts the ashbi-agency-wp-bridge plugin (cloned by tests/e2e/wp-env/setup-plugin.sh from camster91/ashbi-agency-wp-bridge @ feat/magic-login-managewp-grade). WordPress 6.6 + PHP 8.2.",
   "core": "WordPress/WordPress#6.6",
   "phpVersion": "8.2",
   "plugins": [
-    "./wp-content/plugins/ashbi-agency-wp-bridge"
+    "wp-content/plugins/ashbi-agency-wp-bridge"
   ],
   "config": {
     "WP_DEBUG": true,
@@ -14,7 +13,6 @@
   "env": {
     "tests": {
       "config": {
-        "//": "URL the plugin uses to POST to the hub. host.docker.internal is the Docker Desktop gateway from inside wp-env to the host's docker-compose port 3001.",
         "ASHBI_HUB_URL": "http://host.docker.internal:3001"
       }
     },

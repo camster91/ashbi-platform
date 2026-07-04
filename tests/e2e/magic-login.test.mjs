@@ -100,10 +100,16 @@ async function http(method, url, { body, headers = {} } = {}) {
  * Used to read plugin options (audit log, secret, etc.).
  */
 async function wpCli(...args) {
-  const result = await execa('npx', ['wp-env', 'run', 'tests-cli', 'wp', ...args], {
-    cwd: process.cwd(),
-    reject: false,
-    timeout: 30000
+  // Repo-root .wp-env.json is canonical; --config is a fallback for users
+  // who only have tests/e2e/wp-env/.wp-env.json checked out.
+  const fs = await import('node:fs');
+  const cwd = process.cwd();
+  const hasRootConfig = fs.existsSync(`${cwd}/.wp-env.json`);
+  const cmd = ['npx', '@wordpress/env', 'run'];
+  if (!hasRootConfig) cmd.push('--config', 'tests/e2e/wp-env/.wp-env.json');
+  cmd.push('tests-cli', 'wp', ...args);
+  const result = await execa(cmd[0], cmd.slice(1), {
+    cwd, reject: false, timeout: 30000
   });
   return { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode };
 }

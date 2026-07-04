@@ -2,10 +2,11 @@
 # tests/e2e/setup.sh
 #
 # Boots the magic-login end-to-end test stack:
-#   1. plugin clone + activate (wp-env/wp-content/...)
-#   2. wp-env Docker containers (WordPress 6.6 + MariaDB)
-#   3. docker-compose.test.yml (Postgres + migrate + seed + hub)
-#   4. wait for hub /api/health to return 200
+#   1. plugin clone (no wp-env yet — git clone only)
+#   2. wp-env start (boots WordPress 6.6 + MariaDB containers)
+#   3. activate plugin + write options via wp-env wp-cli
+#   4. docker-compose.test.yml (Postgres + migrate + seed + hub)
+#   5. wait for hub /api/health + verify admin login works
 #
 # Idempotent: re-runs reuse existing containers; teardown.sh wipes them.
 #
@@ -14,11 +15,9 @@
 #   hub image. We have two options:
 #     a) Run migrate inside a container that has devDeps — slow (npm install)
 #     b) Run migrate from the host (the test runner has all devDeps)
-#   We pick (b) — the host has prisma already. setup.sh runs
-#   `npx prisma migrate deploy` directly against the test Postgres.
-#
-# Seed strategy: same logic — `node prisma/seed.js` from the host with
-#   ADMIN_SEED_PASSWORD set to match the docker-compose ADMIN_PASSWORD.
+#   We pick (a) — docker-compose.test.yml has its own migrate + seed
+#   services that run `npm install` first, mirroring production's
+#   one-shot pattern. setup.sh waits for both to complete.
 #
 # Env knobs (override on CI):
 #   HOST_PORT         — host port for hub (default 3001)
@@ -44,17 +43,29 @@ command -v docker >/dev/null || fail "docker not on PATH"
 command -v npx   >/dev/null || fail "npx not on PATH"
 
 cd "$REPO_ROOT"
+WP_ENV_CONFIG="$E2E_DIR/wp-env/.wp-env.json"
+export WP_ENV_CONFIG
 
 # ---------------------------------------------------------------------------
-# 1. wp-env — clones plugin + boots WordPress.
+# 1. wp-env — clones plugin (no container boot yet).
 # ---------------------------------------------------------------------------
 if [ "${SKIP_WP_ENV:-0}" != "1" ]; then
-  log "running wp-env/plugin setup"
+  log "running wp-env plugin clone"
   bash "$E2E_DIR/wp-env/setup-plugin.sh" \
-    "wp-content/plugins/ashbi-agency-wp-bridge"
+    "wp-content/plugins/ashbi-agency-wp-bridge" --clone-only
 
   log "starting wp-env (first run downloads WordPress 6.6 + MariaDB)"
-  npx --yes wp-env start
+  # .wp-env.json at repo root is the canonical config; --config is a fallback.
+  cd "$REPO_ROOT"
+  if [ -f "$REPO_ROOT/.wp-env.json" ]; then
+    npx --yes @wordpress/env start
+  else
+    npx --yes @wordpress/env start --config "$WP_ENV_CONFIG"
+  fi
+
+  log "activating plugin + writing plugin options"
+  bash "$E2E_DIR/wp-env/setup-plugin.sh" \
+    "wp-content/plugins/ashbi-agency-wp-bridge" --activate-only
 else
   log "SKIP_WP_ENV=1 — assuming wp-env is already running"
 fi
@@ -74,20 +85,19 @@ docker compose \
 # ---------------------------------------------------------------------------
 HUB_URL="http://localhost:${HOST_PORT}"
 log "waiting for hub /api/health at $HUB_URL"
-DEADLINE=$(( $(date +%s) + 120 ))
+DEADLINE=$(( $(date +%s) + 180 ))
 while [ "$(date +%s)" -lt "$DEADLINE" ]; do
   if curl -fsS "$HUB_URL/api/health" >/dev/null 2>&1; then
     log "hub healthy at $HUB_URL"
     break
   fi
-  sleep 1
+  sleep 2
 done
 curl -fsS "$HUB_URL/api/health" >/dev/null \
   || fail "hub never became healthy at $HUB_URL (see: docker logs ashbi-e2e-hub-1)"
 
 # ---------------------------------------------------------------------------
 # 4. Verify the admin user from seed can actually log in.
-#    This catches cases where seed didn't run or the password mismatches.
 # ---------------------------------------------------------------------------
 log "verifying admin login works (cameron@ashbi.ca)"
 LOGIN_STATUS=$(curl -s -o /dev/null -w '%{http_code}' \

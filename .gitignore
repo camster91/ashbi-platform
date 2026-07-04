@@ -63,6 +63,9 @@ data/
 .env*
 data/
 
+# wp-env runtime files (Plan 11 / Plan 12 PR-G)
+wp-content/
+
 # E2E test artifacts (Plan 11 / Plan 12 PR-G)
 tests/e2e/.vitest-output.json
 tests/e2e/.vitest-cache/

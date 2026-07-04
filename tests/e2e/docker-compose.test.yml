@@ -4,8 +4,17 @@
 #
 # Three services:
 #   postgres  — fresh DB per test run (no volume)
-#   migrate   — one-shot `npx prisma migrate deploy` against the test DB.
-#               Production docker-compose.yml uses the same pattern.
+#   migrate   — one-shot `npx prisma db push` against the test DB.
+#               We use `db push` instead of `migrate deploy` because:
+#               1. The test DB is ephemeral (no production state to preserve).
+#               2. prisma/schema.prisma's `datasource db` block does not
+#                  include `url = env("DATABASE_URL")` (the URL lives in
+#                  prisma.config.ts). `migrate deploy` requires the URL
+#                  in schema.prisma and fails with "datasource.url property
+#                  is required"; `db push` reads URL from prisma.config.ts.
+#               3. `db push` syncs the final schema directly — no need to
+#                  replay the migration history on every test run.
+#               Source: src/prisma/schema.prisma + prisma.config.ts.
 #   seed      — one-shot `node prisma/seed.js` after migrate completes.
 #               Creates cameron@ashbi.ca with the role ADMIN so the test
 #               can log in via /api/auth/login.
@@ -36,17 +45,16 @@ services:
     ports:
       - "54329:5432"
 
-  # One-shot migration runner. Runs `prisma migrate deploy` to completion
-  # and exits 0. The hub waits on `service_completed_successfully` so
-  # migrations always finish before any app replicas start.
+  # One-shot schema sync. Runs `prisma db push` against the test DB.
   # Uses the production Dockerfile but overrides command to `npm install`
-  # first (devDependencies include the `prisma` CLI) then `migrate deploy`.
+  # first (devDependencies include the `prisma` CLI) then `db push`.
+  # Reads DATABASE_URL from prisma.config.ts datasource block (not schema.prisma).
   migrate:
     build:
       context: ../..
       dockerfile: Dockerfile
     restart: "no"
-    command: ["sh", "-c", "npm install --no-audit --no-fund && npx prisma migrate deploy"]
+    command: ["sh", "-c", "npm install --no-audit --no-fund && npx prisma db push --skip-generate --accept-data-loss"]
     depends_on:
       postgres:
         condition: service_healthy
