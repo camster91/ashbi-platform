@@ -599,22 +599,42 @@ export default async function wpBridgeRoutes(fastify) {
   });
 
   // POST /api/wp-bridge/magic-login/revoke
-  // Body: { siteId, token }  OR  { siteUrl, token }
-  // Forwards the revocation to the plugin over HMAC and persists a hub-side
-  // audit row with status='revoked'. Used by the WPSites Recent Logins tab
-  // "Revoke" button (post-PR-F).
+  // Body: { siteId, hash }  OR  { siteUrl, hash }       ← preferred (hub UI)
+  //     OR  { siteId, token }  OR  { siteUrl, token }    ← legacy (raw token)
+  //
+  // The hub's "Recent Logins" tab never had the raw token (we only persist
+  // its sha256 hash on the hub side), so the preferred wire shape is
+  // `{ hash }`. The plugin-side revoke endpoint accepts both shapes —
+  // when it sees `hash`, it uses it directly as the active-transient key
+  // (no double-hashing); when it sees `token`, it hashes first.
+  //
+  // The fan-out forwards whatever the hub-side audit row records (`hash`
+  // if the caller passed a hash, otherwise the sha256 of the raw token),
+  // so plugin-side and hub-side audit rows always reference the same hash.
   fastify.post('/magic-login/revoke', {
     onRequest: [fastify.authenticate, fastify.adminOnly],
     preHandler: validateBody(z.object({
       siteId: z.string().min(1).optional(),
       siteUrl: z.string().url().optional(),
-      token: z.string().min(8)
+      hash: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+      token: z.string().min(8).optional()
     }).refine((d) => Boolean(d.siteId) || Boolean(d.siteUrl), {
       message: 'siteId or siteUrl is required'
+    }).refine((d) => Boolean(d.hash) !== Boolean(d.token), {
+      message: 'pass either hash OR token, not both (and not neither)'
     }))
   }, async (request, reply) => {
     if (!ensureAdminSecretConfigured(reply)) return;
-    const { siteId, siteUrl, token } = request.body;
+    const { siteId, siteUrl, hash, token } = request.body;
+
+    // Compute the canonical hash that BOTH the plugin-side audit row and
+    // the hub-side audit row will reference. Plugin receives `hash` directly
+    // (no double-hash) when the caller supplied a hash; receives `token` as
+    // a raw token (plugin hashes it) when the caller supplied a token.
+    const callerHash = hash || sha256TokenHash(token);
+    const pluginPayloadField = hash ? 'hash' : 'token';
+    const pluginPayloadValue = hash || token;
+
     let site;
     try {
       site = await findMagicLoginSite({ siteId, siteUrl });
@@ -639,7 +659,7 @@ export default async function wpBridgeRoutes(fastify) {
     try {
       const raw = await executeFleetOp({
         opType: 'magic_login_revoke',
-        payload: { token },
+        payload: { [pluginPayloadField]: pluginPayloadValue },
         targetSites: [site],
         endpoint: 'magic-login/revoke',
         createdBy: request.user.id,
@@ -656,13 +676,14 @@ export default async function wpBridgeRoutes(fastify) {
         ip: request.ip || '0.0.0.0',
         status: 'revoked',
         reason: 'manual_revoke',
-        tokenHash: sha256TokenHash(token)
+        tokenHash: callerHash
       });
 
       return {
         ok,
         siteUrl: site.url,
-        pluginResponse: pluginResponse || null
+        pluginResponse: pluginResponse || null,
+        hash: callerHash
       };
     } catch (err) {
       request.log && request.log.error && request.log.error({ err }, '[magic-login/revoke] fan-out failed');

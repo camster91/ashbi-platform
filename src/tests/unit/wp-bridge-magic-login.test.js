@@ -39,6 +39,11 @@ const JWT_SECRET = 'test-jwt-secret-32-chars-long-xxxxxx';
 const ADMIN_USER = { id: 'admin-1', role: 'ADMIN' };
 const NON_ADMIN_USER = { id: 'user-2', role: 'MEMBER' };
 
+// A 64-char lowercase hex hash used in revoke payloads. Constant so every
+// test references the same shape the production plugin expects on the wire.
+const TEST_HASH = 'a'.repeat(64);
+const TEST_HASH_2 = 'b'.repeat(64);
+
 // ============================================================================
 // Pure helpers — no Fastify, no DB
 // ============================================================================
@@ -198,8 +203,13 @@ async function bootMagicServer({ stubPrisma, fetchImpl }) {
     onRequest: [fastify.adminOnly]
   }, async (request, reply) => {
     const body = request.body || {};
-    if (!body.token || typeof body.token !== 'string' || body.token.length < 8) {
-      return reply.status(400).send({ error: 'token is required (string, min 8 chars)' });
+
+    // Validate the wire shape (mirrors the production zod schema).
+    const hasHash  = typeof body.hash  === 'string' && /^[0-9a-f]{64}$/.test(body.hash);
+    const hasToken = typeof body.token === 'string' && body.token.length >= 8;
+    if (hasHash === hasToken) {
+      // both true (ambiguous) or both false (missing)
+      return reply.status(400).send({ error: 'pass either hash OR token, not both (and not neither)' });
     }
     if (!body.siteId && !body.siteUrl) {
       return reply.status(400).send({ error: 'siteId or siteUrl is required' });
@@ -219,11 +229,16 @@ async function bootMagicServer({ stubPrisma, fetchImpl }) {
       });
     }
 
-    // Forward to the plugin over HMAC.
+    // Forward to the plugin over HMAC. Use the hash directly when the caller
+    // supplied a hash (preferred — matches what the hub UI sends), or
+    // forward the raw token and let the plugin hash it (legacy path).
+    const pluginPayloadField = body.hash ? 'hash' : 'token';
+    const pluginPayloadValue = body.hash || body.token;
+    const callerHash = body.hash || sha256TokenHash(body.token);
     const fan = await executeFanOutPure({
       targetSites: [site],
       endpoint: 'magic-login/revoke',
-      payload: { token: body.token },
+      payload: { [pluginPayloadField]: pluginPayloadValue },
       secret: HUB_SECRET,
       fetchImpl
     });
@@ -237,13 +252,14 @@ async function bootMagicServer({ stubPrisma, fetchImpl }) {
       ip: request.ip || '127.0.0.1',
       status: 'revoked',
       reason: 'manual_revoke',
-      tokenHash: sha256TokenHash(body.token)
+      tokenHash: callerHash
     });
 
     return {
       ok,
       siteUrl: site.url,
-      pluginResponse: result && result.output && result.output.body
+      pluginResponse: result && result.output && result.output.body,
+      hash: callerHash
     };
   });
 
@@ -370,7 +386,7 @@ describe('Fastify integration — magic-login audit log + revoke', () => {
     booted = await bootMagicServer({ stubPrisma: stub, fetchImpl: async () => ({ ok: true, status: 200, text: async () => '{}' }) });
     const res = await booted.fastify.inject({
       method: 'POST', url: '/api/wp-bridge/magic-login/revoke',
-      payload: { siteId: 's1', token: 'abcdef1234567890' }
+      payload: { siteId: "s1", hash: TEST_HASH }
     });
     assert.equal(res.statusCode, 401);
   });
@@ -389,7 +405,7 @@ describe('Fastify integration — magic-login audit log + revoke', () => {
     const res = await booted.fastify.inject({
       method: 'POST', url: '/api/wp-bridge/magic-login/revoke',
       headers: { authorization: `Bearer ${token}` },
-      payload: { siteId: 's1', token: 'abcdef1234567890' }
+      payload: { siteId: "s1", hash: TEST_HASH }
     });
     assert.equal(res.statusCode, 200);
     const body = res.json();
@@ -409,7 +425,7 @@ describe('Fastify integration — magic-login audit log + revoke', () => {
     assert.equal(log[0].siteUrl, 'https://x.com');
     assert.equal(log[0].hubUserId, ADMIN_USER.id);
     assert.equal(log[0].reason, 'manual_revoke');
-    assert.equal(log[0].tokenHash, sha256TokenHash('abcdef1234567890'));
+    assert.equal(log[0].tokenHash, TEST_HASH);
   });
 
   test('POST /magic-login/revoke rejects missing siteId/siteUrl with 400', async () => {
@@ -419,7 +435,7 @@ describe('Fastify integration — magic-login audit log + revoke', () => {
     const res = await booted.fastify.inject({
       method: 'POST', url: '/api/wp-bridge/magic-login/revoke',
       headers: { authorization: `Bearer ${token}` },
-      payload: { token: 'abcdef1234567890' }
+      payload: { hash: TEST_HASH }
     });
     assert.equal(res.statusCode, 400);
   });
@@ -443,7 +459,7 @@ describe('Fastify integration — magic-login audit log + revoke', () => {
     const res = await booted.fastify.inject({
       method: 'POST', url: '/api/wp-bridge/magic-login/revoke',
       headers: { authorization: `Bearer ${token}` },
-      payload: { siteId: 'unknown', token: 'abcdef1234567890' }
+      payload: { siteId: "unknown", hash: TEST_HASH }
     });
     assert.equal(res.statusCode, 404);
   });
@@ -462,7 +478,7 @@ describe('Fastify integration — magic-login audit log + revoke', () => {
     const res = await booted.fastify.inject({
       method: 'POST', url: '/api/wp-bridge/magic-login/revoke',
       headers: { authorization: `Bearer ${token}` },
-      payload: { siteId: 's1', token: 'abcdef1234567890' }
+      payload: { siteId: "s1", hash: TEST_HASH }
     });
     assert.equal(res.statusCode, 429);
     assert.equal(res.headers['retry-after'], '3600');
@@ -477,7 +493,7 @@ describe('Fastify integration — magic-login audit log + revoke', () => {
     const res = await booted.fastify.inject({
       method: 'POST', url: '/api/wp-bridge/magic-login/revoke',
       headers: { authorization: `Bearer ${token}` },
-      payload: { siteUrl: 'https://hub-test.example.com', token: 'abcdef1234567890' }
+      payload: { siteUrl: "https://hub-test.example.com", hash: TEST_HASH }
     });
     assert.equal(res.statusCode, 200);
     const body = res.json();
@@ -489,5 +505,102 @@ describe('Fastify integration — magic-login audit log + revoke', () => {
     const stub = makeStubPrisma({ sites });
     const site = await findMagicLoginSite({});
     assert.equal(site, null);
+  });
+
+  // ----- Regression tests for PR-F verifier FAIL --------------------------
+  //
+  // The original PR shipped a UI that passed the sha256 hash as the "token"
+  // field, the plugin computed sha256(sha256(raw)) = double-hash, and the
+  // active transient lookup missed — so the Revoke button silently no-op'd.
+  // The fix: hub forwards the hash to the plugin under a `hash` field, the
+  // plugin uses it directly (no re-hash), and both audit rows reference the
+  // same hash.
+
+  test('POST /magic-login/revoke forwards the hash to the plugin WITHOUT re-hashing (regression)', async () => {
+    const stub = makeStubPrisma({ sites: [{ id: 's1', url: 'https://x.com' }], log: [] });
+    let capturedBody = null;
+    const fetchImpl = async (url, init) => {
+      capturedBody = init && init.body ? JSON.parse(init.body) : null;
+      return { ok: true, status: 200, text: async () => JSON.stringify({ revoked: true, hash: TEST_HASH }) };
+    };
+    booted = await bootMagicServer({ stubPrisma: stub, fetchImpl });
+    const jwt = adminToken(booted.fastify);
+    const res = await booted.fastify.inject({
+      method: 'POST', url: '/api/wp-bridge/magic-login/revoke',
+      headers: { authorization: `Bearer ${jwt}` },
+      payload: { siteId: 's1', hash: TEST_HASH }
+    });
+    assert.equal(res.statusCode, 200);
+
+    // The plugin received `{ hash: TEST_HASH }` — NOT `{ token: TEST_HASH }`
+    // and NOT `{ token: sha256(TEST_HASH) }`.
+    assert.ok(capturedBody, 'plugin was called');
+    assert.ok(capturedBody.hash, `plugin payload must use hash field, got: ${JSON.stringify(capturedBody)}`);
+    assert.equal(capturedBody.hash, TEST_HASH);
+    assert.equal(capturedBody.token, undefined, 'plugin payload must NOT use token field');
+  });
+
+  test('hash field round-trip: plugin response + hub audit + response body all reference the same hash', async () => {
+    const stub = makeStubPrisma({ sites: [{ id: 's1', url: 'https://x.com' }], log: [] });
+    let capturedBody = null;
+    const fetchImpl = async (url, init) => {
+      capturedBody = init && init.body ? JSON.parse(init.body) : null;
+      return { ok: true, status: 200, text: async () => JSON.stringify({ revoked: true, hash: TEST_HASH, existed: true }) };
+    };
+    booted = await bootMagicServer({ stubPrisma: stub, fetchImpl });
+    const jwt = adminToken(booted.fastify);
+    const res = await booted.fastify.inject({
+      method: 'POST', url: '/api/wp-bridge/magic-login/revoke',
+      headers: { authorization: `Bearer ${jwt}` },
+      payload: { siteId: 's1', hash: TEST_HASH }
+    });
+    assert.equal(res.statusCode, 200);
+    const body = res.json();
+
+    // Response body surfaces the hash so the UI can confirm what was revoked.
+    assert.equal(body.hash, TEST_HASH);
+
+    // Plugin payload and hub response agree on the hash.
+    assert.equal(capturedBody.hash, TEST_HASH);
+    assert.equal(body.hash, TEST_HASH);
+    // No double-hash anywhere on the wire.
+    assert.notEqual(capturedBody.hash, sha256TokenHash(TEST_HASH));
+  });
+
+  test('legacy raw-token path still works (backward compat)', async () => {
+    const stub = makeStubPrisma({ sites: [{ id: 's1', url: 'https://x.com' }], log: [] });
+    let capturedBody = null;
+    const fetchImpl = async (url, init) => {
+      capturedBody = init && init.body ? JSON.parse(init.body) : null;
+      return { ok: true, status: 200, text: async () => JSON.stringify({ revoked: true }) };
+    };
+    booted = await bootMagicServer({ stubPrisma: stub, fetchImpl });
+    const jwt = adminToken(booted.fastify);
+    const rawToken = 'a'.repeat(64); // a 64-hex raw token (legacy callers)
+    const res = await booted.fastify.inject({
+      method: 'POST', url: '/api/wp-bridge/magic-login/revoke',
+      headers: { authorization: `Bearer ${jwt}` },
+      payload: { siteId: 's1', token: rawToken }
+    });
+    assert.equal(res.statusCode, 200);
+    const body = res.json();
+
+    // Plugin received `{ token: raw }` — old shape.
+    assert.equal(capturedBody.token, rawToken);
+    // Hub response surfaces the sha256(raw) hash, so the audit row's
+    // tokenHash matches what the plugin will compute on receipt.
+    assert.equal(body.hash, sha256TokenHash(rawToken));
+  });
+
+  test('ambiguous body (both hash and token) returns 400', async () => {
+    const stub = makeStubPrisma({ sites: [{ id: 's1', url: 'https://x.com' }] });
+    booted = await bootMagicServer({ stubPrisma: stub, fetchImpl: async () => ({ ok: true, status: 200, text: async () => '{}' }) });
+    const jwt = adminToken(booted.fastify);
+    const res = await booted.fastify.inject({
+      method: 'POST', url: '/api/wp-bridge/magic-login/revoke',
+      headers: { authorization: `Bearer ${jwt}` },
+      payload: { siteId: 's1', hash: TEST_HASH, token: 'a'.repeat(64) }
+    });
+    assert.equal(res.statusCode, 400);
   });
 });
