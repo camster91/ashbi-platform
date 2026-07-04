@@ -145,12 +145,16 @@ fastify.addHook('onRequest', async (request, reply) => {
   // Skip auth-exempt routes
   if (
     request.url.startsWith('/api/auth') ||
-    request.url.startsWith('/api/wp-bridge') ||
     request.url.startsWith('/api/portal') ||
     request.url.startsWith('/api/client-acquisition/config') ||
     request.url.startsWith('/api/client-acquisition/intake') ||
     request.url === '/api/health'
   ) return;
+  // HMAC-bypass for wp-bridge/backup — the WordPress plugin signs each backup
+  // request with WP_BRIDGE_SECRET (HMAC-SHA256 of ts+body) and the route
+  // enforces it in its own preHandler. All other /api/wp-bridge/* routes
+  // must pass standard JWT auth (blast-radius guard from PR-D).
+  if (request.url.startsWith('/api/wp-bridge/backup')) return;
   try {
     await request.jwtVerify();
   } catch {

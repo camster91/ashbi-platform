@@ -128,6 +128,11 @@ if (!env.isDev) {
   const placeholders = {
     JWT_SECRET: 'your-secret-key-change-in-production',
     CREDENTIALS_KEY: 'your-credentials-key-change-in-production',
+    // PR-D: WP_BRIDGE_SECRET was previously accepted with the placeholder
+    // value. The WordPress plugin uses the same secret to sign HMAC-SHA256
+    // payloads, so a copy-paste deploy would authenticate against a
+    // publicly-known shared secret. Refuse to start until it's replaced.
+    WP_BRIDGE_SECRET: 'your-wp-bridge-shared-secret',
   };
   const placeholderHits = Object.entries(placeholders)
     .filter(([key, placeholder]) => process.env[key] === placeholder)

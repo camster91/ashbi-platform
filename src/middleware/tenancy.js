@@ -23,7 +23,6 @@ export async function tenancyMiddleware(request, reply) {
   // Exempt Auth, Health, and Public Portal from strict isolation
   if (
     request.url.startsWith('/api/auth') ||
-    request.url.startsWith('/api/wp-bridge') ||
     request.url.startsWith('/api/portal') ||
     request.url.startsWith('/api/client-acquisition/config') ||
     request.url.startsWith('/api/client-acquisition/intake') ||
@@ -33,6 +32,27 @@ export async function tenancyMiddleware(request, reply) {
     enterRequestContext({ prisma, organizationId: null });
     return;
   }
+
+  // TODO(hub-exemptions-cleanup PR-D follow-up): re-enable tenancy for
+  // /api/wp-bridge/*. The WPSite table has no organizationId column — even
+  // if the exemption were removed, queries against WPSite would not be
+  // scoped and would leak data across tenants. To safely remove the
+  // exemption, the follow-up work is:
+  //   1. Add a nullable organizationId column to WPSite (Prisma migration).
+  //   2. Backfill: every existing WPSite row is assigned to the same
+  //      single "ashbi-internal" org, OR each WPSite is bound to the org
+  //      of the team that provisioned it (audit WPSite.createdByUserId
+  //      → user → organizationId).
+  //   3. Tighten the WPSite model: organizationId NOT NULL, then extend
+  //      createScopedPrisma in utils/prisma-tenant-proxy.js to include
+  //      WPSite in the auto-scope list.
+  //   4. Verify the WordPress plugin sends an X-Org-Id header (or a
+  //      wp-bridge-specific JWT) so the tenancy middleware can derive
+  //      organizationId from the request without breaking the HMAC
+  //      contract on /api/wp-bridge/backup.
+  // Until that work lands, /api/wp-bridge/* is intentionally exempted
+  // from tenancy and is the responsibility of route-level auth (JWT or
+  // HMAC) to gate access. See plan_6e75e260/notes/wp-bridge-org-scoping.md.
 
   // SECURITY: Derive organizationId from the verified JWT only.
   // The x-org-id header fallback was a tenant-spoofing vector (C5) — any
