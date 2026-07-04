@@ -173,25 +173,89 @@ function SitesTab({ queryClient }) {
     },
   });
 
+  // PR-E (hub-ui-buttons-wire): DELETE /wp-bridge/:id is the actual route
+  // shape — the prior handler sent the id as a query string (?id=) which the
+  // server never matched. Body is omitted because DELETE carries nothing.
+  // Treats 204 No Content as success (matches the hub endpoint contract:
+  // `return reply.status(204).send()`).
   const deleteMutation = useMutation({
-    mutationFn: (id) => api.deleteWPSite(id),
+    mutationFn: async (id) => {
+      const res = await fetch(`/api/wp-bridge/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (res.status === 204) return;
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Delete failed (${res.status})`);
+      }
+      return res.json().catch(() => null);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['wp-sites'] });
       queryClient.invalidateQueries({ queryKey: ['wp-fleet-status'] });
+      setAlert({ type: 'success', msg: 'Site removed.' });
+      setTimeout(() => setAlert(null), 3000);
+    },
+    onError: (err) => {
+      setAlert({ type: 'error', msg: err.message || 'Failed to delete site' });
     },
   });
 
+  // PR-E (hub-ui-buttons-wire): the prior handler issued
+  //   GET /wp-bridge/magic-login?siteId=...
+  // which is not a route the server defines. The real entry point is
+  // POST /api/wp-bridge/fleet/magic-login (per-site fan-out endpoint,
+  // accepts { user_id, targetSites }). For a single-site click we hand it
+  // targetSites=[siteId] so the fan-out is bounded to that one site and we
+  // can open the only returned magic URL in a new tab.
+  //
+  // user_id defaults to 1 (Cameron). The hub has no hub-user -> wp-user
+  // mapping table yet; once that exists, wire it in here. Until then the
+  // payload intentionally targets WP user id 1 on the receiving site.
+  const WP_ADMIN_USER_ID = 1;
   const magicLoginMutation = useMutation({
-    mutationFn: (siteId) => api.generateWPMagicLogin(siteId),
+    mutationFn: async (siteId) => {
+      const res = await fetch('/api/wp-bridge/fleet/magic-login', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: WP_ADMIN_USER_ID,
+          targetSites: [siteId],
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Magic login failed (${res.status})`);
+      }
+      return res.json();
+    },
     onSuccess: (data) => {
-      if (data?.magicLink) {
-        navigator.clipboard.writeText(data.magicLink);
-        setAlert({ type: 'success', msg: 'Magic login link copied to clipboard!' });
+      const result = Array.isArray(data?.results) ? data.results[0] : null;
+      if (result?.url) {
+        // Open in a new tab so the operator keeps the hub context behind.
+        // noopener+noreferrer blocks window.opener / Referer leaks.
+        window.open(result.url, '_blank', 'noopener,noreferrer');
+        setAlert({
+          type: 'success',
+          msg: 'Magic login link opened in a new tab.'
+        });
         setTimeout(() => setAlert(null), 3000);
+      } else if (result?.error) {
+        setAlert({
+          type: 'error',
+          msg: `Magic login failed: ${result.error}`
+        });
+      } else {
+        setAlert({
+          type: 'error',
+          msg: 'Magic login failed: empty response from plugin'
+        });
       }
     },
     onError: (err) => {
-      setAlert({ type: 'error', msg: err.message || 'Failed to generate magic link' });
+      setAlert({ type: 'error', msg: err.message || 'Failed to generate magic login' });
     },
   });
 
@@ -355,6 +419,7 @@ function SitesTab({ queryClient }) {
                     onMagicLogin={() => magicLoginMutation.mutate(site.id)}
                     onDelete={() => { if (confirm('Remove this site?')) deleteMutation.mutate(site.id); }}
                     magicPending={magicLoginMutation.isPending}
+                    deletePending={deleteMutation.isPending}
                   />
                 ))}
               </tbody>
@@ -1042,7 +1107,7 @@ function RollupMetric({ label, value, tone = 'neutral', hint }) {
   );
 }
 
-function SiteRow({ site, expanded, onToggle, onMagicLogin, onDelete, magicPending }) {
+function SiteRow({ site, expanded, onToggle, onMagicLogin, onDelete, magicPending, deletePending }) {
   const dot = pingStatusToDot(site.pingStatus);
   const pillKey = pingStatusToPill(site.pingStatus);
   const sslText = site.sslDaysRemaining === null
@@ -1094,10 +1159,17 @@ function SiteRow({ site, expanded, onToggle, onMagicLogin, onDelete, magicPendin
         </td>
         <td className="px-3 py-2 align-middle text-right">
           <div className="inline-flex gap-1">
-            <Button size="sm" variant="outline" onClick={onMagicLogin} loading={magicPending}>
+            <Button size="sm" variant="outline" onClick={onMagicLogin} loading={magicPending} data-testid="magic-login-button">
               Magic Login
             </Button>
-            <Button size="sm" variant="ghost" onClick={onDelete} className="text-red-500 hover:text-red-600">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onDelete}
+              loading={deletePending}
+              className="text-red-500 hover:text-red-600"
+              data-testid="delete-site-button"
+            >
               <Trash2 className="w-4 h-4" />
             </Button>
           </div>
