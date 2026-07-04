@@ -76,7 +76,7 @@ const OP_TYPE_LABELS = {
 
 export default function WPSites() {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState('sites'); // 'sites' | 'fleet-ops' | 'login'
+  const [activeTab, setActiveTab] = useState('sites'); // 'sites' | 'fleet-ops' | 'login' | 'recent-logins'
 
   return (
     <div className="space-y-6">
@@ -101,11 +101,15 @@ export default function WPSites() {
         <TabButton id="login" activeTab={activeTab} onSelect={setActiveTab} icon={<Shield className="w-4 h-4" />} testId="login-tab">
           Login
         </TabButton>
+        <TabButton id="recent-logins" activeTab={activeTab} onSelect={setActiveTab} icon={<Shield className="w-4 h-4" />} testId="recent-logins-tab">
+          Recent Logins
+        </TabButton>
       </div>
 
       {activeTab === 'sites' && <SitesTab queryClient={queryClient} />}
       {activeTab === 'fleet-ops' && <FleetOpsTab queryClient={queryClient} />}
       {activeTab === 'login' && <LoginTab />}
+      {activeTab === 'recent-logins' && <RecentLoginsTab queryClient={queryClient} />}
     </div>
   );
 }
@@ -1265,5 +1269,220 @@ function DetailPanel({ title, loading, empty, rows }) {
         </ul>
       )}
     </div>
+  );
+}
+
+// =============================================================================
+// RECENT LOGINS TAB — Plan 11 / PR-F.
+// Read-only feed of magic-login audit events across all sites (or filtered
+// to one). Backed by GET /api/wp-bridge/magic-login/log.
+// =============================================================================
+
+const STATUS_PILL = {
+  issued:   'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
+  consumed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+  revoked:  'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',
+  rejected: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+};
+
+const REASON_LABELS = {
+  replayed: 'replayed within 5-min window',
+  expired: 'token expired',
+  expired_or_invalid: 'expired or invalid',
+  rate_limited: 'hub-side rate limit',
+  ip_not_allowed: 'IP not in allowlist',
+  manual_revoke: 'admin-initiated revoke'
+};
+
+function RecentLoginsTab({ queryClient }) {
+  const [siteFilter, setSiteFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState(''); // '' | issued | consumed | revoked | rejected
+  const [alert, setAlert] = useState(null);
+
+  const params = {};
+  if (siteFilter) params.siteUrl = siteFilter;
+  if (statusFilter) params.status = statusFilter;
+  params.limit = 100;
+
+  const {
+    data: logData,
+    isLoading,
+    refetch,
+    isFetching
+  } = useQuery({
+    queryKey: ['wp-magic-login-log', params],
+    queryFn: () => api.getWPMagicLoginLog(params),
+    refetchInterval: 30_000
+  });
+  const entries = (logData && Array.isArray(logData.entries)) ? logData.entries : [];
+
+  // Site list from the fleet status so the filter dropdown stays in sync
+  // with the Sites tab.
+  const { data: fleet } = useQuery({
+    queryKey: ['wp-fleet-status'],
+    queryFn: () => api.getWPFleetStatus()
+  });
+  const allSites = (fleet && Array.isArray(fleet.sites)) ? fleet.sites : [];
+
+  const revokeMutation = useMutation({
+    mutationFn: ({ siteId, token }) => api.postWPMagicLoginRevoke({ siteId, token }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['wp-magic-login-log'] });
+      setAlert({
+        type: data?.ok ? 'success' : 'error',
+        msg: data?.ok
+          ? `Revoked magic login on ${data.siteUrl || 'site'}.`
+          : `Revoke failed: ${data?.pluginResponse?.error || 'plugin rejected'}`
+      });
+      setTimeout(() => setAlert(null), 4000);
+    },
+    onError: (err) => {
+      setAlert({ type: 'error', msg: err.message || 'Revoke request failed' });
+    }
+  });
+
+  return (
+    <div className="space-y-6">
+      {alert && (
+        <div className={`flex items-center gap-2 px-4 py-3 rounded-lg ${
+          alert.type === 'success' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
+          'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+        }`}>
+          {alert.type === 'success' ? <Shield className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+          <span className="text-sm">{alert.msg}</span>
+          <button onClick={() => setAlert(null)} className="ml-auto"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+
+      <Card className="p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Shield className="w-5 h-5 text-primary" />
+            Recent Magic-Login Events
+          </h2>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => refetch()}
+            leftIcon={<RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />}
+            disabled={isFetching}
+          >
+            Refresh
+          </Button>
+        </div>
+
+        <div className="flex flex-wrap items-end gap-3 mb-4">
+          <div className="flex-1 min-w-[200px]">
+            <label className="block text-xs font-medium mb-1">Filter by site</label>
+            <select
+              value={siteFilter}
+              onChange={(e) => setSiteFilter(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+              data-testid="site-filter"
+            >
+              <option value="">All sites</option>
+              {allSites.map((s) => (
+                <option key={s.id || s.siteUrl} value={s.siteUrl || s.url}>
+                  {s.name || s.siteUrl || s.url}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="min-w-[160px]">
+            <label className="block text-xs font-medium mb-1">Status</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+              data-testid="status-filter"
+            >
+              <option value="">All statuses</option>
+              <option value="issued">Issued</option>
+              <option value="consumed">Consumed</option>
+              <option value="revoked">Revoked</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          </div>
+          <div className="text-xs text-muted-foreground ml-auto self-end">
+            {entries.length === 0 ? 'No events' : `${entries.length} event${entries.length === 1 ? '' : 's'}`}
+          </div>
+        </div>
+
+        {isLoading && entries.length === 0 ? (
+          <div className="text-sm text-muted-foreground">Loading…</div>
+        ) : entries.length === 0 ? (
+          <div className="text-sm text-muted-foreground">
+            No magic-login events yet. Once you issue a magic link from the Sites tab, it shows up here.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm" data-testid="recent-logins-table">
+              <thead>
+                <tr className="bg-muted/40 text-left">
+                  <th className="px-3 py-2 font-medium">Time</th>
+                  <th className="px-3 py-2 font-medium">Site</th>
+                  <th className="px-3 py-2 font-medium">Status</th>
+                  <th className="px-3 py-2 font-medium">Reason</th>
+                  <th className="px-3 py-2 font-medium">IP</th>
+                  <th className="px-3 py-2 font-medium">User</th>
+                  <th className="px-3 py-2 font-medium">By</th>
+                  <th className="px-3 py-2 font-medium text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((e) => (
+                  <RecentLoginRow
+                    key={e.id}
+                    entry={e}
+                    onRevoke={(token) => {
+                      if (!confirm('Revoke this magic-login token? The user will not be able to use it.')) return;
+                      revokeMutation.mutate({ siteId: e.siteId, token });
+                    }}
+                    revokePending={revokeMutation.isPending}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function RecentLoginRow({ entry, onRevoke, revokePending }) {
+  const statusPill = STATUS_PILL[entry.status] || 'bg-muted text-foreground';
+  return (
+    <tr className="border-t border-border" data-testid={`recent-login-row-${entry.id}`}>
+      <td className="px-3 py-2 align-middle text-xs">{entry.ts ? new Date(entry.ts).toLocaleString() : '—'}</td>
+      <td className="px-3 py-2 align-middle font-mono text-xs">{entry.siteUrl}</td>
+      <td className="px-3 py-2 align-middle">
+        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusPill}`}>
+          {entry.status}
+        </span>
+      </td>
+      <td className="px-3 py-2 align-middle text-xs text-muted-foreground">
+        {REASON_LABELS[entry.reason] || entry.reason || '—'}
+      </td>
+      <td className="px-3 py-2 align-middle font-mono text-xs">{entry.ip || '—'}</td>
+      <td className="px-3 py-2 align-middle text-xs">{entry.userId ?? '—'}</td>
+      <td className="px-3 py-2 align-middle text-xs">{entry.hubUserId ? entry.hubUserId.slice(0, 8) + '…' : '—'}</td>
+      <td className="px-3 py-2 align-middle text-right">
+        {/* Revoke is only meaningful for active or consumption-rejected tokens.
+            Issued/consumed entries already carry a fresh state and pulling them
+            back is partly theatre — but keep the affordance so an operator can
+            burn a "stuck-open" token without guessing its lifecycle status. */}
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => onRevoke(entry.tokenHash)}
+          loading={revokePending}
+          disabled={!entry.tokenHash || entry.status === 'revoked'}
+          title="Best-effort revoke — pulls the token out of the plugin's active list and the consumed list."
+        >
+          <Trash2 className="w-4 h-4" />
+        </Button>
+      </td>
+    </tr>
   );
 }
