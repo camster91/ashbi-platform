@@ -54,12 +54,9 @@ services:
       context: ../..
       dockerfile: Dockerfile
     restart: "no"
-    command: ["sh", "-c", "npm install --no-audit --no-fund && npx prisma db push --skip-generate --accept-data-loss"]
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      DATABASE_URL: postgresql://ashbi_test:ashbi_test@postgres:5432/ashbi_test
+    command: ["sh", "-c", "npm install --no-audit --no-fund && npx prisma db push --accept-data-loss"]
+
+
 
   # One-shot seed runner. Creates cameron@ashbi.ca / ADMIN so the test can
   # log in via /api/auth/login. Mirrors the prod seed path but reads
