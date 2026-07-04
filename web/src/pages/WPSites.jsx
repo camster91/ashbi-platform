@@ -1325,7 +1325,7 @@ function RecentLoginsTab({ queryClient }) {
   const allSites = (fleet && Array.isArray(fleet.sites)) ? fleet.sites : [];
 
   const revokeMutation = useMutation({
-    mutationFn: ({ siteId, token }) => api.postWPMagicLoginRevoke({ siteId, token }),
+    mutationFn: ({ siteId, hash }) => api.postWPMagicLoginRevoke({ siteId, hash }),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['wp-magic-login-log'] });
       setAlert({
@@ -1434,9 +1434,9 @@ function RecentLoginsTab({ queryClient }) {
                   <RecentLoginRow
                     key={e.id}
                     entry={e}
-                    onRevoke={(token) => {
+                    onRevoke={(hash) => {
                       if (!confirm('Revoke this magic-login token? The user will not be able to use it.')) return;
-                      revokeMutation.mutate({ siteId: e.siteId, token });
+                      revokeMutation.mutate({ siteId: e.siteId, hash });
                     }}
                     revokePending={revokeMutation.isPending}
                   />
@@ -1468,17 +1468,17 @@ function RecentLoginRow({ entry, onRevoke, revokePending }) {
       <td className="px-3 py-2 align-middle text-xs">{entry.userId ?? '—'}</td>
       <td className="px-3 py-2 align-middle text-xs">{entry.hubUserId ? entry.hubUserId.slice(0, 8) + '…' : '—'}</td>
       <td className="px-3 py-2 align-middle text-right">
-        {/* Revoke is only meaningful for active or consumption-rejected tokens.
-            Issued/consumed entries already carry a fresh state and pulling them
-            back is partly theatre — but keep the affordance so an operator can
-            burn a "stuck-open" token without guessing its lifecycle status. */}
+        {/* Revoke sends the sha256 hash to the plugin (the raw token is
+            never persisted on the hub). The plugin's revoke endpoint accepts
+            `hash` directly so it does not double-hash the value — the active
+            transient is keyed on this exact hash. */}
         <Button
           size="sm"
           variant="ghost"
           onClick={() => onRevoke(entry.tokenHash)}
           loading={revokePending}
           disabled={!entry.tokenHash || entry.status === 'revoked'}
-          title="Best-effort revoke — pulls the token out of the plugin's active list and the consumed list."
+          title="Revoke this magic-login token — pulls the active transient out of the plugin and clears the 5-min consumed-tracking entry."
         >
           <Trash2 className="w-4 h-4" />
         </Button>

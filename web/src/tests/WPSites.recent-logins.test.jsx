@@ -144,27 +144,36 @@ describe('WPSites — Recent Logins tab', () => {
     expect(await screen.findByText(/1 event$/)).toBeTruthy();
   });
 
-  it('revoke button calls POST and shows success toast', async () => {
+  it('revoke button calls POST and shows success toast (regression: bug #37 sends hash, not token)', async () => {
+    // Regression for PR-F verifier FAIL: the UI was passing the sha256 hash
+    // as the "token" field, the plugin computed sha256(sha256(raw)) =
+    // double-hash, and the revoke silently no-op'd. The fix: the UI sends
+    // { siteId, hash } and the plugin uses the hash directly.
+    const REAL_HASH = 'a'.repeat(64); // 64-char lowercase hex (matches plugin's strict regex)
     apiMock.getWPMagicLoginLog.mockResolvedValue({
       entries: [
-        { id: 'l1', siteId: 'site-42', siteUrl: 'https://a.com', status: 'issued', ts: '2026-07-03T18:00:00Z', userId: 1, hubUserId: 'admin-1', ip: '203.0.113.1', reason: null, tokenHash: 'abc123' }
+        { id: 'l1', siteId: 'site-42', siteUrl: 'https://a.com', status: 'issued', ts: '2026-07-03T18:00:00Z', userId: 1, hubUserId: 'admin-1', ip: '203.0.113.1', reason: null, tokenHash: REAL_HASH }
       ],
       count: 1,
       limit: 100
     });
-    apiMock.postWPMagicLoginRevoke.mockResolvedValue({ ok: true, siteUrl: 'https://a.com' });
+    apiMock.postWPMagicLoginRevoke.mockResolvedValue({ ok: true, siteUrl: 'https://a.com', hash: REAL_HASH });
     // Confirm() returns true to allow the revoke to proceed.
     const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
 
     renderWPSites();
     fireEvent.click(screen.getByTestId('recent-logins-tab'));
     const row = await screen.findByTestId('recent-login-row-l1');
-    const button = within(row).getByTitle(/Best-effort revoke/);
+    const button = within(row).getByTitle(/Revoke this magic-login token/);
     fireEvent.click(button);
 
+    // Wire shape: { siteId, hash } — NOT { siteId, token }
     await waitFor(() => {
-      expect(apiMock.postWPMagicLoginRevoke).toHaveBeenCalledWith({ siteId: 'site-42', token: 'abc123' });
+      expect(apiMock.postWPMagicLoginRevoke).toHaveBeenCalledWith({ siteId: 'site-42', hash: REAL_HASH });
     });
+    const lastCall = apiMock.postWPMagicLoginRevoke.mock.calls.at(-1)?.[0];
+    expect(lastCall).not.toHaveProperty('token'); // explicit anti-regression
+
     await waitFor(() => {
       expect(screen.getByText(/Revoked magic login on https:\/\/a\.com/)).toBeTruthy();
     });
@@ -172,9 +181,10 @@ describe('WPSites — Recent Logins tab', () => {
   });
 
   it('does not call POST when user cancels the confirm dialog', async () => {
+    const REAL_HASH = 'a'.repeat(64);
     apiMock.getWPMagicLoginLog.mockResolvedValue({
       entries: [
-        { id: 'l1', siteId: 'site-42', siteUrl: 'https://a.com', status: 'issued', ts: '2026-07-03T18:00:00Z', userId: 1, hubUserId: 'admin-1', ip: '203.0.113.1', reason: null, tokenHash: 'abc123' }
+        { id: 'l1', siteId: 'site-42', siteUrl: 'https://a.com', status: 'issued', ts: '2026-07-03T18:00:00Z', userId: 1, hubUserId: 'admin-1', ip: '203.0.113.1', reason: null, tokenHash: REAL_HASH }
       ],
       count: 1,
       limit: 100
@@ -185,7 +195,7 @@ describe('WPSites — Recent Logins tab', () => {
     renderWPSites();
     fireEvent.click(screen.getByTestId('recent-logins-tab'));
     const row = await screen.findByTestId('recent-login-row-l1');
-    const button = within(row).getByTitle(/Best-effort revoke/);
+    const button = within(row).getByTitle(/Revoke this magic-login token/);
     fireEvent.click(button);
 
     // Give React a tick to fire any mutations
