@@ -14,11 +14,21 @@
 //   callback pattern actually advance. This test boots a real Fastify
 //   server and asserts that:
 //
-//     1. Valid signature + fresh timestamp -> 201 (handler runs, returns)
+//     1. Valid signature + fresh `timestamp` -> 201 (handler runs, returns)
 //     2. Invalid signature -> 401, handler NOT called
 //     3. Stale timestamp -> 401, handler NOT called
 //     4. Missing signature header -> 401, handler NOT called
-//     5. Missing _timestamp -> 401, handler NOT called
+//     5. Missing `timestamp` AND `_timestamp` -> 401, handler NOT called
+//     6. `_timestamp` fallback (backward compat) -> 201 (handler runs)
+//     7. Success path does not hang (parallel valid-sig requests)
+//
+// Wire format note:
+//   The plugin's send_backup_report (after PR #17) sends `timestamp`
+//   (no underscore). Older plugin versions sent `_timestamp`. The hub
+//   reads `timestamp` first and falls back to `_timestamp` for
+//   backward compatibility. The canonical HMAC string is always
+//   `timestamp + rawBody` regardless of which field name the plugin
+//   used to send it.
 //
 // If any of these hang instead of returning, the test fails (5s
 // per-request AbortSignal timeout, surfaced as a fail rather than a
@@ -63,6 +73,20 @@ test('production route uses async preHandler (regression guard)', () => {
 
   // The preParsing hook must capture rawBody.
   assert.match(src, /request\.rawBody\s*=/, 'preParsing hook must capture request.rawBody');
+
+  // The hook must read `request.body.timestamp` (the primary read
+  // after PR #17's wire-format change) before falling back to
+  // `request.body._timestamp` (the legacy field name).
+  assert.match(
+    src,
+    /request\.body\.timestamp/,
+    'verifyBackupHmac must read request.body.timestamp as the primary field (PR-B wire-format fix)'
+  );
+  assert.match(
+    src,
+    /request\.body\._timestamp/,
+    'verifyBackupHmac must keep _timestamp as a backward-compat fallback (PR-B wire-format fix)'
+  );
 });
 
 function buildSignature({ timestamp, body, secret }) {
@@ -102,9 +126,17 @@ async function bootApp({ secret }) {
         }
         const providedHex = headerSig.slice('sha256='.length);
 
-        const timestamp = request.body && request.body._timestamp;
+        // Read `timestamp` (current wire format) first; fall back to
+        // `_timestamp` for backward compatibility with older plugin
+        // versions. Mirrors src/routes/wp-bridge.routes.js.
+        const timestamp =
+          request.body && (
+            request.body.timestamp !== undefined
+              ? request.body.timestamp
+              : request.body._timestamp
+          );
         if (timestamp === undefined || timestamp === null || !/^\d+$/.test(String(timestamp))) {
-          reply.status(401).send({ error: 'Missing or invalid _timestamp' });
+          reply.status(401).send({ error: 'Missing or invalid timestamp' });
           return reply;
         }
         const tsSec = parseInt(String(timestamp), 10);
@@ -173,16 +205,16 @@ async function post(url, body, headers = {}) {
   }
 }
 
-test('valid signature + fresh timestamp -> 201, handler runs', async () => {
+test('valid signature + fresh `timestamp` -> 201, handler runs', async () => {
   const app = await bootApp({ secret: SECRET });
   const port = app.server.address().port;
   try {
     const body = JSON.stringify({
-      _timestamp: Math.floor(Date.now() / 1000),
+      timestamp: Math.floor(Date.now() / 1000),
       siteUrl: 'https://example.com',
       report: { dbSuccess: true, filesSuccess: true }
     });
-    const ts = JSON.parse(body)._timestamp;
+    const ts = JSON.parse(body).timestamp;
     const sig = buildSignature({ timestamp: ts, body, secret: SECRET });
     const res = await post(`http://127.0.0.1:${port}/backup`, body, {
       'x-ashbi-signature': sig
@@ -202,11 +234,11 @@ test('invalid signature -> 401, handler NOT called', async () => {
   const port = app.server.address().port;
   try {
     const body = JSON.stringify({
-      _timestamp: Math.floor(Date.now() / 1000),
+      timestamp: Math.floor(Date.now() / 1000),
       siteUrl: 'https://example.com',
       report: {}
     });
-    const ts = JSON.parse(body)._timestamp;
+    const ts = JSON.parse(body).timestamp;
     // Sign with wrong secret
     const sig = buildSignature({ timestamp: ts, body, secret: 'wrong-secret' });
     const res = await post(`http://127.0.0.1:${port}/backup`, body, {
@@ -225,7 +257,7 @@ test('stale timestamp (-600s) -> 401, handler NOT called', async () => {
   const port = app.server.address().port;
   try {
     const staleTs = Math.floor(Date.now() / 1000) - 600;
-    const body = JSON.stringify({ _timestamp: staleTs, siteUrl: 'https://example.com', report: {} });
+    const body = JSON.stringify({ timestamp: staleTs, siteUrl: 'https://example.com', report: {} });
     const sig = buildSignature({ timestamp: staleTs, body, secret: SECRET });
     const res = await post(`http://127.0.0.1:${port}/backup`, body, {
       'x-ashbi-signature': sig
@@ -243,7 +275,7 @@ test('missing X-Ashbi-Signature header -> 401, handler NOT called', async () => 
   const port = app.server.address().port;
   try {
     const body = JSON.stringify({
-      _timestamp: Math.floor(Date.now() / 1000),
+      timestamp: Math.floor(Date.now() / 1000),
       siteUrl: 'https://example.com',
       report: {}
     });
@@ -256,7 +288,7 @@ test('missing X-Ashbi-Signature header -> 401, handler NOT called', async () => 
   }
 });
 
-test('missing _timestamp -> 401, handler NOT called', async () => {
+test('missing timestamp AND _timestamp -> 401, handler NOT called', async () => {
   const app = await bootApp({ secret: SECRET });
   const port = app.server.address().port;
   try {
@@ -270,7 +302,68 @@ test('missing _timestamp -> 401, handler NOT called', async () => {
     });
     assert.equal(res.status, 401);
     const j = await res.json();
-    assert.equal(j.error, 'Missing or invalid _timestamp');
+    assert.equal(j.error, 'Missing or invalid timestamp');
+  } finally {
+    await app.close();
+  }
+});
+
+test('backward-compat: valid signature with `_timestamp` only -> 201', async () => {
+  // The hub must still accept the legacy `_timestamp` field for plugin
+  // versions that pre-date PR #17. This is the backward-compat path:
+  // `timestamp` is absent, the hub falls back to `_timestamp`, verifies
+  // the HMAC, and returns 201.
+  const app = await bootApp({ secret: SECRET });
+  const port = app.server.address().port;
+  try {
+    const body = JSON.stringify({
+      _timestamp: Math.floor(Date.now() / 1000),
+      siteUrl: 'https://legacy.example.com',
+      report: { dbSuccess: true }
+    });
+    const ts = JSON.parse(body)._timestamp;
+    const sig = buildSignature({ timestamp: ts, body, secret: SECRET });
+    const res = await post(`http://127.0.0.1:${port}/backup`, body, {
+      'x-ashbi-signature': sig
+    });
+    const text = await res.text();
+    assert.equal(res.status, 201, `expected 201, got ${res.status}: ${text}`);
+    const j = JSON.parse(text);
+    assert.equal(j.success, true);
+    assert.equal(j.backup.siteUrl, 'https://legacy.example.com');
+  } finally {
+    await app.close();
+  }
+});
+
+test('`timestamp` (no underscore) is the primary read; if both fields are present, `timestamp` wins', async () => {
+  // The wire-format fix: the plugin's current send_backup_report sends
+  // `timestamp` (no underscore). When both fields are present, the
+  // `timestamp` value must be used for HMAC verification — the
+  // `_timestamp` value is ignored. This catches a future regression
+  // where someone reorders the read and the wrong field is picked.
+  const app = await bootApp({ secret: SECRET });
+  const port = app.server.address().port;
+  try {
+    const freshTs = Math.floor(Date.now() / 1000);
+    const staleTs = freshTs - 1000; // would fail replay window if used
+    const body = JSON.stringify({
+      timestamp: freshTs,
+      _timestamp: staleTs,
+      siteUrl: 'https://primary-wins.example.com',
+      report: {}
+    });
+    // Sign with the fresh `timestamp` value (the primary field)
+    const sig = buildSignature({ timestamp: freshTs, body, secret: SECRET });
+    const res = await post(`http://127.0.0.1:${port}/backup`, body, {
+      'x-ashbi-signature': sig
+    });
+    const text = await res.text();
+    assert.equal(
+      res.status,
+      201,
+      `expected 201 (primary timestamp wins), got ${res.status}: ${text}`
+    );
   } finally {
     await app.close();
   }
@@ -288,11 +381,11 @@ test('success path does not hang (no AbortSignal timeout fire on valid sig)', as
     const requests = [];
     for (let i = 0; i < 5; i++) {
       const body = JSON.stringify({
-        _timestamp: Math.floor(Date.now() / 1000),
+        timestamp: Math.floor(Date.now() / 1000),
         siteUrl: `https://site-${i}.example.com`,
         report: { dbSuccess: true }
       });
-      const ts = JSON.parse(body)._timestamp;
+      const ts = JSON.parse(body).timestamp;
       const sig = buildSignature({ timestamp: ts, body, secret: SECRET });
       requests.push(post(`http://127.0.0.1:${port}/backup`, body, {
         'x-ashbi-signature': sig
