@@ -62,3 +62,7 @@ data/
 
 .env*
 data/
+
+# E2E test artifacts (Plan 11 / Plan 12 PR-G)
+tests/e2e/.vitest-output.json
+tests/e2e/.vitest-cache/

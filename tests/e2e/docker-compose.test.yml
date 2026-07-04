@@ -1,0 +1,109 @@
+# tests/e2e/docker-compose.test.yml
+#
+# Hub stack for the magic-login end-to-end smoke test.
+#
+# Three services:
+#   postgres  — fresh DB per test run (no volume)
+#   migrate   — one-shot `npx prisma migrate deploy` against the test DB.
+#               Production docker-compose.yml uses the same pattern.
+#   seed      — one-shot `node prisma/seed.js` after migrate completes.
+#               Creates cameron@ashbi.ca with the role ADMIN so the test
+#               can log in via /api/auth/login.
+#   hub       — ashbi-platform image running Fastify. depends_on
+#               postgres (healthy) + migrate (succeeded) + seed (succeeded).
+#
+# WP_BRIDGE_SECRET matches ashbi_secret_key in tests/e2e/wp-env/setup-plugin.sh.
+# ADMIN_SEED_PASSWORD matches ADMIN_PASSWORD the test logs in with.
+#
+# Usage:
+#   docker compose -f tests/e2e/docker-compose.test.yml up -d
+#   docker compose -f tests/e2e/docker-compose.test.yml down -v
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ashbi_test
+      POSTGRES_PASSWORD: ashbi_test
+      POSTGRES_DB: ashbi_test
+    # No volumes — fresh DB per run.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ashbi_test -d ashbi_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    ports:
+      - "54329:5432"
+
+  # One-shot migration runner. Runs `prisma migrate deploy` to completion
+  # and exits 0. The hub waits on `service_completed_successfully` so
+  # migrations always finish before any app replicas start.
+  # Uses the production Dockerfile but overrides command to `npm install`
+  # first (devDependencies include the `prisma` CLI) then `migrate deploy`.
+  migrate:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    restart: "no"
+    command: ["sh", "-c", "npm install --no-audit --no-fund && npx prisma migrate deploy"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://ashbi_test:ashbi_test@postgres:5432/ashbi_test
+
+  # One-shot seed runner. Creates cameron@ashbi.ca / ADMIN so the test can
+  # log in via /api/auth/login. Mirrors the prod seed path but reads
+  # ADMIN_SEED_PASSWORD from env (which the prod seed requires).
+  seed:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    restart: "no"
+    command: ["sh", "-c", "npm install --no-audit --no-fund && node prisma/seed.js"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://ashbi_test:ashbi_test@postgres:5432/ashbi_test
+      ADMIN_SEED_PASSWORD: TestPass123!
+
+  hub:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      seed:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: test
+      PORT: 3000
+      DATABASE_URL: postgresql://ashbi_test:ashbi_test@postgres:5432/ashbi_test
+      JWT_SECRET: test-jwt-secret-do-not-use-in-prod
+      ADMIN_EMAIL: cameron@ashbi.ca
+      ADMIN_PASSWORD: TestPass123!
+      # WP_BRIDGE_SECRET must match the value configured in wp-env
+      # (tests/e2e/wp-env/setup-plugin.sh writes ashbi_secret_key=...).
+      WP_BRIDGE_SECRET: test-e2e-secret-12345
+      # Magic-login specific (Plan 11 / PR-F).
+      MAGIC_LOGIN_AUDIT_MAX: 500
+      MAGIC_LOGIN_RATE_LIMIT_PER_HOUR: 5
+      # Disable Slack digest cron — no webhook traffic in tests.
+      FLEET_DIGEST_ENABLED: "false"
+    ports:
+      - "${HOST_PORT:-3001}:3000"
+    # Fastify takes ~3s on cold start; generous healthcheck retries.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
