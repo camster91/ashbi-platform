@@ -201,6 +201,7 @@ export default function Layout({ children }) {
           to={item.href}
           onClick={() => setSidebarOpen(false)}
           title={sidebarCollapsed ? item.name : undefined}
+          aria-label={sidebarCollapsed ? item.name : undefined}
           id={item.id}
           className={cn(
             'flex items-center text-sm font-medium rounded-lg transition-all duration-150',
@@ -559,11 +560,10 @@ export default function Layout({ children }) {
                 {/* More menu dropdown */}
                 {moreMenuOpen && (
                   <>
-                    <div
-          className="fixed inset-0 z-50 bg-black/5 backdrop-blur-sm"
+                    <button
+          type="button"
+          className="fixed inset-0 z-50 bg-black/5 backdrop-blur-sm cursor-default"
           onClick={() => setMoreMenuOpen(false)}
-          role="button"
-          tabIndex={0}
           aria-label="Close menu"
          />
                     <div className="absolute bottom-full right-2 mb-4 w-64 bg-card/90 backdrop-blur-xl border border-border/40 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-300" role="menu">
