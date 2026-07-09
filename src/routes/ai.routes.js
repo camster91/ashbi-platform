@@ -486,6 +486,11 @@ Format the proposal as clean, professional text ready to be sent to a client. Do
     onRequest: [fastify.authenticate],
     preHandler: validateBody(aiClientHealthSchema),
   }, async (request, reply) => {
+    // PERFORMANCE (audit 2026-07-09, swarm finding): the previous nested
+    // fan-out (200 clients × up to 50 projects × up to 20 tasks) compiles
+    // to a single SQL JOIN but returns up to 200,000 rows in worst case.
+    // Cap at 100 active clients per request, with a paginated top-N-by-
+    // health-score order so the response stays bounded.
     const clients = await request.prisma.client.findMany({
       where: { status: 'ACTIVE' },
       include: {
@@ -506,7 +511,7 @@ Format the proposal as clean, professional text ready to be sent to a client. Do
         },
         retainerPlan: true
       },
-      take: 200
+      take: 100
     });
 
     const now = new Date();
@@ -621,29 +626,33 @@ Respond with JSON:
       const result = await aiClient.chatJSON({ system, prompt, temperature: 0.2 });
 
       // Update thread priorities in DB
+      // PERFORMANCE (audit 2026-07-09, swarm finding): the previous
+      // sequential await loop issued up to 200 round-trips (10s worst
+      // case at 50ms each). Parallelize via Promise.all — N independent
+      // updates in flight at once.
       const summary = { urgent: 0, followUp: 0, waiting: 0, lowPriority: 0 };
-      const updatedThreads = [];
+      const updateResults = await Promise.all(
+        (result.results || []).map(async (item) => {
+          const priority = ['CRITICAL', 'HIGH', 'NORMAL', 'LOW'].includes(item.priority) ? item.priority : 'NORMAL';
+          await request.prisma.thread.update({
+            where: { id: item.id },
+            data: { priority }
+          });
+          return { id: item.id, priority, reason: item.reason };
+        })
+      );
 
-      for (const item of (result.results || [])) {
-        const priority = ['CRITICAL', 'HIGH', 'NORMAL', 'LOW'].includes(item.priority) ? item.priority : 'NORMAL';
-
-        await request.prisma.thread.update({
-          where: { id: item.id },
-          data: { priority }
-        });
-
-        if (priority === 'CRITICAL') summary.urgent++;
-        else if (priority === 'HIGH') summary.followUp++;
-        else if (priority === 'NORMAL') summary.waiting++;
+      for (const r of updateResults) {
+        if (r.priority === 'CRITICAL') summary.urgent++;
+        else if (r.priority === 'HIGH') summary.followUp++;
+        else if (r.priority === 'NORMAL') summary.waiting++;
         else summary.lowPriority++;
-
-        updatedThreads.push({ id: item.id, priority, reason: item.reason });
       }
 
       return {
-        triaged: updatedThreads.length,
+        triaged: updateResults.length,
         summary,
-        threads: updatedThreads
+        threads: updateResults
       };
     } catch (error) {
       fastify.log.error('AI triage error:', error);
