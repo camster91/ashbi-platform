@@ -63,7 +63,7 @@ Date: {startDate}</p>`
 </ul>
 
 <h2>4. Revision Policy</h2>
-<p>This project includes up to 2 rounds of revisions per deliverable. Additional revisions will be billed at \$150/hour.</p>
+<p>This project includes up to 2 rounds of revisions per deliverable. Additional revisions will be billed at $150/hour.</p>
 
 <h2>5. Timeline</h2>
 <p>The estimated timeline begins upon receipt of the deposit and all required assets from the Client. Delays caused by late client feedback may extend the timeline.</p>

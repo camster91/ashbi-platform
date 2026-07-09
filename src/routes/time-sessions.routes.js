@@ -3,8 +3,8 @@
 // GET /api/time-sessions/running — get running timer
 // POST /api/time-sessions/:id/stop — stop a running timer
 
-import {
 import { validateBody } from '../validators/schemas.js';
+import {
   startTimer,
   stopTimer,
   getRunningTimer
