@@ -6,36 +6,48 @@ on:
   pull_request:
     branches: [main]
 
+# SECURITY (audit 2026-07-09): added concurrency + per-job timeouts.
+# Previously this workflow had neither — a 10-PR flurry would spawn 10
+# parallel pgvector Postgres services, 10 parallel backend test runs,
+# 10 parallel frontend test runs, all hammering shared runner capacity.
+# Default job timeout is 360 minutes (GH hard cap) which is far too
+# generous for what should be a < 5 min scan.
+concurrency:
+  group: compliance-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   compliance:
     name: Lint & Compliance Scan
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v7
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: 'npm'
-          
+
       - name: Install dependencies
         run: npm install
-        
+
       - name: Linting
         run: npm run lint
-        
+
       - name: Multi-Tenancy Compliance Scan
         run: |
           # Ensure no direct prisma imports in routes (must use request.prisma)
           # Grep returns 1 if no matches found, which is what we want
           ! grep -r "import prisma from '../config/db.js'" src/routes/
-          
+
   backend-tests:
     name: Backend Unit Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
         # Use pgvector/pgvector:pg16 — schema.prisma declares
@@ -91,10 +103,11 @@ jobs:
           NODE_ENV: test
           JWT_SECRET: test-secret
           DATABASE_URL: postgresql://postgres:testpass@localhost:5432/testdb
-          
+
   frontend-tests:
     name: Frontend Unit Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - name: Setup Node.js
