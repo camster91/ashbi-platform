@@ -54,13 +54,27 @@ export async function storeEmbedding(clientId, content, source, sourceId = null,
 }
 
 /**
- * Search for similar content using pgvector cosine similarity
+ * Search for similar content using pgvector cosine similarity.
+ *
+ * SECURITY (audit 2026-07-09, swarm finding P0-B): the previous
+ * implementation trusted a caller-supplied `clientId` query param and
+ * returned cross-tenant matches when none was provided. We now require an
+ * `organizationId` (taken from the per-request scoped prisma's
+ * `client.organizationId`) and always filter by it. If the caller also
+ * provides a `clientId`, that is applied as an additional AND filter.
  */
-export async function searchSimilar(query, limit = 5, clientId = null) {
+export async function searchSimilar(query, limit = 5, clientId = null, organizationId = null) {
   const queryEmbedding = await generateEmbedding(query);
 
-  const whereClause = clientId
-    ? prisma.sql`WHERE ce."clientId" = ${clientId}`
+  // Tenant-scope: build WHERE clause from organizationId first, then
+  // optionally narrow by clientId. organizationId is mandatory.
+  if (!organizationId) {
+    throw new Error('organizationId is required for scoped embedding search');
+  }
+
+  const tenantClause = prisma.sql`c."organizationId" = ${organizationId}`;
+  const clientClause = clientId
+    ? prisma.sql`AND ce."clientId" = ${clientId}`
     : prisma.sql``;
 
   const results = await prisma.$queryRaw`
@@ -74,7 +88,8 @@ export async function searchSimilar(query, limit = 5, clientId = null) {
       1 - (ce.embedding <=> ${queryEmbedding}::vector) as similarity
     FROM "client_embeddings" ce
     JOIN clients c ON c.id = ce."clientId"
-    ${whereClause}
+    WHERE ${tenantClause}
+    ${clientClause}
     ORDER BY ce.embedding <=> ${queryEmbedding}::vector
     LIMIT ${limit}
   `;
