@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@capacitor/android": "^8.2.0",
+    "@sentry/react": "^10.0.0",
     "@capacitor/cli": "^8.2.0",
     "@capacitor/core": "^8.2.0",
     "@capacitor/push-notifications": "^8.0.2",
