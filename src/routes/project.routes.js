@@ -488,46 +488,53 @@ Brief: ${brief}`;
         return reply.status(500).send({ error: 'AI returned invalid plan structure' });
       }
 
-      // Create milestones in DB
+      // Create milestones in DB.
+      // PERFORMANCE (audit 2026-07-09, swarm finding): the previous
+      // sequential for-await created each milestone one round-trip at a
+      // time — for a project with 20 milestones that's 20×50ms = 1s of
+      // pure network wait before the response returns. Use
+      // createMany() in a single statement instead.
       const now = new Date();
-      const createdMilestones = [];
-
-      for (const ms of plan.milestones) {
+      const milestoneRows = (plan.milestones || []).map(ms => {
         const dueDate = new Date(now);
         dueDate.setDate(dueDate.getDate() + (ms.dueOffset || 7));
-
-        const milestone = await fastify.prisma.milestone.create({
-          data: {
-            name: ms.name,
-            description: ms.description || null,
-            dueDate,
-            projectId: id,
-          }
-        });
-        createdMilestones.push(milestone);
+        return {
+          name: ms.name,
+          description: ms.description || null,
+          dueDate,
+          projectId: id,
+        };
+      });
+      if (milestoneRows.length > 0) {
+        await fastify.prisma.milestone.createMany({ data: milestoneRows });
       }
+      // Re-read with a stable order so the milestoneIndex lookup below
+      // matches the input array order.
+      const createdMilestones = await fastify.prisma.milestone.findMany({
+        where: { projectId: id },
+        orderBy: { createdAt: 'asc' },
+        take: milestoneRows.length
+      });
 
-      // Create tasks in DB
-      const createdTasks = [];
-      for (const task of plan.tasks) {
+      // Create tasks in DB. Same parallelization story as milestones.
+      const taskRows = (plan.tasks || []).map(task => {
         const milestoneId = task.milestoneIndex != null && createdMilestones[task.milestoneIndex]
           ? createdMilestones[task.milestoneIndex].id
           : null;
-
-        const created = await fastify.prisma.task.create({
-          data: {
-            title: task.title,
-            description: task.description || null,
-            category: task.category || 'UPCOMING',
-            priority: task.priority || 'NORMAL',
-            estimatedTime: task.estimatedHours ? `${task.estimatedHours}h` : null,
-            projectId: id,
-            milestoneId,
-            aiGenerated: true,
-          }
-        });
-        createdTasks.push(created);
-      }
+        return {
+          title: task.title,
+          description: task.description || null,
+          category: task.category || 'UPCOMING',
+          priority: task.priority || 'NORMAL',
+          estimatedTime: task.estimatedHours ? `${task.estimatedHours}h` : null,
+          projectId: id,
+          milestoneId,
+          aiGenerated: true,
+        };
+      });
+      const createdTasks = taskRows.length > 0
+        ? await fastify.prisma.task.createManyAndReturn({ data: taskRows })
+        : [];
 
       // Save the full AI plan as JSON on the project
       await fastify.prisma.project.update({
@@ -691,47 +698,47 @@ Brief: ${brief}`;
       }
     });
 
-    // Create milestones
+    // Create milestones. Same createMany story as the AI plan path above.
     const now = new Date();
-    const createdMilestones = [];
-
-    for (const ms of templateMilestones) {
+    const milestoneRows = (templateMilestones || []).map(ms => {
       const dueDate = new Date(now);
       dueDate.setDate(dueDate.getDate() + (ms.dueOffset || 7));
-
-      const milestone = await fastify.prisma.milestone.create({
-        data: {
-          name: ms.name,
-          description: ms.description || null,
-          dueDate,
-          color: ms.color || '#3B82F6',
-          projectId: project.id,
-        }
-      });
-      createdMilestones.push(milestone);
+      return {
+        name: ms.name,
+        description: ms.description || null,
+        dueDate,
+        color: ms.color || '#3B82F6',
+        projectId: project.id,
+      };
+    });
+    if (milestoneRows.length > 0) {
+      await fastify.prisma.milestone.createMany({ data: milestoneRows });
     }
+    const createdMilestones = await fastify.prisma.milestone.findMany({
+      where: { projectId: project.id },
+      orderBy: { createdAt: 'asc' },
+      take: milestoneRows.length
+    });
 
-    // Create tasks
-    const createdTasks = [];
-    for (const task of templateTasks) {
+    // Create tasks. Same createManyAndReturn story as above.
+    const taskRows = (templateTasks || []).map(task => {
       const milestoneId = task.milestoneIndex != null && createdMilestones[task.milestoneIndex]
         ? createdMilestones[task.milestoneIndex].id
         : null;
-
-      const created = await fastify.prisma.task.create({
-        data: {
-          title: task.title,
-          description: task.description || null,
-          category: task.category || 'UPCOMING',
-          priority: task.priority || 'NORMAL',
-          estimatedTime: task.estimatedTime || null,
-          projectId: project.id,
-          milestoneId,
-          aiGenerated: false,
-        }
-      });
-      createdTasks.push(created);
-    }
+      return {
+        title: task.title,
+        description: task.description || null,
+        category: task.category || 'UPCOMING',
+        priority: task.priority || 'NORMAL',
+        estimatedTime: task.estimatedTime || null,
+        projectId: project.id,
+        milestoneId,
+        aiGenerated: false,
+      };
+    });
+    const createdTasks = taskRows.length > 0
+      ? await fastify.prisma.task.createManyAndReturn({ data: taskRows })
+      : [];
 
     return reply.status(201).send({
       project,
