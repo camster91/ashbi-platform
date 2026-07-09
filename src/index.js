@@ -290,7 +290,11 @@ fastify.setErrorHandler((error, request, reply) => {
 const io = new SocketIO(fastify.server, { cors: { origin: env.isDev ? 'http://localhost:*' : env.corsOrigins, credentials: true } });
 io.use(async (socket, next) => {
   try {
-    const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+    // SECURITY (audit 2026-07-09, swarm finding): only accept the JWT
+    // via `handshake.auth.token`. The previous \`socket.handshake.query?.token\`
+    // fallback leaked the token into nginx/Traefik/Coolify access logs
+    // and Referer headers (WebSocket upgrade URL is query-encoded).
+    const token = socket.handshake.auth?.token;
     if (!token) return next(new Error('Authentication required'));
     const decoded = await fastify.jwt.verify(token);
     socket.userId = decoded.id || decoded.contactId;
