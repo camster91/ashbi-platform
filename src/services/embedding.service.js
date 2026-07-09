@@ -186,7 +186,18 @@ export async function rebuildClientBrain(clientId) {
     );
   }
 
-  await Promise.all(embeddingPromises);
+  // PERFORMANCE (audit 2026-07-09, swarm finding): previously called
+  // Promise.all on every embedding in one shot — for a client with
+  // 100+ threads that's 100+ concurrent Ollama requests, which Ollama
+  // typically handles at 1-4 concurrency before rate-limiting or
+  // crashing. Chunk in groups of OLLAMA_CONCURRENCY to bound fan-out.
+  const OLLAMA_CONCURRENCY = 4;
+  let completed = 0;
+  for (let i = 0; i < embeddingPromises.length; i += OLLAMA_CONCURRENCY) {
+    const chunk = embeddingPromises.slice(i, i + OLLAMA_CONCURRENCY);
+    await Promise.all(chunk);
+    completed += chunk.length;
+  }
 
   return { clientId, embeddingsCreated: embeddingPromises.length };
 }
