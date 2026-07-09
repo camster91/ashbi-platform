@@ -1393,7 +1393,7 @@ const globalStyles = `
   .cp-error-box { max-width: 400px; margin: 2rem auto; text-align: center; }
 
   /* Kanban board */
-  .cp-kanban { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
+  .cp-kanban { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .cp-kanban-col { background: ${BRAND.bg}; border-radius: 14px; padding: 0.75rem; }
   .cp-kanban-col-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; padding: 0 0.25rem; }
   .cp-kanban-col-body { display: flex; flex-direction: column; gap: 0.5rem; }

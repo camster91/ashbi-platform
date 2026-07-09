@@ -162,17 +162,11 @@ export default function Layout({ children }) {
     { name: 'Trash', href: '/trash', icon: X },
   ] : [];
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        document.querySelector('input[type="text"]')?.focus();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [navigate, user?.role]);
+  // NOTE: a SECOND Cmd+K handler used to live here that focused the first
+  // <input type="text">. It raced the QuickAdd handler at the top of this
+  // component — both fired on the same keystroke, sometimes opening
+  // QuickAdd, sometimes focusing search, sometimes both. Removed. The
+  // single QuickAdd toggle at the top is now the canonical Cmd+K handler.
 
   const handleSearch = (e) => {
     e.preventDefault();
