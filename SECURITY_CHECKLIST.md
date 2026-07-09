@@ -53,9 +53,16 @@
 ## 🔍 VERIFICATION REQUIRED
 
 ### Database Audit
+> **NOTE (audit 2026-07-09):** the script referenced below is in
+> `scripts/_legacy/` and is not part of the CI gate. It was moved
+> there when the audit confirmed it's invoked from no workflow and no
+> package.json script. Use it for manual one-off checks only. The
+> **env placeholder check** in `src/config/env.js` and the
+> **enterprise-compliance.yml** workflow are the actual gates.
+
 Run the security audit script to verify:
 ```bash
-node scripts/security-audit.js
+node scripts/_legacy/security-audit.js
 ```
 
 Expected results:
@@ -65,7 +72,7 @@ Expected results:
 
 If issues found, run with --fix:
 ```bash
-node scripts/security-audit.js --fix
+node scripts/_legacy/security-audit.js --fix
 ```
 
 ## 🚀 DEPLOYMENT CHECKLIST
@@ -140,7 +147,7 @@ The Agency Hub authentication system is now production-ready with enterprise-gra
 ## 🚨 INCIDENT RESPONSE
 
 If security breach suspected:
-1. Run: `node scripts/security-audit.js`
+1. Run: `node scripts/_legacy/security-audit.js`
 2. Check logs for suspicious activity
 3. Review admin user list
 4. Rotate JWT_SECRET if needed

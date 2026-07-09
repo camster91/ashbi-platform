@@ -224,8 +224,13 @@ async function checkThreadEscalation(threadId, existingThread = null) {
     }
   }
 
-  for (const notif of notifications) {
-    await prisma.notification.create({ data: notif });
+  // PERFORMANCE (audit 2026-07-09, swarm finding): the previous loop
+  // issued one INSERT per notification — at 2 admins × 2 escalation paths
+  // that's 4 round-trips per escalation event. Use createMany for a
+  // single round-trip. Not in a transaction because notifications are
+  // independently-fanout; partial failure is acceptable.
+  if (notifications.length > 0) {
+    await prisma.notification.createMany({ data: notifications });
   }
 
   return {

@@ -49,9 +49,13 @@ npm run build
 
 ### ✅ Security Verification
 
-1. **Run security check:**
+1. **Run security check (optional, manual):**
    ```bash
-   node scripts/security-check.js
+   # NOTE (audit 2026-07-09): these scripts are not part of the CI
+   # gate. Use them for one-off checks; don't rely on them to fail
+   # a deploy — the env placeholder check in src/config/env.js IS
+   # the deploy-blocking gate.
+   node scripts/_legacy/security-check.js
    ```
 
 2. **Verify no demo credentials in production:**

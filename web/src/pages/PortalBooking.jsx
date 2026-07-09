@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   Sparkles,
@@ -29,6 +29,25 @@ function MiniCalendar({ selectedDate, onSelect }) {
   });
   // Ref + index for keyboard navigation (arrow keys move focus across days)
   const gridRef = useRef(null);
+  // Tracks which day the user is focused on so PageUp/PageDown can
+  // refocus the equivalent day in the new month (instead of leaving
+  // focus on a now-hidden day).
+  const [focusedDate, setFocusedDate] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  });
+
+  // After viewMonth changes (PageUp/Down / month nav buttons), refocus the
+  // cell that corresponds to focusedDate. Without this, focus stays on a
+  // day in the now-hidden month and screen-reader / keyboard users lose
+  // their place.
+  useEffect(() => {
+    if (!gridRef.current) return;
+    const target = gridRef.current.querySelector(
+      `[data-date="${focusedDate.toISOString().slice(0, 10)}"]`
+    );
+    if (target) target.focus();
+  }, [viewMonth, focusedDate]);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -59,12 +78,29 @@ function MiniCalendar({ selectedDate, onSelect }) {
       case 'ArrowUp': nextIndex = Math.max(currentIndex - 7, 0); break;
       case 'Home': nextIndex = currentIndex - (currentIndex % 7); break;
       case 'End': nextIndex = Math.min(currentIndex + (6 - (currentIndex % 7)), total - 1); break;
-      case 'PageUp': e.preventDefault(); prevMonth(); return;
-      case 'PageDown': e.preventDefault(); nextMonth(); return;
+      case 'PageUp':
+        e.preventDefault();
+        // Move focusedDate back by 1 month — the useEffect refocuses the
+        // equivalent day in the new view once it renders.
+        setFocusedDate(new Date(focusedDate.getFullYear(), focusedDate.getMonth() - 1, focusedDate.getDate()));
+        prevMonth();
+        return;
+      case 'PageDown':
+        e.preventDefault();
+        setFocusedDate(new Date(focusedDate.getFullYear(), focusedDate.getMonth() + 1, focusedDate.getDate()));
+        nextMonth();
+        return;
       default: return;
     }
     e.preventDefault();
     focusable[nextIndex]?.focus();
+    // Track focusedDate for the same-month arrow/Home/End keys so a later
+    // PageUp/Down has a sane seed.
+    const focused = focusable[nextIndex];
+    if (focused?.dataset?.date) {
+      const [y, m, d] = focused.dataset.date.split('-').map(Number);
+      setFocusedDate(new Date(y, m - 1, d));
+    }
   };
 
   const cells = [];
@@ -88,6 +124,7 @@ function MiniCalendar({ selectedDate, onSelect }) {
         aria-pressed={isSelected}
         disabled={isPast}
         tabIndex={isSelected || (!selectedDate && d === 1) ? 0 : -1}
+        data-date={dateStr}
         onClick={() => onSelect(dateStr)}
         className={cn(
           'w-10 h-10 rounded-lg text-sm font-medium transition-all',
@@ -125,7 +162,7 @@ function MiniCalendar({ selectedDate, onSelect }) {
       </div>
       <div className="grid grid-cols-7 gap-1 text-center mb-2" role="row">
         {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((day) => (
-          <div key={day} role="columnheader" className="text-xs font-medium text-slate-400 py-1">{day}</div>
+          <div key={day} role="columnheader" className="text-xs font-medium text-slate-500 py-1">{day}</div>
         ))}
       </div>
       <div
@@ -135,7 +172,20 @@ function MiniCalendar({ selectedDate, onSelect }) {
         onKeyDown={handleGridKeyDown}
         className="grid grid-cols-7 gap-1 place-items-center"
       >
-        {cells}
+        {/* A11Y (audit 2026-07-09): wrap each week in role="row" so screen
+            readers using ARIA grid mode (JAWS table mode, NVDA browse
+            mode) navigate week-by-week rather than flat-list. The outer
+            grid still uses CSS grid for layout; the row wrappers are
+            inline-block so the cells line up identically. */}
+        {Array.from({ length: Math.ceil(cells.length / 7) }, (_, weekIdx) => (
+          <div
+            key={`week-${weekIdx}`}
+            role="row"
+            className="contents"
+          >
+            {cells.slice(weekIdx * 7, weekIdx * 7 + 7)}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -382,7 +432,13 @@ export default function PortalBooking() {
             </button>
 
             {bookMutation.isError && (
-              <p className="text-sm text-red-600 text-center">Something went wrong. Please try again.</p>
+              <p
+                role="alert"
+                aria-live="assertive"
+                className="text-sm text-red-600 text-center"
+              >
+                {bookMutation.error?.message || 'Something went wrong. Please try again.'}
+              </p>
             )}
           </form>
         )}

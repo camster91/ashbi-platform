@@ -120,15 +120,28 @@ export default async function authRoutes(fastify) {
     const userCount = await request.prisma.user.count();
 
     if (userCount === 0) {
-      // First user registration — if ADMIN_INVITE_TOKEN env var is set, require it
-      // This prevents anyone from becoming admin by hitting /register on a fresh database
-      if (process.env.ADMIN_INVITE_TOKEN) {
+      // First user registration — the bootstrap ADMIN.
+      //
+      // SECURITY (audit 2026-07-09, swarm finding P2-D): the previous
+      // behavior was "if ADMIN_INVITE_TOKEN is unset, log a warning
+      // and let the first registrant become ADMIN unconditionally."
+      // A typo'd production deploy or a forgotten env var would let
+      // any unauthenticated request become admin on a fresh database.
+      // Fix: in production, refuse first-user registration if
+      // ADMIN_INVITE_TOKEN is unset OR doesn't match. In dev, allow
+      // it (the seed needs to work without ceremony).
+      if (!process.env.ADMIN_INVITE_TOKEN) {
+        if (process.env.NODE_ENV === 'production') {
+          return reply.status(503).send({
+            error: 'Server misconfigured: ADMIN_INVITE_TOKEN is required for first-user registration in production. Set it in your environment before deploying.'
+          });
+        }
+        // dev / test: log warning, continue
+        console.warn('[auth] First user registration without ADMIN_INVITE_TOKEN (non-production env).');
+      } else {
         if (!adminInviteToken || adminInviteToken !== process.env.ADMIN_INVITE_TOKEN) {
           return reply.status(403).send({ error: 'Invalid admin invite token. Provide the correct ADMIN_INVITE_TOKEN to register as first admin.' });
         }
-      } else {
-        // No ADMIN_INVITE_TOKEN configured — log warning
-        console.warn('[auth] First user registration without ADMIN_INVITE_TOKEN. Set this env var in production to prevent unauthorized admin escalation.');
       }
     } else {
       // Subsequent users — require admin auth

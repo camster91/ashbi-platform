@@ -6,10 +6,19 @@ on:
   schedule:
     - cron: '0 3 * * *'
 
+# SECURITY (audit 2026-07-09): add concurrency + job timeout. The
+# 3am-UTC scheduled run can collide with a mid-analysis push to main
+# (now two parallel CodeQL scans). Default job timeout is 360 min,
+# wildly generous for what should be a < 30 min scan.
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   analyze:
     name: Analyze
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       actions: read
       contents: read

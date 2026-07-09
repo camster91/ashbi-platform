@@ -20,9 +20,15 @@ export async function tenancyMiddleware(request, reply) {
     return;
   }
 
-  // Exempt Auth, Health, and Public Portal from strict isolation
+  // Exempt Auth, Health, Public Portal, and Webhooks from strict isolation.
+  //
+  // Webhooks (Stripe, email inbound) authenticate via HMAC, not JWT —
+  // they have no `request.user.organizationId`. Without this exemption
+  // every webhook POST fails with 403 ORG_CONTEXT_REQUIRED before the
+  // HMAC verify ever runs. Routes still verify signatures themselves.
   if (
     request.url.startsWith('/api/auth') ||
+    request.url.startsWith('/api/webhooks') ||
     request.url.startsWith('/api/wp-bridge') ||
     request.url.startsWith('/api/portal') ||
     request.url.startsWith('/api/client-acquisition/config') ||

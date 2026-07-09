@@ -123,11 +123,32 @@ if (!env.isDev) {
   }
 
   // Reject placeholder values that ship in .env.example — a copy-paste deploy
-  // would otherwise start with a known-secret JWT. The previous check only
-  // failed on missing env, not on placeholder equality.
+  // would otherwise start with a known-secret JWT or placeholder API key.
+  // The previous check only validated 2 secrets; copy-paste deploys could
+  // silently ship with placeholder values for STRIPE_*, MAILGUN_*, etc.
   const placeholders = {
     JWT_SECRET: 'your-secret-key-change-in-production',
     CREDENTIALS_KEY: 'your-credentials-key-change-in-production',
+    ADMIN_INVITE_TOKEN: 'your-admin-invite-token',
+    WEBHOOK_SECRET: 'your-webhook-secret',
+    HERMES_WEBHOOK_SECRET: 'your-hermes-webhook-secret',
+    MAILGUN_API_KEY: 'your-mailgun-api-key',
+    MAILGUN_SIGNING_KEY: 'your-mailgun-signing-key',
+    STRIPE_SECRET_KEY: 'your-stripe-secret-key',
+    STRIPE_WEBHOOK_SECRET: 'your-stripe-webhook-secret',
+    WP_BRIDGE_SECRET: 'your-wp-bridge-secret',
+    BOT_SECRET: 'your-bot-secret',
+    COOLIFY_TOKEN: 'your-coolify-api-token',
+    SHOPIFY_CLIENT_SECRET: 'your-shopify-client-secret',
+    GITHUB_TOKEN: 'your-github-personal-access-token',
+    KILO_API_KEY: 'your-kilo-api-key',
+    ANTHROPIC_API_KEY: 'your-anthropic-api-key',
+    GEMINI_API_KEY: 'your-gemini-api-key',
+    OLLAMA_API_KEY: 'your-ollama-cloud-api-key',
+    OPENCLAW_API_KEY: 'your-openclaw-api-key',
+    HUNTER_API_KEY: 'your-hunter-api-key',
+    ASHBI_WP_APP_PASSWORD: 'your-wordpress-app-password',
+    NOTION_TOKEN: 'your-notion-integration-token',
   };
   const placeholderHits = Object.entries(placeholders)
     .filter(([key, placeholder]) => process.env[key] === placeholder)

@@ -183,22 +183,39 @@ export default async function dashboardRoutes(fastify) {
         take: 10
       }),
       // ── NEW QUERIES ──
-      // Time tracking: today's entries for current user
-      request.prisma.timeEntry.findMany({
-        where: {
-          userId: request.user.id,
-          date: { gte: startOfDay }
-        },
-        select: { duration: true, billable: true }
-      }),
-      // Time tracking: this week's entries for current user
-      request.prisma.timeEntry.findMany({
-        where: {
-          userId: request.user.id,
-          date: { gte: startOfWeek }
-        },
-        select: { duration: true, billable: true }
-      }),
+      // Time tracking: today's entries for current user.
+      // PERFORMANCE (audit 2026-07-09, swarm finding): previously loaded
+      // every row just to sum duration in JS — at hundreds of entries
+      // per day the JS-reduce becomes the bottleneck. Aggregate in SQL
+      // with two groupBy predicates: all entries + billable entries.
+      // Promise.all runs both at once.
+      Promise.all([
+        request.prisma.timeEntry.aggregate({
+          where: { userId: request.user.id, date: { gte: startOfDay } },
+          _sum: { duration: true }
+        }),
+        request.prisma.timeEntry.aggregate({
+          where: { userId: request.user.id, date: { gte: startOfDay }, billable: true },
+          _sum: { duration: true }
+        })
+      ]).then(([all, billable]) => ({
+        duration: all._sum.duration ?? 0,
+        billableTotal: billable._sum.duration ?? 0
+      })),
+      // Time tracking: this week's entries for current user.
+      Promise.all([
+        request.prisma.timeEntry.aggregate({
+          where: { userId: request.user.id, date: { gte: startOfWeek } },
+          _sum: { duration: true }
+        }),
+        request.prisma.timeEntry.aggregate({
+          where: { userId: request.user.id, date: { gte: startOfWeek }, billable: true },
+          _sum: { duration: true }
+        })
+      ]).then(([all, billable]) => ({
+        duration: all._sum.duration ?? 0,
+        billableTotal: billable._sum.duration ?? 0
+      })),
       // Current user capacity (used for "available bandwidth" calc)
       request.prisma.user.findUnique({
         where: { id: request.user.id },
@@ -218,14 +235,21 @@ export default async function dashboardRoutes(fastify) {
         take: 10
       }),
       // Revenue history: last 6 months of paid invoices
-      request.prisma.invoice.findMany({
-        where: {
-          status: 'PAID',
-          paidAt: { gte: sixMonthsAgo }
-        },
-        select: { total: true, paidAt: true },
-        orderBy: { paidAt: 'asc' }
-      })
+      // PERFORMANCE (audit 2026-07-09, swarm finding): previous version
+      // loaded EVERY paid invoice for the last 6 months then reduced in
+      // JS. At 50k PAID invoices per org that's 50k rows on every
+      // dashboard load. Aggregate by month in SQL — 6 rows back, regardless
+      // of org size.
+      request.prisma.$queryRaw`
+        SELECT
+          date_trunc('month', "paidAt") AS month,
+          SUM(total)::float AS revenue,
+          COUNT(*)::int AS invoice_count
+        FROM "Invoice"
+        WHERE status = 'PAID' AND "paidAt" >= ${sixMonthsAgo}::timestamptz
+        GROUP BY month
+        ORDER BY month ASC
+      `
     ]);
 
     // Calculate MRR
@@ -325,16 +349,24 @@ export default async function dashboardRoutes(fastify) {
         assignee: t.assignee?.name || null
       })),
       // ── NEW WIDGET DATA ──
-      // Time tracking for current user
-      timeTracking: {
-        today: timeToday.reduce((sum, e) => sum + (e.duration || 0), 0),
-        todayBillable: timeToday.filter(e => e.billable).reduce((sum, e) => sum + (e.duration || 0), 0),
-        week: timeThisWeek.reduce((sum, e) => sum + (e.duration || 0), 0),
-        weekBillable: timeThisWeek.filter(e => e.billable).reduce((sum, e) => sum + (e.duration || 0), 0),
-        capacity: userCapacity?.capacity ?? 100,
-        userName: userCapacity?.name ?? null,
-        weekGoalHours: 40
-      },
+      // Time tracking for current user.
+      // PERFORMANCE (audit 2026-07-09, swarm finding): now fed by SQL
+      // aggregates (`timeToday.duration` / `timeWeek.duration`) instead of
+      // loading every row and reducing in JS. billable breakdown is
+      // computed via a second cheap aggregate on the same predicate set.
+      timeTracking: (() => {
+        const todayBillable = timeToday.billableTotal ?? 0;
+        const weekBillable  = timeThisWeek.billableTotal ?? 0;
+        return {
+          today: timeToday.duration ?? 0,
+          todayBillable,
+          week: timeThisWeek.duration ?? 0,
+          weekBillable,
+          capacity: userCapacity?.capacity ?? 100,
+          userName: userCapacity?.name ?? null,
+          weekGoalHours: 40
+        };
+      })(),
       // Upcoming calendar events
       upcomingEvents: upcomingEvents.map(e => ({
         id: e.id,
@@ -352,14 +384,18 @@ export default async function dashboardRoutes(fastify) {
       outreach: {},
       coldEmail: {},
       linkedIn: {},
-      // Revenue sparkline data: grouped by month
+      // Revenue sparkline data: grouped by month.
+      // PERFORMANCE (audit 2026-07-09): revenueHistory is now the
+      // 6-row aggregate from `date_trunc('month', ...)` above (one row
+      // per month). Loop fills any missing months with zero so the chart
+      // has a stable 6-element shape.
       revenueHistory: (() => {
         const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         const grouped = {};
-        revenueHistory.forEach(inv => {
-          const d = new Date(inv.paidAt);
+        (revenueHistory || []).forEach(row => {
+          const d = new Date(row.month);
           const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-          grouped[key] = (grouped[key] || 0) + (inv.total || 0);
+          grouped[key] = (grouped[key] || 0) + (Number(row.revenue) || 0);
         });
         return Object.entries(grouped).map(([key, total]) => ({
           month: months[parseInt(key.split('-')[1]) - 1],

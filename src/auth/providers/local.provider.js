@@ -79,8 +79,21 @@ export class LocalAuthProvider {
 
   async verifyPassword(password, hash) {
     if (!hash.startsWith('$2')) {
-      const sha256 = crypto.createHash('sha256').update(password).digest('hex');
-      return sha256 === hash;
+      // SECURITY (audit 2026-07-09, swarm finding): legacy SHA-256 hashes
+      // are unsalted — the real risk is rainbow-table attacks, not timing.
+      // Auto-upgrade (lines 33-37 above) re-hashes with bcrypt on the
+      // next successful login, so the window of exposure is "until each
+      // user logs in once". Still, use timingSafeEqual for the legacy
+      // path so the comparison doesn't leak the matching prefix length.
+      const expected = crypto.createHash('sha256').update(password).digest();
+      let actual;
+      try {
+        actual = Buffer.from(hash, 'hex');
+      } catch {
+        return false;
+      }
+      if (expected.length !== actual.length) return false;
+      return crypto.timingSafeEqual(expected, actual);
     }
     return bcrypt.compare(password, hash);
   }

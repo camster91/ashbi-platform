@@ -21,6 +21,7 @@ function sanitizeEmailHeader(value) {
   if (typeof value !== 'string') return '';
 
   // Remove any control characters except tabs
+  // eslint-disable-next-line no-control-regex -- intentional, this IS the sanitization
   let sanitized = value.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
 
   // Remove any newlines (prevents header injection)
@@ -47,6 +48,7 @@ function sanitizeEmailHeader(value) {
 function sanitizeHeader(value) {
   if (typeof value !== 'string') return String(value);
   return value
+    // eslint-disable-next-line no-control-regex -- intentional, this IS the sanitization
     .replace(/[\x00-\x1f\x7f-\x9f]/g, '')  // strip null bytes and control chars
     .replace(/[\x80-\uffff]/g, '')          // strip non-ASCII
     .replace(/\r?\n/g, ' ')                 // replace newlines with space

@@ -121,14 +121,39 @@ function LoginScreen() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email })
       });
-      const data = await res.json();
-      if (data.sent) {
-        setSent(true);
-      } else {
-        setError(data.error || 'Something went wrong');
+      // SECURITY/UX: distinguish three failure modes so users get an
+      // actionable message and devs get a console breadcrumb:
+      //   - non-OK HTTP status (server returned an error JSON)
+      //   - non-JSON body (proxy/CDN HTML error page → misleading SyntaxError)
+      //   - JSON without `sent` (server returned an unexpected shape)
+      // Previously all three fell into the same catch block with no
+      // console.error, so a 502 from a misconfigured CDN looked identical
+      // to "the user typed a wrong email" — silent failure.
+      let data;
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        console.error('[client-portal] non-JSON response', { status: res.status, contentType });
+        setError(`Server error (${res.status}) — please try again or contact support.`);
+        return;
       }
-    } catch {
-      setError('Network error — please try again');
+      try {
+        data = await res.json();
+      } catch (parseErr) {
+        console.error('[client-portal] JSON parse failed', { status: res.status, err: parseErr });
+        setError(`Server returned an unexpected response — please try again.`);
+        return;
+      }
+      if (data?.sent) {
+        setSent(true);
+      } else if (data?.error) {
+        setError(data.error);
+      } else {
+        console.error('[client-portal] unexpected response shape', data);
+        setError('Something went wrong — please try again.');
+      }
+    } catch (fetchErr) {
+      console.error('[client-portal] network error', fetchErr);
+      setError('Network error — please check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -1368,7 +1393,7 @@ const globalStyles = `
   .cp-error-box { max-width: 400px; margin: 2rem auto; text-align: center; }
 
   /* Kanban board */
-  .cp-kanban { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
+  .cp-kanban { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .cp-kanban-col { background: ${BRAND.bg}; border-radius: 14px; padding: 0.75rem; }
   .cp-kanban-col-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; padding: 0 0.25rem; }
   .cp-kanban-col-body { display: flex; flex-direction: column; gap: 0.5rem; }
