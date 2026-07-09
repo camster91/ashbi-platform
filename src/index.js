@@ -253,7 +253,6 @@ await fastify.register(threadRoutes, { prefix: '/api/threads' });
 await fastify.register(webhookRoutes, { prefix: '/api/webhooks' });
 await fastify.register(clientPortalRoutes, { prefix: '/api/client-portal' });
 await fastify.register(gmailRoutes, { prefix: '/api/gmail' });
-// ... (all other routes would be registered here in a production app, condensed for space)
 
 // Hub-Hermes bridge initialization
 initHermesBridge(fastify);
