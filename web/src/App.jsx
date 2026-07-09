@@ -148,14 +148,11 @@ function AppRoutes() {
                   <Route path="/schedule" element={<Schedule />} />
                   <Route path="/timesheets" element={<Timesheets />} />
                   <Route path="/rate-cards" element={<AdminRoute><RateCards /></AdminRoute>} />
-                  <Route path="/bookkeeping" element={<AdminRoute><Bookkeeping /></AdminRoute>} />
                                                       <Route path="/credentials" element={<AdminRoute><Credentials /></AdminRoute>} />
                   <Route path="/chat" element={<Chat />} />
                   <Route path="/admin/settings/ai-context" element={<AdminRoute><AiContextSettings /></AdminRoute>} />
                   <Route path="/admin/command-center" element={<AdminRoute><CommandCenter /></AdminRoute>} />
                   <Route path="/admin/brand" element={<AdminRoute><BrandSettings /></AdminRoute>} />
-                  <Route path="/admin/reports" element={<AdminRoute><Reports /></AdminRoute>} />
-                  <Route path="/reports" element={<AdminRoute><Reports /></AdminRoute>} />
                                     <Route path="/trash" element={<AdminRoute><Trash /></AdminRoute>} />
                                     <Route path="/automations" element={<AdminRoute><Automations /></AdminRoute>} />
                   <Route path="/docs" element={<Docs />} />
@@ -164,11 +161,9 @@ function AppRoutes() {
                                                       <Route path="/retainers" element={<AdminRoute><Retainers /></AdminRoute>} />
                   <Route path="/invoice-chaser" element={<AdminRoute><InvoiceChaser /></AdminRoute>} />
                   <Route path="/settings" element={<Settings />} />
-                  <Route path="/revenue" element={<AdminRoute><Revenue /></AdminRoute>} />
                                                                                           <Route path="/notifications" element={<Notifications />} />
                   {/* Advanced Features */}
                   <Route path="/assets" element={<AssetLibrary />} />
-                  <Route path="/wp-sites" element={<WPSites />} />
                   <Route path="/semantic-search" element={<SemanticSearch />} />
                   </Routes>
                 </Suspense>
