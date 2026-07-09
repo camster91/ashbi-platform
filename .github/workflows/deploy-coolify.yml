@@ -45,6 +45,16 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
+      - name: Install web/ dependencies
+        # FIXTURE (audit 2026-07-09): vite.config.js has `root: 'web'`, so
+        # `npm run build` runs vite against web/ as the project root. The
+        # root npm ci above doesn't populate web/node_modules, so any
+        # import declared only in web/package.json (e.g. @sentry/react
+        # added in the swarm audit) fails to resolve. Install web/ deps
+        # separately so the build can find them.
+        working-directory: web
+        run: npm ci --no-audit --no-fund
+
       - name: Generate Prisma client (no-op if not using Prisma)
         run: npx prisma generate
         env:
