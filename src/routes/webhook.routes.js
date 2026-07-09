@@ -9,7 +9,7 @@ import {validateBody, webhookEmailTestSchema} from '../validators/schemas.js';
 
 export default async function webhookRoutes(fastify) {
   // Email webhook endpoint
-  fastify.post('/email, { config: { skipValidation: true } }', async (request, reply) => {
+  fastify.post('/email', { config: { skipValidation: true } }, async (request, reply) => {
     // Verify webhook secret (fail closed)
     if (!env.webhookSecret) {
       return reply.status(500).send({ error: 'Webhook secret not configured' });
@@ -23,7 +23,17 @@ export default async function webhookRoutes(fastify) {
       .update(JSON.stringify(request.body))
       .digest('hex');
 
-    if (signature !== expectedSig) {
+    // SECURITY: timing-safe compare — string `!==` short-circuits on first
+    // byte mismatch and leaks the matching prefix length to a network
+    // attacker. `crypto.timingSafeEqual` is constant-time per byte.
+    let sigBuf, expectedBuf;
+    try {
+      sigBuf = Buffer.from(signature, 'hex');
+      expectedBuf = Buffer.from(expectedSig, 'hex');
+    } catch {
+      return reply.status(401).send({ error: 'Invalid webhook signature' });
+    }
+    if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
       return reply.status(401).send({ error: 'Invalid webhook signature' });
     }
 
@@ -49,7 +59,7 @@ export default async function webhookRoutes(fastify) {
     }
   });
 
-  // Manual email submission (fo, { config: { skipValidation: true } }r testing)
+  // Manual email submission (for testing)
   fastify.post('/email/test', {
     onRequest: [fastify.authenticate],
     preHandler: validateBody(webhookEmailTestSchema),
@@ -89,7 +99,7 @@ export default async function webhookRoutes(fastify) {
 
   // ==================== STRIPE WEBHOOK ====================
 
-  // Stripe s, { config: { skipValidation: true } }ends raw body — must configure Fastify to provide it
+  // Stripe sends raw body — must configure Fastify to provide it
   fastify.post('/stripe', {
     config: {
       rawBody: true
