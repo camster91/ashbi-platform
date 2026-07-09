@@ -97,6 +97,23 @@ function AdminRoute({ children }) {
   return children;
 }
 
+function NotFound() {
+  // UX (audit 2026-07-09): previously /typo landed on a blank page with
+  // no explanation. Show a recoverable 404 with a link back to the
+  // dashboard so the user isn't stuck.
+  return (
+    <div className="min-h-[60vh] flex items-center justify-center p-6">
+      <div className="text-center max-w-md">
+        <h1 className="text-3xl font-bold text-slate-800 mb-2">404</h1>
+        <p className="text-slate-600 mb-4">We couldn't find that page.</p>
+        <a href="/dashboard" className="text-blue-600 hover:underline">
+          Go to dashboard →
+        </a>
+      </div>
+    </div>
+  );
+}
+
 function AppRoutes() {
   return (
       <ErrorBoundary>
@@ -165,6 +182,7 @@ function AppRoutes() {
                   {/* Advanced Features */}
                   <Route path="/assets" element={<AssetLibrary />} />
                   <Route path="/semantic-search" element={<SemanticSearch />} />
+                  <Route path="*" element={<NotFound />} />
                   </Routes>
                 </Suspense>
               </ErrorBoundary>
