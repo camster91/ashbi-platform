@@ -59,7 +59,6 @@ import invoiceRoutes from './routes/invoice.routes.js';
 import invoiceChaserRoutes from './routes/invoice-chaser.routes.js';
 import aiContextRoutes from './routes/ai-context.routes.js';
 import gmailRoutes from './routes/gmail.routes.js';
-import integrationsVpsRoutes from './routes/integrations.vps.routes.js';
 import integrationsHostingerRoutes from './routes/integrations.hostinger.routes.js';
 import pushRoutes from './routes/push.routes.js';
 import { initVapid } from './utils/web-push.js';
