@@ -1,7 +1,7 @@
 // Client routes
 
 import { safeParse } from '../utils/safeParse.js';
-import {validateBody, createClientSchema, updateClientSchema, clientContactSchema} from '../validators/schemas.js';
+import { validateBody, createClientSchema, updateClientSchema, clientContactSchema, clientNoteCreateSchema } from '../validators/schemas.js';
 
 export default async function clientRoutes(fastify) {
   // List all clients

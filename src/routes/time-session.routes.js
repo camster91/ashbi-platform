@@ -1,3 +1,4 @@
+import { validateBody, timeSessionStartNewSchema } from '../validators/schemas.js';
 // Time Session routes (live timer backend)
 
 export default async function timeSessionRoutes(fastify) {

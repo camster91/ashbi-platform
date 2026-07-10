@@ -1,7 +1,7 @@
 // Team management routes
 
 import bcrypt from 'bcrypt';
-import { validateBody, teamInviteSchema, teamResetPasswordSchema } from '../validators/schemas.js';
+import { validateBody, teamInviteSchema, teamResetPasswordSchema, teamUpdateSchema } from '../validators/schemas.js';
 
 async function hashPassword(password) {
   return bcrypt.hash(password, 12);

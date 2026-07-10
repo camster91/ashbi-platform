@@ -1,7 +1,7 @@
 // Credentials Vault routes
 
 import { encrypt, decrypt } from '../utils/crypto.js';
-import { validateBody, credentialUpsertSchema } from '../validators/schemas.js';
+import { validateBody, credentialUpsertSchema, credentialSchema } from '../validators/schemas.js';
 
 export default async function credentialRoutes(fastify) {
   // List credentials with optional filters (admin only)

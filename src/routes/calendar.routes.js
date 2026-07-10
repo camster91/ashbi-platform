@@ -1,6 +1,6 @@
 // Calendar & Meeting routes
 
-import { validateBody, calendarEventCreateSchema, calendarEventUpdateSchema } from '../validators/schemas.js';
+import { validateBody, calendarEventCreateSchema, calendarEventUpdateSchema, calendarRsvpSchema } from '../validators/schemas.js';
 
 export default async function calendarRoutes(fastify) {
   // Get calendar events

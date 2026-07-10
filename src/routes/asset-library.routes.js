@@ -1,6 +1,7 @@
 // Asset Library routes
 // Migrated from ashbi-hub with auth decorators and Prisma service layer
 
+import { validateBody, assetCreateSchema, assetUpdateSchema, assetGuidelineCreateSchema } from '../validators/schemas.js';
 import {
   getAssets,
   getAsset,
@@ -8,10 +9,6 @@ import {
   updateAsset,
   deleteAsset,
   searchAssets,
-  validateBody,
-  assetCreateSchema,
-  assetUpdateSchema,
-  assetGuidelineCreateSchema,
   getBrandSettings,
   updateBrandSettings
 } from '../services/assetLibrary.service.js';

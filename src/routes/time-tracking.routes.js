@@ -1,7 +1,7 @@
 // Time Tracking routes
 // Migrated from ashbi-hub with auth decorators and service layer
 
-import { validateBody, timeSessionStartNewSchema } from '../validators/schemas.js';
+import { validateBody, timeSessionStartNewSchema, timeEntryCreateSchema } from '../validators/schemas.js';
 import {
   startTimer,
   stopTimer,

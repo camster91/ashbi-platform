@@ -1,15 +1,7 @@
 // Task routes
 
-import {
-  validateBody,
-  createTaskSchema,
-  updateTaskSchema,
-  taskUpdateSchema,
-  taskBulkUpdateSchema,
-  taskNoteCreateSchema,
-  taskNoteUpdateSchema,
-  taskDependencyCreateSchema,
-} from '../validators/schemas.js';
+import { validateBody, createTaskSchema, updateTaskSchema, taskUpdateSchema, taskBulkUpdateSchema, taskNoteCreateSchema, taskNoteUpdateSchema, taskDependencyCreateSchema, taskCreateQuickSchema } from '../validators/schemas.js';
+import { z } from 'zod';
 import bus, { EVENTS } from '../utils/events.js';
 
 export default async function taskRoutes(fastify) {
@@ -654,14 +646,10 @@ export default async function taskRoutes(fastify) {
   // Move task between Kanban columns
   fastify.post('/:id/move', {
     onRequest: [fastify.authenticate],
-    preHandler: validateBody(z.object({ status: z.enum(['TODO', 'IN_PROGRESS', 'BLOCKED', 'REVIEW', 'COMPLETED']) })),
+    preHandler: validateBody(z.object({ status: z.enum(['TODO', 'PENDING', 'IN_PROGRESS', 'BLOCKED', 'REVIEW', 'COMPLETED']) })),
   }, async (request) => {
     const { id } = request.params;
     const { status } = request.body;
-
-    if (!['PENDING', 'IN_PROGRESS', 'BLOCKED', 'COMPLETED'].includes(status)) {
-      return request.reply.status(400).send({ error: 'Invalid status' });
-    }
 
     const task = await fastify.prisma.task.update({
       where: { id },

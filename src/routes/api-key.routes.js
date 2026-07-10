@@ -1,7 +1,7 @@
 // API Key management routes
 
 import crypto from 'crypto';
-import { validateBody } from '../validators/schemas.js';
+import { validateBody, apiKeyCreateSchema } from '../validators/schemas.js';
 
 const PREFIX = 'ashbi_'; // API keys start with ashbi_ for easy identification
 
