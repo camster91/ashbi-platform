@@ -79,7 +79,7 @@
     "handlebars": "^4.7.8",
     "ioredis": "^5.10.1",
     "lucide-react": "^0.460.0",
-    "mailgun.js": "^10.2.2",
+    "mailgun.js": "^13.3.0",
     "mailparser": "^3.9.11",
     "pdfkit": "^0.18.0",
     "pino": "^10.3.1",
