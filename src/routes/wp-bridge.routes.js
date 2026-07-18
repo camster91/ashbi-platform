@@ -43,9 +43,20 @@ const verifyBackupHmac = async (request, reply) => {
   }
   const providedHex = headerSig.slice('sha256='.length);
 
-  const timestamp = request.body && request.body._timestamp;
+  // Accept `timestamp` (current wire format — set by plugin's send_backup_report
+  // after PR #17) as the primary read. Fall back to `_timestamp` for backward
+  // compatibility with older plugin versions that prefixed internal fields with
+  // an underscore. The canonical string the signature is computed over remains
+  // `timestamp + body`, so the wire format the plugin uses to compute the HMAC
+  // must match the field name we read here.
+  const timestamp =
+    request.body && (
+      request.body.timestamp !== undefined
+        ? request.body.timestamp
+        : request.body._timestamp
+    );
   if (timestamp === undefined || timestamp === null || !/^\d+$/.test(String(timestamp))) {
-    reply.status(401).send({ error: 'Missing or invalid _timestamp' });
+    reply.status(401).send({ error: 'Missing or invalid timestamp' });
     return reply;
   }
   const tsSec = parseInt(String(timestamp), 10);
