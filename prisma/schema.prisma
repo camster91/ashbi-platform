@@ -1679,7 +1679,7 @@ model WPAlert {
 // the hub-side orchestration ledger.
 model WPFleetOp {
   id           String    @id @default(cuid())
-  opType       String // 'file_patch' | 'command' | 'option_set'
+  opType       String // 'file_patch' | 'command' | 'option_set' | 'magic_login'
   payload      Json // original request body
   targetCount  Int
   successCount Int       @default(0)

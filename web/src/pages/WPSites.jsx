@@ -11,7 +11,14 @@ import {
   ChevronRight,
   X,
   RefreshCw,
-  Send
+  Send,
+  Copy,
+  PlayCircle,
+  Terminal,
+  FileCode,
+  Settings2,
+  ExternalLink as OpenIcon,
+  ChevronDown as ChevronDownIcon
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { Button, Card } from '../components/ui';
@@ -20,7 +27,7 @@ const STATUS_COLORS = {
   HEALTHY: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
   DEGRADED: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
   DOWN: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-  MAINTENANCE: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  MAINTENANCE: 'bg-blue-100 text-blue-700 dark:text-blue-400',
 };
 
 // Map our derived `lastPingStatus` (from the fleet aggregation) to the
@@ -45,23 +52,100 @@ function statusText(pingStatus) {
   return 'Silent';
 }
 
+// Plan 8 — whitelisted WP-CLI subcommands surfaced in the "Run Command" form
+// help text. Mirrors the plugin-side allowlist that runs after the hub-side
+// HMAC verification; if you add one here, also add it to the plugin's allowlist.
+const WP_CLI_HELP = [
+  'wp option get <name>',
+  'wp option update <name> <value>',
+  'wp plugin list',
+  'wp plugin activate <slug>',
+  'wp plugin deactivate <slug>',
+  'wp theme list',
+  'wp user list',
+  'wp post list --posts_per_page=10',
+  'wp db query "SELECT ..."'
+].join('\n');
+
+const OP_TYPE_LABELS = {
+  file_patch: 'Patch',
+  command: 'Command',
+  option_set: 'Option',
+  magic_login: 'Magic Login'
+};
+
 export default function WPSites() {
   const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState('sites'); // 'sites' | 'fleet-ops' | 'login'
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-heading font-bold text-foreground flex items-center gap-2">
+            <Globe className="w-6 h-6 text-primary" />
+            WordPress Sites
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">Manage connected WordPress sites</p>
+        </div>
+      </div>
+
+      {/* Tab bar — unobtrusive, plain buttons under the page header. */}
+      <div role="tablist" aria-label="WPSites tabs" className="flex gap-1 border-b border-border">
+        <TabButton id="sites" activeTab={activeTab} onSelect={setActiveTab} icon={<Globe className="w-4 h-4" />} testId="sites-tab">
+          Sites
+        </TabButton>
+        <TabButton id="fleet-ops" activeTab={activeTab} onSelect={setActiveTab} icon={<Settings2 className="w-4 h-4" />} testId="fleet-ops-tab">
+          Fleet Ops
+        </TabButton>
+        <TabButton id="login" activeTab={activeTab} onSelect={setActiveTab} icon={<Shield className="w-4 h-4" />} testId="login-tab">
+          Login
+        </TabButton>
+      </div>
+
+      {activeTab === 'sites' && <SitesTab queryClient={queryClient} />}
+      {activeTab === 'fleet-ops' && <FleetOpsTab queryClient={queryClient} />}
+      {activeTab === 'login' && <LoginTab />}
+    </div>
+  );
+}
+
+function TabButton({ id, activeTab, onSelect, icon, children, testId }) {
+  const active = activeTab === id;
+  return (
+    <button
+      role="tab"
+      aria-selected={active}
+      data-testid={testId}
+      onClick={() => onSelect(id)}
+      className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+        active
+          ? 'border-primary text-foreground'
+          : 'border-transparent text-muted-foreground hover:text-foreground hover:border-muted'
+      }`}
+    >
+      {icon}
+      {children}
+    </button>
+  );
+}
+
+// =============================================================================
+// SITES TAB — Plan 6 page contents, unchanged behavior
+// =============================================================================
+
+function SitesTab({ queryClient }) {
   const [showAdd, setShowAdd] = useState(false);
   const [addUrl, setAddUrl] = useState('');
   const [addKey, setAddKey] = useState('');
   const [alert, setAlert] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
 
-  // Existing canonical data fetch (sites list) — kept as-is for backwards
-  // compat with whatever else reads `['wp-sites']`.
   const { data: sites = [], isLoading } = useQuery({
     queryKey: ['wp-sites'],
     queryFn: () => api.listWPSites(),
   });
 
-  // Plan 6 — fleet status rollup. Surfaces the 7 metrics + per-site rows
-  // for the columns / status dot / row expansion.
   const {
     data: fleet,
     isLoading: fleetLoading,
@@ -89,25 +173,89 @@ export default function WPSites() {
     },
   });
 
+  // PR-E (hub-ui-buttons-wire): DELETE /wp-bridge/:id is the actual route
+  // shape — the prior handler sent the id as a query string (?id=) which the
+  // server never matched. Body is omitted because DELETE carries nothing.
+  // Treats 204 No Content as success (matches the hub endpoint contract:
+  // `return reply.status(204).send()`).
   const deleteMutation = useMutation({
-    mutationFn: (id) => api.deleteWPSite(id),
+    mutationFn: async (id) => {
+      const res = await fetch(`/api/wp-bridge/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (res.status === 204) return;
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Delete failed (${res.status})`);
+      }
+      return res.json().catch(() => null);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['wp-sites'] });
       queryClient.invalidateQueries({ queryKey: ['wp-fleet-status'] });
+      setAlert({ type: 'success', msg: 'Site removed.' });
+      setTimeout(() => setAlert(null), 3000);
+    },
+    onError: (err) => {
+      setAlert({ type: 'error', msg: err.message || 'Failed to delete site' });
     },
   });
 
+  // PR-E (hub-ui-buttons-wire): the prior handler issued
+  //   GET /wp-bridge/magic-login?siteId=...
+  // which is not a route the server defines. The real entry point is
+  // POST /api/wp-bridge/fleet/magic-login (per-site fan-out endpoint,
+  // accepts { user_id, targetSites }). For a single-site click we hand it
+  // targetSites=[siteId] so the fan-out is bounded to that one site and we
+  // can open the only returned magic URL in a new tab.
+  //
+  // user_id defaults to 1 (Cameron). The hub has no hub-user -> wp-user
+  // mapping table yet; once that exists, wire it in here. Until then the
+  // payload intentionally targets WP user id 1 on the receiving site.
+  const WP_ADMIN_USER_ID = 1;
   const magicLoginMutation = useMutation({
-    mutationFn: (siteId) => api.generateWPMagicLogin(siteId),
+    mutationFn: async (siteId) => {
+      const res = await fetch('/api/wp-bridge/fleet/magic-login', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: WP_ADMIN_USER_ID,
+          targetSites: [siteId],
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Magic login failed (${res.status})`);
+      }
+      return res.json();
+    },
     onSuccess: (data) => {
-      if (data?.magicLink) {
-        navigator.clipboard.writeText(data.magicLink);
-        setAlert({ type: 'success', msg: 'Magic login link copied to clipboard!' });
+      const result = Array.isArray(data?.results) ? data.results[0] : null;
+      if (result?.url) {
+        // Open in a new tab so the operator keeps the hub context behind.
+        // noopener+noreferrer blocks window.opener / Referer leaks.
+        window.open(result.url, '_blank', 'noopener,noreferrer');
+        setAlert({
+          type: 'success',
+          msg: 'Magic login link opened in a new tab.'
+        });
         setTimeout(() => setAlert(null), 3000);
+      } else if (result?.error) {
+        setAlert({
+          type: 'error',
+          msg: `Magic login failed: ${result.error}`
+        });
+      } else {
+        setAlert({
+          type: 'error',
+          msg: 'Magic login failed: empty response from plugin'
+        });
       }
     },
     onError: (err) => {
-      setAlert({ type: 'error', msg: err.message || 'Failed to generate magic link' });
+      setAlert({ type: 'error', msg: err.message || 'Failed to generate magic login' });
     },
   });
 
@@ -131,16 +279,11 @@ export default function WPSites() {
     registerMutation.mutate({ siteUrl: addUrl, secretKey: addKey });
   };
 
-  // Index fleet sites by siteUrl so the table can render columns without
-  // an extra round-trip per row. If the fleet query hasn't returned yet
-  // we fall back to a defensive empty map.
   const fleetByUrl = new Map();
   if (fleet && Array.isArray(fleet.sites)) {
     for (const fs of fleet.sites) fleetByUrl.set(fs.siteUrl, fs);
   }
 
-  // The canonical "list of sites" still drives rows so anything else
-  // subscribing to `['wp-sites']` (or future widgets) keeps working.
   const rows = (sites || []).map((s) => {
     const f = fleetByUrl.get(s.url) || fleetByUrl.get(s.siteUrl) || null;
     return {
@@ -156,30 +299,20 @@ export default function WPSites() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-heading font-bold text-foreground flex items-center gap-2">
-            <Globe className="w-6 h-6 text-primary" />
-            WordPress Sites
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">Manage connected WordPress sites</p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => digestMutation.mutate()}
-            loading={digestMutation.isPending}
-            leftIcon={<Send className="w-4 h-4" />}
-          >
-            Send digest
-          </Button>
-          <Button onClick={() => setShowAdd(true)} leftIcon={<Plus className="w-4 h-4" />}>
-            Add Site
-          </Button>
-        </div>
+      <div className="flex items-center justify-end gap-2">
+        <Button
+          variant="outline"
+          onClick={() => digestMutation.mutate()}
+          loading={digestMutation.isPending}
+          leftIcon={<Send className="w-4 h-4" />}
+        >
+          Send digest
+        </Button>
+        <Button onClick={() => setShowAdd(true)} leftIcon={<Plus className="w-4 h-4" />}>
+          Add Site
+        </Button>
       </div>
 
-      {/* Alert */}
       {alert && (
         <div className={`flex items-center gap-2 px-4 py-3 rounded-lg ${
           alert.type === 'success' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
@@ -191,7 +324,6 @@ export default function WPSites() {
         </div>
       )}
 
-      {/* =================== FLEET STATUS ROLLUP CARD (Plan 6) =================== */}
       <Card className="p-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold flex items-center gap-2">
@@ -252,7 +384,6 @@ export default function WPSites() {
         )}
       </Card>
 
-      {/* =================== SITES TABLE (Plan 6: enhanced with columns + dot + expand) =================== */}
       {isLoading ? (
         <div className="flex justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
@@ -288,6 +419,7 @@ export default function WPSites() {
                     onMagicLogin={() => magicLoginMutation.mutate(site.id)}
                     onDelete={() => { if (confirm('Remove this site?')) deleteMutation.mutate(site.id); }}
                     magicPending={magicLoginMutation.isPending}
+                    deletePending={deleteMutation.isPending}
                   />
                 ))}
               </tbody>
@@ -296,7 +428,6 @@ export default function WPSites() {
         </Card>
       )}
 
-      {/* Setup Guide */}
       <Card className="p-6">
         <h2 className="text-lg font-semibold mb-4">Setup Guide</h2>
         <div className="space-y-4">
@@ -331,7 +462,6 @@ export default function WPSites() {
         </div>
       </Card>
 
-      {/* Add Site Modal */}
       {showAdd && (
         <div role="button" tabIndex={0} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowAdd(false)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { setShowAdd(false); e.preventDefault(); } }}>
           <div className="bg-card rounded-xl border border-border p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
@@ -364,11 +494,605 @@ export default function WPSites() {
   );
 }
 
-// ----- Subcomponents kept here to avoid creating new files outside scope -----
+// =============================================================================
+// FLEET OPS TAB — Plan 8: 3 forms (Patch / Command / Option) + history table
+// =============================================================================
+
+function FleetOpsTab({ queryClient }) {
+  const [alert, setAlert] = useState(null);
+
+  // History (recent fleet ops). Refreshes on every successful mutation below
+  // via queryClient.invalidateQueries.
+  const { data: opsData, isLoading: opsLoading, refetch: refetchOps } = useQuery({
+    queryKey: ['wp-fleet-ops', { limit: 50 }],
+    queryFn: () => api.getWPFleetOps({ limit: 50 }),
+    refetchInterval: 30_000
+  });
+  const ops = (opsData && Array.isArray(opsData.ops)) ? opsData.ops : [];
+
+  // List of sites for the target-sites multi-select on each form. Pulled
+  // from the same fleet status query the Sites tab uses; if it's still
+  // loading, the multi-select shows an empty state.
+  const { data: fleet } = useQuery({
+    queryKey: ['wp-fleet-status'],
+    queryFn: () => api.getWPFleetStatus()
+  });
+  const allSites = (fleet && Array.isArray(fleet.sites)) ? fleet.sites : [];
+
+  const onSuccess = (op, msg) => {
+    queryClient.invalidateQueries({ queryKey: ['wp-fleet-ops'] });
+    setAlert({ type: 'success', msg });
+    setTimeout(() => setAlert(null), 4000);
+  };
+  const onError = (err) => setAlert({ type: 'error', msg: err.message || 'Fleet op failed' });
+
+  return (
+    <div className="space-y-6">
+      {alert && (
+        <div className={`flex items-center gap-2 px-4 py-3 rounded-lg ${
+          alert.type === 'success' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
+          'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+        }`}>
+          {alert.type === 'success' ? <Shield className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+          <span className="text-sm">{alert.msg}</span>
+          <button onClick={() => setAlert(null)} className="ml-auto"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+
+      <PatchForm allSites={allSites} onSuccess={onSuccess} onError={onError} />
+      <CommandForm allSites={allSites} onSuccess={onSuccess} onError={onError} />
+      <OptionSetForm allSites={allSites} onSuccess={onSuccess} onError={onError} />
+
+      <Card className="p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <Terminal className="w-5 h-5 text-primary" />
+            Fleet Ops History
+          </h2>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => refetchOps()}
+            leftIcon={<RefreshCw className="w-4 h-4" />}
+          >
+            Refresh
+          </Button>
+        </div>
+        {opsLoading && ops.length === 0 ? (
+          <div className="text-sm text-muted-foreground">Loading…</div>
+        ) : ops.length === 0 ? (
+          <div className="text-sm text-muted-foreground">No fleet ops recorded yet.</div>
+        ) : (
+          <FleetOpsHistoryTable ops={ops} />
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function PatchForm({ allSites, onSuccess, onError }) {
+  const [filePath, setFilePath] = useState('');
+  const [find, setFind] = useState('');
+  const [replace, setReplace] = useState('');
+  const [targetAll, setTargetAll] = useState(true);
+  const [dryRun, setDryRun] = useState(false);
+  const [selected, setSelected] = useState([]); // site URLs when targetAll=false
+
+  const mutation = useMutation({
+    mutationFn: () => {
+      const body = { filePath, find, replace, dryRun };
+      if (targetAll) body.targetAll = true;
+      else body.targetSites = selected;
+      return api.postWPFleetFilePatch(body);
+    },
+    onSuccess: (data) => {
+      const dry = dryRun ? ' (dry run)' : '';
+      onSuccess(data, `Patch applied to ${data.succeeded}/${data.total} sites${dry}`);
+      setFilePath(''); setFind(''); setReplace('');
+    },
+    onError
+  });
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2 mb-3">
+        <FileCode className="w-5 h-5 text-primary" />
+        <h2 className="text-lg font-semibold">Patch file (find / replace)</h2>
+      </div>
+      <form onSubmit={(e) => { e.preventDefault(); mutation.mutate(); }} className="space-y-3" data-testid="patch-form">
+        <Field label="File path" value={filePath} onChange={setFilePath} placeholder="/srv/www/wp-config.php" required />
+        <Field label="Find" value={find} onChange={setFind} placeholder="WP_DEBUG = false" required textarea />
+        <Field label="Replace" value={replace} onChange={setReplace} placeholder="WP_DEBUG = true" textarea />
+        <div className="flex flex-wrap items-center gap-4">
+          <Checkbox label="Apply to all sites" checked={targetAll} onChange={setTargetAll} />
+          <Checkbox label="Dry run" checked={dryRun} onChange={setDryRun} />
+        </div>
+        <TargetSitesSelect
+          allSites={allSites}
+          disabled={targetAll}
+          selected={selected}
+          onChange={setSelected}
+        />
+        <div className="flex justify-end">
+          <Button type="submit" loading={mutation.isPending} leftIcon={<PlayCircle className="w-4 h-4" />}>
+            {dryRun ? 'Preview patch' : 'Apply patch'}
+          </Button>
+        </div>
+        {mutation.data && <FleetOpResultSummary data={mutation.data} />}
+        {mutation.isError && <FleetOpResultError err={mutation.error} />}
+      </form>
+    </Card>
+  );
+}
+
+function CommandForm({ allSites, onSuccess, onError }) {
+  const [cmd, setCmd] = useState('');
+  const [targetAll, setTargetAll] = useState(true);
+  const [selected, setSelected] = useState([]);
+
+  const mutation = useMutation({
+    mutationFn: () => {
+      const body = { cmd };
+      if (targetAll) body.targetAll = true;
+      else body.targetSites = selected;
+      return api.postWPFleetCommand(body);
+    },
+    onSuccess: (data) => {
+      onSuccess(data, `Command ran on ${data.succeeded}/${data.total} sites`);
+      setCmd('');
+    },
+    onError
+  });
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2 mb-3">
+        <Terminal className="w-5 h-5 text-primary" />
+        <h2 className="text-lg font-semibold">Run command</h2>
+      </div>
+      <form onSubmit={(e) => { e.preventDefault(); mutation.mutate(); }} className="space-y-3" data-testid="command-form">
+        <Field label="Command" value={cmd} onChange={setCmd} placeholder="wp option get blogname" required />
+        <details className="text-xs text-muted-foreground">
+          <summary className="cursor-pointer">Whitelisted WP-CLI subcommands</summary>
+          <pre className="mt-2 whitespace-pre-wrap font-mono text-[11px] leading-relaxed bg-muted/40 rounded p-2">{WP_CLI_HELP}</pre>
+        </details>
+        <Checkbox label="Apply to all sites" checked={targetAll} onChange={setTargetAll} />
+        <TargetSitesSelect
+          allSites={allSites}
+          disabled={targetAll}
+          selected={selected}
+          onChange={setSelected}
+        />
+        <div className="flex justify-end">
+          <Button type="submit" loading={mutation.isPending} leftIcon={<PlayCircle className="w-4 h-4" />}>
+            Run on fleet
+          </Button>
+        </div>
+        {mutation.data && <FleetOpResultSummary data={mutation.data} />}
+        {mutation.isError && <FleetOpResultError err={mutation.error} />}
+      </form>
+    </Card>
+  );
+}
+
+function OptionSetForm({ allSites, onSuccess, onError }) {
+  const [name, setName] = useState('');
+  const [value, setValue] = useState('');
+  const [targetAll, setTargetAll] = useState(true);
+  const [selected, setSelected] = useState([]);
+
+  const mutation = useMutation({
+    mutationFn: () => {
+      // Try to parse the value as JSON first (so booleans, numbers, objects work);
+      // fall back to the raw string. Empty string becomes empty string.
+      let parsed;
+      if (value === '') parsed = '';
+      else if (value === 'true') parsed = true;
+      else if (value === 'false') parsed = false;
+      else if (value === 'null') parsed = null;
+      else if (/^-?\d+(\.\d+)?$/.test(value)) parsed = Number(value);
+      else {
+        try { parsed = JSON.parse(value); } catch { parsed = value; }
+      }
+      const body = { name, value: parsed };
+      if (targetAll) body.targetAll = true;
+      else body.targetSites = selected;
+      return api.postWPFleetOptionSet(body);
+    },
+    onSuccess: (data) => {
+      onSuccess(data, `Option set on ${data.succeeded}/${data.total} sites`);
+      setName(''); setValue('');
+    },
+    onError
+  });
+
+  return (
+    <Card className="p-5">
+      <div className="flex items-center gap-2 mb-3">
+        <Settings2 className="w-5 h-5 text-primary" />
+        <h2 className="text-lg font-semibold">Set option</h2>
+      </div>
+      <form onSubmit={(e) => { e.preventDefault(); mutation.mutate(); }} className="space-y-3" data-testid="option-form">
+        <Field label="Option name" value={name} onChange={setName} placeholder="blogdescription" required />
+        <Field label="Value (string, number, true, false, null, or JSON)" value={value} onChange={setValue} placeholder="Just another WordPress site" />
+        <Checkbox label="Apply to all sites" checked={targetAll} onChange={setTargetAll} />
+        <TargetSitesSelect
+          allSites={allSites}
+          disabled={targetAll}
+          selected={selected}
+          onChange={setSelected}
+        />
+        <div className="flex justify-end">
+          <Button type="submit" loading={mutation.isPending} leftIcon={<PlayCircle className="w-4 h-4" />}>
+            Set on fleet
+          </Button>
+        </div>
+        {mutation.data && <FleetOpResultSummary data={mutation.data} />}
+        {mutation.isError && <FleetOpResultError err={mutation.error} />}
+      </form>
+    </Card>
+  );
+}
+
+function FleetOpResultSummary({ data }) {
+  if (!data) return null;
+  return (
+    <div className="rounded-lg border border-emerald-200 bg-emerald-50 dark:border-emerald-900/40 dark:bg-emerald-900/20 p-3 text-sm" data-testid="fleet-op-result">
+      <div className="font-medium text-emerald-800 dark:text-emerald-300">
+        {data.succeeded}/{data.total} sites succeeded ({data.failed} failed)
+      </div>
+      {Array.isArray(data.results) && data.results.length > 0 && (
+        <ul className="mt-2 space-y-1 text-xs">
+          {data.results.map((r) => (
+            <li key={r.siteUrl} className="flex items-center gap-2">
+              <span className={r.status === 'ok' ? 'text-emerald-600' : 'text-red-600'}>
+                {r.status === 'ok' ? 'OK' : 'ERR'}
+              </span>
+              <span className="font-mono">{r.siteUrl}</span>
+              {r.error && <span className="text-muted-foreground">— {r.error}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function FleetOpResultError({ err }) {
+  if (!err) return null;
+  return (
+    <div className="rounded-lg border border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-900/20 p-3 text-sm text-red-800 dark:text-red-300">
+      <div className="font-medium">Fleet op failed</div>
+      <div className="text-xs mt-1">{err.message || 'Unknown error'}</div>
+    </div>
+  );
+}
+
+function FleetOpsHistoryTable({ ops }) {
+  const [expandedId, setExpandedId] = useState(null);
+
+  const truncate = (v) => {
+    if (v == null) return '';
+    const s = typeof v === 'string' ? v : JSON.stringify(v);
+    return s.length > 60 ? s.slice(0, 60) + '…' : s;
+  };
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm" data-testid="fleet-ops-history">
+        <thead>
+          <tr className="bg-muted/40 text-left">
+            <th className="px-3 py-2 w-8" />
+            <th className="px-3 py-2 font-medium">Time</th>
+            <th className="px-3 py-2 font-medium">Op</th>
+            <th className="px-3 py-2 font-medium">Targets</th>
+            <th className="px-3 py-2 font-medium">OK</th>
+            <th className="px-3 py-2 font-medium">Fail</th>
+            <th className="px-3 py-2 font-medium">Payload</th>
+            <th className="px-3 py-2 font-medium">By</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ops.map((op) => (
+            <FleetOpHistoryRow
+              key={op.id}
+              op={op}
+              expanded={expandedId === op.id}
+              onToggle={() => setExpandedId(expandedId === op.id ? null : op.id)}
+              truncate={truncate}
+            />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function FleetOpHistoryRow({ op, expanded, onToggle, truncate }) {
+  return (
+    <>
+      <tr
+        className="border-t border-border hover:bg-muted/30 cursor-pointer"
+        onClick={onToggle}
+        data-testid={`fleet-op-row-${op.id}`}
+      >
+        <td className="px-3 py-2 align-middle">
+          {expanded ? <ChevronDownIcon className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
+        </td>
+        <td className="px-3 py-2 align-middle text-xs">{op.createdAt ? new Date(op.createdAt).toLocaleString() : '—'}</td>
+        <td className="px-3 py-2 align-middle">
+          <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-muted text-foreground">
+            {OP_TYPE_LABELS[op.opType] || op.opType}
+          </span>
+        </td>
+        <td className="px-3 py-2 align-middle">{op.targetCount}</td>
+        <td className="px-3 py-2 align-middle text-emerald-600">{op.successCount}</td>
+        <td className="px-3 py-2 align-middle text-red-600">{op.failureCount}</td>
+        <td className="px-3 py-2 align-middle font-mono text-xs">{truncate(op.payload)}</td>
+        <td className="px-3 py-2 align-middle text-xs">{op.createdBy}</td>
+      </tr>
+      {expanded && (
+        <tr className="border-t border-border bg-muted/20">
+          <td colSpan={8} className="px-3 py-3">
+            <pre className="text-xs font-mono whitespace-pre-wrap break-all">
+{JSON.stringify(op, null, 2)}
+            </pre>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+// =============================================================================
+// LOGIN TAB — bulk magic-login generator
+// =============================================================================
+
+function LoginTab() {
+  const [userId, setUserId] = useState(1); // Cameron as primary admin (per task spec)
+  const [targetAll, setTargetAll] = useState(true);
+  const [selected, setSelected] = useState([]);
+  const [alert, setAlert] = useState(null);
+
+  const { data: fleet } = useQuery({
+    queryKey: ['wp-fleet-status'],
+    queryFn: () => api.getWPFleetStatus()
+  });
+  const allSites = (fleet && Array.isArray(fleet.sites)) ? fleet.sites : [];
+
+  const mutation = useMutation({
+    mutationFn: () => {
+      const body = { user_id: userId };
+      if (targetAll) body.targetAll = true;
+      else body.targetSites = selected;
+      return api.postWPFleetMagicLogin(body);
+    },
+    onSuccess: (data) => {
+      setAlert({ type: 'success', msg: `Magic login generated for ${data.succeeded}/${data.total} sites` });
+      setTimeout(() => setAlert(null), 4000);
+    },
+    onError: (err) => setAlert({ type: 'error', msg: err.message || 'Magic login failed' })
+  });
+
+  const results = (mutation.data && Array.isArray(mutation.data.results)) ? mutation.data.results : [];
+  const successfulUrls = results.filter((r) => r.url);
+
+  const copyOne = async (url) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setAlert({ type: 'success', msg: 'Magic login URL copied to clipboard' });
+      setTimeout(() => setAlert(null), 2500);
+    } catch {
+      setAlert({ type: 'error', msg: 'Clipboard write failed — copy manually' });
+    }
+  };
+
+  const openAll = () => {
+    // Best-effort: most browsers cap popups without a user gesture; this
+    // button is clicked by the user so it counts as one. Sites that fail
+    // (popup blocker) still appear in the result table for manual opening.
+    for (const r of successfulUrls) {
+      try { window.open(r.url, '_blank', 'noopener,noreferrer'); } catch { /* ignored */ }
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {alert && (
+        <div className={`flex items-center gap-2 px-4 py-3 rounded-lg ${
+          alert.type === 'success' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' :
+          'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+        }`}>
+          {alert.type === 'success' ? <Shield className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+          <span className="text-sm">{alert.msg}</span>
+          <button onClick={() => setAlert(null)} className="ml-auto"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+
+      <Card className="p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <Shield className="w-5 h-5 text-primary" />
+          <h2 className="text-lg font-semibold">Bulk magic login</h2>
+        </div>
+        <form onSubmit={(e) => { e.preventDefault(); mutation.mutate(); }} className="space-y-3" data-testid="login-form">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium mb-1">Admin user ID</label>
+              <input
+                type="number"
+                min={1}
+                value={userId}
+                onChange={(e) => setUserId(Number(e.target.value))}
+                className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+                required
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Defaults to <code>1</code> (Cameron's primary admin).
+              </p>
+            </div>
+            <Checkbox label="Apply to all sites" checked={targetAll} onChange={setTargetAll} />
+          </div>
+          <TargetSitesSelect
+            allSites={allSites}
+            disabled={targetAll}
+            selected={selected}
+            onChange={setSelected}
+          />
+          <div className="flex justify-end">
+            <Button type="submit" loading={mutation.isPending} leftIcon={<PlayCircle className="w-4 h-4" />}>
+              Generate magic logins
+            </Button>
+          </div>
+        </form>
+      </Card>
+
+      {mutation.data && (
+        <Card className="p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-base font-semibold">
+              Results — {mutation.data.succeeded}/{mutation.data.total} succeeded
+            </h3>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={openAll}
+              disabled={successfulUrls.length === 0}
+              leftIcon={<OpenIcon className="w-4 h-4" />}
+            >
+              Open all in new tabs
+            </Button>
+          </div>
+          {results.length === 0 ? (
+            <div className="text-sm text-muted-foreground">No sites targeted.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm" data-testid="login-results-table">
+                <thead>
+                  <tr className="bg-muted/40 text-left">
+                    <th className="px-3 py-2 font-medium">Site</th>
+                    <th className="px-3 py-2 font-medium">Status</th>
+                    <th className="px-3 py-2 font-medium">Magic-login URL</th>
+                    <th className="px-3 py-2 font-medium text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {results.map((r) => (
+                    <tr key={r.siteUrl} className="border-t border-border">
+                      <td className="px-3 py-2 font-mono text-xs">{r.siteUrl}</td>
+                      <td className="px-3 py-2">
+                        {r.url
+                          ? <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">OK</span>
+                          : <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" title={r.error || 'Unknown error'}>Failed</span>}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-xs break-all">
+                        {r.url
+                          ? <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{r.url}</a>
+                          : <span className="text-muted-foreground">{r.error || '—'}</span>}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {r.url && (
+                          <Button size="sm" variant="ghost" onClick={() => copyOne(r.url)}>
+                            <Copy className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// Shared form primitives — kept in-file to avoid new files outside scope
+// =============================================================================
+
+function Field({ label, value, onChange, placeholder, required, textarea }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium mb-1">{label}</label>
+      {textarea ? (
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          rows={3}
+          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm font-mono"
+          required={required}
+        />
+      ) : (
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+          required={required}
+        />
+      )}
+    </div>
+  );
+}
+
+function Checkbox({ label, checked, onChange }) {
+  return (
+    <label className="inline-flex items-center gap-2 text-sm cursor-pointer select-none">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="rounded border-border"
+      />
+      {label}
+    </label>
+  );
+}
+
+function TargetSitesSelect({ allSites, disabled, selected, onChange }) {
+  if (disabled) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Targeting all {allSites.length} connected sites.
+      </p>
+    );
+  }
+  const toggle = (url) => {
+    if (selected.includes(url)) onChange(selected.filter((u) => u !== url));
+    else onChange([...selected, url]);
+  };
+  return (
+    <div>
+      <label className="block text-sm font-medium mb-1">Target sites</label>
+      {allSites.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No sites loaded yet.</p>
+      ) : (
+        <div className="rounded-lg border border-border bg-background p-2 max-h-40 overflow-y-auto space-y-1">
+          {allSites.map((s) => (
+            <label key={s.id || s.siteUrl} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/40 rounded px-1 py-0.5">
+              <input
+                type="checkbox"
+                checked={selected.includes(s.siteUrl)}
+                onChange={() => toggle(s.siteUrl)}
+              />
+              <span className="font-mono text-xs">{s.siteUrl}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// Sites-tab subcomponents (unchanged from Plan 6)
+// =============================================================================
 
 function RollupMetric({ label, value, tone = 'neutral', hint }) {
-  // Tone only affects the value color so a glance still works for
-  // red/green-weak viewers — the number itself is the source of truth.
   const toneClass =
     tone === 'ok' ? 'text-emerald-600 dark:text-emerald-400' :
     tone === 'warn' ? 'text-amber-600 dark:text-amber-400' :
@@ -383,7 +1107,7 @@ function RollupMetric({ label, value, tone = 'neutral', hint }) {
   );
 }
 
-function SiteRow({ site, expanded, onToggle, onMagicLogin, onDelete, magicPending }) {
+function SiteRow({ site, expanded, onToggle, onMagicLogin, onDelete, magicPending, deletePending }) {
   const dot = pingStatusToDot(site.pingStatus);
   const pillKey = pingStatusToPill(site.pingStatus);
   const sslText = site.sslDaysRemaining === null
@@ -435,10 +1159,17 @@ function SiteRow({ site, expanded, onToggle, onMagicLogin, onDelete, magicPendin
         </td>
         <td className="px-3 py-2 align-middle text-right">
           <div className="inline-flex gap-1">
-            <Button size="sm" variant="outline" onClick={onMagicLogin} loading={magicPending}>
+            <Button size="sm" variant="outline" onClick={onMagicLogin} loading={magicPending} data-testid="magic-login-button">
               Magic Login
             </Button>
-            <Button size="sm" variant="ghost" onClick={onDelete} className="text-red-500 hover:text-red-600">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={onDelete}
+              loading={deletePending}
+              className="text-red-500 hover:text-red-600"
+              data-testid="delete-site-button"
+            >
               <Trash2 className="w-4 h-4" />
             </Button>
           </div>
