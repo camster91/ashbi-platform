@@ -1,7 +1,7 @@
 // Task Template routes
 
 import { safeParse } from '../utils/safeParse.js';
-import { validateBody, taskTemplateCreateSchema } from '../validators/schemas.js';
+import { validateBody, taskTemplateCreateSchema, taskTemplateSchema } from '../validators/schemas.js';
 
 export default async function templateRoutes(fastify) {
   // List all templates

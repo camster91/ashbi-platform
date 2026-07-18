@@ -1,3 +1,4 @@
+import { validateBody, draftUpsertSchema } from '../validators/schemas.js';
 // Draft (autosave) API routes
 // Generic endpoints for saving/loading/clearing draft data on any entity
 // Entities: proposal, invoice, contract, estimate, project, retainer
