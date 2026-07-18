@@ -393,7 +393,9 @@ export default async function wpBridgeRoutes(fastify) {
     try {
       sites = await resolveTargetSites({ targetAll, targetSites });
     } catch (err) {
-      request.log && request.log.error && request.log.error({ err }, '[fleet/file/patch] resolveTargetSites failed');
+      if (request.log && request.log.error) {
+        request.log.error({ err }, '[fleet/file/patch] resolveTargetSites failed');
+      }
       return reply.status(500).send({ error: 'Failed to resolve target sites' });
     }
     if (sites.length === 0) {
@@ -411,7 +413,9 @@ export default async function wpBridgeRoutes(fastify) {
       });
       return result;
     } catch (err) {
-      request.log && request.log.error && request.log.error({ err }, '[fleet/file/patch] fan-out failed');
+      if (request.log && request.log.error) {
+        request.log.error({ err }, '[fleet/file/patch] fan-out failed');
+      }
       return reply.status(500).send({ error: 'Fleet operation failed', message: err.message });
     }
   });
@@ -428,7 +432,9 @@ export default async function wpBridgeRoutes(fastify) {
     try {
       sites = await resolveTargetSites({ targetAll, targetSites });
     } catch (err) {
-      request.log && request.log.error && request.log.error({ err }, '[fleet/command] resolveTargetSites failed');
+      if (request.log && request.log.error) {
+        request.log.error({ err }, '[fleet/command] resolveTargetSites failed');
+      }
       return reply.status(500).send({ error: 'Failed to resolve target sites' });
     }
     if (sites.length === 0) {
@@ -445,7 +451,9 @@ export default async function wpBridgeRoutes(fastify) {
       });
       return result;
     } catch (err) {
-      request.log && request.log.error && request.log.error({ err }, '[fleet/command] fan-out failed');
+      if (request.log && request.log.error) {
+        request.log.error({ err }, '[fleet/command] fan-out failed');
+      }
       return reply.status(500).send({ error: 'Fleet operation failed', message: err.message });
     }
   });
@@ -467,7 +475,9 @@ export default async function wpBridgeRoutes(fastify) {
     try {
       sites = await resolveTargetSites({ targetAll, targetSites });
     } catch (err) {
-      request.log && request.log.error && request.log.error({ err }, '[fleet/option/set] resolveTargetSites failed');
+      if (request.log && request.log.error) {
+        request.log.error({ err }, '[fleet/option/set] resolveTargetSites failed');
+      }
       return reply.status(500).send({ error: 'Failed to resolve target sites' });
     }
     if (sites.length === 0) {
@@ -484,7 +494,9 @@ export default async function wpBridgeRoutes(fastify) {
       });
       return result;
     } catch (err) {
-      request.log && request.log.error && request.log.error({ err }, '[fleet/option/set] fan-out failed');
+      if (request.log && request.log.error) {
+        request.log.error({ err }, '[fleet/option/set] fan-out failed');
+      }
       return reply.status(500).send({ error: 'Fleet operation failed', message: err.message });
     }
   });
@@ -501,7 +513,9 @@ export default async function wpBridgeRoutes(fastify) {
       const ops = await listFleetOps({ limit, opType });
       return { ops };
     } catch (err) {
-      request.log && request.log.error && request.log.error({ err }, '[fleet/ops] list failed');
+      if (request.log && request.log.error) {
+        request.log.error({ err }, '[fleet/ops] list failed');
+      }
       return reply.status(500).send({ error: 'Failed to list fleet ops' });
     }
   });
