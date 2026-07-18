@@ -67,7 +67,9 @@ const verifyBackupHmac = async (request, reply) => {
   }
 
   if (!env.wpBridgeSecret) {
-    request.log && request.log.error && request.log.error('wpBridgeSecret not configured');
+    if (request.log && request.log.error) {
+      request.log.error('wpBridgeSecret not configured');
+    }
     reply.status(401).send({ error: 'Server missing wpBridgeSecret configuration' });
     return reply;
   }
