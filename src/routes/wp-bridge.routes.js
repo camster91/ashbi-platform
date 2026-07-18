@@ -281,7 +281,9 @@ export default async function wpBridgeRoutes(fastify) {
       }
       return { ok: true, slackStatus, fleet };
     } catch (err) {
-      request.log && request.log.error && request.log.error({ err }, '[fleet-digest] post failed');
+      if (request.log && request.log.error) {
+        request.log.error({ err }, '[fleet-digest] post failed');
+      }
       return reply.status(502).send({ error: err.message || 'Slack post failed' });
     }
   });
@@ -336,15 +338,21 @@ async function runScheduledFleetDigest(logger) {
   try {
     const webhookUrl = env.slackWebhookUrl;
     if (!webhookUrl) {
-      logger && logger.warn && logger.warn('[fleet-digest] SLACK_WEBHOOK_URL not configured; skipping scheduled digest');
+      if (logger && logger.warn) {
+        logger.warn('[fleet-digest] SLACK_WEBHOOK_URL not configured; skipping scheduled digest');
+      }
       return { skipped: true, reason: 'SLACK_WEBHOOK_URL not configured' };
     }
     const fleet = await getFleetStatus();
     const slackStatus = await postFleetDigestToSlack({ webhookUrl, fleet });
-    logger && logger.info && logger.info(`[fleet-digest] scheduled digest posted to Slack (status=${slackStatus}, healthy=${fleet.healthy}/${fleet.totalSites})`);
+    if (logger && logger.info) {
+      logger.info(`[fleet-digest] scheduled digest posted to Slack (status=${slackStatus}, healthy=${fleet.healthy}/${fleet.totalSites})`);
+    }
     return { ok: true, slackStatus, totalSites: fleet.totalSites };
   } catch (err) {
-    logger && logger.error && logger.error({ err }, '[fleet-digest] scheduled run failed');
+    if (logger && logger.error) {
+      logger.error({ err }, '[fleet-digest] scheduled run failed');
+    }
     return { ok: false, error: err.message };
   }
 }
