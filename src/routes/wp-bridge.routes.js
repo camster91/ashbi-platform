@@ -535,7 +535,9 @@ export default async function wpBridgeRoutes(fastify) {
     try {
       sites = await resolveTargetSites({ targetAll, targetSites });
     } catch (err) {
-      request.log && request.log.error && request.log.error({ err }, '[fleet/magic-login] resolveTargetSites failed');
+      if (request.log && request.log.error) {
+        request.log.error({ err }, '[fleet/magic-login] resolveTargetSites failed');
+      }
       return reply.status(500).send({ error: 'Failed to resolve target sites' });
     }
     if (sites.length === 0) {
@@ -560,7 +562,9 @@ export default async function wpBridgeRoutes(fastify) {
         results: raw.results.map(reshapeMagicLoginResult)
       };
     } catch (err) {
-      request.log && request.log.error && request.log.error({ err }, '[fleet/magic-login] fan-out failed');
+      if (request.log && request.log.error) {
+        request.log.error({ err }, '[fleet/magic-login] fan-out failed');
+      }
       return reply.status(500).send({ error: 'Fleet operation failed', message: err.message });
     }
   });
