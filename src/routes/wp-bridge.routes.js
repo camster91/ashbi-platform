@@ -626,7 +626,9 @@ export default async function wpBridgeRoutes(fastify) {
       });
       return { entries, count: entries.length, limit: cap };
     } catch (err) {
-      request.log && request.log.error && request.log.error({ err }, '[magic-login/log] list failed');
+      if (request.log && request.log.error) {
+        request.log.error({ err }, '[magic-login/log] list failed');
+      }
       return reply.status(500).send({ error: 'Failed to read magic-login log' });
     }
   });
@@ -672,7 +674,9 @@ export default async function wpBridgeRoutes(fastify) {
     try {
       site = await findMagicLoginSite({ siteId, siteUrl });
     } catch (err) {
-      request.log && request.log.error && request.log.error({ err }, '[magic-login/revoke] resolve failed');
+      if (request.log && request.log.error) {
+        request.log.error({ err }, '[magic-login/revoke] resolve failed');
+      }
       return reply.status(500).send({ error: 'Failed to resolve site' });
     }
     if (!site) return reply.status(404).send({ error: 'Site not found' });
@@ -719,7 +723,9 @@ export default async function wpBridgeRoutes(fastify) {
         hash: callerHash
       };
     } catch (err) {
-      request.log && request.log.error && request.log.error({ err }, '[magic-login/revoke] fan-out failed');
+      if (request.log && request.log.error) {
+        request.log.error({ err }, '[magic-login/revoke] fan-out failed');
+      }
       return reply.status(500).send({ error: 'Revoke failed', message: err.message });
     }
   });
