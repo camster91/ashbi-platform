@@ -5,6 +5,135 @@ import prisma from '../config/db.js';
 import crypto from 'crypto';
 import env from '../config/env.js';
 
+// ============================================================================
+// Magic-login helpers (Plan 11 / PR-F).
+// Owned by the hub-side keepalive of the magic-login feature: routes call
+// these helpers to (a) persist every state transition to the wp_magic_login_log
+// audit table, (b) read the recent-logins feed for the WPSites dashboard, and
+// (c) enforce a per-fleet rate limit so a single admin hot-keying the magic
+// button doesn't accidentally flood the plugin layer.
+//
+// The plugin-side counterpart (includes/class-ashbi-magic-login.php) keeps its
+// own ring-buffered wp_options audit log for sites that aren't yet registered
+// with the hub. Once a site is registered, the hub log becomes the source of
+// truth for the cross-site "Recent Logins" view.
+// ============================================================================
+
+const MAGIC_LOGIN_RATE_LIMIT_DEFAULT = 5; // per site per hour
+const MAGIC_LOGIN_AUDIT_MAX = 500;        // ring buffer per site in the UI feed
+
+/**
+ * Record a magic-login state transition. The function is intentionally
+ * permissive about missing fields so it can be called from the issuance path,
+ * the revocation path, and the audit-endpoint path with a single shape.
+ *
+ *   status  ∈ 'issued' | 'consumed' | 'revoked' | 'rejected'
+ *   reason  ∈ 'expired_or_invalid' | 'replayed' | 'expired' | 'rate_limited'
+ *             | 'ip_not_allowed' | 'manual_revoke' | NULL
+ */
+export async function recordMagicLoginEvent({
+  siteId = null,
+  siteUrl,
+  userId = null,
+  hubUserId = null,
+  ip = '0.0.0.0',
+  status,
+  reason = null,
+  tokenHash = null
+} = {}) {
+  if (!siteUrl || typeof siteUrl !== 'string') {
+    throw new TypeError('recordMagicLoginEvent: siteUrl is required');
+  }
+  const allowed = ['issued', 'consumed', 'revoked', 'rejected'];
+  if (!allowed.includes(status)) {
+    throw new TypeError(`recordMagicLoginEvent: status must be one of ${allowed.join(', ')}`);
+  }
+
+  return prisma.wPMagicLoginLog.create({
+    data: {
+      siteId,
+      siteUrl,
+      userId: Number.isFinite(userId) ? userId : null,
+      hubUserId: hubUserId || null,
+      ip: ip || '0.0.0.0',
+      status,
+      reason,
+      tokenHash: tokenHash || null
+    }
+  });
+}
+
+/**
+ * Read the magic-login audit log. Filterable by siteId and/or status.
+ * Returns at most `limit` rows (default 100, max 500) ordered by ts desc.
+ */
+export async function getMagicLoginLog({ siteId = null, siteUrl = null, status = null, limit = 100 } = {}) {
+  const cap = Math.min(Math.max(1, Number(limit) || 100), MAGIC_LOGIN_AUDIT_MAX);
+  return prisma.wPMagicLoginLog.findMany({
+    where: {
+      ...(siteId ? { siteId } : {}),
+      ...(siteUrl ? { siteUrl } : {}),
+      ...(status ? { status } : {})
+    },
+    orderBy: { ts: 'desc' },
+    take: cap
+  });
+}
+
+/**
+ * Per-fleet rate limit. Defaults to 5 issuances per site per hour from the
+ * hub side. We use the wp_magic_login_log table itself as the bucket —
+ * counting `status='issued'` rows in the last hour is enough for a hub-side
+ * guard and avoids a second table that needs its own migration + GC.
+ *
+ * Returns `{ allowed, count, limit, retryAfterSeconds }`. The route layer
+ * is responsible for translating `!allowed` into a 429 with the
+ * Retry-After header.
+ */
+export async function checkMagicLoginRateLimit({ siteId, limit = MAGIC_LOGIN_RATE_LIMIT_DEFAULT, now = new Date() } = {}) {
+  if (!siteId) {
+    throw new TypeError('checkMagicLoginRateLimit: siteId is required');
+  }
+  const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+  const count = await prisma.wPMagicLoginLog.count({
+    where: {
+      siteId,
+      status: 'issued',
+      ts: { gte: hourAgo }
+    }
+  });
+  return {
+    allowed: count < limit,
+    count,
+    limit,
+    retryAfterSeconds: 60 * 60
+  };
+}
+
+/**
+ * Look up a WPSite by id OR canonical URL. Used by the magic-login revoke
+ * route which accepts either siteId or siteUrl.
+ */
+export async function findMagicLoginSite({ siteId = null, siteUrl = null } = {}) {
+  if (siteId) {
+    return prisma.wPSite.findUnique({ where: { id: siteId } });
+  }
+  if (siteUrl) {
+    return prisma.wPSite.findFirst({ where: { url: siteUrl } });
+  }
+  return null;
+}
+
+/**
+ * Hash a raw magic-login token with sha256. Used by the revoke route to
+ * record the same tokenHash that the plugin emits, so the hub log + plugin
+ * log can be cross-referenced.
+ */
+export function sha256TokenHash(token) {
+  return crypto.createHash('sha256').update(String(token)).digest('hex');
+}
+
+
 /**
  * Verify shared secret using constant-time compare. Returns true if valid.
  */

@@ -18,7 +18,12 @@ import {
   logSupportHours,
   getSupportHoursSummary,
   getFleetStatus,
-  postFleetDigestToSlack
+  postFleetDigestToSlack,
+  recordMagicLoginEvent,
+  getMagicLoginLog,
+  checkMagicLoginRateLimit,
+  findMagicLoginSite,
+  sha256TokenHash
 } from '../services/wpBridge.service.js';
 import {
   executeFleetOp,
@@ -585,6 +590,143 @@ export default async function wpBridgeRoutes(fastify) {
         request.log.error({ err }, '[fleet/ops] list failed');
       }
       return reply.status(500).send({ error: 'Failed to list fleet ops' });
+    }
+  });
+
+  // ==========================================================================
+  // Magic-login ManageWP-grade endpoints (Plan 11 / PR-F).
+  // The plugin owns the token lifecycle; the hub owns the audit feed, the
+  // per-fleet rate-limit guard, and the proxy into /magic-login/revoke on
+  // each site. Both endpoints below require admin-level JWT (the same gate
+  // as the rest of /api/wp-bridge/* after PR-D removed the blanket exemption).
+  // ==========================================================================
+
+  // GET /api/wp-bridge/magic-login/log?siteId=...&limit=100
+  // Returns the last `limit` magic-login audit rows for a site (or fleet-wide
+  // when siteId is omitted). Drives the WPSites "Recent Logins" tab.
+  fastify.get('/magic-login/log', {
+    onRequest: [fastify.authenticate, fastify.adminOnly]
+  }, async (request, reply) => {
+    const { siteId, siteUrl, status, limit } = request.query || {};
+
+    if (status && !['issued', 'consumed', 'revoked', 'rejected'].includes(status)) {
+      return reply.status(400).send({ error: 'status must be one of issued|consumed|revoked|rejected' });
+    }
+    if (siteId && typeof siteId !== 'string') {
+      return reply.status(400).send({ error: 'siteId must be a string' });
+    }
+    const cap = Math.min(Math.max(1, parseInt(limit, 10) || 100), 500);
+
+    try {
+      const entries = await getMagicLoginLog({
+        siteId: siteId || null,
+        siteUrl: siteUrl || null,
+        status: status || null,
+        limit: cap
+      });
+      return { entries, count: entries.length, limit: cap };
+    } catch (err) {
+      if (request.log && request.log.error) {
+        request.log.error({ err }, '[magic-login/log] list failed');
+      }
+      return reply.status(500).send({ error: 'Failed to read magic-login log' });
+    }
+  });
+
+  // POST /api/wp-bridge/magic-login/revoke
+  // Body: { siteId, hash }  OR  { siteUrl, hash }       ← preferred (hub UI)
+  //     OR  { siteId, token }  OR  { siteUrl, token }    ← legacy (raw token)
+  //
+  // The hub's "Recent Logins" tab never had the raw token (we only persist
+  // its sha256 hash on the hub side), so the preferred wire shape is
+  // `{ hash }`. The plugin-side revoke endpoint accepts both shapes —
+  // when it sees `hash`, it uses it directly as the active-transient key
+  // (no double-hashing); when it sees `token`, it hashes first.
+  //
+  // The fan-out forwards whatever the hub-side audit row records (`hash`
+  // if the caller passed a hash, otherwise the sha256 of the raw token),
+  // so plugin-side and hub-side audit rows always reference the same hash.
+  fastify.post('/magic-login/revoke', {
+    onRequest: [fastify.authenticate, fastify.adminOnly],
+    preHandler: validateBody(z.object({
+      siteId: z.string().min(1).optional(),
+      siteUrl: z.string().url().optional(),
+      hash: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+      token: z.string().min(8).optional()
+    }).refine((d) => Boolean(d.siteId) || Boolean(d.siteUrl), {
+      message: 'siteId or siteUrl is required'
+    }).refine((d) => Boolean(d.hash) !== Boolean(d.token), {
+      message: 'pass either hash OR token, not both (and not neither)'
+    }))
+  }, async (request, reply) => {
+    if (!ensureAdminSecretConfigured(reply)) return;
+    const { siteId, siteUrl, hash, token } = request.body;
+
+    // Compute the canonical hash that BOTH the plugin-side audit row and
+    // the hub-side audit row will reference. Plugin receives `hash` directly
+    // (no double-hash) when the caller supplied a hash; receives `token` as
+    // a raw token (plugin hashes it) when the caller supplied a token.
+    const callerHash = hash || sha256TokenHash(token);
+    const pluginPayloadField = hash ? 'hash' : 'token';
+    const pluginPayloadValue = hash || token;
+
+    let site;
+    try {
+      site = await findMagicLoginSite({ siteId, siteUrl });
+    } catch (err) {
+      if (request.log && request.log.error) {
+        request.log.error({ err }, '[magic-login/revoke] resolve failed');
+      }
+      return reply.status(500).send({ error: 'Failed to resolve site' });
+    }
+    if (!site) return reply.status(404).send({ error: 'Site not found' });
+
+    // Per-fleet rate limit (5/hr default). Revocations are lightweight but
+    // we still cap the volume so an admin hot-keying the kill-switch
+    // doesn't drown the plugin endpoint.
+    const rl = await checkMagicLoginRateLimit({ siteId: site.id });
+    if (!rl.allowed) {
+      reply.header('Retry-After', String(rl.retryAfterSeconds));
+      return reply.status(429).send({
+        error: 'Magic-login rate limit exceeded',
+        retryAfterSeconds: rl.retryAfterSeconds
+      });
+    }
+
+    try {
+      const raw = await executeFleetOp({
+        opType: 'magic_login_revoke',
+        payload: { [pluginPayloadField]: pluginPayloadValue },
+        targetSites: [site],
+        endpoint: 'magic-login/revoke',
+        createdBy: request.user.id,
+        timeoutMs: PER_SITE_TIMEOUT_MS
+      });
+      const result = raw.results && raw.results[0];
+      const pluginResponse = result && result.output && result.output.body;
+      const ok = result && result.status === 'ok';
+
+      await recordMagicLoginEvent({
+        siteId: site.id,
+        siteUrl: site.url,
+        hubUserId: request.user.id,
+        ip: request.ip || '0.0.0.0',
+        status: 'revoked',
+        reason: 'manual_revoke',
+        tokenHash: callerHash
+      });
+
+      return {
+        ok,
+        siteUrl: site.url,
+        pluginResponse: pluginResponse || null,
+        hash: callerHash
+      };
+    } catch (err) {
+      if (request.log && request.log.error) {
+        request.log.error({ err }, '[magic-login/revoke] fan-out failed');
+      }
+      return reply.status(500).send({ error: 'Revoke failed', message: err.message });
     }
   });
 }
