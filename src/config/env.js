@@ -141,7 +141,11 @@ if (!env.isDev) {
     MAILGUN_SIGNING_KEY: 'your-mailgun-signing-key',
     STRIPE_SECRET_KEY: 'your-stripe-secret-key',
     STRIPE_WEBHOOK_SECRET: 'your-stripe-webhook-secret',
-    WP_BRIDGE_SECRET: 'your-wp-bridge-secret',
+    // PR-D: WP_BRIDGE_SECRET was previously accepted with the placeholder
+    // value. The WordPress plugin uses the same secret to sign HMAC-SHA256
+    // payloads, so a copy-paste deploy would authenticate against a
+    // publicly-known shared secret. Refuse to start until it's replaced.
+    WP_BRIDGE_SECRET: 'your-wp-bridge-shared-secret',
     BOT_SECRET: 'your-bot-secret',
     COOLIFY_TOKEN: 'your-coolify-api-token',
     SHOPIFY_CLIENT_SECRET: 'your-shopify-client-secret',
