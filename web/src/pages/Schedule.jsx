@@ -595,7 +595,7 @@ export default function Schedule() {
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects-list'],
-    queryFn: () => api.getProjects({ status: 'ACTIVE' }),
+    queryFn: () => api.getProjects({ status: 'ACTIVE' }).then((r) => r?.projects ?? []),
   });
 
   const { data: team = [] } = useQuery({

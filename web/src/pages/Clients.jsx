@@ -167,7 +167,7 @@ export default function Clients() {
 
   const { data: clients = [], isLoading } = useQuery({
     queryKey: ['clients'],
-    queryFn: () => api.getClients(),
+    queryFn: () => api.getClients().then((r) => r?.clients ?? []),
   });
 
   const { data: healthData, isLoading: healthLoading, refetch: refetchHealth } = useQuery({
@@ -186,8 +186,10 @@ export default function Clients() {
     onError: () => toast.error('Onboarding failed'),
   });
 
-  // Use API data if available, otherwise fall back to hardcoded Ashbi Design clients
-  const displayClients = (clients && clients.length > 0) ? clients : ASHBI_DESIGN_CLIENTS;
+  // Show real API data only. (Previously fell back to hardcoded demo clients
+  // when the response looked empty, which — combined with the wrapper-unwrap
+  // bug — meant real clients were never shown.)
+  const displayClients = clients;
 
   const filtered = displayClients.filter(c =>
     !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.domain?.toLowerCase().includes(search.toLowerCase())

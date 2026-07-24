@@ -68,7 +68,8 @@ export default function Credentials() {
       if (filterCategory) params.category = filterCategory;
       if (filterClient) params.clientId = filterClient;
       const res = await api.getCredentials(params);
-      return res.credentials || [];
+      // Backend returns a raw array; tolerate a wrapped shape too.
+      return Array.isArray(res) ? res : (res?.credentials ?? []);
     },
   });
 

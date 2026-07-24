@@ -234,13 +234,14 @@ export default function Projects() {
   const [searchParams] = useSearchParams();
   const [showCreateModal, setShowCreateModal] = useState(searchParams.get('create') === 'true');
 
-  const { data: projects, isLoading } = useQuery({
+  const { data: projects = [], isLoading } = useQuery({
     queryKey: ['projects'],
-    queryFn: () => api.getProjects(),
+    queryFn: () => api.getProjects().then((r) => r?.projects ?? []),
   });
 
-  // Use API data if available, otherwise fall back to hardcoded Ashbi Design projects
-  const displayProjects = (projects && projects.length > 0) ? projects : ASHBI_DESIGN_PROJECTS;
+  // Show real API data only. (Previously fell back to hardcoded demo projects
+  // when the response looked empty, which hid real projects.)
+  const displayProjects = projects;
 
   // Group projects by kanban column
   const columns = KANBAN_COLUMNS.map((col) => {
