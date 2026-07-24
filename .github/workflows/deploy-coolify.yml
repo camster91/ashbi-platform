@@ -87,6 +87,9 @@ jobs:
     if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     environment: production
+    permissions:
+      contents: read
+      packages: read  # to docker pull from ghcr.io/camster91/ashbi-platform
     steps:
       - name: Render .env on VPS from GH secrets
         # Audit 2026-07-10: the previous deploy committed
@@ -104,6 +107,7 @@ jobs:
           host: ${{ secrets.VPS_HOST }}
           username: root
           key: ${{ secrets.VPS_SSH_KEY }}
+          envs: GITHUB_ACTOR,GITHUB_TOKEN
           script: |
             set -euo pipefail
             ENV_FILE="/opt/ashbi-platform/.env"
@@ -134,18 +138,40 @@ jobs:
             install -m 0600 -o root -g root "$TMP" "$ENV_FILE"
             rm -f "$TMP"
             echo "Wrote $ENV_FILE (chmod 600) with $(grep -cE '^[A-Z_]+=' "$ENV_FILE") keys"
-            # Trigger a container restart so it picks up the new env
+
+            # Pull the new image from GHCR using the workflow's GITHUB_TOKEN.
+            # The VPS's stored PAT is dead/expired, so we auth fresh per deploy.
+            echo "Logging in to ghcr.io as ${GITHUB_ACTOR}..."
+            echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin 2>&1 | tail -1
+
+            SHORT_SHA=$(echo "${GITHUB_SHA}" | head -c 7)
+            REMOTE_IMAGE="ghcr.io/camster91/ashbi-platform"
+            LOCAL_TAG="ashbi-platform:deploy-$(date -u +%Y%m%d)-${SHORT_SHA}"
+
+            echo "Pulling ${REMOTE_IMAGE}:main-${SHORT_SHA}..."
+            docker pull "${REMOTE_IMAGE}:main-${SHORT_SHA}" 2>&1 | tail -3
+
+            echo "Tagging as ${LOCAL_TAG}..."
+            docker tag "${REMOTE_IMAGE}:main-${SHORT_SHA}" "${LOCAL_TAG}"
+
+            # Clean up the fresh login (token is about to expire anyway)
+            docker logout ghcr.io >/dev/null 2>&1 || true
+
+            # Restart the container with the new image, picking up the freshly-rendered .env
+            echo "Restarting ashbi-platform with ${LOCAL_TAG}..."
             if docker inspect ashbi-platform >/dev/null 2>&1; then
               docker rm -f ashbi-platform >/dev/null 2>&1 || true
-              docker run -d --name ashbi-platform --restart unless-stopped \
-                --network ashbi-hub-src_default \
-                -p 127.0.0.1:3002:3002 \
-                --env-file "$ENV_FILE" \
-                ashbi-platform:audit-2026-07-09-v3 >/dev/null
-              echo "Restarted ashbi-platform"
             fi
+            docker run -d --name ashbi-platform --restart unless-stopped \
+              --network ashbi-hub-src_default \
+              -p 127.0.0.1:3002:3002 \
+              --env-file "$ENV_FILE" \
+              "$LOCAL_TAG" >/dev/null
+            echo "Deployed ${LOCAL_TAG}"
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
           REDIS_URL: ${{ secrets.PRODUCTION_REDIS_URL }}
           JWT_SECRET: ${{ secrets.PRODUCTION_JWT_SECRET }}
