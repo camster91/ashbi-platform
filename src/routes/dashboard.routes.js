@@ -240,13 +240,18 @@ export default async function dashboardRoutes(fastify) {
       // JS. At 50k PAID invoices per org that's 50k rows on every
       // dashboard load. Aggregate by month in SQL — 6 rows back, regardless
       // of org size.
+      // Correct table name is "invoices" (Prisma @@map). $queryRaw bypasses the
+      // tenant proxy, so scope by organization explicitly via the client join.
       request.prisma.$queryRaw`
         SELECT
-          date_trunc('month', "paidAt") AS month,
-          SUM(total)::float AS revenue,
+          date_trunc('month', i."paidAt") AS month,
+          SUM(i.total)::float AS revenue,
           COUNT(*)::int AS invoice_count
-        FROM "Invoice"
-        WHERE status = 'PAID' AND "paidAt" >= ${sixMonthsAgo}::timestamptz
+        FROM "invoices" i
+        JOIN "clients" c ON c."id" = i."clientId"
+        WHERE i.status = 'PAID'
+          AND i."paidAt" >= ${sixMonthsAgo}::timestamptz
+          AND c."organizationId" = ${request.organizationId}
         GROUP BY month
         ORDER BY month ASC
       `

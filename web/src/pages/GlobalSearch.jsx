@@ -44,7 +44,20 @@ export default function GlobalSearch() {
       setLoading(true);
       const type = filter === 'all' ? '' : filter;
       const data = await api.search(query, type);
-      setResults(data.results || []);
+      // Backend returns results grouped by entity: { threads, clients, projects, messages }.
+      // Flatten into a single list and tag each item with its type for rendering.
+      const r = data.results || {};
+      const tag = (arr, t, mapFn) => (arr || []).map((x) => ({ ...x, type: t, ...mapFn(x) }));
+      setResults([
+        ...tag(r.projects, 'project', (x) => ({ title: x.name })),
+        ...tag(r.clients, 'client', (x) => ({ title: x.name })),
+        ...tag(r.threads, 'thread', (x) => ({ title: x.subject, clientName: x.client?.name })),
+        ...tag(r.messages, 'message', (x) => ({
+          title: x.thread?.subject || 'Message',
+          clientName: x.thread?.client?.name,
+          id: x.thread?.id || x.id,
+        })),
+      ]);
     } catch (err) {
       setError(err.message);
     } finally {

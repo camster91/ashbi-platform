@@ -84,12 +84,12 @@ export default function Expenses() {
 
   const { data: clients = [] } = useQuery({
     queryKey: ['clients'],
-    queryFn: () => api.getClients(),
+    queryFn: () => api.getClients().then((r) => r?.clients ?? []),
   });
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
-    queryFn: () => api.getProjects ? api.getProjects() : Promise.resolve([]),
+    queryFn: () => api.getProjects ? api.getProjects().then((r) => r?.projects ?? []) : Promise.resolve([]),
   });
 
   // Mutations

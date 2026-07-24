@@ -49,23 +49,25 @@ const TENANT_PATHS = {
   invoice:          ['client'],
   proposal:         ['client'],
   contract:         ['client'],
-  note:             ['client'],
-  attachment:       ['client'],
   retainerPlan:     ['client'],
   pipelineDeal:     ['client'],
-  brandSettings:    ['client'],
   expense:          ['client'],
-  projectCommunication: ['client'],
-  emailTriageItem:  ['client'],
-  unmatchedEmail:   ['client'],
-  chatMessage:      ['client'],
   credential:       ['client'],
+  clientEmbedding:  ['client'],
 
-  // 1-hop to Project (via projectId FK, then project → client)
+  // Via User (uploadedBy → organizationId). Attachment has no client/project
+  // relation — its only owner link is the uploading user.
+  attachment:       ['uploadedBy'],
+
+  // 1-hop to Project (via projectId FK, then project → client).
+  // These models relate to Client through Project, NOT directly.
+  note:             ['project', 'client'],
+  projectCommunication: ['project', 'client'],
+  chatMessage:      ['project', 'client'],
+  revisionRound:    ['project', 'client'],
   task:             ['project', 'client'],
   milestone:        ['project', 'client'],
   timeSession:      ['project', 'client'],
-  taskTemplate:     ['project', 'client'],
 
   // 1-hop to Thread (via threadId FK, then thread → client)
   message:          ['thread', 'client'],
@@ -78,7 +80,11 @@ const TENANT_PATHS = {
   // 1-hop to Proposal (via proposalId FK, then proposal → client)
   proposalLineItem: ['proposal', 'client'],
   proposalVersion:  ['proposal', 'client'],
-  revisionRound:    ['proposal', 'client'],
+
+  // NOTE: brandSettings, emailTriageItem, unmatchedEmail and taskTemplate are
+  // intentionally NOT scoped here — the current schema gives them no relation
+  // path to an Organization (global config / templates / raw inbox tables).
+  // Adding a dedicated organizationId column is the correct long-term fix.
 
   // 1-hop to Task (via taskId FK, then task → project → client)
   taskComment:      ['task', 'project', 'client'],

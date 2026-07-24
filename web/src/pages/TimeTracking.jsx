@@ -45,7 +45,7 @@ export default function TimeTracking() {
 
   const { data: entries = [], isLoading, refetch } = useQuery({
     queryKey: ['time-entries', projectId],
-    queryFn: () => api.getTimeEntries(projectId),
+    queryFn: () => api.getTimeEntries(projectId).then((r) => r?.entries ?? []),
   });
 
   const { data: project } = useQuery({

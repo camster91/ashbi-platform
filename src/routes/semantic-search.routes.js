@@ -33,6 +33,17 @@ export default async function semanticSearchRoutes(fastify) {
     );
   });
 
+  // Embedding stats — counts grouped by source (for the Client Brain dashboard)
+  fastify.get('/stats', {
+    onRequest: [fastify.authenticate]
+  }, async (request) => {
+    const bySource = await request.prisma.clientEmbedding.groupBy({
+      by: ['source'],
+      _count: { _all: true },
+    });
+    return bySource.map((r) => ({ source: r.source, count: r._count._all }));
+  });
+
   // Add an embedding manually
   fastify.post('/embed', {
     onRequest: [fastify.authenticate],

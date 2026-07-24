@@ -48,7 +48,7 @@ export default function Dashboard() {
 
   const { data: myTasks = [] } = useQuery({
     queryKey: ['my-tasks'],
-    queryFn: () => api.getMyTasks(),
+    queryFn: () => api.getMyTasks().then((r) => Object.values(r ?? {}).flat()),
     placeholderData: keepPreviousData,
   });
 

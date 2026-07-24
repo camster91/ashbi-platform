@@ -47,7 +47,7 @@ export default function Retainers() {
 
   const { data: clients = [] } = useQuery({
     queryKey: ['clients'],
-    queryFn: () => api.getClients(),
+    queryFn: () => api.getClients().then((r) => r?.clients ?? []),
   });
 
   const createMutation = useMutation({

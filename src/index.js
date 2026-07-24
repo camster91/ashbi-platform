@@ -59,7 +59,6 @@ import invoiceRoutes from './routes/invoice.routes.js';
 import invoiceChaserRoutes from './routes/invoice-chaser.routes.js';
 import aiContextRoutes from './routes/ai-context.routes.js';
 import gmailRoutes from './routes/gmail.routes.js';
-import integrationsHostingerRoutes from './routes/integrations.hostinger.routes.js';
 import pushRoutes from './routes/push.routes.js';
 import { initVapid } from './utils/web-push.js';
 import commandCenterRoutes from './routes/integrations.command-center.routes.js';
@@ -300,8 +299,40 @@ io.use(async (socket, next) => {
     socket.userId = decoded.id || decoded.contactId;
     socket.userRole = decoded.role;
     socket.organizationId = decoded.organizationId;
+    socket.clientId = decoded.clientId;
     next();
   } catch (err) { next(new Error('Invalid token')); }
+});
+
+// Socket.IO connection handling. Without this, the client-emitted `join` /
+// `join-project` events were never handled, so room-scoped notifications
+// (io.to(`user:...`)) were never delivered. Rooms are authorized server-side.
+io.on('connection', (socket) => {
+  // Auto-join the authenticated user's own room so notify() reaches them.
+  if (socket.userId) socket.join(`user:${socket.userId}`);
+
+  // Explicit join is only allowed for the caller's own user room.
+  socket.on('join', (userId) => {
+    if (userId && userId === socket.userId) socket.join(`user:${userId}`);
+  });
+
+  // Join a project room only if the caller belongs to the project's org
+  // (team member) or is the project's own client.
+  socket.on('join-project', async (projectId) => {
+    if (!projectId) return;
+    try {
+      const project = await prisma.project.findUnique({
+        where: { id: projectId },
+        select: { clientId: true, client: { select: { organizationId: true } } },
+      });
+      if (!project) return;
+      const sameOrg = socket.organizationId && project.client?.organizationId === socket.organizationId;
+      const isProjectClient = socket.userRole === 'CLIENT' && socket.clientId && project.clientId === socket.clientId;
+      if (sameOrg || isProjectClient) socket.join(`project:${projectId}`);
+    } catch (err) {
+      logger.error({ err, projectId }, '[socket] join-project authorization failed');
+    }
+  });
 });
 
 fastify.decorate('io', io);

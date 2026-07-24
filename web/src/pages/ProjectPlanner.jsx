@@ -32,7 +32,7 @@ export default function ProjectPlanner() {
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
-    queryFn: () => api.getProjects(),
+    queryFn: () => api.getProjects().then((r) => r?.projects ?? []),
   });
 
   const generatePlan = useMutation({

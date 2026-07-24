@@ -4,6 +4,7 @@ import { onboardClient } from '../services/onboarding.service.js';
 import { generateWeeklyReport } from '../services/weeklyReport.service.js';
 import { weeklyDigestQueue } from '../jobs/queue.js';
 import { sendWebhookNotification } from '../utils/webhook.js';
+import { safeEqual } from '../utils/crypto.js';
 
 // Ultra-fast in-memory cache for AI requests
 const aiCache = {
@@ -34,7 +35,7 @@ export default async function botRoutes(fastify) {
   // Middleware to validate bot bearer token
   function requireBotAuth(request, reply, done) {
     const auth = request.headers.authorization;
-    if (!auth || auth !== `Bearer ${BOT_SECRET}`) {
+    if (!auth || !safeEqual(auth, `Bearer ${BOT_SECRET}`)) {
       reply.status(401).send({ error: 'Unauthorized' });
       return;
     }
@@ -44,7 +45,7 @@ export default async function botRoutes(fastify) {
   // POST /auth — validate bot secret, return JWT
   fastify.post('/auth', async (request, reply) => {
     const auth = request.headers.authorization;
-    if (!auth || auth !== `Bearer ${BOT_SECRET}`) {
+    if (!auth || !safeEqual(auth, `Bearer ${BOT_SECRET}`)) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
 

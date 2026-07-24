@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import { processEmailPipeline } from '../services/pipeline.service.js';
+import { safeEqual } from '../utils/crypto.js';
 import env from '../config/env.js';
 import {validateBody, mailgunSendSchema} from '../validators/schemas.js';
 
@@ -68,7 +69,7 @@ export default async function mailgunRoutes(fastify) {
           .update(timestamp + token)
           .digest('hex');
 
-        if (expectedSignature !== signature) {
+        if (!safeEqual(expectedSignature, signature)) {
           fastify.log.warn('Invalid Mailgun webhook signature');
           return reply.status(401).send({ error: 'Invalid Mailgun webhook signature' });
         }

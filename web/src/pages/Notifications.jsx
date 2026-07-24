@@ -7,7 +7,7 @@ export default function Notifications() {
 
   const { data: notifications = [], isLoading } = useQuery({
     queryKey: ['notifications'],
-    queryFn: () => api.getNotifications(),
+    queryFn: () => api.getNotifications().then((r) => r?.notifications ?? []),
   });
 
   const markReadMutation = useMutation({
