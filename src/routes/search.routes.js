@@ -1,7 +1,7 @@
 // Search routes
 
 import aiClient from '../ai/client.js';
-import { validateBody } from '../validators/schemas.js';
+import { validateBody, searchAskSchema } from '../validators/schemas.js';
 
 export default async function searchRoutes(fastify) {
   // Global search

@@ -2,7 +2,8 @@
 // RAG-powered search across client memories
 // Migrated from ashbi-hub with Prisma and auth decorators
 
-import {import { validateBody, semanticSearchEmbedSchema} from '../validators/schemas.js';
+import { validateBody, semanticSearchEmbedSchema } from '../validators/schemas.js';
+import {
   searchSimilar,
   storeEmbedding,
   rebuildClientBrain,
@@ -20,7 +21,16 @@ export default async function semanticSearchRoutes(fastify) {
       return { error: 'Query parameter "q" is required' };
     }
 
-    return searchSimilar(q, parseInt(limit) || 5, clientId || null);
+    // SECURITY: enforce tenant scoping by passing the JWT-derived
+    // organizationId into the embedding search. Without this, the
+    // pgvector cosine-similarity query would return cross-tenant
+    // matches when no clientId is provided.
+    return searchSimilar(
+      q,
+      parseInt(limit) || 5,
+      clientId || null,
+      request.organizationId
+    );
   });
 
   // Add an embedding manually

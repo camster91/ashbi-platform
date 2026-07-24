@@ -59,7 +59,6 @@ import invoiceRoutes from './routes/invoice.routes.js';
 import invoiceChaserRoutes from './routes/invoice-chaser.routes.js';
 import aiContextRoutes from './routes/ai-context.routes.js';
 import gmailRoutes from './routes/gmail.routes.js';
-import integrationsVpsRoutes from './routes/integrations.vps.routes.js';
 import integrationsHostingerRoutes from './routes/integrations.hostinger.routes.js';
 import pushRoutes from './routes/push.routes.js';
 import { initVapid } from './utils/web-push.js';
@@ -70,6 +69,7 @@ import automationRoutes from './routes/automation.routes.js';
 import brandRoutes from './routes/brand.routes.js';
 import { startOverdueChecker } from './services/automation.service.js';
 import { startTrashPurgeJob } from './jobs/trash-purge.js';
+import { setupRecurringJobs } from './jobs/queue.js';
 import pipelineRoutes from './routes/pipeline.routes.js';
 import { initHermesBridge } from './agents/hub-hermes.integration.js';
 import timeTrackingRoutes from './routes/time-tracking.routes.js';
@@ -77,6 +77,7 @@ import timeSessionRoutes from './routes/time-sessions.routes.js';
 import semanticSearchRoutes from './routes/semantic-search.routes.js';
 import creativeBriefRoutes from './routes/creative-brief.routes.js';
 import assetLibraryRoutes from './routes/asset-library.routes.js';
+import wpBridgeRoutes from './routes/wp-bridge.routes.js';
 import apiKeyRoutes, { authenticateApiKey } from './routes/api-key.routes.js';
 import estimateRoutes from './routes/estimate.routes.js';
 import rateCardRoutes from './routes/rate-card.routes.js';
@@ -216,6 +217,7 @@ await fastify.register(timeSessionRoutes, { prefix: '/api/time-sessions' });
 await fastify.register(semanticSearchRoutes, { prefix: '/api/semantic-search' });
 await fastify.register(creativeBriefRoutes, { prefix: '/api/creative-brief' });
 await fastify.register(assetLibraryRoutes, { prefix: '/api/asset-library' });
+await fastify.register(wpBridgeRoutes, { prefix: '/api/wp-bridge' });
 await fastify.register(automationRoutes, { prefix: '/api/automations' });
 await fastify.register(expenseRoutes, { prefix: '/api/expenses' });
 await fastify.register(commandCenterRoutes, { prefix: '/api/command-center' });
@@ -256,7 +258,6 @@ await fastify.register(threadRoutes, { prefix: '/api/threads' });
 await fastify.register(webhookRoutes, { prefix: '/api/webhooks' });
 await fastify.register(clientPortalRoutes, { prefix: '/api/client-portal' });
 await fastify.register(gmailRoutes, { prefix: '/api/gmail' });
-// ... (all other routes would be registered here in a production app, condensed for space)
 
 // Hub-Hermes bridge initialization
 initHermesBridge(fastify);
@@ -293,7 +294,11 @@ fastify.setErrorHandler((error, request, reply) => {
 const io = new SocketIO(fastify.server, { cors: { origin: env.isDev ? 'http://localhost:*' : env.corsOrigins, credentials: true } });
 io.use(async (socket, next) => {
   try {
-    const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+    // SECURITY (audit 2026-07-09, swarm finding): only accept the JWT
+    // via `handshake.auth.token`. The previous \`socket.handshake.query?.token\`
+    // fallback leaked the token into nginx/Traefik/Coolify access logs
+    // and Referer headers (WebSocket upgrade URL is query-encoded).
+    const token = socket.handshake.auth?.token;
     if (!token) return next(new Error('Authentication required'));
     const decoded = await fastify.jwt.verify(token);
     socket.userId = decoded.id || decoded.contactId;
@@ -320,6 +325,13 @@ const start = async () => {
     try { initVapid(); } catch (e) { logger.warn({ err: e }, 'Web push init failed'); }
     await fastify.listen({ port: env.port, host: '0.0.0.0' });
     logger.info(`🚀 Agency Hub running at http://localhost:${env.port}`);
+    // FUNCTIONAL FIX (audit 2026-07-09, swarm finding): setupRecurringJobs
+    // was defined in jobs/queue.js but never called from index.js, so the
+    // hourly health-check, every-15-min escalation, and Mon-9am-EST
+    // weekly-digest BullMQ jobs were silently not scheduling. The
+    // ad-hoc intervals below (startRecurringInvoicesJob etc.) only cover
+    // invoice generation, overdue checks, and trash purge.
+    try { await setupRecurringJobs(); } catch (e) { logger.warn({ err: e }, 'Recurring job setup failed'); }
     startRecurringInvoicesJob();
     startOverdueChecker();
     startTrashPurgeJob();

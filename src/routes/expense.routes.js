@@ -3,7 +3,7 @@
 import path from 'path';
 import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
-import { validateBody, createExpenseSchema, fileUpload } from '../validators/schemas.js';
+import { validateBody, createExpenseSchema, fileUpload, expenseUpdateSchema } from '../validators/schemas.js';
 
 const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
 

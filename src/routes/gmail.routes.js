@@ -3,7 +3,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import {validateBody, gmailDraftReplySchema} from '../validators/schemas.js';
+import { validateBody, gmailDraftReplySchema, gmailSendSchema } from '../validators/schemas.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

@@ -1,7 +1,20 @@
 import logger from '../utils/logger.js';
 import { createScopedPrisma } from '../utils/prisma-tenant-proxy.js';
 import { enterRequestContext } from '../utils/request-context.js';
-import prisma from '../config/db.js';
+// CRITICAL: Import the NAMED `prisma` (the raw soft-delete-extended client
+// at src/config/db.js line ~110), NOT the default export (the outer
+// request-context-aware Proxy at line ~133). The default Proxy calls
+// getRequestPrisma() on every property access. If we register it in the
+// request context (enterRequestContext), then the default Proxy's get
+// resolves to ITSELF when the request handler runs, causing infinite
+// recursion → "Maximum call stack size exceeded". This was the cause of
+// the login 500 + every other auth/webhook/portal route failing with the
+// same error after the swarm-audit deploy on 2026-07-10.
+//
+// The same trap is documented in src/utils/request-context.js:30-32 —
+// that file imports `prisma as basePrisma` for exactly this reason.
+// tenancy.js was missed; fixed here.
+import { prisma } from '../config/db.js';
 
 /**
  * Enterprise Multi-Tenancy Middleware
@@ -20,9 +33,15 @@ export async function tenancyMiddleware(request, reply) {
     return;
   }
 
-  // Exempt Auth, Health, and Public Portal from strict isolation
+  // Exempt Auth, Health, Public Portal, and Webhooks from strict isolation.
+  //
+  // Webhooks (Stripe, email inbound) authenticate via HMAC, not JWT —
+  // they have no `request.user.organizationId`. Without this exemption
+  // every webhook POST fails with 403 ORG_CONTEXT_REQUIRED before the
+  // HMAC verify ever runs. Routes still verify signatures themselves.
   if (
     request.url.startsWith('/api/auth') ||
+    request.url.startsWith('/api/webhooks') ||
     request.url.startsWith('/api/portal') ||
     request.url.startsWith('/api/client-acquisition/config') ||
     request.url.startsWith('/api/client-acquisition/intake') ||

@@ -5,7 +5,7 @@ import env from '../config/env.js';
 import path from 'path';
 import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
-import { validateBody, validateParams, clientPortalMessageSchema, requestAccessSchema, fileUpload } from '../validators/schemas.js';
+import { validateBody, validateParams, clientPortalMessageSchema, requestAccessSchema, fileUpload, clientPortalTokenRedeemSchema } from '../validators/schemas.js';
 
 const PORTAL_BASE = env.hubUrl;
 const UPLOAD_DIR = path.join(process.cwd(), 'uploads');

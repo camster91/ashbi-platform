@@ -1,3 +1,4 @@
+import { validateBody, landingLeadUpdateSchema } from '../validators/schemas.js';
 // Landing page lead capture route — public endpoint, no auth required
 
 export default async function landingRoutes(fastify) {

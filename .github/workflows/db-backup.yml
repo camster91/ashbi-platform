@@ -7,6 +7,20 @@ on:
   workflow_dispatch:
     # Allow manual trigger for ad-hoc backups
 
+# SECURITY (audit 2026-07-09, swarm finding): the previous version of
+# this workflow checked for `.env` at the repo root (which is
+# gitignored, so it never existed in CI) — every scheduled 2am UTC
+# run short-circuited with the green badge, meaning "I successfully
+# did nothing." The workflow's success state gave operators false
+# confidence that backups were landing. Fix: read DATABASE_URL from the
+# `PRODUCTION_DATABASE_URL` GH secret directly, drop the .env check.
+# Encrypt the artifact with `BACKUP_GPG_PASSPHRASE` before upload so
+# backups at rest in GH artifact storage aren't plaintext.
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false  # never cancel — backups must finish
+
 jobs:
   backup:
     name: Database Backup
@@ -18,21 +32,25 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Check for .env file
-        id: check_env
+      - name: Verify secrets are configured
         run: |
-          if [ -f .env ]; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo ".env found — proceeding with backup"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "WARNING: .env file not found. Database backup cannot proceed."
-            echo "This is expected if DATABASE_URL is not configured for CI."
+          if [ -z "${{ secrets.PRODUCTION_DATABASE_URL }}" ]; then
+            echo "::error::PRODUCTION_DATABASE_URL secret is not set."
+            echo "Add it at: Settings → Secrets and variables → Actions → New repository secret"
+            exit 1
           fi
+          if [ -z "${{ secrets.BACKUP_GPG_PASSPHRASE }}" ]; then
+            echo "::warning::BACKUP_GPG_PASSPHRASE not set — backup will be uploaded UNENCRYPTED."
+            echo "Generate a passphrase with: openssl rand -base64 48"
+          fi
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
       - name: Run database backup
         id: backup
-        if: steps.check_env.outputs.exists == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
         run: |
           chmod +x scripts/db-backup.sh
           OUTPUT=$(./scripts/db-backup.sh 2>&1)
@@ -46,12 +64,31 @@ jobs:
           echo "backup_path=$BACKUP_PATH" >> "$GITHUB_OUTPUT"
           echo "backup_name=$(basename "$BACKUP_PATH")" >> "$GITHUB_OUTPUT"
 
+      - name: Encrypt backup (if passphrase is set)
+        id: encrypt
+        if: steps.backup.outputs.backup_path && secrets.BACKUP_GPG_PASSPHRASE
+        env:
+          BACKUP_GPG_PASSPHRASE: ${{ secrets.BACKUP_GPG_PASSPHRASE }}
+        run: |
+          gpg --batch --yes --passphrase "$BACKUP_GPG_PASSPHRASE" \
+              --symmetric --cipher-algo AES256 \
+              "${{ steps.backup.outputs.backup_path }}"
+          ls -la "${{ steps.backup.outputs.backup_path }}.gpg"
+          echo "encrypted_path=${{ steps.backup.outputs.backup_path }}.gpg" >> "$GITHUB_OUTPUT"
+
       - name: Upload backup artifact
-        if: steps.check_env.outputs.exists == 'true'
+        if: steps.backup.outputs.backup_path
         uses: actions/upload-artifact@v7
         with:
           name: database-backup-${{ github.run_id }}
-          path: ${{ steps.backup.outputs.backup_path }}
-          retention-days: 7
+          path: ${{ steps.encrypt.outputs.encrypted_path || steps.backup.outputs.backup_path }}
+          retention-days: 30  # bumped from 7 — SOC2 / GDPR ask is 30+
           if-no-files-found: error
           compression-level: 0  # already gzipped by script
+
+      - name: Cleanup local backup files
+        if: always()
+        run: |
+          # Don't leave plaintext on the runner after upload. The artifact
+          # upload is the only path that should hold the data.
+          rm -f "${{ steps.backup.outputs.backup_path }}" "${{ steps.backup.outputs.backup_path }}.gpg" 2>/dev/null || true

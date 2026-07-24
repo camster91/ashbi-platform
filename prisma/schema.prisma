@@ -28,6 +28,7 @@ model Organization {
 
   @@map("organizations")
 }
+
 model User {
   id                  String        @id @default(cuid())
   organizationId      String? // Set for all users to support multi-tenancy
@@ -73,6 +74,7 @@ model User {
 
   @@map("users")
 }
+
 model Client {
   id                  String        @id @default(cuid())
   organizationId      String?
@@ -128,12 +130,14 @@ model Client {
   assets           Asset[]
   clientEmbeddings ClientEmbedding[]
   invitations      ClientInvitation[]
+  wpSites          WPSite[]             @relation("WPSiteClient")
   estimates        Estimate[]
   rateCards        RateCard[]
 
   @@index([status])
   @@map("clients")
 }
+
 model Contact {
   id        String   @id @default(cuid())
   email     String
@@ -150,6 +154,7 @@ model Contact {
   @@unique([email, clientId])
   @@map("contacts")
 }
+
 model Project {
   id             String        @id @default(cuid())
   organizationId String?
@@ -204,11 +209,13 @@ model Project {
   context        ProjectContext?
   creativeBriefs CreativeBrief[]
   timeSessions   TimeSession[]
+  wpSite         WPSite?
 
   @@index([clientId])
   @@index([status])
   @@map("projects")
 }
+
 model Task {
   id          String  @id @default(cuid())
   title       String
@@ -271,6 +278,7 @@ model Task {
   @@index([projectId, status])
   @@map("tasks")
 }
+
 model Thread {
   id              String    @id @default(cuid())
   subject         String
@@ -309,6 +317,7 @@ model Thread {
   @@index([createdAt])
   @@map("threads")
 }
+
 model Message {
   id          String    @id @default(cuid())
   direction   String // INBOUND or OUTBOUND
@@ -332,6 +341,7 @@ model Message {
   @@index([receivedAt])
   @@map("messages")
 }
+
 model InternalNote {
   id        String   @id @default(cuid())
   content   String
@@ -345,6 +355,7 @@ model InternalNote {
 
   @@map("internal_notes")
 }
+
 model Response {
   id              String    @id @default(cuid())
   status          String    @default("DRAFT") // DRAFT, PENDING_APPROVAL, APPROVED, REJECTED, SENT
@@ -371,6 +382,7 @@ model Response {
   @@index([createdAt])
   @@map("responses")
 }
+
 model Notification {
   id        String    @id @default(cuid())
   userId    String
@@ -387,6 +399,7 @@ model Notification {
   @@index([userId, createdAt])
   @@map("notifications")
 }
+
 model AssignmentRule {
   id         String   @id @default(cuid())
   name       String
@@ -401,6 +414,7 @@ model AssignmentRule {
   @@index([isActive])
   @@map("assignment_rules")
 }
+
 model Template {
   id        String   @id @default(cuid())
   name      String
@@ -414,6 +428,7 @@ model Template {
 
   @@map("templates")
 }
+
 model UnmatchedEmail {
   id                String    @id @default(cuid())
   senderEmail       String
@@ -433,6 +448,7 @@ model UnmatchedEmail {
   @@index([senderEmail])
   @@map("unmatched_emails")
 }
+
 model ChatMessage {
   id        String    @id @default(cuid())
   content   String
@@ -457,6 +473,7 @@ model ChatMessage {
   @@index([projectId, createdAt])
   @@map("chat_messages")
 }
+
 model ChatReaction {
   id        String   @id @default(cuid())
   emoji     String
@@ -471,6 +488,7 @@ model ChatReaction {
   @@unique([messageId, userId, emoji])
   @@map("chat_reactions")
 }
+
 model Note {
   id        String    @id @default(cuid())
   title     String
@@ -491,6 +509,7 @@ model Note {
 
   @@map("notes")
 }
+
 model Milestone {
   id          String    @id @default(cuid())
   name        String
@@ -509,6 +528,7 @@ model Milestone {
 
   @@map("milestones")
 }
+
 model TimeEntry {
   id          String    @id @default(cuid())
   description String?
@@ -539,6 +559,7 @@ model TimeEntry {
   @@index([userId, date])
   @@map("time_entries")
 }
+
 model Attachment {
   id            String   @id @default(cuid())
   filename      String
@@ -557,6 +578,7 @@ model Attachment {
 
   @@map("attachments")
 }
+
 model Activity {
   id         String   @id @default(cuid())
   type       String // TASK_CREATED, TASK_COMPLETED, CHAT_MESSAGE, NOTE_CREATED, etc.
@@ -578,6 +600,7 @@ model Activity {
   @@index([entityType, entityId])
   @@map("activities")
 }
+
 model TaskComment {
   id        String   @id @default(cuid())
   content   String
@@ -593,6 +616,7 @@ model TaskComment {
 
   @@map("task_comments")
 }
+
 model CalendarEvent {
   id          String   @id @default(cuid())
   title       String
@@ -618,6 +642,7 @@ model CalendarEvent {
   @@index([projectId, startTime])
   @@map("calendar_events")
 }
+
 model EventAttendee {
   id        String   @id @default(cuid())
   status    String   @default("PENDING") // PENDING, ACCEPTED, DECLINED, TENTATIVE
@@ -632,6 +657,7 @@ model EventAttendee {
   @@unique([eventId, userId])
   @@map("event_attendees")
 }
+
 model RetainerPlan {
   id                String   @id @default(cuid())
   clientId          String   @unique
@@ -668,6 +694,7 @@ model RetainerPlan {
   @@index([clientId, retainerStatus])
   @@map("retainer_plans")
 }
+
 model Report {
   id          String    @id @default(cuid())
   type        String    @default("WEEKLY")
@@ -683,6 +710,7 @@ model Report {
 
   @@map("reports")
 }
+
 model RevisionRound {
   id          String    @id @default(cuid())
   roundNumber Int
@@ -700,6 +728,7 @@ model RevisionRound {
   @@unique([projectId, roundNumber])
   @@map("revision_rounds")
 }
+
 model ProposalVersion {
   id          String   @id @default(cuid())
   proposalId  String
@@ -714,6 +743,7 @@ model ProposalVersion {
   @@index([createdAt])
   @@map("proposal_versions")
 }
+
 model Proposal {
   id            String    @id @default(cuid())
   title         String
@@ -766,6 +796,7 @@ model Proposal {
   @@index([validUntil])
   @@map("proposals")
 }
+
 model ProposalLineItem {
   id          String   @id @default(cuid())
   description String
@@ -777,6 +808,7 @@ model ProposalLineItem {
 
   @@map("proposal_line_items")
 }
+
 model Contract {
   id            String    @id @default(cuid())
   title         String
@@ -807,6 +839,7 @@ model Contract {
   @@index([clientId, status])
   @@map("contracts")
 }
+
 model Invoice {
   id            String    @id @default(cuid())
   invoiceNumber String    @unique
@@ -864,6 +897,7 @@ model Invoice {
   @@index([clientId, status])
   @@map("invoices")
 }
+
 model InvoiceLineItem {
   id          String  @id @default(cuid())
   description String
@@ -877,6 +911,7 @@ model InvoiceLineItem {
 
   @@map("invoice_line_items")
 }
+
 model InvoicePayment {
   id            String   @id @default(cuid())
   amount        Float
@@ -891,6 +926,7 @@ model InvoicePayment {
 
   @@map("invoice_payments")
 }
+
 model LineItemTemplate {
   id          String   @id @default(cuid())
   name        String
@@ -904,6 +940,7 @@ model LineItemTemplate {
 
   @@map("line_item_templates")
 }
+
 model WeeklyDigest {
   id                  String   @id @default(cuid())
   weekStart           DateTime
@@ -920,6 +957,7 @@ model WeeklyDigest {
 
   @@map("weekly_digests")
 }
+
 model Credential {
   id        String   @id @default(cuid())
   label     String
@@ -940,6 +978,7 @@ model Credential {
   @@index([projectId])
   @@map("credentials")
 }
+
 model TaskTemplate {
   id        String   @id @default(cuid())
   name      String
@@ -950,6 +989,7 @@ model TaskTemplate {
 
   @@map("task_templates")
 }
+
 model OutreachSequence {
   id             String   @id @default(cuid())
   name           String
@@ -963,6 +1003,7 @@ model OutreachSequence {
   @@index([status])
   @@map("outreach_sequences")
 }
+
 model EmailTriageItem {
   id          String   @id @default(cuid())
   subject     String
@@ -982,6 +1023,7 @@ model EmailTriageItem {
   @@index([createdAt])
   @@map("email_triage_items")
 }
+
 model EmailTriageDraft {
   id        String   @id @default(cuid())
   option    Int      @default(1) // 1 or 2
@@ -997,6 +1039,7 @@ model EmailTriageDraft {
 
   @@map("email_triage_drafts")
 }
+
 model AiTeamMessage {
   id        String   @id @default(cuid())
   agentRole String // WEB_DESIGNER, WEB_DEVELOPER, PROJECT_MANAGER, MARKETING_MANAGER, SALES, LEGAL, BRANDING_EXPERT
@@ -1012,6 +1055,7 @@ model AiTeamMessage {
   @@index([agentRole, createdAt])
   @@map("ai_team_messages")
 }
+
 model AiContext {
   id        String   @id @default(cuid())
   key       String   @unique
@@ -1021,6 +1065,7 @@ model AiContext {
 
   @@map("ai_context")
 }
+
 model Expense {
   id          String   @id @default(cuid())
   description String
@@ -1049,6 +1094,7 @@ model Expense {
   @@index([invoiceId])
   @@map("expenses")
 }
+
 model RevenueSnapshot {
   id                     String   @id @default(cuid())
   month                  String // YYYY-MM e.g. "2026-03"
@@ -1075,6 +1121,7 @@ model RevenueSnapshot {
   @@unique([month, clientId])
   @@map("revenue_snapshots")
 }
+
 model Approval {
   id         String    @id @default(cuid())
   type       String // EMAIL | PROPOSAL | CONTRACT | DEPLOY | POST | INVOICE | COPY | OTHER
@@ -1099,6 +1146,7 @@ model Approval {
   @@index([createdAt])
   @@map("approvals")
 }
+
 model ProjectCommunication {
   id             String   @id @default(cuid())
   projectId      String
@@ -1124,6 +1172,7 @@ model ProjectCommunication {
   @@index([gmailMessageId])
   @@map("project_communications")
 }
+
 model ProjectContext {
   id                String    @id @default(cuid())
   projectId         String    @unique
@@ -1139,6 +1188,7 @@ model ProjectContext {
 
   @@map("project_contexts")
 }
+
 model ClientEmailMapping {
   id           String   @id @default(cuid())
   clientId     String
@@ -1153,6 +1203,7 @@ model ClientEmailMapping {
   @@unique([emailAddress, clientId])
   @@map("client_email_mappings")
 }
+
 model PushSubscription {
   id        String   @id @default(cuid())
   endpoint  String   @unique
@@ -1165,6 +1216,7 @@ model PushSubscription {
 
   @@map("push_subscriptions")
 }
+
 model AshConversation {
   id        String           @id @default(cuid())
   title     String?
@@ -1174,6 +1226,7 @@ model AshConversation {
 
   @@map("ash_conversations")
 }
+
 model AshChatMessage {
   id             String          @id @default(cuid())
   conversationId String
@@ -1184,6 +1237,7 @@ model AshChatMessage {
 
   @@map("ash_chat_messages")
 }
+
 model ProjectTemplate {
   id          String   @id @default(cuid())
   name        String
@@ -1196,6 +1250,7 @@ model ProjectTemplate {
 
   @@map("project_templates")
 }
+
 model IntakeForm {
   id          String   @id @default(cuid())
   name        String
@@ -1212,6 +1267,7 @@ model IntakeForm {
 
   @@map("intake_forms")
 }
+
 model IntakeFormResponse {
   id              String   @id @default(cuid())
   formId          String
@@ -1225,6 +1281,7 @@ model IntakeFormResponse {
 
   @@map("intake_form_responses")
 }
+
 model BrandSettings {
   id             String  @id @default(cuid())
   companyName    String  @default("Ashbi Design")
@@ -1242,6 +1299,7 @@ model BrandSettings {
 
   @@map("brand_settings")
 }
+
 model PipelineStage {
   id          String   @id @default(cuid())
   name        String
@@ -1255,6 +1313,7 @@ model PipelineStage {
 
   @@map("pipeline_stages")
 }
+
 model PipelineDeal {
   id                String    @id @default(cuid())
   title             String
@@ -1277,6 +1336,7 @@ model PipelineDeal {
   @@index([clientId])
   @@map("pipeline_deals")
 }
+
 model SupportHourEntry {
   id          String   @id @default(cuid())
   siteUrl     String
@@ -1294,6 +1354,7 @@ model SupportHourEntry {
   @@index([clientId])
   @@map("support_hours")
 }
+
 model CreativeBrief {
   id             String   @id @default(cuid())
   title          String
@@ -1316,6 +1377,7 @@ model CreativeBrief {
   @@index([clientId])
   @@map("creative_briefs")
 }
+
 model Snippet {
   id          String   @id @default(cuid())
   title       String
@@ -1334,6 +1396,7 @@ model Snippet {
 
   @@map("snippets")
 }
+
 model Asset {
   id           String   @id @default(cuid())
   name         String
@@ -1354,6 +1417,7 @@ model Asset {
 
   @@map("assets")
 }
+
 model ClientEmbedding {
   id        String                      @id @default(cuid())
   clientId  String
@@ -1371,6 +1435,7 @@ model ClientEmbedding {
   @@index([source])
   @@map("client_embeddings")
 }
+
 model TimeSession {
   id          String    @id @default(cuid())
   userId      String
@@ -1394,6 +1459,7 @@ model TimeSession {
   @@index([isRunning])
   @@map("time_sessions")
 }
+
 model PromptVersion {
   id          String   @id @default(cuid())
   name        String // e.g., "analyzeMessage", "draftResponse"
@@ -1408,6 +1474,7 @@ model PromptVersion {
   @@unique([name, version])
   @@map("prompt_versions")
 }
+
 model ClientInvitation {
   id        String    @id @default(cuid())
   token     String    @unique
@@ -1421,6 +1488,7 @@ model ClientInvitation {
 
   @@map("client_invitations")
 }
+
 model ApiKey {
   id         String    @id @default(cuid())
   name       String
@@ -1436,6 +1504,7 @@ model ApiKey {
 
   @@map("api_keys")
 }
+
 model Estimate {
   id          String    @id @default(cuid())
   clientId    String
@@ -1462,6 +1531,7 @@ model Estimate {
   @@index([status])
   @@map("estimates")
 }
+
 model RateCard {
   id        String   @id @default(cuid())
   name      String
@@ -1474,6 +1544,7 @@ model RateCard {
 
   @@map("rate_cards")
 }
+
 model Integration {
   id           String    @id @default(cuid())
   type         String // QUICKBOOKS, XERO
@@ -1487,6 +1558,7 @@ model Integration {
 
   @@map("integrations")
 }
+
 model TrashedItem {
   id         String    @id @default(cuid())
   entity     String // CLIENT | PROJECT | INVOICE | PROPOSAL | CONTRACT | EXPENSE | TASK | ESTIMATE | NOTE | RETAINER_PLAN
@@ -1499,4 +1571,125 @@ model TrashedItem {
   @@index([entity])
   @@index([expiresAt])
   @@map("trashed_items")
+}
+
+// ==================== WORDPRESS SITE BRIDGE (reinstated 2026-07-03, Path A of plan_96e82e56) ====================
+
+model WPSite {
+  id            String    @id @default(cuid())
+  name          String
+  url           String
+  adminUrl      String?
+  clientId      String?
+  projectId     String?   @unique
+  status        String    @default("ACTIVE") // ACTIVE | MAINTENANCE | OFFLINE | ERROR
+  wpVersion     String?
+  phpVersion    String?
+  pluginCount   Int       @default(0)
+  theme         String?
+  lastCheckedAt DateTime?
+  healthScore   Int       @default(100) // 0-100
+  alerts        String    @default("[]") // JSON: array of alert objects
+  magicLoginUrl String?
+  bridgeVersion String?
+  ttfb          Int?
+  dbSize        BigInt?
+  diskBytes     BigInt?
+  diskUsagePct  Float?
+  pluginUpdates Int       @default(0)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  client    Client?    @relation("WPSiteClient", fields: [clientId], references: [id])
+  project   Project?   @relation(fields: [projectId], references: [id])
+  backups   WPBackup[]
+  reports   WPReport[]
+  alertsLog WPAlert[]
+
+  @@index([status])
+  @@map("wp_sites")
+}
+
+// Per-site backup records from the bridge plugin (v1.7.0+)
+model WPBackup {
+  id           String   @id @default(cuid())
+  siteId       String
+  siteUrl      String
+  timestamp    DateTime
+  dbSuccess    Boolean
+  filesSuccess Boolean
+  dbFile       String?
+  filesFile    String?
+  manifest     String?
+  dbSize       BigInt?
+  filesSize    BigInt?
+  createdAt    DateTime @default(now())
+
+  site WPSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@index([siteId])
+  @@index([siteUrl])
+  @@index([timestamp])
+  @@map("wp_backups")
+}
+
+// Monthly maintenance report delivered by the bridge plugin (v1.7.0+)
+model WPReport {
+  id        String   @id @default(cuid())
+  siteId    String
+  siteUrl   String
+  month     String
+  uptime    String? // JSON: { total, ok, failed, pct }
+  updates   String? // JSON: { plugins, themes, core }
+  cleanup   String? // JSON: { revisions, spam_comments, trash_posts, expired_tokens }
+  hours     String? // JSON: { available, used, remaining, banked, log }
+  ssl       String? // JSON: { status, days }
+  payload   String? // Full raw payload
+  createdAt DateTime @default(now())
+
+  site WPSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, month])
+  @@index([siteUrl])
+  @@index([createdAt])
+  @@map("wp_reports")
+}
+
+// Support-hour alerts: new admin, promotions, security events (v1.7.0+)
+model WPAlert {
+  id        String   @id @default(cuid())
+  siteId    String?
+  siteUrl   String
+  alertType String
+  details   String   @default("{}")
+  createdAt DateTime @default(now())
+
+  site WPSite? @relation(fields: [siteId], references: [id], onDelete: SetNull)
+
+  @@index([siteUrl])
+  @@index([alertType])
+  @@index([createdAt])
+  @@map("wp_alerts")
+}
+
+// Fleet ops audit log (Plan 7) — one row per hub-side fan-out call
+// (file/patch, command, option/set). Records who ran what, how many sites
+// were targeted, and how many succeeded/failed. Per-site results live in
+// the wp_backups/wp_alerts tables the plugin already writes; this table is
+// the hub-side orchestration ledger.
+model WPFleetOp {
+  id           String    @id @default(cuid())
+  opType       String // 'file_patch' | 'command' | 'option_set' | 'magic_login'
+  payload      Json // original request body
+  targetCount  Int
+  successCount Int       @default(0)
+  failureCount Int       @default(0)
+  createdBy    String // user id from JWT
+  createdAt    DateTime  @default(now())
+  completedAt  DateTime?
+
+  @@index([createdAt(sort: Desc)])
+  @@index([opType])
+  @@index([createdBy])
+  @@map("wp_fleet_ops")
 }

@@ -1,7 +1,7 @@
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import env from '../config/env.js';
-import { validateBody, createEstimateSchema, updateEstimateSchema } from '../validators/schemas.js';
+import { validateBody, createEstimateSchema, updateEstimateSchema, estimateUpdateSchema } from '../validators/schemas.js';
 
 export default async function estimateRoutes(fastify) {
   // List estimates

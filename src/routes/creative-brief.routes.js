@@ -1,7 +1,8 @@
 // Creative Brief Generator routes
 // Migrated from ashbi-hub with auth decorators and Prisma service layer
 
-import {import { validateBody, creativeBriefGenerateSchema} from '../validators/schemas.js';
+import { validateBody, creativeBriefGenerateSchema, creativeBriefUpdateSchema } from '../validators/schemas.js';
+import {
   generateCreativeBrief,
   getBriefs,
   getBrief,

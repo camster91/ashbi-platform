@@ -5,10 +5,20 @@ on:
     types: [opened, synchronize]
     branches: [main]
 
+# SECURITY (audit 2026-07-09): add concurrency + timeout. A flurry of
+# pushes to one PR was previously spawning parallel Claude reviews —
+# each costs $$ via API + burns the 360-min default job timeout if the
+# API call hangs. Group by PR number so each PR gets one review at a
+# time; cancel previous on push so we don't queue up old reviews.
+concurrency:
+  group: pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   review:
     name: Claude Code Review
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       pull-requests: write
       contents: read

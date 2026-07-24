@@ -63,6 +63,7 @@ const Settings = lazy(() => import('./pages/Settings'));
 const Notifications = lazy(() => import('./pages/Notifications'));
 // Advanced Features
 const AssetLibrary = lazy(() => import('./pages/AssetLibrary'));
+const WPSites = lazy(() => import('./pages/WPSites'));
 const SemanticSearch = lazy(() => import('./pages/SemanticSearch'));
 // New Features
 const Estimates = lazy(() => import('./pages/Estimates'));
@@ -95,6 +96,23 @@ function AdminRoute({ children }) {
   if (!user) return <Navigate to="/login" />;
   if (user.role !== 'ADMIN') return <Navigate to="/" replace />;
   return children;
+}
+
+function NotFound() {
+  // UX (audit 2026-07-09): previously /typo landed on a blank page with
+  // no explanation. Show a recoverable 404 with a link back to the
+  // dashboard so the user isn't stuck.
+  return (
+    <div className="min-h-[60vh] flex items-center justify-center p-6">
+      <div className="text-center max-w-md">
+        <h1 className="text-3xl font-bold text-slate-800 mb-2">404</h1>
+        <p className="text-slate-600 mb-4">We couldn't find that page.</p>
+        <a href="/dashboard" className="text-blue-600 hover:underline">
+          Go to dashboard →
+        </a>
+      </div>
+    </div>
+  );
 }
 
 function AppRoutes() {
@@ -148,14 +166,11 @@ function AppRoutes() {
                   <Route path="/schedule" element={<Schedule />} />
                   <Route path="/timesheets" element={<Timesheets />} />
                   <Route path="/rate-cards" element={<AdminRoute><RateCards /></AdminRoute>} />
-                  <Route path="/bookkeeping" element={<AdminRoute><Bookkeeping /></AdminRoute>} />
                                                       <Route path="/credentials" element={<AdminRoute><Credentials /></AdminRoute>} />
                   <Route path="/chat" element={<Chat />} />
                   <Route path="/admin/settings/ai-context" element={<AdminRoute><AiContextSettings /></AdminRoute>} />
                   <Route path="/admin/command-center" element={<AdminRoute><CommandCenter /></AdminRoute>} />
                   <Route path="/admin/brand" element={<AdminRoute><BrandSettings /></AdminRoute>} />
-                  <Route path="/admin/reports" element={<AdminRoute><Reports /></AdminRoute>} />
-                  <Route path="/reports" element={<AdminRoute><Reports /></AdminRoute>} />
                                     <Route path="/trash" element={<AdminRoute><Trash /></AdminRoute>} />
                                     <Route path="/automations" element={<AdminRoute><Automations /></AdminRoute>} />
                   <Route path="/docs" element={<Docs />} />
@@ -164,12 +179,12 @@ function AppRoutes() {
                                                       <Route path="/retainers" element={<AdminRoute><Retainers /></AdminRoute>} />
                   <Route path="/invoice-chaser" element={<AdminRoute><InvoiceChaser /></AdminRoute>} />
                   <Route path="/settings" element={<Settings />} />
-                  <Route path="/revenue" element={<AdminRoute><Revenue /></AdminRoute>} />
                                                                                           <Route path="/notifications" element={<Notifications />} />
                   {/* Advanced Features */}
                   <Route path="/assets" element={<AssetLibrary />} />
-                  <Route path="/wp-sites" element={<WPSites />} />
+                  <Route path="/wp-sites" element={<AdminRoute><WPSites /></AdminRoute>} />
                   <Route path="/semantic-search" element={<SemanticSearch />} />
+                  <Route path="*" element={<NotFound />} />
                   </Routes>
                 </Suspense>
               </ErrorBoundary>

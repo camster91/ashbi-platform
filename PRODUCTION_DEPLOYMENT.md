@@ -1,5 +1,36 @@
 # Production Deployment Checklist
 
+## Environment Variable Strategy (audit 2026-07-10)
+
+All **sensitive** values live in GH secrets, not in `.env` on the VPS:
+
+| GH secret | Replaces in .env |
+|---|---|
+| `PRODUCTION_DATABASE_URL` | `DATABASE_URL` |
+| `PRODUCTION_REDIS_URL` | `REDIS_URL` |
+| `PRODUCTION_JWT_SECRET` | `JWT_SECRET` |
+| `PRODUCTION_WEBHOOK_SECRET` | `WEBHOOK_SECRET` |
+| `PRODUCTION_CREDENTIALS_KEY` | `CREDENTIALS_KEY` |
+| `PRODUCTION_BOT_SECRET` | `BOT_SECRET` |
+| `PRODUCTION_MAILGUN_API_KEY` | `MAILGUN_API_KEY` |
+| `PRODUCTION_MAILGUN_SIGNING_KEY` | `MAILGUN_SIGNING_KEY` |
+| `PRODUCTION_STRIPE_SECRET_KEY` | `STRIPE_SECRET_KEY` |
+| `PRODUCTION_STRIPE_WEBHOOK_SECRET` | `STRIPE_WEBHOOK_SECRET` |
+| `PRODUCTION_KILO_API_KEY` | `KILO_API_KEY` |
+| `PRODUCTION_OLLAMA_API_KEY` | `OLLAMA_API_KEY` |
+| `PRODUCTION_R2_ACCESS_KEY_ID` | `R2_ACCESS_KEY_ID` |
+| `PRODUCTION_R2_SECRET_ACCESS_KEY` | `R2_SECRET_ACCESS_KEY` |
+| `PRODUCTION_ANTHROPIC_API_KEY` | `ANTHROPIC_API_KEY` |
+| `PRODUCTION_GEMINI_API_KEY` | `GEMINI_API_KEY` |
+
+`deploy-coolify.yml` ships a "Render .env on VPS from GH secrets" step that
+runs before the Coolify deploy trigger. It backs up the existing .env, writes
+only the non-secret keys it preserved, then appends the new PRODUCTION_*
+values, sets `chmod 600`, and restarts the local `ashbi-platform` container.
+The CI gate `.github/workflows/check-secrets.yml` blocks PRs that hardcode
+any of these patterns: `postgresql://user:password@host` (>= 20 char non-placeholder
+password), `redis://...:password@host`, `sk_live_*` / `sk_test_*`, `AKIA*`.
+
 ## Pre-Deployment Security Checklist
 
 ### ✅ Environment Variables Setup
@@ -22,6 +53,27 @@ export DATABASE_URL=postgresql://username:password@host:port/database
 export NODE_ENV=production
 export CORS_ORIGIN=https://hub.ashbi.ca
 ```
+
+### Rotating a secret in production
+
+1. Generate the new value (e.g. `openssl rand -base64 32`).
+2. Update the underlying system if the secret authenticates to a live
+   service — e.g. for `DATABASE_URL`:
+   ```bash
+   NEW_PW=$(openssl rand -base64 36 | tr -d '=+/' | cut -c1-48)
+   docker exec ashbi-hub-postgres psql -U ashbihub -d ashbihub \
+     -c "ALTER USER ashbihub PASSWORD '${NEW_PW}';"
+   NEW_URL="postgresql://ashbihub:${NEW_PW}@ashbi-hub-postgres:5432/ashbihub"
+   echo "$NEW_URL" | gh secret set PRODUCTION_DATABASE_URL --repo camster91/ashbi-platform
+   ```
+3. Trigger a deploy — `deploy-coolify.yml` will write the new value to
+   `/opt/ashbi-platform/.env` (chmod 600) and restart the container.
+4. Verify the new value is in use: `curl https://hub.ashbi.ca/api/health`
+   and check `docker logs ashbi-platform` for `AuthenticationFailed` (which
+   would mean a downstream container is still using the old password).
+5. If rotating a service-token secret (Stripe, Mailgun, etc.), also update
+   the upstream dashboard at the same time as the GH secret — order matters
+   because the deploy window is when clients are briefly 401'd.
 
 ### ✅ Database Migration
 
@@ -49,9 +101,13 @@ npm run build
 
 ### ✅ Security Verification
 
-1. **Run security check:**
+1. **Run security check (optional, manual):**
    ```bash
-   node scripts/security-check.js
+   # NOTE (audit 2026-07-09): these scripts are not part of the CI
+   # gate. Use them for one-off checks; don't rely on them to fail
+   # a deploy — the env placeholder check in src/config/env.js IS
+   # the deploy-blocking gate.
+   node scripts/_legacy/security-check.js
    ```
 
 2. **Verify no demo credentials in production:**

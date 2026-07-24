@@ -162,17 +162,11 @@ export default function Layout({ children }) {
     { name: 'Trash', href: '/trash', icon: X },
   ] : [];
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        document.querySelector('input[type="text"]')?.focus();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [navigate, user?.role]);
+  // NOTE: a SECOND Cmd+K handler used to live here that focused the first
+  // <input type="text">. It raced the QuickAdd handler at the top of this
+  // component — both fired on the same keystroke, sometimes opening
+  // QuickAdd, sometimes focusing search, sometimes both. Removed. The
+  // single QuickAdd toggle at the top is now the canonical Cmd+K handler.
 
   const handleSearch = (e) => {
     e.preventDefault();
@@ -201,6 +195,7 @@ export default function Layout({ children }) {
           to={item.href}
           onClick={() => setSidebarOpen(false)}
           title={sidebarCollapsed ? item.name : undefined}
+          aria-label={sidebarCollapsed ? item.name : undefined}
           id={item.id}
           className={cn(
             'flex items-center text-sm font-medium rounded-lg transition-all duration-150',
@@ -559,11 +554,10 @@ export default function Layout({ children }) {
                 {/* More menu dropdown */}
                 {moreMenuOpen && (
                   <>
-                    <div
-          className="fixed inset-0 z-50 bg-black/5 backdrop-blur-sm"
+                    <button
+          type="button"
+          className="fixed inset-0 z-50 bg-black/5 backdrop-blur-sm cursor-default"
           onClick={() => setMoreMenuOpen(false)}
-          role="button"
-          tabIndex={0}
           aria-label="Close menu"
          />
                     <div className="absolute bottom-full right-2 mb-4 w-64 bg-card/90 backdrop-blur-xl border border-border/40 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-300" role="menu">

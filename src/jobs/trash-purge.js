@@ -40,23 +40,48 @@ async function purgeExpiredTrash() {
 
     console.log(`[trash-purge] Purging ${expired.length} expired item(s)`);
 
+    // PERFORMANCE (audit 2026-07-09, swarm finding): the previous loop
+    // issued 2 round-trips per item (entity delete + trashedItem delete).
+    // For 50 trashed items that's 100 round-trips. Batch by entity type:
+    //   1. Group expired by model delegate
+    //   2. deleteMany per group (one round-trip per entity)
+    //   3. deleteMany on trashedItem with `id: { in: expiredIds }` at the end
+    const byModel = new Map();
+    const errors = [];
     for (const item of expired) {
-      try {
-        const modelName = ENTITY_TO_MODEL[item.entity];
-        const delegate = modelName && prisma[modelName];
-        if (delegate) {
-          // Use model API — Prisma parameterizes via prepared statement.
-          await delegate.delete({ where: { id: item.recordId } });
-        }
-        await prisma.trashedItem.delete({ where: { id: item.id } });
-        console.log(`[trash-purge] Purged ${item.entity} ${item.recordId}`);
-      } catch (err) {
-        console.error(`[trash-purge] Error purging ${item.entity} ${item.recordId}:`, err.message);
-        // Still delete trashedItem so it doesn't retry forever
-        try {
-          await prisma.trashedItem.delete({ where: { id: item.id } });
-        } catch (_) {}
+      const modelName = ENTITY_TO_MODEL[item.entity];
+      if (!modelName || !prisma[modelName]) {
+        errors.push({ item, reason: 'unknown entity' });
+        continue;
       }
+      if (!byModel.has(modelName)) byModel.set(modelName, []);
+      byModel.get(modelName).push(item);
+    }
+
+    // Per-entity bulk delete. Failures here are logged and surfaced as
+    // errors; the trashedItem rows for failed entity-deletes are still
+    // removed so we don't retry them forever.
+    for (const [modelName, items] of byModel) {
+      const ids = items.map(i => i.recordId);
+      try {
+        await prisma[modelName].deleteMany({ where: { id: { in: ids } } });
+      } catch (err) {
+        console.error(`[trash-purge] Error in ${modelName} deleteMany:`, err.message);
+        for (const item of items) errors.push({ item, reason: err.message });
+      }
+    }
+
+    // Always remove trashedItem rows — successful ones (model gone) and
+    // failed ones (mark as skipped, no retry).
+    const allTrashedIds = expired.map(i => i.id);
+    try {
+      await prisma.trashedItem.deleteMany({ where: { id: { in: allTrashedIds } } });
+    } catch (err) {
+      console.error('[trash-purge] Error cleaning trashedItem rows:', err.message);
+    }
+
+    if (errors.length > 0) {
+      console.warn(`[trash-purge] ${errors.length} item(s) had errors, see logs`);
     }
   } catch (err) {
     console.error('[trash-purge] Fatal error:', err);

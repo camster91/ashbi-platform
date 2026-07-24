@@ -1,7 +1,7 @@
 // Email Triage Agent routes
 
 import aiClient from '../ai/client.js';
-import {validateBody, emailTriageDraftUpdateSchema} from '../validators/schemas.js';
+import { validateBody, emailTriageDraftUpdateSchema, emailTriageScanSchema } from '../validators/schemas.js';
 
 export default async function emailTriageRoutes(fastify) {
   const { prisma } = fastify;

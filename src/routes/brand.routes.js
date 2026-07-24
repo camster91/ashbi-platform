@@ -3,7 +3,7 @@
 import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
-import { validateBody } from '../validators/schemas.js';
+import { validateBody, brandSettingsSchema } from '../validators/schemas.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
