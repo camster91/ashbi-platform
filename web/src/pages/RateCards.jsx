@@ -27,7 +27,7 @@ export default function RateCards() {
   });
 
   const rateCards = rateCardsData?.rateCards ?? [];
-  const clients = clientsData ?? [];
+  const clients = clientsData?.clients ?? [];
 
   const createMutation = useMutation({
     mutationFn: (data) => api.createRateCard(data),

@@ -49,7 +49,7 @@ export default function Contracts() {
 
   const { data: clients = [] } = useQuery({
     queryKey: ['clients'],
-    queryFn: () => api.getClients(),
+    queryFn: () => api.getClients().then((r) => r?.clients ?? []),
   });
 
   const { data: approvedProposals = [] } = useQuery({

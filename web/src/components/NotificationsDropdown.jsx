@@ -61,7 +61,7 @@ export default function NotificationsDropdown() {
 
   const { data: notifications } = useQuery({
     queryKey: ['notifications'],
-    queryFn: () => api.getNotifications({ limit: 10 }),
+    queryFn: () => api.getNotifications({ limit: 10 }).then((r) => r?.notifications ?? []),
     refetchInterval: 30000,
   });
 

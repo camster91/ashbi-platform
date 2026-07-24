@@ -44,8 +44,26 @@ export async function tenancyMiddleware(request, reply) {
     request.url.startsWith('/api/webhooks') ||
     request.url.startsWith('/api/wp-bridge') ||
     request.url.startsWith('/api/portal') ||
+    // Bot API authenticates via BOT_SECRET bearer (not a JWT with org context);
+    // client portal authenticates via its own CLIENT-role JWT and scopes every
+    // query by clientId. Both must bypass the org guard (which would 403 before
+    // their own auth runs), same as the webhook/portal exemptions above.
+    request.url.startsWith('/api/bot') ||
+    request.url.startsWith('/api/client-portal') ||
     request.url.startsWith('/api/client-acquisition/config') ||
     request.url.startsWith('/api/client-acquisition/intake') ||
+    // Public, capability-token-based client flows (no JWT / org context).
+    // These are scoped by an unguessable viewToken/signToken in the URL, not
+    // by tenant. Without these exemptions the tenancy guard 403s before the
+    // token lookup runs, breaking client proposal/contract/estimate/invoice
+    // review links and the Mailgun HITL + lead-intake webhooks.
+    request.url.startsWith('/api/proposals/client') ||
+    request.url.startsWith('/api/contracts/sign') ||
+    request.url.startsWith('/api/estimates/view') ||
+    request.url.startsWith('/api/invoices/client') ||
+    request.url.startsWith('/api/invoices/stripe-webhook') ||
+    request.url.startsWith('/api/mailgun') ||
+    request.url.startsWith('/api/leads/leads/intake') ||
     request.url === '/api/health'
   ) {
     request.prisma = prisma; // Use global for auth/portal/health/public routes

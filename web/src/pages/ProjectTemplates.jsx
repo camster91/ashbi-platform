@@ -34,7 +34,7 @@ export default function ProjectTemplates() {
 
   const { data: clients = [] } = useQuery({
     queryKey: ['clients'],
-    queryFn: () => api.getClients(),
+    queryFn: () => api.getClients().then((r) => r?.clients ?? []),
   });
 
   const createFromTemplate = useMutation({

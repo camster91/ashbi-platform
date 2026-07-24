@@ -229,7 +229,18 @@ export default function Pipeline() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['pipeline'],
-    queryFn: () => api.getPipeline(),
+    // There is no /reports/pipeline endpoint; the deal pipeline lives at
+    // /pipeline (stages+deals) and /pipeline/analytics (conversion metrics).
+    queryFn: async () => {
+      const [stages, analytics] = await Promise.all([
+        api.getPipelineStages(),
+        api.getPipelineAnalytics().catch(() => ({})),
+      ]);
+      return {
+        stages: Array.isArray(stages) ? stages : (stages?.stages ?? []),
+        conversionRates: analytics?.conversionRates ?? {},
+      };
+    },
     refetchInterval: 60000,
   });
 

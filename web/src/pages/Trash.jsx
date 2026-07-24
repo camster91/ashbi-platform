@@ -14,7 +14,7 @@ export default function Trash() {
   const loadTrash = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/trash');
+      const res = await api.request('/trash');
       setItems(res.items || []);
     } catch (err) {
       console.error('Failed to load trash:', err);
@@ -26,7 +26,7 @@ export default function Trash() {
 
   const handleRestore = async (id, type) => {
     try {
-      await api.post('/trash/restore', { id, type });
+      await api.request(`/trash/${id}/restore`, { method: 'POST' });
       setItems(items.filter(i => i.id !== id));
       setConfirmRestore(null);
     } catch (err) {
@@ -36,7 +36,7 @@ export default function Trash() {
 
   const handlePermanentDelete = async (id, type) => {
     try {
-      await api.del('/trash/permanent', { id, type });
+      await api.request(`/trash/${id}/permanent`, { method: 'DELETE' });
       setItems(items.filter(i => i.id !== id));
       setConfirmDelete(null);
     } catch (err) {
@@ -46,7 +46,7 @@ export default function Trash() {
 
   const handleEmptyTrash = async () => {
     try {
-      await api.post('/trash/empty', {});
+      await api.request('/trash/empty', { method: 'DELETE' });
       setItems([]);
       setShowEmptyConfirm(false);
     } catch (err) {

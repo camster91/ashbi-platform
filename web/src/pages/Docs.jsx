@@ -67,7 +67,7 @@ export default function Docs() {
 
   const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
-    queryFn: () => api.getProjects(),
+    queryFn: () => api.getProjects().then((r) => r?.projects ?? []),
     enabled: showNewNote,
   });
 
