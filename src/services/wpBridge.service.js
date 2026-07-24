@@ -152,8 +152,8 @@ function verifySecret(secretKey) {
 /**
  * List all registered WP sites with health summary
  */
-export async function listSites(userId) {
-  const sites = await prisma.wPSite.findMany({
+export async function listSites(userId, { prismaClient = prisma } = {}) {
+  const sites = await prismaClient.wPSite.findMany({
     include: {
       client: { select: { id: true, name: true } },
       project: { select: { id: true, name: true } }

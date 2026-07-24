@@ -23,17 +23,20 @@ export default async function emailTriageRoutes(fastify) {
       return { scanned: 0, items: [] };
     }
 
+    const threadIds = threads.map((t) => t.id);
+    const alreadyTriaged = await prisma.emailTriageItem.findMany({
+      where: { threadId: { in: threadIds } },
+      select: { threadId: true },
+    });
+    const triagedIds = new Set(alreadyTriaged.map((row) => row.threadId));
+
     const items = [];
 
     for (const thread of threads) {
       const msg = thread.messages[0];
       if (!msg) continue;
 
-      // Check if already triaged
-      const existing = await prisma.emailTriageItem.findFirst({
-        where: { threadId: thread.id }
-      });
-      if (existing) continue;
+      if (triagedIds.has(thread.id)) continue;
 
       const system = `You are an email triage assistant for Ashbi Design, a Toronto-based CPG/DTC creative agency run by Cameron Ashley. Classify emails accurately and concisely.`;
 

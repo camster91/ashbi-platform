@@ -1,3 +1,4 @@
+import { redactIntegration, redactIntegrations } from '../utils/redact-integration.js';
 
 export default async function integrationRoutes(fastify) {
   // List connected integrations
@@ -7,7 +8,7 @@ export default async function integrationRoutes(fastify) {
     const integrations = await request.prisma.integration.findMany({
       orderBy: { type: 'asc' }
     });
-    return { integrations };
+    return { integrations: redactIntegrations(integrations) };
   });
 
   // Get integration status
@@ -21,7 +22,7 @@ export default async function integrationRoutes(fastify) {
     if (!integration) {
       return reply.status(404).send({ error: 'Integration not found' });
     }
-    return integration;
+    return redactIntegration(integration);
   });
 
   // Connect integration (OAuth redirect URL generation)
@@ -39,16 +40,17 @@ export default async function integrationRoutes(fastify) {
     // For now, we create a placeholder record
     const integration = await request.prisma.integration.upsert({
       where: { id: `${typeUpper}_placeholder` },
-      update: { status: 'CONNECTED', lastSyncAt: new Date() },
+      update: { status: 'CONNECTED', lastSyncAt: new Date(), organizationId: request.organizationId },
       create: {
         id: `${typeUpper}_placeholder`,
         type: typeUpper,
         status: 'CONNECTED',
-        lastSyncAt: new Date()
+        lastSyncAt: new Date(),
+        organizationId: request.organizationId,
       }
     });
 
-    return { integration, message: `${typeUpper} connected (demo mode)` };
+    return { integration: redactIntegration(integration), message: `${typeUpper} connected (demo mode)` };
   });
 
   // Disconnect integration

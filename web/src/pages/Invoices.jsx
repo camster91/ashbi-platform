@@ -10,6 +10,7 @@ import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import { Button, Card } from '../components/ui';
+import QueryErrorState from '../components/QueryErrorState';
 
 const HST_RATE = 13;
 
@@ -57,7 +58,7 @@ export default function Invoices() {
   });
 
   // Queries
-  const { data: invoiceData = { invoices: [], stats: {} }, isLoading } = useQuery({
+  const { data: invoiceData = { invoices: [], stats: {} }, isLoading, isError, refetch } = useQuery({
     queryKey: ['invoices', filterStatus, searchQuery],
     queryFn: () => api.getInvoices({
       ...(filterStatus ? { status: filterStatus } : {}),
@@ -286,7 +287,9 @@ export default function Invoices() {
           )}
 
           {/* Invoice List */}
-          {isLoading ? (
+          {isError ? (
+            <QueryErrorState onRetry={refetch} message="Failed to load invoices" />
+          ) : isLoading ? (
             <div className="flex justify-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
             </div>

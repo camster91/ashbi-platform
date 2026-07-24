@@ -25,6 +25,7 @@ import {
   cn,
 } from '../lib/utils';
 import { StatCard, Badge, EmptyInbox, SkeletonStatCard, SkeletonThreadRow } from '../components/ui';
+import QueryErrorState from '../components/QueryErrorState';
 
 export default function Inbox() {
   const navigate = useNavigate();
@@ -42,7 +43,7 @@ export default function Inbox() {
     },
   });
 
-  const { data: inboxData, isLoading } = useQuery({
+  const { data: inboxData, isLoading, isError, refetch } = useQuery({
     queryKey: ['inbox'],
     queryFn: () => api.getInbox(),
     refetchInterval: 30000,
@@ -52,6 +53,10 @@ export default function Inbox() {
     queryKey: ['inbox-stats'],
     queryFn: api.getInboxStats,
   });
+
+  if (isError) {
+    return <QueryErrorState onRetry={refetch} message="Failed to load inbox" />;
+  }
 
   if (isLoading) {
     return (

@@ -8,7 +8,7 @@ import ENTITY_MAP from '../utils/entity-map.js';
  * @param {string} entity - upper-case entity name (e.g. 'CLIENT')
  * @param {string} recordId - the record ID
  */
-export async function softDelete(entity, recordId) {
+export async function softDelete(entity, recordId, organizationId = null) {
   const modelName = ENTITY_MAP[entity];
   const prismaModel = prisma[modelName];
   if (!prismaModel) throw new Error(`Unknown entity type: ${entity}`);
@@ -28,6 +28,7 @@ export async function softDelete(entity, recordId) {
       data: {
         entity,
         recordId,
+        organizationId: organizationId || record.organizationId || null,
         data: record,
         deletedAt,
         expiresAt,

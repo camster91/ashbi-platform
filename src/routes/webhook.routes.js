@@ -52,10 +52,7 @@ export default async function webhookRoutes(fastify) {
       };
     } catch (error) {
       fastify.log.error('Email processing error:', error);
-      return reply.status(500).send({
-        error: 'Email processing failed',
-        message: error.message
-      });
+      return reply.status(500).send({ error: 'Email processing failed' });
     }
   });
 
@@ -116,8 +113,8 @@ export default async function webhookRoutes(fastify) {
       const rawBody = request.rawBody || request.raw.rawBody || JSON.stringify(request.body);
       event = await handleWebhook(rawBody, signature);
     } catch (err) {
-      fastify.log.error('Stripe webhook signature verification failed:', err.message);
-      return reply.status(400).send({ error: `Webhook Error: ${err.message}` });
+      fastify.log.error('Stripe webhook signature verification failed');
+      return reply.status(400).send({ error: 'Invalid webhook signature' });
     }
 
     // Handle the event

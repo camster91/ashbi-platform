@@ -8,7 +8,8 @@ import { updateAllProjectHealth } from '../services/project.service.js';
 import { storeEmbedding } from '../services/embedding.service.js';
 import aiClient from '../ai/client.js';
 import env from '../config/env.js';
-
+import * as Sentry from '@sentry/node';
+import logger from '../utils/logger.js';
 import prisma from '../config/db.js';
 
 // Helper to create workers with error handling for Redis unavailability
@@ -359,3 +360,14 @@ const embeddingWorker = createWorker(
 
 const activeWorkers = [emailWorker, healthWorker, escalationWorker, notificationWorker, weeklyDigestWorker, embeddingWorker].filter(Boolean);
 console.log(`Workers started (${activeWorkers.length}/6 active)`);
+
+process.on('unhandledRejection', (reason) => {
+  logger.error({ err: reason }, 'Worker: unhandled promise rejection');
+  if (env.sentryDsn) Sentry.captureException(reason);
+});
+
+process.on('uncaughtException', (err) => {
+  logger.fatal({ err }, 'Worker: uncaught exception');
+  if (env.sentryDsn) Sentry.captureException(err);
+  process.exit(1);
+});

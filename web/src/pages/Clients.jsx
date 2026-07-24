@@ -25,6 +25,7 @@ import { cn } from '../lib/utils';
 import { useToast } from '../hooks/useToast';
 import { Button, Card } from '../components/ui';
 import CreateClientModal from '../components/CreateClientModal';
+import QueryErrorState from '../components/QueryErrorState';
 
 const TIER_HOURS = { '999': 20, '1999': 40, '3999': 80 };
 const TIER_LABEL = { '999': '$999/mo · 20 hrs', '1999': '$1,999/mo · 40 hrs', '3999': '$3,999/mo · 80 hrs' };
@@ -165,7 +166,7 @@ export default function Clients() {
   });
   const [onboardResult, setOnboardResult] = useState(null);
 
-  const { data: clients = [], isLoading } = useQuery({
+  const { data: clients = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['clients'],
     queryFn: () => api.getClients().then((r) => r?.clients ?? []),
   });
@@ -204,6 +205,10 @@ export default function Clients() {
     const bDate = b.lastContactDate || b.updatedAt || '';
     return aDate.localeCompare(bDate);
   });
+
+  if (isError) {
+    return <QueryErrorState onRetry={refetch} message="Failed to load clients" />;
+  }
 
   if (isLoading) {
     return (

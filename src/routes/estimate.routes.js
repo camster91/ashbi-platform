@@ -2,6 +2,7 @@ import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import env from '../config/env.js';
 import { validateBody, createEstimateSchema, updateEstimateSchema, estimateUpdateSchema } from '../validators/schemas.js';
+import { clampTake } from '../utils/query-limits.js';
 
 export default async function estimateRoutes(fastify) {
   // List estimates
@@ -16,7 +17,8 @@ export default async function estimateRoutes(fastify) {
     const estimates = await request.prisma.estimate.findMany({
       where,
       include: { client: { select: { id: true, name: true } } },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
+      take: clampTake(request.query.limit),
     });
 
     return { estimates };

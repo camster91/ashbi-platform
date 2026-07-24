@@ -5,6 +5,9 @@ import { generateWeeklyReport } from '../services/weeklyReport.service.js';
 import { weeklyDigestQueue } from '../jobs/queue.js';
 import { sendWebhookNotification } from '../utils/webhook.js';
 import { safeEqual } from '../utils/crypto.js';
+import prisma from '../config/db.js';
+import { createScopedPrisma } from '../utils/prisma-tenant-proxy.js';
+import { enterRequestContext } from '../utils/request-context.js';
 
 // Ultra-fast in-memory cache for AI requests
 const aiCache = {
@@ -31,6 +34,18 @@ const aiCache = {
 
 export default async function botRoutes(fastify) {
   const BOT_SECRET = process.env.BOT_SECRET;
+  const BOT_ORG_ID = process.env.BOT_ORGANIZATION_ID;
+
+  // Scope all authenticated bot traffic to a single service org when configured.
+  fastify.addHook('preHandler', async (request) => {
+    if (!BOT_ORG_ID || !BOT_SECRET) return;
+    const auth = request.headers.authorization;
+    if (!auth || !safeEqual(auth, `Bearer ${BOT_SECRET}`)) return;
+    const scoped = createScopedPrisma(prisma, BOT_ORG_ID);
+    request.prisma = scoped;
+    request.organizationId = BOT_ORG_ID;
+    enterRequestContext({ prisma: scoped, organizationId: BOT_ORG_ID });
+  });
 
   // Middleware to validate bot bearer token
   function requireBotAuth(request, reply, done) {
@@ -64,15 +79,15 @@ export default async function botRoutes(fastify) {
     if (cached) return cached;
 
     const [projects, tasks, clients] = await Promise.all([
-      fastify.prisma.project.findMany({
+      request.prisma.project.findMany({
         where: { status: 'ACTIVE' },
         select: { id: true, name: true, health: true, hourlyBudget: true, client: { select: { name: true } } }
       }),
-      fastify.prisma.task.findMany({
+      request.prisma.task.findMany({
         where: { status: { not: 'COMPLETED' } },
         select: { id: true, title: true, priority: true, status: true, project: { select: { name: true } } }
       }),
-      fastify.prisma.client.findMany({
+      request.prisma.client.findMany({
         where: { status: 'ACTIVE' },
         select: { id: true, name: true, tier: true }
       })
@@ -1110,7 +1125,7 @@ export default async function botRoutes(fastify) {
       const raw = await readFile(tokenPath, 'utf-8');
       tokens = JSON.parse(raw);
     } catch (err) {
-      return reply.status(500).send({ error: `Failed to load OAuth tokens for ${account}: ${err.message}` });
+      return reply.status(500).send({ error: `Failed to load OAuth tokens for ${account}` });
     }
 
     try {
@@ -1154,7 +1169,7 @@ export default async function botRoutes(fastify) {
 
       return { draftId: draft.data.id, messageId: draft.data.message?.id };
     } catch (err) {
-      return reply.status(500).send({ error: `Failed to create Gmail draft: ${err.message}` });
+      return reply.status(500).send({ error: 'Failed to create Gmail draft' });
     }
   });
 
