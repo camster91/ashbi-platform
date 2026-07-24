@@ -127,7 +127,7 @@ export default async function wpBridgeRoutes(fastify) {
   fastify.get('/', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
-    return listSites(request.user.id);
+    return listSites(request.user.id, { prismaClient: request.prisma });
   });
 
   fastify.post('/', { config: { public: true } }, async (request, reply) => {
@@ -150,7 +150,7 @@ export default async function wpBridgeRoutes(fastify) {
       const result = await updateSiteHealth(siteUrl, healthData);
       return { success: true, health: serializeBigInt(result) };
     } catch (error) {
-      return reply.status(404).send({ error: error.message });
+      return reply.status(404).send({ error: 'Not found' });
     }
   });
 
@@ -172,7 +172,7 @@ export default async function wpBridgeRoutes(fastify) {
         const backup = await recordBackup(siteUrl, report || {});
         return reply.status(201).send({ success: true, backup: serializeBigInt(backup) });
       } catch (error) {
-        return reply.status(404).send({ error: error.message });
+        return reply.status(404).send({ error: 'Not found' });
       }
     }
   );
@@ -191,7 +191,7 @@ export default async function wpBridgeRoutes(fastify) {
         const r = await recordReport(siteUrl, report || {});
         return reply.status(201).send({ success: true, report: serializeBigInt(r) });
       } catch (error) {
-        return reply.status(404).send({ error: error.message });
+        return reply.status(404).send({ error: 'Not found' });
       }
     }
   );
@@ -297,7 +297,7 @@ export default async function wpBridgeRoutes(fastify) {
       if (request.log && request.log.error) {
         request.log.error({ err }, '[fleet-digest] post failed');
       }
-      return reply.status(502).send({ error: err.message || 'Slack post failed' });
+      return reply.status(502).send({ error: 'Slack post failed' });
     }
   });
 
@@ -434,7 +434,7 @@ export default async function wpBridgeRoutes(fastify) {
       if (request.log && request.log.error) {
         request.log.error({ err }, '[fleet/file/patch] fan-out failed');
       }
-      return reply.status(500).send({ error: 'Fleet operation failed', message: err.message });
+      return reply.status(500).send({ error: 'Fleet operation failed' });
     }
   });
 
@@ -472,7 +472,7 @@ export default async function wpBridgeRoutes(fastify) {
       if (request.log && request.log.error) {
         request.log.error({ err }, '[fleet/command] fan-out failed');
       }
-      return reply.status(500).send({ error: 'Fleet operation failed', message: err.message });
+      return reply.status(500).send({ error: 'Fleet operation failed' });
     }
   });
 
@@ -515,7 +515,7 @@ export default async function wpBridgeRoutes(fastify) {
       if (request.log && request.log.error) {
         request.log.error({ err }, '[fleet/option/set] fan-out failed');
       }
-      return reply.status(500).send({ error: 'Fleet operation failed', message: err.message });
+      return reply.status(500).send({ error: 'Fleet operation failed' });
     }
   });
 
@@ -570,7 +570,7 @@ export default async function wpBridgeRoutes(fastify) {
       if (request.log && request.log.error) {
         request.log.error({ err }, '[fleet/magic-login] fan-out failed');
       }
-      return reply.status(500).send({ error: 'Fleet operation failed', message: err.message });
+      return reply.status(500).send({ error: 'Fleet operation failed' });
     }
   });
 
@@ -726,7 +726,7 @@ export default async function wpBridgeRoutes(fastify) {
       if (request.log && request.log.error) {
         request.log.error({ err }, '[magic-login/revoke] fan-out failed');
       }
-      return reply.status(500).send({ error: 'Revoke failed', message: err.message });
+      return reply.status(500).send({ error: 'Revoke failed' });
     }
   });
 }
@@ -812,7 +812,7 @@ async function runScheduledFleetDigest(logger) {
     if (logger && logger.error) {
       logger.error({ err }, '[fleet-digest] scheduled run failed');
     }
-    return { ok: false, error: err.message };
+    return { ok: false, error: 'Operation failed' };
   }
 }
 

@@ -2,6 +2,7 @@
 
 import { encrypt, decrypt } from '../utils/crypto.js';
 import { validateBody, credentialUpsertSchema, credentialSchema } from '../validators/schemas.js';
+import { clampTake } from '../utils/query-limits.js';
 
 export default async function credentialRoutes(fastify) {
   // List credentials with optional filters (admin only)
@@ -21,7 +22,8 @@ export default async function credentialRoutes(fastify) {
         client: { select: { id: true, name: true } },
         project: { select: { id: true, name: true } }
       },
-      orderBy: { updatedAt: 'desc' }
+      orderBy: { updatedAt: 'desc' },
+      take: clampTake(request.query.limit),
     });
 
     // Return without decrypting passwords (frontend requests decrypt individually)

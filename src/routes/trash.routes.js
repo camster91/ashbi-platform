@@ -11,9 +11,10 @@ export default async function trashRoutes(fastify) {
     if (entity) where.entity = entity;
     where.restoredAt = null;
 
-    const items = await fastify.prisma.trashedItem.findMany({
+    const items = await request.prisma.trashedItem.findMany({
       where,
       orderBy: { deletedAt: 'desc' },
+      take: 100,
     });
 
     const grouped = {};

@@ -1,17 +1,19 @@
 import { validateBody, createRetainerSchema, updateRetainerSchema, logRetainerHoursSchema, generateRetainerInvoiceSchema, retainerGenerateInvoiceSchema } from '../validators/schemas.js';
 // Retainer plan routes — track hours & revision rounds per client
 import { generateInvoiceNumber } from '../utils/invoice.js';
+import { clampTake } from '../utils/query-limits.js';
 
 export default async function retainerRoutes(fastify) {
   // GET /retainer — list all retainer plans with client info
   fastify.get('/retainer', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
-    const plans = await fastify.prisma.retainerPlan.findMany({
+    const plans = await request.prisma.retainerPlan.findMany({
       include: {
         client: { select: { id: true, name: true, status: true } }
       },
-      orderBy: { billingCycleStart: 'desc' }
+      orderBy: { billingCycleStart: 'desc' },
+      take: clampTake(request.query.limit),
     });
 
     const now = new Date();

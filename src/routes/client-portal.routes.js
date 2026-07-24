@@ -190,18 +190,32 @@ export default async function clientPortalRoutes(fastify) {
       orderBy: { updatedAt: 'desc' }
     });
 
-    const withProgress = await Promise.all(projects.map(async (p) => {
-      const completedCount = await request.prisma.task.count({
-        where: { projectId: p.id, status: 'COMPLETED' }
-      });
+    const projectIds = projects.map((p) => p.id);
+    const taskStats = projectIds.length
+      ? await request.prisma.task.groupBy({
+          by: ['projectId', 'status'],
+          where: { projectId: { in: projectIds } },
+          _count: { _all: true },
+        })
+      : [];
+
+    const completedByProject = new Map();
+    for (const row of taskStats) {
+      if (row.status === 'COMPLETED') {
+        completedByProject.set(row.projectId, row._count._all);
+      }
+    }
+
+    const withProgress = projects.map((p) => {
       const totalCount = p._count.tasks;
+      const completedCount = completedByProject.get(p.id) ?? 0;
       return {
         ...p,
         completedTasks: completedCount,
         totalTasks: totalCount,
         progressPct: totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0
       };
-    }));
+    });
 
     return withProgress;
   });

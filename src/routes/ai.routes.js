@@ -321,7 +321,7 @@ Respond with JSON:
       return result;
     } catch (error) {
       fastify.log.error('AI draft-update error:', error);
-      return reply.status(500).send({ error: 'Failed to draft update', message: error.message });
+      return reply.status(500).send({ error: 'Failed to draft update' });
     }
   });
 
@@ -429,7 +429,7 @@ ${context ? `Additional context from user: ${context}` : ''}`;
       return { message: answer };
     } catch (error) {
       fastify.log.error('AI chat error:', error);
-      return reply.status(500).send({ error: 'Failed to get response', message: error.message });
+      return reply.status(500).send({ error: 'Failed to get response' });
     }
   });
 
@@ -477,7 +477,7 @@ Format the proposal as clean, professional text ready to be sent to a client. Do
       return { proposal, clientName, projectType };
     } catch (error) {
       fastify.log.error('AI generate-proposal error:', error);
-      return reply.status(500).send({ error: 'Failed to generate proposal', message: error.message });
+      return reply.status(500).send({ error: 'Failed to generate proposal' });
     }
   });
 
@@ -656,7 +656,7 @@ Respond with JSON:
       };
     } catch (error) {
       fastify.log.error('AI triage error:', error);
-      return reply.status(500).send({ error: 'Failed to triage inbox', message: error.message });
+      return reply.status(500).send({ error: 'Failed to triage inbox' });
     }
   });
 
@@ -853,7 +853,7 @@ Provide a 2-3 sentence summary of the project's current state.`;
       return { results };
     } catch (error) {
       fastify.log.error('AI query error:', error);
-      return reply.status(500).send({ error: 'Query failed', message: error.message });
+      return reply.status(500).send({ error: 'Query failed' });
     }
   });
 }

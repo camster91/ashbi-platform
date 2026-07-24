@@ -9,6 +9,7 @@ import {
   proposalUpdateSchema,
   proposalBulkIdsSchema,
 } from '../validators/schemas.js';
+import { clampTake } from '../utils/query-limits.js';
 
 async function sendProposalEmail(to, clientName, proposalTitle, portalUrl) {
   if (!process.env.MAILGUN_API_KEY || !process.env.MAILGUN_DOMAIN) return;
@@ -65,7 +66,8 @@ export default async function proposalRoutes(fastify) {
           select: { lineItems: true }
         }
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
+      take: clampTake(request.query.limit),
     });
 
     return proposals;

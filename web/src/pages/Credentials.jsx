@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { cn, formatDate } from '../lib/utils';
+import QueryErrorState from '../components/QueryErrorState';
 
 const categories = [
   { value: 'WP_ADMIN', label: 'WP Admin', icon: Globe },
@@ -61,7 +62,7 @@ export default function Credentials() {
   const [visiblePasswords, setVisiblePasswords] = useState({});
   const [copiedId, setCopiedId] = useState(null);
 
-  const { data: credentials = [], isLoading } = useQuery({
+  const { data: credentials = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['credentials', filterCategory, filterClient],
     queryFn: async () => {
       const params = {};
@@ -338,7 +339,9 @@ export default function Credentials() {
       )}
 
       {/* Credentials Table */}
-      {isLoading ? (
+      {isError ? (
+        <QueryErrorState onRetry={refetch} message="Failed to load credentials" />
+      ) : isLoading ? (
         <div className="flex items-center justify-center h-32">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>

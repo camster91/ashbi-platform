@@ -122,8 +122,14 @@ export function startRecurringInvoicesJob() {
   console.log('[recurring-invoices] Starting recurring invoices job (runs every hour)');
 
   // Run immediately on startup
-  processRecurringInvoices();
+  processRecurringInvoices().catch(err =>
+    console.error('[recurring-invoices] Startup run failed:', err)
+  );
 
   // Then run every hour
-  setInterval(processRecurringInvoices, ONE_HOUR);
+  setInterval(() => {
+    processRecurringInvoices().catch(err =>
+      console.error('[recurring-invoices] Scheduled run failed:', err)
+    );
+  }, ONE_HOUR);
 }

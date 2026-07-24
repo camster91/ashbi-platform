@@ -183,7 +183,7 @@ export default async function gmailRoutes(fastify) {
       };
     } catch (err) {
       fastify.log.error('Gmail send error:', err);
-      return reply.status(500).send({ error: err.message });
+      return reply.status(500).send({ error: 'Gmail operation failed' });
     }
   });
 
@@ -288,7 +288,7 @@ Write a helpful, professional reply that addresses the client's needs. Be concis
         threadsTotal: profile.threadsTotal
       };
     } catch (err) {
-      return { connected: false, error: err.message };
+      return { connected: false, error: 'Connection check failed' };
     }
   });
 
@@ -305,7 +305,7 @@ Write a helpful, professional reply that addresses the client's needs. Be concis
     return new Promise((resolve) => {
       const child = exec(`node ${scriptPath}`, { timeout: 120000 }, (error, stdout, stderr) => {
         if (error) {
-          resolve({ success: false, error: error.message, output: stderr });
+          resolve({ success: false, error: 'Command failed', output: stderr });
         } else {
           resolve({ success: true, output: stdout });
         }

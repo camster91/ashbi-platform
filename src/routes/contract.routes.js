@@ -3,6 +3,7 @@ import PDFDocument from 'pdfkit';
 import { sendContractSignEmail } from '../services/email.service.js';
 import { getContractTemplate, renderTemplate } from '../services/contractTemplates.service.js';
 import {validateBody, createContractSchema, updateContractDraftSchema, contractDraftUpdateSchema} from '../validators/schemas.js';
+import { clampTake } from '../utils/query-limits.js';
 
 async function sendContractEmail(to, clientName, contractTitle, signUrl) {
   if (!process.env.MAILGUN_API_KEY || !process.env.MAILGUN_DOMAIN) return;
@@ -25,14 +26,15 @@ export default async function contractRoutes(fastify) {
     if (clientId) where.clientId = clientId;
     if (status) where.status = status;
 
-    return fastify.prisma.contract.findMany({
+    return request.prisma.contract.findMany({
       where,
       include: {
         client: { select: { id: true, name: true } },
         createdBy: { select: { id: true, name: true } },
         proposal: { select: { id: true, title: true } }
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
+      take: clampTake(request.query.limit),
     });
   });
 

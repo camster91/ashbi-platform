@@ -40,12 +40,13 @@ export default async function integrationRoutes(fastify) {
     // For now, we create a placeholder record
     const integration = await request.prisma.integration.upsert({
       where: { id: `${typeUpper}_placeholder` },
-      update: { status: 'CONNECTED', lastSyncAt: new Date() },
+      update: { status: 'CONNECTED', lastSyncAt: new Date(), organizationId: request.organizationId },
       create: {
         id: `${typeUpper}_placeholder`,
         type: typeUpper,
         status: 'CONNECTED',
-        lastSyncAt: new Date()
+        lastSyncAt: new Date(),
+        organizationId: request.organizationId,
       }
     });
 
