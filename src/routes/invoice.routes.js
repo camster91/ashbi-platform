@@ -527,7 +527,7 @@ export default async function invoiceRoutes(fastify) {
   });
 
   // ─── GET /client/:viewToken — public client view ────────────────────────────
-  fastify.get('/client/:viewToken, { config: { public: true } }', async (request, reply) => {
+  fastify.get('/client/:viewToken', { config: { public: true } }, async (request, reply) => {
     const invoice = await fastify.prisma.invoice.findUnique({
       where: { viewToken: request.params.viewToken },
       include: {
@@ -543,7 +543,7 @@ export default async function invoiceRoutes(fastify) {
   });
 
   // ─── POST /stripe-webhook ───────────────────────────────────────────────────
-  fastify.post('/stripe-webhook, { config: { skipValidation: true } }', { config: { rawBody: true, public: true } }, async (request, reply) => {
+  fastify.post('/stripe-webhook', { config: { rawBody: true, public: true } }, async (request, reply) => {
     const signature = request.headers['stripe-signature'];
     if (!signature) return reply.status(400).send({ error: 'Missing stripe-signature header' });
 

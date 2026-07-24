@@ -152,7 +152,7 @@ export default async function contractRoutes(fastify) {
   });
 
   // GET /sign/:signToken — PUBLIC — client views contract to sign
-  fastify.get('/sign/:signToken, { config: { public: true } }', async (request, reply) => {
+  fastify.get('/sign/:signToken', { config: { public: true } }, async (request, reply) => {
     const contract = await fastify.prisma.contract.findUnique({
       where: { signToken: request.params.signToken },
       include: {
@@ -166,7 +166,7 @@ export default async function contractRoutes(fastify) {
 
   // POST /sign/:signToken — PUBLIC — client signs contract
   // Body: { signerName, agreement: true }
-  fastify.post('/sign/:signToken, { config: { public: true } }', async (request, reply) => {
+  fastify.post('/sign/:signToken', { config: { public: true } }, async (request, reply) => {
     const { signerName, agreement } = request.body;
     if (!signerName || !agreement) return reply.status(400).send({ error: 'signerName and agreement:true required' });
 

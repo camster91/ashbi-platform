@@ -172,7 +172,7 @@ export default async function estimateRoutes(fastify) {
   });
 
   // Public view by token
-  fastify.get('/view/:viewToken, { config: { public: true } }', async (request, reply) => {
+  fastify.get('/view/:viewToken', { config: { public: true } }, async (request, reply) => {
     const estimate = await request.prisma.estimate.findUnique({
       where: { viewToken: request.params.viewToken },
       include: { client: { select: { id: true, name: true, email: true } } }
@@ -182,7 +182,7 @@ export default async function estimateRoutes(fastify) {
   });
 
   // Client approve/decline estimate
-  fastify.post('/view/:viewToken/approve, { config: { public: true } }', async (request, reply) => {
+  fastify.post('/view/:viewToken/approve', { config: { public: true } }, async (request, reply) => {
     const { viewToken } = request.params;
     const { action } = request.body; // 'approve' or 'decline'
     if (!['approve', 'decline'].includes(action)) {

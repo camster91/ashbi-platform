@@ -8,7 +8,7 @@ export default async function mailgunHitlRoutes(fastify) {
    * POST /api/mailgun/hitl-reply
    * Mailgun forwards replies to reply+{notificationId}@ashbi.ca here
    */
-  fastify.post('/hitl-reply, { config: { public: true } }', async (request, reply) => {
+  fastify.post('/hitl-reply', { config: { public: true } }, async (request, reply) => {
     // Always respond 200 to Mailgun first
     reply.status(200).send({ status: 'ok' });
 
