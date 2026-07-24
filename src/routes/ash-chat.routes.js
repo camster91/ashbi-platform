@@ -121,7 +121,7 @@ export default async function ashChatRoutes(fastify) {
       aiResponse = await callAI(history.map(m => ({ role: m.role, content: m.content })));
     } catch (err) {
       fastify.log.error('AI call failed:', err);
-      aiResponse = `Error calling AI: ${err.message}`;
+      aiResponse = 'Sorry, I could not process that request. Please try again.';
     }
 
     // Save assistant response

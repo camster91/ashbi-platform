@@ -381,12 +381,18 @@ export default async function proposalBuilderRoutes(fastify) {
     }
   });
 
-  // Download proposal as PDF
-  fastify.get("/:id/pdf", async (request, reply) => {
+  // Download proposal as PDF (authenticated — tenant-scoped via request.prisma)
+  fastify.get('/:id/pdf', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     try {
       const proposalId = request.params.id;
-      const proposal = await getProposal(proposalId);
-      if (!proposal) return reply.status(404).send({ error: "Proposal not found" });
+      const proposal = await request.prisma.proposal.findUnique({
+        where: { id: proposalId },
+        include: {
+          client: { select: { id: true, name: true, email: true, company: true } },
+          lineItems: true
+        }
+      });
+      if (!proposal) return reply.status(404).send({ error: 'Proposal not found' });
 
       // Get or generate the HTML for the proposal
       let proposalHtml = "";
@@ -425,8 +431,8 @@ export default async function proposalBuilderRoutes(fastify) {
         .header("Content-Disposition", `attachment; filename="${filename}"`)
         .send(pdfBuffer);
     } catch (error) {
-      request.log.error(error, "Error generating proposal PDF");
-      return reply.status(500).send({ error: "Failed to generate PDF", message: error.message });
+      request.log.error(error, 'Error generating proposal PDF');
+      return reply.status(500).send({ error: 'Failed to generate PDF' });
     }
   });
 }

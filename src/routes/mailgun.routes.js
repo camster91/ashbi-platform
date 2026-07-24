@@ -40,7 +40,7 @@ export default async function mailgunRoutes(fastify) {
       return { sent: true, to, subject };
     } catch (err) {
       fastify.log.error('Mailgun send error:', err);
-      return reply.status(500).send({ error: 'Failed to send email', message: err.message });
+      return reply.status(500).send({ error: 'Failed to send email' });
     }
   });
 

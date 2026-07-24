@@ -56,7 +56,11 @@ export function initHermesBridge(fastify) {
     try {
       const signature = request.headers['x-hermes-signature'];
 
-      if (env.hermesWebhookSecret) {
+      if (!env.hermesWebhookSecret) {
+        if (env.isProduction) {
+          return reply.status(503).send({ error: 'Hermes webhook secret not configured' });
+        }
+      } else {
         if (!signature) {
           return reply.status(401).send({ error: 'Missing signature' });
         }
@@ -95,7 +99,7 @@ export function initHermesBridge(fastify) {
       }
     } catch (error) {
       fastify.log.error({ err: error }, '[hub-hermes] webhook processing failed');
-      return reply.status(500).send({ error: 'webhook_failed', message: error.message });
+      return reply.status(500).send({ error: 'webhook_failed' });
     }
   });
 

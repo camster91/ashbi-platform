@@ -154,19 +154,24 @@ export default async function attachmentRoutes(fastify) {
   // Serve uploaded files (auth required — files are keyed by UUID but must not
   // be world-readable to anyone who guesses/leaks a filename).
   fastify.get('/uploads/:filename', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const { filename } = request.params;
-    const filepath = path.join(UPLOAD_DIR, filename);
+    const safeName = path.basename(request.params.filename);
+    if (!safeName || safeName !== request.params.filename || safeName.includes('..')) {
+      return reply.status(400).send({ error: 'Invalid filename' });
+    }
+    const filepath = path.join(UPLOAD_DIR, safeName);
 
     try {
+      const attachment = await request.prisma.attachment.findFirst({
+        where: { filename: safeName }
+      });
+      if (!attachment) {
+        return reply.status(404).send({ error: 'File not found' });
+      }
+
       const stat = await fs.stat(filepath);
       const file = await fs.readFile(filepath);
 
-      // Get mime type from attachment record
-      const attachment = await request.prisma.attachment.findFirst({
-        where: { filename }
-      });
-
-      reply.header('Content-Type', attachment?.mimeType || 'application/octet-stream');
+      reply.header('Content-Type', attachment.mimeType || 'application/octet-stream');
       reply.header('Content-Length', stat.size);
 
       return reply.send(file);

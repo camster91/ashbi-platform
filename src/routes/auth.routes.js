@@ -72,7 +72,7 @@ export default async function authRoutes(fastify) {
         })
         .send({ user });
     } catch (err) {
-      return reply.status(401).send({ error: err.message });
+      return reply.status(401).send({ error: 'Invalid credentials' });
     }
   });
 

@@ -92,6 +92,7 @@ import logger from './utils/logger.js';
 import { initSubscribers } from './subscribers/index.js';
 import { tenancyMiddleware } from './middleware/tenancy.js';
 import { getAuthProvider } from './auth/index.js';
+import { toClientErrorBody } from './utils/http-errors.js';
 
 // Initialize Sentry error monitoring
 if (env.sentryDsn) {
@@ -274,19 +275,15 @@ if (!env.isDev) {
   });
 }
 
-// Proposal PDF storage files
-await fastify.register(fastifyStatic, {
-  root: path.resolve(__dirname, '../storage/proposals'),
-  prefix: '/storage/proposals/',
-  decorateReply: false
-});
+// Proposal PDFs are served only via authenticated /api/proposal-builder/:id/pdf
+// (and portal token routes). Do not expose storage/proposals/ as public static files.
 
 // Global Error Handler (Enterprise Grade)
 fastify.setErrorHandler((error, request, reply) => {
   const statusCode = error.statusCode || 500;
   request.log.error({ err: error, userId: request.user?.id, url: request.url, method: request.method, organizationId: request.organizationId }, '🔥 Global Error Caught');
   Sentry.captureException(error, { extra: { url: request.url, method: request.method, userId: request.user?.id, organizationId: request.organizationId, traceId: request.id } });
-  reply.status(statusCode).send({ error: error.name || 'InternalServerError', message: error.message || 'An unexpected error occurred', statusCode, traceId: request.id });
+  reply.status(statusCode).send(toClientErrorBody(error, { traceId: request.id }));
 });
 
 // Socket.IO
@@ -378,6 +375,18 @@ const shutdown = async () => {
 
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
+
+process.on('unhandledRejection', (reason) => {
+  logger.error({ err: reason }, 'Unhandled promise rejection');
+  if (env.sentryDsn) Sentry.captureException(reason);
+});
+
+process.on('uncaughtException', (err) => {
+  logger.fatal({ err }, 'Uncaught exception');
+  if (env.sentryDsn) Sentry.captureException(err);
+  process.exit(1);
+});
+
 start();
 
 export { fastify, io };
