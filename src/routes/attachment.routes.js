@@ -151,8 +151,9 @@ export default async function attachmentRoutes(fastify) {
     return { success: true };
   });
 
-  // Serve uploaded files
-  fastify.get('/uploads/:filename', async (request, reply) => {
+  // Serve uploaded files (auth required — files are keyed by UUID but must not
+  // be world-readable to anyone who guesses/leaks a filename).
+  fastify.get('/uploads/:filename', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     const { filename } = request.params;
     const filepath = path.join(UPLOAD_DIR, filename);
 
