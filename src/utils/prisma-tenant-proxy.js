@@ -53,6 +53,7 @@ const TENANT_PATHS = {
   pipelineDeal:     ['client'],
   expense:          ['client'],
   credential:       ['client'],
+  clientEmbedding:  ['client'],
 
   // Via User (uploadedBy → organizationId). Attachment has no client/project
   // relation — its only owner link is the uploading user.

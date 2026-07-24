@@ -81,4 +81,27 @@ export default async function trashRoutes(fastify) {
 
     return { success: true };
   });
+
+  // DELETE /api/trash/empty — permanently delete all trashed items (admin)
+  fastify.delete('/empty', { onRequest: [fastify.adminOnly] }, async (request, reply) => {
+    const trashedItems = await fastify.prisma.trashedItem.findMany({
+      where: { restoredAt: null },
+    });
+
+    let deleted = 0;
+    for (const trashed of trashedItems) {
+      const modelName = ENTITY_MAP[trashed.entity];
+      const prismaModel = modelName ? fastify.prisma[modelName] : null;
+      if (prismaModel) {
+        const existing = await prismaModel.findUnique({ where: { id: trashed.recordId } });
+        if (existing) {
+          await prismaModel.delete({ where: { id: trashed.recordId } });
+        }
+      }
+      await fastify.prisma.trashedItem.delete({ where: { id: trashed.id } });
+      deleted++;
+    }
+
+    return { success: true, deleted };
+  });
 }
