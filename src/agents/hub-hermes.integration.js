@@ -10,6 +10,8 @@
 // empty responses + an `enablement` flag (env.HERMES_BRIDGE_ENABLED)
 // so we can turn the whole bridge off without removing the route.
 
+import crypto from 'crypto';
+import { safeEqual } from '../utils/crypto.js';
 import env from '../config/env.js';
 
 export function initHermesBridge(fastify) {
@@ -58,11 +60,13 @@ export function initHermesBridge(fastify) {
         if (!signature) {
           return reply.status(401).send({ error: 'Missing signature' });
         }
-        // Note: HMAC verification intentionally stubbed (was a TODO before).
-        // Real verification should use:
-        //   const expected = crypto.createHmac('sha256', env.hermesWebhookSecret)
-        //     .update(JSON.stringify(request.body)).digest('hex');
-        //   if (signature !== expected) return 401
+        const expected = crypto
+          .createHmac('sha256', env.hermesWebhookSecret)
+          .update(JSON.stringify(request.body ?? {}))
+          .digest('hex');
+        if (!safeEqual(signature, expected)) {
+          return reply.status(401).send({ error: 'Invalid signature' });
+        }
       }
 
       const { event, triggerId } = request.body || {};

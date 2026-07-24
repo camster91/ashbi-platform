@@ -1,6 +1,7 @@
 // Mailgun HITL reply webhook — parses Cameron's email replies back into Hub
 
 import crypto from 'crypto';
+import { safeEqual } from '../utils/crypto.js';
 import { stripQuotedReply, sendDiscordCamNotification } from '../utils/hitl-email.service.js';
 
 export default async function mailgunHitlRoutes(fastify) {
@@ -32,7 +33,7 @@ export default async function mailgunHitlRoutes(fastify) {
         .createHmac('sha256', signingKey)
         .update(timestamp + token)
         .digest('hex');
-      if (expected !== signature) {
+      if (!safeEqual(expected, signature)) {
         fastify.log.warn('[hitl-reply] Invalid Mailgun signature — ignoring');
         return;
       }

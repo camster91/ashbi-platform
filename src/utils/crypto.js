@@ -15,6 +15,18 @@ function getKey() {
   return crypto.createHash('sha256').update(key).digest();
 }
 
+/**
+ * Constant-time string comparison for secrets/signatures. Hashing both inputs
+ * to a fixed length first avoids leaking length via timingSafeEqual (which
+ * throws on unequal-length buffers).
+ */
+export function safeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const ah = crypto.createHash('sha256').update(a).digest();
+  const bh = crypto.createHash('sha256').update(b).digest();
+  return crypto.timingSafeEqual(ah, bh);
+}
+
 export function encrypt(plaintext) {
   if (!plaintext) return plaintext;
   const key = getKey();
