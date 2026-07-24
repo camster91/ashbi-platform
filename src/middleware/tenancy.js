@@ -44,6 +44,12 @@ export async function tenancyMiddleware(request, reply) {
     request.url.startsWith('/api/webhooks') ||
     request.url.startsWith('/api/wp-bridge') ||
     request.url.startsWith('/api/portal') ||
+    // Bot API authenticates via BOT_SECRET bearer (not a JWT with org context);
+    // client portal authenticates via its own CLIENT-role JWT and scopes every
+    // query by clientId. Both must bypass the org guard (which would 403 before
+    // their own auth runs), same as the webhook/portal exemptions above.
+    request.url.startsWith('/api/bot') ||
+    request.url.startsWith('/api/client-portal') ||
     request.url.startsWith('/api/client-acquisition/config') ||
     request.url.startsWith('/api/client-acquisition/intake') ||
     // Public, capability-token-based client flows (no JWT / org context).
