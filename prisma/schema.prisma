@@ -1679,7 +1679,7 @@ model WPAlert {
 // the hub-side orchestration ledger.
 model WPFleetOp {
   id           String    @id @default(cuid())
-  opType       String // 'file_patch' | 'command' | 'option_set' | 'magic_login'
+  opType       String // 'file_patch' | 'command' | 'option_set' | 'magic_login' | 'magic_login_revoke'
   payload      Json // original request body
   targetCount  Int
   successCount Int       @default(0)
@@ -1692,4 +1692,32 @@ model WPFleetOp {
   @@index([opType])
   @@index([createdBy])
   @@map("wp_fleet_ops")
+}
+
+// Magic-login audit log (Plan 11 / PR-F).
+//
+// One row per state transition on a WP site: an issuance from the hub, a
+// successful single-use consumption by an admin clicking the magic URL, an
+// admin-initiated revocation, or a rejection (expired token, replay
+// attempt, IP-blocked, rate-limited). Mirrors the per-site
+// ashbi_magic_login_log wp_options ring buffer that the plugin keeps, but
+// centralises the cross-site view so the WPSites "Recent Logins" tab can
+// show fleet-wide activity in one place.
+model WPMagicLoginLog {
+  id         String   @id @default(cuid())
+  siteId     String? // nullable: pre-registration/wildcard logins may not have a row yet
+  siteUrl    String // canonical site URL — survives WPSite deletes
+  userId     Int? // WP user id (admin being issued for / logged in as)
+  hubUserId  String? // hub user id (operator that triggered the issuance / revoke)
+  ip         String   @default("0.0.0.0")
+  status     String // 'issued' | 'consumed' | 'revoked' | 'rejected'
+  reason     String? // 'expired_or_invalid' | 'replayed' | 'expired' | 'rate_limited' | 'ip_not_allowed' | 'manual_revoke'
+  tokenHash  String? // sha256 of the raw magic-login token (NEVER the token itself)
+  ts         DateTime @default(now())
+
+  @@index([siteId])
+  @@index([siteUrl])
+  @@index([ts(sort: Desc)])
+  @@index([status])
+  @@map("wp_magic_login_log")
 }

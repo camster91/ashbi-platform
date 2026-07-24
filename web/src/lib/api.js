@@ -1371,6 +1371,22 @@ export const api = {
     return request(`/wp-bridge/fleet/ops${query ? `?${query}` : ''}`);
   },
 
+  // ===== Magic-login audit log (Plan 11 / PR-F) =====
+  // Reads the last N magic-login events (issued / consumed / revoked /
+  // rejected) so the WPSites dashboard can show the cross-site Recent Logins
+  // feed. siteId, siteUrl, status, limit are all optional filters.
+  getWPMagicLoginLog: (params = {}) => {
+    const query = new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v !== null && v !== undefined && v !== '')
+    ).toString();
+    return request(`/wp-bridge/magic-login/log${query ? `?${query}` : ''}`);
+  },
+
+  // POST /wp-bridge/magic-login/revoke — proxies through the hub to a single
+  // site and writes a hub-side audit row.
+  postWPMagicLoginRevoke: (data) =>
+    request('/wp-bridge/magic-login/revoke', { method: 'POST', body: data }),
+
   // ===== SURVEYS / NPS =====
   submitSurvey: (data) =>
     request('/surveys/submit', { method: 'POST', body: data }),
