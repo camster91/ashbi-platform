@@ -748,23 +748,6 @@ export function reshapeMagicLoginResult(r) {
   return { siteUrl: r.siteUrl, error: r.error || 'unknown error' };
 }
 
-// Reshape a generic fan-out result into the magic-login response shape:
-//   ok  + body.url present -> { siteUrl, url }
-//   ok  + body.url missing -> { siteUrl, error: '...' }
-//   err                     -> { siteUrl, error }
-// Exported for tests + used by the magic-login route handler.
-export function reshapeMagicLoginResult(r) {
-  if (!r) return { siteUrl: '', error: 'empty result' };
-  if (r.status === 'ok') {
-    const body = r.output && r.output.body;
-    if (body && typeof body === 'object' && typeof body.url === 'string' && body.url.length > 0) {
-      return { siteUrl: r.siteUrl, url: body.url };
-    }
-    return { siteUrl: r.siteUrl, error: 'plugin response missing url field' };
-  }
-  return { siteUrl: r.siteUrl, error: r.error || 'unknown error' };
-}
-
 // =============================================================================
 // FLEET DIGEST CRON — runs daily at 09:00 America/Toronto. Started from inside
 // the route plugin so the schedule travels with the route registration
