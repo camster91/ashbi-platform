@@ -189,7 +189,7 @@ export default function Clients() {
   // Show real API data only. (Previously fell back to hardcoded demo clients
   // when the response looked empty, which — combined with the wrapper-unwrap
   // bug — meant real clients were never shown.)
-  const displayClients = clients;
+  const displayClients = Array.isArray(clients) ? clients : [];
 
   const filtered = displayClients.filter(c =>
     !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.domain?.toLowerCase().includes(search.toLowerCase())

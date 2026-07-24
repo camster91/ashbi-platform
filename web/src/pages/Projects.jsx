@@ -241,7 +241,7 @@ export default function Projects() {
 
   // Show real API data only. (Previously fell back to hardcoded demo projects
   // when the response looked empty, which hid real projects.)
-  const displayProjects = projects;
+  const displayProjects = Array.isArray(projects) ? projects : [];
 
   // Group projects by kanban column
   const columns = KANBAN_COLUMNS.map((col) => {
