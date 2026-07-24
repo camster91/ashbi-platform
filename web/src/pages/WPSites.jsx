@@ -143,7 +143,7 @@ function SitesTab({ queryClient }) {
 
   const { data: sites = [], isLoading } = useQuery({
     queryKey: ['wp-sites'],
-    queryFn: () => api.listWPSites().then((r) => r?.sites ?? []),
+    queryFn: () => api.listWPSites().then((r) => (Array.isArray(r) ? r : (r?.sites ?? []))),
   });
 
   const {
