@@ -36,6 +36,9 @@ jobs:
       - name: Install dependencies
         run: npm install --no-audit --no-fund
 
+      - name: Generate Prisma client
+        run: npx prisma generate
+
       - name: Type check (if configured)
         run: |
           if grep -q '"typecheck"\|"type-check"\|"tsc"' package.json; then
