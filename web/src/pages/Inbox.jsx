@@ -24,7 +24,7 @@ import {
   getSentimentIcon,
   cn,
 } from '../lib/utils';
-import { StatCard, Badge, EmptyInbox, SkeletonStatCard, SkeletonThreadRow } from '../components/ui';
+import { StatCard, Badge, EmptyInbox, Skeleton, SkeletonStatCard, SkeletonThreadRow, SkeletonPageHeader } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
 
 export default function Inbox() {
@@ -357,21 +357,5 @@ function ThreadRow({ thread }) {
         </div>
       </Link>
     </li>
-  );
-}
-
-// Simple skeleton component for page header
-function Skeleton({ className }) {
-  return (
-    <div className={cn('animate-pulse bg-muted rounded', className)} />
-  );
-}
-
-function SkeletonPageHeader() {
-  return (
-    <div className="space-y-2">
-      <Skeleton className="h-8 w-32" />
-      <Skeleton className="h-4 w-64" />
-    </div>
   );
 }
