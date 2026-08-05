@@ -1,5 +1,7 @@
 # Ashbi Hub
 
+Repository changes follow the issue-to-release policy in [CONTRIBUTING.md](CONTRIBUTING.md).
+
 Agency management platform for operations, finance, and project management.
 
 ## Brand
