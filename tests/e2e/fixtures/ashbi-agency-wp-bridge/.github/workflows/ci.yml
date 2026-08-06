@@ -1,0 +1,330 @@
+name: Build, Release and Deploy
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*.*.*']
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  # Matrix job — check names become "php (7.4)", etc.
+  php:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php-version: ['7.4', '8.0', '8.1', '8.2']
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Setup PHP
+        uses: shivammathur/setup-php@b604ade2a87db23f8871b7182e69ec5e75effb45
+        with:
+          php-version: ${{ matrix.php-version }}
+      - name: Validate composer.json
+        run: composer validate --no-check-publish --strict
+      - name: Get composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+      - name: Cache Composer dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ matrix.php-version }}-${{ hashFiles('**/composer.json', '**/composer.lock') }}
+          restore-keys: |
+            composer-${{ matrix.php-version }}-
+      - name: Install dev dependencies
+        run: composer install --no-interaction --prefer-dist
+      - name: Lint PHP
+        run: find . -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -d error_reporting=E_ALL -d display_errors=1 -l
+      - name: Build ZIP
+        if: matrix.php-version == '8.2'
+        run: mkdir -p dist && zip -r "dist/ashbi-agency-wp-bridge-${GITHUB_REF_NAME//\//-}.zip" . -x "*.git*" -x ".github/*" -x "dist/*" -x "*.log" -x "node_modules/*" -x "vendor/*"
+      - name: Write SHA256SUMS
+        if: matrix.php-version == '8.2'
+        run: (cd dist && sha256sum *.zip > SHA256SUMS) && cat dist/SHA256SUMS
+      - name: Upload artifact
+        if: matrix.php-version == '8.2'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: plugin-zip
+          # Upload the whole dist/ directory so SHA256SUMS ships alongside the zip
+          # (P2-1: deploy job downloads this and runs sha256sum -c before scp).
+          path: dist/
+
+  # Gate job named exactly "build" so branch-protection required check still matches
+  # after introducing the PHP matrix (matrix checks are named "php (x.y)").
+  build:
+    needs: php
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require PHP matrix success
+        run: test "${{ needs.php.result }}" = "success"
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: plugin-zip
+          path: dist/
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
+        with:
+          name: "Ashbi Agency WP Bridge ${{ github.ref_name }}"
+          body: "${{ github.ref_name }} — released automatically on tag push."
+          files: |
+            dist/*.zip
+            dist/SHA256SUMS
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy:
+    needs: release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download release artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: plugin-zip
+          path: dist/
+
+      - name: Verify SHA256 of artifact
+        if: ${{ env.DEPLOY_SSH_KEY != '' }}
+        run: |
+          set -e
+          cd dist
+          if [ ! -f SHA256SUMS ]; then
+            echo "::error::SHA256SUMS missing from artifact — refusing to deploy."
+            exit 1
+          fi
+          sha256sum -c SHA256SUMS
+
+      - name: Restore deployed-versions marker (canary gate)
+        id: cache-versions
+        if: ${{ env.DEPLOY_SSH_KEY != '' }}
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: /tmp/ashbi-cache
+          key: ashbi-deployed-versions-v1
+
+      - name: Canary gate check
+        if: ${{ env.DEPLOY_SSH_KEY != '' }}
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          TEST_SITE: ${{ secrets.DEPLOY_TEST_SITE }}
+        run: |
+          set -e
+          mkdir -p /tmp/ashbi-cache
+          touch /tmp/ashbi-cache/ashbi_deployed_versions
+          if grep -Fxq "$REF_NAME" /tmp/ashbi-cache/ashbi_deployed_versions; then
+            echo "CANARY_OK=1" >> "$GITHUB_ENV"
+            echo "Version $REF_NAME already canaried — fleet deploy allowed."
+          else
+            if [ -z "$TEST_SITE" ]; then
+              echo "::error::First deploy of $REF_NAME requires DEPLOY_TEST_SITE to be set as the canary target."
+              exit 1
+            fi
+            echo "CANARY_OK=0" >> "$GITHUB_ENV"
+            echo "First deploy of $REF_NAME — canary restricted to $TEST_SITE."
+          fi
+
+      - name: Deploy to Hostinger2 (only if DEPLOY_SSH_KEY is set)
+        if: ${{ env.DEPLOY_SSH_KEY != '' }}
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          TEST_SITE: ${{ secrets.DEPLOY_TEST_SITE }}
+          DEPLOY_KNOWN_HOSTS: ${{ vars.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -e
+          SSH_PORT="${DEPLOY_PORT:-22}"
+
+          if [ -z "$DEPLOY_SSH_KEY" ]; then
+            echo "No DEPLOY_SSH_KEY secret — skipping deploy"
+            exit 0
+          fi
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          # P1-2 TOFU fix: real known_hosts (no UserKnownHostsFile=/dev/null).
+          # Set the DEPLOY_KNOWN_HOSTS repo variable to a known_hosts-format entry
+          # (e.g. "|1|...= ssh-ed25519 AAAA..." for $DEPLOY_HOST). With
+          # StrictHostKeyChecking yes below, the deploy fails loudly if the
+          # host key doesn't match — instead of silently accepting anything.
+          if [ -n "$DEPLOY_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+            chmod 644 ~/.ssh/known_hosts
+          else
+            echo "::warning::DEPLOY_KNOWN_HOSTS repo variable is empty — StrictHostKeyChecking=yes will reject the host. Set the variable before next deploy."
+          fi
+          printf 'Host *\n  IdentityFile ~/.ssh/deploy_key\n  StrictHostKeyChecking yes\n  Port %s\n' "$SSH_PORT" > ~/.ssh/config
+          chmod 600 ~/.ssh/config
+
+          scp -P "$SSH_PORT" dist/*.zip "${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/ashbi-bridge-latest.zip"
+
+          ssh -p "$SSH_PORT" "${DEPLOY_USER}@${DEPLOY_HOST}" GITHUB_REF_NAME="${GITHUB_REF_NAME}" TEST_SITE="${TEST_SITE:-}" 'bash -s' <<'SCRIPT'
+            DOCROOT_BASE=/home/u257752935/domains
+            zip=/tmp/ashbi-bridge-latest.zip
+            ok=0; fail=0; log=$(mktemp)
+            target_ver="${GITHUB_REF_NAME#v}"
+
+            # P2-2: wp-cli detection — fail loudly instead of swallowing.
+            if ! command -v wp >/dev/null 2>&1; then
+              echo "::error::wp-cli is not installed on the deploy host (PATH does not contain 'wp'). Install wp-cli before retrying."
+              rm -f "$log"
+              exit 1
+            fi
+
+            for dir in "$DOCROOT_BASE"/*/public_html; do
+              site=$(basename "$(dirname "$dir")")
+              plugin_dir="$dir/wp-content/plugins/ashbi-agency-wp-bridge"
+              [ ! -f "$plugin_dir/ashbi-agency-wp-bridge.php" ] && continue
+
+              # Restrict to single test site if TEST_SITE is set
+              # (canary gate OR manual rerun scoping).
+              if [ -n "$TEST_SITE" ] && [ "$site" != "$TEST_SITE" ]; then
+                continue
+              fi
+
+              # 1. Snapshot the current plugin dir for manual rollback.
+              bak_dir="$plugin_dir.bak.$(date +%s)"
+              if ! cp -r "$plugin_dir" "$bak_dir"; then
+                echo "FAIL $site (snapshot cp failed)" >> "$log"; fail=$((fail+1))
+                continue
+              fi
+
+              # 2. Extract to a scratch dir (NOT into plugin_dir yet).
+              tmp_d="$(mktemp -d)"
+              if ! unzip -q -o "$zip" -d "$tmp_d"; then
+                echo "FAIL $site (unzip failed)" >> "$log"; fail=$((fail+1))
+                rm -rf "$tmp_d" "$bak_dir"
+                continue
+              fi
+
+              # Two valid ZIP layouts:
+              #  (a) Flat: files at top level (ashbi-agency-wp-bridge.php, includes/, README.md, ...)
+              #  (b) Wrapped: single subfolder at top level (like git archive)
+              top_files=$(find "$tmp_d" -maxdepth 1 -type f | head -1)
+              if [ -n "$top_files" ]; then
+                extracted="$tmp_d"
+              else
+                inner=$(find "$tmp_d" -maxdepth 1 -type d | grep -v "^$tmp_d$" | head -1)
+                extracted="${inner:-$tmp_d}"
+              fi
+
+              # 3. P1-3: Stage into a SIBLING dir on the same filesystem.
+              #    rsync populates the staging dir first; the production
+              #    plugin_dir is untouched until validation passes. mv within
+              #    the same filesystem is atomic.
+              staging="$dir/wp-content/plugins/ashbi-agency-wp-bridge.staging.$$"
+              if ! rsync -a "$extracted/" "$staging/"; then
+                echo "FAIL $site (rsync to staging failed)" >> "$log"; fail=$((fail+1))
+                rm -rf "$tmp_d" "$staging" "$bak_dir"
+                continue
+              fi
+              rm -rf "$tmp_d"
+
+              # 4. Validate the staged copy BEFORE swapping into production.
+              entrypoint="$staging/ashbi-agency-wp-bridge.php"
+              if [ ! -f "$entrypoint" ]; then
+                echo "FAIL $site (entrypoint missing in staging)" >> "$log"; fail=$((fail+1))
+                rm -rf "$staging" "$bak_dir"
+                continue
+              fi
+
+              # PHP lint (only if php is in PATH on the deploy host).
+              if command -v php >/dev/null 2>&1; then
+                if ! php -l "$entrypoint" >/dev/null 2>&1; then
+                  echo "FAIL $site (php -l failed on $entrypoint)" >> "$log"; fail=$((fail+1))
+                  rm -rf "$staging" "$bak_dir"
+                  continue
+                fi
+              fi
+
+              # Version must match the tag.
+              ver=$(grep "Version:" "$entrypoint" | head -1 | sed "s/.*Version: *//")
+              if [ "$ver" != "$target_ver" ]; then
+                echo "FAIL $site (staged version $ver != expected $target_ver)" >> "$log"; fail=$((fail+1))
+                rm -rf "$staging" "$bak_dir"
+                continue
+              fi
+
+              # 5. Atomic swap. mv within the same filesystem is atomic.
+              old_swap="${plugin_dir}.swap.$$"
+              if ! mv "$plugin_dir" "$old_swap"; then
+                echo "FAIL $site (mv plugin_dir -> swap failed)" >> "$log"; fail=$((fail+1))
+                rm -rf "$staging" "$bak_dir"
+                continue
+              fi
+              if ! mv "$staging" "$plugin_dir"; then
+                echo "FAIL $site (mv staging -> plugin_dir failed)" >> "$log"; fail=$((fail+1))
+                # Best-effort restore of the original.
+                mv "$old_swap" "$plugin_dir" 2>/dev/null || true
+                rm -rf "$staging" "$bak_dir"
+                continue
+              fi
+
+              # 6. P2-2: wp activate — capture exit code, do NOT swallow.
+              wp_out=$(mktemp)
+              if wp --allow-root --path="$dir" plugin activate ashbi-agency-wp-bridge >"$wp_out" 2>&1; then
+                activate_exit=0
+              else
+                activate_exit=$?
+              fi
+              if [ "$activate_exit" -ne 0 ]; then
+                err_msg=$(head -3 "$wp_out" 2>/dev/null | tr '\n' ' ')
+                echo "FAIL $site (wp plugin activate exit=$activate_exit: $err_msg)" >> "$log"; fail=$((fail+1))
+                rm -f "$wp_out"
+                # Roll back: drop the failed new tree, restore the old.
+                rm -rf "$plugin_dir" 2>/dev/null || true
+                if [ -d "$old_swap" ]; then
+                  mv "$old_swap" "$plugin_dir" 2>/dev/null || true
+                fi
+                continue
+              fi
+              rm -f "$wp_out"
+
+              echo "OK $site v$ver" >> "$log"; ok=$((ok+1))
+
+              # 7. Cleanup the transient swap backup on success.
+              #    bak_dir is kept as the manual rollback snapshot.
+              rm -rf "$old_swap"
+            done
+
+            echo "=== Deploy log $(date) ===" >> "$log"
+            echo "OK=$ok FAIL=$fail" >> "$log"
+            cat "$log"
+            rm -f "$log"
+
+            # Exit non-zero if any site failed.
+            [ "$fail" -eq 0 ]
+          SCRIPT
+
+      - name: Persist deployed-versions marker (canary passed)
+        if: success() && steps.deploy.outcome == 'success' && env.CANARY_OK == '0'
+        run: |
+          set -e
+          mkdir -p /tmp/ashbi-cache
+          touch /tmp/ashbi-cache/ashbi_deployed_versions
+          echo "${{ github.ref_name }}" >> /tmp/ashbi-cache/ashbi_deployed_versions
+          sort -u -o /tmp/ashbi-cache/ashbi_deployed_versions /tmp/ashbi-cache/ashbi_deployed_versions
+
+      - name: Save deployed-versions marker cache
+        if: success() && steps.deploy.outcome == 'success' && env.CANARY_OK == '0'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: /tmp/ashbi-cache/ashbi_deployed_versions
+          key: ashbi-deployed-versions-v1
