@@ -1,4 +1,4 @@
-import { Button } from './ui/Button';
+import Button from './ui/Button';
 
 export function QueryErrorState({ onRetry, message = 'Failed to load data' }) {
   return (
