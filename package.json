@@ -30,6 +30,7 @@
     "test:e2e:teardown": "bash tests/e2e/teardown.sh",
     "test:e2e": "vitest run --config tests/e2e/vitest.config.mjs",
     "test:e2e:watch": "vitest --config tests/e2e/vitest.config.mjs",
+    "test:browser": "playwright test",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
@@ -78,6 +79,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
     "@eslint/js": "^9.39.4",
     "@playwright/test": "^1.62.0",
     "@types/bcrypt": "^6.0.0",

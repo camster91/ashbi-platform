@@ -1,15 +1,19 @@
 import { test, expect } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
+
+async function mockLoggedOutUser(page) {
+  await page.route(/\/api\/auth\/me/, async (route) => {
+    await route.fulfill({
+      status: 401,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'Unauthorized' })
+    });
+  });
+}
 
 test.describe('Authentication Flow', () => {
   test('should display login form when unauthenticated', async ({ page }) => {
-    // Mock unauthorized response
-    await page.route(/\/api\/auth\/me/, async (route) => {
-      await route.fulfill({
-        status: 401,
-        contentType: 'application/json',
-        body: JSON.stringify({ error: 'Unauthorized' })
-      });
-    });
+    await mockLoggedOutUser(page);
 
     await page.goto('/');
 
@@ -17,6 +21,18 @@ test.describe('Authentication Flow', () => {
     await expect(page.getByRole('button', { name: /sign in/i })).toBeVisible();
     await expect(page.getByPlaceholder(/email/i)).toBeVisible();
     await expect(page.getByPlaceholder(/password/i)).toBeVisible();
+  });
+
+  test('login form has no automatically detectable accessibility violations', async ({ page }) => {
+    await mockLoggedOutUser(page);
+    await page.goto('/login');
+    await expect(page.getByRole('button', { name: /sign in/i })).toBeVisible();
+
+    const results = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .analyze();
+
+    expect(results.violations).toEqual([]);
   });
 
   test('should login and redirect to dashboard', async ({ page }) => {
