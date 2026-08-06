@@ -5,7 +5,6 @@ import { generateWeeklyReport } from '../services/weeklyReport.service.js';
 import { weeklyDigestQueue } from '../jobs/queue.js';
 import { sendWebhookNotification } from '../utils/webhook.js';
 import { safeEqual } from '../utils/crypto.js';
-import prisma from '../config/db.js';
 import { createScopedPrisma } from '../utils/prisma-tenant-proxy.js';
 import { enterRequestContext } from '../utils/request-context.js';
 
@@ -41,7 +40,7 @@ export default async function botRoutes(fastify) {
     if (!BOT_ORG_ID || !BOT_SECRET) return;
     const auth = request.headers.authorization;
     if (!auth || !safeEqual(auth, `Bearer ${BOT_SECRET}`)) return;
-    const scoped = createScopedPrisma(prisma, BOT_ORG_ID);
+    const scoped = createScopedPrisma(fastify.prisma, BOT_ORG_ID);
     request.prisma = scoped;
     request.organizationId = BOT_ORG_ID;
     enterRequestContext({ prisma: scoped, organizationId: BOT_ORG_ID });
