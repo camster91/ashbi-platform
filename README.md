@@ -68,6 +68,14 @@ Canonical frontend commands are delegated from the root (`npm run dev:web`,
 and output path. Root production installs contain no React, Radix, Tailwind, or Vite
 packages. Check both resolved dependency graphs with `npm run check:dependencies`.
 
+### Offline and private-data behavior
+
+The PWA caches only the public application shell and static assets. Requests under
+`/api/` are always network-only and return `503 Offline` when unavailable; private
+client, project, invoice, and session data is never stored in Cache Storage. Worker
+upgrades, login/account transitions, session expiry, and logout purge every legacy
+`hub-api-*` cache while preserving the public static cache.
+
 ## Deployment
 
 ```bash

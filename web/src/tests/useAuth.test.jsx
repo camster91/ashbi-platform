@@ -20,8 +20,13 @@ vi.mock('../lib/api', () => ({
   setApiErrorCallback: vi.fn(),
 }));
 
+vi.mock('../lib/private-cache', () => ({
+  purgePrivateCaches: vi.fn().mockResolvedValue(undefined),
+}));
+
 // Import the mocked api after vi.mock
 import { api } from '../lib/api';
+import { purgePrivateCaches } from '../lib/private-cache';
 
 // Wrapper that includes router context (useNavigate requires it)
 function wrapper({ children }) {
@@ -149,6 +154,7 @@ describe('useAuth', () => {
       });
 
       expect(api.logout).toHaveBeenCalled();
+      expect(purgePrivateCaches).toHaveBeenCalledOnce();
       expect(result.current.user).toBeNull();
     });
 
@@ -168,6 +174,7 @@ describe('useAuth', () => {
       });
 
       expect(result.current.user).toBeNull();
+      expect(purgePrivateCaches).toHaveBeenCalledOnce();
     });
   });
 

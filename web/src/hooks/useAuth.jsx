@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, createContext, useContext, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
+import { purgePrivateCaches } from '../lib/private-cache';
 
 const AuthContext = createContext(null);
 
@@ -32,6 +33,7 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(async (email, password) => {
     const { user: userData } = await api.login(email, password);
+    await purgePrivateCaches();
     if (mountedRef.current) {
       setUser(userData);
       navigate('/dashboard');
@@ -45,6 +47,7 @@ export function AuthProvider({ children }) {
     } catch {
       // Even if logout API call fails, clear local state
     }
+    await purgePrivateCaches();
     if (mountedRef.current) {
       setUser(null);
       navigate('/login');

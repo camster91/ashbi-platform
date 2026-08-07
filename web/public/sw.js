@@ -1,7 +1,7 @@
 // Ashbi Hub Service Worker
 const CACHE_NAME = 'hub-v3';
 const STATIC_CACHE = 'hub-static-v3';
-const API_CACHE = 'hub-api-v3';
+const LEGACY_API_CACHE_PREFIX = 'hub-api-';
 
 // App shell files to cache on install
 const APP_SHELL = [
@@ -21,13 +21,17 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-// Activate: clean old caches
+// Activate: clean old caches, including every legacy cache that may contain
+// authenticated API responses from an earlier service-worker version.
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
         keys
-          .filter((key) => key !== CACHE_NAME && key !== STATIC_CACHE && key !== API_CACHE)
+          .filter((key) => (
+            key.startsWith(LEGACY_API_CACHE_PREFIX)
+            || (key !== CACHE_NAME && key !== STATIC_CACHE)
+          ))
           .map((key) => caches.delete(key))
       );
     })
@@ -43,9 +47,10 @@ self.addEventListener('fetch', (event) => {
   // Skip non-GET requests
   if (request.method !== 'GET') return;
 
-  // API calls: network-first
+  // API calls are always network-only. Authenticated responses must never be
+  // written to Cache Storage or exposed to a later browser session.
   if (url.pathname.startsWith('/api/')) {
-    event.respondWith(networkFirst(request, API_CACHE));
+    event.respondWith(networkOnly(request));
     return;
   }
 
@@ -63,6 +68,13 @@ self.addEventListener('fetch', (event) => {
 
   // Everything else: network-first
   event.respondWith(networkFirst(request, CACHE_NAME));
+});
+
+// The app sends this on logout and before changing accounts. Activation also
+// purges these caches for users upgrading from a vulnerable worker version.
+self.addEventListener('message', (event) => {
+  if (event.data?.type !== 'PURGE_PRIVATE_CACHES') return;
+  event.waitUntil(deleteLegacyApiCaches());
 });
 
 // Push notification handler
@@ -133,6 +145,23 @@ async function networkFirst(request, cacheName) {
     if (request.mode === 'navigate') return offlineFallback();
     return new Response('Offline', { status: 503 });
   }
+}
+
+async function networkOnly(request) {
+  try {
+    return await fetch(request);
+  } catch {
+    return new Response('Offline', { status: 503 });
+  }
+}
+
+async function deleteLegacyApiCaches() {
+  const keys = await caches.keys();
+  return Promise.all(
+    keys
+      .filter((key) => key.startsWith(LEGACY_API_CACHE_PREFIX))
+      .map((key) => caches.delete(key))
+  );
 }
 
 function isStaticAsset(pathname) {
