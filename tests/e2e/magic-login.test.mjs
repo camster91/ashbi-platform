@@ -74,6 +74,7 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'TestPass123!';
 
 // State captured across the 14 steps.
 let adminJwt = null;
+let wordpressAdminId = null;
 let siteUuid = null;
 let lastMagicToken = null;
 let lastTokenHash  = null;
@@ -215,6 +216,15 @@ beforeAll(async () => {
       `Got: ${wpPing.status} ${wpPing.text?.slice(0, 200)}`
     );
   }
+  const administrators = await wpCli('user', 'list', '--role=administrator', '--field=ID');
+  const firstAdminId = Number.parseInt(administrators.stdout.trim().split(/\s+/)[0], 10);
+  if (administrators.exitCode !== 0 || !Number.isInteger(firstAdminId) || firstAdminId < 1) {
+    throw new Error(
+      `unable to resolve a WordPress administrator user ID: ` +
+      `${administrators.stderr || administrators.stdout || `exit ${administrators.exitCode}`}`
+    );
+  }
+  wordpressAdminId = firstAdminId;
   adminJwt = await loginAsAdmin();
 }, 120_000);
 
@@ -347,7 +357,7 @@ describe('PR-G: WP bridge + magic-login end-to-end smoke', () => {
     const r = await http('POST', `${HUB_BASE}/api/wp-bridge/fleet/magic-login`, {
       headers: { Authorization: `Bearer ${adminJwt}` },
       body: {
-        user_id: 1,
+        user_id: wordpressAdminId,
         targetSites: [siteUuid]
       }
     });
@@ -359,7 +369,7 @@ describe('PR-G: WP bridge + magic-login end-to-end smoke', () => {
     expect(results.length, 'one result for one target site').toBeGreaterThan(0);
 
     const ok = results.find((row) => row.url);
-    expect(ok, 'at least one success row with url').toBeTruthy();
+    expect(ok, `at least one success row with url; results=${JSON.stringify(results)}`).toBeTruthy();
     expect(ok.url, 'magic-login URL').toMatch(/ashbi_sso=[a-f0-9]+/);
     lastMagicUrl = ok.url;
 
