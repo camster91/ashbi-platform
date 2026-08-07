@@ -1,21 +1,20 @@
 // Discord webhook integration for Agency Hub events
 
-/**
- * Discord webhook URLs from memory/discord-channel-map.md
- */
-const DISCORD_WEBHOOKS = {
-  AGENCY_HUB: 'https://discord.com/api/webhooks/1484535828662321333/lVV_wpXK40GHtZgJUFtIEjqAdfkL1zC4yVSsp2oYNBTco_GaY7uN2b5aG_lnIeuMSbOV',
-  DEPLOYMENTS: 'https://discord.com/api/webhooks/1484535948279812147/lVV_wpXK40GHtZgJUFtIEjqAdfkL1zC4yVSsp2oYNBTco_GaY7uN2b5aG_lnIeuMSbOV',
-  ALERTS: 'https://discord.com/api/webhooks/1484535953912496270/ytaPqJI6KyuYwEjnIAry4TczQpYitj4kXlBcaoNeiMpAeyLzibO4wHoxR8XjF49OkGuR',
-  UPWORK: 'https://discord.com/api/webhooks/1484535965073543199/gXyfQonWUWa3ku5zkoWw7riz7bWo8oZw46Gp4Xv8gBtvf7jY0q0YdA4lBv2eJr-rYBXQ',
-  REVENUE_REPORTS: 'https://discord.com/api/webhooks/1484535970102644786/qWZZOJ1xw-Zpj6f5f6pdVNkGFvFumS4sJ47LhakVMoqzPx2hlT6cAzLGxZAhnWBf4qJG',
-  CRON_LOGS: 'https://discord.com/api/webhooks/1484535975743979631/8vLfpyJfYObhqoXkf3PPH7yvPbVvrSfZglXque-2oZkXjGG_EDnKN07fCYY_2WBrDGbt'
-};
+const DISCORD_WEBHOOKS = Object.freeze({
+  AGENCY_HUB: process.env.DISCORD_AGENCY_HUB_WEBHOOK_URL,
+  DEPLOYMENTS: process.env.DISCORD_DEPLOYMENTS_WEBHOOK_URL,
+  ALERTS: process.env.DISCORD_ALERTS_WEBHOOK_URL,
+});
 
 /**
  * Send a message to Discord via webhook
  */
 export async function sendDiscordWebhook(webhookUrl, data) {
+  if (!webhookUrl) {
+    console.warn('Discord webhook is not configured; skipping notification');
+    return { success: false, error: 'Discord webhook is not configured' };
+  }
+
   try {
     const response = await fetch(webhookUrl, {
       method: 'POST',

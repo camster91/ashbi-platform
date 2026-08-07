@@ -96,10 +96,10 @@ WEBHOOK_SECRET=your-webhook-secret
 ```
 
 ### Discord Webhook URLs
-Webhook URLs are stored in-memory from `memory/discord-channel-map.md`:
-- Agency Hub: `https://discord.com/api/webhooks/1484535828662321333/[token]`
-- Deployments: `https://discord.com/api/webhooks/1484535948279812147/[token]`
-- Alerts: `https://discord.com/api/webhooks/1484535953912496270/[token]`
+Store Discord webhook URLs only in the deployment secret store and expose them
+through `DISCORD_AGENCY_HUB_WEBHOOK_URL`, `DISCORD_DEPLOYMENTS_WEBHOOK_URL`,
+`DISCORD_ALERTS_WEBHOOK_URL`, and `DISCORD_CAM_WEBHOOK_URL`. Notifications are
+skipped safely when the corresponding variable is not configured.
 
 ## Testing
 
