@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useId } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -16,10 +16,11 @@ export default function Modal({
   children,
   size = 'md',
   showCloseButton = true,
+  ariaLabel,
 }) {
   const modalRef = useRef(null);
   const previousActiveElement = useRef(null);
-  const titleId = useRef(`modal-title-${Math.random().toString(36).slice(2, 9)}`);
+  const titleId = useId();
 
   // Handle focus trap
   const handleKeyDown = useCallback((e) => {
@@ -36,6 +37,7 @@ export default function Modal({
 
       if (focusableElements.length === 0) {
         e.preventDefault();
+        modalRef.current.focus();
         return;
       }
 
@@ -57,31 +59,25 @@ export default function Modal({
 
   // Handle escape key, body scroll, and focus management
   useEffect(() => {
-    if (isOpen) {
-      // Store the currently focused element to restore later
-      previousActiveElement.current = document.activeElement;
+    if (!isOpen) return undefined;
 
-      // Add event listeners
-      document.addEventListener('keydown', handleKeyDown);
+    const previousOverflow = document.body.style.overflow;
+    previousActiveElement.current = document.activeElement;
 
-      // Prevent body scroll
-      document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', handleKeyDown);
+    document.body.style.overflow = 'hidden';
 
-      // Focus the first focusable element in the modal
+    const animationFrame = requestAnimationFrame(() => {
       if (modalRef.current) {
         const focusableElements = getFocusableElements(modalRef.current);
-        if (focusableElements.length > 0) {
-          // Use a small timeout to ensure the modal is rendered
-          requestAnimationFrame(() => {
-            focusableElements[0].focus();
-          });
-        }
+        (focusableElements[0] || modalRef.current).focus();
       }
-    }
+    });
 
     return () => {
+      cancelAnimationFrame(animationFrame);
       document.removeEventListener('keydown', handleKeyDown);
-      document.body.style.overflow = 'unset';
+      document.body.style.overflow = previousOverflow;
 
       // Restore focus to the previously focused element
       if (previousActiveElement.current && typeof previousActiveElement.current.focus === 'function') {
@@ -104,11 +100,9 @@ export default function Modal({
     <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/50 transition-opacity"
+        className="fixed inset-0 bg-black/50 transition-opacity motion-reduce:transition-none"
         onClick={onClose}
-        role="button"
-        tabIndex={0}
-        aria-label="Close modal"
+        aria-hidden="true"
       />
 
       {/* Modal container */}
@@ -117,7 +111,9 @@ export default function Modal({
           ref={modalRef}
           role="dialog"
           aria-modal="true"
-          aria-labelledby={title ? titleId.current : undefined}
+          aria-labelledby={title ? titleId : undefined}
+          aria-label={title ? undefined : (ariaLabel || 'Dialog')}
+          tabIndex={-1}
           className={cn(
             'relative w-full bg-white rounded-lg shadow-xl',
             sizeClasses[size]
@@ -128,7 +124,7 @@ export default function Modal({
           {(title || showCloseButton) && (
             <div className="flex items-center justify-between px-6 py-4 border-b">
               {title && (
-                <h2 id={titleId.current} className="text-lg font-semibold">
+                <h2 id={titleId} className="text-lg font-semibold">
                   {title}
                 </h2>
               )}

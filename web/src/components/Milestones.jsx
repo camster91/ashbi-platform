@@ -218,6 +218,7 @@ function MilestoneModal({ milestone, onSave, onDelete, onClose, isLoading }) {
 
   return (
     <Modal
+      isOpen={true}
       onClose={onClose}
       title={milestone ? 'Edit Milestone' : 'Create Milestone'}
     >
