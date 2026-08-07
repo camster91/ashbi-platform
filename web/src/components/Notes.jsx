@@ -109,10 +109,13 @@ export default function Notes({ projectId }) {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {notes.map((note) => (
-            <div
+            <button
+              type="button"
               key={note.id}
               onClick={() => setSelectedNote(note)}
-              className={`bg-white rounded-lg border p-4 cursor-pointer hover:shadow-md transition-shadow ${
+              aria-label={`Open note ${note.title}`}
+              aria-pressed={selectedNote?.id === note.id}
+              className={`w-full min-h-11 bg-white rounded-lg border p-4 text-left cursor-pointer hover:shadow-md active:bg-gray-50 transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 ${
                 note.isPinned ? 'border-yellow-400 border-2' : ''
               }`}
             >
@@ -141,7 +144,7 @@ export default function Notes({ projectId }) {
                   ))}
                 </div>
               )}
-            </div>
+            </button>
           ))}
         </div>
       )}
