@@ -36,6 +36,16 @@ test.describe('Authentication Flow', () => {
   });
 
   test('should login and redirect to dashboard', async ({ page }) => {
+    // Keep every dashboard request hermetic. Endpoint-specific mocks below
+    // are registered later and therefore take precedence over this fallback.
+    await page.route(/\/api\/.*/, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({})
+      });
+    });
+
     // 1. Initially unauthorized
     await page.route(/\/api\/auth\/me/, async (route, request) => {
       if (request.method() === 'GET') {

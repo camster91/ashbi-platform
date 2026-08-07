@@ -62,9 +62,10 @@ import { close as closeDb, countMagicLoginLogBySiteUrl, findMagicLoginLogBySiteU
 const WP_BASE      = process.env.WP_BASE      || 'http://localhost:8888';
 const HUB_BASE     = process.env.HUB_BASE     || 'http://localhost:3001';
 const SHARED_SECRET = process.env.SHARED_SECRET || 'test-e2e-secret-12345';
-// wp-env uses http on the default port; magic-login URLs reference
-// home_url() which is whatever home_url() returns inside WordPress.
-const WP_HOME = process.env.WP_HOME || 'http://localhost:8888';
+// The hub runs in Docker, so its stored fan-out URL must resolve the host
+// rather than the hub container's own localhost. WordPress still returns
+// browser-facing magic URLs using its configured home_url().
+const WP_SITE_URL = process.env.WP_SITE_URL || 'http://host.docker.internal:8888';
 
 // Seeded by prisma/seed.js (run by docker-compose.test.yml seed service).
 // The seed requires ADMIN_SEED_PASSWORD and creates cameron@ashbi.ca ADMIN.
@@ -259,7 +260,7 @@ describe('PR-G: WP bridge + magic-login end-to-end smoke', () => {
     // using the plugin's HMAC format. Proves WP_BRIDGE_SECRET matches.
     //   Source: src/routes/wp-bridge.routes.js POST / handler (verifySecret)
     const body = {
-      siteUrl: `${WP_HOME}/`,
+      siteUrl: `${WP_SITE_URL}/`,
       siteName: 'E2E Test Site',
       secretKey: SHARED_SECRET,
       bridgeVersion: '1.10.4-test',
@@ -276,9 +277,9 @@ describe('PR-G: WP bridge + magic-login end-to-end smoke', () => {
   // -------------------------------------------------------------------------
 
   test('step 6-7: wp_sites row exists with matching url', async () => {
-    // Idempotent re-register against the canonical WP_HOME URL.
+    // Idempotent re-register against the canonical hub-reachable URL.
     const body = {
-      siteUrl: WP_HOME,
+      siteUrl: WP_SITE_URL,
       siteName: 'E2E WP',
       secretKey: SHARED_SECRET,
       bridgeVersion: '1.10.4-test',
@@ -291,8 +292,8 @@ describe('PR-G: WP bridge + magic-login end-to-end smoke', () => {
     expect([200, 201], `register ${reg.status} ${reg.text?.slice(0, 200)}`).toContain(reg.status);
 
     // Verify in Postgres.
-    const site = await findSiteByUrl(WP_HOME);
-    expect(site, `wp_sites row for ${WP_HOME}`).toBeTruthy();
+    const site = await findSiteByUrl(WP_SITE_URL);
+    expect(site, `wp_sites row for ${WP_SITE_URL}`).toBeTruthy();
     siteUuid = site.id;
   });
 
@@ -301,14 +302,14 @@ describe('PR-G: WP bridge + magic-login end-to-end smoke', () => {
   // -------------------------------------------------------------------------
 
   test('step 8-9: health ping sets lastPingAt + lastPingStatus=ok', async () => {
-    const before = await findSiteByUrl(WP_HOME);
+    const before = await findSiteByUrl(WP_SITE_URL);
     expect(before, 'wp_sites row from step 6').toBeTruthy();
     const beforeTs = before.lastPingAt ? new Date(before.lastPingAt).getTime() : 0;
 
     // Issue PUT /api/wp-bridge — hub's updateSiteHealth route.
     //   Source: src/routes/wp-bridge.routes.js PUT / handler (verifySecret)
     const body = {
-      siteUrl: WP_HOME,
+      siteUrl: WP_SITE_URL,
       secretKey: SHARED_SECRET,
       timestamp: new Date().toISOString(),
       ttfb: 120,
@@ -327,7 +328,7 @@ describe('PR-G: WP bridge + magic-login end-to-end smoke', () => {
     expect([200, 201], `health ping ${r.status} ${r.text?.slice(0, 200)}`).toContain(r.status);
 
     await sleep(300);
-    const after = await findSiteByUrl(WP_HOME);
+    const after = await findSiteByUrl(WP_SITE_URL);
     expect(after, 'wp_sites row after ping').toBeTruthy();
     expect(after.lastPingStatus, 'lastPingStatus').toBe('ok');
     const afterTs = after.lastPingAt ? new Date(after.lastPingAt).getTime() : 0;
@@ -419,7 +420,7 @@ describe('PR-G: WP bridge + magic-login end-to-end smoke', () => {
       `plugin audit captured this token/url. rows=${JSON.stringify(pluginRows.slice(-3))}`).toBe(true);
 
     // Hub-side: query wp_magic_login_log.
-    const hubRows = await findMagicLoginLogBySiteUrl(WP_HOME, { limit: 10 });
+    const hubRows = await findMagicLoginLogBySiteUrl(WP_SITE_URL, { limit: 10 });
     expect(hubRows.length, 'hub-side wp_magic_login_log has rows').toBeGreaterThan(0);
     const tokenSeenByHub = hubRows.some((row) =>
       row.tokenHash === lastTokenHash ||
@@ -484,7 +485,7 @@ describe('PR-G: WP bridge + magic-login end-to-end smoke', () => {
     expect(deleted, 'plugin active transient for the revoked hash should be deleted').toBe(true);
 
     // Verify hub-side: wp_magic_login_log has a 'revoked' status row.
-    const revokedCount = await countMagicLoginLogBySiteUrl(WP_HOME, 'revoked');
+    const revokedCount = await countMagicLoginLogBySiteUrl(WP_SITE_URL, 'revoked');
     expect(revokedCount, 'hub-side revoked audit count').toBeGreaterThan(0);
   });
 
