@@ -33,7 +33,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci --no-audit --no-fund
 
       - name: Linting
         run: npm run lint
@@ -74,7 +74,7 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - name: Install dependencies
-        run: npm install
+        run: npm ci --no-audit --no-fund
       - name: Generate Prisma client
         # Required before any test that touches @prisma/client — the runtime
         # resolves to .prisma/client/default which only exists after this step.
@@ -92,7 +92,7 @@ jobs:
         # `prisma migrate deploy` via scripts/start.sh against an already-
         # bootstrapped database.
         # Note: Prisma 7 removed `--skip-generate`; client gen is handled by
-        # the npm install postinstall hook (`prisma generate`) so a plain
+        # the explicit Prisma generation step above, so a plain
         # `db push` is correct here.
         run: npx prisma db push
         env:
@@ -116,6 +116,6 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - name: Install dependencies
-        run: cd web && npm install
+        run: npm ci --prefix web --no-audit --no-fund
       - name: Run Frontend Tests
         run: cd web && npx vitest run --coverage

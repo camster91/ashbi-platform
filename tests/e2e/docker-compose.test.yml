@@ -49,11 +49,14 @@ services:
       context: ../..
       dockerfile: Dockerfile
     restart: "no"
+    # Test-only setup needs devDependencies (Prisma CLI) and writes a
+    # disposable .env. The long-running hub remains the non-root image user.
+    user: root
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
         set -e
-        npm install --no-audit --no-fund
+        npm ci --no-audit --no-fund
         printf 'DATABASE_URL="%s"\n' "$$DATABASE_URL" > /app/.env
         export DATABASE_URL="$$DATABASE_URL"
         exec npx prisma db push --url "$$DATABASE_URL" --accept-data-loss
@@ -68,7 +71,9 @@ services:
       context: ../..
       dockerfile: Dockerfile
     restart: "no"
-    command: ["sh", "-c", "npm install --no-audit --no-fund && node prisma/seed.js"]
+    # Test-only setup installs the locked dev tree for the seed helper.
+    user: root
+    command: ["sh", "-c", "npm ci --no-audit --no-fund && npx prisma generate && node prisma/seed.js"]
     depends_on:
       migrate:
         condition: service_completed_successfully

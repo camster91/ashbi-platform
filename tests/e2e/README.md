@@ -54,7 +54,7 @@ tests/e2e/
 │   └── db.mjs                  Postgres assertion helpers
 └── wp-env/
     ├── .wp-env.json            wp-env config (plugin mount + hub URL)
-    └── setup-plugin.sh         git clone + activate the plugin
+    └── setup-plugin.sh         install + activate the pinned plugin fixture
 ```
 
 ## Local run
@@ -62,7 +62,7 @@ tests/e2e/
 ```bash
 # 1. one-time prereqs
 brew install --cask docker        # Docker Desktop
-npm install --no-audit --no-fund
+npm ci --no-audit --no-fund
 
 # 2. boot everything (~3 min on cold cache; <30s warm)
 npm run test:e2e:setup
@@ -154,12 +154,12 @@ acceptance criteria require.
 
 - Requires Docker Desktop or compatible (the wp-env + compose stack
   needs ~3GB RAM on Linux runners).
-- Plugin is cloned from `feat/magic-login-managewp-grade` (PR #37 head)
-  by default. Override with `PLUGIN_BRANCH=feat/X`.
+- The plugin is a pinned local fixture. Update it deliberately with its
+  `UPSTREAM.md` provenance rather than depending on a moving remote branch.
 - Tests run sequentially — no `fileParallelism` — because step 7
   depends on the `wp_sites` row step 6 created, step 9 reads
   `lastPingAt` step 8 set, step 13 reads the audit row step 10 wrote, etc.
-- The migrate + seed services do a full `npm install` inside the
+- The migrate + seed services do a full locked `npm ci` inside the
   container (the production Dockerfile uses `--omit=dev` so the prisma
   CLI isn't present). On a warm cache that's ~30s; cold cache ~90s.
   Total boot target: 2-3 min warm, <5 min cold.
