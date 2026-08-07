@@ -8,13 +8,13 @@ Why this is one independently reviewable slice:
 
 ## Change summary
 
-- 
+-
 
 ## Acceptance criteria
 
 - [ ] The linked issue's acceptance criteria are mapped here and pass.
-- [ ] Target environment is named: 
-- [ ] Target-environment evidence is linked or recorded: 
+- [ ] Target environment is named:
+- [ ] Target-environment evidence is linked or recorded:
 
 ## Verification
 
@@ -35,22 +35,22 @@ Manual checks and evidence:
 
 ## Risk gates
 
-- Security and tenant isolation: 
-- Privacy, retention, and sensitive logging: 
-- Accessibility: 
-- Performance: 
-- Browser/mobile/API/plugin compatibility: 
+- Security and tenant isolation:
+- Privacy, retention, and sensitive logging:
+- Accessibility:
+- Performance:
+- Browser/mobile/API/plugin compatibility:
 
 Use `Not applicable` only with a reason.
 
 ## Migration, deployment, and rollback
 
-- Schema or data migration: 
-- Backup or restore prerequisite: 
-- Deployment target and immutable artifact: 
-- Previous known-good artifact/configuration: 
-- Rollback or repair steps and owner: 
-- Post-release observation window: 
+- Schema or data migration:
+- Backup or restore prerequisite:
+- Deployment target and immutable artifact:
+- Previous known-good artifact/configuration:
+- Rollback or repair steps and owner:
+- Post-release observation window:
 
 ## Release notes
 
