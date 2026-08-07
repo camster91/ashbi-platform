@@ -1,14 +1,6 @@
 name: Browser E2E smoke
 
 on:
-  pull_request:
-    paths:
-      - 'tests/**/*.spec.ts'
-      - 'playwright.config.ts'
-      - 'web/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - '.github/workflows/browser-e2e.yml'
   workflow_dispatch:
 
 permissions:

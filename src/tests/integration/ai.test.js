@@ -3,7 +3,7 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildAnalyzeMessagePrompt } from '../../utils/ai-prompts-proxy.js';
+import { buildAnalyzeMessagePrompt } from '../../ai/prompts/analyzeMessage.js';
 
 describe('AI Prompt Builders', () => {
   test('buildAnalyzeMessagePrompt should return correct structure', () => {

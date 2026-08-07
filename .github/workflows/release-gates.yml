@@ -1,0 +1,146 @@
+name: Reusable release gates
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Type, lint, unit, integration, and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: testdb
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    env:
+      CI: true
+      NODE_ENV: test
+      JWT_SECRET: test-secret
+      DATABASE_URL: postgresql://postgres:testpass@localhost:5432/testdb
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+      - name: Install locked dependencies
+        run: |
+          npm ci --no-audit --no-fund
+          npm ci --prefix web --no-audit --no-fund
+      - name: Generate Prisma client and test database
+        run: |
+          npx prisma generate
+          npx prisma db push
+      - name: Check package boundaries
+        run: npm run check:boundaries
+      - name: Type check
+        run: npm run type-check
+      - name: Lint backend
+        run: npm run lint
+      - name: Lint frontend
+        run: npm --prefix web run lint
+      - name: Backend unit tests
+        run: npm test
+      - name: Backend integration tests
+        run: npm run test:integration
+      - name: Frontend unit tests
+        run: npm --prefix web test
+      - name: Production build
+        run: npm run build
+        env:
+          NODE_ENV: production
+          CI: true
+
+  browser:
+    name: Browser and accessibility smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
+      - name: Install locked dependencies
+        run: |
+          npm ci --no-audit --no-fund
+          npm ci --prefix web --no-audit --no-fund
+      - name: Install browser runtimes
+        run: npx playwright install --with-deps chromium firefox webkit
+      - name: Run browser smoke
+        run: npm run test:browser
+        env:
+          CI: true
+      - name: Upload sanitized failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: required-browser-gate-failure-evidence
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  stack-e2e:
+    name: Full-stack E2E smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Verify Docker
+        run: docker info >/dev/null
+      - name: Boot test stack
+        run: npm run test:e2e:setup
+        env:
+          HOST_PORT: 3001
+          HUB_DB_PORT: 54329
+          CI: true
+      - name: Run full-stack smoke
+        run: npm run test:e2e
+        env:
+          CI: true
+          HUB_BASE: http://localhost:3001
+          WP_BASE: http://localhost:8888
+          SHARED_SECRET: test-e2e-secret-12345
+      - name: Upload E2E output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: required-full-stack-gate-output
+          path: tests/e2e/.vitest-output.json
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Teardown
+        if: always()
+        run: npm run test:e2e:teardown
