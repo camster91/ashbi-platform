@@ -44,6 +44,9 @@ jobs:
           # Grep returns 1 if no matches found, which is what we want
           ! grep -r "import prisma from '../config/db.js'" src/routes/
 
+      - name: Release gate contract
+        run: npm run check:release-gates
+
   backend-tests:
     name: Backend Unit Tests
     runs-on: ubuntu-latest

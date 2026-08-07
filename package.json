@@ -25,6 +25,7 @@
     "test:web": "npm --prefix web test",
     "check:dependencies": "npm ls --all && npm --prefix web ls --all",
     "check:boundaries": "node scripts/check-package-boundaries.mjs",
+    "check:release-gates": "node scripts/check-release-gates.mjs",
     "audit:password-hashes": "node scripts/audit-password-hashes.mjs",
     "test:all": "NODE_ENV=test CI=${CI:-1} find src/tests/unit src/tests/integration -name '*.test.js' | xargs node --test",
     "test:e2e:setup": "bash tests/e2e/setup.sh",

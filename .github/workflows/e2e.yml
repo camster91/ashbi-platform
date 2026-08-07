@@ -7,25 +7,12 @@ name: E2E smoke (wp-env + hub)
 # (Postgres + migrate + seed + hub), then runs the 14-step magic-login
 # smoke.
 #
-# Runs on PRs that touch `tests/e2e/**`, `prisma/**`, `src/routes/wp-bridge/**`,
-# `src/services/wpBridge.service.js`, `Dockerfile`, `docker-compose*`, or
-# this workflow. Can be dispatched manually.
+# The required release workflow owns the blocking PR/deploy run. This wrapper
+# remains available for a focused manual rerun while debugging the stack.
 #
 # Acceptance gate: 14/14 steps pass in <5 minutes.
 
 on:
-  pull_request:
-    paths:
-      - 'tests/e2e/**'
-      - 'prisma/**'
-      - 'src/routes/wp-bridge.routes.js'
-      - 'src/services/wpBridge.service.js'
-      - 'src/services/fleetOps.service.js'
-      - 'src/validators/wp-bridge*'
-      - 'Dockerfile'
-      - 'docker-compose*.yml'
-      - '.github/workflows/e2e.yml'
-      - 'package.json'
   workflow_dispatch:
 
 permissions:

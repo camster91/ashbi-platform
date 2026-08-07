@@ -12,7 +12,7 @@ name: Build, Test & Deploy to Staging
 
 on:
   push:
-    branches: [main, master]
+    branches: [main]
   workflow_dispatch:
 
 # Cancel in-progress runs on the same branch when a new push lands
@@ -21,60 +21,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: Build & Test
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Setup Node
-        uses: actions/setup-node@v7
-        with:
-          node-version: "20"
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
-
-      - name: Install web/ dependencies
-        # vite.config.js has `root: 'web'`, so vite looks in web/node_modules.
-        # Root npm ci doesn't populate it.
-        working-directory: web
-        run: npm ci --no-audit --no-fund
-
-      - name: Generate Prisma client
-        run: npx prisma generate
-        env:
-          DATABASE_URL: postgresql://placeholder/placeholder
-        continue-on-error: true
-
-      - name: Lint
-        run: npm run lint --if-present
-        continue-on-error: true
-
-      - name: Typecheck
-        run: npm run typecheck --if-present
-        continue-on-error: true
-
-      - name: Build
-        run: npm run build --if-present
-        env:
-          SKIP_ENV_VALIDATION: "true"
-          NODE_ENV: production
-
-      - name: Test
-        run: npm test --if-present -- --ci
-        env:
-          CI: "true"
-        continue-on-error: true
+  release-gates:
+    name: Required release gates
+    uses: ./.github/workflows/release-gates.yml
 
   deploy:
     name: Deploy to Coolify (staging)
-    needs: build
-    if: github.event_name != 'pull_request'
+    needs: release-gates
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: staging
     steps:
