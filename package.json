@@ -27,6 +27,7 @@
     "check:boundaries": "node scripts/check-package-boundaries.mjs",
     "check:release-gates": "node scripts/check-release-gates.mjs",
     "audit:password-hashes": "node scripts/audit-password-hashes.mjs",
+    "audit:wp-bridge-ownership": "node scripts/audit-wp-bridge-ownership.mjs",
     "test:all": "NODE_ENV=test CI=${CI:-1} find src/tests/unit src/tests/integration -name '*.test.js' | xargs node --test",
     "test:e2e:setup": "bash tests/e2e/setup.sh",
     "test:e2e:teardown": "bash tests/e2e/teardown.sh",
