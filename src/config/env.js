@@ -15,7 +15,7 @@ const env = {
 
   // Auth
   jwtSecret: process.env.JWT_SECRET,
-  jwtExpiresIn: '7d',
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   adminInviteToken: process.env.ADMIN_INVITE_TOKEN, // Required for first admin registration
 
   // AI

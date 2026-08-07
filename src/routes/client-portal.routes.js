@@ -5,6 +5,8 @@ import env from '../config/env.js';
 import path from 'path';
 import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
+import bcrypt from 'bcrypt';
+import { isCurrentUserSession, sessionCookieMaxAge } from '../auth/session.js';
 import { validateBody, validateParams, clientPortalMessageSchema, requestAccessSchema, fileUpload, clientPortalTokenRedeemSchema } from '../validators/schemas.js';
 
 const PORTAL_BASE = env.hubUrl;
@@ -67,6 +69,10 @@ export default async function clientPortalRoutes(fastify) {
 
       const payload = fastify.jwt.verify(rawToken);
 
+      if (!(await isCurrentUserSession(request.prisma, payload))) {
+        return reply.status(401).send({ error: 'Session expired or revoked' });
+      }
+
       if (payload.role !== 'CLIENT') {
         return reply.status(403).send({ error: 'Not authorized' });
       }
@@ -128,7 +134,7 @@ export default async function clientPortalRoutes(fastify) {
         contactId: payload.contactId,
         clientId: payload.clientId,
         role: 'CLIENT'
-      }, { expiresIn: '7d' });
+      }, { expiresIn: env.jwtExpiresIn });
 
       reply
         .setCookie('token', sessionToken, {
@@ -136,7 +142,7 @@ export default async function clientPortalRoutes(fastify) {
           httpOnly: true,
           secure: env.isProduction,
           sameSite: env.isProduction ? 'strict' : 'lax',
-          maxAge: 7 * 24 * 60 * 60 // 7 days
+          maxAge: sessionCookieMaxAge()
         })
         .send({
           user: {
@@ -357,7 +363,7 @@ export default async function clientPortalRoutes(fastify) {
         data: {
           email: contact.email,
           name: contact.name,
-          password: randomUUID(), // random password — they auth via magic link
+          password: await bcrypt.hash(randomUUID(), 12), // magic-link account; keep stored credential non-reusable
           role: 'CLIENT',
           clientId
         }
@@ -451,7 +457,9 @@ export default async function clientPortalRoutes(fastify) {
         data: {
           email: contact.email,
           name: contact.name,
-          password: randomUUID(),
+          // This account is not password-authenticated, but the invariant for
+          // every stored login credential remains a bcrypt hash.
+          password: await bcrypt.hash(randomUUID(), 12),
           role: 'CLIENT',
           clientId
         }
