@@ -407,7 +407,7 @@ function EventDetailModal({ event, isOpen, onClose, onEdit }) {
   const Icon = TYPE_ICONS[event.type] || CalendarDays;
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="" size="md">
+    <Modal isOpen={isOpen} onClose={onClose} title="" ariaLabel="Event details" size="md">
       <div className="space-y-4">
         {/* Header */}
         <div className="flex items-start gap-3">

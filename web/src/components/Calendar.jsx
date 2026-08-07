@@ -193,7 +193,7 @@ export default function Calendar({ projectId }) {
 
       {/* Event Detail Modal */}
       {selectedEvent && (
-        <Modal onClose={() => setSelectedEvent(null)} title={selectedEvent.title}>
+        <Modal isOpen={true} onClose={() => setSelectedEvent(null)} title={selectedEvent.title}>
           <div className="space-y-4">
             <div>
               <label className="text-sm text-gray-500">Date & Time</label>
@@ -266,7 +266,7 @@ function CreateEventModal({ date, projectId, onClose, onSubmit, isLoading }) {
   };
 
   return (
-    <Modal onClose={onClose} title="Create Event">
+    <Modal isOpen={true} onClose={onClose} title="Create Event">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>

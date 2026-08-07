@@ -196,7 +196,7 @@ function NoteEditor({ note, onSave, onDelete, onPin, onClose, isLoading }) {
   };
 
   return (
-    <Modal onClose={onClose} title={note ? 'Edit Note' : 'Create Note'} size="lg">
+    <Modal isOpen={true} onClose={onClose} title={note ? 'Edit Note' : 'Create Note'} size="lg">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="flex gap-4">
           <div className="flex-1">
