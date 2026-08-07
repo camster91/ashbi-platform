@@ -13,10 +13,10 @@
 # Migration strategy:
 #   The Dockerfile installs --omit=dev so the `prisma` CLI is NOT in the
 #   hub image. We have two options:
-#     a) Run migrate inside a container that has devDeps — slow (npm install)
+#     a) Run migrate inside a container that has devDeps — slow (npm ci)
 #     b) Run migrate from the host (the test runner has all devDeps)
 #   We pick (a) — docker-compose.test.yml has its own migrate + seed
-#   services that run `npm install` first, mirroring production's
+#   services that run locked `npm ci` installs first, mirroring production's
 #   one-shot pattern. setup.sh waits for both to complete.
 #
 # Env knobs (override on CI):

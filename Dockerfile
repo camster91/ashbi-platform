@@ -1,10 +1,11 @@
+# syntax=docker/dockerfile:1.7
 # Multi-stage build for Ashbi Platform
 # Stage 1: Build frontend
 FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app/web
-COPY web/package.json web/package-lock.json* ./
-RUN npm install --legacy-peer-deps
+COPY web/package.json web/package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 COPY web/ ./
 RUN npm run build
 
@@ -17,8 +18,8 @@ RUN apk add --no-cache openssl dumb-init
 WORKDIR /app
 
 # Copy backend package files
-COPY package.json package-lock.json* ./
-RUN npm install --omit=dev --legacy-peer-deps
+COPY package.json package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --no-audit --no-fund
 
 # Copy Prisma schema and generate client
 COPY prisma ./prisma/
@@ -31,13 +32,12 @@ COPY --from=frontend-builder /app/web/dist ./dist
 COPY src/ ./src/
 COPY scripts/ ./scripts/
 
-# SECURITY: Run as the unprivileged `node` user (UID 1000 in the node:alpine
-# base image). Previously the container ran as UID 0 (root), so any RCE in
-# node / vite / fastify would have full control inside the container.
-# node:alpine ships the `node` user and group at UID/GID 1000 already.
-# Ensure /app is owned by `node` (npm install / prisma generate above run as
-# root, but the resulting /app contents must be readable+writable by `node`).
-RUN chown -R node:node /app
+# SECURITY: Keep application code and dependencies read-only, and grant the
+# unprivileged runtime user write access only to the directories that hold
+# uploads or runtime-managed integration state. Recursively chowning the full
+# dependency tree is especially slow under arm64 emulation.
+RUN mkdir -p /app/uploads /app/config \
+  && chown node:node /app/uploads /app/config
 USER node
 
 # Default environment
