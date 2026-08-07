@@ -420,7 +420,9 @@ export default async function clientPortalRoutes(fastify) {
   fastify.get('/client-portal/documents/:docId/download', { preHandler: clientAuth }, async (request, reply) => {
     const { clientId } = request.clientUser;
     const doc = await request.prisma.attachment.findUnique({ where: { id: request.params.docId } });
-    if (!doc || doc.entityType !== 'PROJECT') return reply.status(404).send({ error: 'Document not found' });
+    if (!doc || doc.entityType !== 'PROJECT' || doc.path.startsWith('/uploads/quarantine/')) {
+      return reply.status(404).send({ error: 'Document not found' });
+    }
     const project = await request.prisma.project.findFirst({ where: { id: doc.entityId, clientId } });
     if (!project) return reply.status(404).send({ error: 'Document not found' });
     try {
