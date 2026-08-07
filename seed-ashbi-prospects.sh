@@ -1,22 +1,29 @@
 #!/bin/bash
 # Seed Ashbi DTC prospects + email sequence into hub.ashbi.ca
-# Usage: bash seed-ashbi-prospects.sh
+# Usage: ASHBI_EMAIL='user@example.com' ASHBI_PASSWORD='...' bash seed-ashbi-prospects.sh
 
-BASE="https://hub.ashbi.ca"
+BASE="${ASHBI_BASE_URL:-https://hub.ashbi.ca}"
 TOKEN=""
+
+if [ -z "${ASHBI_EMAIL:-}" ] || [ -z "${ASHBI_PASSWORD:-}" ]; then
+  echo "ASHBI_EMAIL and ASHBI_PASSWORD must be supplied by the approved secret store." >&2
+  exit 1
+fi
 
 # ---- Step 1: Login to get auth token ----
 echo "Logging in..."
 LOGIN_RESP=$(curl -s -X POST "$BASE/api/auth/login" \
   -H "Content-Type: application/json" \
-  -d '{"email":"cameron@ashbi.ca","password":"Ashbi2026!"}')
+  --data-binary "$(node -e 'process.stdout.write(JSON.stringify({ email: process.env.ASHBI_EMAIL, password: process.env.ASHBI_PASSWORD }))')")
 
-TOKEN=$(echo $LOGIN_RESP | node -e "const d=require('fs').readFileSync('/dev/stdin','utf8');console.log(JSON.parse(d).token||'')" 2>/dev/null)
+unset ASHBI_PASSWORD
+
+TOKEN=$(printf '%s' "$LOGIN_RESP" | node -e "const d=require('fs').readFileSync('/dev/stdin','utf8');console.log(JSON.parse(d).token||'')" 2>/dev/null)
 if [ -z "$TOKEN" ]; then
-  echo "Login failed. Response: $LOGIN_RESP"
+  echo "Login failed; response omitted because it may contain sensitive data." >&2
   exit 1
 fi
-echo "Logged in. Token: ${TOKEN:0:20}..."
+echo "Logged in."
 
 AUTH_HEADER="Authorization: Bearer $TOKEN"
 
@@ -104,7 +111,7 @@ CAMERON_IMPORT_RESP=$(curl -s -X POST "$BASE/cold-email/prospects" \
   -H "Content-Type: application/json" \
   -d "{\"prospects\":$CAMERON_PROSPECTS}")
 
-echo "cameronashley import: $C Import_RESP"
+echo "cameronashley import: $CAMERON_IMPORT_RESP"
 
 echo "Done!"
 echo "Next: go to hub.ashbi.ca/cold-email and generate the sequence from the UI"
