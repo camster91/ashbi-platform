@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   FileText, Plus, Send, CheckCircle, XCircle, ArrowRightLeft,
@@ -7,6 +7,8 @@ import {
 import { api } from '../lib/api';
 import { useToast } from '../hooks/useToast';
 import { Button, Card } from '../components/ui';
+import useAutosave from '../hooks/useAutosave';
+import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -52,6 +54,14 @@ export default function Estimates() {
     validUntil: '',
     lineItems: [defaultLineItem()],
   });
+  const draftKey = editingEstimate?.id || 'new';
+  const formDraft = useAutosave('estimate', draftKey, form, 500, {
+    baseUpdatedAt: editingEstimate?.updatedAt,
+  });
+
+  useEffect(() => {
+    if (formDraft.draft && draftKey === 'new') setShowCreate(true);
+  }, [formDraft.draft, draftKey]);
 
   // Queries
   const { data: estimatesData = { estimates: [] }, isLoading } = useQuery({
@@ -71,6 +81,7 @@ export default function Estimates() {
   const createMutation = useMutation({
     mutationFn: (data) => api.createEstimate(data),
     onSuccess: () => {
+      void formDraft.clearDraft();
       queryClient.invalidateQueries({ queryKey: ['estimates'] });
       setShowCreate(false);
       resetForm();
@@ -82,6 +93,7 @@ export default function Estimates() {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => api.updateEstimate(id, data),
     onSuccess: () => {
+      void formDraft.clearDraft();
       queryClient.invalidateQueries({ queryKey: ['estimates'] });
       setEditingEstimate(null);
       resetForm();
@@ -263,6 +275,7 @@ export default function Estimates() {
           onCancel={cancelForm}
           loading={editingEstimate ? updateMutation.isPending : createMutation.isPending}
           error={editingEstimate ? updateMutation.error?.message : createMutation.error?.message}
+          draftState={formDraft}
         />
       )}
 
@@ -430,11 +443,20 @@ function EstimateCard({ estimate, onEdit, onSend, onConvert, onDelete, sendLoadi
 function EstimateForm({
   form, clients, formSubtotal, formTax, formTotal, isEditing,
   onFormChange, onLineItemUpdate, onLineItemAdd, onLineItemRemove,
-  onSubmit, onCancel, loading, error,
+  onSubmit, onCancel, loading, error, draftState,
 }) {
   return (
     <Card className="p-4 sm:p-6">
       <h2 className="text-lg font-semibold mb-5">{isEditing ? 'Edit Estimate' : 'New Estimate'}</h2>
+      <DraftRecoveryNotice
+        draft={draftState.draft}
+        draftSavedAt={draftState.draftMeta?.draftSavedAt}
+        status={draftState.status}
+        lastSaved={draftState.lastSaved}
+        onRecover={(recovered) => { onFormChange(recovered); draftState.setDraft(null); }}
+        onDiscard={draftState.discardDraft}
+        onRetry={draftState.saveNow}
+      />
       <form onSubmit={onSubmit} className="space-y-5">
         {/* Client + Title */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

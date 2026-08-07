@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -15,6 +15,8 @@ import {
 import { api } from '../lib/api';
 import { useToast } from '../hooks/useToast';
 import { Button, Card } from '../components/ui';
+import useAutosave from '../hooks/useAutosave';
+import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 
 export default function ProposalDetail() {
   const { id } = useParams();
@@ -32,6 +34,17 @@ export default function ProposalDetail() {
   const [notes, setNotes] = useState('');
   const [title, setTitle] = useState('');
   const [discount, setDiscount] = useState(0);
+  const editDraftData = useMemo(() => editing ? { title, notes, discount, lineItems } : null, [editing, title, notes, discount, lineItems]);
+  const formDraft = useAutosave('proposal', id, editDraftData, 500, { baseUpdatedAt: proposal?.updatedAt });
+
+  useEffect(() => {
+    if (!formDraft.draft) return;
+    setTitle(formDraft.draft.title ?? '');
+    setNotes(formDraft.draft.notes ?? '');
+    setDiscount(formDraft.draft.discount ?? 0);
+    setLineItems(formDraft.draft.lineItems ?? []);
+    setEditing(true);
+  }, [formDraft.draft]);
 
   const startEdit = () => {
     setLineItems(proposal.lineItems || []);
@@ -44,6 +57,7 @@ export default function ProposalDetail() {
   const updateMutation = useMutation({
     mutationFn: (data) => api.updateProposal(id, data),
     onSuccess: () => {
+      void formDraft.clearDraft();
       queryClient.invalidateQueries({ queryKey: ['proposal', id] });
       setEditing(false);
       toast.success('Proposal saved');
@@ -103,6 +117,24 @@ export default function ProposalDetail() {
 
   return (
     <div className="space-y-6 max-w-4xl">
+      {(editing || formDraft.draft) && (
+        <DraftRecoveryNotice
+          draft={formDraft.draft}
+          draftSavedAt={formDraft.draftMeta?.draftSavedAt}
+          status={formDraft.status}
+          lastSaved={formDraft.lastSaved}
+          onRecover={(recovered) => {
+            setTitle(recovered.title ?? '');
+            setNotes(recovered.notes ?? '');
+            setDiscount(recovered.discount ?? 0);
+            setLineItems(recovered.lineItems ?? []);
+            setEditing(true);
+            formDraft.setDraft(null);
+          }}
+          onDiscard={formDraft.discardDraft}
+          onRetry={formDraft.saveNow}
+        />
+      )}
       {/* Header */}
       <div className="flex items-center gap-4">
         <button onClick={() => navigate('/proposals')} className="p-2 hover:bg-muted rounded-lg">

@@ -27,7 +27,7 @@ import { withSoftDelete } from '../services/soft-delete.service.js';
 
 // Models that have a direct `organizationId` column. These get the
 // `where.organizationId = <jwt.orgId>` auto-inject (same as before).
-const DIRECT_SCOPED_MODELS = ['client', 'project', 'user', 'integration', 'trashedItem'];
+const DIRECT_SCOPED_MODELS = ['client', 'project', 'user', 'integration', 'trashedItem', 'formDraft'];
 
 // Models without a direct `organizationId` column. Each entry maps the
 // model to the chain of relations we need to walk to reach an owner

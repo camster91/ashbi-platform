@@ -1473,12 +1473,16 @@ export const api = {
   approveTimesheetEntry: (id) => request(`/time-entries/timesheets/${id}/approve`, { method: 'PATCH' }),
 
   // ===== AUTOSAVE DRAFT =====
-  saveDraft: (entity, id, data) =>
-    request(`/draft/${entity}/${id}`, { method: 'PUT', body: { data } }),
+  saveDraft: (entity, id, data, expectedRevision, baseUpdatedAt) =>
+    request(`/draft/${entity}/${id}`, {
+      method: 'PUT',
+      body: { data, expectedRevision, baseUpdatedAt },
+      silent: true,
+    }),
   getDraft: (entity, id) =>
     request(`/draft/${entity}/${id}`),
-  clearDraft: (entity, id) =>
-    request(`/draft/${entity}/${id}`, { method: 'DELETE' }),
+  clearDraft: (entity, id, revision) =>
+    request(`/draft/${entity}/${id}${revision ? `?revision=${revision}` : ''}`, { method: 'DELETE', silent: true }),
 };
 
 export default api;
