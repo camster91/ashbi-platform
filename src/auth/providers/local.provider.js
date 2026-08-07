@@ -1,6 +1,7 @@
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import env from '../../config/env.js';
+import { isCurrentUserSession, signUserSession } from '../session.js';
 
 const BCRYPT_ROUNDS = 12;
 
@@ -48,14 +49,7 @@ export class LocalAuthProvider {
       await this.prisma.user.update({ where: { id: user.id }, data: { organizationId } });
     }
 
-    const token = this.jwt.sign({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-      clientId: user.clientId,
-      organizationId: organizationId
-    });
+    const token = signUserSession(this.jwt, { ...user, organizationId });
 
     return {
       user: {
@@ -70,7 +64,11 @@ export class LocalAuthProvider {
   }
 
   async verifyToken(token) {
-    return this.jwt.verify(token);
+    const payload = this.jwt.verify(token);
+    if (!(await isCurrentUserSession(this.prisma, payload))) {
+      throw new Error('Session expired or revoked');
+    }
+    return payload;
   }
 
   async hashPassword(password) {

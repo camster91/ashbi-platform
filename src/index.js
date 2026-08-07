@@ -14,6 +14,7 @@ import { fileURLToPath } from 'url';
 
 import env from './config/env.js';
 import prisma from './config/db.js';
+import { isCurrentUserSession } from './auth/session.js';
 
 // Routes
 import authRoutes from './routes/auth.routes.js';
@@ -156,21 +157,36 @@ fastify.addHook('onRequest', async (request, reply) => {
   // enforces it in its own preHandler. All other /api/wp-bridge/* routes
   // must pass standard JWT auth (blast-radius guard from PR-D).
   if (request.url.startsWith('/api/wp-bridge/backup')) return;
+  let jwtVerified = false;
   try {
     await request.jwtVerify();
+    jwtVerified = true;
   } catch {
     // No valid token — let route-specific auth handle 401
+  }
+  if (jwtVerified) {
+    try {
+      if (!(await isCurrentUserSession(prisma, request.user))) {
+        return reply.status(401).send({ error: 'Session expired or revoked' });
+      }
+    } catch {
+      return reply.status(401).send({ error: 'Unable to validate session' });
+    }
   }
 });
 
 // Auth decorators
 fastify.decorate('authenticate', async (request, reply) => {
-  try { await request.jwtVerify(); } catch (err) { return reply.status(401).send({ error: 'Unauthorized' }); }
+  try {
+    await request.jwtVerify();
+    if (!(await isCurrentUserSession(prisma, request.user))) throw new Error('Revoked session');
+  } catch (err) { return reply.status(401).send({ error: 'Unauthorized' }); }
 });
 
 fastify.decorate('adminOnly', async (request, reply) => {
   try {
     await request.jwtVerify();
+    if (!(await isCurrentUserSession(prisma, request.user))) throw new Error('Revoked session');
     if (request.user.role !== 'ADMIN') return reply.status(403).send({ error: 'Admin access required' });
   } catch (err) { return reply.status(401).send({ error: 'Unauthorized' }); }
 });
@@ -297,6 +313,9 @@ io.use(async (socket, next) => {
     const token = socket.handshake.auth?.token;
     if (!token) return next(new Error('Authentication required'));
     const decoded = await fastify.jwt.verify(token);
+    if (!(await isCurrentUserSession(prisma, decoded))) {
+      return next(new Error('Invalid token'));
+    }
     socket.userId = decoded.id || decoded.contactId;
     socket.userRole = decoded.role;
     socket.organizationId = decoded.organizationId;

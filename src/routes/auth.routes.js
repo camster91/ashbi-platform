@@ -5,6 +5,7 @@ import bcrypt from 'bcrypt';
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import env from '../config/env.js';
+import { isCurrentUserSession, revokeUserSessions, sessionCookieMaxAge, signUserSession } from '../auth/session.js';
 import {
   validateBody,
   schemas,
@@ -34,10 +35,10 @@ async function verifyPassword(password, hash) {
   return bcrypt.compare(password, hash);
 }
 
-async function upgradeHashIfNeeded(userId, password, currentHash) {
+async function upgradeHashIfNeeded(prisma, userId, password, currentHash) {
   if (!currentHash.startsWith('$2')) {
     const newHash = await hashPassword(password);
-    await request.prisma.user.update({ where: { id: userId }, data: { password: newHash } });
+    await prisma.user.update({ where: { id: userId }, data: { password: newHash } });
   }
 }
 
@@ -68,7 +69,7 @@ export default async function authRoutes(fastify) {
           httpOnly: true,
           secure: env.isProduction,
           sameSite: env.isProduction ? 'strict' : 'lax',
-          maxAge: 7 * 24 * 60 * 60 // 7 days
+          maxAge: sessionCookieMaxAge()
         })
         .send({ user });
     } catch (err) {
@@ -78,6 +79,14 @@ export default async function authRoutes(fastify) {
 
   // Logout
   fastify.post('/logout', async (request, reply) => {
+    try {
+      await request.jwtVerify();
+      if (await isCurrentUserSession(request.prisma, request.user)) {
+        await revokeUserSessions(request.prisma, request.user.id);
+      }
+    } catch {
+      // Logout is idempotent: always clear the browser cookie.
+    }
     reply
       .clearCookie('token', { path: '/', httpOnly: true, secure: process.env.NODE_ENV === 'production' && !request.headers.host?.includes('localhost'), sameSite: 'lax' })
       .send({ success: true });
@@ -147,6 +156,9 @@ export default async function authRoutes(fastify) {
       // Subsequent users — require admin auth
       try {
         await request.jwtVerify();
+        if (!(await isCurrentUserSession(request.prisma, request.user))) {
+          return reply.status(401).send({ error: 'Session expired or revoked' });
+        }
         if (request.user.role !== 'ADMIN') {
           return reply.status(403).send({ error: 'Admin access required' });
         }
@@ -221,7 +233,10 @@ export default async function authRoutes(fastify) {
 
     await request.prisma.user.update({
       where: { id: request.user.id },
-      data: { password: await hashPassword(newPassword) }
+      data: {
+        password: await hashPassword(newPassword),
+        sessionVersion: { increment: 1 },
+      }
     });
 
     return { success: true };
@@ -284,13 +299,7 @@ export default async function authRoutes(fastify) {
       data: { usedAt: new Date() }
     });
 
-    const jwtToken = fastify.jwt.sign({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: 'CLIENT',
-      clientId: user.clientId
-    });
+    const jwtToken = signUserSession(fastify.jwt, user);
 
     reply
       .setCookie('token', jwtToken, {
@@ -298,7 +307,7 @@ export default async function authRoutes(fastify) {
         httpOnly: true,
         secure: env.isProduction,
         sameSite: env.isProduction ? 'strict' : 'lax',
-        maxAge: 7 * 24 * 60 * 60
+        maxAge: sessionCookieMaxAge()
       })
       .send({
         user: {
@@ -306,8 +315,7 @@ export default async function authRoutes(fastify) {
           email: user.email,
           name: user.name,
           role: 'CLIENT'
-        },
-        token: jwtToken
+        }
       });
   });
 
@@ -333,19 +341,13 @@ export default async function authRoutes(fastify) {
     }
 
     // Auto-upgrade legacy SHA-256 hash to bcrypt
-    await upgradeHashIfNeeded(user.id, password, user.password);
+    await upgradeHashIfNeeded(request.prisma, user.id, password, user.password);
 
     if (!user.isActive) {
       return reply.status(401).send({ error: 'Account is inactive' });
     }
 
-    const token = fastify.jwt.sign({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      role: 'CLIENT',
-      clientId: user.clientId
-    });
+    const token = signUserSession(fastify.jwt, user);
 
     reply
       .setCookie('token', token, {
@@ -353,7 +355,7 @@ export default async function authRoutes(fastify) {
         httpOnly: true,
         secure: env.isProduction,
         sameSite: env.isProduction ? 'strict' : 'lax',
-        maxAge: 7 * 24 * 60 * 60
+        maxAge: sessionCookieMaxAge()
       })
       .send({
         user: {
@@ -361,8 +363,7 @@ export default async function authRoutes(fastify) {
           email: user.email,
           name: user.name,
           role: 'CLIENT'
-        },
-        token
+        }
       });
   });
 
@@ -470,6 +471,7 @@ export default async function authRoutes(fastify) {
         where: { id: user.id },
         data: {
           password: await hashPassword(newPassword),
+          sessionVersion: { increment: 1 },
           resetToken: null,
           resetTokenExpiresAt: null
         }
