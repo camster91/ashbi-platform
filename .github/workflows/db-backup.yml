@@ -66,10 +66,14 @@ jobs:
 
       - name: Encrypt backup (if passphrase is set)
         id: encrypt
-        if: steps.backup.outputs.backup_path && secrets.BACKUP_GPG_PASSPHRASE
+        if: steps.backup.outputs.backup_path != ''
         env:
           BACKUP_GPG_PASSPHRASE: ${{ secrets.BACKUP_GPG_PASSPHRASE }}
         run: |
+          if [ -z "$BACKUP_GPG_PASSPHRASE" ]; then
+            echo "encrypted_path=${{ steps.backup.outputs.backup_path }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           gpg --batch --yes --passphrase "$BACKUP_GPG_PASSPHRASE" \
               --symmetric --cipher-algo AES256 \
               "${{ steps.backup.outputs.backup_path }}"
@@ -77,11 +81,11 @@ jobs:
           echo "encrypted_path=${{ steps.backup.outputs.backup_path }}.gpg" >> "$GITHUB_OUTPUT"
 
       - name: Upload backup artifact
-        if: steps.backup.outputs.backup_path
+        if: steps.backup.outputs.backup_path != ''
         uses: actions/upload-artifact@v7
         with:
           name: database-backup-${{ github.run_id }}
-          path: ${{ steps.encrypt.outputs.encrypted_path || steps.backup.outputs.backup_path }}
+          path: ${{ steps.encrypt.outputs.encrypted_path }}
           retention-days: 30  # bumped from 7 — SOC2 / GDPR ask is 30+
           if-no-files-found: error
           compression-level: 0  # already gzipped by script
