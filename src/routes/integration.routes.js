@@ -1,11 +1,26 @@
 import { redactIntegration, redactIntegrations } from '../utils/redact-integration.js';
 
+const DEFERRED_ACCOUNTING_TYPES = new Set(['QUICKBOOKS', 'XERO']);
+
+function isDeferredAccountingType(type) {
+  return DEFERRED_ACCOUNTING_TYPES.has(String(type || '').toUpperCase());
+}
+
+function accountingUnavailable(reply) {
+  return reply.status(501).send({
+    error: 'Accounting integration unavailable',
+    code: 'ACCOUNTING_INTEGRATION_UNAVAILABLE',
+    message: 'QuickBooks and Xero are not yet supported. No authorization or synchronization was performed.',
+  });
+}
+
 export default async function integrationRoutes(fastify) {
   // List connected integrations
   fastify.get('/', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
     const integrations = await request.prisma.integration.findMany({
+      where: { type: { notIn: [...DEFERRED_ACCOUNTING_TYPES] } },
       orderBy: { type: 'asc' }
     });
     return { integrations: redactIntegrations(integrations) };
@@ -16,6 +31,9 @@ export default async function integrationRoutes(fastify) {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const { type } = request.params;
+    if (isDeferredAccountingType(type)) {
+      return accountingUnavailable(reply);
+    }
     const integration = await request.prisma.integration.findFirst({
       where: { type: type.toUpperCase() }
     });
@@ -32,25 +50,13 @@ export default async function integrationRoutes(fastify) {
     const { type } = request.params;
     const typeUpper = type.toUpperCase();
 
-    if (!['QUICKBOOKS', 'XERO'].includes(typeUpper)) {
-      return reply.status(400).send({ error: 'Unsupported integration type' });
+    if (isDeferredAccountingType(typeUpper)) {
+      return accountingUnavailable(reply);
     }
 
-    // In production, this would generate OAuth redirect URLs
-    // For now, we create a placeholder record
-    const integration = await request.prisma.integration.upsert({
-      where: { id: `${typeUpper}_placeholder` },
-      update: { status: 'CONNECTED', lastSyncAt: new Date(), organizationId: request.organizationId },
-      create: {
-        id: `${typeUpper}_placeholder`,
-        type: typeUpper,
-        status: 'CONNECTED',
-        lastSyncAt: new Date(),
-        organizationId: request.organizationId,
-      }
-    });
-
-    return { integration: redactIntegration(integration), message: `${typeUpper} connected (demo mode)` };
+    if (!DEFERRED_ACCOUNTING_TYPES.has(typeUpper)) {
+      return reply.status(400).send({ error: 'Unsupported integration type' });
+    }
   });
 
   // Disconnect integration
@@ -59,6 +65,10 @@ export default async function integrationRoutes(fastify) {
   }, async (request, reply) => {
     const { type } = request.params;
     const typeUpper = type.toUpperCase();
+
+    if (isDeferredAccountingType(typeUpper)) {
+      return accountingUnavailable(reply);
+    }
 
     const integration = await request.prisma.integration.findFirst({
       where: { type: typeUpper }
@@ -83,6 +93,10 @@ export default async function integrationRoutes(fastify) {
     const { type } = request.params;
     const typeUpper = type.toUpperCase();
 
+    if (isDeferredAccountingType(typeUpper)) {
+      return accountingUnavailable(reply);
+    }
+
     const integration = await request.prisma.integration.findFirst({
       where: { type: typeUpper }
     });
@@ -91,12 +105,6 @@ export default async function integrationRoutes(fastify) {
       return reply.status(400).send({ error: `${typeUpper} is not connected` });
     }
 
-    // Update last sync time
-    await request.prisma.integration.update({
-      where: { id: integration.id },
-      data: { lastSyncAt: new Date() }
-    });
-
-    return { success: true, message: `${typeUpper} sync initiated (demo mode)` };
+    return reply.status(501).send({ error: 'Integration synchronization is not implemented' });
   });
 }

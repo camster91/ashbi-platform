@@ -15,12 +15,9 @@ import {
   Trash2,
   Copy,
   Link2,
-  RefreshCw,
-  Unplug,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
-import { useToast } from '../hooks/useToast';
 import { Button, Card } from '../components/ui';
 
 function Section({ icon: Icon, title, description, children }) {
@@ -267,106 +264,30 @@ function ApiKeysSection() {
   );
 }
 
-function IntegrationsSection() {
-  const queryClient = useQueryClient();
-  const toast = useToast();
-
-  const { data: integrationsData, isLoading } = useQuery({
-    queryKey: ['integrations'],
-    queryFn: () => api.getIntegrations(),
-  });
-
-  const integrations = integrationsData?.integrations || [];
-
-  const connectMutation = useMutation({
-    mutationFn: (type) => api.connectIntegration(type),
-    onSuccess: (_, type) => {
-      toast.success('Connected', `${type} connected successfully`);
-      queryClient.invalidateQueries({ queryKey: ['integrations'] });
-    },
-    onError: (err) => toast.error('Connection Failed', err.message),
-  });
-
-  const disconnectMutation = useMutation({
-    mutationFn: (type) => api.disconnectIntegration(type),
-    onSuccess: (_, type) => {
-      toast.success('Disconnected', `${type} disconnected`);
-      queryClient.invalidateQueries({ queryKey: ['integrations'] });
-    },
-    onError: (err) => toast.error('Disconnect Failed', err.message),
-  });
-
-  const syncMutation = useMutation({
-    mutationFn: (type) => api.syncIntegration(type),
-    onSuccess: (_, type) => {
-      toast.success('Sync Started', `${type} sync initiated`);
-      queryClient.invalidateQueries({ queryKey: ['integrations'] });
-    },
-    onError: (err) => toast.error('Sync Failed', err.message),
-  });
-
+export function IntegrationsSection() {
   const providers = [
-    { type: 'QUICKBOOKS', name: 'QuickBooks Online', description: 'Sync invoices, expenses, and payments', color: 'bg-green-600' },
-    { type: 'XERO', name: 'Xero', description: 'Sync financial data and reports', color: 'bg-blue-600' },
+    { type: 'QUICKBOOKS', name: 'QuickBooks Online', color: 'bg-green-600' },
+    { type: 'XERO', name: 'Xero', color: 'bg-blue-600' },
   ];
 
   return (
-    <Section icon={Link2} title="Accounting Integrations" description="Connect QuickBooks or Xero to sync financial data">
+    <Section icon={Link2} title="Accounting Integrations" description="Accounting providers are not currently available">
       <div className="space-y-4">
         {providers.map(provider => {
-          const integration = integrations.find(i => i.type === provider.type);
-          const isConnected = integration?.status === 'CONNECTED';
-
           return (
-            <div key={provider.type} className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+            <div key={provider.type} className="flex flex-col gap-3 p-4 bg-muted/50 rounded-lg sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-lg ${provider.color} flex items-center justify-center text-white font-bold text-sm`}>
                   {provider.type === 'QUICKBOOKS' ? 'QB' : 'Xe'}
                 </div>
                 <div>
                   <p className="font-medium text-foreground">{provider.name}</p>
-                  <p className="text-xs text-muted-foreground">{provider.description}</p>
-                  {isConnected && integration.lastSyncAt && (
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Last synced: {new Date(integration.lastSyncAt).toLocaleString()}
-                    </p>
-                  )}
+                  <p className="text-xs text-muted-foreground">Available after accounting integration approval and implementation.</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                {isConnected ? (
-                  <>
-                    <span className="text-xs font-medium text-green-600 bg-green-50 dark:bg-green-900/20 dark:text-green-400 px-2 py-1 rounded-full">
-                      Connected
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => syncMutation.mutate(provider.type)}
-                      disabled={syncMutation.isPending}
-                      leftIcon={<RefreshCw className={syncMutation.isPending ? 'animate-spin' : ''} />}
-                    >
-                      Sync
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => { if (confirm(`Disconnect ${provider.name}?`)) disconnectMutation.mutate(provider.type); }}
-                      disabled={disconnectMutation.isPending}
-                    >
-                      <Unplug className="w-4 h-4" />
-                    </Button>
-                  </>
-                ) : (
-                  <Button
-                    size="sm"
-                    onClick={() => connectMutation.mutate(provider.type)}
-                    disabled={connectMutation.isPending}
-                  >
-                    Connect
-                  </Button>
-                )}
-              </div>
+              <span role="status" className="self-start rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground sm:self-auto">
+                Unavailable
+              </span>
             </div>
           );
         })}
