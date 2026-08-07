@@ -15,7 +15,6 @@ name: E2E smoke (wp-env + hub)
 
 on:
   pull_request:
-    branches: [main, master]
     paths:
       - 'tests/e2e/**'
       - 'prisma/**'
@@ -53,7 +52,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       # wp-env needs Docker (it spins up WordPress + MariaDB containers
       # internally). GitHub-hosted runners have it pre-installed.

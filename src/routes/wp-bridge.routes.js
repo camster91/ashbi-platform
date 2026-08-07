@@ -559,6 +559,28 @@ export default async function wpBridgeRoutes(fastify) {
         createdBy: request.user.id,
         timeoutMs: PER_SITE_TIMEOUT_MS
       });
+      await Promise.all(raw.results.map(async (result) => {
+        const site = sites.find((candidate) => candidate.url === result.siteUrl);
+        const pluginBody = result.output && result.output.body;
+        const issued = result.status === 'ok' && pluginBody && typeof pluginBody.url === 'string';
+        let tokenHash = issued && typeof pluginBody.hash === 'string' ? pluginBody.hash : null;
+        if (!tokenHash && issued) {
+          try {
+            const token = new URL(pluginBody.url).searchParams.get('ashbi_sso');
+            if (token) tokenHash = sha256TokenHash(token);
+          } catch { /* malformed plugin URL is captured as a rejected event below */ }
+        }
+        await recordMagicLoginEvent({
+          siteId: site?.id || null,
+          siteUrl: result.siteUrl,
+          userId,
+          hubUserId: request.user.id,
+          ip: request.ip || '0.0.0.0',
+          status: issued ? 'issued' : 'rejected',
+          reason: issued ? null : (result.error || 'plugin_response_invalid'),
+          tokenHash
+        });
+      }));
       return {
         opId: raw.opId,
         total: raw.total,

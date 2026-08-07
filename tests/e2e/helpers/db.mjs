@@ -40,7 +40,12 @@ export async function close() {
 export async function findSiteByUrl(siteUrl) {
   const c = await getClient();
   const r = await c.query(
-    'SELECT id, url, name, status, "lastPingAt", "lastPingStatus", "bridgeVersion", "healthScore" FROM wp_sites WHERE url = $1',
+    `SELECT id, url, name, status,
+            "lastCheckedAt" AS "lastPingAt",
+            CASE WHEN status = 'ACTIVE' THEN 'ok' ELSE 'unreachable' END AS "lastPingStatus",
+            "bridgeVersion", "healthScore"
+     FROM wp_sites
+     WHERE url = $1`,
     [siteUrl]
   );
   return r.rows[0] || null;

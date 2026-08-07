@@ -27,7 +27,9 @@
 
 services:
   postgres:
-    image: postgres:16-alpine
+    # Prisma declares the vector extension, so the disposable test database
+    # must provide pgvector rather than plain PostgreSQL.
+    image: pgvector/pgvector:0.8.2-pg16-bookworm
     restart: unless-stopped
     environment:
       POSTGRES_USER: ashbi_test
@@ -81,6 +83,8 @@ services:
       context: ../..
       dockerfile: Dockerfile
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
