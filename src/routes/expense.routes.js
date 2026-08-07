@@ -134,15 +134,14 @@ export default async function expenseRoutes(fastify) {
     const data = await request.file();
     if (!data) return reply.status(400).send({ error: 'No file uploaded' });
 
-    // Validate file type and extension via shared validator
-    const validation = fileUpload.validate(data.filename, data.mimetype);
+    const buffer = await data.toBuffer();
+    const validation = fileUpload.validate(data.filename, data.mimetype, buffer);
     if (!validation.valid) {
       return reply.status(400).send({ error: validation.error });
     }
 
     const filename = `receipt-${randomUUID()}${validation.ext}`;
     const filepath = path.join(UPLOAD_DIR, filename);
-    const buffer = await data.toBuffer();
     await fs.writeFile(filepath, buffer);
 
     return { url: `/uploads/${filename}` };

@@ -3,22 +3,16 @@
 import path from 'path';
 import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
+import { fileUpload } from '../validators/schemas.js';
 
 const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
 
-const ALLOWED_EXTENSIONS = new Set([
-  '.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg',
-  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
-  '.txt', '.csv', '.json', '.xml',
-  '.zip', '.gz', '.tar',
-  '.mp4', '.mov', '.mp3', '.wav'
-]);
+const ENTITY_MODELS = Object.freeze({ PROJECT: 'project', TASK: 'task', NOTE: 'note', CHAT: 'chatMessage' });
 
-const BLOCKED_EXTENSIONS = new Set([
-  '.exe', '.bat', '.cmd', '.sh', '.ps1', '.msi', '.dll',
-  '.com', '.scr', '.pif', '.vbs', '.js', '.wsh', '.wsf',
-  '.htm', '.html', '.php', '.asp', '.aspx', '.jsp', '.cgi'
-]);
+async function entityExistsForTenant(prisma, entityType, entityId) {
+  const model = ENTITY_MODELS[entityType];
+  return model ? Boolean(await prisma[model].findFirst({ where: { id: entityId }, select: { id: true } })) : false;
+}
 
 // Ensure upload directory exists
 async function ensureUploadDir() {
@@ -35,11 +29,14 @@ export default async function attachmentRoutes(fastify) {
   // Get attachments for an entity
   fastify.get('/attachments', {
     onRequest: [fastify.authenticate]
-  }, async (request) => {
+  }, async (request, reply) => {
     const { entityType, entityId } = request.query;
 
     if (!entityType || !entityId) {
       return [];
+    }
+    if (!await entityExistsForTenant(request.prisma, entityType, entityId)) {
+      return reply.status(404).send({ error: 'Entity not found' });
     }
 
     const attachments = await request.prisma.attachment.findMany({
@@ -69,23 +66,22 @@ export default async function attachmentRoutes(fastify) {
       return reply.status(400).send({ error: 'entityType and entityId are required' });
     }
 
-    // Validate file extension
-    const ext = path.extname(data.filename).toLowerCase();
-    if (BLOCKED_EXTENSIONS.has(ext)) {
-      return reply.status(400).send({ error: `File type ${ext} is not allowed` });
+    if (!await entityExistsForTenant(request.prisma, entityType.value, entityId.value)) {
+      return reply.status(404).send({ error: 'Entity not found' });
     }
-    const filename = `${randomUUID()}${ext}`;
-    const filepath = path.join(UPLOAD_DIR, filename);
 
-    // Save file
     const buffer = await data.toBuffer();
+    const validation = fileUpload.validate(data.filename, data.mimetype, buffer);
+    if (!validation.valid) return reply.status(400).send({ error: validation.error });
+    const filename = `${randomUUID()}${validation.ext}`;
+    const filepath = path.join(UPLOAD_DIR, filename);
     await fs.writeFile(filepath, buffer);
 
     const attachment = await request.prisma.attachment.create({
       data: {
         filename,
         originalName: data.filename,
-        mimeType: data.mimetype,
+        mimeType: validation.mimetype,
         size: buffer.length,
         path: `/uploads/${filename}`,
         entityType: entityType.value,
@@ -173,6 +169,9 @@ export default async function attachmentRoutes(fastify) {
 
       reply.header('Content-Type', attachment.mimeType || 'application/octet-stream');
       reply.header('Content-Length', stat.size);
+      reply.header('Content-Disposition', `attachment; filename="${path.basename(attachment.originalName).replace(/["\\\r\n]/g, '_')}"`);
+      reply.header('X-Content-Type-Options', 'nosniff');
+      reply.header('Content-Security-Policy', "default-src 'none'; sandbox");
 
       return reply.send(file);
     } catch (err) {

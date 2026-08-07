@@ -417,6 +417,26 @@ export default async function clientPortalRoutes(fastify) {
     return documents;
   });
 
+  fastify.get('/client-portal/documents/:docId/download', { preHandler: clientAuth }, async (request, reply) => {
+    const { clientId } = request.clientUser;
+    const doc = await request.prisma.attachment.findUnique({ where: { id: request.params.docId } });
+    if (!doc || doc.entityType !== 'PROJECT') return reply.status(404).send({ error: 'Document not found' });
+    const project = await request.prisma.project.findFirst({ where: { id: doc.entityId, clientId } });
+    if (!project) return reply.status(404).send({ error: 'Document not found' });
+    try {
+      const file = await fs.readFile(path.join(process.cwd(), doc.path));
+      const downloadName = path.basename(doc.originalName).replace(/["\\\r\n]/g, '_');
+      return reply
+        .header('Content-Type', doc.mimeType || 'application/octet-stream')
+        .header('Content-Disposition', `attachment; filename="${downloadName}"`)
+        .header('X-Content-Type-Options', 'nosniff')
+        .header('Content-Security-Policy', "default-src 'none'; sandbox")
+        .send(file);
+    } catch {
+      return reply.status(404).send({ error: 'Document not found' });
+    }
+  });
+
   // POST /api/client-portal/projects/:id/upload — Upload document
   fastify.post('/client-portal/projects/:id/upload', { preHandler: clientAuth }, async (request, reply) => {
     const { clientId, contactId } = request.clientUser;
@@ -432,8 +452,8 @@ export default async function clientPortalRoutes(fastify) {
       return reply.status(400).send({ error: 'No file uploaded' });
     }
 
-    // Validate file type and extension
-    const validation = fileUpload.validate(data.filename, data.mimetype);
+    const buffer = await data.toBuffer();
+    const validation = fileUpload.validate(data.filename, data.mimetype, buffer);
     if (!validation.valid) {
       return reply.status(400).send({ error: validation.error });
     }
@@ -446,7 +466,6 @@ export default async function clientPortalRoutes(fastify) {
     const filepath = path.join(UPLOAD_DIR, filename);
 
     // Write file
-    const buffer = await data.toBuffer();
     await fs.writeFile(filepath, buffer);
 
     // Find or create user for the contact
@@ -471,7 +490,7 @@ export default async function clientPortalRoutes(fastify) {
       data: {
         filename,
         originalName: data.filename,
-        mimeType: data.mimetype,
+        mimeType: validation.mimetype,
         size: buffer.length,
         path: `/uploads/${filename}`,
         entityType: 'PROJECT',
