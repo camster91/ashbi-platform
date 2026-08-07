@@ -59,6 +59,35 @@ describe('project dialog journeys', () => {
     expect(trigger).toHaveFocus();
   });
 
+  it('opens note and milestone cards once with native keyboard activation and exposed state', async () => {
+    const user = userEvent.setup();
+    api.getNotes.mockResolvedValue([{
+      id: 'note-1', title: 'Scope', content: 'Approved scope', type: 'NOTE',
+      tags: [], isPinned: false, updatedAt: new Date().toISOString(), author: { name: 'Admin' },
+    }]);
+    const notesView = renderWithQuery(<Notes projectId="project-1" />);
+    const noteCard = await screen.findByRole('button', { name: 'Open note Scope' });
+    noteCard.focus();
+    await user.keyboard('{Enter}');
+    expect(screen.getByRole('dialog', { name: 'Edit Note' })).toBeVisible();
+    expect(noteCard).toHaveAttribute('aria-pressed', 'true');
+    await user.keyboard('{Escape}');
+    expect(noteCard).toHaveFocus();
+    notesView.unmount();
+
+    api.getMilestones.mockResolvedValue([{
+      id: 'milestone-1', name: 'Launch', description: 'Ship it',
+      dueDate: new Date(Date.now() + 86400000).toISOString(), status: 'PENDING',
+      color: '#3B82F6', completedTasks: 0, totalTasks: 1, progress: 0, tasks: [],
+    }]);
+    renderWithQuery(<Milestones projectId="project-1" />);
+    const milestoneCard = await screen.findByRole('button', { name: 'Open milestone Launch' });
+    milestoneCard.focus();
+    await user.keyboard(' ');
+    expect(screen.getByRole('dialog', { name: 'Edit Milestone' })).toBeVisible();
+    expect(milestoneCard).toHaveAttribute('aria-pressed', 'true');
+  });
+
   it('opens the calendar create and event-detail dialogs', async () => {
     const user = userEvent.setup();
     const startTime = new Date();
