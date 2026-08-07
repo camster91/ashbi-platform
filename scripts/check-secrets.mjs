@@ -12,6 +12,7 @@ const patterns = [
   ['Redis password', /redis:\/\/[^:]+:[-A-Za-z0-9_!@#$%^&*()+=]{16,}@/g],
   ['Stripe key', /sk_(?:live|test)_[A-Za-z0-9]{20,}/g],
   ['AWS access key', /AKIA[0-9A-Z]{16}/g],
+  ['Discord webhook', /https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\/\d+\/[A-Za-z0-9._-]{20,}/g],
   ['JSON login password', /"password"\s*:\s*"(?=[^"]{8,}")(?=[^"]*[A-Za-z])(?=[^"]*[0-9])(?=[^"]*[!@#])[^"]+"/g, placeholder],
 ];
 

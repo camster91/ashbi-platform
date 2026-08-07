@@ -23,7 +23,7 @@ const MAILGUN_API_KEY = process.env.MAILGUN_API_KEY;
 const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN || 'ashbi.ca';
 const MAILGUN_API_URL = `https://api.mailgun.net/v3/${MAILGUN_DOMAIN}/messages`;
 
-const DISCORD_CAM_WEBHOOK = 'https://discord.com/api/webhooks/1484535953912496270/ytaPqJI6KyuYwEjnIAry4TczQpYitj4kXlBcaoNeiMpAeyLzibO4wHoxR8XjF49OkGuR';
+const DISCORD_CAM_WEBHOOK = process.env.DISCORD_CAM_WEBHOOK_URL;
 
 /**
  * Load and compile an HTML email template using Handlebars
@@ -158,6 +158,11 @@ export async function sendBlockedHITLEmail({ notificationId, task, project, bloc
  * Send Discord notification to #cam channel
  */
 export async function sendDiscordCamNotification(message) {
+  if (!DISCORD_CAM_WEBHOOK) {
+    console.warn('[discord] DISCORD_CAM_WEBHOOK_URL not set; skipping notification');
+    return { ok: false, error: 'DISCORD_CAM_WEBHOOK_URL not set' };
+  }
+
   try {
     const res = await fetch(DISCORD_CAM_WEBHOOK, {
       method: 'POST',
@@ -167,9 +172,12 @@ export async function sendDiscordCamNotification(message) {
     });
     if (!res.ok) {
       console.error('[discord] POST failed:', res.status);
+      return { ok: false, error: `HTTP ${res.status}` };
     }
+    return { ok: true };
   } catch (err) {
     console.error('[discord] Error:', err.message);
+    return { ok: false, error: err.message };
   }
 }
 
