@@ -19,7 +19,12 @@ WORKDIR /app
 
 # Copy backend package files
 COPY package.json package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --no-audit --no-fund
+# Package lifecycle scripts for native modules are extremely slow under QEMU
+# and can exhaust the multi-architecture CI timeout. Install the locked tree
+# first, then rebuild only the native dependency needed at runtime. Prisma's
+# target-specific client is generated explicitly after its schema is copied.
+RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --ignore-scripts --no-audit --no-fund \
+  && npm rebuild bcrypt
 
 # Copy Prisma schema and generate client
 COPY prisma ./prisma/
