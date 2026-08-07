@@ -46,7 +46,7 @@ export default function Dashboard() {
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
   });
 
-  const { data: myTasks = [] } = useQuery({
+  const { data: myTasks = [], isError: isTasksError } = useQuery({
     queryKey: ['my-tasks'],
     queryFn: () => api.getMyTasks().then((r) => Object.values(r ?? {}).flat()),
     placeholderData: keepPreviousData,
@@ -79,7 +79,7 @@ export default function Dashboard() {
   if (isError && !stats && failureCount >= 3) {
     return (
       <div className="space-y-6 min-h-[60vh]">
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6 text-center">
+        <div role="alert" className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6 text-center">
           <p className="text-red-600 dark:text-red-400 font-semibold">Failed to load dashboard stats</p>
           <p className="text-sm text-red-500 dark:text-red-400 mt-1">
             Could not fetch dashboard data after multiple attempts. Try refreshing the page.
@@ -91,10 +91,6 @@ export default function Dashboard() {
             Refresh Page
           </button>
         </div>
-        {/* Show partial UI with fallback data */}
-        <p className="text-sm text-muted-foreground text-center">
-          Showing default data until the dashboard connects.
-        </p>
       </div>
     );
   }
@@ -108,34 +104,13 @@ export default function Dashboard() {
     liveNotifications
   );
 
-  // Hardcoded Ashbi Design fallback data — shows real agency context until DB is populated
-  const ASHBI_FALLBACK = {
-    atRiskProjects: [
-      { id: 'ashbi-ssca', name: 'SSCA Website', status: 'DESIGN_DEV', health: 'AT_RISK', healthScore: 55, endDate: '2026-06-15', client: { id: 'c1', name: 'SSCA' }, blockedTasks: [{ id: 'bt1', title: 'Content handoff — waiting on client', dueDate: '2026-05-05', blockedBy: 'Waiting on client content' }], totalTasks: 12 },
-      { id: 'ashbi-numan', name: 'Numan Redesign', status: 'DESIGN_DEV', health: 'NEEDS_ATTENTION', healthScore: 68, endDate: '2026-06-01', client: { id: 'c2', name: 'Numan' }, blockedTasks: [], totalTasks: 8 },
-      { id: 'ashbi-wellington', name: 'Wellington Quarters', status: 'ON_HOLD', health: 'AT_RISK', healthScore: 30, endDate: null, client: { id: 'c3', name: 'Wellington' }, blockedTasks: [{ id: 'bt2', title: 'Contract renewal pending', dueDate: '2026-04-20', blockedBy: 'Legal review' }], totalTasks: 5 },
-    ],
-    inboxTriage: {
-      untriagedCount: 3,
-      latest: [
-        { id: 'in1', subject: 'Re: SSCA homepage revisions', status: 'OPEN', priority: 'HIGH', lastActivityAt: '2026-05-08T14:30:00Z', client: 'SSCA', project: 'SSCA Website' },
-        { id: 'in2', subject: 'Invoice #1024 — Q2 retainer', status: 'OPEN', priority: 'NORMAL', lastActivityAt: '2026-05-07T09:15:00Z', client: 'TotalETO', project: null },
-        { id: 'in3', subject: 'New project inquiry — restaurant brand', status: 'OPEN', priority: 'HIGH', lastActivityAt: '2026-05-06T16:45:00Z', client: null, project: null },
-      ]
-    },
-    wpSiteAlerts: [
-      { id: 'wp1', name: 'ssca.ca', url: 'https://ssca.ca', status: 'ERROR', healthScore: 35, lastCheckedAt: '2026-05-08T02:00:00Z', client: 'SSCA', project: 'SSCA Website' },
-      { id: 'wp2', name: 'wellingtonquarters.ca', url: 'https://wellingtonquarters.ca', status: 'MAINTENANCE', healthScore: 42, lastCheckedAt: '2026-05-07T02:00:00Z', client: 'Wellington', project: 'Wellington Quarters' },
-    ],
-    overdueTasks: [
-      { id: 'ot1', title: 'Finalize SSCA mobile nav', dueDate: '2026-05-03', status: 'IN_PROGRESS', priority: 'HIGH', project: 'SSCA Website', client: 'SSCA', assignee: 'Cam' },
-      { id: 'ot2', title: 'Send Numan Figma review link', dueDate: '2026-05-04', status: 'PENDING', priority: 'HIGH', project: 'Numan Redesign', client: 'Numan', assignee: 'Cam' },
-      { id: 'ot3', title: 'Update TotalETO SEO meta', dueDate: '2026-05-01', status: 'PENDING', priority: 'NORMAL', project: 'TotalETO Refresh', client: 'TotalETO', assignee: 'Cam' },
-    ]
-  };
-
   return (
     <div className="space-y-8 animate-slide-up">
+      {isTasksError && (
+        <div role="status" className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+          Task data is temporarily unavailable. Other dashboard data is still current.
+        </div>
+      )}
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -172,7 +147,7 @@ export default function Dashboard() {
             iconBg="bg-emerald-100 dark:bg-emerald-900/30"
             label="MRR"
             value={`$${(stats?.mrr || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}
-            onClick={() => navigate('/revenue')}
+            onClick={() => navigate('/invoices')}
           />
         )}
 
@@ -247,7 +222,7 @@ export default function Dashboard() {
               <Activity className="w-4 h-4 text-primary" />
               <h2 className="font-semibold text-foreground">Activity Feed</h2>
             </div>
-            <Link to="/activity" className="text-xs text-primary hover:underline flex items-center gap-1">
+            <Link to="/inbox" className="text-xs text-primary hover:underline flex items-center gap-1">
               View all <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
@@ -417,11 +392,11 @@ export default function Dashboard() {
               View all <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
-          {(stats?.atRiskProjects?.length || ASHBI_FALLBACK.atRiskProjects.length) > 0 ? (
+          {stats?.atRiskProjects?.length > 0 ? (
             <ul className="divide-y divide-border max-h-[340px] overflow-y-auto">
-              {(stats?.atRiskProjects?.length > 0 ? stats.atRiskProjects : ASHBI_FALLBACK.atRiskProjects).map(project => (
+              {stats.atRiskProjects.map(project => (
                 <li key={project.id} className="px-4 py-3 hover:bg-muted/30 transition-colors cursor-pointer"
-                  onClick={() => navigate(`/projects/${project.id}`)}>
+                  onClick={() => navigate(`/project/${project.id}`)}>
                   <div className="flex items-start justify-between">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground truncate">{project.name}</p>
@@ -469,9 +444,9 @@ export default function Dashboard() {
             <div className="flex items-center gap-2">
               <Mail className="w-4 h-4 text-blue-500" />
               <h2 className="font-semibold text-foreground">Inbox Triage</h2>
-              {(stats?.inboxTriage?.untriagedCount > 0 || ASHBI_FALLBACK.inboxTriage.untriagedCount > 0) && (
+              {stats?.inboxTriage?.untriagedCount > 0 && (
                 <span className="bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                  {stats?.inboxTriage?.untriagedCount || ASHBI_FALLBACK.inboxTriage.untriagedCount}
+                  {stats.inboxTriage.untriagedCount}
                 </span>
               )}
             </div>
@@ -479,9 +454,9 @@ export default function Dashboard() {
               Open inbox <ArrowRight className="w-3 h-3" />
             </Link>
           </div>
-          {((stats?.inboxTriage?.latest?.length || ASHBI_FALLBACK.inboxTriage.latest.length) > 0) ? (
+          {stats?.inboxTriage?.latest?.length > 0 ? (
             <ul className="divide-y divide-border max-h-[340px] overflow-y-auto">
-              {(stats?.inboxTriage?.latest?.length > 0 ? stats.inboxTriage.latest : ASHBI_FALLBACK.inboxTriage.latest).map(thread => (
+              {stats.inboxTriage.latest.map(thread => (
                 <li key={thread.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
                   <div className="flex items-start gap-3">
                     <div className={cn(
@@ -513,7 +488,7 @@ export default function Dashboard() {
       {/* ─── Row: WordPress Sites + Overdue Tasks ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* WordPress Site Alerts */}
-        {((stats?.wpSiteAlerts?.length || ASHBI_FALLBACK.wpSiteAlerts.length) > 0) && (
+        {stats?.wpSiteAlerts?.length > 0 && (
           <Card>
             <div className="px-4 py-3 border-b border-border flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -522,7 +497,7 @@ export default function Dashboard() {
               </div>
             </div>
             <ul className="divide-y divide-border max-h-[340px] overflow-y-auto">
-              {(stats?.wpSiteAlerts?.length > 0 ? stats.wpSiteAlerts : ASHBI_FALLBACK.wpSiteAlerts).map(site => (
+              {stats.wpSiteAlerts.map(site => (
                 <li key={site.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
                   <div className="flex items-start justify-between">
                     <div className="flex-1 min-w-0">
@@ -554,14 +529,14 @@ export default function Dashboard() {
         )}
 
         {/* Overdue Tasks */}
-        {((stats?.overdueTasks?.length || ASHBI_FALLBACK.overdueTasks.length) > 0) && (
+        {stats?.overdueTasks?.length > 0 && (
           <Card>
             <div className="px-4 py-3 border-b border-border flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-red-500" />
                 <h2 className="font-semibold text-foreground">Overdue Tasks</h2>
                 <span className="bg-red-100 text-red-700 text-xs font-bold rounded-full px-2 dark:bg-red-900/30 dark:text-red-400">
-                  {stats?.overdueTasks?.length || ASHBI_FALLBACK.overdueTasks.length}
+                  {stats.overdueTasks.length}
                 </span>
               </div>
               <Link to="/inbox" className="text-xs text-primary hover:underline flex items-center gap-1">
@@ -569,7 +544,7 @@ export default function Dashboard() {
               </Link>
             </div>
             <ul className="divide-y divide-border max-h-[340px] overflow-y-auto">
-              {(stats?.overdueTasks?.length > 0 ? stats.overdueTasks : ASHBI_FALLBACK.overdueTasks).map(task => (
+              {stats.overdueTasks.map(task => (
                 <li key={task.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
                   <div className="flex items-start justify-between">
                     <div className="flex-1 min-w-0">
@@ -735,11 +710,11 @@ function ClientHealthCard({ client, navigate }) {
         'p-4 border-l-4 cursor-pointer hover:border-primary/30 transition-colors',
         healthColors[client.healthStatus] || 'border-l-border'
       )}
-      onClick={() => navigate(`/clients/${client.id}`)}
+      onClick={() => navigate(`/client/${client.id}`)}
       role="button"
       tabIndex={0}
       aria-label={`View client health for ${client.name}`}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/clients/${client.id}`); } }}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(`/client/${client.id}`); } }}
     >
       <div className="flex items-start justify-between mb-2">
         <h3 className="font-semibold text-sm text-foreground truncate flex-1">{client.name}</h3>
