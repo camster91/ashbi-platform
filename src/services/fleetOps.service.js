@@ -225,7 +225,7 @@ export async function executeFanOutPure({
 /**
  * Resolve target sites from a fan-out request.
  * - targetAll=true: every site in wPSite (id + url + name only)
- * - targetSites=[url, ...]: filter to those URLs that exist in wPSite
+ * - targetSites=[id-or-url, ...]: filter to matching IDs or URLs in wPSite
  * - neither: returns [] (caller should reject before calling executeFleetOp)
  */
 export async function resolveTargetSites({ targetAll, targetSites } = {}) {
@@ -237,7 +237,12 @@ export async function resolveTargetSites({ targetAll, targetSites } = {}) {
   }
   if (Array.isArray(targetSites) && targetSites.length > 0) {
     return prisma.wPSite.findMany({
-      where: { url: { in: targetSites } },
+      where: {
+        OR: [
+          { id: { in: targetSites } },
+          { url: { in: targetSites } }
+        ]
+      },
       select: { id: true, url: true, name: true },
       orderBy: { createdAt: 'asc' }
     });

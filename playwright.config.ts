@@ -13,6 +13,9 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './tests',
+  // Keep Playwright from importing Vitest's `*.test.mjs` integration suite.
+  // Browser tests use the conventional `*.spec.ts` suffix.
+  testMatch: '**/*.spec.ts',
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
