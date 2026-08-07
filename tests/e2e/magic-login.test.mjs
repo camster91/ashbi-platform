@@ -398,15 +398,14 @@ describe('PR-G: WP bridge + magic-login end-to-end smoke', () => {
     expect(isRedirectToAdmin || isAdminResponse,
       `magic-URL response ${res.status} loc="${loc}" did not reach wp-admin`).toBe(true);
 
-    // Follow the redirect once to confirm a session cookie was set.
+    // The token is single-use, so inspect the consuming response itself.
+    // Fetching the magic URL a second time would correctly trigger replay
+    // protection and cannot be used to validate the first response's cookie.
     if (isRedirectToAdmin) {
-      const followed = await fetch(lastMagicUrl, { redirect: 'follow' });
-      const cookies = followed.headers.getSetCookie?.() || [];
+      const cookies = res.headers.getSetCookie?.() || [res.headers.get('set-cookie') || ''];
       const cookieStr = cookies.join(' ');
-      const ok = /wordpress_logged_in|wordpress_sec/.test(cookieStr) || followed.url.includes('/wp-admin');
-      expect(ok,
-        `followed response cookies/url indicate logged-in session. ` +
-        `url=${followed.url} cookies=${cookieStr.slice(0, 200)}`).toBe(true);
+      expect(/wordpress_logged_in|wordpress_sec/.test(cookieStr),
+        `magic response did not set a logged-in session cookie: ${cookieStr.slice(0, 200)}`).toBe(true);
     }
   });
 
