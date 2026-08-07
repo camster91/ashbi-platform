@@ -39,15 +39,15 @@ ashbi-design/
 ## Development
 
 ```bash
-# Install dependencies
-npm install
-cd web && npm install
+# Install locked dependencies
+npm ci
+npm ci --prefix web
 
 # Start backend
 npm run dev
 
 # Start frontend (in another terminal)
-cd web && npm run dev
+npm run dev:web
 
 # Generate Prisma client
 npm run db:generate
@@ -55,6 +55,16 @@ npm run db:generate
 # Push schema changes
 npm run db:push
 ```
+
+### Dependency and build ownership
+
+The repository root owns the Fastify backend, Prisma client, workers, and backend/E2E
+tooling. `web/` exclusively owns browser dependencies, Tailwind/PostCSS, and Vite.
+Canonical frontend commands are delegated from the root (`npm run dev:web`,
+`npm run build:web`, `npm run test:web`) and use `web/vite.config.js`, producing
+`web/dist`. The Docker frontend stage uses the same manifest, lockfile, configuration,
+and output path. Root production installs contain no React, Radix, Tailwind, or Vite
+packages. Check both resolved dependency graphs with `npm run check:dependencies`.
 
 ## Deployment
 

@@ -63,6 +63,10 @@ export async function tenancyMiddleware(request, reply) {
     request.url.startsWith('/api/invoices/stripe-webhook') ||
     request.url.startsWith('/api/mailgun') ||
     request.url.startsWith('/api/leads/leads/intake') ||
+    // WordPress bridge requests are authenticated at the route level with
+    // either HMAC or an admin JWT. WPSite is not tenant-scoped yet, so the
+    // global tenancy guard cannot derive an organization for these calls.
+    request.url.startsWith('/api/wp-bridge') ||
     request.url === '/api/health'
   ) {
     request.prisma = prisma; // Use global for auth/portal/health/public routes

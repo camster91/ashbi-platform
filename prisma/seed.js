@@ -1,7 +1,11 @@
-import { PrismaClient } from '@prisma/client'
+import prismaPkg from '@prisma/client'
+import { PrismaPg } from '@prisma/adapter-pg'
 import bcrypt from 'bcrypt'
 
-const prisma = new PrismaClient()
+const { PrismaClient } = prismaPkg
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL })
+})
 
 function hashPassword(password) {
   return bcrypt.hashSync(password, 12)
