@@ -40,9 +40,11 @@ if [ "$MODE" = "all" ] || [ "$MODE" = "--activate-only" ]; then
     || { log "FATAL: repo-root .wp-env.json not found"; exit 3; }
 
   log "activating plugin via wp-env wp-cli"
-  npx --yes @wordpress/env run tests-cli wp plugin activate ashbi-agency-wp-bridge
-  npx --yes @wordpress/env run tests-cli wp option update ashbi_hub_url "$HUB_URL"
-  npx --yes @wordpress/env run tests-cli wp option update ashbi_secret_key "$HUB_SECRET"
+  # The E2E suite calls the development site on port 8888. Configure that
+  # site's database through `cli`; `tests-cli` targets the separate test DB.
+  npx --yes @wordpress/env run cli wp plugin activate ashbi-agency-wp-bridge
+  npx --yes @wordpress/env run cli wp option update ashbi_hub_url "$HUB_URL"
+  npx --yes @wordpress/env run cli wp option update ashbi_secret_key "$HUB_SECRET"
 fi
 
 log "plugin-setup phase done ($MODE)"

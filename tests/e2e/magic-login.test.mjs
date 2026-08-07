@@ -109,7 +109,9 @@ async function wpCli(...args) {
   const hasRootConfig = fs.existsSync(`${cwd}/.wp-env.json`);
   const cmd = ['npx', '@wordpress/env', 'run'];
   if (!hasRootConfig) cmd.push('--config', 'tests/e2e/wp-env/.wp-env.json');
-  cmd.push('tests-cli', 'wp', ...args);
+  // WP_BASE points at wp-env's development site (port 8888), so use its
+  // matching CLI container. Using tests-cli would read a separate database.
+  cmd.push('cli', 'wp', ...args);
   const result = await execa(cmd[0], cmd.slice(1), {
     cwd, reject: false, timeout: 30000
   });
