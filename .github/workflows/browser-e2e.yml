@@ -3,7 +3,7 @@ name: Browser E2E smoke
 on:
   pull_request:
     paths:
-      - 'tests/login.spec.ts'
+      - 'tests/**/*.spec.ts'
       - 'playwright.config.ts'
       - 'web/**'
       - 'package.json'
