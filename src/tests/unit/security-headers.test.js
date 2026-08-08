@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import Fastify from 'fastify';
 import helmet from '@fastify/helmet';
 import { buildHelmetOptions, permissionsPolicy } from '../../config/security-headers.js';
+import { readFile } from 'node:fs/promises';
 
 async function responseFor(options) {
   const app = Fastify();
@@ -51,4 +52,12 @@ test('development omits HSTS and upgrade-insecure-requests', async () => {
   const response = await responseFor({ isProduction: false });
   assert.equal(response.headers['strict-transport-security'], undefined);
   assert.doesNotMatch(response.headers['content-security-policy'], /upgrade-insecure-requests/);
+});
+
+test('production HTML contains no executable inline scripts blocked by CSP', async () => {
+  const html = await readFile(new URL('../../../web/index.html', import.meta.url), 'utf8');
+  const inlineScripts = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)]
+    .map((match) => match[1].trim())
+    .filter(Boolean);
+  assert.deepEqual(inlineScripts, []);
 });

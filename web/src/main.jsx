@@ -26,6 +26,14 @@ if (import.meta.env.VITE_SENTRY_DSN) {
   });
 }
 
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((error) => {
+      Sentry.captureException(error);
+    });
+  });
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
