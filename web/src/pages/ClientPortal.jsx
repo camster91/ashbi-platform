@@ -5,6 +5,21 @@ import { io } from 'socket.io-client';
 const API = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '') : '';
 const SOCKET_URL = import.meta.env.PROD ? window.location.origin : 'http://localhost:3000';
 
+async function downloadPortalDocument(token, doc) {
+  const response = await fetch(`${API}/api/client-portal/documents/${doc.id}/download`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!response.ok) throw new Error(`Download failed (${response.status})`);
+  const blobUrl = URL.createObjectURL(await response.blob());
+  const anchor = document.createElement('a');
+  anchor.href = blobUrl;
+  anchor.download = doc.originalName || 'download';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(blobUrl);
+}
+
 // ── Ashbi Design Brand ────────────────────────────────────────────────────────
 const BRAND = {
   primary: '#2e2958',
@@ -582,6 +597,14 @@ function ProjectDetail({ projectId, token, onBack }) {
     }
   }
 
+  async function handleDownloadDoc(doc) {
+    try {
+      await downloadPortalDocument(token, doc);
+    } catch (err) {
+      setUploadError(err?.message ?? 'Download failed — please try again');
+    }
+  }
+
   if (loading) {
     return <div className="cp-loading">Loading project...</div>;
   }
@@ -826,9 +849,9 @@ function ProjectDetail({ projectId, token, onBack }) {
                     </p>
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem', marginLeft: '0.75rem' }}>
-                    <a href={`${API}${doc.path}`} target="_blank" rel="noopener noreferrer" className="cp-btn-secondary" style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }}>
+                    <button type="button" onClick={() => handleDownloadDoc(doc)} className="cp-btn-secondary" style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }}>
                       {Icons.download} Download
-                    </a>
+                    </button>
                     <button onClick={() => handleDeleteDoc(doc.id)} className="cp-btn-danger" style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }}>
                       {Icons.trash}
                     </button>
@@ -971,6 +994,14 @@ function DocumentsTab({ projects, token }) {
     }
   }
 
+  async function handleDownloadDoc(doc) {
+    try {
+      await downloadPortalDocument(token, doc);
+    } catch (err) {
+      setUploadError(err?.message ?? 'Download failed — please try again');
+    }
+  }
+
   return (
     <div className="cp-space-y-4">
       <h2 className="cp-page-title">Documents</h2>
@@ -1033,9 +1064,9 @@ function DocumentsTab({ projects, token }) {
                 </p>
               </div>
               <div style={{ display: 'flex', gap: '0.5rem', marginLeft: '0.75rem' }}>
-                <a href={`${API}${doc.path}`} target="_blank" rel="noopener noreferrer" className="cp-btn-secondary" style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }}>
+                <button type="button" onClick={() => handleDownloadDoc(doc)} className="cp-btn-secondary" style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }}>
                   {Icons.download} Download
-                </a>
+                </button>
                 <button onClick={() => handleDeleteDoc(doc.id)} className="cp-btn-danger" style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }}>
                   {Icons.trash}
                 </button>

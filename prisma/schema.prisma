@@ -25,6 +25,7 @@ model Organization {
   users    User[]
   clients  Client[]
   projects Project[]
+  attachments Attachment[]
 
   @@map("organizations")
 }
@@ -566,6 +567,7 @@ model TimeEntry {
 
 model Attachment {
   id            String   @id @default(cuid())
+  organizationId String
   filename      String
   originalName  String
   mimeType      String
@@ -579,7 +581,9 @@ model Attachment {
 
   // Relations
   uploadedBy User @relation(fields: [uploadedById], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 
+  @@index([organizationId])
   @@map("attachments")
 }
 
