@@ -27,6 +27,7 @@ RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --ignore-scripts --no
   && npm rebuild bcrypt
 
 # Copy Prisma schema and generate client
+COPY prisma.config.ts ./
 COPY prisma ./prisma/
 RUN npx prisma generate
 
