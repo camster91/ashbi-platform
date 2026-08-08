@@ -114,6 +114,7 @@ model Client {
   organizationId      String?
   organization        Organization? @relation(fields: [organizationId], references: [id])
   name                String
+  email               String?
   domain              String?       @unique
   status              String        @default("ACTIVE") // ACTIVE, PAUSED, CHURNED
   communicationPrefs  String        @default("{}") // JSON: tone, frequency, etc.
@@ -906,6 +907,7 @@ model Invoice {
   stripePaymentIntentId String?
   paymentMethod         String? // STRIPE | BANK | CHECK | CASH | OTHER
   paymentNotes          String?
+  transactionId         String?
   paidAt                DateTime?
   sentAt                DateTime?
   isRecurring           Boolean   @default(false)
