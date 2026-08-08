@@ -22,9 +22,19 @@ model Organization {
   updatedAt DateTime @updatedAt
 
   // Relations
-  users    User[]
-  clients  Client[]
-  projects Project[]
+  users              User[]
+  clients            Client[]
+  projects           Project[]
+  formDrafts         FormDraft[]
+  attachments        Attachment[]
+  wpSites            WPSite[]
+  wpBackups          WPBackup[]
+  wpReports          WPReport[]
+  wpAlerts           WPAlert[]
+  wpFleetOps         WPFleetOp[]
+  wpMagicLoginLogs   WPMagicLoginLog[]
+  wpBridgeNonces     WPBridgeNonce[]
+  supportHourEntries SupportHourEntry[]
 
   @@map("organizations")
 }
@@ -72,9 +82,31 @@ model User {
   proposalVersions  ProposalVersion[]
   timeSessions      TimeSession[]
   apiKeys           ApiKey[]
+  formDrafts        FormDraft[]
 
   @@index([organizationId])
   @@map("users")
+}
+
+model FormDraft {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entity         String
+  entityId       String
+  data           Json
+  revision       Int          @default(1)
+  baseUpdatedAt  DateTime?
+  expiresAt      DateTime
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([userId, entity, entityId])
+  @@index([organizationId, userId])
+  @@index([expiresAt])
+  @@map("form_drafts")
 }
 
 model Client {
@@ -566,6 +598,7 @@ model TimeEntry {
 
 model Attachment {
   id            String   @id @default(cuid())
+  organizationId String
   filename      String
   originalName  String
   mimeType      String
@@ -579,7 +612,9 @@ model Attachment {
 
   // Relations
   uploadedBy User @relation(fields: [uploadedById], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 
+  @@index([organizationId])
   @@map("attachments")
 }
 
@@ -1342,20 +1377,24 @@ model PipelineDeal {
 }
 
 model SupportHourEntry {
-  id          String   @id @default(cuid())
-  siteUrl     String
-  clientId    String?
-  projectId   String?
-  month       String
-  hours       Float
-  description String?
-  source      String   @default("plugin")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String   @id @default(cuid())
+  organizationId String?
+  siteUrl        String
+  clientId       String?
+  projectId      String?
+  month          String
+  hours          Float
+  description    String?
+  source         String   @default("plugin")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization? @relation(fields: [organizationId], references: [id])
 
   @@index([siteUrl])
   @@index([month])
   @@index([clientId])
+  @@index([organizationId])
   @@map("support_hours")
 }
 
@@ -1584,57 +1623,65 @@ model TrashedItem {
 // ==================== WORDPRESS SITE BRIDGE (reinstated 2026-07-03, Path A of plan_96e82e56) ====================
 
 model WPSite {
-  id            String    @id @default(cuid())
-  name          String
-  url           String
-  adminUrl      String?
-  clientId      String?
-  projectId     String?   @unique
-  status        String    @default("ACTIVE") // ACTIVE | MAINTENANCE | OFFLINE | ERROR
-  wpVersion     String?
-  phpVersion    String?
-  pluginCount   Int       @default(0)
-  theme         String?
-  lastCheckedAt DateTime?
-  healthScore   Int       @default(100) // 0-100
-  alerts        String    @default("[]") // JSON: array of alert objects
-  magicLoginUrl String?
-  bridgeVersion String?
-  ttfb          Int?
-  dbSize        BigInt?
-  diskBytes     BigInt?
-  diskUsagePct  Float?
-  pluginUpdates Int       @default(0)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                    String    @id @default(cuid())
+  organizationId        String?
+  bridgeSecretEncrypted String?
+  name                  String
+  url                   String
+  adminUrl              String?
+  clientId              String?
+  projectId             String?   @unique
+  status                String    @default("ACTIVE") // ACTIVE | MAINTENANCE | OFFLINE | ERROR
+  wpVersion             String?
+  phpVersion            String?
+  pluginCount           Int       @default(0)
+  theme                 String?
+  lastCheckedAt         DateTime?
+  healthScore           Int       @default(100) // 0-100
+  alerts                String    @default("[]") // JSON: array of alert objects
+  magicLoginUrl         String?
+  bridgeVersion         String?
+  ttfb                  Int?
+  dbSize                BigInt?
+  diskBytes             BigInt?
+  diskUsagePct          Float?
+  pluginUpdates         Int       @default(0)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
-  client    Client?    @relation("WPSiteClient", fields: [clientId], references: [id])
-  project   Project?   @relation(fields: [projectId], references: [id])
-  backups   WPBackup[]
-  reports   WPReport[]
-  alertsLog WPAlert[]
+  client       Client?         @relation("WPSiteClient", fields: [clientId], references: [id])
+  project      Project?        @relation(fields: [projectId], references: [id])
+  backups      WPBackup[]
+  reports      WPReport[]
+  alertsLog    WPAlert[]
+  nonces       WPBridgeNonce[]
+  organization Organization?   @relation(fields: [organizationId], references: [id])
 
+  @@index([organizationId])
   @@index([status])
   @@map("wp_sites")
 }
 
 // Per-site backup records from the bridge plugin (v1.7.0+)
 model WPBackup {
-  id           String   @id @default(cuid())
-  siteId       String
-  siteUrl      String
-  timestamp    DateTime
-  dbSuccess    Boolean
-  filesSuccess Boolean
-  dbFile       String?
-  filesFile    String?
-  manifest     String?
-  dbSize       BigInt?
-  filesSize    BigInt?
-  createdAt    DateTime @default(now())
+  id             String   @id @default(cuid())
+  organizationId String?
+  siteId         String
+  siteUrl        String
+  timestamp      DateTime
+  dbSuccess      Boolean
+  filesSuccess   Boolean
+  dbFile         String?
+  filesFile      String?
+  manifest       String?
+  dbSize         BigInt?
+  filesSize      BigInt?
+  createdAt      DateTime @default(now())
 
-  site WPSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  site         WPSite        @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id])
 
+  @@index([organizationId])
   @@index([siteId])
   @@index([siteUrl])
   @@index([timestamp])
@@ -1643,21 +1690,24 @@ model WPBackup {
 
 // Monthly maintenance report delivered by the bridge plugin (v1.7.0+)
 model WPReport {
-  id        String   @id @default(cuid())
-  siteId    String
-  siteUrl   String
-  month     String
-  uptime    String? // JSON: { total, ok, failed, pct }
-  updates   String? // JSON: { plugins, themes, core }
-  cleanup   String? // JSON: { revisions, spam_comments, trash_posts, expired_tokens }
-  hours     String? // JSON: { available, used, remaining, banked, log }
-  ssl       String? // JSON: { status, days }
-  payload   String? // Full raw payload
-  createdAt DateTime @default(now())
+  id             String   @id @default(cuid())
+  organizationId String?
+  siteId         String
+  siteUrl        String
+  month          String
+  uptime         String? // JSON: { total, ok, failed, pct }
+  updates        String? // JSON: { plugins, themes, core }
+  cleanup        String? // JSON: { revisions, spam_comments, trash_posts, expired_tokens }
+  hours          String? // JSON: { available, used, remaining, banked, log }
+  ssl            String? // JSON: { status, days }
+  payload        String? // Full raw payload
+  createdAt      DateTime @default(now())
 
-  site WPSite @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  site         WPSite        @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id])
 
   @@unique([siteId, month])
+  @@index([organizationId])
   @@index([siteUrl])
   @@index([createdAt])
   @@map("wp_reports")
@@ -1665,15 +1715,18 @@ model WPReport {
 
 // Support-hour alerts: new admin, promotions, security events (v1.7.0+)
 model WPAlert {
-  id        String   @id @default(cuid())
-  siteId    String?
-  siteUrl   String
-  alertType String
-  details   String   @default("{}")
-  createdAt DateTime @default(now())
+  id             String   @id @default(cuid())
+  organizationId String?
+  siteId         String?
+  siteUrl        String
+  alertType      String
+  details        String   @default("{}")
+  createdAt      DateTime @default(now())
 
-  site WPSite? @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  site         WPSite?       @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  organization Organization? @relation(fields: [organizationId], references: [id])
 
+  @@index([organizationId])
   @@index([siteUrl])
   @@index([alertType])
   @@index([createdAt])
@@ -1686,16 +1739,19 @@ model WPAlert {
 // the wp_backups/wp_alerts tables the plugin already writes; this table is
 // the hub-side orchestration ledger.
 model WPFleetOp {
-  id           String    @id @default(cuid())
-  opType       String // 'file_patch' | 'command' | 'option_set' | 'magic_login' | 'magic_login_revoke'
-  payload      Json // original request body
-  targetCount  Int
-  successCount Int       @default(0)
-  failureCount Int       @default(0)
-  createdBy    String // user id from JWT
-  createdAt    DateTime  @default(now())
-  completedAt  DateTime?
+  id             String        @id @default(cuid())
+  organizationId String?
+  opType         String // 'file_patch' | 'command' | 'option_set' | 'magic_login' | 'magic_login_revoke'
+  payload        Json // original request body
+  targetCount    Int
+  successCount   Int           @default(0)
+  failureCount   Int           @default(0)
+  createdBy      String // user id from JWT
+  createdAt      DateTime      @default(now())
+  completedAt    DateTime?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
 
+  @@index([organizationId])
   @@index([createdAt(sort: Desc)])
   @@index([opType])
   @@index([createdBy])
@@ -1712,20 +1768,39 @@ model WPFleetOp {
 // centralises the cross-site view so the WPSites "Recent Logins" tab can
 // show fleet-wide activity in one place.
 model WPMagicLoginLog {
-  id        String   @id @default(cuid())
-  siteId    String? // nullable: pre-registration/wildcard logins may not have a row yet
-  siteUrl   String // canonical site URL — survives WPSite deletes
-  userId    Int? // WP user id (admin being issued for / logged in as)
-  hubUserId String? // hub user id (operator that triggered the issuance / revoke)
-  ip        String   @default("0.0.0.0")
-  status    String // 'issued' | 'consumed' | 'revoked' | 'rejected'
-  reason    String? // 'expired_or_invalid' | 'replayed' | 'expired' | 'rate_limited' | 'ip_not_allowed' | 'manual_revoke'
-  tokenHash String? // sha256 of the raw magic-login token (NEVER the token itself)
-  ts        DateTime @default(now())
+  id             String        @id @default(cuid())
+  organizationId String?
+  siteId         String? // nullable: pre-registration/wildcard logins may not have a row yet
+  siteUrl        String // canonical site URL — survives WPSite deletes
+  userId         Int? // WP user id (admin being issued for / logged in as)
+  hubUserId      String? // hub user id (operator that triggered the issuance / revoke)
+  ip             String        @default("0.0.0.0")
+  status         String // 'issued' | 'consumed' | 'revoked' | 'rejected'
+  reason         String? // 'expired_or_invalid' | 'replayed' | 'expired' | 'rate_limited' | 'ip_not_allowed' | 'manual_revoke'
+  tokenHash      String? // sha256 of the raw magic-login token (NEVER the token itself)
+  ts             DateTime      @default(now())
+  organization   Organization? @relation(fields: [organizationId], references: [id])
 
+  @@index([organizationId])
   @@index([siteId])
   @@index([siteUrl])
   @@index([ts(sort: Desc)])
   @@index([status])
   @@map("wp_magic_login_log")
+}
+
+model WPBridgeNonce {
+  id             String   @id @default(cuid())
+  organizationId String
+  siteId         String
+  nonceHash      String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  site         WPSite       @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([siteId, nonceHash])
+  @@index([organizationId, createdAt])
+  @@index([createdAt])
+  @@map("wp_bridge_nonces")
 }

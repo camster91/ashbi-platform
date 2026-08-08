@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ScrollText,
@@ -15,6 +15,8 @@ import { api } from '../lib/api';
 import { useToast } from '../hooks/useToast';
 import { Button, Card } from '../components/ui';
 import Modal from '../components/Modal';
+import useAutosave from '../hooks/useAutosave';
+import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 
 const statusConfig = {
   DRAFT: { label: 'Draft', color: 'bg-muted text-muted-foreground' },
@@ -41,6 +43,12 @@ export default function Contracts() {
   const [aiLoading, setAiLoading] = useState(false);
   const [filterStatus, setFilterStatus] = useState('');
   const [expandedId, setExpandedId] = useState(null);
+  const [form, setForm] = useState({ clientId: '', title: '', templateType: 'RETAINER' });
+  const formDraft = useAutosave('contract', 'new', form);
+
+  useEffect(() => {
+    if (formDraft.draft) setShowCreate(true);
+  }, [formDraft.draft]);
 
   const { data: contracts = [], isLoading } = useQuery({
     queryKey: ['contracts', filterStatus],
@@ -61,6 +69,7 @@ export default function Contracts() {
   const createMutation = useMutation({
     mutationFn: (data) => api.createContract(data),
     onSuccess: () => {
+      void formDraft.clearDraft();
       queryClient.invalidateQueries({ queryKey: ['contracts'] });
       setShowCreate(false);
       setForm({ clientId: '', title: '', templateType: 'RETAINER' });
@@ -87,8 +96,6 @@ export default function Contracts() {
     },
     onError: () => toast.error('Failed to send contract'),
   });
-
-  const [form, setForm] = useState({ clientId: '', title: '', templateType: 'RETAINER' });
 
   const handleCreate = (e) => {
     e.preventDefault();
@@ -245,6 +252,15 @@ export default function Contracts() {
       {showCreate && (
         <Card className="p-6">
           <h2 className="text-lg font-semibold mb-4">New Contract</h2>
+          <DraftRecoveryNotice
+            draft={formDraft.draft}
+            draftSavedAt={formDraft.draftMeta?.draftSavedAt}
+            status={formDraft.status}
+            lastSaved={formDraft.lastSaved}
+            onRecover={(recovered) => { setForm(recovered); formDraft.setDraft(null); }}
+            onDiscard={formDraft.discardDraft}
+            onRetry={formDraft.saveNow}
+          />
           <form onSubmit={handleCreate} className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-1">Client</label>

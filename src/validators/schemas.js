@@ -2,6 +2,12 @@
 // Usage: import { schemas } from '../validators/schemas.js';
 
 import { z } from 'zod';
+import {
+  ALLOWED_UPLOAD_EXTENSIONS,
+  ALLOWED_UPLOAD_MIMETYPES,
+  MAX_UPLOAD_SIZE,
+  validateUploadedFile,
+} from '../security/file-upload-policy.js';
 
 // ── Reusable field validators ──────────────────────────────────────────────
 const email = z.string().email().max(255);
@@ -12,27 +18,6 @@ const cuidId = z.string().min(1).max(50); // accepts cuid2, uuid, etc.
 const url = z.string().url().max(2048);
 
 // Allowlisted file extensions (prevents path traversal / XSS via stored extensions)
-const ALLOWED_UPLOAD_EXTENSIONS = [
-  '.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg',
-  '.pdf', '.doc', '.docx', '.xls', '.xlsx',
-  '.ppt', '.pptx', '.txt', '.csv',
-  '.zip', '.mp4', '.mp3', '.wav'
-];
-
-const ALLOWED_UPLOAD_MIMETYPES = [
-  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-powerpoint',
-  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-  'text/plain', 'text/csv',
-  'application/zip',
-  'video/mp4',
-  'audio/mpeg', 'audio/wav',
-];
 
 // ── Auth schemas ───────────────────────────────────────────────────────────
 export const loginSchema = z.object({
@@ -286,30 +271,7 @@ export const patchApprovalSchema = z.object({
 });
 
 // ── File upload validation helper ──────────────────────────────────────────
-export function validateUploadedFile(filename, mimetype) {
-  const ext = filename.includes('.') ? filename.substring(filename.lastIndexOf('.')).toLowerCase() : '';
-
-  // Reject double extensions (e.g., file.html.png)
-  const parts = filename.split('.');
-  if (parts.length > 2) {
-    return { valid: false, error: 'Double extensions are not allowed' };
-  }
-
-  if (!ALLOWED_UPLOAD_EXTENSIONS.includes(ext)) {
-    return { valid: false, error: `File extension "${ext}" is not allowed. Allowed: ${ALLOWED_UPLOAD_EXTENSIONS.join(', ')}` };
-  }
-
-  if (!ALLOWED_UPLOAD_MIMETYPES.includes(mimetype)) {
-    return { valid: false, error: `MIME type "${mimetype}" is not allowed.` };
-  }
-
-  // SVG is dangerous when served inline — require special handling
-  if (ext === '.svg' && mimetype === 'image/svg+xml') {
-    return { valid: true, warning: 'SVG files must be served with Content-Disposition: attachment', ext, mimetype };
-  }
-
-  return { valid: true, ext, mimetype };
-}
+export { validateUploadedFile };
 
 // ── Helper: convert Zod schema to Fastify JSON Schema ──────────────────────
 // This allows using Zod schemas with Fastify's built-in validation
@@ -467,7 +429,7 @@ export const fileUpload = {
   validate: validateUploadedFile,
   ALLOWED_EXTENSIONS: ALLOWED_UPLOAD_EXTENSIONS,
   ALLOWED_MIMETYPES: ALLOWED_UPLOAD_MIMETYPES,
-  MAX_SIZE: 50 * 1024 * 1024, // 50MB
+  MAX_SIZE: MAX_UPLOAD_SIZE,
 };
 
 // ── AI context (admin key/value store feeding AI system prompts) ───────────
@@ -1360,7 +1322,12 @@ export const creativeBriefGenerateSchema = z.object({
 export const credentialCreateSchema = credentialSchema; // alias for routes that import a different name
 
 export const draftUpsertSchema = z.object({
-  data: z.string().min(1).max(100_000),
+  data: z.unknown().refine(
+    (value) => value !== undefined && JSON.stringify(value).length <= 100_000,
+    'Draft data must be valid JSON no larger than 100KB',
+  ),
+  expectedRevision: z.number().int().positive().optional(),
+  baseUpdatedAt: z.string().datetime().optional(),
 });
 
 export const emailTriageDraftUpdateSchema = z.object({

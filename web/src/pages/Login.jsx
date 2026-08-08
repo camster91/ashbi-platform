@@ -92,7 +92,7 @@ export default function Login() {
 
       {/* Right side - Login form */}
       <main className="flex-1 flex items-center justify-center p-4 sm:p-8 lg:p-12 bg-background">
-        <div className="w-full max-w-md space-y-8 animate-slide-up">
+        <div className="w-full max-w-md space-y-8">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
             <div className="w-10 h-10 rounded-xl bg-[#2e2958] flex items-center justify-center">

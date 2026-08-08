@@ -11,7 +11,8 @@ export function validateReleaseGates(root = process.cwd()) {
   const release = read('release-gates.yml');
   const ci = read('ci.yml');
   const production = read('deploy-coolify.yml');
-  const staging = read('deploy-coolify-staging.yml');
+  const deployVps = read('deploy-vps.yml');
+  const imageBuild = read('build-and-push.yml');
   const failures = [];
 
   for (const [name, source] of allWorkflows) {
@@ -36,15 +37,22 @@ export function validateReleaseGates(root = process.cwd()) {
   }
   if (!/^\s*workflow_call:\s*$/m.test(release)) failures.push('release-gates.yml is not reusable');
 
-  for (const [name, source] of [['ci.yml', ci], ['deploy-coolify.yml', production], ['deploy-coolify-staging.yml', staging]]) {
+  for (const [name, source] of [['ci.yml', ci], ['deploy-coolify.yml', production]]) {
     if (!/uses:\s*\.\/\.github\/workflows\/release-gates\.yml/.test(source)) {
       failures.push(`${name} does not invoke the canonical release gates`);
     }
   }
-  for (const [name, source] of [['deploy-coolify.yml', production], ['deploy-coolify-staging.yml', staging]]) {
-    if (!/needs:\s*release-gates/.test(source)) failures.push(`${name} can deploy without the release gates`);
-    if (!/if:\s*github\.ref == 'refs\/heads\/main'/.test(source)) failures.push(`${name} can deploy from an unprotected branch`);
+  if (!/publish:[\s\S]*needs:\s*release-gates/.test(production)) failures.push('deploy-coolify.yml can publish without the release gates');
+  if (!/staging:[\s\S]*needs:\s*publish/.test(production)) failures.push('deploy-coolify.yml can stage before immutable publication');
+  if (!/production:[\s\S]*needs:\s*\[publish, staging\]/.test(production)) failures.push('deploy-coolify.yml can promote to production before staging');
+  if (!/if:\s*github\.ref == 'refs\/heads\/main'/.test(production)) failures.push('deploy-coolify.yml can deploy from an unprotected branch');
+  if (!/image:\s*\$\{\{ needs\.publish\.outputs\.image \}\}/.test(production) || !/digest:\s*\$\{\{ needs\.publish\.outputs\.digest \}\}/.test(production)) {
+    failures.push('deploy-coolify.yml does not promote the published image digest');
   }
+  if (!/IMAGE_REF:.*@\$\{\{ inputs\.digest \}\}/.test(deployVps)) failures.push('deploy-vps.yml does not deploy by digest');
+  if (!/PREVIOUS_IMAGE/.test(deployVps) || !/Readiness failed; restoring/.test(deployVps)) failures.push('deploy-vps.yml has no automatic rollback');
+  if (/COOLIFY_TOKEN|applications\/.*\/start/.test(production + deployVps)) failures.push('production has more than one deployment controller');
+  if (/push:[\s\S]*branches:\s*\[main/.test(imageBuild.split('workflow_call:')[0])) failures.push('build-and-push.yml independently races main deployment');
 
   return failures;
 }

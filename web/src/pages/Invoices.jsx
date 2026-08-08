@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -11,6 +11,8 @@ import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import { Button, Card } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
+import useAutosave from '../hooks/useAutosave';
+import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 
 const HST_RATE = 13;
 
@@ -56,6 +58,11 @@ export default function Invoices() {
     recurringInterval: 'MONTHLY',
     lineItems: [{ description: '', itemType: 'LABOR', quantity: 1, unitPrice: 0 }],
   });
+  const formDraft = useAutosave('invoice', 'new', form);
+
+  useEffect(() => {
+    if (formDraft.draft) setShowCreate(true);
+  }, [formDraft.draft]);
 
   // Queries
   const { data: invoiceData = { invoices: [], stats: {} }, isLoading, isError, refetch } = useQuery({
@@ -85,6 +92,7 @@ export default function Invoices() {
   const createMutation = useMutation({
     mutationFn: (data) => api.createInvoice(data),
     onSuccess: () => {
+      void formDraft.clearDraft();
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       setShowCreate(false);
       resetForm();
@@ -283,6 +291,7 @@ export default function Invoices() {
               onCancel={() => { setShowCreate(false); resetForm(); }}
               loading={createMutation.isPending}
               error={createMutation.error?.message}
+              draftState={formDraft}
             />
           )}
 
@@ -456,13 +465,22 @@ function InvoiceCreateForm({
   form, clients, projects, templates,
   formSubtotal, formDiscount, formTax, formTotal,
   onFormChange, onLineItemUpdate, onLineItemAdd, onLineItemRemove,
-  onApplyTemplate, onSubmit, onCancel, loading, error
+  onApplyTemplate, onSubmit, onCancel, loading, error, draftState
 }) {
   const clientProjects = projects.filter(p => p.clientId === form.clientId);
 
   return (
     <Card className="p-4 sm:p-6">
       <h2 className="text-lg font-semibold mb-5">New Invoice</h2>
+      <DraftRecoveryNotice
+        draft={draftState.draft}
+        draftSavedAt={draftState.draftMeta?.draftSavedAt}
+        status={draftState.status}
+        lastSaved={draftState.lastSaved}
+        onRecover={(recovered) => { onFormChange(recovered); draftState.setDraft(null); }}
+        onDiscard={draftState.discardDraft}
+        onRetry={draftState.saveNow}
+      />
       <form onSubmit={onSubmit} className="space-y-5">
         {/* Client / Project / Title */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

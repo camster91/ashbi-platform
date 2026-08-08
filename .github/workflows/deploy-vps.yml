@@ -1,0 +1,95 @@
+name: Deploy immutable image to VPS
+
+on:
+  workflow_call:
+    inputs:
+      environment: { required: true, type: string }
+      image: { required: true, type: string }
+      digest: { required: true, type: string }
+      revision: { required: true, type: string }
+      root_dir: { required: true, type: string }
+      container_name: { required: true, type: string }
+      host_port: { required: true, type: string }
+    secrets:
+      VPS_HOST: { required: true }
+      VPS_SSH_KEY: { required: true }
+
+jobs:
+  deploy:
+    name: Deploy and verify ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Deploy exact digest with automatic rollback
+        uses: appleboy/ssh-action@v1
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE_REF: ${{ inputs.image }}@${{ inputs.digest }}
+          EXPECTED_REVISION: ${{ inputs.revision }}
+          IMAGE_DIGEST: ${{ inputs.digest }}
+          ROOT_DIR: ${{ inputs.root_dir }}
+          CONTAINER: ${{ inputs.container_name }}
+          HOST_PORT: ${{ inputs.host_port }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: root
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: GITHUB_ACTOR,GITHUB_TOKEN,IMAGE_REF,EXPECTED_REVISION,IMAGE_DIGEST,ROOT_DIR,CONTAINER,HOST_PORT
+          script: |
+            set -euo pipefail
+            ENV_FILE="$ROOT_DIR/.env"
+            DATA_DIR="$ROOT_DIR/data"
+            test -f "$ENV_FILE"
+            PREVIOUS_IMAGE=$(docker inspect --format '{{.Config.Image}}' "$CONTAINER" 2>/dev/null || true)
+            PREVIOUS_REVISION=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$CONTAINER" 2>/dev/null | sed -n 's/^APP_REVISION=//p' | tail -1)
+            PREVIOUS_DIGEST=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$CONTAINER" 2>/dev/null | sed -n 's/^APP_IMAGE_DIGEST=//p' | tail -1)
+            mkdir -p "$DATA_DIR/uploads" "$DATA_DIR/config" "$ROOT_DIR/releases"
+            if docker inspect "$CONTAINER" >/dev/null 2>&1 && [ -z "$(find "$DATA_DIR/uploads" -mindepth 1 -print -quit)" ]; then
+              docker cp "$CONTAINER:/app/uploads/." "$DATA_DIR/uploads/" 2>/dev/null || true
+              docker cp "$CONTAINER:/app/config/." "$DATA_DIR/config/" 2>/dev/null || true
+            fi
+            echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin >/dev/null
+            docker pull "$IMAGE_REF"
+            docker logout ghcr.io >/dev/null 2>&1 || true
+
+            start_container() {
+              image="$1" revision="$2" digest="$3"
+              docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+              docker run -d --name "$CONTAINER" --restart unless-stopped \
+                --network ashbi-hub-src_default \
+                -p "127.0.0.1:${HOST_PORT}:3002" \
+                -v "$DATA_DIR/uploads:/app/uploads" \
+                -v "$DATA_DIR/config:/app/config" \
+                --env-file "$ENV_FILE" \
+                -e APP_REVISION="$revision" -e APP_IMAGE_DIGEST="$digest" \
+                "$image" >/dev/null
+            }
+
+            start_container "$IMAGE_REF" "$EXPECTED_REVISION" "$IMAGE_DIGEST"
+            READY=false
+            for attempt in $(seq 1 30); do
+              BODY=$(curl -fsS --max-time 5 "http://127.0.0.1:${HOST_PORT}/api/health" || true)
+              if printf '%s' "$BODY" | grep -Fq "\"revision\":\"$EXPECTED_REVISION\"" && \
+                 printf '%s' "$BODY" | grep -Fq "\"imageDigest\":\"$IMAGE_DIGEST\""; then READY=true; break; fi
+              sleep 5
+            done
+            if [ "$READY" != true ]; then
+              echo "Readiness failed; restoring ${PREVIOUS_IMAGE:-nothing}" >&2
+              if [ -n "$PREVIOUS_IMAGE" ]; then
+                start_container "$PREVIOUS_IMAGE" "${PREVIOUS_REVISION:-unknown}" "${PREVIOUS_DIGEST:-unknown}"
+              else
+                docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+              fi
+              exit 1
+            fi
+            printf '%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$EXPECTED_REVISION" "$IMAGE_REF" >> "$ROOT_DIR/releases/history.tsv"
+
+      - name: Record release
+        run: |
+          echo "## ${{ inputs.environment }} release" >> "$GITHUB_STEP_SUMMARY"
+          echo "Revision: \`${{ inputs.revision }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Image: \`${{ inputs.image }}@${{ inputs.digest }}\`" >> "$GITHUB_STEP_SUMMARY"

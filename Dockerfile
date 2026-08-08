@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 # Multi-stage build for Ashbi Platform
 # Stage 1: Build frontend
-FROM node:20-alpine AS frontend-builder
+FROM node:22-alpine AS frontend-builder
 
 WORKDIR /app/web
 COPY web/package.json web/package-lock.json ./
@@ -10,7 +10,7 @@ COPY web/ ./
 RUN npm run build
 
 # Stage 2: Build backend + production image
-FROM node:20-alpine
+FROM node:22-alpine
 
 # Install OpenSSL (required by Prisma) and dumb-init for proper signal handling
 RUN apk add --no-cache openssl dumb-init
@@ -48,6 +48,8 @@ USER node
 # Default environment
 ENV NODE_ENV=production
 ENV PORT=3002
+ARG APP_REVISION=unknown
+ENV APP_REVISION=$APP_REVISION
 
 # Expose port
 EXPOSE 3002
