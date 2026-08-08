@@ -1,3 +1,6 @@
+import { createScopedPrisma } from '../utils/prisma-tenant-proxy.js';
+import { getRequestOrganizationId, requestStorage } from '../utils/request-context.js';
+
 /**
  * Resolve the tenant set for a background job.
  *
@@ -21,4 +24,21 @@ export async function resolveTenantOrganizationIds(prisma, requestedOrganization
     orderBy: { id: 'asc' },
   });
   return organizations.map(({ id }) => id);
+}
+
+export async function runTenantJob(prisma, organizationId, callback) {
+  await resolveTenantOrganizationIds(prisma, organizationId);
+  const tenantPrisma = createScopedPrisma(prisma, organizationId);
+  return requestStorage.run(
+    { prisma: tenantPrisma, organizationId },
+    () => callback(tenantPrisma),
+  );
+}
+
+export function withCurrentTenantJobData(data) {
+  const organizationId = getRequestOrganizationId();
+  if (!organizationId) {
+    throw new Error('Tenancy Error: a verified tenant context is required to enqueue this job');
+  }
+  return { ...data, organizationId };
 }

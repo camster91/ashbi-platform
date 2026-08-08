@@ -3,6 +3,7 @@
 import { Queue, Worker, QueueEvents } from 'bullmq';
 import IORedis from 'ioredis';
 import env from '../config/env.js';
+import { withCurrentTenantJobData } from './tenant-iteration.js';
 
 // Create Redis connection - parse URL manually to handle special chars in password
 function parseRedisUrl(url) {
@@ -69,7 +70,7 @@ emailQueueEvents.on('failed', ({ jobId, failedReason }) => {
  * Add email to processing queue
  */
 export async function queueEmailForProcessing(emailData) {
-  const job = await emailQueue.add('process-email', emailData, {
+  const job = await emailQueue.add('process-email', withCurrentTenantJobData(emailData), {
     attempts: 3,
     backoff: {
       type: 'exponential',
@@ -83,7 +84,7 @@ export async function queueEmailForProcessing(emailData) {
  * Schedule project health update
  */
 export async function scheduleHealthUpdate(projectId) {
-  await healthQueue.add('update-health', { projectId }, {
+  await healthQueue.add('update-health', withCurrentTenantJobData({ projectId }), {
     delay: 60000, // 1 minute delay to batch updates
     jobId: `health-${projectId}`, // Prevent duplicate jobs
     removeOnComplete: true
@@ -94,7 +95,7 @@ export async function scheduleHealthUpdate(projectId) {
  * Schedule escalation check
  */
 export async function scheduleEscalationCheck(threadId, delayMs) {
-  await escalationQueue.add('check-escalation', { threadId }, {
+  await escalationQueue.add('check-escalation', withCurrentTenantJobData({ threadId }), {
     delay: delayMs,
     jobId: `escalation-${threadId}`,
     removeOnComplete: true
@@ -105,7 +106,7 @@ export async function scheduleEscalationCheck(threadId, delayMs) {
  * Queue notification for delivery
  */
 export async function queueNotification(notification) {
-  await notificationQueue.add('send-notification', notification, {
+  await notificationQueue.add('send-notification', withCurrentTenantJobData(notification), {
     attempts: 3,
     backoff: { type: 'exponential', delay: 1000 }
   });
@@ -115,7 +116,7 @@ export async function queueNotification(notification) {
  * Queue embedding generation for a client
  */
 export async function queueEmbedding(clientId, content, source, sourceId = null, metadata = {}) {
-  await embeddingQueue.add('generate-embedding', { clientId, content, source, sourceId, metadata }, {
+  await embeddingQueue.add('generate-embedding', withCurrentTenantJobData({ clientId, content, source, sourceId, metadata }), {
     attempts: 2,
     backoff: { type: 'exponential', delay: 5000 },
     removeOnComplete: true

@@ -199,3 +199,44 @@ test('relationship-scoped upsert validates create and update ownership before wr
   );
   assert.equal(upserted, false);
 });
+
+test('direct-scoped project creation rejects a client owned by another organization', async () => {
+  let created = false;
+  const scoped = createScopedPrisma({
+    client: { findFirst: async () => null },
+    project: { create: async () => { created = true; return {}; } },
+  }, 'org-a');
+
+  await assert.rejects(
+    scoped.project.create({ data: { name: 'Foreign project', clientId: 'client-b' } }),
+    /client client-b does not belong to organization org-a/i,
+  );
+  assert.equal(created, false);
+});
+
+test('direct-scoped nested connect is ownership-checked before writing', async () => {
+  let created = false;
+  const scoped = createScopedPrisma({
+    client: { findFirst: async () => null },
+    project: { create: async () => { created = true; return {}; } },
+  }, 'org-a');
+
+  await assert.rejects(
+    scoped.project.create({ data: { name: 'Foreign project', client: { connect: { id: 'client-b' } } } }),
+    /client client-b does not belong to organization org-a/i,
+  );
+  assert.equal(created, false);
+});
+
+test('aliased relationship owners resolve to their actual tenant model', async () => {
+  const ownerCalls = [];
+  const createCalls = [];
+  const scoped = createScopedPrisma({
+    user: { findFirst: async (args) => { ownerCalls.push(args); return { id: 'user-a' }; } },
+    snippet: { create: async (args) => { createCalls.push(args); return {}; } },
+  }, 'org-a');
+
+  await scoped.snippet.create({ data: { name: 'Reply', content: 'Hello', createdById: 'user-a' } });
+  assert.equal(createCalls.length, 1);
+  assert.deepEqual(ownerCalls[0].where, { id: 'user-a', organizationId: 'org-a' });
+});

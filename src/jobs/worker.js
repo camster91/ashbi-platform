@@ -12,7 +12,7 @@ import * as Sentry from '@sentry/node';
 import logger from '../utils/logger.js';
 import prisma from '../config/db.js';
 import { createScopedPrisma } from '../utils/prisma-tenant-proxy.js';
-import { resolveTenantOrganizationIds } from './tenant-iteration.js';
+import { resolveTenantOrganizationIds, runTenantJob } from './tenant-iteration.js';
 
 // Helper to create workers with error handling for Redis unavailability
 function createWorker(queueName, processor, options = {}) {
@@ -44,7 +44,11 @@ const emailWorker = createWorker(
   QUEUES.EMAIL_PROCESSING,
   async (job) => {
     console.log(`Processing email job ${job.id}`);
-    const result = await processEmailPipeline(job.data);
+    const result = await runTenantJob(
+      prisma,
+      job.data?.organizationId,
+      () => processEmailPipeline(job.data),
+    );
 
     // Schedule escalation if thread was created
     if (result.threadId) {
@@ -64,14 +68,23 @@ const healthWorker = createWorker(
   async (job) => {
     if (job.name === 'update-all-health') {
       console.log('Updating all project health scores');
-      const count = await updateAllProjectHealth();
-      return { updated: count };
+      const organizationIds = await resolveTenantOrganizationIds(prisma);
+      let updated = 0;
+      for (const organizationId of organizationIds) {
+        updated += await runTenantJob(
+          prisma,
+          organizationId,
+          (tenantPrisma) => updateAllProjectHealth(tenantPrisma),
+        );
+      }
+      return { updated, organizations: organizationIds.length };
     }
 
     if (job.name === 'update-health' && job.data.projectId) {
-      const { calculateHealthScore, getHealthStatus } = await import('../services/project.service.js');
+      return runTenantJob(prisma, job.data?.organizationId, async (tenantPrisma) => {
+        const { calculateHealthScore, getHealthStatus } = await import('../services/project.service.js');
 
-      const project = await prisma.project.findUnique({
+      const project = await tenantPrisma.project.findUnique({
         where: { id: job.data.projectId },
         include: { threads: { where: { status: { not: 'RESOLVED' } } } }
       });
@@ -80,13 +93,15 @@ const healthWorker = createWorker(
         const score = calculateHealthScore(project, project.threads);
         const health = getHealthStatus(score);
 
-        await prisma.project.update({
+        await tenantPrisma.project.update({
           where: { id: job.data.projectId },
           data: { healthScore: score, health }
         });
 
         return { projectId: job.data.projectId, score, health };
       }
+      return { skipped: true };
+      });
     }
 
     return { skipped: true };
@@ -100,11 +115,20 @@ const escalationWorker = createWorker(
   async (job) => {
     if (job.name === 'check-all-escalations') {
       console.log('Checking all threads for escalation');
-      return await checkAllEscalations();
+      const organizationIds = await resolveTenantOrganizationIds(prisma);
+      const results = [];
+      for (const organizationId of organizationIds) {
+        results.push(await runTenantJob(prisma, organizationId, () => checkAllEscalations()));
+      }
+      return { organizations: results };
     }
 
     if (job.name === 'check-escalation' && job.data.threadId) {
-      return await checkThreadEscalation(job.data.threadId);
+      return runTenantJob(
+        prisma,
+        job.data?.organizationId,
+        () => checkThreadEscalation(job.data.threadId),
+      );
     }
 
     return { skipped: true };
@@ -119,15 +143,17 @@ const notificationWorker = createWorker(
     const { userId, type, title, message, data } = job.data;
 
     // Create in-app notification
-    await prisma.notification.create({
-      data: {
-        type,
-        title,
-        message,
-        data: data ? JSON.stringify(data) : null,
-        userId
-      }
-    });
+    await runTenantJob(prisma, job.data?.organizationId, (tenantPrisma) => (
+      tenantPrisma.notification.create({
+        data: {
+          type,
+          title,
+          message,
+          data: data ? JSON.stringify(data) : null,
+          userId
+        }
+      })
+    ));
 
     return { delivered: true };
   },
@@ -363,7 +389,11 @@ const embeddingWorker = createWorker(
   async (job) => {
     const { clientId, content, source, sourceId, metadata } = job.data;
     console.log(`Generating embedding for ${source}:${sourceId || 'none'}`);
-    const result = await storeEmbedding(clientId, content, source, sourceId, metadata);
+    const result = await runTenantJob(
+      prisma,
+      job.data?.organizationId,
+      () => storeEmbedding(clientId, content, source, sourceId, metadata),
+    );
     return result;
   },
   { concurrency: 3 }

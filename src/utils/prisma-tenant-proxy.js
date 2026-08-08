@@ -42,6 +42,26 @@ const DIRECT_SCOPED_MODELS = new Set([
 // unclassified delegate is rejected instead of silently bypassing tenancy.
 const GLOBAL_MODELS = new Set(['organization']);
 
+// Direct-owned records can also reference another tenant-owned root. The
+// redundant organizationId is not enough: the referenced parent must belong
+// to the same organization or the graph would span tenants.
+const DIRECT_PARENT_RELATIONS = {
+  project: [{ relation: 'client', field: 'clientId', model: 'client', delegate: 'client', required: true }],
+  user: [{ relation: 'client', field: 'clientId', model: 'client', delegate: 'client' }],
+  supporthourentry: [
+    { relation: 'client', field: 'clientId', model: 'client', delegate: 'client' },
+    { relation: 'project', field: 'projectId', model: 'project', delegate: 'project' },
+  ],
+  wpsite: [
+    { relation: 'client', field: 'clientId', model: 'client', delegate: 'client' },
+    { relation: 'project', field: 'projectId', model: 'project', delegate: 'project' },
+  ],
+  wpbackup: [{ relation: 'site', field: 'siteId', model: 'wpsite', delegate: 'wPSite', required: true }],
+  wpreport: [{ relation: 'site', field: 'siteId', model: 'wpsite', delegate: 'wPSite', required: true }],
+  wpalert: [{ relation: 'site', field: 'siteId', model: 'wpsite', delegate: 'wPSite' }],
+  wpbridgenonce: [{ relation: 'site', field: 'siteId', model: 'wpsite', delegate: 'wPSite', required: true }],
+};
+
 const RESTRICTED_MODELS = new Set([]);
 
 // Models without a direct `organizationId` column. Each entry maps the
@@ -132,6 +152,22 @@ const TENANT_PATHS = {
 
 };
 
+const RELATION_OWNER_MODELS = {
+  client: { model: 'client', delegate: 'client' },
+  project: { model: 'project', delegate: 'project' },
+  thread: { model: 'thread', delegate: 'thread' },
+  invoice: { model: 'invoice', delegate: 'invoice' },
+  proposal: { model: 'proposal', delegate: 'proposal' },
+  task: { model: 'task', delegate: 'task' },
+  user: { model: 'user', delegate: 'user' },
+  createdBy: { model: 'user', delegate: 'user' },
+  event: { model: 'calendarevent', delegate: 'calendarEvent' },
+  message: { model: 'chatmessage', delegate: 'chatMessage' },
+  item: { model: 'emailtriageitem', delegate: 'emailTriageItem' },
+  conversation: { model: 'ashconversation', delegate: 'ashConversation' },
+  form: { model: 'intakeform', delegate: 'intakeForm' },
+};
+
 export const tenantModelPolicy = Object.freeze({
   ...Object.fromEntries([...DIRECT_SCOPED_MODELS].map((model) => [model, 'direct'])),
   ...Object.fromEntries(Object.keys(TENANT_PATHS).map((model) => [model, 'relation'])),
@@ -162,6 +198,20 @@ export function createScopedPrisma(prisma, organizationId) {
 
   // Apply soft-delete wrapper first, then tenant scoping
   const softPrisma = withSoftDelete(prisma);
+
+  async function verifyTenantOwner({ relation, model, delegate }, ownerId) {
+    const ownerPath = TENANT_PATHS[model];
+    const ownerWhere = DIRECT_SCOPED_MODELS.has(model)
+      ? { id: ownerId, organizationId }
+      : { AND: [{ id: ownerId }, buildTenantWhere(ownerPath, organizationId)] };
+    const owner = await softPrisma[delegate].findFirst({
+      where: ownerWhere,
+      select: { id: true },
+    });
+    if (!owner) {
+      throw new Error(`Tenancy Error: ${relation} ${ownerId} does not belong to organization ${organizationId}`);
+    }
+  }
 
   return new Proxy(softPrisma, {
     get(target, modelName) {
@@ -215,6 +265,30 @@ export function createScopedPrisma(prisma, organizationId) {
                   queryArgs.data = { ...queryArgs.data, organizationId };
                 }
               }
+
+              const parentRelations = DIRECT_PARENT_RELATIONS[modelKey] || [];
+              const isCreate = methodName === 'create' || methodName === 'createMany';
+              const ownershipWrites = methodName === 'upsert'
+                ? [{ row: queryArgs.create, creating: true }, { row: queryArgs.update, creating: false }]
+                : (isCreate || methodName === 'update' || methodName === 'updateMany')
+                  ? (Array.isArray(queryArgs.data) ? queryArgs.data : [queryArgs.data])
+                    .map((row) => ({ row, creating: isCreate }))
+                  : [];
+              for (const { row, creating } of ownershipWrites) {
+                for (const parent of parentRelations) {
+                  if (row?.[parent.relation]?.create || row?.[parent.relation]?.connectOrCreate) {
+                    throw new Error(`Tenancy Error: nested ${parent.relation} creation is not allowed in scoped writes`);
+                  }
+                  const ownerId = row?.[parent.field] ?? row?.[parent.relation]?.connect?.id;
+                  if (!ownerId) {
+                    if (creating && parent.required) {
+                      throw new Error(`Tenancy Error: ${String(modelName)}.${parent.field} is required`);
+                    }
+                    continue;
+                  }
+                  await verifyTenantOwner(parent, ownerId);
+                }
+              }
               logger.debug({ modelName, methodName, organizationId }, 'Scoped Query Execution');
               return method.apply(modelTarget, [queryArgs, ...args.slice(1)]);
             }
@@ -250,8 +324,10 @@ export function createScopedPrisma(prisma, organizationId) {
               if (methodName === 'create' || methodName === 'createMany' || methodName === 'upsert') {
                 const ownerRelation = tenantPath[0];
                 const ownerIdField = `${ownerRelation}Id`;
-                const ownerKey = ownerRelation.toLowerCase();
-                const ownerPath = TENANT_PATHS[ownerKey];
+                const ownerPolicy = RELATION_OWNER_MODELS[ownerRelation];
+                if (!ownerPolicy) {
+                  throw new Error(`Tenancy Error: no owner policy for relation ${ownerRelation}`);
+                }
                 const ownershipWrites = methodName === 'upsert'
                   ? [{ row: queryArgs.create, required: true }, { row: queryArgs.update, required: false }]
                   : (Array.isArray(queryArgs.data) ? queryArgs.data : [queryArgs.data])
@@ -265,16 +341,7 @@ export function createScopedPrisma(prisma, organizationId) {
                     continue;
                   }
 
-                  const ownerWhere = DIRECT_SCOPED_MODELS.has(ownerKey)
-                    ? { id: ownerId, organizationId }
-                    : { AND: [{ id: ownerId }, buildTenantWhere(ownerPath, organizationId)] };
-                  const owner = await softPrisma[ownerRelation].findFirst({
-                    where: ownerWhere,
-                    select: { id: true },
-                  });
-                  if (!owner) {
-                    throw new Error(`Tenancy Error: ${ownerRelation} ${ownerId} does not belong to organization ${organizationId}`);
-                  }
+                  await verifyTenantOwner({ relation: ownerRelation, ...ownerPolicy }, ownerId);
                 }
               }
 

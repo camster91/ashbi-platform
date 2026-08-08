@@ -2,6 +2,8 @@ import { Readable } from 'node:stream';
 import crypto from 'crypto';
 import { z } from 'zod';
 import env from '../config/env.js';
+import prisma from '../config/db.js';
+import { resolveTenantOrganizationIds, runTenantJob } from '../jobs/tenant-iteration.js';
 import { validateBody, validateQuery } from '../validators/schemas.js';
 import {
   registerSite,
@@ -824,12 +826,17 @@ async function runScheduledFleetDigest(logger) {
       }
       return { skipped: true, reason: 'SLACK_WEBHOOK_URL not configured' };
     }
-    const fleet = await getFleetStatus();
-    const slackStatus = await postFleetDigestToSlack({ webhookUrl, fleet });
-    if (logger && logger.info) {
-      logger.info(`[fleet-digest] scheduled digest posted to Slack (status=${slackStatus}, healthy=${fleet.healthy}/${fleet.totalSites})`);
+    const organizationIds = await resolveTenantOrganizationIds(prisma);
+    const results = [];
+    for (const organizationId of organizationIds) {
+      const fleet = await runTenantJob(prisma, organizationId, () => getFleetStatus());
+      const slackStatus = await postFleetDigestToSlack({ webhookUrl, fleet });
+      results.push({ organizationId, slackStatus, totalSites: fleet.totalSites });
+      if (logger && logger.info) {
+        logger.info(`[fleet-digest] tenant digest posted to Slack (organization=${organizationId}, status=${slackStatus}, healthy=${fleet.healthy}/${fleet.totalSites})`);
+      }
     }
-    return { ok: true, slackStatus, totalSites: fleet.totalSites };
+    return { ok: true, organizations: results };
   } catch (err) {
     if (logger && logger.error) {
       logger.error({ err }, '[fleet-digest] scheduled run failed');

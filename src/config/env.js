@@ -83,6 +83,7 @@ const env = {
 
   // Bot
   botSecret: process.env.BOT_SECRET,
+  botOrganizationId: process.env.BOT_ORGANIZATION_ID,
 
   // WP Bridge
   wpBridgeSecret: process.env.WP_BRIDGE_SECRET,

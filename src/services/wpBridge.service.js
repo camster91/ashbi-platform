@@ -4,6 +4,13 @@
 import prisma from '../config/db.js';
 import crypto from 'crypto';
 import env from '../config/env.js';
+import { runTenantJob } from '../jobs/tenant-iteration.js';
+
+async function withSiteTenant(siteUrl, callback) {
+  const site = await prisma.wPSite.findFirst({ where: { url: siteUrl } });
+  if (!site?.organizationId) throw new Error('Site not found or not provisioned for a tenant');
+  return runTenantJob(prisma, site.organizationId, (tenantPrisma) => callback(tenantPrisma, site));
+}
 
 // ============================================================================
 // Magic-login helpers (Plan 11 / PR-F).
@@ -210,13 +217,7 @@ export async function registerSite(data) {
  * Update site health data (from WP plugin heartbeat)
  */
 export async function updateSiteHealth(siteUrl, healthData) {
-  const site = await prisma.wPSite.findFirst({
-    where: { url: siteUrl }
-  });
-
-  if (!site) throw new Error('Site not found');
-
-  return prisma.wPSite.update({
+  return withSiteTenant(siteUrl, (tenantPrisma, site) => tenantPrisma.wPSite.update({
     where: { id: site.id },
     data: {
       wpVersion: healthData.wordpressVersion || healthData.wpVersion || site.wpVersion,
@@ -234,16 +235,14 @@ export async function updateSiteHealth(siteUrl, healthData) {
       lastCheckedAt: new Date(),
       alerts: JSON.stringify(healthData.alerts || [])
     }
-  });
+  }));
 }
 
 /**
  * Record a backup event from the bridge plugin (v1.7.0+)
  */
 export async function recordBackup(siteUrl, report) {
-  const site = await prisma.wPSite.findFirst({ where: { url: siteUrl } });
-  if (!site) throw new Error('Site not found');
-
+  return withSiteTenant(siteUrl, (tenantPrisma, site) => {
   // The plugin now sends 'manifest' as the parsed object (with dbSize/filesSize),
   // and also as top-level 'dbSize'/'filesSize'. Prefer top-level, fall back to manifest.
   const manifestObj = (report.manifest && typeof report.manifest === 'object') ? report.manifest : null;
@@ -255,7 +254,7 @@ export async function recordBackup(siteUrl, report) {
     ? JSON.stringify(manifestObj)
     : (typeof report.manifest === 'string' ? report.manifest : null);
 
-  return prisma.wPBackup.create({
+  return tenantPrisma.wPBackup.create({
     data: {
       siteId: site.id,
       siteUrl,
@@ -269,18 +268,17 @@ export async function recordBackup(siteUrl, report) {
       filesSize: filesSizeRaw ? BigInt(filesSizeRaw) : null
     }
   });
+  });
 }
 
 /**
  * Upsert a monthly maintenance report (v1.7.0+)
  */
 export async function recordReport(siteUrl, report) {
-  const site = await prisma.wPSite.findFirst({ where: { url: siteUrl } });
-  if (!site) throw new Error('Site not found');
-
+  return withSiteTenant(siteUrl, (tenantPrisma, site) => {
   const month = report.month || new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
 
-  return prisma.wPReport.upsert({
+  return tenantPrisma.wPReport.upsert({
     where: { siteId_month: { siteId: site.id, month } },
     create: {
       siteId: site.id,
@@ -302,72 +300,71 @@ export async function recordReport(siteUrl, report) {
       payload: JSON.stringify(report)
     }
   });
+  });
 }
 
 /**
  * Log a site alert (v1.7.0+)
  */
 export async function recordAlert(siteUrl, alertType, details) {
-  const site = await prisma.wPSite.findFirst({ where: { url: siteUrl } });
-  return prisma.wPAlert.create({
+  return withSiteTenant(siteUrl, (tenantPrisma, site) => tenantPrisma.wPAlert.create({
     data: {
-      siteId: site?.id || null,
+      siteId: site.id,
       siteUrl,
       alertType,
       details: JSON.stringify(details || {})
     }
-  });
+  }));
 }
 
 /**
  * Get recent alerts for a site
  */
 export async function getAlerts(siteUrl, limit = 50) {
-  return prisma.wPAlert.findMany({
+  return withSiteTenant(siteUrl, (tenantPrisma) => tenantPrisma.wPAlert.findMany({
     where: { siteUrl },
     orderBy: { createdAt: 'desc' },
     take: limit
-  });
+  }));
 }
 
 /**
  * Get recent backups for a site
  */
 export async function getBackups(siteUrl, limit = 20) {
-  return prisma.wPBackup.findMany({
+  return withSiteTenant(siteUrl, (tenantPrisma) => tenantPrisma.wPBackup.findMany({
     where: { siteUrl },
     orderBy: { timestamp: 'desc' },
     take: limit
-  });
+  }));
 }
 
 /**
  * Get reports for a site
  */
 export async function getReports(siteUrl) {
-  return prisma.wPReport.findMany({
+  return withSiteTenant(siteUrl, (tenantPrisma) => tenantPrisma.wPReport.findMany({
     where: { siteUrl },
     orderBy: { createdAt: 'desc' },
     take: 12
-  });
+  }));
 }
 
 /**
  * Log support hours for retainer tracking
  */
 export async function logSupportHours(siteUrl, hours, description, month) {
-  const site = await prisma.wPSite.findFirst({ where: { url: siteUrl } });
-  return prisma.supportHourEntry.create({
+  return withSiteTenant(siteUrl, (tenantPrisma, site) => tenantPrisma.supportHourEntry.create({
     data: {
       siteUrl,
-      clientId: site?.clientId || null,
-      projectId: site?.projectId || null,
+      clientId: site.clientId || null,
+      projectId: site.projectId || null,
       month: month || new Date().toISOString().slice(0, 7),
       hours: Number(hours) || 0,
       description: description || null,
       source: 'plugin'
     }
-  });
+  }));
 }
 
 /**
