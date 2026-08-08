@@ -3,7 +3,9 @@
 import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
+import { randomUUID } from 'crypto';
 import { validateBody, brandSettingsSchema } from '../validators/schemas.js';
+import { validateUpload } from '../utils/upload-policy.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -62,22 +64,20 @@ export default async function brandRoutes(fastify) {
       return reply.status(400).send({ error: 'No file uploaded' });
     }
 
-    // Validate file type
-    const allowed = ['image/png', 'image/jpeg', 'image/svg+xml', 'image/webp'];
-    if (!allowed.includes(data.mimetype)) {
-      return reply.status(400).send({ error: 'Invalid file type. Allowed: PNG, JPEG, SVG, WebP' });
+    const buffer = await data.toBuffer();
+    const validation = validateUpload({ filename: data.filename, mimetype: data.mimetype, buffer });
+    if (!validation.valid || !['.png', '.jpg', '.jpeg', '.webp'].includes(validation.ext)) {
+      return reply.status(400).send({ error: validation.error || 'Brand logos must be PNG, JPEG, or WebP' });
     }
 
     // Save to uploads/brand/
     const uploadsDir = path.join(__dirname, '../../uploads/brand');
     await fs.mkdir(uploadsDir, { recursive: true });
 
-    const ext = path.extname(data.filename) || '.png';
-    const filename = `logo-${Date.now()}${ext}`;
+    const filename = `logo-${randomUUID()}${validation.ext}`;
     const filePath = path.join(uploadsDir, filename);
 
     // Write file
-    const buffer = await data.toBuffer();
     await fs.writeFile(filePath, buffer);
 
     const logoUrl = `/uploads/brand/${filename}`;

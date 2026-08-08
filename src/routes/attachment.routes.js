@@ -3,22 +3,9 @@
 import path from 'path';
 import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
+import { safeDownloadHeaders, validateUpload } from '../utils/upload-policy.js';
 
 const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
-
-const ALLOWED_EXTENSIONS = new Set([
-  '.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg',
-  '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
-  '.txt', '.csv', '.json', '.xml',
-  '.zip', '.gz', '.tar',
-  '.mp4', '.mov', '.mp3', '.wav'
-]);
-
-const BLOCKED_EXTENSIONS = new Set([
-  '.exe', '.bat', '.cmd', '.sh', '.ps1', '.msi', '.dll',
-  '.com', '.scr', '.pif', '.vbs', '.js', '.wsh', '.wsf',
-  '.htm', '.html', '.php', '.asp', '.aspx', '.jsp', '.cgi'
-]);
 
 // Ensure upload directory exists
 async function ensureUploadDir() {
@@ -43,7 +30,7 @@ export default async function attachmentRoutes(fastify) {
     }
 
     const attachments = await request.prisma.attachment.findMany({
-      where: { entityType, entityId },
+      where: { entityType, entityId, organizationId: request.user.organizationId },
       include: {
         uploadedBy: { select: { id: true, name: true } }
       },
@@ -69,16 +56,11 @@ export default async function attachmentRoutes(fastify) {
       return reply.status(400).send({ error: 'entityType and entityId are required' });
     }
 
-    // Validate file extension
-    const ext = path.extname(data.filename).toLowerCase();
-    if (BLOCKED_EXTENSIONS.has(ext)) {
-      return reply.status(400).send({ error: `File type ${ext} is not allowed` });
-    }
-    const filename = `${randomUUID()}${ext}`;
-    const filepath = path.join(UPLOAD_DIR, filename);
-
-    // Save file
     const buffer = await data.toBuffer();
+    const validation = validateUpload({ filename: data.filename, mimetype: data.mimetype, buffer });
+    if (!validation.valid) return reply.status(400).send({ error: validation.error });
+    const filename = `${randomUUID()}${validation.ext}`;
+    const filepath = path.join(UPLOAD_DIR, filename);
     await fs.writeFile(filepath, buffer);
 
     const attachment = await request.prisma.attachment.create({
@@ -90,7 +72,8 @@ export default async function attachmentRoutes(fastify) {
         path: `/uploads/${filename}`,
         entityType: entityType.value,
         entityId: entityId.value,
-        uploadedById: request.user.id
+        uploadedById: request.user.id,
+        organizationId: request.user.organizationId,
       },
       include: {
         uploadedBy: { select: { id: true, name: true } }
@@ -127,7 +110,9 @@ export default async function attachmentRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const existing = await request.prisma.attachment.findUnique({ where: { id } });
+    const existing = await request.prisma.attachment.findFirst({
+      where: { id, organizationId: request.user.organizationId },
+    });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Attachment not found' });
@@ -162,7 +147,7 @@ export default async function attachmentRoutes(fastify) {
 
     try {
       const attachment = await request.prisma.attachment.findFirst({
-        where: { filename: safeName }
+        where: { filename: safeName, organizationId: request.user.organizationId }
       });
       if (!attachment) {
         return reply.status(404).send({ error: 'File not found' });
@@ -171,7 +156,9 @@ export default async function attachmentRoutes(fastify) {
       const stat = await fs.stat(filepath);
       const file = await fs.readFile(filepath);
 
-      reply.header('Content-Type', attachment.mimeType || 'application/octet-stream');
+      for (const [name, value] of Object.entries(safeDownloadHeaders(attachment.originalName))) {
+        reply.header(name, value);
+      }
       reply.header('Content-Length', stat.size);
 
       return reply.send(file);

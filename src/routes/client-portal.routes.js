@@ -7,7 +7,8 @@ import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
 import bcrypt from 'bcrypt';
 import { isCurrentUserSession, sessionCookieMaxAge } from '../auth/session.js';
-import { validateBody, validateParams, clientPortalMessageSchema, requestAccessSchema, fileUpload, clientPortalTokenRedeemSchema } from '../validators/schemas.js';
+import { validateBody, validateParams, clientPortalMessageSchema, requestAccessSchema, clientPortalTokenRedeemSchema } from '../validators/schemas.js';
+import { safeDownloadHeaders, validateUpload } from '../utils/upload-policy.js';
 
 const PORTAL_BASE = env.hubUrl;
 const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
@@ -432,8 +433,8 @@ export default async function clientPortalRoutes(fastify) {
       return reply.status(400).send({ error: 'No file uploaded' });
     }
 
-    // Validate file type and extension
-    const validation = fileUpload.validate(data.filename, data.mimetype);
+    const buffer = await data.toBuffer();
+    const validation = validateUpload({ filename: data.filename, mimetype: data.mimetype, buffer });
     if (!validation.valid) {
       return reply.status(400).send({ error: validation.error });
     }
@@ -446,7 +447,6 @@ export default async function clientPortalRoutes(fastify) {
     const filepath = path.join(UPLOAD_DIR, filename);
 
     // Write file
-    const buffer = await data.toBuffer();
     await fs.writeFile(filepath, buffer);
 
     // Find or create user for the contact
@@ -476,7 +476,8 @@ export default async function clientPortalRoutes(fastify) {
         path: `/uploads/${filename}`,
         entityType: 'PROJECT',
         entityId: id,
-        uploadedById: authorUser.id
+        uploadedById: authorUser.id,
+        organizationId: project.organizationId,
       },
       include: {
         uploadedBy: { select: { id: true, name: true } }
@@ -484,6 +485,34 @@ export default async function clientPortalRoutes(fastify) {
     });
 
     return reply.status(201).send(attachment);
+  });
+
+  fastify.get('/client-portal/documents/:docId/download', { preHandler: clientAuth }, async (request, reply) => {
+    const { clientId } = request.clientUser;
+    const { docId } = request.params;
+    const doc = await request.prisma.attachment.findFirst({ where: { id: docId } });
+    if (!doc || doc.entityType !== 'PROJECT') {
+      return reply.status(404).send({ error: 'Document not found' });
+    }
+    const project = await request.prisma.project.findFirst({
+      where: { id: doc.entityId, clientId },
+      select: { id: true, organizationId: true },
+    });
+    if (!project || project.organizationId !== doc.organizationId) {
+      return reply.status(404).send({ error: 'Document not found' });
+    }
+    const safeName = path.basename(doc.filename);
+    if (safeName !== doc.filename) return reply.status(404).send({ error: 'Document not found' });
+    try {
+      const file = await fs.readFile(path.join(UPLOAD_DIR, safeName));
+      for (const [name, value] of Object.entries(safeDownloadHeaders(doc.originalName))) {
+        reply.header(name, value);
+      }
+      reply.header('Content-Length', file.length);
+      return reply.send(file);
+    } catch {
+      return reply.status(404).send({ error: 'Document not found' });
+    }
   });
 
   // DELETE /api/client-portal/documents/:docId — Delete uploaded doc
