@@ -42,7 +42,9 @@ export default async function organizationRoutes(fastify) {
   });
 
   // GET /api/organizations/:id
-  fastify.get('/:id', async (request, reply) => {
+  fastify.get('/:id', {
+    onRequest: [fastify.authenticate],
+  }, async (request, reply) => {
     const { id } = request.params;
     const organization = await fastify.prisma.organization.findUnique({
       where: { id },
