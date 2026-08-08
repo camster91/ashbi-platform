@@ -8,6 +8,7 @@ import jwt from '@fastify/jwt';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import multipart from '@fastify/multipart';
+import helmet from '@fastify/helmet';
 import { Server as SocketIO } from 'socket.io';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -94,6 +95,7 @@ import { initSubscribers } from './subscribers/index.js';
 import { tenancyMiddleware } from './middleware/tenancy.js';
 import { getAuthProvider } from './auth/index.js';
 import { toClientErrorBody } from './utils/http-errors.js';
+import { buildHelmetOptions, permissionsPolicy } from './config/security-headers.js';
 
 // Initialize Sentry error monitoring
 if (env.sentryDsn) {
@@ -134,6 +136,11 @@ fastify.addContentTypeParser('application/json', { parseAs: 'string' }, (req, bo
 });
 
 // Plugins
+await fastify.register(helmet, buildHelmetOptions(env));
+fastify.addHook('onSend', async (_request, reply, payload) => {
+  reply.header('Permissions-Policy', permissionsPolicy);
+  return payload;
+});
 await fastify.register(compress, { global: true });
 await fastify.register(cors, { origin: env.isDev ? ['http://localhost:3000', 'http://localhost:5173'] : env.corsOrigins, credentials: true });
 await fastify.register(cookie);

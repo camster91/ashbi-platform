@@ -140,8 +140,11 @@ npm run build
 3. **Verify security headers:**
    ```bash
    curl -I https://hub.ashbi.ca
-   # Should include: X-Frame-Options, X-Content-Type-Options, etc.
+   # Must include CSP, X-Frame-Options: DENY, X-Content-Type-Options: nosniff,
+   # Referrer-Policy, Strict-Transport-Security, Cross-Origin-Opener-Policy,
+   # Cross-Origin-Resource-Policy, and Permissions-Policy.
    ```
+   See `docs/security-headers.md` for the approved policy and staged checks.
 
 ### ✅ Post-Deployment Verification
 

@@ -25,13 +25,13 @@
 - [x] **HIGH:** CSRF tokens in cookies with proper settings
 
 ### 🔒 Security Headers
-- [x] **CRITICAL:** Content Security Policy (CSP) implemented
-  - Default-src: self only
-  - Script-src: self + trusted CDNs
-  - Style-src: self + Google Fonts
-  - No unsafe-eval, restricted inline styles
-- [x] **HIGH:** Helmet.js security headers enabled
-- [x] **MEDIUM:** Cross-Origin policies configured
+- [x] **CRITICAL:** CSP is registered through `@fastify/helmet`
+  - Scripts: self only; inline script attributes and `unsafe-eval` denied
+  - Styles: self + Google Fonts; `unsafe-inline` is temporarily required by existing React inline style attributes
+  - Frames and objects denied; mixed content upgraded in production
+- [x] **HIGH:** Helmet response headers are enabled and covered by effective-response tests
+- [x] **MEDIUM:** Frame, MIME, referrer, transport, cross-origin, and permissions policies are configured
+- [ ] **VERIFY IN STAGING:** review CSP reports and portal/auth/upload browser smoke before closing #140
 
 ### 👑 Admin Access Control
 - [x] **CRITICAL:** Admin-only endpoints protected with adminOnly middleware
