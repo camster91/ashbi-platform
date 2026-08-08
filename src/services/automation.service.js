@@ -5,6 +5,7 @@ import prisma from '../config/db.js';
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import crypto from 'crypto';
+import { resolveTenantOrganizationIds, runTenantJob } from '../jobs/tenant-iteration.js';
 
 // ==================== EMAIL HELPER ====================
 
@@ -844,17 +845,24 @@ function shouldRunNow(cronExpression, lastChecked) {
 
 let overdueInterval = null;
 
+async function checkOverdueInvoicesForAllOrganizations() {
+  const organizationIds = await resolveTenantOrganizationIds(prisma);
+  for (const organizationId of organizationIds) {
+    await runTenantJob(prisma, organizationId, () => checkOverdueInvoices());
+  }
+}
+
 export function startOverdueChecker() {
   // Run every hour (3600000ms)
   const ONE_HOUR = 60 * 60 * 1000;
 
   // Run immediately on startup, then hourly
-  checkOverdueInvoices().catch(err =>
+  checkOverdueInvoicesForAllOrganizations().catch(err =>
     console.error('[Automation] Initial overdue check failed:', err)
   );
 
   overdueInterval = setInterval(() => {
-    checkOverdueInvoices().catch(err =>
+    checkOverdueInvoicesForAllOrganizations().catch(err =>
       console.error('[Automation] Scheduled overdue check failed:', err)
     );
   }, ONE_HOUR);

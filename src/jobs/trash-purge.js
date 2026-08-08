@@ -2,6 +2,7 @@
 // Runs daily at 04:00 to permanently delete items that have been in trash >30 days.
 
 import prisma from '../config/db.js';
+import { resolveTenantOrganizationIds, runTenantJob } from './tenant-iteration.js';
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -21,12 +22,12 @@ const ENTITY_TO_MODEL = {
   RETAINER_PLAN: 'retainerPlan',
 };
 
-async function purgeExpiredTrash() {
+async function purgeExpiredTrash(tenantPrisma) {
   const cutoff = new Date(Date.now() - THIRTY_DAYS_MS);
   console.log(`[trash-purge] Checking for expired items before ${cutoff.toISOString()}`);
 
   try {
-    const expired = await prisma.trashedItem.findMany({
+    const expired = await tenantPrisma.trashedItem.findMany({
       where: {
         restoredAt: null,
         deletedAt: { lte: cutoff },
@@ -50,7 +51,7 @@ async function purgeExpiredTrash() {
     const errors = [];
     for (const item of expired) {
       const modelName = ENTITY_TO_MODEL[item.entity];
-      if (!modelName || !prisma[modelName]) {
+      if (!modelName || !tenantPrisma[modelName]) {
         errors.push({ item, reason: 'unknown entity' });
         continue;
       }
@@ -64,7 +65,7 @@ async function purgeExpiredTrash() {
     for (const [modelName, items] of byModel) {
       const ids = items.map(i => i.recordId);
       try {
-        await prisma[modelName].deleteMany({ where: { id: { in: ids } } });
+        await tenantPrisma[modelName].deleteMany({ where: { id: { in: ids } } });
       } catch (err) {
         console.error(`[trash-purge] Error in ${modelName} deleteMany:`, err.message);
         for (const item of items) errors.push({ item, reason: err.message });
@@ -75,7 +76,7 @@ async function purgeExpiredTrash() {
     // failed ones (mark as skipped, no retry).
     const allTrashedIds = expired.map(i => i.id);
     try {
-      await prisma.trashedItem.deleteMany({ where: { id: { in: allTrashedIds } } });
+      await tenantPrisma.trashedItem.deleteMany({ where: { id: { in: allTrashedIds } } });
     } catch (err) {
       console.error('[trash-purge] Error cleaning trashedItem rows:', err.message);
     }
@@ -85,6 +86,13 @@ async function purgeExpiredTrash() {
     }
   } catch (err) {
     console.error('[trash-purge] Fatal error:', err);
+  }
+}
+
+async function purgeExpiredTrashForAllOrganizations() {
+  const organizationIds = await resolveTenantOrganizationIds(prisma);
+  for (const organizationId of organizationIds) {
+    await runTenantJob(prisma, organizationId, purgeExpiredTrash);
   }
 }
 
@@ -99,7 +107,13 @@ export function startTrashPurgeJob() {
   const msUntil = next4am - now;
 
   setTimeout(() => {
-    purgeExpiredTrash();
-    setInterval(purgeExpiredTrash, 24 * 60 * 60 * 1000); // daily
+    purgeExpiredTrashForAllOrganizations().catch(err =>
+      console.error('[trash-purge] Scheduled run failed:', err)
+    );
+    setInterval(() => {
+      purgeExpiredTrashForAllOrganizations().catch(err =>
+        console.error('[trash-purge] Scheduled run failed:', err)
+      );
+    }, 24 * 60 * 60 * 1000); // daily
   }, msUntil);
 }

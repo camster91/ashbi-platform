@@ -6,6 +6,7 @@ import { handleWebhook } from '../services/stripe.service.js';
 import env from '../config/env.js';
 import crypto from 'crypto';
 import {validateBody, webhookEmailTestSchema} from '../validators/schemas.js';
+import { runTenantJob } from '../jobs/tenant-iteration.js';
 
 export default async function webhookRoutes(fastify) {
   // Email webhook endpoint
@@ -13,6 +14,9 @@ export default async function webhookRoutes(fastify) {
     // Verify webhook secret (fail closed)
     if (!env.webhookSecret) {
       return reply.status(500).send({ error: 'Webhook secret not configured' });
+    }
+    if (!env.botOrganizationId) {
+      return reply.status(503).send({ error: 'Webhook tenant is not configured' });
     }
     const signature = request.headers['x-webhook-signature'];
     if (!signature) {
@@ -42,7 +46,11 @@ export default async function webhookRoutes(fastify) {
       const emailData = await parseEmail(request.body);
 
       // Process through AI pipeline (async in production, sync for simplicity here)
-      const result = await processEmailPipeline(emailData);
+      const result = await runTenantJob(
+        fastify.prisma,
+        env.botOrganizationId,
+        () => processEmailPipeline(emailData),
+      );
 
       return {
         success: true,

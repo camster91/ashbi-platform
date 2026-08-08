@@ -3,6 +3,7 @@
 
 import prisma from '../config/db.js';
 import { generateInvoiceNumber } from '../utils/invoice.js';
+import { resolveTenantOrganizationIds, runTenantJob } from './tenant-iteration.js';
 
 const ONE_HOUR = 60 * 60 * 1000;
 
@@ -24,12 +25,12 @@ function getNextRecurringDate(currentDate, interval) {
   return d;
 }
 
-async function processRecurringInvoices() {
+async function processRecurringInvoices(tenantPrisma) {
   const now = new Date();
   console.log(`[recurring-invoices] Checking for due recurring invoices at ${now.toISOString()}`);
 
   try {
-    const dueInvoices = await prisma.invoice.findMany({
+    const dueInvoices = await tenantPrisma.invoice.findMany({
       where: {
         isRecurring: true,
         recurringNextDate: { lte: now },
@@ -69,7 +70,7 @@ async function processRecurringInvoices() {
         const total = parseFloat((discounted + tax).toFixed(2));
 
         // Create new invoice as DRAFT
-        const newInvoice = await prisma.invoice.create({
+        const newInvoice = await tenantPrisma.invoice.create({
           data: {
             invoiceNumber,
             status: 'DRAFT',
@@ -100,7 +101,7 @@ async function processRecurringInvoices() {
           invoice.recurringInterval
         );
 
-        await prisma.invoice.update({
+        await tenantPrisma.invoice.update({
           where: { id: invoice.id },
           data: { recurringNextDate: nextDate }
         });
@@ -118,17 +119,24 @@ async function processRecurringInvoices() {
   }
 }
 
+async function processRecurringInvoicesForAllOrganizations() {
+  const organizationIds = await resolveTenantOrganizationIds(prisma);
+  for (const organizationId of organizationIds) {
+    await runTenantJob(prisma, organizationId, processRecurringInvoices);
+  }
+}
+
 export function startRecurringInvoicesJob() {
   console.log('[recurring-invoices] Starting recurring invoices job (runs every hour)');
 
   // Run immediately on startup
-  processRecurringInvoices().catch(err =>
+  processRecurringInvoicesForAllOrganizations().catch(err =>
     console.error('[recurring-invoices] Startup run failed:', err)
   );
 
   // Then run every hour
   setInterval(() => {
-    processRecurringInvoices().catch(err =>
+    processRecurringInvoicesForAllOrganizations().catch(err =>
       console.error('[recurring-invoices] Scheduled run failed:', err)
     );
   }, ONE_HOUR);

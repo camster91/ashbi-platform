@@ -7,6 +7,7 @@ import { processEmailPipeline } from '../services/pipeline.service.js';
 import { safeEqual } from '../utils/crypto.js';
 import env from '../config/env.js';
 import {validateBody, mailgunSendSchema} from '../validators/schemas.js';
+import { runTenantJob } from '../jobs/tenant-iteration.js';
 
 export default async function mailgunRoutes(fastify) {
   // POST /mailgun/send — manually send an email (admin only)
@@ -45,6 +46,9 @@ export default async function mailgunRoutes(fastify) {
   });
 
   fastify.post('/', { config: { public: true } }, async (request, reply) => {
+    if (!env.botOrganizationId) {
+      return reply.status(503).send({ error: 'Webhook tenant is not configured' });
+    }
     try {
       const body = request.body;
 
@@ -83,14 +87,14 @@ export default async function mailgunRoutes(fastify) {
       const bodyHtml = body['body-html'];
       const messageId = body['Message-Id'];
 
-      await processEmailPipeline({
+      await runTenantJob(fastify.prisma, env.botOrganizationId, () => processEmailPipeline({
         from: sender,
         to: recipient,
         subject,
         text: bodyPlain,
         html: bodyHtml,
         messageId
-      });
+      }));
     } catch (err) {
       fastify.log.error(err, 'Mailgun webhook processing error');
     }

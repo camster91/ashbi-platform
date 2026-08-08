@@ -11,6 +11,8 @@ import env from '../config/env.js';
 import * as Sentry from '@sentry/node';
 import logger from '../utils/logger.js';
 import prisma from '../config/db.js';
+import { createScopedPrisma } from '../utils/prisma-tenant-proxy.js';
+import { resolveTenantOrganizationIds, runTenantJob } from './tenant-iteration.js';
 
 // Helper to create workers with error handling for Redis unavailability
 function createWorker(queueName, processor, options = {}) {
@@ -42,7 +44,11 @@ const emailWorker = createWorker(
   QUEUES.EMAIL_PROCESSING,
   async (job) => {
     console.log(`Processing email job ${job.id}`);
-    const result = await processEmailPipeline(job.data);
+    const result = await runTenantJob(
+      prisma,
+      job.data?.organizationId,
+      () => processEmailPipeline(job.data),
+    );
 
     // Schedule escalation if thread was created
     if (result.threadId) {
@@ -62,14 +68,23 @@ const healthWorker = createWorker(
   async (job) => {
     if (job.name === 'update-all-health') {
       console.log('Updating all project health scores');
-      const count = await updateAllProjectHealth();
-      return { updated: count };
+      const organizationIds = await resolveTenantOrganizationIds(prisma);
+      let updated = 0;
+      for (const organizationId of organizationIds) {
+        updated += await runTenantJob(
+          prisma,
+          organizationId,
+          (tenantPrisma) => updateAllProjectHealth(tenantPrisma),
+        );
+      }
+      return { updated, organizations: organizationIds.length };
     }
 
     if (job.name === 'update-health' && job.data.projectId) {
-      const { calculateHealthScore, getHealthStatus } = await import('../services/project.service.js');
+      return runTenantJob(prisma, job.data?.organizationId, async (tenantPrisma) => {
+        const { calculateHealthScore, getHealthStatus } = await import('../services/project.service.js');
 
-      const project = await prisma.project.findUnique({
+      const project = await tenantPrisma.project.findUnique({
         where: { id: job.data.projectId },
         include: { threads: { where: { status: { not: 'RESOLVED' } } } }
       });
@@ -78,13 +93,15 @@ const healthWorker = createWorker(
         const score = calculateHealthScore(project, project.threads);
         const health = getHealthStatus(score);
 
-        await prisma.project.update({
+        await tenantPrisma.project.update({
           where: { id: job.data.projectId },
           data: { healthScore: score, health }
         });
 
         return { projectId: job.data.projectId, score, health };
       }
+      return { skipped: true };
+      });
     }
 
     return { skipped: true };
@@ -98,11 +115,20 @@ const escalationWorker = createWorker(
   async (job) => {
     if (job.name === 'check-all-escalations') {
       console.log('Checking all threads for escalation');
-      return await checkAllEscalations();
+      const organizationIds = await resolveTenantOrganizationIds(prisma);
+      const results = [];
+      for (const organizationId of organizationIds) {
+        results.push(await runTenantJob(prisma, organizationId, () => checkAllEscalations()));
+      }
+      return { organizations: results };
     }
 
     if (job.name === 'check-escalation' && job.data.threadId) {
-      return await checkThreadEscalation(job.data.threadId);
+      return runTenantJob(
+        prisma,
+        job.data?.organizationId,
+        () => checkThreadEscalation(job.data.threadId),
+      );
     }
 
     return { skipped: true };
@@ -117,15 +143,17 @@ const notificationWorker = createWorker(
     const { userId, type, title, message, data } = job.data;
 
     // Create in-app notification
-    await prisma.notification.create({
-      data: {
-        type,
-        title,
-        message,
-        data: data ? JSON.stringify(data) : null,
-        userId
-      }
-    });
+    await runTenantJob(prisma, job.data?.organizationId, (tenantPrisma) => (
+      tenantPrisma.notification.create({
+        data: {
+          type,
+          title,
+          message,
+          data: data ? JSON.stringify(data) : null,
+          userId
+        }
+      })
+    ));
 
     return { delivered: true };
   },
@@ -247,28 +275,34 @@ const weeklyDigestWorker = createWorker(
   async (job) => {
     console.log('Generating weekly digest');
 
+    const organizationIds = await resolveTenantOrganizationIds(prisma, job.data?.organizationId);
+    const organizationResults = [];
+
+    for (const organizationId of organizationIds) {
+      const tenantPrisma = createScopedPrisma(prisma, organizationId);
+
     const now = new Date();
     const weekStart = new Date(now);
     weekStart.setDate(weekStart.getDate() - 7);
 
-    const newLeads = await prisma.thread.count({
+    const newLeads = await tenantPrisma.thread.count({
       where: {
         needsTriage: true,
         createdAt: { gte: weekStart }
       }
     });
 
-    const proposalsSent = await prisma.proposal.count({
+    const proposalsSent = await tenantPrisma.proposal.count({
       where: { sentAt: { gte: weekStart } }
     });
-    const proposalsViewed = await prisma.proposal.count({
+    const proposalsViewed = await tenantPrisma.proposal.count({
       where: { status: 'VIEWED', updatedAt: { gte: weekStart } }
     });
-    const proposalsHired = await prisma.proposal.count({
+    const proposalsHired = await tenantPrisma.proposal.count({
       where: { status: 'APPROVED', approvedAt: { gte: weekStart } }
     });
 
-    const clients = await prisma.client.findMany({
+    const clients = await tenantPrisma.client.findMany({
       where: { status: 'ACTIVE' },
       include: {
         threads: { where: { status: { not: 'RESOLVED' } }, orderBy: { lastActivityAt: 'desc' }, take: 1 },
@@ -299,11 +333,11 @@ const weeklyDigestWorker = createWorker(
       clientHealthSummary[client.name] = Math.max(0, Math.min(100, score));
     }
 
-    const tasksOverdue = await prisma.task.count({
+    const tasksOverdue = await tenantPrisma.task.count({
       where: { status: { not: 'COMPLETED' }, dueDate: { lt: now } }
     });
 
-    const retainers = await prisma.retainerPlan.findMany({ include: { client: true } });
+    const retainers = await tenantPrisma.retainerPlan.findMany({ include: { client: true } });
     const retainerTotal = retainers.reduce((sum, r) => sum + parseFloat(r.tier || 0), 0);
 
     const system = `You are the AI assistant for Ashbi Design agency. Generate a concise weekly digest email for Cameron (CEO).`;
@@ -326,7 +360,7 @@ Write a brief, actionable digest highlighting what needs attention this week. In
       fullDigest = `Weekly Digest (${weekStart.toLocaleDateString('en-CA')} - ${now.toLocaleDateString('en-CA')})\n\nNew Leads: ${newLeads}\nProposals Sent: ${proposalsSent}\nProposals Viewed: ${proposalsViewed}\nProposals Hired: ${proposalsHired}\nOverdue Tasks: ${tasksOverdue}\nRetainer Revenue: $${retainerTotal}`;
     }
 
-    await prisma.weeklyDigest.create({
+    await tenantPrisma.weeklyDigest.create({
       data: {
         weekStart,
         weekEnd: now,
@@ -341,7 +375,10 @@ Write a brief, actionable digest highlighting what needs attention this week. In
       }
     });
 
-    return { newLeads, proposalsSent, proposalsViewed, proposalsHired, tasksOverdue, retainerTotal };
+      organizationResults.push({ organizationId, newLeads, proposalsSent, proposalsViewed, proposalsHired, tasksOverdue, retainerTotal });
+    }
+
+    return { organizations: organizationResults };
   },
   { concurrency: 1 }
 );
@@ -352,7 +389,11 @@ const embeddingWorker = createWorker(
   async (job) => {
     const { clientId, content, source, sourceId, metadata } = job.data;
     console.log(`Generating embedding for ${source}:${sourceId || 'none'}`);
-    const result = await storeEmbedding(clientId, content, source, sourceId, metadata);
+    const result = await runTenantJob(
+      prisma,
+      job.data?.organizationId,
+      () => storeEmbedding(clientId, content, source, sourceId, metadata),
+    );
     return result;
   },
   { concurrency: 3 }

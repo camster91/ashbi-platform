@@ -35,14 +35,30 @@ model Organization {
   wpMagicLoginLogs   WPMagicLoginLog[]
   wpBridgeNonces     WPBridgeNonce[]
   supportHourEntries SupportHourEntry[]
+  integrations       Integration[]
+  trashedItems       TrashedItem[]
+  assignmentRules    AssignmentRule[]
+  templates          Template[]
+  unmatchedEmails    UnmatchedEmail[]
+  lineItemTemplates  LineItemTemplate[]
+  weeklyDigests      WeeklyDigest[]
+  taskTemplates      TaskTemplate[]
+  outreachSequences  OutreachSequence[]
+  emailTriageItems   EmailTriageItem[]
+  aiContexts         AiContext[]
+  ashConversations   AshConversation[]
+  projectTemplates   ProjectTemplate[]
+  brandSettings      BrandSettings[]
+  pipelineStages     PipelineStage[]
+  promptVersions     PromptVersion[]
 
   @@map("organizations")
 }
 
 model User {
   id                  String        @id @default(cuid())
-  organizationId      String? // Set for all users to support multi-tenancy
-  organization        Organization? @relation(fields: [organizationId], references: [id])
+  organizationId      String // Set for all users to support multi-tenancy
+  organization        Organization @relation(fields: [organizationId], references: [id])
   email               String        @unique
   name                String
   password            String
@@ -111,8 +127,8 @@ model FormDraft {
 
 model Client {
   id                  String        @id @default(cuid())
-  organizationId      String?
-  organization        Organization? @relation(fields: [organizationId], references: [id])
+  organizationId      String
+  organization        Organization @relation(fields: [organizationId], references: [id])
   name                String
   email               String?
   domain              String?       @unique
@@ -193,8 +209,8 @@ model Contact {
 
 model Project {
   id             String        @id @default(cuid())
-  organizationId String?
-  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
   name           String
   description    String?
   status         String        @default("STARTING_UP") // STARTING_UP, DESIGN_DEV, ADDING_CONTENT, FINALIZING, LAUNCHED, ON_HOLD, CANCELLED
@@ -439,6 +455,8 @@ model Notification {
 
 model AssignmentRule {
   id         String   @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name       String
   type       String // SKILL, CLIENT, PROJECT, LOAD_BALANCE
   conditions String // JSON: rule conditions
@@ -449,11 +467,14 @@ model AssignmentRule {
   updatedAt  DateTime @updatedAt
 
   @@index([isActive])
+  @@index([organizationId])
   @@map("assignment_rules")
 }
 
 model Template {
   id        String   @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name      String
   category  String // GREETING, ACKNOWLEDGMENT, FOLLOW_UP, etc.
   subject   String?
@@ -463,11 +484,14 @@ model Template {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([organizationId])
   @@map("templates")
 }
 
 model UnmatchedEmail {
   id                String    @id @default(cuid())
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   senderEmail       String
   senderName        String?
   subject           String
@@ -483,6 +507,7 @@ model UnmatchedEmail {
 
   @@index([createdAt])
   @@index([senderEmail])
+  @@index([organizationId])
   @@map("unmatched_emails")
 }
 
@@ -970,6 +995,8 @@ model InvoicePayment {
 
 model LineItemTemplate {
   id          String   @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name        String
   description String
   itemType    String   @default("LABOR") // LABOR | MATERIALS | EXPENSE | CUSTOM
@@ -979,11 +1006,14 @@ model LineItemTemplate {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  @@index([organizationId])
   @@map("line_item_templates")
 }
 
 model WeeklyDigest {
   id                  String   @id @default(cuid())
+  organizationId      String
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   weekStart           DateTime
   weekEnd             DateTime
   newLeads            Int      @default(0)
@@ -996,6 +1026,7 @@ model WeeklyDigest {
   fullDigest          String // Full AI-generated digest text
   createdAt           DateTime @default(now())
 
+  @@index([organizationId])
   @@map("weekly_digests")
 }
 
@@ -1022,17 +1053,22 @@ model Credential {
 
 model TaskTemplate {
   id        String   @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name      String
   phase     String // STARTING_UP, DESIGN_DEV, ADDING_CONTENT, FINALIZING, LAUNCHED
   tasks     String   @default("[]") // JSON array of {title, description, assignee_role}
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([organizationId])
   @@map("task_templates")
 }
 
 model OutreachSequence {
   id             String   @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name           String
   steps          String   @default("[]") // JSON array of {subject, body, delayDays}
   status         String   @default("ACTIVE") // ACTIVE | PAUSED
@@ -1042,11 +1078,14 @@ model OutreachSequence {
   updatedAt      DateTime @updatedAt
 
   @@index([status])
+  @@index([organizationId])
   @@map("outreach_sequences")
 }
 
 model EmailTriageItem {
   id          String   @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   subject     String
   senderEmail String
   senderName  String?
@@ -1062,6 +1101,7 @@ model EmailTriageItem {
 
   @@index([status])
   @@index([createdAt])
+  @@index([organizationId])
   @@map("email_triage_items")
 }
 
@@ -1099,11 +1139,14 @@ model AiTeamMessage {
 
 model AiContext {
   id        String   @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   key       String   @unique
   value     String
   updatedAt DateTime @updatedAt
   createdAt DateTime @default(now())
 
+  @@index([organizationId])
   @@map("ai_context")
 }
 
@@ -1260,11 +1303,14 @@ model PushSubscription {
 
 model AshConversation {
   id        String           @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   title     String?
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
   messages  AshChatMessage[]
 
+  @@index([organizationId])
   @@map("ash_conversations")
 }
 
@@ -1281,6 +1327,8 @@ model AshChatMessage {
 
 model ProjectTemplate {
   id          String   @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name        String
   description String?
   projectType String? // WEBSITE | BRANDING | MARKETING | CUSTOM
@@ -1289,6 +1337,7 @@ model ProjectTemplate {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  @@index([organizationId])
   @@map("project_templates")
 }
 
@@ -1325,6 +1374,8 @@ model IntakeFormResponse {
 
 model BrandSettings {
   id             String  @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   companyName    String  @default("Ashbi Design")
   logoUrl        String?
   primaryColor   String  @default("#c9a84c")
@@ -1338,11 +1389,14 @@ model BrandSettings {
   proposalFooter String?
   contractHeader String?
 
+  @@index([organizationId])
   @@map("brand_settings")
 }
 
 model PipelineStage {
   id          String   @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name        String
   order       Int      @default(0)
   color       String   @default("#3B82F6")
@@ -1352,6 +1406,7 @@ model PipelineStage {
 
   deals PipelineDeal[]
 
+  @@index([organizationId])
   @@map("pipeline_stages")
 }
 
@@ -1380,7 +1435,7 @@ model PipelineDeal {
 
 model SupportHourEntry {
   id             String   @id @default(cuid())
-  organizationId String?
+  organizationId String
   siteUrl        String
   clientId       String?
   projectId      String?
@@ -1391,7 +1446,7 @@ model SupportHourEntry {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  organization Organization? @relation(fields: [organizationId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([siteUrl])
   @@index([month])
@@ -1507,6 +1562,8 @@ model TimeSession {
 
 model PromptVersion {
   id          String   @id @default(cuid())
+  organizationId String
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name        String // e.g., "analyzeMessage", "draftResponse"
   version     Int      @default(1)
   system      String   @db.Text // System prompt
@@ -1517,6 +1574,7 @@ model PromptVersion {
   updatedAt   DateTime @updatedAt
 
   @@unique([name, version])
+  @@index([organizationId])
   @@map("prompt_versions")
 }
 
@@ -1593,7 +1651,7 @@ model RateCard {
 model Integration {
   id             String    @id @default(cuid())
   type           String // QUICKBOOKS, XERO
-  organizationId String?
+  organizationId String
   accessToken    String?
   refreshToken   String?
   orgId          String?
@@ -1601,6 +1659,8 @@ model Integration {
   lastSyncAt     DateTime?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@map("integrations")
@@ -1610,11 +1670,13 @@ model TrashedItem {
   id             String    @id @default(cuid())
   entity         String // CLIENT | PROJECT | INVOICE | PROPOSAL | CONTRACT | EXPENSE | TASK | ESTIMATE | NOTE | RETAINER_PLAN
   recordId       String
-  organizationId String?
+  organizationId String
   data           Json
   deletedAt      DateTime  @default(now())
   expiresAt      DateTime // 30 days from deletedAt
   restoredAt     DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([entity])
   @@index([expiresAt])
@@ -1626,7 +1688,7 @@ model TrashedItem {
 
 model WPSite {
   id                    String    @id @default(cuid())
-  organizationId        String?
+  organizationId        String
   bridgeSecretEncrypted String?
   name                  String
   url                   String
@@ -1657,7 +1719,7 @@ model WPSite {
   reports      WPReport[]
   alertsLog    WPAlert[]
   nonces       WPBridgeNonce[]
-  organization Organization?   @relation(fields: [organizationId], references: [id])
+  organization Organization    @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@index([status])
@@ -1667,7 +1729,7 @@ model WPSite {
 // Per-site backup records from the bridge plugin (v1.7.0+)
 model WPBackup {
   id             String   @id @default(cuid())
-  organizationId String?
+  organizationId String
   siteId         String
   siteUrl        String
   timestamp      DateTime
@@ -1681,7 +1743,7 @@ model WPBackup {
   createdAt      DateTime @default(now())
 
   site         WPSite        @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  organization Organization? @relation(fields: [organizationId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@index([siteId])
@@ -1693,7 +1755,7 @@ model WPBackup {
 // Monthly maintenance report delivered by the bridge plugin (v1.7.0+)
 model WPReport {
   id             String   @id @default(cuid())
-  organizationId String?
+  organizationId String
   siteId         String
   siteUrl        String
   month          String
@@ -1706,7 +1768,7 @@ model WPReport {
   createdAt      DateTime @default(now())
 
   site         WPSite        @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  organization Organization? @relation(fields: [organizationId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 
   @@unique([siteId, month])
   @@index([organizationId])
@@ -1718,7 +1780,7 @@ model WPReport {
 // Support-hour alerts: new admin, promotions, security events (v1.7.0+)
 model WPAlert {
   id             String   @id @default(cuid())
-  organizationId String?
+  organizationId String
   siteId         String?
   siteUrl        String
   alertType      String
@@ -1726,7 +1788,7 @@ model WPAlert {
   createdAt      DateTime @default(now())
 
   site         WPSite?       @relation(fields: [siteId], references: [id], onDelete: SetNull)
-  organization Organization? @relation(fields: [organizationId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@index([siteUrl])
@@ -1742,7 +1804,7 @@ model WPAlert {
 // the hub-side orchestration ledger.
 model WPFleetOp {
   id             String        @id @default(cuid())
-  organizationId String?
+  organizationId String
   opType         String // 'file_patch' | 'command' | 'option_set' | 'magic_login' | 'magic_login_revoke'
   payload        Json // original request body
   targetCount    Int
@@ -1751,7 +1813,7 @@ model WPFleetOp {
   createdBy      String // user id from JWT
   createdAt      DateTime      @default(now())
   completedAt    DateTime?
-  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organization   Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@index([createdAt(sort: Desc)])
@@ -1771,7 +1833,7 @@ model WPFleetOp {
 // show fleet-wide activity in one place.
 model WPMagicLoginLog {
   id             String        @id @default(cuid())
-  organizationId String?
+  organizationId String
   siteId         String? // nullable: pre-registration/wildcard logins may not have a row yet
   siteUrl        String // canonical site URL — survives WPSite deletes
   userId         Int? // WP user id (admin being issued for / logged in as)
@@ -1781,7 +1843,7 @@ model WPMagicLoginLog {
   reason         String? // 'expired_or_invalid' | 'replayed' | 'expired' | 'rate_limited' | 'ip_not_allowed' | 'manual_revoke'
   tokenHash      String? // sha256 of the raw magic-login token (NEVER the token itself)
   ts             DateTime      @default(now())
-  organization   Organization? @relation(fields: [organizationId], references: [id])
+  organization   Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
   @@index([siteId])

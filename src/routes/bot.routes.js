@@ -53,6 +53,10 @@ export default async function botRoutes(fastify) {
       reply.status(401).send({ error: 'Unauthorized' });
       return;
     }
+    if (!BOT_ORG_ID) {
+      reply.status(503).send({ error: 'Bot tenant is not configured' });
+      return;
+    }
     done();
   }
 
@@ -753,6 +757,7 @@ export default async function botRoutes(fastify) {
   // POST /weekly-digest — trigger weekly digest generation
   fastify.post('/weekly-digest', { preHandler: requireBotAuth }, async (request, reply) => {
     const job = await weeklyDigestQueue.add('generate-weekly-digest', {
+      organizationId: BOT_ORG_ID,
       triggeredManually: true,
       triggeredAt: new Date().toISOString()
     });

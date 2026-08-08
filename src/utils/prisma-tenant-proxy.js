@@ -27,11 +27,42 @@ import { withSoftDelete } from '../services/soft-delete.service.js';
 
 // Models that have a direct `organizationId` column. These get the
 // `where.organizationId = <jwt.orgId>` auto-inject (same as before).
-const DIRECT_SCOPED_MODELS = [
+const DIRECT_SCOPED_MODELS = new Set([
   'client', 'project', 'user', 'integration', 'trasheditem', 'attachment', 'formdraft',
   'wpsite', 'wpbackup', 'wpreport', 'wpalert', 'wpfleetop',
-  'wpmagicloginlog', 'wpbridgenonce', 'supporthourentry'
-];
+  'wpmagicloginlog', 'wpbridgenonce', 'supporthourentry',
+  'assignmentrule', 'template', 'unmatchedemail', 'lineitemtemplate',
+  'weeklydigest', 'tasktemplate', 'outreachsequence', 'emailtriageitem',
+  'aicontext', 'ashconversation', 'projecttemplate', 'brandsettings',
+  'pipelinestage', 'promptversion'
+]);
+
+// Models that are intentionally shared across organizations. Every Prisma
+// model must be present here, DIRECT_SCOPED_MODELS, or TENANT_PATHS; an
+// unclassified delegate is rejected instead of silently bypassing tenancy.
+const GLOBAL_MODELS = new Set(['organization']);
+
+// Direct-owned records can also reference another tenant-owned root. The
+// redundant organizationId is not enough: the referenced parent must belong
+// to the same organization or the graph would span tenants.
+const DIRECT_PARENT_RELATIONS = {
+  project: [{ relation: 'client', field: 'clientId', model: 'client', delegate: 'client', required: true }],
+  user: [{ relation: 'client', field: 'clientId', model: 'client', delegate: 'client' }],
+  supporthourentry: [
+    { relation: 'client', field: 'clientId', model: 'client', delegate: 'client' },
+    { relation: 'project', field: 'projectId', model: 'project', delegate: 'project' },
+  ],
+  wpsite: [
+    { relation: 'client', field: 'clientId', model: 'client', delegate: 'client' },
+    { relation: 'project', field: 'projectId', model: 'project', delegate: 'project' },
+  ],
+  wpbackup: [{ relation: 'site', field: 'siteId', model: 'wpsite', delegate: 'wPSite', required: true }],
+  wpreport: [{ relation: 'site', field: 'siteId', model: 'wpsite', delegate: 'wPSite', required: true }],
+  wpalert: [{ relation: 'site', field: 'siteId', model: 'wpsite', delegate: 'wPSite' }],
+  wpbridgenonce: [{ relation: 'site', field: 'siteId', model: 'wpsite', delegate: 'wPSite', required: true }],
+};
+
+const RESTRICTED_MODELS = new Set([]);
 
 // Models without a direct `organizationId` column. Each entry maps the
 // model to the chain of relations we need to walk to reach an owner
@@ -49,37 +80,53 @@ const DIRECT_SCOPED_MODELS = [
 // HermesEvent, etc., not in this map).
 const TENANT_PATHS = {
   // 1-hop to Client (via clientId FK)
+  contact:          ['client'],
   thread:           ['client'],
   invoice:          ['client'],
   proposal:         ['client'],
   contract:         ['client'],
-  retainerPlan:     ['client'],
-  pipelineDeal:     ['client'],
+  retainerplan:     ['client'],
+  pipelinedeal:     ['client'],
   expense:          ['client'],
   credential:       ['client'],
-  clientEmbedding:  ['client'],
+  clientembedding:  ['client'],
+  report:           ['client'],
+  aiteammessage:    ['client'],
+  revenuesnapshot:  ['client'],
+  clientemailmapping: ['client'],
+  intakeform:       ['client'],
+  creativebrief:    ['client'],
+  asset:            ['client'],
+  clientinvitation: ['client'],
+  estimate:         ['client'],
+  ratecard:         ['client'],
 
   // 1-hop to Project (via projectId FK, then project → client).
   // These models relate to Client through Project, NOT directly.
   note:             ['project', 'client'],
-  projectCommunication: ['project', 'client'],
-  chatMessage:      ['project', 'client'],
-  revisionRound:    ['project', 'client'],
+  projectcommunication: ['project', 'client'],
+  chatmessage:      ['project', 'client'],
+  revisionround:    ['project', 'client'],
   task:             ['project', 'client'],
   milestone:        ['project', 'client'],
-  timeSession:      ['project', 'client'],
+  timesession:      ['project', 'client'],
+  projectcontext:   ['project', 'client'],
+  timeentry:        ['project', 'client'],
+  activity:         ['project', 'client'],
+  approval:         ['project', 'client'],
 
   // 1-hop to Thread (via threadId FK, then thread → client)
   message:          ['thread', 'client'],
+  internalnote:     ['thread', 'client'],
   response:         ['thread', 'client'],
 
   // 1-hop to Invoice (via invoiceId FK, then invoice → client)
-  invoiceLineItem:  ['invoice', 'client'],
-  invoicePayment:   ['invoice', 'client'],
+  invoicelineitem:  ['invoice', 'client'],
+  invoicepayment:   ['invoice', 'client'],
 
   // 1-hop to Proposal (via proposalId FK, then proposal → client)
-  proposalLineItem: ['proposal', 'client'],
-  proposalVersion:  ['proposal', 'client'],
+  proposallineitem: ['proposal', 'client'],
+  proposalversion:  ['proposal', 'client'],
 
   // NOTE: brandSettings, emailTriageItem, unmatchedEmail and taskTemplate are
   // intentionally NOT scoped here — the current schema gives them no relation
@@ -87,15 +134,46 @@ const TENANT_PATHS = {
   // Adding a dedicated organizationId column is the correct long-term fix.
 
   // 1-hop to Task (via taskId FK, then task → project → client)
-  taskComment:      ['task', 'project', 'client'],
+  taskcomment:      ['task', 'project', 'client'],
 
   // 1-hop to User (via userId FK, then user → organizationId)
   notification:     ['user'],
+  pushsubscription: ['user'],
+  snippet:          ['createdBy'],
+  apikey:           ['user'],
 
   // Calendar events — assume projectId FK (verify schema on first miss)
-  calendarEvent:    ['project', 'client'],
+  calendarevent:    ['project', 'client'],
+  eventattendee:    ['event', 'project', 'client'],
+  chatreaction:     ['message', 'project', 'client'],
+  emailtriagedraft: ['item'],
+  ashchatmessage:   ['conversation'],
+  intakeformresponse: ['form', 'client'],
 
 };
+
+const RELATION_OWNER_MODELS = {
+  client: { model: 'client', delegate: 'client' },
+  project: { model: 'project', delegate: 'project' },
+  thread: { model: 'thread', delegate: 'thread' },
+  invoice: { model: 'invoice', delegate: 'invoice' },
+  proposal: { model: 'proposal', delegate: 'proposal' },
+  task: { model: 'task', delegate: 'task' },
+  user: { model: 'user', delegate: 'user' },
+  createdBy: { model: 'user', delegate: 'user' },
+  event: { model: 'calendarevent', delegate: 'calendarEvent' },
+  message: { model: 'chatmessage', delegate: 'chatMessage' },
+  item: { model: 'emailtriageitem', delegate: 'emailTriageItem' },
+  conversation: { model: 'ashconversation', delegate: 'ashConversation' },
+  form: { model: 'intakeform', delegate: 'intakeForm' },
+};
+
+export const tenantModelPolicy = Object.freeze({
+  ...Object.fromEntries([...DIRECT_SCOPED_MODELS].map((model) => [model, 'direct'])),
+  ...Object.fromEntries(Object.keys(TENANT_PATHS).map((model) => [model, 'relation'])),
+  ...Object.fromEntries([...GLOBAL_MODELS].map((model) => [model, 'global'])),
+  ...Object.fromEntries([...RESTRICTED_MODELS].map((model) => [model, 'restricted'])),
+});
 
 /**
  * Build a Prisma `where` filter that scopes a query to a given
@@ -121,6 +199,20 @@ export function createScopedPrisma(prisma, organizationId) {
   // Apply soft-delete wrapper first, then tenant scoping
   const softPrisma = withSoftDelete(prisma);
 
+  async function verifyTenantOwner({ relation, model, delegate }, ownerId) {
+    const ownerPath = TENANT_PATHS[model];
+    const ownerWhere = DIRECT_SCOPED_MODELS.has(model)
+      ? { id: ownerId, organizationId }
+      : { AND: [{ id: ownerId }, buildTenantWhere(ownerPath, organizationId)] };
+    const owner = await softPrisma[delegate].findFirst({
+      where: ownerWhere,
+      select: { id: true },
+    });
+    if (!owner) {
+      throw new Error(`Tenancy Error: ${relation} ${ownerId} does not belong to organization ${organizationId}`);
+    }
+  }
+
   return new Proxy(softPrisma, {
     get(target, modelName) {
       if (modelName === Symbol.for('__proxy__')) return true;
@@ -130,14 +222,19 @@ export function createScopedPrisma(prisma, organizationId) {
       if (typeof model !== 'object' || model === null) return model;
 
       const modelKey = modelName.toLowerCase();
-      const isDirect = DIRECT_SCOPED_MODELS.includes(modelKey);
+      const isDirect = DIRECT_SCOPED_MODELS.has(modelKey);
       const tenantPath = TENANT_PATHS[modelKey];
 
-      // If neither direct-scoped nor path-scoped, return as-is.
-      // (These are org-agnostic models like PipelineStage, or tables
-      // we have not yet enumerated. Log once per unknown model in dev.)
+      if (GLOBAL_MODELS.has(modelKey)) return model;
+      if (RESTRICTED_MODELS.has(modelKey)) {
+        throw new Error(`Tenancy Error: model ${String(modelName)} has no tenant owner and is unavailable in request scope`);
+      }
+
+      // Application model delegates must be classified explicitly. This
+      // makes future schema additions fail closed until their ownership
+      // policy is reviewed.
       if (!isDirect && !tenantPath) {
-        return model;
+        throw new Error(`Tenancy Error: model ${String(modelName)} is not classified for tenant access`);
       }
 
       return new Proxy(model, {
@@ -150,7 +247,7 @@ export function createScopedPrisma(prisma, organizationId) {
 
             // Path A: direct-scoped model (client/project/user)
             if (isDirect) {
-              if (['findMany', 'findUnique', 'findFirst', 'count', 'aggregate', 'groupBy'].includes(methodName)) {
+              if (['findMany', 'findUnique', 'findUniqueOrThrow', 'findFirst', 'findFirstOrThrow', 'count', 'aggregate', 'groupBy'].includes(methodName)) {
                 queryArgs.where = { ...queryArgs.where, organizationId };
               } else if (['create', 'createMany'].includes(methodName)) {
                 if (Array.isArray(queryArgs.data)) {
@@ -158,10 +255,38 @@ export function createScopedPrisma(prisma, organizationId) {
                 } else {
                   queryArgs.data = { ...queryArgs.data, organizationId };
                 }
-              } else if (['update', 'updateMany', 'upsert', 'delete', 'deleteMany'].includes(methodName)) {
+              } else if (methodName === 'upsert') {
+                queryArgs.where = { ...queryArgs.where, organizationId };
+                queryArgs.create = { ...queryArgs.create, organizationId };
+                queryArgs.update = { ...queryArgs.update, organizationId };
+              } else if (['update', 'updateMany', 'delete', 'deleteMany'].includes(methodName)) {
                 queryArgs.where = { ...queryArgs.where, organizationId };
                 if (queryArgs.data) {
                   queryArgs.data = { ...queryArgs.data, organizationId };
+                }
+              }
+
+              const parentRelations = DIRECT_PARENT_RELATIONS[modelKey] || [];
+              const isCreate = methodName === 'create' || methodName === 'createMany';
+              const ownershipWrites = methodName === 'upsert'
+                ? [{ row: queryArgs.create, creating: true }, { row: queryArgs.update, creating: false }]
+                : (isCreate || methodName === 'update' || methodName === 'updateMany')
+                  ? (Array.isArray(queryArgs.data) ? queryArgs.data : [queryArgs.data])
+                    .map((row) => ({ row, creating: isCreate }))
+                  : [];
+              for (const { row, creating } of ownershipWrites) {
+                for (const parent of parentRelations) {
+                  if (row?.[parent.relation]?.create || row?.[parent.relation]?.connectOrCreate) {
+                    throw new Error(`Tenancy Error: nested ${parent.relation} creation is not allowed in scoped writes`);
+                  }
+                  const ownerId = row?.[parent.field] ?? row?.[parent.relation]?.connect?.id;
+                  if (!ownerId) {
+                    if (creating && parent.required) {
+                      throw new Error(`Tenancy Error: ${String(modelName)}.${parent.field} is required`);
+                    }
+                    continue;
+                  }
+                  await verifyTenantOwner(parent, ownerId);
                 }
               }
               logger.debug({ modelName, methodName, organizationId }, 'Scoped Query Execution');
@@ -186,8 +311,9 @@ export function createScopedPrisma(prisma, organizationId) {
                 if (queryArgs.orderBy) findFirstArgs.orderBy = queryArgs.orderBy;
                 if (queryArgs.cursor)  findFirstArgs.cursor  = queryArgs.cursor;
                 if (queryArgs.distinct) findFirstArgs.distinct = queryArgs.distinct;
-                logger.debug({ modelName, methodName: 'findFirst(from-unique)', organizationId, tenantPath }, 'Tenant-path Query Execution');
-                return modelTarget.findFirst(findFirstArgs);
+                const scopedMethod = methodName === 'findUniqueOrThrow' ? 'findFirstOrThrow' : 'findFirst';
+                logger.debug({ modelName, methodName: `${scopedMethod}(from-unique)`, organizationId, tenantPath }, 'Tenant-path Query Execution');
+                return modelTarget[scopedMethod](findFirstArgs);
               }
 
               if (['findFirst', 'findMany', 'count', 'aggregate', 'groupBy'].includes(methodName)) {
@@ -195,10 +321,29 @@ export function createScopedPrisma(prisma, organizationId) {
               } else if (['update', 'updateMany', 'upsert', 'delete', 'deleteMany'].includes(methodName)) {
                 queryArgs.where = { AND: [queryArgs.where ?? {}, tenantWhere] };
               }
-              // create/createMany: caller MUST supply the FK (e.g. clientId
-              // for thread). The model layer doesn't have a tenant column
-              // to inject, so we trust the FK here. (Read-after-create
-              // will hit the scoped path and verify tenant ownership.)
+              if (methodName === 'create' || methodName === 'createMany' || methodName === 'upsert') {
+                const ownerRelation = tenantPath[0];
+                const ownerIdField = `${ownerRelation}Id`;
+                const ownerPolicy = RELATION_OWNER_MODELS[ownerRelation];
+                if (!ownerPolicy) {
+                  throw new Error(`Tenancy Error: no owner policy for relation ${ownerRelation}`);
+                }
+                const ownershipWrites = methodName === 'upsert'
+                  ? [{ row: queryArgs.create, required: true }, { row: queryArgs.update, required: false }]
+                  : (Array.isArray(queryArgs.data) ? queryArgs.data : [queryArgs.data])
+                    .map((row) => ({ row, required: true }));
+                for (const { row, required } of ownershipWrites) {
+                  const ownerId = row?.[ownerIdField];
+                  if (!ownerId) {
+                    if (required) {
+                      throw new Error(`Tenancy Error: ${String(modelName)}.${ownerIdField} is required`);
+                    }
+                    continue;
+                  }
+
+                  await verifyTenantOwner({ relation: ownerRelation, ...ownerPolicy }, ownerId);
+                }
+              }
 
               logger.debug({ modelName, methodName, organizationId, tenantPath }, 'Tenant-path Query Execution');
               return method.apply(modelTarget, [queryArgs, ...args.slice(1)]);
