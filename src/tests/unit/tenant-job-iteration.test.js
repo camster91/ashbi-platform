@@ -34,15 +34,18 @@ test('tenant-targeted jobs verify the declared organization exists', async () =>
 
 test('tenant job callbacks run inside an isolated scoped async context', async () => {
   const calls = [];
-  const prisma = {
+  const contextAwarePrisma = {
     organization: { findUnique: async () => ({ id: 'org-a' }) },
+    template: { findMany: async () => { throw new Error('context-aware proxy must not be wrapped'); } },
+  };
+  const backgroundPrisma = {
     template: { findMany: async (args) => { calls.push(args); return []; } },
   };
 
-  await runTenantJob(prisma, 'org-a', async (tenantPrisma) => {
+  await runTenantJob(contextAwarePrisma, 'org-a', async (tenantPrisma) => {
     assert.equal(getRequestOrganizationId(), 'org-a');
     await tenantPrisma.template.findMany();
-  });
+  }, backgroundPrisma);
   assert.deepEqual(calls[0].where, { organizationId: 'org-a' });
 });
 

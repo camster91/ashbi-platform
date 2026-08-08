@@ -1,7 +1,7 @@
 // Recurring Invoices Cron Job
 // Runs on startup and every hour to generate new invoices from recurring templates
 
-import prisma from '../config/db.js';
+import { prisma } from '../config/db.js';
 import { generateInvoiceNumber } from '../utils/invoice.js';
 import { resolveTenantOrganizationIds, runTenantJob } from './tenant-iteration.js';
 

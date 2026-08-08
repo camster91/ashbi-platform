@@ -2,6 +2,7 @@
 // Migrated from ashbi-hub with proper auth and Prisma
 
 import prisma from '../config/db.js';
+import { prisma as backgroundPrisma } from '../config/db.js';
 import crypto from 'crypto';
 import env from '../config/env.js';
 import { runTenantJob } from '../jobs/tenant-iteration.js';
@@ -9,7 +10,7 @@ import { runTenantJob } from '../jobs/tenant-iteration.js';
 async function withSiteTenant(siteUrl, callback) {
   const site = await prisma.wPSite.findFirst({ where: { url: siteUrl } });
   if (!site?.organizationId) throw new Error('Site not found or not provisioned for a tenant');
-  return runTenantJob(prisma, site.organizationId, (tenantPrisma) => callback(tenantPrisma, site));
+  return runTenantJob(prisma, site.organizationId, (tenantPrisma) => callback(tenantPrisma, site), backgroundPrisma);
 }
 
 // ============================================================================

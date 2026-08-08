@@ -2,7 +2,7 @@ import { Readable } from 'node:stream';
 import crypto from 'crypto';
 import { z } from 'zod';
 import env from '../config/env.js';
-import prisma from '../config/db.js';
+import { prisma } from '../config/db.js';
 import { resolveTenantOrganizationIds, runTenantJob } from '../jobs/tenant-iteration.js';
 import { validateBody, validateQuery } from '../validators/schemas.js';
 import {

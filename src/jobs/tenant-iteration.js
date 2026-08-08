@@ -26,9 +26,9 @@ export async function resolveTenantOrganizationIds(prisma, requestedOrganization
   return organizations.map(({ id }) => id);
 }
 
-export async function runTenantJob(prisma, organizationId, callback) {
+export async function runTenantJob(prisma, organizationId, callback, scopingPrisma = prisma) {
   await resolveTenantOrganizationIds(prisma, organizationId);
-  const tenantPrisma = createScopedPrisma(prisma, organizationId);
+  const tenantPrisma = createScopedPrisma(scopingPrisma, organizationId);
   return requestStorage.run(
     { prisma: tenantPrisma, organizationId },
     () => callback(tenantPrisma),

@@ -7,6 +7,7 @@ import env from '../config/env.js';
 import crypto from 'crypto';
 import {validateBody, webhookEmailTestSchema} from '../validators/schemas.js';
 import { runTenantJob } from '../jobs/tenant-iteration.js';
+import { prisma as backgroundPrisma } from '../config/db.js';
 
 export default async function webhookRoutes(fastify) {
   // Email webhook endpoint
@@ -50,6 +51,7 @@ export default async function webhookRoutes(fastify) {
         fastify.prisma,
         env.botOrganizationId,
         () => processEmailPipeline(emailData),
+        backgroundPrisma,
       );
 
       return {

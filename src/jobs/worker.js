@@ -11,6 +11,7 @@ import env from '../config/env.js';
 import * as Sentry from '@sentry/node';
 import logger from '../utils/logger.js';
 import prisma from '../config/db.js';
+import { prisma as backgroundPrisma } from '../config/db.js';
 import { createScopedPrisma } from '../utils/prisma-tenant-proxy.js';
 import { resolveTenantOrganizationIds, runTenantJob } from './tenant-iteration.js';
 
@@ -48,6 +49,7 @@ const emailWorker = createWorker(
       prisma,
       job.data?.organizationId,
       () => processEmailPipeline(job.data),
+      backgroundPrisma,
     );
 
     // Schedule escalation if thread was created
@@ -75,6 +77,7 @@ const healthWorker = createWorker(
           prisma,
           organizationId,
           (tenantPrisma) => updateAllProjectHealth(tenantPrisma),
+          backgroundPrisma,
         );
       }
       return { updated, organizations: organizationIds.length };
@@ -84,10 +87,10 @@ const healthWorker = createWorker(
       return runTenantJob(prisma, job.data?.organizationId, async (tenantPrisma) => {
         const { calculateHealthScore, getHealthStatus } = await import('../services/project.service.js');
 
-      const project = await tenantPrisma.project.findUnique({
-        where: { id: job.data.projectId },
-        include: { threads: { where: { status: { not: 'RESOLVED' } } } }
-      });
+        const project = await tenantPrisma.project.findUnique({
+          where: { id: job.data.projectId },
+          include: { threads: { where: { status: { not: 'RESOLVED' } } } }
+        });
 
       if (project) {
         const score = calculateHealthScore(project, project.threads);
@@ -101,7 +104,7 @@ const healthWorker = createWorker(
         return { projectId: job.data.projectId, score, health };
       }
       return { skipped: true };
-      });
+      }, backgroundPrisma);
     }
 
     return { skipped: true };
@@ -118,7 +121,7 @@ const escalationWorker = createWorker(
       const organizationIds = await resolveTenantOrganizationIds(prisma);
       const results = [];
       for (const organizationId of organizationIds) {
-        results.push(await runTenantJob(prisma, organizationId, () => checkAllEscalations()));
+        results.push(await runTenantJob(prisma, organizationId, () => checkAllEscalations(), backgroundPrisma));
       }
       return { organizations: results };
     }
@@ -128,6 +131,7 @@ const escalationWorker = createWorker(
         prisma,
         job.data?.organizationId,
         () => checkThreadEscalation(job.data.threadId),
+        backgroundPrisma,
       );
     }
 
@@ -153,7 +157,7 @@ const notificationWorker = createWorker(
           userId
         }
       })
-    ));
+    ), backgroundPrisma);
 
     return { delivered: true };
   },
@@ -279,7 +283,7 @@ const weeklyDigestWorker = createWorker(
     const organizationResults = [];
 
     for (const organizationId of organizationIds) {
-      const tenantPrisma = createScopedPrisma(prisma, organizationId);
+      const tenantPrisma = createScopedPrisma(backgroundPrisma, organizationId);
 
     const now = new Date();
     const weekStart = new Date(now);
@@ -393,6 +397,7 @@ const embeddingWorker = createWorker(
       prisma,
       job.data?.organizationId,
       () => storeEmbedding(clientId, content, source, sourceId, metadata),
+      backgroundPrisma,
     );
     return result;
   },

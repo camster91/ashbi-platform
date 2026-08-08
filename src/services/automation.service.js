@@ -2,6 +2,7 @@
 // Handles trigger-action automations for invoices, proposals, and contracts
 
 import prisma from '../config/db.js';
+import { prisma as backgroundPrisma } from '../config/db.js';
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import crypto from 'crypto';
@@ -848,7 +849,7 @@ let overdueInterval = null;
 async function checkOverdueInvoicesForAllOrganizations() {
   const organizationIds = await resolveTenantOrganizationIds(prisma);
   for (const organizationId of organizationIds) {
-    await runTenantJob(prisma, organizationId, () => checkOverdueInvoices());
+    await runTenantJob(prisma, organizationId, () => checkOverdueInvoices(), backgroundPrisma);
   }
 }
 

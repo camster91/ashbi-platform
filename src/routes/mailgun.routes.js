@@ -8,6 +8,7 @@ import { safeEqual } from '../utils/crypto.js';
 import env from '../config/env.js';
 import {validateBody, mailgunSendSchema} from '../validators/schemas.js';
 import { runTenantJob } from '../jobs/tenant-iteration.js';
+import { prisma as backgroundPrisma } from '../config/db.js';
 
 export default async function mailgunRoutes(fastify) {
   // POST /mailgun/send — manually send an email (admin only)
@@ -94,7 +95,7 @@ export default async function mailgunRoutes(fastify) {
         text: bodyPlain,
         html: bodyHtml,
         messageId
-      }));
+      }), backgroundPrisma);
     } catch (err) {
       fastify.log.error(err, 'Mailgun webhook processing error');
     }

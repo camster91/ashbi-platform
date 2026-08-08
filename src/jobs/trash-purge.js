@@ -1,7 +1,7 @@
 // Trash purge cron job
 // Runs daily at 04:00 to permanently delete items that have been in trash >30 days.
 
-import prisma from '../config/db.js';
+import { prisma } from '../config/db.js';
 import { resolveTenantOrganizationIds, runTenantJob } from './tenant-iteration.js';
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
