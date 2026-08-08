@@ -84,22 +84,37 @@ jobs:
         # No postinstall hook in package.json runs it automatically.
         run: npx prisma generate
       - name: Setup database
-        # Use `db push` (not `migrate deploy`) because the migration history
-        # has no baseline — the earliest migration in this repo
-        # (20260318_add_credentials_templates_portal) ALTERs "projects" but
-        # never CREATEs it, so `migrate deploy` against a fresh DB fails with
-        # `relation "projects" does not exist`. The baseline migration was
-        # intentionally removed (commit 3df7615) because it conflicted with
-        # the existing production schema. For CI test databases we sync
-        # directly from schema.prisma; production runs continue to use
-        # `prisma migrate deploy` via scripts/start.sh against an already-
-        # bootstrapped database.
-        # Note: Prisma 7 removed `--skip-generate`; client gen is handled by
-        # the explicit Prisma generation step above, so a plain
-        # `db push` is correct here.
-        run: npx prisma db push
+        run: npx prisma migrate deploy
         env:
           DATABASE_URL: postgresql://postgres:testpass@localhost:5432/testdb
+      - name: Verify fresh migration schema has no drift
+        run: npx prisma migrate diff --exit-code --from-config-datasource --to-schema prisma/schema.prisma
+        env:
+          DATABASE_URL: postgresql://postgres:testpass@localhost:5432/testdb
+      - name: Rehearse adoption of a representative current-schema snapshot
+        run: |
+          printf 'CREATE DATABASE baseline_adoption;' | npx prisma db execute --stdin
+          export DATABASE_URL=postgresql://postgres:testpass@localhost:5432/baseline_adoption
+          npx prisma db push
+          npm run db:adopt-baseline
+          npx prisma migrate diff --exit-code --from-config-datasource --to-schema prisma/schema.prisma
+        env:
+          DATABASE_URL: postgresql://postgres:testpass@localhost:5432/testdb
+          ALLOW_BASELINE_ADOPTION: 20260808040000_baseline
+      - name: Prove baseline adoption refuses schema drift
+        run: |
+          printf 'CREATE DATABASE baseline_drift;' | npx prisma db execute --stdin
+          export DATABASE_URL=postgresql://postgres:testpass@localhost:5432/baseline_drift
+          npx prisma db push
+          printf 'ALTER TABLE "clients" ADD COLUMN "unexpectedBaselineDrift" TEXT;' | npx prisma db execute --stdin
+          if npm run db:adopt-baseline; then
+            echo 'Baseline adoption unexpectedly accepted drift' >&2
+            exit 1
+          fi
+          node scripts/assert-no-prisma-migrations.mjs
+        env:
+          DATABASE_URL: postgresql://postgres:testpass@localhost:5432/testdb
+          ALLOW_BASELINE_ADOPTION: 20260808040000_baseline
       - name: Run Backend Tests
         run: npm test
         env:

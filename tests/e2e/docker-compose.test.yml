@@ -59,7 +59,7 @@ services:
         npm ci --no-audit --no-fund
         printf 'DATABASE_URL="%s"\n' "$$DATABASE_URL" > /app/.env
         export DATABASE_URL="$$DATABASE_URL"
-        exec npx prisma db push --url "$$DATABASE_URL" --accept-data-loss
+        exec npx prisma migrate deploy
     depends_on:
       postgres:
         condition: service_healthy
