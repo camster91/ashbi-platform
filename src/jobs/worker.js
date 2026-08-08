@@ -11,6 +11,8 @@ import env from '../config/env.js';
 import * as Sentry from '@sentry/node';
 import logger from '../utils/logger.js';
 import prisma from '../config/db.js';
+import { createScopedPrisma } from '../utils/prisma-tenant-proxy.js';
+import { resolveTenantOrganizationIds } from './tenant-iteration.js';
 
 // Helper to create workers with error handling for Redis unavailability
 function createWorker(queueName, processor, options = {}) {
@@ -247,28 +249,34 @@ const weeklyDigestWorker = createWorker(
   async (job) => {
     console.log('Generating weekly digest');
 
+    const organizationIds = await resolveTenantOrganizationIds(prisma, job.data?.organizationId);
+    const organizationResults = [];
+
+    for (const organizationId of organizationIds) {
+      const tenantPrisma = createScopedPrisma(prisma, organizationId);
+
     const now = new Date();
     const weekStart = new Date(now);
     weekStart.setDate(weekStart.getDate() - 7);
 
-    const newLeads = await prisma.thread.count({
+    const newLeads = await tenantPrisma.thread.count({
       where: {
         needsTriage: true,
         createdAt: { gte: weekStart }
       }
     });
 
-    const proposalsSent = await prisma.proposal.count({
+    const proposalsSent = await tenantPrisma.proposal.count({
       where: { sentAt: { gte: weekStart } }
     });
-    const proposalsViewed = await prisma.proposal.count({
+    const proposalsViewed = await tenantPrisma.proposal.count({
       where: { status: 'VIEWED', updatedAt: { gte: weekStart } }
     });
-    const proposalsHired = await prisma.proposal.count({
+    const proposalsHired = await tenantPrisma.proposal.count({
       where: { status: 'APPROVED', approvedAt: { gte: weekStart } }
     });
 
-    const clients = await prisma.client.findMany({
+    const clients = await tenantPrisma.client.findMany({
       where: { status: 'ACTIVE' },
       include: {
         threads: { where: { status: { not: 'RESOLVED' } }, orderBy: { lastActivityAt: 'desc' }, take: 1 },
@@ -299,11 +307,11 @@ const weeklyDigestWorker = createWorker(
       clientHealthSummary[client.name] = Math.max(0, Math.min(100, score));
     }
 
-    const tasksOverdue = await prisma.task.count({
+    const tasksOverdue = await tenantPrisma.task.count({
       where: { status: { not: 'COMPLETED' }, dueDate: { lt: now } }
     });
 
-    const retainers = await prisma.retainerPlan.findMany({ include: { client: true } });
+    const retainers = await tenantPrisma.retainerPlan.findMany({ include: { client: true } });
     const retainerTotal = retainers.reduce((sum, r) => sum + parseFloat(r.tier || 0), 0);
 
     const system = `You are the AI assistant for Ashbi Design agency. Generate a concise weekly digest email for Cameron (CEO).`;
@@ -326,7 +334,7 @@ Write a brief, actionable digest highlighting what needs attention this week. In
       fullDigest = `Weekly Digest (${weekStart.toLocaleDateString('en-CA')} - ${now.toLocaleDateString('en-CA')})\n\nNew Leads: ${newLeads}\nProposals Sent: ${proposalsSent}\nProposals Viewed: ${proposalsViewed}\nProposals Hired: ${proposalsHired}\nOverdue Tasks: ${tasksOverdue}\nRetainer Revenue: $${retainerTotal}`;
     }
 
-    await prisma.weeklyDigest.create({
+    await tenantPrisma.weeklyDigest.create({
       data: {
         weekStart,
         weekEnd: now,
@@ -341,7 +349,10 @@ Write a brief, actionable digest highlighting what needs attention this week. In
       }
     });
 
-    return { newLeads, proposalsSent, proposalsViewed, proposalsHired, tasksOverdue, retainerTotal };
+      organizationResults.push({ organizationId, newLeads, proposalsSent, proposalsViewed, proposalsHired, tasksOverdue, retainerTotal });
+    }
+
+    return { organizations: organizationResults };
   },
   { concurrency: 1 }
 );
