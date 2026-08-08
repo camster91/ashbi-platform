@@ -497,7 +497,8 @@ export default async function clientPortalRoutes(fastify) {
         path: `/uploads/${filename}`,
         entityType: 'PROJECT',
         entityId: id,
-        uploadedById: authorUser.id
+        uploadedById: authorUser.id,
+        organizationId: project.organizationId,
       },
       include: {
         uploadedBy: { select: { id: true, name: true } }

@@ -86,7 +86,8 @@ export default async function attachmentRoutes(fastify) {
         path: `/uploads/${filename}`,
         entityType: entityType.value,
         entityId: entityId.value,
-        uploadedById: request.user.id
+        uploadedById: request.user.id,
+        organizationId: request.user.organizationId,
       },
       include: {
         uploadedBy: { select: { id: true, name: true } }

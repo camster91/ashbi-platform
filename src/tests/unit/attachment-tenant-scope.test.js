@@ -8,17 +8,22 @@ function recorder() {
   return { calls, prisma: { attachment: delegate, project: delegate } };
 }
 
-test('attachment lookup is scoped through the uploader organization', async () => {
+test('attachment lookup is scoped through explicit organization ownership', async () => {
   const orgA = recorder();
   await createScopedPrisma(orgA.prisma, 'org-a').attachment.findFirst({ where: { filename: 'shared.pdf' } });
-  assert.deepEqual(orgA.calls[0].where, {
-    AND: [{ filename: 'shared.pdf' }, { uploadedBy: { organizationId: 'org-a' } }]
-  });
+  assert.deepEqual(orgA.calls[0].where, { filename: 'shared.pdf', organizationId: 'org-a' });
 
   const orgB = recorder();
   await createScopedPrisma(orgB.prisma, 'org-b').attachment.findFirst({ where: { filename: 'shared.pdf' } });
-  assert.deepEqual(orgB.calls[0].where.AND[1], { uploadedBy: { organizationId: 'org-b' } });
+  assert.deepEqual(orgB.calls[0].where.organizationId, 'org-b');
   assert.notDeepEqual(orgA.calls[0].where, orgB.calls[0].where);
+});
+
+test('attachment schema requires indexed organization ownership', async () => {
+  const schema = await import('node:fs/promises').then(fs => fs.readFile(new URL('../../../prisma/schema.prisma', import.meta.url), 'utf8'));
+  const model = schema.match(/model Attachment \{[\s\S]*?\n\}/)?.[0] || '';
+  assert.match(model, /organizationId\s+String/);
+  assert.match(model, /@@index\(\[organizationId\]\)/);
 });
 
 test('attachment entity authorization scopes projects directly by organization', async () => {
