@@ -286,7 +286,12 @@ await fastify.register(gmailRoutes, { prefix: '/api/gmail' });
 initHermesBridge(fastify);
 
 fastify.get('/api/health', async () => {
-  return { status: 'ok', timestamp: new Date().toISOString() };
+  return {
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    revision: process.env.APP_REVISION || 'unknown',
+    imageDigest: process.env.APP_IMAGE_DIGEST || 'unknown'
+  };
 });
 
 // Static files

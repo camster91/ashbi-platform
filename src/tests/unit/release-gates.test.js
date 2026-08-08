@@ -23,6 +23,15 @@ describe('mandatory release gates', () => {
     assert.deepEqual(validateReleaseGates(), []);
   });
 
+  it('exposes revision-aware readiness and documents rollback rehearsal', () => {
+    const server = fs.readFileSync(path.resolve('src/index.js'), 'utf8');
+    const runbook = fs.readFileSync(path.resolve('docs/deployment-and-rollback.md'), 'utf8');
+    assert.match(server, /revision:\s*process\.env\.APP_REVISION/);
+    assert.match(server, /imageDigest:\s*process\.env\.APP_IMAGE_DIGEST/);
+    assert.match(runbook, /Automated rollback test/);
+    assert.match(runbook, /Manual rollback/);
+  });
+
   it('fails closed when a quality command is removed', () => {
     const root = copyWorkflows();
     const workflow = path.join(root, '.github', 'workflows', 'release-gates.yml');
@@ -39,6 +48,6 @@ describe('mandatory release gates', () => {
     fs.writeFileSync(workflow, source);
     const failures = validateReleaseGates(root);
     assert.ok(failures.some((failure) => failure.includes('continue-on-error')));
-    assert.ok(failures.some((failure) => failure.includes('deploy without')));
+    assert.ok(failures.some((failure) => failure.includes('publish without')));
   });
 });

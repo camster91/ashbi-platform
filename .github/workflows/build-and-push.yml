@@ -13,9 +13,6 @@ name: Build and Push Image
 #   - SBOM + provenance attestations enabled (for supply-chain trust)
 
 on:
-  push:
-    branches: [main, master]
-    tags: ['v*']
   pull_request:
     branches: [main, master]
   workflow_call:
@@ -34,6 +31,13 @@ on:
         required: false
         type: string
         default: 'linux/amd64,linux/arm64'
+    outputs:
+      image:
+        description: 'Published GHCR image name'
+        value: ${{ jobs.build.outputs.image }}
+      digest:
+        description: 'Immutable published manifest digest'
+        value: ${{ jobs.build.outputs.digest }}
 
 permissions:
   contents: read
@@ -48,6 +52,9 @@ concurrency:
 jobs:
   build:
     name: Build & push image
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+      digest: ${{ steps.build.outputs.digest }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -103,12 +110,13 @@ jobs:
             ${{ runner.os }}-buildx-
 
       - name: Build and push
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ inputs.dockerfile || 'Dockerfile' }}
           platforms: ${{ inputs.platforms || 'linux/amd64,linux/arm64' }}
-          push: true
+          push: ${{ github.event_name != 'pull_request' }}
           tags: |
             ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}
             ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.tag }}-${{ steps.meta.outputs.sha }}
@@ -122,6 +130,8 @@ jobs:
             org.opencontainers.image.source=${{ github.event.repository.html_url }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.created=${{ github.event.repository.updated_at }}
+          build-args: |
+            APP_REVISION=${{ github.sha }}
 
       - name: Image summary
         run: |

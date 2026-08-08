@@ -48,6 +48,8 @@ USER node
 # Default environment
 ENV NODE_ENV=production
 ENV PORT=3002
+ARG APP_REVISION=unknown
+ENV APP_REVISION=$APP_REVISION
 
 # Expose port
 EXPOSE 3002
