@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -21,6 +21,8 @@ import {
 import { api } from '../lib/api';
 import { useToast } from '../hooks/useToast';
 import { Button, Card } from '../components/ui';
+import useAutosave from '../hooks/useAutosave';
+import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 
 const statusConfig = {
   DRAFT: { label: 'Draft', color: 'bg-muted text-muted-foreground', icon: FileText },
@@ -38,6 +40,12 @@ export default function Proposals() {
   const [showCreate, setShowCreate] = useState(searchParams.get('create') === 'true');
   const [showGenerator, setShowGenerator] = useState(false);
   const [filterStatus, setFilterStatus] = useState('');
+  const [form, setForm] = useState({ clientId: '', title: '', notes: '' });
+  const formDraft = useAutosave('proposal', 'new', form);
+
+  useEffect(() => {
+    if (formDraft.draft) setShowCreate(true);
+  }, [formDraft.draft]);
 
   const { data: proposals = [], isLoading } = useQuery({
     queryKey: ['proposals', filterStatus],
@@ -52,6 +60,7 @@ export default function Proposals() {
   const createMutation = useMutation({
     mutationFn: (data) => api.createProposal(data),
     onSuccess: (proposal) => {
+      void formDraft.clearDraft();
       queryClient.invalidateQueries({ queryKey: ['proposals'] });
       setShowCreate(false);
       navigate(`/proposal/${proposal.id}`);
@@ -75,8 +84,6 @@ export default function Proposals() {
     },
     onError: () => toast.error('Failed to duplicate proposal'),
   });
-
-  const [form, setForm] = useState({ clientId: '', title: '', notes: '' });
 
   const handleCreate = (e) => {
     e.preventDefault();
@@ -142,6 +149,15 @@ export default function Proposals() {
       {showCreate && (
         <Card className="p-6">
           <h2 className="text-lg font-semibold mb-4">New Proposal</h2>
+          <DraftRecoveryNotice
+            draft={formDraft.draft}
+            draftSavedAt={formDraft.draftMeta?.draftSavedAt}
+            status={formDraft.status}
+            lastSaved={formDraft.lastSaved}
+            onRecover={(recovered) => { setForm(recovered); formDraft.setDraft(null); }}
+            onDiscard={formDraft.discardDraft}
+            onRetry={formDraft.saveNow}
+          />
           <form onSubmit={handleCreate} className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-1">Client</label>

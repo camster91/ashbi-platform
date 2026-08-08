@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -7,6 +7,8 @@ import {
   Trash2, ExternalLink, RefreshCw, Receipt,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import useAutosave from '../hooks/useAutosave';
+import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import { Button, Card } from '../components/ui';
@@ -49,6 +51,13 @@ export default function InvoiceDetail() {
     queryKey: ['invoice', id],
     queryFn: () => api.getInvoice(id),
   });
+  const formDraft = useAutosave('invoice', id, editing ? editForm : null, 500, { baseUpdatedAt: invoice?.updatedAt });
+
+  useEffect(() => {
+    if (!formDraft.draft) return;
+    setEditForm(formDraft.draft);
+    setEditing(true);
+  }, [formDraft.draft]);
 
   const { data: payments = [] } = useQuery({
     queryKey: ['invoice-payments', id],
@@ -59,6 +68,7 @@ export default function InvoiceDetail() {
   const updateMutation = useMutation({
     mutationFn: (data) => api.updateInvoice(id, data),
     onSuccess: () => {
+      void formDraft.clearDraft();
       queryClient.invalidateQueries({ queryKey: ['invoice', id] });
       setEditing(false);
       setEditForm(null);
@@ -337,6 +347,15 @@ export default function InvoiceDetail() {
       {editing && editForm ? (
         <Card className="p-4 sm:p-6">
           <h2 className="font-semibold text-lg mb-4">Edit Invoice</h2>
+          <DraftRecoveryNotice
+            draft={formDraft.draft}
+            draftSavedAt={formDraft.draftMeta?.draftSavedAt}
+            status={formDraft.status}
+            lastSaved={formDraft.lastSaved}
+            onRecover={(recovered) => { setEditForm(recovered); formDraft.setDraft(null); }}
+            onDiscard={formDraft.discardDraft}
+            onRetry={formDraft.saveNow}
+          />
           <form onSubmit={handleUpdate} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>

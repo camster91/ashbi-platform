@@ -25,6 +25,7 @@ model Organization {
   users              User[]
   clients            Client[]
   projects           Project[]
+  formDrafts         FormDraft[]
   attachments        Attachment[]
   wpSites            WPSite[]
   wpBackups          WPBackup[]
@@ -81,9 +82,31 @@ model User {
   proposalVersions  ProposalVersion[]
   timeSessions      TimeSession[]
   apiKeys           ApiKey[]
+  formDrafts        FormDraft[]
 
   @@index([organizationId])
   @@map("users")
+}
+
+model FormDraft {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entity         String
+  entityId       String
+  data           Json
+  revision       Int          @default(1)
+  baseUpdatedAt  DateTime?
+  expiresAt      DateTime
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([userId, entity, entityId])
+  @@index([organizationId, userId])
+  @@index([expiresAt])
+  @@map("form_drafts")
 }
 
 model Client {

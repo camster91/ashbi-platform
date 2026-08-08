@@ -1322,7 +1322,12 @@ export const creativeBriefGenerateSchema = z.object({
 export const credentialCreateSchema = credentialSchema; // alias for routes that import a different name
 
 export const draftUpsertSchema = z.object({
-  data: z.string().min(1).max(100_000),
+  data: z.unknown().refine(
+    (value) => value !== undefined && JSON.stringify(value).length <= 100_000,
+    'Draft data must be valid JSON no larger than 100KB',
+  ),
+  expectedRevision: z.number().int().positive().optional(),
+  baseUpdatedAt: z.string().datetime().optional(),
 });
 
 export const emailTriageDraftUpdateSchema = z.object({
