@@ -27,7 +27,11 @@ import { withSoftDelete } from '../services/soft-delete.service.js';
 
 // Models that have a direct `organizationId` column. These get the
 // `where.organizationId = <jwt.orgId>` auto-inject (same as before).
-const DIRECT_SCOPED_MODELS = ['client', 'project', 'user', 'integration', 'trashedItem', 'attachment'];
+const DIRECT_SCOPED_MODELS = [
+  'client', 'project', 'user', 'integration', 'trasheditem', 'attachment',
+  'wpsite', 'wpbackup', 'wpreport', 'wpalert', 'wpfleetop',
+  'wpmagicloginlog', 'wpbridgenonce', 'supporthourentry'
+];
 
 // Models without a direct `organizationId` column. Each entry maps the
 // model to the chain of relations we need to walk to reach an owner
@@ -91,8 +95,6 @@ const TENANT_PATHS = {
   // Calendar events — assume projectId FK (verify schema on first miss)
   calendarEvent:    ['project', 'client'],
 
-  // WP sites linked to a client (sites without clientId are excluded from tenant reads)
-  wPSite:           ['client'],
 };
 
 /**
