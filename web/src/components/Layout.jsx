@@ -134,7 +134,7 @@ export default function Layout({ children }) {
 
   // Core nav — always visible, no section header
   const coreNav = [
-    { name: 'Dashboard', href: '/', icon: LayoutDashboard, exact: true },
+    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, exact: true },
     { name: 'Inbox', href: '/inbox', icon: Inbox, badge: stats?.needsResponse },
     { name: 'Projects', href: '/projects', icon: FolderOpen, id: 'projects-link' },
     { name: 'Clients', href: '/clients', icon: Users, id: 'clients-link' },
@@ -525,7 +525,7 @@ export default function Layout({ children }) {
       {/* Mobile bottom nav with More menu */}
       <nav className="fixed bottom-0 inset-x-0 z-40 bg-card/80 backdrop-blur-lg border-t border-border/60 flex lg:hidden safe-area-inset-bottom shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.05)]" role="navigation" aria-label="Mobile navigation">
         {[
-          { href: '/', icon: LayoutDashboard, label: 'Home', exact: true },
+          { href: '/dashboard', icon: LayoutDashboard, label: 'Home', exact: true },
           { href: '/inbox', icon: Inbox, label: 'Inbox', badge: stats?.needsResponse },
           { href: '/projects', icon: FolderOpen, label: 'Projects' },
           { href: '/invoices', icon: Receipt, label: 'Invoices' },
