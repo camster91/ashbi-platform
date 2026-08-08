@@ -2,7 +2,7 @@
 //
 // Key source priority (highest wins):
 //   1. VAPID_PUBLIC_KEY + VAPID_PRIVATE_KEY env vars (production / Coolify)
-//   2. .vapid-keys.json file at repo root (local dev convenience)
+//   2. Persistent key file (VAPID_KEYS_PATH, /app/config in production)
 //   3. webpush.generateVAPIDKeys() — last resort, persisted to disk so
 //      the same key survives restarts.
 //
@@ -19,7 +19,10 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const VAPID_KEYS_PATH = path.join(__dirname, '../../.vapid-keys.json');
+const VAPID_KEYS_PATH = process.env.VAPID_KEYS_PATH
+  || (process.env.NODE_ENV === 'production'
+    ? '/app/config/.vapid-keys.json'
+    : path.join(__dirname, '../../.vapid-keys.json'));
 
 let vapidKeys = null;
 
@@ -53,7 +56,12 @@ export function initVapid() {
     const generated = webpush.generateVAPIDKeys();
     vapidKeys = { ...generated, source: 'generated' };
     try {
-      fs.writeFileSync(VAPID_KEYS_PATH, JSON.stringify({ publicKey: generated.publicKey, privateKey: generated.privateKey }, null, 2));
+      fs.mkdirSync(path.dirname(VAPID_KEYS_PATH), { recursive: true });
+      fs.writeFileSync(
+        VAPID_KEYS_PATH,
+        JSON.stringify({ publicKey: generated.publicKey, privateKey: generated.privateKey }, null, 2),
+        { mode: 0o600 }
+      );
       console.log('VAPID: generated new keys and persisted to', VAPID_KEYS_PATH);
     } catch (e) {
       console.warn('VAPID: could not persist generated keys:', e.message, '- subscription IDs will rotate on every restart');
