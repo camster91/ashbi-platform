@@ -18,4 +18,11 @@ describe('layout shell accessibility contract', () => {
     expect(source).toContain('aria-label="Open more navigation options"');
     expect(source).toContain('aria-label="Dismiss install banner"');
   });
+
+  it('makes quick-create controls named, native, and keyboard-visible', () => {
+    expect(source).toContain('aria-label="Open quick create menu"');
+    expect(source).toContain('aria-label={label}');
+    expect(source).toContain('role="menuitem"');
+    expect(source).toContain('focus-visible:ring-2');
+  });
 });

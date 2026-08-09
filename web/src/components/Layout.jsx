@@ -809,11 +809,13 @@ function QuickCreateMenu({ navigate, isAdmin }) {
   return (
     <div className="relative" ref={containerRef}>
       <button
+        type="button"
         onClick={() => setOpen(!open)}
         aria-expanded={open}
         aria-haspopup="menu"
+        aria-label="Open quick create menu"
         className={cn(
-          'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full transition-colors',
+          'flex min-h-11 items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2e2958]',
           open ? 'bg-[#e6f354] text-[#2e2958]' : 'bg-[#e6f354] text-[#2e2958] hover:bg-[#d0dd9a]'
         )}
         title="Quick create"
@@ -828,10 +830,12 @@ function QuickCreateMenu({ navigate, isAdmin }) {
           role="menu"
         >
           {actions.map(({ label, icon: Icon, href }) => (
-            <button
-              key={label}
-              onClick={() => { navigate(href); setOpen(false); }}
-              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-muted transition-colors text-left"
+             <button
+               key={label}
+               type="button"
+               aria-label={label}
+               onClick={() => { navigate(href); setOpen(false); }}
+               className="w-full min-h-11 flex items-center gap-3 px-4 py-2.5 text-sm text-foreground hover:bg-muted transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               role="menuitem"
             >
               <Icon className="w-4 h-4 text-muted-foreground" />
