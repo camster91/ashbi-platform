@@ -264,13 +264,15 @@ describe('executeFanOutPure — concurrency + isolation', () => {
   });
 
   test('fan-out is concurrent: parallel requests overlap in time (not serial)', async () => {
-    // Each call sleeps 80ms. With 5 sites serial = ~400ms. Concurrent = ~80ms.
-    // We assert total wall time is well under 4x single-call latency.
+    let inFlight = 0;
+    let maxInFlight = 0;
     const mockFetch = async () => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
       await new Promise((r) => setTimeout(r, 80));
+      inFlight -= 1;
       return { ok: true, status: 200, text: async () => '{}' };
     };
-    const start = Date.now();
     const out = await executeFanOutPure({
       targetSites: Array.from({ length: 5 }, (_, i) => ({ id: `s${i}`, url: `https://s${i}.com` })),
       endpoint: 'command',
@@ -278,11 +280,9 @@ describe('executeFanOutPure — concurrency + isolation', () => {
       secret: HUB_SECRET,
       fetchImpl: mockFetch
     });
-    const elapsed = Date.now() - start;
     assert.equal(out.total, 5);
     assert.equal(out.succeeded, 5);
-    // Serial would be ~400ms. Allow up to 250ms (3x single-call) for parallel jitter.
-    assert.ok(elapsed < 250, `expected concurrent execution (<250ms), got ${elapsed}ms (serial would be ~400ms)`);
+    assert.ok(maxInFlight > 1, `expected overlapping requests, observed max concurrency ${maxInFlight}`);
   });
 });
 

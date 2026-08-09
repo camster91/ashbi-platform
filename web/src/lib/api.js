@@ -37,7 +37,7 @@ export function setApiErrorCallback(callback) {
   onApiError = callback;
 }
 
-function dispatchApiError(error, endpoint) {
+function dispatchApiError(error, endpoint, retry) {
   console.group('%cAPI Error', 'color: #ef4444; font-weight: bold;');
   console.error('Endpoint:', endpoint);
   console.error('Error:', error.message);
@@ -54,7 +54,7 @@ function dispatchApiError(error, endpoint) {
 
   // Dispatch to global callback if set
   if (onApiError) {
-    onApiError(error, endpoint);
+    onApiError(error, endpoint, retry);
   }
 }
 
@@ -62,6 +62,8 @@ async function request(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
   const timeout = options.timeout ?? DEFAULT_TIMEOUT;
   const silent = options.silent ?? false;
+  const method = (options.method || 'GET').toUpperCase();
+  const retry = method === 'GET' ? () => request(endpoint, options) : undefined;
 
   // Create AbortController for timeout
   const controller = new AbortController();
@@ -102,7 +104,7 @@ async function request(endpoint, options = {}) {
       // don't trigger global toast/logout for them
       const isAuthEndpoint = endpoint.startsWith('/auth/login') || endpoint.startsWith('/auth/me');
       if (!silent && !isAuthEndpoint) {
-        dispatchApiError(error, endpoint);
+        dispatchApiError(error, endpoint, retry);
         if (onUnauthorized) {
           onUnauthorized(data.error || 'Session expired. Please log in again.');
         }
@@ -119,7 +121,7 @@ async function request(endpoint, options = {}) {
         data
       );
       if (!silent) {
-        dispatchApiError(error, endpoint);
+        dispatchApiError(error, endpoint, retry);
       }
       throw error;
     }
@@ -131,7 +133,7 @@ async function request(endpoint, options = {}) {
     // Handle timeout errors
     if (error.name === 'AbortError') {
       const timeoutError = new TimeoutError(timeout);
-      dispatchApiError(timeoutError, endpoint);
+      dispatchApiError(timeoutError, endpoint, retry);
       throw timeoutError;
     }
 
@@ -139,7 +141,7 @@ async function request(endpoint, options = {}) {
     if (error instanceof TypeError && error.message === 'Failed to fetch') {
       const networkError = new Error('Network error. Please check your connection.');
       networkError.name = 'NetworkError';
-      dispatchApiError(networkError, endpoint);
+      dispatchApiError(networkError, endpoint, retry);
       throw networkError;
     }
 
@@ -149,7 +151,7 @@ async function request(endpoint, options = {}) {
     }
 
     // Log and re-throw other errors
-    dispatchApiError(error, endpoint);
+    dispatchApiError(error, endpoint, retry);
     throw error;
   }
 }

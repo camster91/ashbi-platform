@@ -54,10 +54,10 @@ function ApiErrorHandler({ children }) {
   });
 
   // Set up the API error callback for global toast notifications
-  setApiErrorCallback((error, endpoint) => {
+  setApiErrorCallback((error, endpoint, retry) => {
     // Dispatch a custom event that the app can listen to for toast notifications
     window.dispatchEvent(new CustomEvent('api:error', {
-      detail: { error, endpoint }
+      detail: { error, endpoint, retry }
     }));
   });
 

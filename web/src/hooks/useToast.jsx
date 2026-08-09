@@ -27,7 +27,7 @@ const ICON_STYLES = {
   info: 'text-blue-500',
 };
 
-function Toast({ id, type = 'info', title, message, onDismiss }) {
+function Toast({ id, type = 'info', title, message, action, onDismiss }) {
   const Icon = ICONS[type] || ICONS.info;
   const isError = type === 'error';
 
@@ -44,6 +44,23 @@ function Toast({ id, type = 'info', title, message, onDismiss }) {
       <div className="flex-1 min-w-0">
         {title && <p className="font-semibold text-sm">{title}</p>}
         {message && <p className={cn('text-sm', title ? 'opacity-80 mt-0.5' : '')}>{message}</p>}
+        {action?.label && typeof action.onClick === 'function' && (
+          <button
+            type="button"
+            onClick={() => {
+              try {
+                const result = action.onClick();
+                if (result && typeof result.catch === 'function') result.catch(() => {});
+              } catch {
+                // The originating workflow reports retry failures through its normal error state.
+              }
+              if (action.dismissOnClick !== false) onDismiss(id);
+            }}
+            className="mt-2 rounded-full border border-current px-3 py-1 text-xs font-semibold hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 dark:hover:bg-white/10"
+          >
+            {action.label}
+          </button>
+        )}
       </div>
       <button
         onClick={() => onDismiss(id)}
@@ -77,19 +94,22 @@ export function ToastProvider({ children }) {
 
   const toast = useCallback((type, titleOrOptions, message, duration = 4000) => {
     const id = ++toastId;
-    let title, msg;
+    let title, msg, action;
 
     if (typeof titleOrOptions === 'object') {
       title = titleOrOptions.title;
       msg = titleOrOptions.message;
+      action = titleOrOptions.action;
       duration = titleOrOptions.duration ?? duration;
     } else {
       title = titleOrOptions;
       msg = message;
     }
 
-    setToasts(prev => [...prev.slice(-4), { id, type, title, message: msg }]);
-    timers.current[id] = setTimeout(() => dismiss(id), duration);
+    setToasts(prev => [...prev.slice(-4), { id, type, title, message: msg, action }]);
+    if (Number.isFinite(duration) && duration > 0) {
+      timers.current[id] = setTimeout(() => dismiss(id), duration);
+    }
     return id;
   }, [dismiss]);
 

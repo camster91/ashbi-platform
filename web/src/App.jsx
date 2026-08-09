@@ -246,7 +246,7 @@ function GlobalErrorHandler({ children }) {
     };
 
     const handleApiError = (event) => {
-      const { error } = event.detail;
+      const { error, retry } = event.detail;
       // Show error toast for failed requests (but not 401s - those are handled separately)
       if (error.status !== 401) {
         // Don't show toast for network errors or timeouts in development
@@ -255,11 +255,26 @@ function GlobalErrorHandler({ children }) {
         const isTimeout = error.name === 'TimeoutError';
 
         if (isNetworkError) {
-          toast.error('Network Error', 'Please check your internet connection.');
+          toast.error({
+            title: 'Network error',
+            message: retry ? 'Check your connection, then try this read-only request again.' : 'Check your connection. Your action was not retried to avoid a duplicate change.',
+            duration: 0,
+            action: retry ? { label: 'Try again', onClick: retry } : undefined,
+          });
         } else if (isTimeout) {
-          toast.error('Request Timeout', 'The request took too long. Please try again.');
+          toast.error({
+            title: 'Request timed out',
+            message: retry ? 'The server took too long. You can safely retry this read-only request.' : 'The result is uncertain, so the action was not retried. Check the page before trying again.',
+            duration: 0,
+            action: retry ? { label: 'Try again', onClick: retry } : undefined,
+          });
         } else if (error.status >= 500) {
-          toast.error('Server Error', 'Something went wrong on our end. Please try again later.');
+          toast.error({
+            title: 'Server error',
+            message: retry ? 'The request failed on the server. Try this read-only request again.' : 'The action may not have completed. Check the current record before trying again.',
+            duration: 0,
+            action: retry ? { label: 'Try again', onClick: retry } : undefined,
+          });
         } else if (error.status >= 400) {
           toast.error('Request Failed', error.message || 'Please check your input and try again.');
         }

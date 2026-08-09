@@ -4,7 +4,7 @@
  * Verifies toast creation, dismissal, and provider behavior.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, render, screen, fireEvent } from '@testing-library/react';
 import { ToastProvider, useToast } from '../hooks/useToast';
 
 function wrapper({ children }) {
@@ -96,6 +96,32 @@ describe('useToast', () => {
 
       // Should not throw with options format
       expect(result.current.success).toBeInstanceOf(Function);
+    });
+
+    it('renders a keyboard-accessible action and dismisses after it runs', () => {
+      const action = vi.fn();
+      function Harness() {
+        const toast = useToast();
+        return <button onClick={() => toast.error({ title: 'Could not load', message: 'Try again.', duration: 0, action: { label: 'Try again', onClick: action } })}>Show</button>;
+      }
+      render(<ToastProvider><Harness /></ToastProvider>);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Show' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+      expect(action).toHaveBeenCalledOnce();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('keeps a zero-duration error visible until explicitly dismissed', () => {
+      function Harness() {
+        const toast = useToast();
+        return <button onClick={() => toast.error({ title: 'Needs attention', duration: 0 })}>Show</button>;
+      }
+      render(<ToastProvider><Harness /></ToastProvider>);
+      fireEvent.click(screen.getByRole('button', { name: 'Show' }));
+      act(() => vi.advanceTimersByTime(60000));
+      expect(screen.getByRole('alert')).toHaveTextContent('Needs attention');
     });
   });
 
