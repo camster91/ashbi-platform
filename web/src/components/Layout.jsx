@@ -397,10 +397,10 @@ export default function Layout({ children }) {
                     {user?.name?.charAt(0)?.toUpperCase()}
                   </span>
                 </div>
-                <Link to="/settings" className="p-1.5 text-white/60 hover:text-white rounded-lg hover:bg-white/10 transition-colors" title="Settings" aria-label="Settings" onClick={() => setSidebarOpen(false)}>
+                <Link to="/settings" className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-white/60 hover:text-white rounded-lg hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white" title="Settings" aria-label="Settings" onClick={() => setSidebarOpen(false)}>
                   <Settings className="w-3.5 h-3.5" />
                 </Link>
-                <button onClick={logout} className="p-1.5 text-white/60 hover:text-red-400 rounded-lg hover:bg-white/10 transition-colors" title="Logout" aria-label="Logout">
+                <button type="button" onClick={logout} className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-white/60 hover:text-red-400 rounded-lg hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white" title="Logout" aria-label="Logout">
                   <LogOut className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -422,16 +422,17 @@ export default function Layout({ children }) {
                 <div className="flex items-center gap-1">
                   <Link
                     to="/settings"
-                    className="p-2 text-white/60 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
+                    className="min-h-11 min-w-11 inline-flex items-center justify-center p-2 text-white/60 hover:text-white rounded-lg hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                     title="Settings"
-                    aria-label="Settings"
+                     aria-label="Settings"
                     onClick={() => setSidebarOpen(false)}
                   >
                     <Settings className="w-4 h-4" />
                   </Link>
                   <button
+                    type="button"
                     onClick={logout}
-                    className="p-2 text-white/60 hover:text-red-400 rounded-lg hover:bg-white/10 transition-colors"
+                    className="min-h-11 min-w-11 inline-flex items-center justify-center p-2 text-white/60 hover:text-red-400 rounded-lg hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                     title="Logout"
                     aria-label="Logout"
                   >
