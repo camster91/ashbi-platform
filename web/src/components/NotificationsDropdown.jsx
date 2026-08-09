@@ -138,8 +138,9 @@ export default function NotificationsDropdown() {
   return (
     <div className="relative" ref={dropdownRef}>
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors"
+        className="relative min-h-11 min-w-11 p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-label={`Notifications${count > 0 ? ` (${count} unread)` : ''}`}
       >
         <Bell className="w-4 h-4" />
@@ -157,9 +158,11 @@ export default function NotificationsDropdown() {
             <h3 className="text-sm font-semibold text-foreground">Notifications</h3>
             {notifications?.length > 0 && (
               <button
+                type="button"
                 onClick={() => markAllReadMutation.mutate()}
                 disabled={markAllReadMutation.isPending}
-                className="flex items-center gap-1 text-xs font-medium text-[#2e2958] hover:text-[#e6f354] dark:text-foreground dark:hover:text-[#e6f354] transition-colors disabled:opacity-50"
+                className="min-h-11 min-w-11 flex items-center justify-center gap-1 text-xs font-medium text-[#2e2958] hover:text-[#e6f354] dark:text-foreground dark:hover:text-[#e6f354] transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Mark all as read"
                 title="Mark all as read"
               >
                 <CheckCheck className="w-3.5 h-3.5" />
@@ -182,10 +185,18 @@ export default function NotificationsDropdown() {
 
                   return (
                     <li key={notification.id}>
-                      <button
+                      <div
+                        role="button"
+                        tabIndex={0}
                         onClick={() => handleNotificationClick(notification)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            handleNotificationClick(notification);
+                          }
+                        }}
                         className={cn(
-                          'w-full text-left flex items-start gap-3 px-4 py-3 hover:bg-muted/50 transition-colors cursor-pointer',
+                          'w-full min-h-11 text-left flex items-start gap-3 px-4 py-3 hover:bg-muted/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
                           !notification.read && 'bg-[#e6f354]/5'
                         )}
                       >
@@ -223,17 +234,19 @@ export default function NotificationsDropdown() {
                         {/* Mark read button */}
                         {!notification.read && (
                           <button
+                            type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               markReadMutation.mutate(notification.id);
                             }}
-                            className="flex-shrink-0 p-1 text-muted-foreground hover:text-[#2e2958] dark:hover:text-[#e6f354] rounded transition-colors mt-0.5"
+                            className="flex-shrink-0 min-h-11 min-w-11 p-1 text-muted-foreground hover:text-[#2e2958] dark:hover:text-[#e6f354] rounded transition-colors mt-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            aria-label="Mark as read"
                             title="Mark as read"
                           >
                             <Check className="w-3.5 h-3.5" />
                           </button>
                         )}
-                      </button>
+                      </div>
                     </li>
                   );
                 })}
