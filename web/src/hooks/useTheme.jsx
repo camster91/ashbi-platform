@@ -1,24 +1,14 @@
 import { useState, useEffect } from 'react';
-
-function storageKey(scopeId) {
-  return scopeId ? `theme:${scopeId}` : 'theme:public';
-}
+import { applyTheme, getInitialTheme, themeStorageKey } from '../lib/theme';
 
 export function useTheme(scopeId = null) {
   const [theme, setTheme] = useState(() => {
-    const stored = localStorage.getItem(storageKey(scopeId));
-    if (stored) return stored;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    return getInitialTheme(scopeId);
   });
 
   useEffect(() => {
-    const root = document.documentElement;
-    if (theme === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
-    localStorage.setItem(storageKey(scopeId), theme);
+    applyTheme(theme);
+    localStorage.setItem(themeStorageKey(scopeId), theme);
   }, [scopeId, theme]);
 
   const toggle = () => setTheme(t => t === 'dark' ? 'light' : 'dark');

@@ -5,7 +5,12 @@ import * as Sentry from '@sentry/react';
 import App from './App';
 import ErrorBoundary from './components/ErrorBoundary';
 import { setUnauthorizedCallback, setApiErrorCallback } from './lib/api';
+import { applyTheme, getInitialTheme } from './lib/theme';
 import './index.css';
+
+// Apply public/system preference before React renders the authentication
+// gateway. Authenticated Layout replaces it with the account-scoped choice.
+applyTheme(getInitialTheme());
 
 // OBSERVABILITY (audit 2026-07-09, swarm finding): the backend has had
 // Sentry since commit 6884159, but the web side had zero Sentry wiring —

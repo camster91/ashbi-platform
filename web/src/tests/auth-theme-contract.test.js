@@ -6,6 +6,8 @@ const login = readFileSync(resolve(process.cwd(), 'src/pages/Login.jsx'), 'utf8'
 const app = readFileSync(resolve(process.cwd(), 'src/App.jsx'), 'utf8');
 const layout = readFileSync(resolve(process.cwd(), 'src/components/Layout.jsx'), 'utf8');
 const theme = readFileSync(resolve(process.cwd(), 'src/hooks/useTheme.jsx'), 'utf8');
+const main = readFileSync(resolve(process.cwd(), 'src/main.jsx'), 'utf8');
+const themeLibrary = readFileSync(resolve(process.cwd(), 'src/lib/theme.js'), 'utf8');
 
 describe('authentication theme contract', () => {
   it('uses semantic theme surfaces and statuses throughout the auth gateway', () => {
@@ -20,8 +22,10 @@ describe('authentication theme contract', () => {
 
   it('stores staff theme preferences under an account-specific key', () => {
     expect(layout).toContain('useTheme(user?.id)');
-    expect(theme).toContain('`theme:${scopeId}`');
+    expect(themeLibrary).toContain('`theme:${scopeId}`');
     expect(theme).not.toContain("localStorage.getItem('theme')");
     expect(theme).not.toContain("localStorage.setItem('theme', theme)");
+    expect(main).toContain('applyTheme(getInitialTheme())');
+    expect(themeLibrary).toContain("matchMedia('(prefers-color-scheme: dark)')");
   });
 });
