@@ -13,6 +13,7 @@ const modalConsumers = [
   'src/pages/AssetLibrary.jsx',
   'src/pages/ApprovalQueue.jsx',
   'src/pages/Contracts.jsx',
+  'src/pages/InvoiceDetail.jsx',
   'src/pages/Pipeline.jsx',
   'src/pages/Project.jsx',
   'src/pages/ProjectTemplates.jsx',

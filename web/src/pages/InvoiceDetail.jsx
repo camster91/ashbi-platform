@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, Send, DollarSign, Printer, FileText, CheckCircle,
-  AlertTriangle, Edit2, Save, X, Plus, Clock, CreditCard,
+  AlertTriangle, Edit2, Save, Plus, Clock, CreditCard,
   Trash2, ExternalLink, RefreshCw, Receipt,
 } from 'lucide-react';
 import { api } from '../lib/api';
@@ -12,8 +12,10 @@ import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import { Button, Card, LoadingState } from '../components/ui';
+import Modal, { ModalFooter } from '../components/Modal';
 
 const HST_RATE = 13;
+const INITIAL_PAYMENT_FORM = { paymentMethod: 'BANK', paymentNotes: '', transactionId: '' };
 
 const STATUS_CONFIG = {
   DRAFT:   { label: 'Draft',   color: 'bg-muted text-muted-foreground' },
@@ -43,7 +45,7 @@ export default function InvoiceDetail() {
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState(null);
   const [showMarkPaid, setShowMarkPaid] = useState(false);
-  const [payForm, setPayForm] = useState({ paymentMethod: 'BANK', paymentNotes: '', transactionId: '' });
+  const [payForm, setPayForm] = useState(INITIAL_PAYMENT_FORM);
   const [showPdf, setShowPdf] = useState(false);
   const pdfRef = useRef(null);
 
@@ -94,6 +96,7 @@ export default function InvoiceDetail() {
       queryClient.invalidateQueries({ queryKey: ['invoice-payments', id] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       setShowMarkPaid(false);
+      setPayForm(INITIAL_PAYMENT_FORM);
       toast.success('Invoice marked as paid');
     },
     onError: () => toast.error('Failed to mark as paid'),
@@ -131,6 +134,17 @@ export default function InvoiceDetail() {
     },
     onError: (error) => toast.error('Failed to void invoice', error.message),
   });
+
+  const openMarkPaid = () => {
+    markPaidMutation.reset();
+    setShowMarkPaid(true);
+  };
+
+  const closeMarkPaid = () => {
+    if (markPaidMutation.isPending) return;
+    markPaidMutation.reset();
+    setShowMarkPaid(false);
+  };
 
   const [copyLinkMsg, setCopyLinkMsg] = useState('');
   const generatePaymentLinkMutation = useMutation({
@@ -260,7 +274,7 @@ export default function InvoiceDetail() {
           )}
           {isSent && !isPaid && (
             <Button size="sm" leftIcon={<DollarSign className="w-4 h-4" />}
-              onClick={() => setShowMarkPaid(true)}>
+              onClick={openMarkPaid}>
               Mark as Paid
             </Button>
           )}
@@ -338,7 +352,7 @@ export default function InvoiceDetail() {
           )}
           {isSent && !isPaid && (
             <Button size="sm" leftIcon={<DollarSign className="w-4 h-4" />}
-              onClick={() => setShowMarkPaid(true)}>
+              onClick={openMarkPaid}>
               Mark Paid
             </Button>
           )}
@@ -778,58 +792,76 @@ export default function InvoiceDetail() {
       )}
 
       {/* Mark Paid Modal */}
-      {showMarkPaid && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <Card className="p-6 w-full max-w-md">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-lg">Record Payment</h3>
-              <button onClick={() => setShowMarkPaid(false)} className="text-muted-foreground hover:text-foreground">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Invoice: <span className="font-medium text-foreground">{invoice.invoiceNumber}</span></p>
-                <p className="text-sm text-muted-foreground">Amount: <span className="font-semibold text-foreground">{fmt(invoice.total)}</span></p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Payment Method</label>
-                <select value={payForm.paymentMethod}
-                  onChange={(e) => setPayForm(f => ({ ...f, paymentMethod: e.target.value }))}
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm">
-                  <option value="BANK">Bank Transfer / e-Transfer</option>
-                  <option value="STRIPE">Stripe</option>
-                  <option value="CHECK">Check</option>
-                  <option value="CASH">Cash</option>
-                  <option value="OTHER">Other</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Transaction ID (optional)</label>
-                <input type="text" value={payForm.transactionId}
-                  onChange={(e) => setPayForm(f => ({ ...f, transactionId: e.target.value }))}
-                  placeholder="e.g. ref #, Stripe charge ID"
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Notes (optional)</label>
-                <input type="text" value={payForm.paymentNotes}
-                  onChange={(e) => setPayForm(f => ({ ...f, paymentNotes: e.target.value }))}
-                  placeholder="e.g. received via Interac e-Transfer"
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" />
-              </div>
-            </div>
-            <div className="flex gap-2 mt-5">
-              <Button onClick={() => markPaidMutation.mutate(payForm)}
-                loading={markPaidMutation.isPending}
-                leftIcon={<CheckCircle className="w-4 h-4" />}>
-                Mark as Paid
-              </Button>
-              <Button variant="ghost" onClick={() => setShowMarkPaid(false)}>Cancel</Button>
-            </div>
-          </Card>
-        </div>
-      )}
+      <Modal
+        isOpen={showMarkPaid}
+        onClose={closeMarkPaid}
+        title="Record payment"
+        size="sm"
+        showCloseButton={!markPaidMutation.isPending}
+      >
+        <form onSubmit={(event) => { event.preventDefault(); markPaidMutation.mutate(payForm); }} className="space-y-4">
+          <div>
+            <p className="text-sm text-muted-foreground">Invoice: <span className="font-medium text-foreground">{invoice.invoiceNumber}</span></p>
+            <p className="text-sm text-muted-foreground">Amount: <span className="font-semibold text-foreground">{fmt(invoice.total)}</span></p>
+          </div>
+          <div>
+            <label htmlFor="invoice-payment-method" className="block text-sm font-medium mb-1">Payment method</label>
+            <select
+              id="invoice-payment-method"
+              value={payForm.paymentMethod}
+              onChange={(event) => setPayForm((form) => ({ ...form, paymentMethod: event.target.value }))}
+              disabled={markPaidMutation.isPending}
+              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-base"
+            >
+              <option value="BANK">Bank Transfer / e-Transfer</option>
+              <option value="STRIPE">Stripe</option>
+              <option value="CHECK">Check</option>
+              <option value="CASH">Cash</option>
+              <option value="OTHER">Other</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="invoice-payment-transaction" className="block text-sm font-medium mb-1">Transaction ID <span className="font-normal text-muted-foreground">(optional)</span></label>
+            <input
+              id="invoice-payment-transaction"
+              type="text"
+              value={payForm.transactionId}
+              onChange={(event) => setPayForm((form) => ({ ...form, transactionId: event.target.value }))}
+              disabled={markPaidMutation.isPending}
+              placeholder="Reference or Stripe charge ID"
+              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-base"
+            />
+          </div>
+          <div>
+            <label htmlFor="invoice-payment-notes" className="block text-sm font-medium mb-1">Notes <span className="font-normal text-muted-foreground">(optional)</span></label>
+            <input
+              id="invoice-payment-notes"
+              type="text"
+              value={payForm.paymentNotes}
+              onChange={(event) => setPayForm((form) => ({ ...form, paymentNotes: event.target.value }))}
+              disabled={markPaidMutation.isPending}
+              placeholder="Received via Interac e-Transfer"
+              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-base"
+            />
+          </div>
+          {markPaidMutation.error && (
+            <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
+              {markPaidMutation.error.message || 'Payment could not be recorded. Your entries are still available; review them and try again.'}
+            </p>
+          )}
+          <ModalFooter>
+            <Button type="button" variant="ghost" onClick={closeMarkPaid} disabled={markPaidMutation.isPending}>Cancel</Button>
+            <Button
+              type="submit"
+              loading={markPaidMutation.isPending}
+              disabled={markPaidMutation.isPending}
+              leftIcon={<CheckCircle className="w-4 h-4" />}
+            >
+              {markPaidMutation.isPending ? 'Marking as paid…' : 'Mark as paid'}
+            </Button>
+          </ModalFooter>
+        </form>
+      </Modal>
     </div>
   );
 }
