@@ -213,37 +213,47 @@ export default function Project() {
             {project.health?.replace(/_/g, ' ')} ({project.healthScore})
           </span>
           <button
+            type="button"
+            aria-label="Share project with client"
             onClick={copyPortalLink}
-            className="px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-secondary flex items-center gap-2 transition-colors"
+            className="min-h-11 inline-flex items-center px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-secondary flex items-center gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {shareCopied ? <Check className="w-4 h-4 text-green-500" /> : <Share2 className="w-4 h-4" />}
             {shareCopied ? 'Copied!' : 'Share with Client'}
           </button>
           <button
+            type="button"
+            aria-label="Apply project template"
             onClick={() => setShowTemplateModal(true)}
-            className="px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-secondary flex items-center gap-2 transition-colors"
+            className="min-h-11 inline-flex items-center px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-secondary flex items-center gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <LayoutTemplate className="w-4 h-4" />
             Apply Template
           </button>
           <button
+            type="button"
+            aria-label="Draft project update"
             onClick={() => setShowDraftModal(true)}
-            className="px-3 py-1.5 text-sm bg-accent text-accent-foreground rounded-lg hover:opacity-90 flex items-center gap-2 transition-all hover-lift"
+            className="min-h-11 inline-flex items-center px-3 py-1.5 text-sm bg-accent text-accent-foreground rounded-lg hover:opacity-90 flex items-center gap-2 transition-all hover-lift focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <FileText className="w-4 h-4" />
             Draft Update
           </button>
           <button
+            type="button"
+            aria-label="Paste project message"
             onClick={() => setShowPasteModal(true)}
-            className="px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-secondary flex items-center gap-2 transition-colors"
+            className="min-h-11 inline-flex items-center px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-secondary flex items-center gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <ClipboardPaste className="w-4 h-4" />
             Paste Message
           </button>
           <button
+            type="button"
+            aria-label="Refresh project plan"
             onClick={() => refreshMutation.mutate()}
             disabled={refreshMutation.isPending}
-            className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:opacity-90 flex items-center gap-2 transition-all"
+            className="min-h-11 inline-flex items-center px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:opacity-90 flex items-center gap-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <RefreshCw className={cn('w-4 h-4', refreshMutation.isPending && 'animate-spin')} />
             Refresh Plan
@@ -576,9 +586,11 @@ function RevisionRounds({ revisions, isAdmin, onCreateRound, onApprove, isCreati
         <h3 className="font-semibold flex-1">Revision Rounds</h3>
         <span className="text-sm text-muted-foreground">({revisions.length})</span>
         <button
+          type="button"
+          aria-label="New revision round"
           onClick={(e) => { e.stopPropagation(); onCreateRound(); }}
           disabled={isCreating}
-          className="p-1 hover:bg-muted rounded"
+          className="min-h-11 min-w-11 inline-flex items-center justify-center p-1 hover:bg-muted rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           title="New revision round"
         >
           <Plus className="w-4 h-4" />
@@ -616,8 +628,10 @@ function RevisionRounds({ revisions, isAdmin, onCreateRound, onApprove, isCreati
                 </div>
                 {isAdmin && rev.status !== 'APPROVED' && (
                   <button
+                    type="button"
+                    aria-label={`Approve revision ${rev.roundNumber}`}
                     onClick={() => onApprove(rev.id)}
-                    className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 flex items-center gap-1"
+                    className="min-h-11 inline-flex items-center px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 flex items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <Check className="w-3 h-3" /> Approve
                   </button>
@@ -761,8 +775,10 @@ function ProjectNotes({ projectId }) {
           )}
         </div>
         <button
+          type="button"
+          aria-label="Create new note"
           onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-1 text-sm text-primary hover:text-primary/80 transition-colors"
+          className="min-h-11 inline-flex items-center gap-1 text-sm text-primary hover:text-primary/80 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
         >
           <Plus className="w-4 h-4" />
           New Note
@@ -828,8 +844,10 @@ function ProjectNotes({ projectId }) {
                   <div className="flex items-center gap-2 flex-wrap">
                     {note.isPinned && <Pin className="w-3 h-3 text-primary flex-shrink-0" />}
                     <button
+                      type="button"
+                      aria-label={`Expand note ${note.title}`}
                       onClick={() => setExpandedId(expandedId === note.id ? null : note.id)}
-                      className="text-sm font-medium text-foreground hover:text-primary transition-colors text-left"
+                      className="min-h-11 text-sm font-medium text-foreground hover:text-primary transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
                     >
                       {note.title}
                     </button>
