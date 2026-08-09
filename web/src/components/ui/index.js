@@ -6,3 +6,4 @@ export { default as Badge } from './Badge';
 export { default as Skeleton, SkeletonText, SkeletonCard, SkeletonStatCard, SkeletonAvatar, SkeletonThreadRow, SkeletonPageHeader } from './Skeleton';
 export { default as EmptyState, EmptyInbox, EmptyProjects, EmptySearch, EmptyNotifications, EmptyTeam, EmptyClients, EmptyInvoices, EmptyProposals, EmptyExpenses, EmptyTasks } from './EmptyState';
 export { default as StatCard } from './StatCard';
+export { default as LoadingState } from './LoadingState';

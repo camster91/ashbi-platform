@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
+import LoadingState from '../components/ui/LoadingState';
 
 export default function PortalIntakeForm() {
   const { token } = useParams();
@@ -59,12 +60,7 @@ export default function PortalIntakeForm() {
 
   // Loading state
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center" role="status" aria-live="polite">
-        <Loader2 className="w-8 h-8 animate-spin text-amber-400" aria-hidden="true" />
-        <span className="sr-only">Loading form</span>
-      </div>
-    );
+    return <LoadingState label="Loading form…" className="min-h-screen bg-slate-950 text-slate-200" spinnerClassName="border-slate-700 border-t-amber-400" />;
   }
 
   // Error state

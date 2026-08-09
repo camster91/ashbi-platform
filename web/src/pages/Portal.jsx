@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { cn, formatDate } from '../lib/utils';
+import LoadingState from '../components/ui/LoadingState';
 
 const statusConfig = {
   STARTING_UP: { label: 'Starting Up', color: 'bg-gray-100 text-gray-700', dotColor: 'bg-gray-400' },
@@ -40,11 +41,7 @@ export default function Portal() {
   });
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-800"></div>
-      </div>
-    );
+    return <LoadingState label="Loading project portal…" className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 text-slate-700" spinnerClassName="border-slate-300 border-t-slate-800" />;
   }
 
   if (error || !project) {

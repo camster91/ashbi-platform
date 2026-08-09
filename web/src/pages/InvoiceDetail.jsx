@@ -11,7 +11,7 @@ import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
-import { Button, Card } from '../components/ui';
+import { Button, Card, LoadingState } from '../components/ui';
 
 const HST_RATE = 13;
 
@@ -190,11 +190,7 @@ export default function InvoiceDetail() {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-96">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-      </div>
-    );
+    return <LoadingState label="Loading invoice…" className="min-h-96" />;
   }
 
   if (!invoice) {

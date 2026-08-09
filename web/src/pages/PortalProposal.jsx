@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { cn, formatDate } from '../lib/utils';
+import LoadingState from '../components/ui/LoadingState';
 
 export default function PortalProposal() {
   const { token } = useParams();
@@ -53,12 +54,7 @@ export default function PortalProposal() {
   };
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center" role="status" aria-live="polite">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-800" aria-hidden="true" />
-        <span className="sr-only">Loading proposal</span>
-      </div>
-    );
+    return <LoadingState label="Loading proposal…" className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 text-slate-700" spinnerClassName="border-slate-300 border-t-slate-800" />;
   }
 
   if (error || !proposal) {

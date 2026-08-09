@@ -9,7 +9,7 @@ import {
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
-import { Button, Card } from '../components/ui';
+import { Button, Card, LoadingState } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
@@ -324,9 +324,7 @@ export default function Invoices() {
           {isError ? (
             <QueryErrorState onRetry={refetch} error={loadError} isRetrying={isFetching} message="Failed to load invoices" />
           ) : isLoading ? (
-            <div className="flex justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-            </div>
+            <LoadingState label="Loading invoices…" compact className="py-12" />
           ) : sortedInvoices.length === 0 ? (
             <Card className="p-12 text-center">
               <Receipt className="w-12 h-12 text-muted-foreground mx-auto mb-4" />

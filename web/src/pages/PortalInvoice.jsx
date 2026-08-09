@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { cn, formatDate } from '../lib/utils';
+import LoadingState from '../components/ui/LoadingState';
 
 const statusConfig = {
   DRAFT: { label: 'Draft', color: 'bg-slate-100 text-slate-600', icon: FileText },
@@ -41,11 +42,7 @@ export default function PortalInvoice() {
   });
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-800" />
-      </div>
-    );
+    return <LoadingState label="Loading invoice…" className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 text-slate-700" spinnerClassName="border-slate-300 border-t-slate-800" />;
   }
 
   if (error || !invoice) {

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { cn, formatDate } from '../lib/utils';
+import LoadingState from '../components/ui/LoadingState';
 
 const statusConfig = {
   DRAFT: { label: 'Draft', color: 'bg-slate-100 text-slate-600' },
@@ -53,14 +54,7 @@ export default function PortalEstimate() {
   };
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#faf9f2' }}>
-        <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2" style={{ borderColor: '#2e2958' }} />
-          <p className="text-sm" style={{ color: '#2e2958' }}>Loading estimate&hellip;</p>
-        </div>
-      </div>
-    );
+    return <LoadingState label="Loading estimate…" size="lg" className="min-h-screen text-[#2e2958]" spinnerClassName="border-[#dedbd0] border-t-[#2e2958]" style={{ backgroundColor: '#faf9f2' }} />;
   }
 
   if (error || !estimate) {
