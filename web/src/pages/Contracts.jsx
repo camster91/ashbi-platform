@@ -167,8 +167,10 @@ export default function Contracts() {
         {['', 'DRAFT', 'SENT', 'SIGNED', 'VOID'].map((s) => (
           <button
             key={s}
+            type="button"
+            aria-pressed={filterStatus === s}
             onClick={() => setFilterStatus(s)}
-            className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
+            className={`min-h-11 px-3 py-1.5 text-sm rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
               filterStatus === s
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -203,9 +205,10 @@ export default function Contracts() {
             {approvedProposals.map((p) => (
               <button
                 key={p.id}
+                type="button"
                 onClick={() => fromProposalMutation.mutate(p.id)}
                 disabled={fromProposalMutation.isPending}
-                className="w-full text-left px-4 py-3 rounded-lg border border-border hover:bg-muted/50 transition-colors disabled:opacity-50"
+                className="w-full min-h-11 text-left px-4 py-3 rounded-lg border border-border hover:bg-muted/50 transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <div className="text-sm font-medium">{p.title}</div>
                 <div className="text-xs text-muted-foreground mt-0.5">
