@@ -179,6 +179,22 @@ describe('useToast', () => {
       await act(async () => resolveAction());
       expect(undo).not.toBeDisabled();
     });
+
+    it('keeps recovery and dismissal controls explicit and touch-sized', () => {
+      function Harness() {
+        const toast = useToast();
+        return <button type="button" onClick={() => toast.success({ title: 'Item deleted', action: { label: 'Undo', onClick: () => {} } })}>Delete</button>;
+      }
+      render(<ToastProvider><Harness /></ToastProvider>);
+      fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+      const undo = screen.getByRole('button', { name: 'Undo' });
+      const dismiss = screen.getByRole('button', { name: 'Dismiss notification' });
+      expect(undo).toHaveAttribute('type', 'button');
+      expect(dismiss).toHaveAttribute('type', 'button');
+      expect(undo).toHaveClass('min-h-11');
+      expect(dismiss).toHaveClass('min-h-11', 'min-w-11');
+    });
   });
 
   describe('toast dismissal', () => {
