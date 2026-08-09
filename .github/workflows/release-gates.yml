@@ -67,6 +67,8 @@ jobs:
         env:
           NODE_ENV: production
           CI: true
+      - name: Frontend performance budgets
+        run: npm run check:frontend-budgets
 
   browser:
     name: Browser and accessibility smoke

@@ -30,6 +30,7 @@ export function validateReleaseGates(root = process.cwd()) {
     'npm run test:browser',
     'npm run test:e2e',
     'npm run build',
+    'npm run check:frontend-budgets',
   ];
   for (const command of commands) {
     if (!release.includes(command)) failures.push(`release-gates.yml is missing ${command}`);

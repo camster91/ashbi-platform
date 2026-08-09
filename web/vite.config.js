@@ -24,6 +24,7 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
+    manifest: true,
     sourcemap: false, // disable in prod for smaller output
     chunkSizeWarningLimit: 600,
     rollupOptions: {

@@ -5,18 +5,18 @@ import Layout from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider, useToast } from './hooks/useToast';
 
-// Eagerly loaded (auth + portal — always needed before user is known)
-import Login from './pages/Login';
-import ForgotPassword from './pages/ForgotPassword';
-import ResetPassword from './pages/ResetPassword';
-import Portal from './pages/Portal';
-import PortalProposal from './pages/PortalProposal';
-import PortalContract from './pages/PortalContract';
-import PortalInvoice from './pages/PortalInvoice';
-import PortalBooking from './pages/PortalBooking';
-import PortalIntakeForm from './pages/PortalIntakeForm';
-import PortalEstimate from './pages/PortalEstimate';
-import ClientPortal from './pages/ClientPortal';
+// Public entry points are split so each deep link loads only its route module.
+const Login = lazy(() => import('./pages/Login'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const ResetPassword = lazy(() => import('./pages/ResetPassword'));
+const Portal = lazy(() => import('./pages/Portal'));
+const PortalProposal = lazy(() => import('./pages/PortalProposal'));
+const PortalContract = lazy(() => import('./pages/PortalContract'));
+const PortalInvoice = lazy(() => import('./pages/PortalInvoice'));
+const PortalBooking = lazy(() => import('./pages/PortalBooking'));
+const PortalIntakeForm = lazy(() => import('./pages/PortalIntakeForm'));
+const PortalEstimate = lazy(() => import('./pages/PortalEstimate'));
+const ClientPortal = lazy(() => import('./pages/ClientPortal'));
 
 function RootRedirect() {
   const { user, isLoading, authState, checkAuth } = useAuth();
@@ -83,6 +83,15 @@ function PageLoader() {
       <div aria-hidden="true" className="animate-spin motion-reduce:animate-none rounded-full h-8 w-8 border-b-2 border-primary"></div>
       <span>Checking your session…</span>
     </div>
+  );
+}
+
+function RouteLoader() {
+  return (
+    <main role="status" aria-live="polite" aria-label="Loading page" className="flex min-h-[60vh] items-center justify-center gap-3 bg-background p-6 text-muted-foreground">
+      <div aria-hidden="true" className="h-8 w-8 animate-spin motion-reduce:animate-none rounded-full border-b-2 border-primary"></div>
+      <span>Loading page...</span>
+    </main>
   );
 }
 
@@ -155,7 +164,8 @@ function NotFound() {
 function AppRoutes() {
   return (
       <ErrorBoundary>
-        <Routes>
+        <Suspense fallback={<RouteLoader />}>
+          <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
@@ -229,7 +239,8 @@ function AppRoutes() {
           </PrivateRoute>
         }
       />
-      </Routes>
+          </Routes>
+        </Suspense>
       </ErrorBoundary>
   );
 }
