@@ -13,11 +13,9 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronUp,
-  Mail,
   Shield,
   Reply,
   ExternalLink,
-  X,
   Loader2,
 } from 'lucide-react';
 import { api } from '../lib/api';
@@ -32,6 +30,7 @@ import {
 } from '../lib/utils';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
+import Modal, { ModalFooter } from '../components/Modal';
 
 export default function Thread() {
   const { id } = useParams();
@@ -92,12 +91,14 @@ export default function Thread() {
   const gmailDraftMutation = useMutation({
     mutationFn: () => api.gmailDraftReply(id),
     onSuccess: (data) => {
+      gmailSendMutation.reset();
       setGmailReplyText(data.draft || '');
       setGmailReplySubject(data.subject || `Re: ${thread?.subject}`);
       setGmailReplyTo(data.to || '');
       setGmailDraftMeta({ gmailThreadId: data.gmailThreadId, lastMessageId: data.lastMessageId });
       setShowGmailReply(true);
     },
+    onError: (error) => toast.error('Could not prepare Gmail reply', error.message),
   });
 
   const gmailSendMutation = useMutation({
@@ -120,6 +121,12 @@ export default function Thread() {
     },
     onError: () => toast.error('Failed to send Gmail reply'),
   });
+
+  const closeGmailReply = () => {
+    if (gmailSendMutation.isPending) return;
+    gmailSendMutation.reset();
+    setShowGmailReply(false);
+  };
 
   if (isLoading) {
     return (
@@ -201,90 +208,70 @@ export default function Thread() {
         </div>
       </div>
 
+      {gmailDraftMutation.error && (
+        <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
+          {gmailDraftMutation.error.message || 'The Gmail draft could not be prepared. Try again without leaving this conversation.'}
+        </p>
+      )}
+
       {/* Gmail Reply Modal */}
-      {showGmailReply && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4">
-          <div className="bg-card rounded-xl border border-border w-full max-w-2xl shadow-xl animate-fade-in">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-              <h2 className="font-heading font-semibold flex items-center gap-2">
-                <Mail className="w-4 h-4 text-primary" />
-                Reply via Gmail
-              </h2>
-              <button
-                onClick={() => setShowGmailReply(false)}
-                className="p-1.5 hover:bg-muted rounded-lg transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="p-5 space-y-4">
+      <Modal isOpen={showGmailReply} onClose={closeGmailReply} title="Reply via Gmail" size="lg" showCloseButton={!gmailSendMutation.isPending}>
+        <form onSubmit={(event) => { event.preventDefault(); gmailSendMutation.mutate(); }} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1.5">To</label>
+                <label htmlFor="gmail-reply-to" className="block text-sm font-medium mb-1.5">To</label>
                 <input
+                  id="gmail-reply-to"
                   type="email"
                   value={gmailReplyTo}
                   onChange={(e) => setGmailReplyTo(e.target.value)}
-                  className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  disabled={gmailSendMutation.isPending}
+                  className="w-full px-3 py-2 border border-border bg-background rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  autoComplete="email"
+                  required
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Subject</label>
+                <label htmlFor="gmail-reply-subject" className="block text-sm font-medium mb-1.5">Subject</label>
                 <input
+                  id="gmail-reply-subject"
                   type="text"
                   value={gmailReplySubject}
                   onChange={(e) => setGmailReplySubject(e.target.value)}
-                  className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  disabled={gmailSendMutation.isPending}
+                  className="w-full px-3 py-2 border border-border bg-background rounded-lg text-base focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  required
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Message</label>
+                <label htmlFor="gmail-reply-message" className="block text-sm font-medium mb-1.5">Message</label>
                 <textarea
+                  id="gmail-reply-message"
                   value={gmailReplyText}
                   onChange={(e) => setGmailReplyText(e.target.value)}
                   rows={10}
-                  className="w-full px-3 py-2 border border-border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 font-mono leading-relaxed"
+                  disabled={gmailSendMutation.isPending}
+                  className="w-full px-3 py-2 border border-border bg-background rounded-lg text-base resize-y focus:outline-none focus:ring-2 focus:ring-primary/20 font-mono leading-relaxed"
+                  required
                 />
               </div>
-              {gmailSendMutation.isError && (
-                <p className="text-sm text-destructive">
-                  Send failed. Please try again.
+              {gmailSendMutation.error && (
+                <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
+                  {gmailSendMutation.error.message || 'Email could not be sent.'} Your draft is still available.
                 </p>
               )}
-              {gmailSendMutation.isSuccess && (
-                <p className="text-sm text-success font-medium">
-                  ✓ Email sent successfully via Gmail
-                </p>
-              )}
-            </div>
-            <div className="flex items-center justify-between px-5 py-4 border-t border-border bg-muted/30 rounded-b-xl">
-              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                <Shield className="w-3 h-3" />
-                Sends via Gmail API
-              </p>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setShowGmailReply(false)}
-                  className="px-4 py-2 text-sm text-muted-foreground hover:text-foreground bg-background border border-border rounded-lg transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => gmailSendMutation.mutate()}
-                  disabled={!gmailReplyText || !gmailReplyTo || gmailSendMutation.isPending}
-                  className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg hover:opacity-90 disabled:opacity-50 flex items-center gap-2 font-medium transition-all"
-                >
-                  {gmailSendMutation.isPending ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Send className="w-4 h-4" />
-                  )}
-                  {gmailSendMutation.isPending ? 'Sending...' : 'Send Email'}
-                </button>
-              </div>
-            </div>
+          <div className="flex items-center gap-1 text-sm text-muted-foreground">
+            <Shield className="w-4 h-4" aria-hidden="true" />
+            Sends through the connected Gmail account.
           </div>
-        </div>
-      )}
+          <ModalFooter>
+            <button type="button" onClick={closeGmailReply} disabled={gmailSendMutation.isPending} className="min-h-11 rounded-lg border border-border px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50">Cancel</button>
+            <button type="submit" disabled={!gmailReplyText.trim() || !gmailReplyTo.trim() || !gmailReplySubject.trim() || gmailSendMutation.isPending} className="flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
+              {gmailSendMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none" aria-hidden="true" /> : <Send className="w-4 h-4" aria-hidden="true" />}
+              {gmailSendMutation.isPending ? 'Sending…' : 'Send email'}
+            </button>
+          </ModalFooter>
+        </form>
+      </Modal>
 
       {/* AI Analysis */}
       {analysis && (

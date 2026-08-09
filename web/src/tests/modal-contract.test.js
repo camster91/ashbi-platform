@@ -21,6 +21,7 @@ const modalConsumers = [
   'src/pages/SemanticSearch.jsx',
   'src/pages/Schedule.jsx',
   'src/pages/Trash.jsx',
+  'src/pages/Thread.jsx',
 ];
 
 describe('shared modal contract', () => {
