@@ -264,8 +264,11 @@ export default function Layout({ children }) {
     return (
       <div className="space-y-0.5">
         <button
+          type="button"
           onClick={() => toggleSection(key)}
-          className="w-full flex items-center px-3 py-1.5 text-xs font-semibold text-white/70 uppercase tracking-wider hover:text-white transition-colors"
+          aria-expanded={show}
+          aria-label={`${show ? 'Collapse' : 'Expand'} ${label}`}
+          className="w-full min-h-11 flex items-center px-3 py-1.5 text-xs font-semibold text-white/70 uppercase tracking-wider hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
         >
           <ChevronRight className={cn('w-3 h-3 mr-1 transition-transform duration-150', show && 'rotate-90')} />
           {label}
@@ -363,14 +366,18 @@ export default function Layout({ children }) {
             <div className="pt-2 border-t border-white/10">
               {sidebarCollapsed ? (
                 <button
+                  type="button"
                   onClick={() => navigate('/projects?create=true')}
-                  className="w-full flex items-center justify-center p-2 text-[#e6f354] hover:bg-[#e6f354]/10 rounded-lg transition-colors"
+                  aria-label="Create new project"
+                  className="w-full min-h-11 flex items-center justify-center p-2 text-[#e6f354] hover:bg-[#e6f354]/10 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e6f354]"
                   title="New Project"
                 >
                   <Plus className="w-4 h-4" />
                 </button>
               ) : (
                 <button
+                  type="button"
+                  aria-label="Create new project"
                   className="w-full flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold rounded-full bg-[#e6f354] text-[#2e2958] hover:bg-[#d0dd9a] transition-colors"
                   onClick={() => navigate('/projects?create=true')}
                 >
@@ -492,8 +499,10 @@ export default function Layout({ children }) {
             <LiveTimer socket={socket} />
             <QuickCreateMenu navigate={navigate} isAdmin={isAdmin} />
             <button
+              type="button"
               onClick={toggleTheme}
-              className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors"
+              aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+              className="min-h-11 min-w-11 inline-flex items-center justify-center p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
             >
               {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
@@ -517,8 +526,10 @@ export default function Layout({ children }) {
                 Install
               </Button>
               <button
+                type="button"
+                aria-label="Dismiss install banner"
                 onClick={() => setInstallDismissed(true)}
-                className="text-muted-foreground hover:text-foreground text-xs"
+                className="min-h-11 px-2 text-muted-foreground hover:text-foreground text-xs rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 Dismiss
               </button>
@@ -569,6 +580,7 @@ export default function Layout({ children }) {
             return (
               <div key="more" className="relative flex-1">
                 <button
+                  type="button"
                   onClick={() => setMoreMenuOpen(!moreMenuOpen)}
                   className={cn(
                     'w-full flex flex-col items-center justify-center py-2.5 text-xs transition-all active:scale-90',
@@ -576,6 +588,7 @@ export default function Layout({ children }) {
                   )}
                   aria-expanded={moreMenuOpen}
                   aria-haspopup="true"
+                  aria-label="Open more navigation options"
                 >
                   <MoreHorizontal className="w-5 h-5 mb-0.5" />
                   <span className="text-[10px] font-medium uppercase tracking-tighter">More</span>
