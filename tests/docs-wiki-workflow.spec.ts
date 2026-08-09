@@ -3,6 +3,7 @@ import AxeBuilder from '@axe-core/playwright';
 
 test('creates a nested document from a tenant template with authorized mentions', async ({ page }) => {
   let createdPayload: Record<string, unknown> | null = null;
+  let updatedPayload: Record<string, unknown> | null = null;
   let notes = [
     { id: 'root-note', title: 'Project home', content: '<img src=x onerror="window.__wikiXss=true"><script>window.__wikiXss=true</script>', type: 'WIKI', tags: [], mentions: [], parentId: null, isTemplate: false, isPinned: false, projectId: 'project-a', updatedAt: '2026-08-09T12:00:00.000Z', author: { name: 'Admin' }, project: { id: 'project-a', name: 'Portal Project', client: { id: 'client-a', name: 'Fixture Client' } } },
   ];
@@ -19,6 +20,11 @@ test('creates a nested document from a tenant template with authorized mentions'
       createdPayload = request.postDataJSON();
       notes = [...notes, { ...notes[0], id: 'created-note', title: String(createdPayload.title), parentId: createdPayload.parentId, mentions: createdPayload.mentionUserIds }];
       return json(notes.at(-1), 201);
+    }
+    if (pathname === '/api/notes/root-note' && request.method() === 'PUT') {
+      updatedPayload = request.postDataJSON();
+      notes = notes.map(note => note.id === 'root-note' ? { ...note, ...updatedPayload } : note);
+      return json(notes[0]);
     }
     if (pathname.startsWith('/api/notifications')) return json({ notifications: [], total: 0 });
     if (pathname.includes('/unread')) return json({ count: 0 });
@@ -43,6 +49,10 @@ test('creates a nested document from a tenant template with authorized mentions'
 
   await expect(page.getByRole('button', { name: 'Nested launch guide', exact: true })).toBeVisible();
   expect(createdPayload).toEqual({ title: 'Nested launch guide', parentId: 'root-note', mentionUserIds: ['user-b'] });
+  await page.getByRole('button', { name: 'Edit Project home' }).click();
+  await page.getByLabel('Notify mentioned teammates for Project home').selectOption('user-b');
+  await page.getByRole('button', { name: 'Save' }).click();
+  expect(updatedPayload).toMatchObject({ mentionUserIds: ['user-b'] });
   const dimensions = await page.evaluate(() => ({ clientWidth: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth }));
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
 });

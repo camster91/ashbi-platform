@@ -83,7 +83,7 @@ export default function Docs() {
   const { data: team = [] } = useQuery({
     queryKey: ['team'],
     queryFn: api.getTeam,
-    enabled: showNewNote,
+    enabled: showNewNote || Boolean(editingId),
   });
 
   const updateMutation = useMutation({
@@ -144,7 +144,15 @@ export default function Docs() {
 
   const startEdit = (note) => {
     setEditingId(note.id);
-    setEditForm({ title: note.title, content: note.content, type: note.type, tags: (note.tags || []).join(', '), parentId: note.parentId || '', isTemplate: Boolean(note.isTemplate) });
+    setEditForm({
+      title: note.title,
+      content: note.content,
+      type: note.type,
+      tags: (note.tags || []).join(', '),
+      parentId: note.parentId || '',
+      mentionUserIds: note.mentions || [],
+      isTemplate: Boolean(note.isTemplate),
+    });
     setExpandedId(note.id);
   };
 
@@ -158,6 +166,7 @@ export default function Docs() {
         type: editForm.type,
         tags: editForm.tags ? editForm.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
         parentId: editForm.parentId || null,
+        mentionUserIds: editForm.mentionUserIds || [],
         isTemplate: Boolean(editForm.isTemplate),
       },
     });
@@ -376,6 +385,7 @@ export default function Docs() {
                     onDelete={() => { deleteMutation.reset(); setNoteToDelete(note); }}
                     onPin={() => pinMutation.mutate(note.id)}
                     updatePending={updateMutation.isPending}
+                    team={team}
                   />
                 ))}
               </div>
@@ -400,6 +410,7 @@ export default function Docs() {
                 onDelete={(id) => { deleteMutation.reset(); setNoteToDelete(notes.find((note) => note.id === id) || { id, title: 'Note' }); }}
                 onPin={(id) => pinMutation.mutate(id)}
                 updatePending={updateMutation.isPending}
+                team={team}
               />
             ))}
           </div>
@@ -500,7 +511,7 @@ export function flattenNoteHierarchy(notes) {
 
 function NoteCard({
   note, expanded, editing, editForm, setEditForm,
-  onToggle, onEdit, onUpdate, onCancelEdit, onDelete, onPin, updatePending, projectNotes = []
+  onToggle, onEdit, onUpdate, onCancelEdit, onDelete, onPin, updatePending, projectNotes = [], team = []
 }) {
   return (
     <Card className={cn('p-4 transition-shadow', expanded && 'shadow-md')}>
@@ -577,6 +588,25 @@ function NoteCard({
                 <input type="checkbox" checked={Boolean(editForm.isTemplate)} onChange={(e) => setEditForm({ ...editForm, isTemplate: e.target.checked })} />
                 Reusable template
               </label>
+            </div>
+            <div>
+              <label htmlFor={`note-mentions-${note.id}`} className="block text-xs font-medium mb-1">
+                Notify mentioned teammates for {note.title}
+              </label>
+              <select
+                id={`note-mentions-${note.id}`}
+                multiple
+                value={editForm.mentionUserIds || []}
+                onChange={(e) => setEditForm({
+                  ...editForm,
+                  mentionUserIds: [...e.target.selectedOptions].map(option => option.value),
+                })}
+                className="w-full min-h-20 px-2 py-1.5 rounded border border-border bg-background text-sm"
+              >
+                {team.filter(member => member.isActive !== false).map(member => (
+                  <option key={member.id} value={member.id}>{member.name || member.email}</option>
+                ))}
+              </select>
             </div>
             <div className="flex items-center gap-2">
               <input
