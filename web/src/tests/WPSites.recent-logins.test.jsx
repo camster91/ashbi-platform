@@ -158,14 +158,12 @@ describe('WPSites — Recent Logins tab', () => {
       limit: 100
     });
     apiMock.postWPMagicLoginRevoke.mockResolvedValue({ ok: true, siteUrl: 'https://a.com', hash: REAL_HASH });
-    // Confirm() returns true to allow the revoke to proceed.
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
-
     renderWPSites();
     fireEvent.click(screen.getByTestId('recent-logins-tab'));
     const row = await screen.findByTestId('recent-login-row-l1');
     const button = within(row).getByTitle(/Revoke this magic-login token/);
     fireEvent.click(button);
+    fireEvent.click(await screen.findByRole('button', { name: 'Revoke token' }));
 
     // Wire shape: { siteId, hash } — NOT { siteId, token }
     await waitFor(() => {
@@ -177,7 +175,6 @@ describe('WPSites — Recent Logins tab', () => {
     await waitFor(() => {
       expect(screen.getByText(/Revoked magic login on https:\/\/a\.com/)).toBeTruthy();
     });
-    confirmSpy.mockRestore();
   });
 
   it('does not call POST when user cancels the confirm dialog', async () => {
@@ -190,17 +187,15 @@ describe('WPSites — Recent Logins tab', () => {
       limit: 100
     });
     apiMock.postWPMagicLoginRevoke.mockResolvedValue({ ok: true, siteUrl: 'https://a.com' });
-    const confirmSpy = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
-
     renderWPSites();
     fireEvent.click(screen.getByTestId('recent-logins-tab'));
     const row = await screen.findByTestId('recent-login-row-l1');
     const button = within(row).getByTitle(/Revoke this magic-login token/);
     fireEvent.click(button);
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
 
     // Give React a tick to fire any mutations
     await new Promise((r) => setTimeout(r, 50));
     expect(apiMock.postWPMagicLoginRevoke).not.toHaveBeenCalled();
-    confirmSpy.mockRestore();
   });
 });

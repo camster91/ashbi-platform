@@ -22,6 +22,7 @@ import { api } from '../lib/api';
 import LoadingState from '../components/ui/LoadingState';
 import { cn, formatDate } from '../lib/utils';
 import QueryErrorState from '../components/QueryErrorState';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 const categories = [
   { value: 'WP_ADMIN', label: 'WP Admin', icon: Globe },
@@ -62,6 +63,7 @@ export default function Credentials() {
   const [form, setForm] = useState(emptyForm);
   const [visiblePasswords, setVisiblePasswords] = useState({});
   const [copiedId, setCopiedId] = useState(null);
+  const [credentialToDelete, setCredentialToDelete] = useState(null);
 
   const { data: credentials = [], isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['credentials', filterCategory, filterClient],
@@ -100,7 +102,10 @@ export default function Credentials() {
 
   const deleteMutation = useMutation({
     mutationFn: (id) => api.deleteCredential(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['credentials'] }),
+    onSuccess: () => {
+      setCredentialToDelete(null);
+      queryClient.invalidateQueries({ queryKey: ['credentials'] });
+    },
   });
 
   function resetForm() {
@@ -421,16 +426,14 @@ export default function Credentials() {
                         <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => startEdit(cred)}
+                            aria-label={`Edit ${cred.label}`}
                             className="p-1.5 text-muted-foreground hover:text-foreground rounded hover:bg-muted transition-colors"
                           >
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={() => {
-                              if (confirm('Delete this credential?')) {
-                                deleteMutation.mutate(cred.id);
-                              }
-                            }}
+                            onClick={() => { deleteMutation.reset(); setCredentialToDelete(cred); }}
+                            aria-label={`Delete ${cred.label}`}
                             className="p-1.5 text-muted-foreground hover:text-destructive rounded hover:bg-destructive/10 transition-colors"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -445,6 +448,16 @@ export default function Credentials() {
           </div>
         </div>
       )}
+      <ConfirmDialog
+        isOpen={Boolean(credentialToDelete)}
+        title="Delete credential"
+        description={credentialToDelete ? `Permanently delete “${credentialToDelete.label}”? The stored password and metadata will be removed and this cannot be undone.` : ''}
+        confirmLabel="Permanently delete"
+        onConfirm={() => credentialToDelete && deleteMutation.mutate(credentialToDelete.id)}
+        onCancel={() => { deleteMutation.reset(); setCredentialToDelete(null); }}
+        pending={deleteMutation.isPending}
+        error={deleteMutation.error?.message}
+      />
     </div>
   );
 }

@@ -23,6 +23,7 @@ import {
 import { api } from '../lib/api';
 import { Button, Card, LoadingState, Skeleton } from '../components/ui';
 import Modal, { ModalFooter } from '../components/Modal';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 const STATUS_COLORS = {
   HEALTHY: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
@@ -147,6 +148,7 @@ function SitesTab({ queryClient }) {
   const [secretCopied, setSecretCopied] = useState(false);
   const [alert, setAlert] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
+  const [siteToDelete, setSiteToDelete] = useState(null);
 
   const { data: sites = [], isLoading } = useQuery({
     queryKey: ['wp-sites'],
@@ -198,13 +200,11 @@ function SitesTab({ queryClient }) {
       return res.json().catch(() => null);
     },
     onSuccess: () => {
+      setSiteToDelete(null);
       queryClient.invalidateQueries({ queryKey: ['wp-sites'] });
       queryClient.invalidateQueries({ queryKey: ['wp-fleet-status'] });
       setAlert({ type: 'success', msg: 'Site removed.' });
       setTimeout(() => setAlert(null), 3000);
-    },
-    onError: (err) => {
-      setAlert({ type: 'error', msg: err.message || 'Failed to delete site' });
     },
   });
 
@@ -457,7 +457,7 @@ function SitesTab({ queryClient }) {
                     expanded={expandedId === site.id}
                     onToggle={() => setExpandedId(expandedId === site.id ? null : site.id)}
                     onMagicLogin={() => magicLoginMutation.mutate(site.id)}
-                    onDelete={() => { if (confirm('Remove this site?')) deleteMutation.mutate(site.id); }}
+                    onDelete={() => { deleteMutation.reset(); setSiteToDelete(site); }}
                     magicPending={magicLoginMutation.isPending}
                     deletePending={deleteMutation.isPending}
                   />
@@ -467,6 +467,17 @@ function SitesTab({ queryClient }) {
           </div>
         </Card>
       )}
+
+      <ConfirmDialog
+        isOpen={Boolean(siteToDelete)}
+        title="Remove WordPress site"
+        description={siteToDelete ? `Remove “${siteToDelete.name || siteToDelete.url}”? This disconnects monitoring, backups, reports, and managed operations from Ashbi Hub. The WordPress site itself is not deleted.` : ''}
+        confirmLabel="Remove site"
+        onConfirm={() => siteToDelete && deleteMutation.mutate(siteToDelete.id)}
+        onCancel={() => { deleteMutation.reset(); setSiteToDelete(null); }}
+        pending={deleteMutation.isPending}
+        error={deleteMutation.error?.message}
+      />
 
       <Card className="p-6">
         <h2 className="text-lg font-semibold mb-4">Setup Guide</h2>
@@ -1341,6 +1352,7 @@ function RecentLoginsTab({ queryClient }) {
   const [siteFilter, setSiteFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState(''); // '' | issued | consumed | revoked | rejected
   const [alert, setAlert] = useState(null);
+  const [loginToRevoke, setLoginToRevoke] = useState(null);
 
   const params = {};
   if (siteFilter) params.siteUrl = siteFilter;
@@ -1368,19 +1380,19 @@ function RecentLoginsTab({ queryClient }) {
   const allSites = (fleet && Array.isArray(fleet.sites)) ? fleet.sites : [];
 
   const revokeMutation = useMutation({
-    mutationFn: ({ siteId, hash }) => api.postWPMagicLoginRevoke({ siteId, hash }),
+    mutationFn: async ({ siteId, hash }) => {
+      const data = await api.postWPMagicLoginRevoke({ siteId, hash });
+      if (!data?.ok) throw new Error(data?.pluginResponse?.error || 'The WordPress plugin rejected the revoke request.');
+      return data;
+    },
     onSuccess: (data) => {
+      setLoginToRevoke(null);
       queryClient.invalidateQueries({ queryKey: ['wp-magic-login-log'] });
       setAlert({
-        type: data?.ok ? 'success' : 'error',
-        msg: data?.ok
-          ? `Revoked magic login on ${data.siteUrl || 'site'}.`
-          : `Revoke failed: ${data?.pluginResponse?.error || 'plugin rejected'}`
+        type: 'success',
+        msg: `Revoked magic login on ${data.siteUrl || 'site'}.`
       });
       setTimeout(() => setAlert(null), 4000);
-    },
-    onError: (err) => {
-      setAlert({ type: 'error', msg: err.message || 'Revoke request failed' });
     }
   });
 
@@ -1477,10 +1489,7 @@ function RecentLoginsTab({ queryClient }) {
                   <RecentLoginRow
                     key={e.id}
                     entry={e}
-                    onRevoke={(hash) => {
-                      if (!confirm('Revoke this magic-login token? The user will not be able to use it.')) return;
-                      revokeMutation.mutate({ siteId: e.siteId, hash });
-                    }}
+                    onRevoke={(hash) => { revokeMutation.reset(); setLoginToRevoke({ ...e, hash }); }}
                     revokePending={revokeMutation.isPending}
                   />
                 ))}
@@ -1489,6 +1498,16 @@ function RecentLoginsTab({ queryClient }) {
           </div>
         )}
       </Card>
+      <ConfirmDialog
+        isOpen={Boolean(loginToRevoke)}
+        title="Revoke magic-login token"
+        description={loginToRevoke ? `Revoke the magic-login link issued for ${loginToRevoke.siteUrl}? The user will no longer be able to use this link.` : ''}
+        confirmLabel="Revoke token"
+        onConfirm={() => loginToRevoke && revokeMutation.mutate({ siteId: loginToRevoke.siteId, hash: loginToRevoke.hash })}
+        onCancel={() => { revokeMutation.reset(); setLoginToRevoke(null); }}
+        pending={revokeMutation.isPending}
+        error={revokeMutation.error?.message}
+      />
     </div>
   );
 }

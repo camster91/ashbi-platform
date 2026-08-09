@@ -24,7 +24,9 @@ describe('Settings workflow-state contract', () => {
   });
 
   it('announces API-key mutation failures and prevents duplicate revocation', () => {
-    expect(source).toContain('createMutation.error || deleteMutation.error');
+    expect(source).toContain('error={deleteMutation.error?.message}');
+    expect(source).toContain('pending={deleteMutation.isPending}');
+    expect(source).toContain('title="Revoke API key"');
     expect(source).toContain('role="alert"');
     expect(source).toContain('disabled={deleteMutation.isPending}');
     expect(source).toContain('aria-label={`Revoke ${key.name}`}');

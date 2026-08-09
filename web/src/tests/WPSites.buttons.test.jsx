@@ -105,14 +105,11 @@ describe('WPSites row buttons (PR-E: hub-ui-buttons-wire)', () => {
     // window.open is normally not implemented in jsdom — stub it
     windowOpenMock = vi.fn(() => null);
     window.open = windowOpenMock;
-    // jsdom returns false from window.confirm by default; replace.
-    window.confirm = vi.fn(() => true);
   });
 
   afterEach(() => {
     delete global.fetch;
     delete window.open;
-    delete window.confirm;
   });
 
   it('provisions a site without accepting a caller secret and shows the one-time key', async () => {
@@ -194,6 +191,7 @@ describe('WPSites row buttons (PR-E: hub-ui-buttons-wire)', () => {
     await act(async () => {
       fireEvent.click(deleteBtn);
     });
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove site' }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
     const [url, init] = fetchMock.mock.calls[0];
@@ -219,8 +217,9 @@ describe('WPSites row buttons (PR-E: hub-ui-buttons-wire)', () => {
     await act(async () => {
       fireEvent.click(deleteBtn);
     });
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove site' }));
 
-    // The page renders errors via an inline alert banner.
+    // The shared confirmation retains and announces the server failure.
     expect(await screen.findByText(/Forbidden — admin only/i)).toBeInTheDocument();
   });
 

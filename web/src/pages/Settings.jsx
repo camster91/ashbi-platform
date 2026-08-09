@@ -23,6 +23,7 @@ import { useAuth } from '../hooks/useAuth';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 import QueryErrorState from '../components/QueryErrorState';
 import { Button, Card, LoadingState } from '../components/ui';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 function Section({ icon: Icon, title, description, children }) {
   return (
@@ -92,6 +93,7 @@ function NotificationPreferences() {
 
 function OnboardingPreferences() {
   const queryClient = useQueryClient();
+  const [showRestartConfirm, setShowRestartConfirm] = useState(false);
   const { data, isLoading, error } = useQuery({
     queryKey: ['onboarding-progress'],
     queryFn: api.getOnboardingProgress,
@@ -100,6 +102,7 @@ function OnboardingPreferences() {
   const restart = useMutation({
     mutationFn: api.restartOnboarding,
     onSuccess: progress => {
+      setShowRestartConfirm(false);
       queryClient.setQueryData(['onboarding-progress'], progress);
       window.dispatchEvent(new Event('ashbi:onboarding-restart'));
     },
@@ -124,19 +127,25 @@ function OnboardingPreferences() {
           {data.completedCount} of {data.totalCount} role-specific tasks are completed or explicitly skipped. Progress is saved to this account, not this browser.
         </p>
       </div>
-      {restart.error && <p role="alert" className="text-sm text-destructive">{restart.error.message || 'Onboarding could not be restarted.'}</p>}
       <Button
         type="button"
         variant="outline"
         disabled={restart.isPending}
-        onClick={() => {
-          if (window.confirm('Restart your onboarding checklist? Previously skipped tasks will be available again. Verified completed work will remain complete.')) {
-            restart.mutate();
-          }
-        }}
+        onClick={() => { restart.reset(); setShowRestartConfirm(true); }}
       >
         {restart.isPending ? 'Restarting…' : 'Restart getting started'}
       </Button>
+      <ConfirmDialog
+        isOpen={showRestartConfirm}
+        title="Restart onboarding"
+        description="Restart your onboarding checklist? Previously skipped tasks will be available again. Verified completed work will remain complete."
+        confirmLabel="Restart onboarding"
+        destructive={false}
+        onConfirm={() => restart.mutate()}
+        onCancel={() => { restart.reset(); setShowRestartConfirm(false); }}
+        pending={restart.isPending}
+        error={restart.error?.message || (restart.error ? 'Onboarding could not be restarted.' : '')}
+      />
     </div>
   );
 }
@@ -263,6 +272,7 @@ function ApiKeysSection() {
   const queryClient = useQueryClient();
   const [newKeyName, setNewKeyName] = useState('');
   const [createdKey, setCreatedKey] = useState(null);
+  const [keyToRevoke, setKeyToRevoke] = useState(null);
 
   const {
     data: keysData = { keys: [] },
@@ -286,7 +296,10 @@ function ApiKeysSection() {
 
   const deleteMutation = useMutation({
     mutationFn: (id) => api.deleteApiKey(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['api-keys'] }),
+    onSuccess: () => {
+      setKeyToRevoke(null);
+      queryClient.invalidateQueries({ queryKey: ['api-keys'] });
+    },
   });
 
   const copyToClipboard = (text) => {
@@ -295,9 +308,9 @@ function ApiKeysSection() {
 
   return (
     <div className="space-y-4">
-      {(createMutation.error || deleteMutation.error) && (
+      {createMutation.error && (
         <p role="alert" className="text-sm text-destructive">
-          {(createMutation.error || deleteMutation.error).message || 'The API key change could not be completed. Try again.'}
+          {createMutation.error.message || 'The API key could not be created. Try again.'}
         </p>
       )}
       {/* Create new key */}
@@ -378,11 +391,7 @@ function ApiKeysSection() {
                 type="button"
                 aria-label={`Revoke ${key.name}`}
                 disabled={deleteMutation.isPending}
-                onClick={() => {
-                  if (confirm('Revoke this API key? Any integrations using it will stop working.')) {
-                    deleteMutation.mutate(key.id);
-                  }
-                }}
+                onClick={() => { deleteMutation.reset(); setKeyToRevoke(key); }}
                 className="p-1.5 text-muted-foreground hover:text-destructive transition-colors"
                 title="Revoke key"
               >
@@ -392,6 +401,17 @@ function ApiKeysSection() {
           ))}
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={Boolean(keyToRevoke)}
+        title="Revoke API key"
+        description={keyToRevoke ? `Revoke “${keyToRevoke.name}”? Any integrations using it will stop working immediately.` : ''}
+        confirmLabel="Revoke API key"
+        onConfirm={() => keyToRevoke && deleteMutation.mutate(keyToRevoke.id)}
+        onCancel={() => { deleteMutation.reset(); setKeyToRevoke(null); }}
+        pending={deleteMutation.isPending}
+        error={deleteMutation.error?.message}
+      />
 
       <p className="text-xs text-muted-foreground">
         Use your API key in the <code className="bg-muted px-1 rounded">x-api-key</code> header or as a <code className="bg-muted px-1 rounded">Bearer</code> token.
