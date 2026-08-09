@@ -66,12 +66,8 @@ import pushRoutes from './routes/push.routes.js';
 import { initVapid } from './utils/web-push.js';
 import commandCenterRoutes from './routes/integrations.command-center.routes.js';
 import expenseRoutes from './routes/expense.routes.js';
-import { startRecurringInvoicesJob } from './jobs/recurring-invoices.js';
 import automationRoutes from './routes/automation.routes.js';
 import brandRoutes from './routes/brand.routes.js';
-import { startOverdueChecker } from './services/automation.service.js';
-import { startTrashPurgeJob } from './jobs/trash-purge.js';
-import { setupRecurringJobs } from './jobs/queue.js';
 import pipelineRoutes from './routes/pipeline.routes.js';
 import { initHermesBridge } from './agents/hub-hermes.integration.js';
 import timeTrackingRoutes from './routes/time-tracking.routes.js';
@@ -400,16 +396,6 @@ const start = async () => {
     try { initVapid(); } catch (e) { logger.warn({ err: e }, 'Web push init failed'); }
     await fastify.listen({ port: env.port, host: '0.0.0.0' });
     logger.info(`🚀 Agency Hub running at http://localhost:${env.port}`);
-    // FUNCTIONAL FIX (audit 2026-07-09, swarm finding): setupRecurringJobs
-    // was defined in jobs/queue.js but never called from index.js, so the
-    // hourly health-check, every-15-min escalation, and Mon-9am-EST
-    // weekly-digest BullMQ jobs were silently not scheduling. The
-    // ad-hoc intervals below (startRecurringInvoicesJob etc.) only cover
-    // invoice generation, overdue checks, and trash purge.
-    try { await setupRecurringJobs(); } catch (e) { logger.warn({ err: e }, 'Recurring job setup failed'); }
-    startRecurringInvoicesJob();
-    startOverdueChecker();
-    startTrashPurgeJob();
   } catch (err) { fastify.log.error(err); process.exit(1); }
 };
 

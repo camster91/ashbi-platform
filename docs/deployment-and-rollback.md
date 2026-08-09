@@ -9,8 +9,8 @@ Before upload, the operator runs the release gates, builds once with the full
 Git revision, and records both the Docker image ID and archive SHA-256. The
 same archive is uploaded to each environment. The VPS script verifies both
 identifiers before starting anything, takes an exclusive deployment lock,
-runs migration deployment plus status and ownership preflight checks, retains the prior container,
-and requires `/api/health` to report the approved revision and image ID.
+runs migration deployment plus status and ownership preflight checks, retains the prior API and worker containers,
+and requires both `/api/health` and the Redis-backed worker heartbeat to report the approved revision.
 
 The host must already contain its root-owned, mode-0600 environment file at
 `/opt/ashbi-platform/.env`. Runtime data is bind-mounted from the corresponding
@@ -45,17 +45,18 @@ records; the environment is included in every history outcome field.
 
 ## Automated rollback test
 
-The direct release script captures the prior image, revision, and image ID
-before replacement. Readiness succeeds only when `/api/health` reports
-the expected full commit and image digest. A timeout automatically recreates
-the previous image with its previous revision metadata and fails the release.
+The direct release script captures the prior API and worker containers plus
+their immutable image metadata before replacement. Readiness succeeds only
+when `/api/health` reports the expected full commit and image digest and
+`npm run health:worker` sees a fresh heartbeat from that revision. A timeout
+automatically restores both previous processes and fails the release.
 
 Before enabling production promotion, rehearse this in staging:
 
 1. Deploy a known-good digest and confirm it appears in `releases/history.tsv`.
 2. Temporarily supply a test image whose health response has the wrong
    revision, or stop its application process.
-3. Confirm the release command fails and the prior container is restored.
+3. Confirm the release command fails and the prior API and worker containers are restored.
 4. Confirm the database and persistent upload/config directories are intact.
 5. Save the release-history entries and resulting health response on issue
    #294 as the rehearsal record. Never induce this failure on the live
@@ -68,5 +69,5 @@ Use the last known-good immutable image reference and image ID from
 `latest` tag. The release script automatically restores the retained previous
 container when startup or readiness fails. For an operator-requested rollback,
 rerun the script using the recorded previous artifact, revision, and image ID,
-then verify both fields at `/api/health`. Record the operator, timestamp,
+then verify both fields at `/api/health` and run `docker exec ashbi-platform-worker npm run health:worker`. Record the operator, timestamp,
 source release, target image ID, reason, and verification result.

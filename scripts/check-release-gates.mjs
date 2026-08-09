@@ -13,6 +13,9 @@ export function validateReleaseGates(root = process.cwd()) {
   const imageBuild = read('build-and-push.yml');
   const directDeploy = fs.readFileSync(path.join(root, 'scripts', 'deploy-vps-direct.sh'), 'utf8');
   const dockerfile = fs.readFileSync(path.join(root, 'Dockerfile'), 'utf8');
+  const packageJson = fs.readFileSync(path.join(root, 'package.json'), 'utf8');
+  const worker = fs.readFileSync(path.join(root, 'src', 'jobs', 'worker.js'), 'utf8');
+  const workerHealth = fs.readFileSync(path.join(root, 'scripts', 'worker-health.mjs'), 'utf8');
   const failures = [];
 
   for (const [name, source] of allWorkflows) {
@@ -52,6 +55,15 @@ export function validateReleaseGates(root = process.cwd()) {
   if (!/COPY scripts\/check-frontend-budgets\.mjs \/app\/scripts\/check-frontend-budgets\.mjs/.test(dockerfile)) {
     failures.push('Dockerfile frontend builder is missing the performance budget verifier');
   }
+  if (!/"start:api"\s*:/.test(packageJson) || !/"start:worker"\s*:/.test(packageJson)) {
+    failures.push('package.json does not expose separate API and worker commands');
+  }
+  if (!/setupRecurringJobs\(\)/.test(worker) || !/worker\.close\(\)/.test(worker)) {
+    failures.push('worker does not own scheduler bootstrap and graceful draining');
+  }
+  if (!/ashbi:workers:heartbeat/.test(workerHealth)) {
+    failures.push('worker health check does not verify the Redis heartbeat');
+  }
 
   for (const [name, source] of allWorkflows) {
     if (/appleboy\/ssh-action|COOLIFY_TOKEN|applications\/.*\/start|deploy-vps\.yml/.test(source)) {
@@ -70,6 +82,9 @@ export function validateReleaseGates(root = process.cwd()) {
     [/restore_previous/, 'does not implement automatic rollback'],
     [/trap emergency_rollback EXIT/, 'does not protect interrupted cutovers'],
     [/imageDigest.*IMAGE_ID/, 'does not verify revision-aware readiness'],
+    [/start_worker_container/, 'does not start a dedicated worker'],
+    [/health:worker/, 'does not require worker readiness'],
+    [/ROLLBACK_WORKER_CONTAINER/, 'does not retain a worker rollback'],
     [/record deployed/, 'does not append a successful release record'],
   ];
   for (const [pattern, message] of directRequirements) {

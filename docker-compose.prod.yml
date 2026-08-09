@@ -25,6 +25,26 @@ services:
       - "traefik.http.routers.ashbi-platform-http.entrypoints=http"
       - "coolify.managed=true"
 
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ashbi-platform-worker
+    restart: unless-stopped
+    command: ["npm", "run", "start:worker"]
+    env_file:
+      - .env
+    environment:
+      - MATON_API_KEY=${MATON_API_KEY}
+    healthcheck:
+      test: ["CMD", "npm", "run", "health:worker"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - coolify
+
 networks:
   coolify:
     external: true

@@ -8,4 +8,4 @@ set -e
 # deploy` here would race with other replicas in a rolling deploy.
 
 echo "Starting Ashbi Platform..."
-exec node --import ./src/tracing.js src/index.js
+exec npm run start:api

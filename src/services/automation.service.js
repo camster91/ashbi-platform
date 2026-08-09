@@ -451,6 +451,7 @@ export async function checkOverdueInvoices() {
     console.log(`[Automation] Overdue invoice check complete`);
   } catch (err) {
     console.error(`[Automation] checkOverdueInvoices failed:`, err);
+    throw err;
   }
 }
 
@@ -758,132 +759,12 @@ function getNestedValue(obj, path) {
 
 // ==================== SCHEDULE CHECKER ====================
 
-let scheduleInterval = null;
-
-export function startScheduleChecker() {
-  // Run every minute to check scheduled workflows
-  scheduleInterval = setInterval(async () => {
-    try {
-      const now = new Date();
-
-      // Find enabled SCHEDULE workflows
-      const workflows = await prisma.workflow.findMany({
-        where: {
-          triggerType: 'SCHEDULE',
-          enabled: true
-        }
-      });
-
-      for (const workflow of workflows) {
-        const { cronExpression, lastChecked } = workflow.triggerConfig;
-
-        // Simple cron check - supports basic expressions like "*/5 * * * *"
-        if (shouldRunNow(cronExpression, lastChecked ? new Date(lastChecked) : null)) {
-          console.log(`[Schedule] Running workflow: ${workflow.name}`);
-          await executeWorkflow(workflow, { scheduled: true, cronExpression });
-
-          // Update lastChecked
-          await prisma.workflow.update({
-            where: { id: workflow.id },
-            data: { triggerConfig: { ...workflow.triggerConfig, lastChecked: now.toISOString() } }
-          });
-        }
-      }
-    } catch (err) {
-      console.error('[Schedule] Checker error:', err);
-    }
-  }, 60000); // Every minute
-
-  console.log('[Workflow] Schedule checker started');
-}
-
-export function stopScheduleChecker() {
-  if (scheduleInterval) {
-    clearInterval(scheduleInterval);
-    scheduleInterval = null;
-    console.log('[Workflow] Schedule checker stopped');
-  }
-}
-
-function shouldRunNow(cronExpression, lastChecked) {
-  if (!cronExpression) return false;
-
-  const now = new Date();
-  const parts = cronExpression.split(' ');
-
-  if (parts.length !== 5) return false;
-
-  const [min, hour, dayOfMonth, month, dayOfWeek] = parts;
-
-  // Simple check for "every N minutes" patterns like "*/5 * * * *"
-  if (min.startsWith('*/')) {
-    const interval = parseInt(min.slice(2));
-    if (interval > 0 && now.getMinutes() % interval === 0) {
-      // Also check if we haven't run in the last interval
-      if (!lastChecked || (now - lastChecked) >= (interval * 60 * 1000 * 0.8)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  // For exact minute matches
-  const currentMin = now.getMinutes();
-  if (min !== '*' && parseInt(min) !== currentMin) return false;
-
-  const currentHour = now.getHours();
-  if (hour !== '*' && parseInt(hour) !== currentHour) return false;
-
-  const currentDayOfMonth = now.getDate();
-  if (dayOfMonth !== '*' && parseInt(dayOfMonth) !== currentDayOfMonth) return false;
-
-  const currentMonth = now.getMonth() + 1;
-  if (month !== '*' && parseInt(month) !== currentMonth) return false;
-
-  const currentDayOfWeek = now.getDay();
-  if (dayOfWeek !== '*' && parseInt(dayOfWeek) !== currentDayOfWeek) return false;
-
-  // Ensure we don't run more than once per minute
-  if (lastChecked && (now - lastChecked) < 55000) return false;
-
-  return true;
-}
-
-// ==================== START INTERVAL ====================
-
-let overdueInterval = null;
-
-async function checkOverdueInvoicesForAllOrganizations() {
+export async function checkOverdueInvoicesForAllOrganizations() {
   const organizationIds = await resolveTenantOrganizationIds(prisma);
   for (const organizationId of organizationIds) {
     await runTenantJob(prisma, organizationId, () => checkOverdueInvoices(), backgroundPrisma);
   }
-}
-
-export function startOverdueChecker() {
-  // Run every hour (3600000ms)
-  const ONE_HOUR = 60 * 60 * 1000;
-
-  // Run immediately on startup, then hourly
-  checkOverdueInvoicesForAllOrganizations().catch(err =>
-    console.error('[Automation] Initial overdue check failed:', err)
-  );
-
-  overdueInterval = setInterval(() => {
-    checkOverdueInvoicesForAllOrganizations().catch(err =>
-      console.error('[Automation] Scheduled overdue check failed:', err)
-    );
-  }, ONE_HOUR);
-
-  console.log('[Automation] Overdue invoice checker started (hourly)');
-}
-
-export function stopOverdueChecker() {
-  if (overdueInterval) {
-    clearInterval(overdueInterval);
-    overdueInterval = null;
-    console.log('[Automation] Overdue invoice checker stopped');
-  }
+  return { organizations: organizationIds.length };
 }
 
 // ==================== WORKFLOW ENGINE ====================
@@ -1174,6 +1055,7 @@ export async function runScheduledWorkflows() {
       }
     });
 
+    const failures = [];
     for (const wf of workflows) {
       try {
         const config = JSON.parse(wf.triggerConfig || '{}');
@@ -1199,10 +1081,18 @@ export async function runScheduledWorkflows() {
         }
       } catch (wfErr) {
         console.error(`[WorkflowEngine] Error running workflow ${wf.id}:`, wfErr);
+        failures.push({ workflowId: wf.id, error: wfErr.message });
       }
     }
+    if (failures.length > 0) {
+      const error = new Error(`Failed to run ${failures.length} scheduled workflow(s)`);
+      error.failures = failures;
+      throw error;
+    }
+    return { examined: workflows.length };
   } catch (err) {
     console.error('[WorkflowEngine] Scheduled workflow check failed:', err);
+    throw err;
   }
 }
 

@@ -1,6 +1,6 @@
 // BullMQ Queue Setup
 
-import { Queue, Worker, QueueEvents } from 'bullmq';
+import { Queue, QueueEvents } from 'bullmq';
 import IORedis from 'ioredis';
 import env from '../config/env.js';
 import { withCurrentTenantJobData } from './tenant-iteration.js';
@@ -29,11 +29,14 @@ const connection = isTestEnv ? {} : new IORedis({
 class MockQueue {
   constructor(name) { this.name = name; }
   async add() { return { id: 'mock-job-id' }; }
+  async upsertJobScheduler() { return { id: 'mock-scheduler-id' }; }
+  async close() {}
 }
 
 class MockQueueEvents {
   constructor(name) { this.name = name; }
   on() {}
+  async close() {}
 }
 
 const QueueClass = isTestEnv ? MockQueue : Queue;
@@ -46,7 +49,8 @@ export const QUEUES = {
   ESCALATION: 'escalation',
   NOTIFICATIONS: 'notifications',
   WEEKLY_DIGEST: 'weekly-digest',
-  EMBEDDING: 'embedding'
+  EMBEDDING: 'embedding',
+  SCHEDULED: 'scheduled-maintenance'
 };
 
 // Create queues
@@ -56,6 +60,7 @@ export const escalationQueue = new QueueClass(QUEUES.ESCALATION, { connection })
 export const notificationQueue = new QueueClass(QUEUES.NOTIFICATIONS, { connection });
 export const weeklyDigestQueue = new QueueClass(QUEUES.WEEKLY_DIGEST, { connection });
 export const embeddingQueue = new QueueClass(QUEUES.EMBEDDING, { connection });
+export const scheduledQueue = new QueueClass(QUEUES.SCHEDULED, { connection });
 
 // Queue event handlers
 const emailQueueEvents = new QueueEventsClass(QUEUES.EMAIL_PROCESSING, { connection });
@@ -127,25 +132,62 @@ export async function queueEmbedding(clientId, content, source, sourceId = null,
  * Set up recurring jobs
  */
 export async function setupRecurringJobs() {
-  // Health check every hour
-  await healthQueue.add('update-all-health', {}, {
-    repeat: { every: 3600000 }, // 1 hour
-    jobId: 'recurring-health-check'
-  });
+  const defaults = {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 5000 },
+    removeOnComplete: 100,
+    removeOnFail: 500,
+  };
 
-  // Escalation check every 15 minutes
-  await escalationQueue.add('check-all-escalations', {}, {
-    repeat: { every: 900000 }, // 15 minutes
-    jobId: 'recurring-escalation-check'
-  });
+  // upsertJobScheduler gives every logical schedule a stable Redis identity.
+  // Multiple worker replicas can run this bootstrap without creating duplicate
+  // repeat schedules.
+  await healthQueue.upsertJobScheduler(
+    'project-health-hourly',
+    { every: 60 * 60 * 1000 },
+    { name: 'update-all-health', data: {}, opts: defaults },
+  );
+  await escalationQueue.upsertJobScheduler(
+    'escalation-quarter-hourly',
+    { every: 15 * 60 * 1000 },
+    { name: 'check-all-escalations', data: {}, opts: defaults },
+  );
+  await weeklyDigestQueue.upsertJobScheduler(
+    'weekly-digest-monday-toronto',
+    { pattern: '0 9 * * 1', tz: 'America/Toronto' },
+    { name: 'generate-weekly-digest', data: {}, opts: defaults },
+  );
 
-  // Weekly digest every Monday at 9am EST (14:00 UTC)
-  await weeklyDigestQueue.add('generate-weekly-digest', {}, {
-    repeat: { pattern: '0 14 * * 1' }, // Monday 9am EST
-    jobId: 'recurring-weekly-digest'
-  });
+  const scheduledJobs = [
+    ['recurring-invoices-hourly', { every: 60 * 60 * 1000 }, 'recurring-invoices'],
+    ['overdue-invoices-hourly', { every: 60 * 60 * 1000 }, 'overdue-invoices'],
+    ['trash-purge-daily-toronto', { pattern: '0 4 * * *', tz: 'America/Toronto' }, 'trash-purge'],
+    ['fleet-digest-daily-toronto', { pattern: '0 9 * * *', tz: 'America/Toronto' }, 'fleet-digest'],
+    ['scheduled-workflows-minutely', { every: 60 * 1000 }, 'scheduled-workflows'],
+  ];
+  for (const [schedulerId, repeat, name] of scheduledJobs) {
+    await scheduledQueue.upsertJobScheduler(
+      schedulerId,
+      repeat,
+      { name, data: {}, opts: defaults },
+    );
+  }
 
   console.log('Recurring jobs scheduled');
+}
+
+export async function closeQueueInfrastructure() {
+  await Promise.all([
+    emailQueueEvents.close(),
+    emailQueue.close(),
+    healthQueue.close(),
+    escalationQueue.close(),
+    notificationQueue.close(),
+    weeklyDigestQueue.close(),
+    embeddingQueue.close(),
+    scheduledQueue.close(),
+  ]);
+  if (!isTestEnv) await connection.quit();
 }
 
 export { connection };

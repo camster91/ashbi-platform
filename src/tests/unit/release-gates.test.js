@@ -14,6 +14,10 @@ function copyWorkflows() {
   fs.mkdirSync(path.join(root, 'scripts'), { recursive: true });
   fs.copyFileSync(path.resolve('scripts/deploy-vps-direct.sh'), path.join(root, 'scripts', 'deploy-vps-direct.sh'));
   fs.copyFileSync(path.resolve('Dockerfile'), path.join(root, 'Dockerfile'));
+  fs.copyFileSync(path.resolve('package.json'), path.join(root, 'package.json'));
+  fs.mkdirSync(path.join(root, 'src', 'jobs'), { recursive: true });
+  fs.copyFileSync(path.resolve('src/jobs/worker.js'), path.join(root, 'src', 'jobs', 'worker.js'));
+  fs.copyFileSync(path.resolve('scripts/worker-health.mjs'), path.join(root, 'scripts', 'worker-health.mjs'));
   return root;
 }
 
@@ -55,6 +59,13 @@ describe('mandatory release gates', () => {
     const deploy = path.join(root, 'scripts', 'deploy-vps-direct.sh');
     fs.writeFileSync(deploy, fs.readFileSync(deploy, 'utf8').replace('sha256sum "$ARCHIVE"', 'echo unverified'));
     assert.ok(validateReleaseGates(root).some((failure) => failure.includes('archive checksum')));
+  });
+
+  it('fails closed when worker readiness is removed from direct deployment', () => {
+    const root = copyWorkflows();
+    const deploy = path.join(root, 'scripts', 'deploy-vps-direct.sh');
+    fs.writeFileSync(deploy, fs.readFileSync(deploy, 'utf8').replaceAll('health:worker', 'worker-check-omitted'));
+    assert.ok(validateReleaseGates(root).some((failure) => failure.includes('worker readiness')));
   });
 
   it('fails closed when the Docker frontend build bypasses performance budgets', () => {

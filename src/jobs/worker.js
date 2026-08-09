@@ -1,8 +1,15 @@
 // BullMQ Workers — graceful Redis connection handling
 
 import { Worker } from 'bullmq';
+import os from 'node:os';
 
-import { connection, QUEUES, scheduleEscalationCheck } from './queue.js';
+import {
+  closeQueueInfrastructure,
+  connection,
+  QUEUES,
+  scheduleEscalationCheck,
+  setupRecurringJobs,
+} from './queue.js';
 import { processEmailPipeline } from '../services/pipeline.service.js';
 import { updateAllProjectHealth } from '../services/project.service.js';
 import { storeEmbedding } from '../services/embedding.service.js';
@@ -14,6 +21,13 @@ import prisma from '../config/db.js';
 import { prisma as backgroundPrisma } from '../config/db.js';
 import { createScopedPrisma } from '../utils/prisma-tenant-proxy.js';
 import { resolveTenantOrganizationIds, runTenantJob } from './tenant-iteration.js';
+import { processRecurringInvoicesForAllOrganizations } from './recurring-invoices.js';
+import { purgeExpiredTrashForAllOrganizations } from './trash-purge.js';
+import {
+  checkOverdueInvoicesForAllOrganizations,
+  runScheduledWorkflows,
+} from '../services/automation.service.js';
+import { runScheduledFleetDigest } from '../routes/wp-bridge.routes.js';
 
 // Helper to create workers with error handling for Redis unavailability
 function createWorker(queueName, processor, options = {}) {
@@ -404,8 +418,81 @@ const embeddingWorker = createWorker(
   { concurrency: 3 }
 );
 
-const activeWorkers = [emailWorker, healthWorker, escalationWorker, notificationWorker, weeklyDigestWorker, embeddingWorker].filter(Boolean);
-console.log(`Workers started (${activeWorkers.length}/6 active)`);
+const scheduledWorker = createWorker(
+  QUEUES.SCHEDULED,
+  async (job) => {
+    switch (job.name) {
+      case 'recurring-invoices':
+        return processRecurringInvoicesForAllOrganizations();
+      case 'overdue-invoices':
+        return checkOverdueInvoicesForAllOrganizations();
+      case 'trash-purge':
+        return purgeExpiredTrashForAllOrganizations();
+      case 'fleet-digest':
+        return runScheduledFleetDigest(logger);
+      case 'scheduled-workflows':
+        return runScheduledWorkflows();
+      default:
+        throw new Error(`Unknown scheduled maintenance job: ${job.name}`);
+    }
+  },
+  { concurrency: 1 },
+);
+
+const activeWorkers = [
+  emailWorker,
+  healthWorker,
+  escalationWorker,
+  notificationWorker,
+  weeklyDigestWorker,
+  embeddingWorker,
+  scheduledWorker,
+].filter(Boolean);
+
+if (activeWorkers.length !== 7) {
+  throw new Error(`Worker startup incomplete (${activeWorkers.length}/7 active)`);
+}
+
+await setupRecurringJobs();
+
+const heartbeatKey = 'ashbi:workers:heartbeat';
+const heartbeat = async () => {
+  await connection.set(heartbeatKey, JSON.stringify({
+    status: 'ok',
+    host: os.hostname(),
+    pid: process.pid,
+    revision: process.env.APP_REVISION || 'unknown',
+    timestamp: new Date().toISOString(),
+  }), 'EX', 45);
+};
+await heartbeat();
+const heartbeatInterval = setInterval(() => {
+  heartbeat().catch((err) => logger.error({ err }, 'Worker heartbeat failed'));
+}, 15_000);
+heartbeatInterval.unref();
+
+console.log(`Workers started (${activeWorkers.length}/7 active)`);
+
+let shuttingDown = false;
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  clearInterval(heartbeatInterval);
+  logger.info({ signal }, 'Worker: draining active jobs');
+  await Promise.all(activeWorkers.map((worker) => worker.close()));
+  await closeQueueInfrastructure();
+  await prisma.$disconnect();
+  logger.info('Worker: shutdown complete');
+}
+
+process.on('SIGINT', () => shutdown('SIGINT').then(() => process.exit(0)).catch((err) => {
+  logger.fatal({ err }, 'Worker: graceful shutdown failed');
+  process.exit(1);
+}));
+process.on('SIGTERM', () => shutdown('SIGTERM').then(() => process.exit(0)).catch((err) => {
+  logger.fatal({ err }, 'Worker: graceful shutdown failed');
+  process.exit(1);
+}));
 
 process.on('unhandledRejection', (reason) => {
   logger.error({ err: reason }, 'Worker: unhandled promise rejection');
@@ -415,5 +502,5 @@ process.on('unhandledRejection', (reason) => {
 process.on('uncaughtException', (err) => {
   logger.fatal({ err }, 'Worker: uncaught exception');
   if (env.sentryDsn) Sentry.captureException(err);
-  process.exit(1);
+  shutdown('uncaughtException').finally(() => process.exit(1));
 });

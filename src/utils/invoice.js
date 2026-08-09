@@ -1,10 +1,10 @@
 import prisma from '../config/db.js';
 
-export async function generateInvoiceNumber() {
+export async function generateInvoiceNumber(prismaClient = prisma) {
   const year = new Date().getFullYear();
   const prefix = `INV-${year}-`;
 
-  const lastInvoice = await prisma.invoice.findFirst({
+  const lastInvoice = await prismaClient.invoice.findFirst({
     where: { invoiceNumber: { startsWith: prefix } },
     orderBy: { invoiceNumber: 'desc' }
   });

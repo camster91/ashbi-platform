@@ -1,31 +1,35 @@
-// Recurring Invoices Cron Job
-// Runs on startup and every hour to generate new invoices from recurring templates
+// Recurring invoice processor. Scheduling is owned by BullMQ in queue.js.
 
 import { prisma } from '../config/db.js';
 import { generateInvoiceNumber } from '../utils/invoice.js';
 import { resolveTenantOrganizationIds, runTenantJob } from './tenant-iteration.js';
 
-const ONE_HOUR = 60 * 60 * 1000;
-
-function getNextRecurringDate(currentDate, interval) {
+export function getNextRecurringDate(currentDate, interval) {
   const d = new Date(currentDate);
+  const originalDay = d.getUTCDate();
+  const advanceMonths = (months) => {
+    d.setUTCDate(1);
+    d.setUTCMonth(d.getUTCMonth() + months);
+    const lastDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+    d.setUTCDate(Math.min(originalDay, lastDay));
+  };
   switch (interval) {
     case 'MONTHLY':
-      d.setMonth(d.getMonth() + 1);
+      advanceMonths(1);
       break;
     case 'QUARTERLY':
-      d.setMonth(d.getMonth() + 3);
+      advanceMonths(3);
       break;
     case 'ANNUALLY':
-      d.setFullYear(d.getFullYear() + 1);
+      advanceMonths(12);
       break;
     default:
-      d.setMonth(d.getMonth() + 1);
+      advanceMonths(1);
   }
   return d;
 }
 
-async function processRecurringInvoices(tenantPrisma) {
+export async function processRecurringInvoices(tenantPrisma, invoiceNumberGenerator = generateInvoiceNumber) {
   const now = new Date();
   console.log(`[recurring-invoices] Checking for due recurring invoices at ${now.toISOString()}`);
 
@@ -44,16 +48,15 @@ async function processRecurringInvoices(tenantPrisma) {
 
     if (dueInvoices.length === 0) {
       console.log('[recurring-invoices] No recurring invoices due');
-      return;
+      return { examined: 0, generated: 0, failed: 0 };
     }
 
     console.log(`[recurring-invoices] Found ${dueInvoices.length} recurring invoice(s) due`);
 
+    let generated = 0;
+    const failures = [];
     for (const invoice of dueInvoices) {
       try {
-        const invoiceNumber = await generateInvoiceNumber();
-
-        // Copy line items without id/invoiceId
         const lineItemsData = invoice.lineItems.map((li, idx) => ({
           description: li.description,
           itemType: li.itemType || 'LABOR',
@@ -69,9 +72,28 @@ async function processRecurringInvoices(tenantPrisma) {
         const tax = parseFloat(((discounted * invoice.taxRate) / 100).toFixed(2));
         const total = parseFloat((discounted + tax).toFixed(2));
 
-        // Create new invoice as DRAFT
-        const newInvoice = await tenantPrisma.invoice.create({
-          data: {
+        const nextDate = getNextRecurringDate(invoice.recurringNextDate, invoice.recurringInterval);
+        // Invoice numbers are globally unique, so this lookup intentionally
+        // uses the raw client rather than the tenant-scoped transaction.
+        // A concurrent collision rolls the transaction back and BullMQ retries.
+        const invoiceNumber = await invoiceNumberGenerator(prisma);
+
+        // Claim and generate in one serializable transaction. A competing
+        // worker either observes the advanced date or receives a retryable
+        // serialization conflict; it cannot commit a second invoice.
+        const result = await tenantPrisma.$transaction(async (tx) => {
+          const claimed = await tx.invoice.updateMany({
+            where: {
+              id: invoice.id,
+              isRecurring: true,
+              recurringNextDate: invoice.recurringNextDate,
+              status: { not: 'VOID' },
+            },
+            data: { recurringNextDate: nextDate },
+          });
+          if (claimed.count !== 1) return null;
+
+          return tx.invoice.create({ data: {
             invoiceNumber,
             status: 'DRAFT',
             title: invoice.title,
@@ -92,52 +114,37 @@ async function processRecurringInvoices(tenantPrisma) {
             lineItems: {
               create: lineItemsData
             }
-          }
-        });
-
-        // Advance the original invoice's recurringNextDate
-        const nextDate = getNextRecurringDate(
-          invoice.recurringNextDate,
-          invoice.recurringInterval
-        );
-
-        await tenantPrisma.invoice.update({
-          where: { id: invoice.id },
-          data: { recurringNextDate: nextDate }
-        });
+          } });
+        }, { isolationLevel: 'Serializable' });
+        if (!result) continue;
+        generated += 1;
 
         console.log(
-          `[recurring-invoices] Generated ${invoiceNumber} from recurring invoice ${invoice.invoiceNumber} ` +
+          `[recurring-invoices] Generated ${result.invoiceNumber} from recurring invoice ${invoice.invoiceNumber} ` +
           `for client "${invoice.client?.name || invoice.clientId}". Next due: ${nextDate.toISOString()}`
         );
       } catch (err) {
         console.error(`[recurring-invoices] Error processing invoice ${invoice.invoiceNumber}:`, err);
+        failures.push({ invoiceId: invoice.id, error: err.message });
       }
     }
+    if (failures.length > 0) {
+      const error = new Error(`Failed to process ${failures.length} recurring invoice(s)`);
+      error.failures = failures;
+      throw error;
+    }
+    return { examined: dueInvoices.length, generated, failed: 0 };
   } catch (err) {
     console.error('[recurring-invoices] Error querying recurring invoices:', err);
+    throw err;
   }
 }
 
-async function processRecurringInvoicesForAllOrganizations() {
+export async function processRecurringInvoicesForAllOrganizations() {
   const organizationIds = await resolveTenantOrganizationIds(prisma);
+  const results = [];
   for (const organizationId of organizationIds) {
-    await runTenantJob(prisma, organizationId, processRecurringInvoices);
+    results.push(await runTenantJob(prisma, organizationId, processRecurringInvoices));
   }
-}
-
-export function startRecurringInvoicesJob() {
-  console.log('[recurring-invoices] Starting recurring invoices job (runs every hour)');
-
-  // Run immediately on startup
-  processRecurringInvoicesForAllOrganizations().catch(err =>
-    console.error('[recurring-invoices] Startup run failed:', err)
-  );
-
-  // Then run every hour
-  setInterval(() => {
-    processRecurringInvoicesForAllOrganizations().catch(err =>
-      console.error('[recurring-invoices] Scheduled run failed:', err)
-    );
-  }, ONE_HOUR);
+  return { organizations: results };
 }

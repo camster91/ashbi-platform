@@ -50,32 +50,18 @@ export async function purgeExpiredTrash(
   return { examined: expired.length, purged, failed };
 }
 
-async function purgeExpiredTrashForAllOrganizations() {
+export async function purgeExpiredTrashForAllOrganizations() {
   const organizationIds = await resolveTenantOrganizationIds(prisma);
+  const results = [];
   for (const organizationId of organizationIds) {
-    await runTenantJob(
+    results.push(await runTenantJob(
       prisma,
       organizationId,
       (tenantPrisma) => purgeExpiredTrash(tenantPrisma, rawPrisma),
       rawPrisma,
-    );
+    ));
   }
-}
-
-export function startTrashPurgeJob() {
-  console.log('[trash-purge] Scheduled daily at 04:00');
-
-  const now = new Date();
-  const next4am = new Date(now);
-  next4am.setHours(4, 0, 0, 0);
-  if (next4am <= now) next4am.setDate(next4am.getDate() + 1);
-
-  const run = () => purgeExpiredTrashForAllOrganizations().catch((error) =>
-    console.error('[trash-purge] Scheduled run failed:', error)
-  );
-
-  setTimeout(() => {
-    run();
-    setInterval(run, 24 * 60 * 60 * 1000);
-  }, next4am - now);
+  const failed = results.reduce((sum, result) => sum + result.failed, 0);
+  if (failed > 0) throw new Error(`${failed} trash purge item(s) retained for retry`);
+  return { organizations: results };
 }
