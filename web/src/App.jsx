@@ -1,7 +1,6 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth, AuthProvider } from './hooks/useAuth';
-import Layout from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
 import { ToastProvider, useToast } from './hooks/useToast';
 
@@ -17,6 +16,12 @@ const PortalBooking = lazy(() => import('./pages/PortalBooking'));
 const PortalIntakeForm = lazy(() => import('./pages/PortalIntakeForm'));
 const PortalEstimate = lazy(() => import('./pages/PortalEstimate'));
 const ClientPortal = lazy(() => import('./pages/ClientPortal'));
+const Layout = lazy(() => import('./components/Layout'));
+const QueryProvider = lazy(() => import('./components/QueryProvider'));
+
+function QueryRoute({ children }) {
+  return <QueryProvider>{children}</QueryProvider>;
+}
 
 function RootRedirect() {
   const { user, isLoading, authState, checkAuth } = useAuth();
@@ -169,13 +174,13 @@ function AppRoutes() {
           <Route path="/login" element={<Login />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/portal/:token" element={<Portal />} />
-          <Route path="/portal/proposal/:token" element={<PortalProposal />} />
-          <Route path="/portal/contract/:token" element={<PortalContract />} />
-          <Route path="/portal/invoice/:token" element={<PortalInvoice />} />
-          <Route path="/portal/book" element={<PortalBooking />} />
-          <Route path="/portal/form/:token" element={<PortalIntakeForm />} />
-          <Route path="/portal/estimate/:viewToken" element={<PortalEstimate />} />
+          <Route path="/portal/:token" element={<QueryRoute><Portal /></QueryRoute>} />
+          <Route path="/portal/proposal/:token" element={<QueryRoute><PortalProposal /></QueryRoute>} />
+          <Route path="/portal/contract/:token" element={<QueryRoute><PortalContract /></QueryRoute>} />
+          <Route path="/portal/invoice/:token" element={<QueryRoute><PortalInvoice /></QueryRoute>} />
+          <Route path="/portal/book" element={<QueryRoute><PortalBooking /></QueryRoute>} />
+          <Route path="/portal/form/:token" element={<QueryRoute><PortalIntakeForm /></QueryRoute>} />
+          <Route path="/portal/estimate/:viewToken" element={<QueryRoute><PortalEstimate /></QueryRoute>} />
           <Route path="/client-portal" element={<ClientPortal />} />
           <Route path="/client/login" element={<ClientPortal />} />
           <Route path="/client/dashboard" element={<ClientPortal />} />
@@ -184,9 +189,10 @@ function AppRoutes() {
         path="/*"
         element={
           <PrivateRoute>
-            <Layout>
-              <ErrorBoundary>
-                <Suspense fallback={<PageLoader />}>
+            <QueryRoute>
+              <Layout>
+                <ErrorBoundary>
+                  <Suspense fallback={<PageLoader />}>
                   <Routes>
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/" element={<Navigate to="/dashboard" />} />
@@ -233,9 +239,10 @@ function AppRoutes() {
                   <Route path="/semantic-search" element={<SemanticSearch />} />
                   <Route path="*" element={<NotFound />} />
                   </Routes>
-                </Suspense>
-              </ErrorBoundary>
-            </Layout>
+                  </Suspense>
+                </ErrorBoundary>
+              </Layout>
+            </QueryRoute>
           </PrivateRoute>
         }
       />

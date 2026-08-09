@@ -69,4 +69,22 @@ describe('mandatory release gates', () => {
     );
     assert.ok(validateReleaseGates(root).some((failure) => failure.includes('performance budget verifier')));
   });
+
+  it('fails closed when the Lighthouse performance gate is removed', () => {
+    const root = copyWorkflows();
+    const workflow = path.join(root, '.github', 'workflows', 'release-gates.yml');
+    fs.writeFileSync(workflow, fs.readFileSync(workflow, 'utf8').replace('npm run test:lighthouse', 'echo skipped'));
+    assert.ok(validateReleaseGates(root).some((failure) => failure.includes('test:lighthouse')));
+  });
+
+  it('fails closed when browser gates do not build their own production artifact', () => {
+    const root = copyWorkflows();
+    const workflow = path.join(root, '.github', 'workflows', 'release-gates.yml');
+    const source = fs.readFileSync(workflow, 'utf8');
+    const start = source.indexOf('  browser:');
+    const end = source.indexOf('  stack-e2e:');
+    const browser = source.slice(start, end).replace('npm run build', 'echo build omitted');
+    fs.writeFileSync(workflow, `${source.slice(0, start)}${browser}${source.slice(end)}`);
+    assert.ok(validateReleaseGates(root).some((failure) => failure.includes('browser job')));
+  });
 });

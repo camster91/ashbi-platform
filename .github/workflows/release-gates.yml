@@ -69,6 +69,8 @@ jobs:
           CI: true
       - name: Frontend performance budgets
         run: npm run check:frontend-budgets
+      - name: Lighthouse mobile and desktop budgets
+        run: npm run test:lighthouse
 
   browser:
     name: Browser and accessibility smoke
@@ -91,8 +93,21 @@ jobs:
           npm ci --prefix web --no-audit --no-fund
       - name: Install browser runtimes
         run: npx playwright install --with-deps chromium firefox webkit
+      - name: Build production frontend for browser gates
+        run: npm run build
+        env:
+          NODE_ENV: production
+          CI: true
       - name: Run browser smoke
         run: npm run test:browser
+        env:
+          CI: true
+      - name: Verify public-route splitting
+        run: npm run test:public-routes
+        env:
+          CI: true
+      - name: Verify PWA offline and private-cache policy
+        run: npm run test:pwa-offline
         env:
           CI: true
       - name: Upload sanitized failure evidence

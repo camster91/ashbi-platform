@@ -32,11 +32,16 @@ export function validateReleaseGates(root = process.cwd()) {
     'npm run test:e2e',
     'npm run build',
     'npm run check:frontend-budgets',
+    'npm run test:lighthouse',
+    'npm run test:public-routes',
+    'npm run test:pwa-offline',
   ];
   for (const command of commands) {
     if (!release.includes(command)) failures.push(`release-gates.yml is missing ${command}`);
   }
   if (!/^\s*workflow_call:\s*$/m.test(release)) failures.push('release-gates.yml is not reusable');
+  const browserJob = release.split(/^  browser:/m)[1]?.split(/^  stack-e2e:/m)[0] ?? '';
+  if (!browserJob.includes('npm run build')) failures.push('release-gates.yml browser job does not build the production frontend');
 
   if (!/uses:\s*\.\/\.github\/workflows\/release-gates\.yml/.test(ci)) {
     failures.push('ci.yml does not invoke the canonical release gates');

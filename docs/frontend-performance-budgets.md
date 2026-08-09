@@ -21,6 +21,27 @@ a fresh production artifact comparison; do not raise a ceiling merely to make a
 build pass.
 
 Run `npm run build` or, against an existing artifact,
-`npm run check:frontend-budgets`. Browser performance targets remain LCP <= 2.5s,
-CLS <= 0.1, and INP <= 200ms at the 75th percentile once representative RUM is
-available. Those field targets are not claimed from bundle checks alone.
+`npm run check:frontend-budgets`.
+
+`npm run test:lighthouse` performs three mobile and three desktop lab runs of
+the production login entry and fails when the median exceeds these budgets:
+
+| Lighthouse measurement | Budget |
+| --- | ---: |
+| Performance score | >= 0.90 |
+| Accessibility score | >= 0.95 |
+| Best-practices score | >= 0.95 |
+| SEO score | >= 0.90 |
+| Largest Contentful Paint | <= 2.5 s |
+| Cumulative Layout Shift | <= 0.10 |
+| Total Blocking Time | <= 200 ms |
+
+Lighthouse's Total Blocking Time is a lab responsiveness guard, not a claim
+about Interaction to Next Paint. The production field target remains INP <=
+200 ms at the 75th percentile once representative, privacy-reviewed RUM is
+available. Lab budgets and field targets must not be presented as equivalent.
+
+`npm run test:pwa-offline` verifies that the active production service worker
+serves a controlled, previously visited login route and its static assets
+offline while API requests remain network-only and return an offline response
+rather than cached private data.

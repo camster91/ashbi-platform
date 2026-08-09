@@ -38,6 +38,10 @@
     "test:e2e:watch": "vitest --config tests/e2e/vitest.config.mjs",
     "test:browser": "playwright test",
     "test:public-routes": "playwright test --config playwright.public.config.ts",
+    "test:pwa-offline": "playwright test --config playwright.pwa.config.ts",
+    "test:lighthouse:mobile": "node -e \"require('fs').rmSync('.lighthouseci/mobile',{recursive:true,force:true})\" && lhci autorun --config=lighthouserc.mobile.cjs",
+    "test:lighthouse:desktop": "node -e \"require('fs').rmSync('.lighthouseci/desktop',{recursive:true,force:true})\" && lhci autorun --config=lighthouserc.desktop.cjs",
+    "test:lighthouse": "npm run test:lighthouse:mobile && npm run test:lighthouse:desktop",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:adopt-baseline": "node scripts/adopt-prisma-baseline.mjs",
@@ -90,6 +94,7 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
     "@eslint/js": "^9.39.4",
+    "@lhci/cli": "^0.15.1",
     "@playwright/test": "^1.62.0",
     "@types/bcrypt": "^6.0.0",
     "@types/node": "^26.1.1",

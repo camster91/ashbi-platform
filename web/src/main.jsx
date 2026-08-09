@@ -1,7 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as Sentry from '@sentry/react';
 import App from './App';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -34,14 +33,15 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 1000 * 60, // 1 minute
-      retry: 1,
-    },
-  },
-});
+// Fonts are progressive enhancement. A third-party stylesheet must not block
+// the login/portal first paint; display=optional avoids a late swap on slow
+// connections while fast connections still receive the Ashbi typography.
+window.addEventListener('load', () => {
+  const fontStylesheet = document.createElement('link');
+  fontStylesheet.rel = 'stylesheet';
+  fontStylesheet.href = 'https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=optional';
+  document.head.append(fontStylesheet);
+}, { once: true });
 
 // Component to set up global API error handling
 function ApiErrorHandler({ children }) {
@@ -66,14 +66,12 @@ function ApiErrorHandler({ children }) {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <ApiErrorHandler>
-          <ErrorBoundary>
-            <App />
-          </ErrorBoundary>
-        </ApiErrorHandler>
-      </BrowserRouter>
-    </QueryClientProvider>
+    <BrowserRouter>
+      <ApiErrorHandler>
+        <ErrorBoundary>
+          <App />
+        </ErrorBoundary>
+      </ApiErrorHandler>
+    </BrowserRouter>
   </React.StrictMode>
 );
