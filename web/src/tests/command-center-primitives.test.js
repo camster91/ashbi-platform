@@ -34,4 +34,10 @@ describe('Command Center primitive contract', () => {
     expect(source).toContain('type="button"');
     expect(source).toContain('min-h-11 min-w-11');
   });
+
+  it('makes today task navigation keyboard-operable and descriptive', () => {
+    expect(source).toContain('aria-label={`Open task ${task.title}`}');
+    expect(source).toContain('className="flex min-h-11 w-full items-start justify-between');
+    expect(source).toContain('focus-visible:ring-2');
+  });
 });

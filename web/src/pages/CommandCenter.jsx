@@ -360,10 +360,12 @@ function TasksPanel({ data, loading }) {
       )}
       <div className="space-y-2">
         {data?.todayTasks?.map(task => (
-          <div
+          <button
             key={task.id}
+            type="button"
+            aria-label={`Open task ${task.title}`}
             onClick={() => navigate(`/task/${task.id}`)}
-            className="flex items-start justify-between text-sm cursor-pointer hover:bg-muted/50 rounded p-1.5 -mx-1.5"
+            className="flex min-h-11 w-full items-start justify-between text-left text-sm cursor-pointer hover:bg-muted/50 rounded p-1.5 -mx-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <div>
               <p className="font-medium leading-tight">{task.title}</p>
@@ -372,7 +374,7 @@ function TasksPanel({ data, loading }) {
             <div className="flex items-center gap-1 ml-2 flex-shrink-0">
               <CommandBadge variant={priorityColor[task.priority] || 'default'}>{task.priority}</CommandBadge>
             </div>
-          </div>
+          </button>
         ))}
         {(!data?.todayTasks || data.todayTasks.length === 0) && !loading && (
           <p className="text-muted-foreground text-sm">No tasks due today 🎉</p>
