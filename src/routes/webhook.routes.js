@@ -2,7 +2,7 @@
 
 import { parseEmail } from '../utils/emailParser.js';
 import { processEmailPipeline } from '../services/pipeline.service.js';
-import { handleWebhook } from '../services/stripe.service.js';
+import { clearExpiredCheckout, handleWebhook, recordCompletedCheckout } from '../services/stripe.service.js';
 import env from '../config/env.js';
 import crypto from 'crypto';
 import {validateBody, webhookEmailTestSchema} from '../validators/schemas.js';
@@ -130,75 +130,19 @@ export default async function webhookRoutes(fastify) {
     // Handle the event
     switch (event.type) {
       case 'checkout.session.completed': {
-        const session = event.data.object;
-        const invoiceId = session.metadata?.invoiceId;
-
-        if (!invoiceId) {
-          fastify.log.warn('Stripe checkout completed but no invoiceId in metadata');
-          break;
-        }
-
         try {
-          const invoice = await request.prisma.invoice.findUnique({
-            where: { id: invoiceId }
-          });
-
-          if (!invoice) {
-            fastify.log.warn(`Invoice ${invoiceId} not found for Stripe payment`);
-            break;
-          }
-
-          if (invoice.status === 'PAID') {
-            fastify.log.info(`Invoice ${invoiceId} already marked as paid`);
-            break;
-          }
-
-          const now = new Date();
-
-          // Update invoice and create payment record in a transaction
-          await request.prisma.$transaction([
-            request.prisma.invoice.update({
-              where: { id: invoiceId },
-              data: {
-                status: 'PAID',
-                paidAt: now,
-                paymentMethod: 'STRIPE',
-                stripePaymentIntentId: session.payment_intent || session.id,
-                paymentNotes: `Stripe checkout session ${session.id}`
-              }
-            }),
-            request.prisma.invoicePayment.create({
-              data: {
-                amount: (session.amount_total || 0) / 100,
-                method: 'STRIPE',
-                transactionId: session.payment_intent || session.id,
-                notes: `Stripe checkout ${session.id}`,
-                paidAt: now,
-                invoiceId
-              }
-            })
-          ]);
-
-          fastify.log.info(`Invoice ${invoice.invoiceNumber} marked as PAID via Stripe`);
+          const result = await recordCompletedCheckout(fastify.prisma, event);
+          fastify.log.info({ invoiceId: result.invoiceId, duplicate: result.duplicate }, 'Stripe checkout processed');
         } catch (error) {
-          fastify.log.error(`Error processing Stripe payment for invoice ${invoiceId}:`, error);
-          // Return 200 anyway so Stripe doesn't retry
+          fastify.log.error({ error }, 'Error processing Stripe payment');
+          return reply.status(400).send({ error: 'Stripe payment did not match an invoice' });
         }
         break;
       }
 
       case 'checkout.session.expired': {
         const session = event.data.object;
-        const invoiceId = session.metadata?.invoiceId;
-        if (invoiceId) {
-          // Clear the expired payment link so a new one can be generated
-          await request.prisma.invoice.update({
-            where: { id: invoiceId },
-            data: { stripePaymentLink: null }
-          }).catch(err => {
-            fastify.log.error(`Error clearing expired payment link for ${invoiceId}:`, err);
-          });
-        }
+        await clearExpiredCheckout(fastify.prisma, session);
         break;
       }
 

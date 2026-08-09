@@ -318,20 +318,74 @@ export function createScopedPrisma(prisma, organizationId) {
 
               if (['findFirst', 'findMany', 'count', 'aggregate', 'groupBy'].includes(methodName)) {
                 queryArgs.where = { AND: [queryArgs.where ?? {}, tenantWhere] };
-              } else if (['update', 'updateMany', 'upsert', 'delete', 'deleteMany'].includes(methodName)) {
+              } else if (['updateMany', 'deleteMany'].includes(methodName)) {
                 queryArgs.where = { AND: [queryArgs.where ?? {}, tenantWhere] };
               }
-              if (methodName === 'create' || methodName === 'createMany' || methodName === 'upsert') {
+
+              // Prisma update/delete require a WhereUniqueInput. Adding a
+              // relation filter via AND makes that input invalid. Prove the
+              // target belongs to this tenant first, then execute the original
+              // unique mutation. Relationship-owner changes are independently
+              // checked so a record cannot be moved across tenants.
+              if (methodName === 'update' || methodName === 'delete') {
+                const scopedTarget = await modelTarget.findFirst({
+                  where: { AND: [queryArgs.where ?? {}, tenantWhere] },
+                  select: { id: true },
+                });
+                if (!scopedTarget) {
+                  throw new Error(`Tenancy Error: ${String(modelName)} record is unavailable in this organization`);
+                }
+                if (methodName === 'update') {
+                  const ownerRelation = tenantPath[0];
+                  const ownerIdField = `${ownerRelation}Id`;
+                  const ownerPolicy = RELATION_OWNER_MODELS[ownerRelation];
+                  const changedOwnerId = queryArgs.data?.[ownerIdField];
+                  if (changedOwnerId && ownerPolicy) {
+                    await verifyTenantOwner({ relation: ownerRelation, ...ownerPolicy }, changedOwnerId);
+                  }
+                }
+                logger.debug({ modelName, methodName, organizationId, tenantPath }, 'Tenant-path Unique Mutation');
+                return method.apply(modelTarget, [queryArgs, ...args.slice(1)]);
+              }
+              if (methodName === 'upsert') {
                 const ownerRelation = tenantPath[0];
                 const ownerIdField = `${ownerRelation}Id`;
                 const ownerPolicy = RELATION_OWNER_MODELS[ownerRelation];
                 if (!ownerPolicy) {
                   throw new Error(`Tenancy Error: no owner policy for relation ${ownerRelation}`);
                 }
-                const ownershipWrites = methodName === 'upsert'
-                  ? [{ row: queryArgs.create, required: true }, { row: queryArgs.update, required: false }]
-                  : (Array.isArray(queryArgs.data) ? queryArgs.data : [queryArgs.data])
-                    .map((row) => ({ row, required: true }));
+
+                const scopedTarget = await modelTarget.findFirst({
+                  where: { AND: [queryArgs.where ?? {}, tenantWhere] },
+                  select: { id: true },
+                });
+                const branch = scopedTarget ? queryArgs.update : queryArgs.create;
+                const ownerId = branch?.[ownerIdField];
+                if (!scopedTarget && !ownerId) {
+                  throw new Error(`Tenancy Error: ${String(modelName)}.${ownerIdField} is required`);
+                }
+                if (ownerId) {
+                  await verifyTenantOwner({ relation: ownerRelation, ...ownerPolicy }, ownerId);
+                }
+
+                const branchArgs = scopedTarget
+                  ? { where: queryArgs.where, data: queryArgs.update }
+                  : { data: queryArgs.create };
+                if (queryArgs.include) branchArgs.include = queryArgs.include;
+                if (queryArgs.select) branchArgs.select = queryArgs.select;
+                const branchMethod = scopedTarget ? 'update' : 'create';
+                logger.debug({ modelName, methodName: `${branchMethod}(from-upsert)`, organizationId, tenantPath }, 'Tenant-path Upsert');
+                return modelTarget[branchMethod](branchArgs);
+              }
+              if (methodName === 'create' || methodName === 'createMany') {
+                const ownerRelation = tenantPath[0];
+                const ownerIdField = `${ownerRelation}Id`;
+                const ownerPolicy = RELATION_OWNER_MODELS[ownerRelation];
+                if (!ownerPolicy) {
+                  throw new Error(`Tenancy Error: no owner policy for relation ${ownerRelation}`);
+                }
+                const ownershipWrites = (Array.isArray(queryArgs.data) ? queryArgs.data : [queryArgs.data])
+                  .map((row) => ({ row, required: true }));
                 for (const { row, required } of ownershipWrites) {
                   const ownerId = row?.[ownerIdField];
                   if (!ownerId) {

@@ -4,13 +4,17 @@ import { sendContractSignEmail } from '../services/email.service.js';
 import { getContractTemplate, renderTemplate } from '../services/contractTemplates.service.js';
 import {validateBody, createContractSchema, updateContractDraftSchema, contractDraftUpdateSchema} from '../validators/schemas.js';
 import { clampTake } from '../utils/query-limits.js';
+import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
 
 async function sendContractEmail(to, clientName, contractTitle, signUrl) {
-  if (!process.env.MAILGUN_API_KEY || !process.env.MAILGUN_DOMAIN) return;
+  if (process.env.NODE_ENV === 'test' && process.env.ASHBI_RUN_EMAIL_TESTS !== '1') return false;
+  if (!process.env.MAILGUN_API_KEY || !process.env.MAILGUN_DOMAIN) return false;
   try {
     await sendContractSignEmail({ to, clientName, contractTitle, signLink: signUrl });
+    return true;
   } catch (err) {
     console.error('[Contract] Email send error:', err.message);
+    return false;
   }
 }
 
@@ -137,20 +141,27 @@ export default async function contractRoutes(fastify) {
     if (!contract) return reply.status(404).send({ error: 'Contract not found' });
     if (contract.status !== 'DRAFT') return reply.status(400).send({ error: 'Only draft contracts can be sent' });
 
+    const access = createPublicAccessWindow();
     const updated = await fastify.prisma.contract.update({
       where: { id: request.params.id },
-      data: { status: 'SENT' }
+      data: {
+        status: 'SENT',
+        signToken: access.token,
+        publicAccessExpiresAt: access.expiresAt,
+        publicAccessRevokedAt: access.revokedAt,
+      }
     });
 
     // Email the primary contact
     const primaryContact = contract.client?.contacts?.[0];
-    if (primaryContact?.email && contract.signToken) {
+    let emailSent = false;
+    if (primaryContact?.email) {
       const baseUrl = process.env.APP_URL || 'https://hub.ashbi.ca';
-      const signUrl = `${baseUrl}/portal/contract/${contract.signToken}`;
-      await sendContractEmail(primaryContact.email, primaryContact.name || contract.client?.name, contract.title || 'Service Agreement', signUrl);
+      const signUrl = `${baseUrl}/portal/contract/${access.token}`;
+      emailSent = await sendContractEmail(primaryContact.email, primaryContact.name || contract.client?.name, contract.title || 'Service Agreement', signUrl);
     }
 
-    return { ...updated, emailSent: !!primaryContact?.email };
+    return { ...updated, emailSent };
   });
 
   // GET /sign/:signToken — PUBLIC — client views contract to sign
@@ -162,35 +173,120 @@ export default async function contractRoutes(fastify) {
         createdBy: { select: { name: true } }
       }
     });
-    if (!contract) return reply.status(404).send({ error: 'Contract not found' });
-    return contract;
+    const accessFailure = publicAccessFailure(contract);
+    if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
+    const {
+      signToken: storedToken,
+      createdById,
+      clientId,
+      proposalId,
+      draftData,
+      deletedAt,
+      signerIp,
+      signerUserAgent,
+      publicAccessRevokedAt,
+      ...publicContract
+    } = contract;
+    return publicContract;
   });
 
   // POST /sign/:signToken — PUBLIC — client signs contract
   // Body: { signerName, agreement: true }
   fastify.post('/sign/:signToken', { config: { public: true } }, async (request, reply) => {
-    const { signerName, agreement } = request.body;
+    const { signerName, agreement, signatureType = 'type', signatureImage } = request.body || {};
     if (!signerName || !agreement) return reply.status(400).send({ error: 'signerName and agreement:true required' });
+    if (!['type', 'draw'].includes(signatureType)) return reply.status(400).send({ error: 'signatureType must be type or draw' });
+    if (signatureType === 'draw' && !signatureImage) return reply.status(400).send({ error: 'signatureImage is required for drawn signatures' });
 
     const contract = await fastify.prisma.contract.findUnique({ where: { signToken: request.params.signToken } });
-    if (!contract) return reply.status(404).send({ error: 'Contract not found' });
-    if (contract.status === 'SIGNED') return reply.status(400).send({ error: 'Contract already signed' });
-    if (contract.status === 'VOID') return reply.status(400).send({ error: 'Contract is void' });
+    const accessFailure = publicAccessFailure(contract);
+    if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
+    if (contract.status !== 'SENT') return reply.status(409).send({ error: 'Contract is not awaiting signature' });
 
     const now = new Date();
-    const sigHash = crypto.createHmac('sha256', request.params.signToken)
-      .update(signerName + now.getTime().toString())
+    const signatureSecret = process.env.CONTRACT_SIGNATURE_SECRET || process.env.JWT_SECRET;
+    if (!signatureSecret) return reply.status(503).send({ error: 'Contract signing is unavailable' });
+    const signedContentHash = crypto.createHash('sha256').update(contract.content).digest('hex');
+    const signatureDataHash = crypto.createHash('sha256')
+      .update(signatureType === 'draw' ? signatureImage : signerName)
+      .digest('hex');
+    const sigHash = crypto.createHmac('sha256', signatureSecret)
+      .update(`${contract.id}:${signedContentHash}:${signerName}:${signatureType}:${signatureDataHash}:${now.toISOString()}`)
       .digest('hex');
 
-    return fastify.prisma.contract.update({
-      where: { signToken: request.params.signToken },
+    const updated = await fastify.prisma.contract.updateMany({
+      where: { id: contract.id, status: 'SENT', publicAccessRevokedAt: null },
       data: {
         status: 'SIGNED',
         clientSigHash: sigHash,
         clientSigName: signerName,
         clientSigDate: now,
-        signedAt: now
+        signedAt: now,
+        signedContentHash,
+        signatureType,
+        signatureDataHash,
+        signerIp: request.ip,
+        signerUserAgent: String(request.headers['user-agent'] || '').slice(0, 500),
+        publicAccessRevokedAt: now,
       }
+    });
+    if (updated.count !== 1) return reply.status(409).send({ error: 'Contract is no longer awaiting signature' });
+    return {
+      status: 'SIGNED',
+      signedAt: now,
+      clientSigName: signerName,
+      signedContentHash,
+      signatureType,
+    };
+  });
+
+  fastify.post('/:id/public-link/revoke', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const contract = await request.prisma.contract.findUnique({ where: { id: request.params.id } });
+    if (!contract) return reply.status(404).send({ error: 'Contract not found' });
+    await request.prisma.contract.update({
+      where: { id: contract.id },
+      data: { publicAccessRevokedAt: new Date() },
+    });
+    return { revoked: true };
+  });
+
+  fastify.post('/:id/resend', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const contract = await request.prisma.contract.findUnique({
+      where: { id: request.params.id },
+      include: { client: { include: { contacts: { where: { isPrimary: true }, take: 1 } } } },
+    });
+    if (!contract) return reply.status(404).send({ error: 'Contract not found' });
+    if (contract.status !== 'SENT') return reply.status(409).send({ error: 'Only sent contracts can be resent' });
+    const accessFailure = publicAccessFailure(contract);
+    if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
+    const contact = contract.client?.contacts?.[0];
+    if (!contact?.email) return reply.status(409).send({ error: 'Primary client email is missing' });
+    const signUrl = `${process.env.APP_URL || 'https://hub.ashbi.ca'}/portal/contract/${contract.signToken}`;
+    const emailSent = await sendContractEmail(contact.email, contact.name || contract.client.name, contract.title, signUrl);
+    if (!emailSent) return reply.status(503).send({ error: 'Contract email delivery is unavailable', retryable: true });
+    return { emailSent: true };
+  });
+
+  fastify.post('/:id/public-link/rotate', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const contract = await request.prisma.contract.findUnique({ where: { id: request.params.id } });
+    if (!contract) return reply.status(404).send({ error: 'Contract not found' });
+    if (contract.status !== 'SENT') return reply.status(409).send({ error: 'Contract is not awaiting signature' });
+    const access = createPublicAccessWindow();
+    return request.prisma.contract.update({
+      where: { id: contract.id },
+      data: { signToken: access.token, publicAccessExpiresAt: access.expiresAt, publicAccessRevokedAt: null },
+      select: { signToken: true, publicAccessExpiresAt: true },
+    });
+  });
+
+  fastify.post('/:id/void', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const contract = await request.prisma.contract.findUnique({ where: { id: request.params.id } });
+    if (!contract) return reply.status(404).send({ error: 'Contract not found' });
+    if (contract.status === 'SIGNED') return reply.status(409).send({ error: 'A signed contract cannot be voided' });
+    if (contract.status === 'VOID') return contract;
+    return request.prisma.contract.update({
+      where: { id: contract.id },
+      data: { status: 'VOID', publicAccessRevokedAt: new Date() },
     });
   });
 

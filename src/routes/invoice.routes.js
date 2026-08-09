@@ -1,7 +1,8 @@
 // Invoice routes — full CRUD + send + PDF + payments + templates
-import { createPaymentLink, handleWebhook } from '../services/stripe.service.js';
+import { createPaymentLink, handleWebhook, recordCompletedCheckout } from '../services/stripe.service.js';
 import { generateInvoicePdf } from '../utils/generate-invoice-pdf.js';
 import { generateInvoiceNumber } from '../utils/invoice.js';
+import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
 import { validateBody, createInvoiceSchema, updateInvoiceSchema, markInvoicePaidSchema, sendInvoiceSchema, lineItemTemplateCreateSchema, invoiceBulkIdsSchema, invoiceBulkArchiveSchema, bulkMarkPaidSchema } from '../validators/schemas.js';
 
 const HST_RATE = 13; // Ontario HST
@@ -323,13 +324,21 @@ export default async function invoiceRoutes(fastify) {
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
     if (invoice.status !== 'DRAFT') return reply.status(400).send({ error: 'Only draft invoices can be sent' });
 
-    const updateData = { status: 'SENT', sentAt: new Date() };
+    const access = createPublicAccessWindow(invoice.dueDate);
+    const updateData = {
+      status: 'SENT',
+      sentAt: new Date(),
+      viewToken: access.token,
+      publicAccessExpiresAt: access.expiresAt,
+      publicAccessRevokedAt: access.revokedAt,
+    };
 
     // Attempt Stripe payment link
     try {
       const result = await createPaymentLink(invoice);
       if (result) {
         updateData.stripePaymentLink = result.paymentLink;
+        updateData.stripeCheckoutSessionId = result.checkoutSessionId;
         updateData.stripePaymentIntentId = result.paymentIntentId;
       }
     } catch (err) {
@@ -338,10 +347,11 @@ export default async function invoiceRoutes(fastify) {
 
     // Stub Mailgun email send
     const primaryContact = invoice.client?.contacts?.[0];
+    let emailSent = false;
     if (primaryContact?.email) {
       try {
-        const viewUrl = `${process.env.APP_URL || 'https://hub.ashbi.ca'}/portal/invoice/${invoice.viewToken}`;
-        await sendInvoiceEmail({
+        const viewUrl = `${process.env.APP_URL || 'https://hub.ashbi.ca'}/portal/invoice/${access.token}`;
+        emailSent = await sendInvoiceEmail({
           to: primaryContact.email,
           name: primaryContact.name,
           invoice,
@@ -363,7 +373,7 @@ export default async function invoiceRoutes(fastify) {
       }
     });
 
-    return { ...flagOverdue(updated), emailSent: !!primaryContact?.email };
+    return { ...flagOverdue(updated), emailSent };
   });
 
   // ─── GET /:id/pdf — generate and download PDF ──────────────────────────────
@@ -403,8 +413,8 @@ export default async function invoiceRoutes(fastify) {
 
   // ─── POST /:id/mark-paid — mark as paid ────────────────────────────────────
   fastify.post('/:id/mark-paid', { onRequest: [fastify.authenticate], preHandler: [validateBody(markInvoicePaidSchema)] }, async (request, reply) => {
-    const { method, amount, paidAt } = request.body;
-    const paymentMethod = method || 'OTHER';
+    const { method, paymentMethod: requestedPaymentMethod, paymentNotes, transactionId, amount, paidAt } = request.body;
+    const paymentMethod = requestedPaymentMethod || method || 'OTHER';
     const invoice = await fastify.prisma.invoice.findUnique({ where: { id: request.params.id } });
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
     if (invoice.status === 'PAID') return reply.status(400).send({ error: 'Invoice already paid' });
@@ -412,22 +422,23 @@ export default async function invoiceRoutes(fastify) {
 
     const paidDate = paidAt ? new Date(paidAt) : new Date();
 
-    const [updated] = await fastify.prisma.$transaction([
-      fastify.prisma.invoice.update({
+    const updated = await fastify.prisma.$transaction(async (tx) => {
+      const paidInvoice = await tx.invoice.update({
         where: { id: request.params.id },
-        data: { status: 'PAID', paidAt: paidDate, paymentMethod, paymentNotes: paymentNotes || null }
-      }),
-      fastify.prisma.invoicePayment.create({
+        data: { status: 'PAID', paidAt: paidDate, paymentMethod, paymentNotes: paymentNotes || null, transactionId: transactionId || null }
+      });
+      await tx.invoicePayment.create({
         data: {
           invoiceId: request.params.id,
-          amount: invoice.total,
+          amount: amount ?? invoice.total,
           method: paymentMethod,
           notes: paymentNotes || null,
           transactionId: transactionId || null,
           paidAt: paidDate,
         }
-      })
-    ]);
+      });
+      return paidInvoice;
+    });
 
     return updated;
   });
@@ -439,7 +450,9 @@ export default async function invoiceRoutes(fastify) {
       include: { client: true, lineItems: true }
     });
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
-    if (invoice.status === 'VOID') return reply.status(400).send({ error: 'Cannot generate link for voided invoice' });
+    if (invoice.status !== 'SENT') return reply.status(409).send({ error: 'Only sent invoices can have a payment link' });
+    const accessFailure = publicAccessFailure(invoice);
+    if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
 
     // Return existing link if already generated
     if (invoice.stripePaymentLink) {
@@ -454,6 +467,7 @@ export default async function invoiceRoutes(fastify) {
         where: { id: request.params.id },
         data: {
           stripePaymentLink: result.paymentLink,
+          stripeCheckoutSessionId: result.checkoutSessionId,
           stripePaymentIntentId: result.paymentIntentId,
         }
       });
@@ -536,10 +550,70 @@ export default async function invoiceRoutes(fastify) {
         createdBy: { select: { name: true } }
       }
     });
-    if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
+    const accessFailure = publicAccessFailure(invoice);
+    if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
     // Don't expose internal notes in public view
-    const { internalNotes, stripePaymentIntentId, ...safe } = invoice;
+    const {
+      internalNotes,
+      stripePaymentIntentId,
+      stripeCheckoutSessionId,
+      createdById,
+      clientId,
+      projectId,
+      proposalId,
+      viewToken,
+      publicAccessRevokedAt,
+      ...safe
+    } = invoice;
     return safe;
+  });
+
+  fastify.post('/:id/public-link/revoke', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const invoice = await request.prisma.invoice.findUnique({ where: { id: request.params.id } });
+    if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
+    await request.prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { publicAccessRevokedAt: new Date(), stripePaymentLink: null },
+    });
+    return { revoked: true };
+  });
+
+  fastify.post('/:id/resend', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const invoice = await request.prisma.invoice.findUnique({
+      where: { id: request.params.id },
+      include: {
+        client: { include: { contacts: { where: { isPrimary: true }, take: 1 } } },
+        lineItems: { orderBy: { position: 'asc' } },
+      },
+    });
+    if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
+    if (invoice.status !== 'SENT') return reply.status(409).send({ error: 'Only sent invoices can be resent' });
+    const accessFailure = publicAccessFailure(invoice);
+    if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
+    const contact = invoice.client?.contacts?.[0];
+    if (!contact?.email) return reply.status(409).send({ error: 'Primary client email is missing' });
+    const viewUrl = `${process.env.APP_URL || 'https://hub.ashbi.ca'}/portal/invoice/${invoice.viewToken}`;
+    const emailSent = await sendInvoiceEmail({
+      to: contact.email,
+      name: contact.name || invoice.client.name,
+      invoice,
+      viewUrl,
+      paymentLink: invoice.stripePaymentLink,
+    });
+    if (!emailSent) return reply.status(503).send({ error: 'Invoice email delivery is unavailable', retryable: true });
+    return { emailSent: true };
+  });
+
+  fastify.post('/:id/public-link/rotate', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const invoice = await request.prisma.invoice.findUnique({ where: { id: request.params.id } });
+    if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
+    if (!['SENT', 'PAID'].includes(invoice.status)) return reply.status(409).send({ error: 'Invoice has not been sent' });
+    const access = createPublicAccessWindow();
+    return request.prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { viewToken: access.token, publicAccessExpiresAt: access.expiresAt, publicAccessRevokedAt: null, stripePaymentLink: null, stripeCheckoutSessionId: null },
+      select: { viewToken: true, publicAccessExpiresAt: true },
+    });
   });
 
   // ─── POST /stripe-webhook ───────────────────────────────────────────────────
@@ -551,33 +625,7 @@ export default async function invoiceRoutes(fastify) {
       const event = await handleWebhook(request.rawBody || request.body, signature);
 
       if (event.type === 'checkout.session.completed') {
-        const session = event.data.object;
-        const invoiceId = session.metadata?.invoiceId;
-        if (invoiceId) {
-          const invoice = await fastify.prisma.invoice.findUnique({ where: { id: invoiceId } });
-          if (invoice && invoice.status !== 'PAID') {
-            await fastify.prisma.$transaction([
-              fastify.prisma.invoice.update({
-                where: { id: invoiceId },
-                data: {
-                  status: 'PAID',
-                  paidAt: new Date(),
-                  paymentMethod: 'STRIPE',
-                  stripePaymentIntentId: session.payment_intent || session.id,
-                }
-              }),
-              fastify.prisma.invoicePayment.create({
-                data: {
-                  invoiceId,
-                  amount: invoice.total,
-                  method: 'STRIPE',
-                  transactionId: session.payment_intent || session.id,
-                  notes: 'Paid via Stripe Checkout',
-                }
-              })
-            ]);
-          }
-        }
+        await recordCompletedCheckout(fastify.prisma, event);
       }
 
       return { received: true };
@@ -675,9 +723,10 @@ export default async function invoiceRoutes(fastify) {
 
 // ─── Email stub (Mailgun) ─────────────────────────────────────────────────────
 async function sendInvoiceEmail({ to, name, invoice, viewUrl, paymentLink }) {
+  if (process.env.NODE_ENV === 'test' && process.env.ASHBI_RUN_EMAIL_TESTS !== '1') return false;
   const MAILGUN_API_KEY = process.env.MAILGUN_API_KEY;
   const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN;
-  if (!MAILGUN_API_KEY || !MAILGUN_DOMAIN) return; // No-op if not configured
+  if (!MAILGUN_API_KEY || !MAILGUN_DOMAIN) return false; // No-op if not configured
 
   const dueDate = invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString('en-CA', { dateStyle: 'long' }) : 'upon receipt';
   const formData = new FormData();
@@ -706,6 +755,7 @@ async function sendInvoiceEmail({ to, name, invoice, viewUrl, paymentLink }) {
     const text = await response.text();
     throw new Error(`Mailgun error: ${text}`);
   }
+  return true;
 }
 
 // ─── Invoice HTML/PDF generator ──────────────────────────────────────────────

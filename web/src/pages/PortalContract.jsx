@@ -144,6 +144,7 @@ export default function PortalContract() {
     const payload = {
       signerName: signerName.trim(),
       signatureType: signatureMode,
+      agreement: true,
     };
     if (signatureMode === 'draw' && signatureData) {
       payload.signatureImage = signatureData;

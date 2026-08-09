@@ -10,9 +10,11 @@ import {
   proposalBulkIdsSchema,
 } from '../validators/schemas.js';
 import { clampTake } from '../utils/query-limits.js';
+import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
 
 async function sendProposalEmail(to, clientName, proposalTitle, portalUrl) {
-  if (!process.env.MAILGUN_API_KEY || !process.env.MAILGUN_DOMAIN) return;
+  if (process.env.NODE_ENV === 'test' && process.env.ASHBI_RUN_EMAIL_TESTS !== '1') return false;
+  if (!process.env.MAILGUN_API_KEY || !process.env.MAILGUN_DOMAIN) return false;
   try {
     const mg = new Mailgun(FormData);
     const client = mg.client({ username: 'api', key: process.env.MAILGUN_API_KEY });
@@ -40,8 +42,10 @@ async function sendProposalEmail(to, clientName, proposalTitle, portalUrl) {
         </div>
       `,
     });
+    return true;
   } catch (err) {
     console.error('[Proposal] Email send error:', err.message);
+    return false;
   }
 }
 
@@ -264,11 +268,21 @@ export default async function proposalRoutes(fastify) {
       return reply.status(404).send({ error: 'Proposal not found' });
     }
 
+    if (existing.status !== 'DRAFT') {
+      return reply.status(400).send({ error: 'Only draft proposals can be sent' });
+    }
+    if (existing.validUntil && new Date(existing.validUntil) <= new Date()) {
+      return reply.status(409).send({ error: 'Proposal validity date must be extended before sending' });
+    }
+    const access = createPublicAccessWindow(existing.validUntil);
     const proposal = await request.prisma.proposal.update({
       where: { id },
       data: {
         status: 'SENT',
-        sentAt: new Date()
+        sentAt: new Date(),
+        viewToken: access.token,
+        publicAccessExpiresAt: access.expiresAt,
+        publicAccessRevokedAt: access.revokedAt,
       },
       include: {
         client: {
@@ -285,12 +299,30 @@ export default async function proposalRoutes(fastify) {
     // Email the primary contact
     const primaryEmail = proposal.client?.contacts?.[0]?.email;
     const primaryName = proposal.client?.contacts?.[0]?.name || proposal.client?.name;
+    let emailSent = false;
     if (primaryEmail && proposal.viewToken) {
       const portalUrl = `${process.env.PORTAL_BASE_URL || 'https://hub.ashbi.ca'}/portal/proposal/${proposal.viewToken}`;
-      await sendProposalEmail(primaryEmail, primaryName, proposal.title, portalUrl);
+      emailSent = await sendProposalEmail(primaryEmail, primaryName, proposal.title, portalUrl);
     }
 
-    return proposal;
+    return { ...proposal, emailSent };
+  });
+
+  fastify.post('/:id/resend', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const proposal = await request.prisma.proposal.findUnique({
+      where: { id: request.params.id },
+      include: { client: { include: { contacts: { where: { isPrimary: true }, take: 1 } } } },
+    });
+    if (!proposal) return reply.status(404).send({ error: 'Proposal not found' });
+    if (!['SENT', 'VIEWED'].includes(proposal.status)) return reply.status(409).send({ error: 'Only sent proposals can be resent' });
+    const accessFailure = publicAccessFailure(proposal);
+    if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
+    const contact = proposal.client?.contacts?.[0];
+    if (!contact?.email) return reply.status(409).send({ error: 'Primary client email is missing' });
+    const portalUrl = `${process.env.PORTAL_BASE_URL || 'https://hub.ashbi.ca'}/portal/proposal/${proposal.viewToken}`;
+    const emailSent = await sendProposalEmail(contact.email, contact.name || proposal.client.name, proposal.title, portalUrl);
+    if (!emailSent) return reply.status(503).send({ error: 'Proposal email delivery is unavailable', retryable: true });
+    return { emailSent: true };
   });
 
   // Duplicate proposal
@@ -436,6 +468,8 @@ export default async function proposalRoutes(fastify) {
     if (!proposal) {
       return reply.status(404).send({ error: 'Proposal not found' });
     }
+    const accessFailure = publicAccessFailure(proposal);
+    if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
 
     // If status is SENT, update to VIEWED
     if (proposal.status === 'SENT') {
@@ -446,7 +480,19 @@ export default async function proposalRoutes(fastify) {
       proposal.status = 'VIEWED';
     }
 
-    return proposal;
+    const {
+      internalNotes,
+      createdById,
+      clientId,
+      projectId,
+      viewToken: storedToken,
+      aiPrompt,
+      metadata,
+      draftData,
+      deletedAt,
+      ...publicProposal
+    } = proposal;
+    return publicProposal;
   });
 
   // PUBLIC: Client approves proposal
@@ -460,16 +506,22 @@ export default async function proposalRoutes(fastify) {
     if (!proposal) {
       return reply.status(404).send({ error: 'Proposal not found' });
     }
+    const accessFailure = publicAccessFailure(proposal);
+    if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
+    if (!['SENT', 'VIEWED'].includes(proposal.status)) {
+      return reply.status(409).send({ error: 'Proposal is not awaiting approval' });
+    }
 
     const updated = await request.prisma.proposal.update({
       where: { id: proposal.id },
       data: {
         status: 'APPROVED',
-        approvedAt: new Date()
+        approvedAt: new Date(),
+        publicAccessRevokedAt: new Date(),
       }
     });
 
-    return updated;
+    return { status: updated.status, approvedAt: updated.approvedAt };
   });
 
   // PUBLIC: Client declines proposal
@@ -483,15 +535,44 @@ export default async function proposalRoutes(fastify) {
     if (!proposal) {
       return reply.status(404).send({ error: 'Proposal not found' });
     }
+    const accessFailure = publicAccessFailure(proposal);
+    if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
+    if (!['SENT', 'VIEWED'].includes(proposal.status)) {
+      return reply.status(409).send({ error: 'Proposal is not awaiting a decision' });
+    }
 
     const updated = await request.prisma.proposal.update({
       where: { id: proposal.id },
       data: {
         status: 'DECLINED',
-        declinedAt: new Date()
+        declinedAt: new Date(),
+        publicAccessRevokedAt: new Date(),
       }
     });
 
+    return { status: updated.status, declinedAt: updated.declinedAt };
+  });
+
+  fastify.post('/:id/public-link/revoke', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const proposal = await request.prisma.proposal.findUnique({ where: { id: request.params.id } });
+    if (!proposal) return reply.status(404).send({ error: 'Proposal not found' });
+    await request.prisma.proposal.update({
+      where: { id: proposal.id },
+      data: { publicAccessRevokedAt: new Date() },
+    });
+    return { revoked: true };
+  });
+
+  fastify.post('/:id/public-link/rotate', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    const proposal = await request.prisma.proposal.findUnique({ where: { id: request.params.id } });
+    if (!proposal) return reply.status(404).send({ error: 'Proposal not found' });
+    if (!['SENT', 'VIEWED'].includes(proposal.status)) return reply.status(409).send({ error: 'Proposal is not awaiting a decision' });
+    const access = createPublicAccessWindow(proposal.validUntil);
+    const updated = await request.prisma.proposal.update({
+      where: { id: proposal.id },
+      data: { viewToken: access.token, publicAccessExpiresAt: access.expiresAt, publicAccessRevokedAt: null },
+      select: { viewToken: true, publicAccessExpiresAt: true },
+    });
     return updated;
   });
 

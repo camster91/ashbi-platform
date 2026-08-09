@@ -56,23 +56,23 @@ model Organization {
 }
 
 model User {
-  id                  String        @id @default(cuid())
+  id                  String       @id @default(cuid())
   organizationId      String // Set for all users to support multi-tenancy
   organization        Organization @relation(fields: [organizationId], references: [id])
-  email               String        @unique
+  email               String       @unique
   name                String
   password            String
-  role                String        @default("TEAM") // ADMIN, TEAM, CLIENT, or BOT
+  role                String       @default("TEAM") // ADMIN, TEAM, CLIENT, or BOT
   clientId            String? // Set for CLIENT role users
-  skills              String        @default("[]") // JSON array of skills
-  capacity            Int           @default(100) // Percentage available
-  isActive            Boolean       @default(true)
-  sessionVersion      Int           @default(0) // Increment to revoke every previously issued user session
-  hourlyRate          Float?        @default(50)
+  skills              String       @default("[]") // JSON array of skills
+  capacity            Int          @default(100) // Percentage available
+  isActive            Boolean      @default(true)
+  sessionVersion      Int          @default(0) // Increment to revoke every previously issued user session
+  hourlyRate          Float?       @default(50)
   resetToken          String?
   resetTokenExpiresAt DateTime?
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
 
   // Relations
   assignedThreads   Thread[]           @relation("AssignedTo")
@@ -126,17 +126,17 @@ model FormDraft {
 }
 
 model Client {
-  id                  String        @id @default(cuid())
+  id                  String       @id @default(cuid())
   organizationId      String
   organization        Organization @relation(fields: [organizationId], references: [id])
   name                String
   email               String?
-  domain              String?       @unique
-  status              String        @default("ACTIVE") // ACTIVE, PAUSED, CHURNED
-  communicationPrefs  String        @default("{}") // JSON: tone, frequency, etc.
-  satisfactionSignals String        @default("{}") // JSON: sentiment trends
+  domain              String?      @unique
+  status              String       @default("ACTIVE") // ACTIVE, PAUSED, CHURNED
+  communicationPrefs  String       @default("{}") // JSON: tone, frequency, etc.
+  satisfactionSignals String       @default("{}") // JSON: sentiment trends
   slaOverrides        String? // JSON: custom SLA rules
-  knowledgeBase       String        @default("[]") // JSON: brand guidelines, specs, etc.
+  knowledgeBase       String       @default("[]") // JSON: brand guidelines, specs, etc.
 
   // Bonsai migration fields
   bonsaiClientId     String? // Original Bonsai client ID
@@ -208,21 +208,21 @@ model Contact {
 }
 
 model Project {
-  id             String        @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   name           String
   description    String?
-  status         String        @default("STARTING_UP") // STARTING_UP, DESIGN_DEV, ADDING_CONTENT, FINALIZING, LAUNCHED, ON_HOLD, CANCELLED
-  health         String        @default("ON_TRACK") // ON_TRACK, NEEDS_ATTENTION, AT_RISK
-  healthScore    Int           @default(100)
+  status         String       @default("STARTING_UP") // STARTING_UP, DESIGN_DEV, ADDING_CONTENT, FINALIZING, LAUNCHED, ON_HOLD, CANCELLED
+  health         String       @default("ON_TRACK") // ON_TRACK, NEEDS_ATTENTION, AT_RISK
+  healthScore    Int          @default(100)
   healthHistory  Json? // Array of {health, score, timestamp} for historical tracking
   aiSummary      String? // AI-generated current status summary
   aiPlan         String? // JSON: AI-generated task plan
-  risks          String        @default("[]") // JSON: identified risks
+  risks          String       @default("[]") // JSON: identified risks
   defaultOwnerId String?
   clientId       String
-  viewToken      String?       @unique @default(cuid())
+  viewToken      String?      @unique @default(cuid())
 
   // Bonsai migration fields
   bonsaiProjectId String?
@@ -454,17 +454,17 @@ model Notification {
 }
 
 model AssignmentRule {
-  id         String   @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  name       String
-  type       String // SKILL, CLIENT, PROJECT, LOAD_BALANCE
-  conditions String // JSON: rule conditions
-  assignToId String?
-  priority   Int      @default(0)
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  type           String // SKILL, CLIENT, PROJECT, LOAD_BALANCE
+  conditions     String // JSON: rule conditions
+  assignToId     String?
+  priority       Int          @default(0)
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@index([isActive])
   @@index([organizationId])
@@ -472,24 +472,24 @@ model AssignmentRule {
 }
 
 model Template {
-  id        String   @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  name      String
-  category  String // GREETING, ACKNOWLEDGMENT, FOLLOW_UP, etc.
-  subject   String?
-  body      String
-  variables String   @default("[]") // JSON: available variables
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  category       String // GREETING, ACKNOWLEDGMENT, FOLLOW_UP, etc.
+  subject        String?
+  body           String
+  variables      String       @default("[]") // JSON: available variables
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@index([organizationId])
   @@map("templates")
 }
 
 model UnmatchedEmail {
-  id                String    @id @default(cuid())
+  id                String       @id @default(cuid())
   organizationId    String
   organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   senderEmail       String
@@ -501,9 +501,9 @@ model UnmatchedEmail {
   source            String? // Source: upwork, email, form, etc.
   suggestedClients  String? // JSON: AI suggestions
   suggestedProjects String? // JSON: AI suggestions
-  status            String    @default("PENDING") // PENDING, RESOLVED, IGNORED
+  status            String       @default("PENDING") // PENDING, RESOLVED, IGNORED
   resolvedAt        DateTime?
-  createdAt         DateTime  @default(now())
+  createdAt         DateTime     @default(now())
 
   @@index([createdAt])
   @@index([senderEmail])
@@ -623,21 +623,21 @@ model TimeEntry {
 }
 
 model Attachment {
-  id            String   @id @default(cuid())
+  id             String   @id @default(cuid())
   organizationId String
-  filename      String
-  originalName  String
-  mimeType      String
-  size          Int // Size in bytes
-  path          String // Storage path or URL
-  thumbnailPath String? // For images
-  entityType    String // PROJECT, TASK, CHAT, NOTE
-  entityId      String
-  uploadedById  String
-  createdAt     DateTime @default(now())
+  filename       String
+  originalName   String
+  mimeType       String
+  size           Int // Size in bytes
+  path           String // Storage path or URL
+  thumbnailPath  String? // For images
+  entityType     String // PROJECT, TASK, CHAT, NOTE
+  entityId       String
+  uploadedById   String
+  createdAt      DateTime @default(now())
 
   // Relations
-  uploadedBy User @relation(fields: [uploadedById], references: [id])
+  uploadedBy   User         @relation(fields: [uploadedById], references: [id])
   organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
@@ -810,24 +810,26 @@ model ProposalVersion {
 }
 
 model Proposal {
-  id            String    @id @default(cuid())
-  title         String
-  status        String    @default("DRAFT") // DRAFT | SENT | VIEWED | APPROVED | DECLINED
-  validUntil    DateTime?
-  subtotal      Float     @default(0)
-  discount      Float     @default(0)
-  total         Float     @default(0)
-  notes         String?
-  internalNotes String?
-  viewToken     String?   @unique @default(cuid())
-  approvedAt    DateTime?
-  declinedAt    DateTime?
-  sentAt        DateTime?
-  clientId      String
-  projectId     String?
-  createdById   String
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                    String    @id @default(cuid())
+  title                 String
+  status                String    @default("DRAFT") // DRAFT | SENT | VIEWED | APPROVED | DECLINED
+  validUntil            DateTime?
+  subtotal              Float     @default(0)
+  discount              Float     @default(0)
+  total                 Float     @default(0)
+  notes                 String?
+  internalNotes         String?
+  viewToken             String?   @unique @default(cuid())
+  publicAccessExpiresAt DateTime?
+  publicAccessRevokedAt DateTime?
+  approvedAt            DateTime?
+  declinedAt            DateTime?
+  sentAt                DateTime?
+  clientId              String
+  projectId             String?
+  createdById           String
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   // Phase 3a: PDF generation & email tracking
   pdfPath        String? // Path/URL to stored PDF file
@@ -875,21 +877,28 @@ model ProposalLineItem {
 }
 
 model Contract {
-  id            String    @id @default(cuid())
-  title         String
-  status        String    @default("DRAFT") // DRAFT | SENT | SIGNED | VOID
-  content       String // Rich text / HTML contract body
-  templateType  String    @default("RETAINER") // RETAINER | PROJECT | NDA
-  signToken     String    @unique @default(cuid())
-  clientSigHash String?
-  clientSigName String?
-  clientSigDate DateTime?
-  signedAt      DateTime?
-  proposalId    String?   @unique
-  clientId      String
-  createdById   String
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                    String    @id @default(cuid())
+  title                 String
+  status                String    @default("DRAFT") // DRAFT | SENT | SIGNED | VOID
+  content               String // Rich text / HTML contract body
+  templateType          String    @default("RETAINER") // RETAINER | PROJECT | NDA
+  signToken             String    @unique @default(cuid())
+  publicAccessExpiresAt DateTime?
+  publicAccessRevokedAt DateTime?
+  clientSigHash         String?
+  clientSigName         String?
+  clientSigDate         DateTime?
+  signedAt              DateTime?
+  signedContentHash     String?
+  signatureType         String?
+  signatureDataHash     String?
+  signerIp              String?
+  signerUserAgent       String?
+  proposalId            String?   @unique
+  clientId              String
+  createdById           String
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   proposal  Proposal? @relation(fields: [proposalId], references: [id])
   client    Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
@@ -920,32 +929,35 @@ model Invoice {
   amountCad       Float?
   daysToPayActual Int? // Historical: actual days client took to pay
 
-  subtotal              Float     @default(0)
-  discountAmount        Float     @default(0)
-  taxRate               Float     @default(13) // HST 13% default for Ontario
-  taxType               String    @default("HST") // HST | GST | PST | NONE
-  tax                   Float     @default(0)
-  total                 Float     @default(0)
-  notes                 String?
-  internalNotes         String?
-  stripePaymentLink     String?
-  stripePaymentIntentId String?
-  paymentMethod         String? // STRIPE | BANK | CHECK | CASH | OTHER
-  paymentNotes          String?
-  transactionId         String?
-  paidAt                DateTime?
-  sentAt                DateTime?
-  isRecurring           Boolean   @default(false)
-  recurringInterval     String? // MONTHLY | QUARTERLY | ANNUALLY
-  recurringNextDate     DateTime?
-  reminderSentAt        DateTime?
-  viewToken             String?   @unique @default(cuid())
-  clientId              String
-  projectId             String?
-  proposalId            String?
-  createdById           String
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+  subtotal                Float     @default(0)
+  discountAmount          Float     @default(0)
+  taxRate                 Float     @default(13) // HST 13% default for Ontario
+  taxType                 String    @default("HST") // HST | GST | PST | NONE
+  tax                     Float     @default(0)
+  total                   Float     @default(0)
+  notes                   String?
+  internalNotes           String?
+  stripePaymentLink       String?
+  stripeCheckoutSessionId String?
+  stripePaymentIntentId   String?
+  paymentMethod           String? // STRIPE | BANK | CHECK | CASH | OTHER
+  paymentNotes            String?
+  transactionId           String?
+  paidAt                  DateTime?
+  sentAt                  DateTime?
+  isRecurring             Boolean   @default(false)
+  recurringInterval       String? // MONTHLY | QUARTERLY | ANNUALLY
+  recurringNextDate       DateTime?
+  reminderSentAt          DateTime?
+  viewToken               String?   @unique @default(cuid())
+  publicAccessExpiresAt   DateTime?
+  publicAccessRevokedAt   DateTime?
+  clientId                String
+  projectId               String?
+  proposalId              String?
+  createdById             String
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
 
   client      Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
   createdBy   User              @relation("InvoiceCreator", fields: [createdById], references: [id])
@@ -983,7 +995,7 @@ model InvoicePayment {
   amount        Float
   method        String   @default("BANK") // STRIPE | BANK | CHECK | CASH | OTHER
   notes         String?
-  transactionId String?
+  transactionId String?  @unique
   paidAt        DateTime @default(now())
   invoiceId     String
   createdAt     DateTime @default(now())
@@ -994,37 +1006,37 @@ model InvoicePayment {
 }
 
 model LineItemTemplate {
-  id          String   @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  name        String
-  description String
-  itemType    String   @default("LABOR") // LABOR | MATERIALS | EXPENSE | CUSTOM
-  unitPrice   Float
-  unit        String   @default("hr") // hr | flat | unit
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  description    String
+  itemType       String       @default("LABOR") // LABOR | MATERIALS | EXPENSE | CUSTOM
+  unitPrice      Float
+  unit           String       @default("hr") // hr | flat | unit
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@index([organizationId])
   @@map("line_item_templates")
 }
 
 model WeeklyDigest {
-  id                  String   @id @default(cuid())
+  id                  String       @id @default(cuid())
   organizationId      String
   organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   weekStart           DateTime
   weekEnd             DateTime
-  newLeads            Int      @default(0)
-  proposalsSent       Int      @default(0)
-  proposalsViewed     Int      @default(0)
-  proposalsHired      Int      @default(0)
-  tasksOverdue        Int      @default(0)
-  retainerTotal       Float    @default(0)
-  clientHealthSummary String   @default("{}") // JSON: per-client health scores
+  newLeads            Int          @default(0)
+  proposalsSent       Int          @default(0)
+  proposalsViewed     Int          @default(0)
+  proposalsHired      Int          @default(0)
+  tasksOverdue        Int          @default(0)
+  retainerTotal       Float        @default(0)
+  clientHealthSummary String       @default("{}") // JSON: per-client health scores
   fullDigest          String // Full AI-generated digest text
-  createdAt           DateTime @default(now())
+  createdAt           DateTime     @default(now())
 
   @@index([organizationId])
   @@map("weekly_digests")
@@ -1052,30 +1064,30 @@ model Credential {
 }
 
 model TaskTemplate {
-  id        String   @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  name      String
-  phase     String // STARTING_UP, DESIGN_DEV, ADDING_CONTENT, FINALIZING, LAUNCHED
-  tasks     String   @default("[]") // JSON array of {title, description, assignee_role}
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  phase          String // STARTING_UP, DESIGN_DEV, ADDING_CONTENT, FINALIZING, LAUNCHED
+  tasks          String       @default("[]") // JSON array of {title, description, assignee_role}
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@index([organizationId])
   @@map("task_templates")
 }
 
 model OutreachSequence {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name           String
-  steps          String   @default("[]") // JSON array of {subject, body, delayDays}
-  status         String   @default("ACTIVE") // ACTIVE | PAUSED
+  steps          String       @default("[]") // JSON array of {subject, body, delayDays}
+  status         String       @default("ACTIVE") // ACTIVE | PAUSED
   targetIndustry String?
-  filters        String   @default("{}") // JSON
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  filters        String       @default("{}") // JSON
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@index([status])
   @@index([organizationId])
@@ -1083,19 +1095,19 @@ model OutreachSequence {
 }
 
 model EmailTriageItem {
-  id          String   @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  subject     String
-  senderEmail String
-  senderName  String?
-  bodyText    String
-  tags        String   @default("[]") // JSON: ['needs-reply', 'info-only', 'urgent', 'client', 'lead', 'spam']
-  status      String   @default("PENDING") // PENDING | REVIEWED | ARCHIVED
-  aiSummary   String?
-  threadId    String? // Link to existing Thread if matched
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subject        String
+  senderEmail    String
+  senderName     String?
+  bodyText       String
+  tags           String       @default("[]") // JSON: ['needs-reply', 'info-only', 'urgent', 'client', 'lead', 'spam']
+  status         String       @default("PENDING") // PENDING | REVIEWED | ARCHIVED
+  aiSummary      String?
+  threadId       String? // Link to existing Thread if matched
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   drafts EmailTriageDraft[]
 
@@ -1138,13 +1150,13 @@ model AiTeamMessage {
 }
 
 model AiContext {
-  id        String   @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  key       String   @unique
-  value     String
-  updatedAt DateTime @updatedAt
-  createdAt DateTime @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  key            String       @unique
+  value          String
+  updatedAt      DateTime     @updatedAt
+  createdAt      DateTime     @default(now())
 
   @@index([organizationId])
   @@map("ai_context")
@@ -1302,13 +1314,13 @@ model PushSubscription {
 }
 
 model AshConversation {
-  id        String           @id @default(cuid())
+  id             String           @id @default(cuid())
   organizationId String
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  title     String?
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
-  messages  AshChatMessage[]
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  title          String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  messages       AshChatMessage[]
 
   @@index([organizationId])
   @@map("ash_conversations")
@@ -1326,16 +1338,16 @@ model AshChatMessage {
 }
 
 model ProjectTemplate {
-  id          String   @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  name        String
-  description String?
-  projectType String? // WEBSITE | BRANDING | MARKETING | CUSTOM
-  tasks       String   @default("[]") // JSON array of task definitions
-  milestones  String   @default("[]") // JSON array of milestone definitions
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  projectType    String? // WEBSITE | BRANDING | MARKETING | CUSTOM
+  tasks          String       @default("[]") // JSON array of task definitions
+  milestones     String       @default("[]") // JSON array of milestone definitions
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@index([organizationId])
   @@map("project_templates")
@@ -1373,13 +1385,13 @@ model IntakeFormResponse {
 }
 
 model BrandSettings {
-  id             String  @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  companyName    String  @default("Ashbi Design")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  companyName    String       @default("Ashbi Design")
   logoUrl        String?
-  primaryColor   String  @default("#c9a84c")
-  accentColor    String  @default("#1e293b")
+  primaryColor   String       @default("#c9a84c")
+  accentColor    String       @default("#1e293b")
   address        String?
   phone          String?
   email          String?
@@ -1394,15 +1406,15 @@ model BrandSettings {
 }
 
 model PipelineStage {
-  id          String   @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  name        String
-  order       Int      @default(0)
-  color       String   @default("#3B82F6")
-  probability Int      @default(0) // Win probability percentage
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  order          Int          @default(0)
+  color          String       @default("#3B82F6")
+  probability    Int          @default(0) // Win probability percentage
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   deals PipelineDeal[]
 
@@ -1561,17 +1573,17 @@ model TimeSession {
 }
 
 model PromptVersion {
-  id          String   @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  name        String // e.g., "analyzeMessage", "draftResponse"
-  version     Int      @default(1)
-  system      String   @db.Text // System prompt
-  template    String   @db.Text // Prompt template with {{variables}}
-  temperature Float    @default(0.7)
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String // e.g., "analyzeMessage", "draftResponse"
+  version        Int          @default(1)
+  system         String       @db.Text // System prompt
+  template       String       @db.Text // Prompt template with {{variables}}
+  temperature    Float        @default(0.7)
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@unique([name, version])
   @@index([organizationId])
@@ -1742,7 +1754,7 @@ model WPBackup {
   filesSize      BigInt?
   createdAt      DateTime @default(now())
 
-  site         WPSite        @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  site         WPSite       @relation(fields: [siteId], references: [id], onDelete: Cascade)
   organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
@@ -1767,7 +1779,7 @@ model WPReport {
   payload        String? // Full raw payload
   createdAt      DateTime @default(now())
 
-  site         WPSite        @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  site         WPSite       @relation(fields: [siteId], references: [id], onDelete: Cascade)
   organization Organization @relation(fields: [organizationId], references: [id])
 
   @@unique([siteId, month])
@@ -1787,7 +1799,7 @@ model WPAlert {
   details        String   @default("{}")
   createdAt      DateTime @default(now())
 
-  site         WPSite?       @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  site         WPSite?      @relation(fields: [siteId], references: [id], onDelete: SetNull)
   organization Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
@@ -1803,15 +1815,15 @@ model WPAlert {
 // the wp_backups/wp_alerts tables the plugin already writes; this table is
 // the hub-side orchestration ledger.
 model WPFleetOp {
-  id             String        @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   opType         String // 'file_patch' | 'command' | 'option_set' | 'magic_login' | 'magic_login_revoke'
   payload        Json // original request body
   targetCount    Int
-  successCount   Int           @default(0)
-  failureCount   Int           @default(0)
+  successCount   Int          @default(0)
+  failureCount   Int          @default(0)
   createdBy      String // user id from JWT
-  createdAt      DateTime      @default(now())
+  createdAt      DateTime     @default(now())
   completedAt    DateTime?
   organization   Organization @relation(fields: [organizationId], references: [id])
 
@@ -1832,17 +1844,17 @@ model WPFleetOp {
 // centralises the cross-site view so the WPSites "Recent Logins" tab can
 // show fleet-wide activity in one place.
 model WPMagicLoginLog {
-  id             String        @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   siteId         String? // nullable: pre-registration/wildcard logins may not have a row yet
   siteUrl        String // canonical site URL — survives WPSite deletes
   userId         Int? // WP user id (admin being issued for / logged in as)
   hubUserId      String? // hub user id (operator that triggered the issuance / revoke)
-  ip             String        @default("0.0.0.0")
+  ip             String       @default("0.0.0.0")
   status         String // 'issued' | 'consumed' | 'revoked' | 'rejected'
   reason         String? // 'expired_or_invalid' | 'replayed' | 'expired' | 'rate_limited' | 'ip_not_allowed' | 'manual_revoke'
   tokenHash      String? // sha256 of the raw magic-login token (NEVER the token itself)
-  ts             DateTime      @default(now())
+  ts             DateTime     @default(now())
   organization   Organization @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])

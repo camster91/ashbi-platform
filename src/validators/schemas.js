@@ -128,6 +128,15 @@ export const updateClientSchema = z.object({
 });
 
 // ── Invoice schemas ───────────────────────────────────────────────────────
+const invoiceRouteLineItemSchema = z.object({
+  description: z.string().min(1).max(500),
+  itemType: z.enum(['LABOR', 'MATERIAL', 'MATERIALS', 'EXPENSE', 'DISCOUNT', 'OTHER']).optional().default('LABOR'),
+  quantity: z.number().positive(),
+  unitPrice: z.number().nonnegative(),
+  total: z.number().nonnegative().optional(),
+  position: z.number().int().optional(),
+});
+
 export const createInvoiceSchema = z.object({
   clientId: cuidId,
   projectId: cuidId.optional(),
@@ -138,14 +147,11 @@ export const createInvoiceSchema = z.object({
   taxRate: z.number().min(0).max(50).optional().default(13),
   discountAmount: z.number().min(0).optional().default(0),
   notes: z.string().max(2000).optional(),
-  lineItems: z.array(z.object({
-    description: z.string().min(1).max(500),
-    itemType: z.enum(['LABOR', 'MATERIAL', 'EXPENSE', 'DISCOUNT', 'OTHER']).optional().default('LABOR'),
-    quantity: z.number().positive(),
-    unitPrice: z.number().nonnegative(),
-    total: z.number().nonnegative(),
-    position: z.number().int().optional(),
-  })).min(1),
+  internalNotes: z.string().max(2000).optional(),
+  taxType: z.enum(['HST', 'GST', 'PST', 'NONE']).optional(),
+  isRecurring: z.boolean().optional(),
+  recurringInterval: z.enum(['MONTHLY', 'QUARTERLY', 'ANNUALLY']).optional(),
+  lineItems: z.array(invoiceRouteLineItemSchema).min(1),
 });
 
 // ── Expense schemas ────────────────────────────────────────────────────────
@@ -169,12 +175,21 @@ export const updateInvoiceSchema = z.object({
   taxRate: z.number().min(0).max(50).optional(),
   discountAmount: z.number().min(0).optional(),
   notes: z.string().max(2000).optional(),
+  internalNotes: z.string().max(2000).optional(),
+  taxType: z.enum(['HST', 'GST', 'PST', 'NONE']).optional(),
+  projectId: cuidId.nullable().optional(),
+  isRecurring: z.boolean().optional(),
+  recurringInterval: z.enum(['MONTHLY', 'QUARTERLY', 'ANNUALLY']).nullable().optional(),
+  lineItems: z.array(invoiceRouteLineItemSchema).min(1).optional(),
 }).refine(val => Object.keys(val).length > 0, { message: 'At least one field must be provided' });
 
 // ── Mark invoice paid ──────────────────────────────────────────────────────
 export const markInvoicePaidSchema = z.object({
   amount: z.number().positive().optional(),
-  method: z.enum(['STRIPE', 'TRANSFER', 'CASH', 'CHEQUE', 'OTHER']).optional(),
+  method: z.enum(['STRIPE', 'BANK', 'TRANSFER', 'CASH', 'CHEQUE', 'OTHER']).optional(),
+  paymentMethod: z.enum(['STRIPE', 'BANK', 'TRANSFER', 'CASH', 'CHEQUE', 'OTHER']).optional(),
+  paymentNotes: z.string().max(2000).optional(),
+  transactionId: z.string().max(200).optional(),
   paidAt: z.string().datetime().optional(),
 });
 
@@ -182,7 +197,7 @@ export const markInvoicePaidSchema = z.object({
 export const sendInvoiceSchema = z.object({
   email: email.optional(),
   message: z.string().max(2000).optional(),
-});
+}).default({});
 
 // ── Portal schemas ─────────────────────────────────────────────────────────
 export const bookingSchema = z.object({

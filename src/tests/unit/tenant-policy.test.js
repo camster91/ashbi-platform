@@ -102,6 +102,58 @@ test('relationship-scoped create verifies the parent before writing', async () =
   assert.equal(createCalls.length, 1);
 });
 
+test('relationship-scoped update preserves a unique where after tenant preflight', async () => {
+  const updateCalls = [];
+  const scoped = createScopedPrisma({
+    invoice: {
+      findFirst: async (args) => {
+        assert.deepEqual(args.where, {
+          AND: [{ id: 'invoice-a' }, { client: { organizationId: 'org-a' } }],
+          deletedAt: null,
+        });
+        return { id: 'invoice-a' };
+      },
+      update: async (args) => { updateCalls.push(args); return { id: 'invoice-a', ...args.data }; },
+    },
+  }, 'org-a');
+
+  await scoped.invoice.update({ where: { id: 'invoice-a' }, data: { status: 'SENT' } });
+  assert.deepEqual(updateCalls[0].where, { id: 'invoice-a' });
+});
+
+test('relationship-scoped update rejects a target outside the tenant', async () => {
+  let updated = false;
+  const scoped = createScopedPrisma({
+    invoice: {
+      findFirst: async () => null,
+      update: async () => { updated = true; },
+    },
+  }, 'org-a');
+
+  await assert.rejects(
+    scoped.invoice.update({ where: { id: 'invoice-b' }, data: { status: 'SENT' } }),
+    /unavailable in this organization/i,
+  );
+  assert.equal(updated, false);
+});
+
+test('relationship-scoped update verifies a changed owner', async () => {
+  let updated = false;
+  const scoped = createScopedPrisma({
+    client: { findFirst: async () => null },
+    invoice: {
+      findFirst: async () => ({ id: 'invoice-a' }),
+      update: async () => { updated = true; },
+    },
+  }, 'org-a');
+
+  await assert.rejects(
+    scoped.invoice.update({ where: { id: 'invoice-a' }, data: { clientId: 'client-b' } }),
+    /client client-b does not belong to organization org-a/i,
+  );
+  assert.equal(updated, false);
+});
+
 test('newly owned root models inject the verified organization on create', async () => {
   const calls = [];
   const scoped = createScopedPrisma({
@@ -182,22 +234,75 @@ test('relationship-scoped createMany rejects any foreign-owned parent before wri
   assert.equal(created, false);
 });
 
-test('relationship-scoped upsert validates create and update ownership before writing', async () => {
-  let upserted = false;
+test('relationship-scoped upsert uses the create branch when no tenant record exists', async () => {
+  const calls = [];
   const scoped = createScopedPrisma({
     client: { findFirst: async (args) => args.where.id === 'client-a' ? { id: 'client-a' } : null },
-    invoice: { upsert: async () => { upserted = true; return {}; } },
+    invoice: {
+      findFirst: async () => null,
+      create: async (args) => { calls.push(args); return {}; },
+      update: async () => { throw new Error('update must not run'); },
+      upsert: async () => { throw new Error('native upsert must not run'); },
+    },
   }, 'org-a');
 
-  await assert.rejects(
-    scoped.invoice.upsert({
-      where: { id: 'invoice-a' },
-      create: { clientId: 'client-a', invoiceNumber: 'INV-1' },
-      update: { clientId: 'client-b' },
-    }),
-    /client client-b does not belong to organization org-a/i,
-  );
-  assert.equal(upserted, false);
+  await scoped.invoice.upsert({
+    where: { id: 'invoice-a' },
+    create: { clientId: 'client-a', invoiceNumber: 'INV-1' },
+    update: { clientId: 'client-b' },
+    include: { client: true },
+  });
+  assert.deepEqual(calls[0], {
+    data: { clientId: 'client-a', invoiceNumber: 'INV-1' },
+    include: { client: true },
+  });
+});
+
+test('relationship-scoped upsert updates only an existing tenant record', async () => {
+  const calls = [];
+  const scoped = createScopedPrisma({
+    client: { findFirst: async (args) => args.where.id === 'client-a' ? { id: 'client-a' } : null },
+    invoice: {
+      findFirst: async () => ({ id: 'invoice-a' }),
+      create: async () => { throw new Error('create must not run'); },
+      update: async (args) => { calls.push(args); return {}; },
+      upsert: async () => { throw new Error('native upsert must not run'); },
+    },
+  }, 'org-a');
+
+  await scoped.invoice.upsert({
+    where: { id: 'invoice-a' },
+    create: { clientId: 'client-b', invoiceNumber: 'INV-1' },
+    update: { clientId: 'client-a', notes: 'Updated' },
+    select: { id: true },
+  });
+  assert.deepEqual(calls[0], {
+    where: { id: 'invoice-a' },
+    data: { clientId: 'client-a', notes: 'Updated' },
+    select: { id: true },
+  });
+});
+
+test('relationship-scoped upsert cannot update an existing record from another tenant', async () => {
+  let created = false;
+  let updated = false;
+  const scoped = createScopedPrisma({
+    client: { findFirst: async () => ({ id: 'client-a' }) },
+    invoice: {
+      findFirst: async () => null,
+      create: async () => { created = true; throw new Error('unique constraint'); },
+      update: async () => { updated = true; return {}; },
+      upsert: async () => { throw new Error('native upsert must not run'); },
+    },
+  }, 'org-a');
+
+  await assert.rejects(scoped.invoice.upsert({
+    where: { id: 'invoice-other-tenant' },
+    create: { clientId: 'client-a', invoiceNumber: 'INV-1' },
+    update: { clientId: 'client-a', notes: 'Hijacked' },
+  }), /unique constraint/i);
+  assert.equal(created, true);
+  assert.equal(updated, false);
 });
 
 test('direct-scoped project creation rejects a client owned by another organization', async () => {

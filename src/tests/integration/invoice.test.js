@@ -52,6 +52,9 @@ before(async () => {
       const scopedPrisma = createScopedPrisma(prisma, request.user.organizationId);
       request.prisma = scopedPrisma;
       enterRequestContext({ prisma: scopedPrisma, organizationId: request.user.organizationId });
+    } else {
+      request.prisma = rawPrisma;
+      enterRequestContext({ prisma: rawPrisma, organizationId: null });
     }
   });
 
@@ -106,8 +109,8 @@ after(async () => {
   await rawPrisma.lineItemTemplate.deleteMany({ where: { organizationId: testOrganizationId } });
   await rawPrisma.contact.deleteMany({ where: { clientId: testClientId } });
   await rawPrisma.client.deleteMany({ where: { organizationId: testOrganizationId } });
-  await rawPrisma.user.delete({ where: { id: testUserId } });
-  await rawPrisma.organization.delete({ where: { id: testOrganizationId } });
+  await rawPrisma.user.delete({ where: { id: testUserId } }).catch(() => null);
+  await rawPrisma.organization.delete({ where: { id: testOrganizationId } }).catch(() => null);
   await rawPrisma.$disconnect();
   await fastify.close();
 });
@@ -128,7 +131,7 @@ describe('Invoice CRUD', { skip }, () => {
       payload: {
         clientId: testClientId,
         title: 'April 2026 Retainer',
-        dueDate: '2026-04-30',
+        dueDate: '2027-04-30T23:59:59.000Z',
         taxRate: 13,
         taxType: 'HST',
         discountAmount: 100,
@@ -310,6 +313,7 @@ describe('Invoice CRUD', { skip }, () => {
     const body = JSON.parse(res.body);
     assert.equal(body.status, 'SENT');
     assert.ok(body.sentAt, 'sentAt should be set');
+    assert.equal(body.emailSent, false, 'Test mode must not report an email that was not delivered');
     console.log(`  ✓ Sent invoice ${body.invoiceNumber}, emailSent=${body.emailSent}`);
   });
 
@@ -324,20 +328,29 @@ describe('Invoice CRUD', { skip }, () => {
     console.log('  ✓ Correctly rejected double-send');
   });
 
-  test('POST /api/invoices/:id/pdf — generate PDF/HTML', async () => {
+  test('POST /api/invoices/:id/resend — reports retryable delivery outage', async () => {
+    const res = await fastify.inject({
+      method: 'POST',
+      url: `/api/invoices/${createdInvoiceId}/resend`,
+      headers: authHeader(),
+    });
+    assert.equal(res.statusCode, 503);
+    assert.equal(JSON.parse(res.body).retryable, true);
+  });
+
+  test('GET /api/invoices/:id/pdf — generate PDF', async () => {
     assert.ok(createdInvoiceId, 'Invoice must have been created first');
 
     const res = await fastify.inject({
-      method: 'POST',
+      method: 'GET',
       url: `/api/invoices/${createdInvoiceId}/pdf`,
       headers: authHeader(),
     });
 
     assert.equal(res.statusCode, 200);
-    assert.ok(res.headers['content-type']?.includes('text/html'), 'Should return HTML');
-    assert.ok(res.body.includes('Ashbi Design'), 'PDF HTML should contain company name');
-    assert.ok(res.body.includes(createdInvoiceNumber), 'PDF HTML should contain invoice number');
-    console.log(`  ✓ Generated PDF HTML (${res.body.length} chars)`);
+    assert.ok(res.headers['content-type']?.includes('application/pdf'), 'Should return PDF');
+    assert.ok(res.rawPayload.length > 500, 'PDF should contain rendered content');
+    console.log(`  ✓ Generated PDF (${res.rawPayload.length} bytes)`);
   });
 
   test('POST /api/invoices/:id/mark-paid — mark paid with payment details', async () => {
@@ -429,9 +442,12 @@ describe('Invoice CRUD', { skip }, () => {
       headers: authHeader(),
       payload: {
         clientId: testClientId,
-        lineItems: [{ description: 'To be voided', itemType: 'CUSTOM', quantity: 1, unitPrice: 100 }],
+        title: 'Draft to void',
+        dueDate: '2027-05-31T23:59:59.000Z',
+        lineItems: [{ description: 'To be voided', itemType: 'OTHER', quantity: 1, unitPrice: 100 }],
       },
     });
+    assert.equal(createRes.statusCode, 200, `Expected draft creation to succeed: ${createRes.body}`);
     const draftId = JSON.parse(createRes.body).id;
 
     const res = await fastify.inject({
@@ -462,7 +478,7 @@ describe('Invoice CRUD', { skip }, () => {
 
   test('GET /api/invoices/client/:viewToken — public client view', async () => {
     // Get the paid invoice's viewToken
-    const invoice = await prisma.invoice.findUnique({ where: { id: createdInvoiceId } });
+    const invoice = await rawPrisma.invoice.findUnique({ where: { id: createdInvoiceId } });
     assert.ok(invoice.viewToken, 'Invoice should have a viewToken');
 
     const res = await fastify.inject({
@@ -476,6 +492,18 @@ describe('Invoice CRUD', { skip }, () => {
     assert.equal(body.id, createdInvoiceId);
     assert.ok(!('internalNotes' in body), 'Internal notes should not be exposed publicly');
     console.log('  ✓ Public client view works (no auth required)');
+  });
+
+  test('invoice public link can be revoked', async () => {
+    const invoice = await rawPrisma.invoice.findUnique({ where: { id: createdInvoiceId } });
+    const revokeRes = await fastify.inject({
+      method: 'POST',
+      url: `/api/invoices/${createdInvoiceId}/public-link/revoke`,
+      headers: authHeader(),
+    });
+    assert.equal(revokeRes.statusCode, 200);
+    const publicRes = await fastify.inject({ method: 'GET', url: `/api/invoices/client/${invoice.viewToken}` });
+    assert.equal(publicRes.statusCode, 410);
   });
 
 });
