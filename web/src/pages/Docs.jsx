@@ -134,9 +134,18 @@ export default function Docs() {
         action: {
           label: `Undo delete ${title}`,
           onClick: async () => {
-            await api.restoreTrashItem(result.trashId);
-            await queryClient.invalidateQueries({ queryKey: ['all-notes'] });
-            toast.success('Note restored');
+            try {
+              await api.restoreTrashItem(result.trashId);
+              await queryClient.invalidateQueries({ queryKey: ['all-notes'] });
+              toast.success('Note restored');
+            } catch (error) {
+              toast.error({
+                title: 'Could not restore note',
+                message: error.message || 'Open Trash or refresh before trying again.',
+                duration: 0,
+              });
+              throw error;
+            }
           },
         },
       });

@@ -3,6 +3,8 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const notes = readFileSync(resolve(process.cwd(), 'src/components/Notes.jsx'), 'utf8');
+const project = readFileSync(resolve(process.cwd(), 'src/pages/Project.jsx'), 'utf8');
+const docs = readFileSync(resolve(process.cwd(), 'src/pages/Docs.jsx'), 'utf8');
 const milestones = readFileSync(resolve(process.cwd(), 'src/components/Milestones.jsx'), 'utf8');
 const invoices = readFileSync(resolve(process.cwd(), 'src/pages/Invoices.jsx'), 'utf8');
 const invoiceDetail = readFileSync(resolve(process.cwd(), 'src/pages/InvoiceDetail.jsx'), 'utf8');
@@ -14,6 +16,15 @@ describe('destructive action recovery contract', () => {
     expect(notes).toContain('label: `Undo delete ${title}`');
     expect(notes).toContain('restoreMutation.mutate(result.trashId)');
     expect(notes).toContain("title: 'Could not restore note'");
+  });
+
+  it.each([
+    ['project notes', project],
+    ['global docs', docs],
+  ])('reports failed Undo recovery on the active %s surface', (_surface, source) => {
+    expect(source).toContain("title: 'Could not restore note'");
+    expect(source).toContain("message: error.message || 'Open Trash or refresh before trying again.'");
+    expect(source).toContain('duration: 0');
   });
 
   it('requires explicit consequence confirmation for permanent milestone deletion', () => {
