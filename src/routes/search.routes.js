@@ -19,6 +19,7 @@ export default async function searchRoutes(fastify) {
       threads: [],
       clients: [],
       projects: [],
+      tasks: [],
       messages: []
     };
 
@@ -76,6 +77,32 @@ export default async function searchRoutes(fastify) {
       });
     }
 
+    if (searchAll || type === 'tasks') {
+      const taskWhere = {
+        deletedAt: null,
+        OR: [
+          { title: { contains: q, mode: 'insensitive' } },
+          { description: { contains: q, mode: 'insensitive' } }
+        ]
+      };
+      if (projectId) taskWhere.projectId = projectId;
+
+      results.tasks = await request.prisma.task.findMany({
+        where: taskWhere,
+        include: {
+          project: {
+            select: {
+              id: true,
+              name: true,
+              client: { select: { id: true, name: true } }
+            }
+          }
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: limit
+      });
+    }
+
     if (searchAll || type === 'messages') {
       const messageWhere = {
         OR: [
@@ -104,6 +131,7 @@ export default async function searchRoutes(fastify) {
     const totalResults = results.threads.length +
                          results.clients.length +
                          results.projects.length +
+                         results.tasks.length +
                          results.messages.length;
 
     return {

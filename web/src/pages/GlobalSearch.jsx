@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Search, Folder, CheckSquare, User, MessageSquare, Mail } from 'lucide-react';
 import api from '../lib/api';
@@ -18,62 +18,124 @@ const FILTERS = [
   { value: 'projects', label: 'Projects' },
   { value: 'tasks', label: 'Tasks' },
   { value: 'clients', label: 'Clients' },
-  { value: 'threads', label: 'Messages' },
+  { value: 'threads', label: 'Conversations' },
+  { value: 'messages', label: 'Messages' },
 ];
+
+const FILTER_VALUES = new Set(FILTERS.map(({ value }) => value));
+
+export function normalizeSearchResults(data) {
+  const r = data?.results || {};
+  const tag = (arr, type, mapFn) => (arr || []).map((item) => ({
+    ...item,
+    type,
+    ...mapFn(item),
+  }));
+
+  return [
+    ...tag(r.projects, 'project', (item) => ({ title: item.name, clientName: item.client?.name })),
+    ...tag(r.tasks, 'task', (item) => ({
+      title: item.title,
+      clientName: item.project?.client?.name,
+      projectName: item.project?.name,
+    })),
+    ...tag(r.clients, 'client', (item) => ({ title: item.name })),
+    ...tag(r.threads, 'thread', (item) => ({ title: item.subject, clientName: item.client?.name })),
+    ...tag(r.messages, 'message', (item) => ({
+      title: item.thread?.subject || item.subject || 'Message',
+      clientName: item.thread?.client?.name,
+      threadId: item.thread?.id,
+      messageId: item.id,
+      description: item.bodyText,
+    })),
+  ];
+}
+
+export function resultDestination(result) {
+  const routes = {
+    project: `/project/${result.id}`,
+    task: `/task/${result.id}`,
+    client: `/client/${result.id}`,
+    thread: `/thread/${result.id}`,
+    message: result.threadId
+      ? `/thread/${result.threadId}?message=${encodeURIComponent(result.messageId)}`
+      : null,
+  };
+  return routes[result.type] || null;
+}
 
 export default function GlobalSearch() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const [query, setQuery] = useState(searchParams.get('q') || '');
+  const urlQuery = searchParams.get('q') || '';
+  const urlFilter = FILTER_VALUES.has(searchParams.get('type')) ? searchParams.get('type') : 'all';
+  const [query, setQuery] = useState(urlQuery);
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState(urlFilter);
+  const requestSequence = useRef(0);
 
   useEffect(() => {
-    if (query.trim()) {
-      search();
-    } else {
+    setQuery(urlQuery);
+    setFilter(urlFilter);
+  }, [urlFilter, urlQuery]);
+
+  useEffect(() => {
+    const trimmedQuery = query.trim();
+    const requestId = ++requestSequence.current;
+
+    if (trimmedQuery.length < 2) {
       setResults([]);
+      setLoading(false);
+      setError('');
+      return undefined;
     }
+
+    const search = async () => {
+      try {
+        setLoading(true);
+        setError('');
+        const params = filter === 'all' ? {} : { type: filter };
+        const data = await api.search(trimmedQuery, params);
+        if (requestId !== requestSequence.current) return;
+        setResults(normalizeSearchResults(data));
+      } catch (err) {
+        if (requestId !== requestSequence.current) return;
+        setResults([]);
+        setError(err.message || 'Search failed. Please try again.');
+      } finally {
+        if (requestId === requestSequence.current) setLoading(false);
+      }
+    };
+
+    search();
+    return () => {
+      requestSequence.current += 1;
+    };
   }, [query, filter]);
 
-  const search = async () => {
-    if (query.trim().length < 2) { setResults([]); return; }
-    try {
-      setLoading(true);
-      const type = filter === 'all' ? '' : filter;
-      const data = await api.search(query, type);
-      // Backend returns results grouped by entity: { threads, clients, projects, messages }.
-      // Flatten into a single list and tag each item with its type for rendering.
-      const r = data.results || {};
-      const tag = (arr, t, mapFn) => (arr || []).map((x) => ({ ...x, type: t, ...mapFn(x) }));
-      setResults([
-        ...tag(r.projects, 'project', (x) => ({ title: x.name })),
-        ...tag(r.clients, 'client', (x) => ({ title: x.name })),
-        ...tag(r.threads, 'thread', (x) => ({ title: x.subject, clientName: x.client?.name })),
-        ...tag(r.messages, 'message', (x) => ({
-          title: x.thread?.subject || 'Message',
-          clientName: x.thread?.client?.name,
-          id: x.thread?.id || x.id,
-        })),
-      ]);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+  const updateUrlState = (nextQuery, nextFilter) => {
+    const params = new URLSearchParams();
+    if (nextQuery) params.set('q', nextQuery);
+    if (nextFilter !== 'all') params.set('type', nextFilter);
+    setSearchParams(params);
   };
 
   const handleSearch = (e) => {
     const value = e.target.value;
     setQuery(value);
-    setSearchParams({ q: value });
+    updateUrlState(value, filter);
+  };
+
+  const handleFilter = (value) => {
+    setFilter(value);
+    updateUrlState(query, value);
   };
 
   const goToResult = (result) => {
-    const routes = { project: `/project/${result.id}`, task: `/task/${result.id}`, client: `/client/${result.id}`, thread: `/thread/${result.id}` };
-    if (routes[result.type]) navigate(routes[result.type]);
+    const destination = resultDestination(result);
+    if (destination) navigate(destination);
   };
 
   return (
@@ -88,6 +150,7 @@ export default function GlobalSearch() {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
           <input
+            aria-label="Search Hub"
             type="text"
             value={query}
             onChange={handleSearch}
@@ -100,7 +163,8 @@ export default function GlobalSearch() {
           {FILTERS.map(f => (
             <button
               key={f.value}
-              onClick={() => setFilter(f.value)}
+              onClick={() => handleFilter(f.value)}
+              aria-pressed={filter === f.value}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
                 filter === f.value
                   ? 'bg-primary text-primary-foreground'
@@ -114,14 +178,14 @@ export default function GlobalSearch() {
       </div>
 
       {error && (
-        <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 text-sm">
+        <div role="alert" className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 text-sm">
           {error}
         </div>
       )}
 
       {/* Results */}
       {loading ? (
-        <div className="text-center text-muted-foreground py-12">
+        <div role="status" aria-live="polite" className="text-center text-muted-foreground py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4" />
           Searching...
         </div>
@@ -138,7 +202,7 @@ export default function GlobalSearch() {
         </div>
       ) : (
         <div className="space-y-2">
-          <p className="text-sm text-muted-foreground">
+          <p aria-live="polite" className="text-sm text-muted-foreground">
             Found <span className="font-semibold text-foreground">{results.length}</span> results
           </p>
           {results.map((result) => {
@@ -163,6 +227,7 @@ export default function GlobalSearch() {
                     )}
                     <div className="flex gap-4 text-xs text-muted-foreground mt-1.5">
                       {result.clientName && <span>Client: {result.clientName}</span>}
+                      {result.projectName && <span>Project: {result.projectName}</span>}
                       {result.status && <span>Status: {result.status}</span>}
                       {result.lastActivity && (
                         <span>Updated: {new Date(result.lastActivity).toLocaleDateString('en-CA')}</span>
