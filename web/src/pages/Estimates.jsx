@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useToast } from '../hooks/useToast';
-import { Button, Card } from '../components/ui';
+import { Button, Card, LoadingState } from '../components/ui';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 
@@ -294,7 +294,7 @@ export default function Estimates() {
       {/* List */}
       {isLoading ? (
         <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+          <LoadingState label="Loading estimates…" compact />
         </div>
       ) : estimates.length === 0 ? (
         <Card className="p-12 text-center">

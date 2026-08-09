@@ -5,7 +5,7 @@ import {
   Clock, Play, Square, Plus, DollarSign, Timer, Trash2, RefreshCw, ArrowLeft
 } from 'lucide-react';
 import { api } from '../lib/api';
-import { Button, Card } from '../components/ui';
+import { Button, Card, LoadingState } from '../components/ui';
 
 function formatDuration(seconds) {
   const h = Math.floor(seconds / 3600);
@@ -247,7 +247,7 @@ export default function TimeTracking() {
       {/* Entries list */}
       {isLoading ? (
         <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+          <LoadingState label="Loading time entries…" compact />
         </div>
       ) : entries.length === 0 ? (
         <Card className="p-12 text-center">

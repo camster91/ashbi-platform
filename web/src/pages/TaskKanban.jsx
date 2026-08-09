@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, ArrowLeft } from 'lucide-react';
 import { api } from '../lib/api';
+import LoadingState from '../components/ui/LoadingState';
 
 const STATUS_COLUMNS = [
   { key: 'PENDING', label: 'To Do', headerColor: 'text-muted-foreground border-muted-foreground/30' },
@@ -59,7 +60,7 @@ export default function TaskKanban() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        <LoadingState label="Loading task board…" compact />
       </div>
     );
   }

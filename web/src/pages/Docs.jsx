@@ -22,7 +22,7 @@ import {
 import { api } from '../lib/api';
 import { useToast } from '../hooks/useToast';
 import { cn } from '../lib/utils';
-import { Card, Button } from '../components/ui';
+import { Card, Button, LoadingState } from '../components/ui';
 
 const NOTE_TYPES = [
   { value: '', label: 'All Types', icon: Layers },
@@ -337,7 +337,7 @@ export default function Docs() {
 
       {isLoading ? (
         <div className="flex justify-center py-16">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+          <LoadingState label="Loading documents…" compact />
         </div>
       ) : notes.length === 0 ? (
         <Card className="p-16 text-center">

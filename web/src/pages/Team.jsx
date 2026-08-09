@@ -15,7 +15,7 @@ import {
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
 import { useToast } from '../hooks/useToast';
-import { Card, Button } from '../components/ui';
+import { Card, Button, LoadingState } from '../components/ui';
 import CreateTeamMemberModal from '../components/CreateTeamMemberModal';
 
 const roleColors = {
@@ -84,7 +84,7 @@ export default function Team() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        <LoadingState label="Loading team…" compact />
       </div>
     );
   }

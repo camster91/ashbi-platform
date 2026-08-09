@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
+import Skeleton from './ui/Skeleton';
 
 export default function TaskComments({ taskId }) {
   const queryClient = useQueryClient();
@@ -110,9 +111,10 @@ export default function TaskComments({ taskId }) {
 
   if (isLoading) {
     return (
-      <div className="animate-pulse space-y-3">
+      <div role="status" aria-live="polite" aria-label="Loading task comments" className="space-y-3">
+        <span className="sr-only">Loading task comments…</span>
         {[...Array(3)].map((_, i) => (
-          <div key={i} className="bg-gray-100 rounded h-12"></div>
+          <Skeleton key={i} className="h-12" />
         ))}
       </div>
     );

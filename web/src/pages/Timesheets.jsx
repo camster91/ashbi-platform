@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useToast } from '../hooks/useToast';
-import { Card, Button } from '../components/ui';
+import { Card, Button, LoadingState } from '../components/ui';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -186,7 +186,7 @@ export default function Timesheets() {
       {/* Weekly grid */}
       {isLoading ? (
         <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+          <LoadingState label="Loading timesheets…" compact />
         </div>
       ) : timesheets.length === 0 ? (
         <Card className="p-12 text-center">

@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useToast } from '../hooks/useToast';
-import { Button, Card } from '../components/ui';
+import { Button, Card, LoadingState } from '../components/ui';
 import { formatRelativeTime } from '../lib/utils';
 
 function urgencyColor(days) {
@@ -151,7 +151,7 @@ export default function InvoiceChaser() {
       {/* Invoices */}
       {isLoading ? (
         <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+          <LoadingState label="Loading overdue invoices…" compact />
         </div>
       ) : overdueInvoices.length === 0 ? (
         <Card className="p-12 text-center">

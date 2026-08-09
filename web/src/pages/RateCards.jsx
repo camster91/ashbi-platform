@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Pencil, Trash2, X, Star, DollarSign } from 'lucide-react';
 import { api } from '../lib/api';
-import { Card, CardHeader, CardTitle, CardContent } from '../components/ui';
+import { Card, CardHeader, CardTitle, CardContent, Skeleton } from '../components/ui';
 import Button from '../components/ui/Button';
 import { useToast } from '../hooks/useToast';
 import { cn } from '../lib/utils';
@@ -97,11 +97,10 @@ export default function RateCards() {
       </div>
 
       {isLoading ? (
-        <div className="grid gap-4">
+        <div role="status" aria-live="polite" aria-label="Loading rate cards" className="grid gap-4">
+          <span className="sr-only">Loading rate cards…</span>
           {[1, 2, 3].map((i) => (
-            <Card key={i} className="animate-pulse">
-              <div className="h-24" />
-            </Card>
+            <Skeleton key={i} className="h-24 rounded-xl" />
           ))}
         </div>
       ) : sortedCards.length === 0 ? (

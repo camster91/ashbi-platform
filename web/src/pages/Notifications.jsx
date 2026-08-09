@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Bell, Check, CheckCheck, Trash2 } from 'lucide-react';
 import { api } from '../lib/api';
+import LoadingState from '../components/ui/LoadingState';
 
 export default function Notifications() {
   const queryClient = useQueryClient();
@@ -44,7 +45,7 @@ export default function Notifications() {
 
       {isLoading ? (
         <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+          <LoadingState label="Loading notifications…" compact />
         </div>
       ) : notifications.length === 0 ? (
         <div className="text-center py-12">

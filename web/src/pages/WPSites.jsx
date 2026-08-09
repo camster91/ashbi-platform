@@ -21,7 +21,7 @@ import {
   ChevronDown as ChevronDownIcon
 } from 'lucide-react';
 import { api } from '../lib/api';
-import { Button, Card } from '../components/ui';
+import { Button, Card, LoadingState, Skeleton } from '../components/ui';
 
 const STATUS_COLORS = {
   HEALTHY: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
@@ -351,9 +351,10 @@ function SitesTab({ queryClient }) {
           </Button>
         </div>
         {fleetLoading && !fleet ? (
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+          <div role="status" aria-live="polite" aria-label="Loading fleet status" className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+            <span className="sr-only">Loading fleet status…</span>
             {Array.from({ length: 7 }).map((_, i) => (
-              <div key={i} className="animate-pulse h-20 rounded-lg bg-muted" />
+              <Skeleton key={i} className="h-20 rounded-lg" />
             ))}
           </div>
         ) : (
@@ -396,7 +397,7 @@ function SitesTab({ queryClient }) {
 
       {isLoading ? (
         <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+          <LoadingState label="Loading WordPress sites…" compact />
         </div>
       ) : rows.length === 0 ? (
         <Card className="p-12 text-center">

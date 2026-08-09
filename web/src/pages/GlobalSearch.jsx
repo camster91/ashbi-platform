@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Search, Folder, CheckSquare, User, MessageSquare, Mail } from 'lucide-react';
 import api from '../lib/api';
+import LoadingState from '../components/ui/LoadingState';
 
 const TYPE_ICON = { project: Folder, task: CheckSquare, client: User, thread: MessageSquare, message: Mail };
 
@@ -185,10 +186,7 @@ export default function GlobalSearch() {
 
       {/* Results */}
       {!error && (loading ? (
-        <div role="status" aria-live="polite" className="text-center text-muted-foreground py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4" />
-          Searching...
-        </div>
+        <LoadingState label="Searching…" compact className="py-12" />
       ) : results.length === 0 && query.trim() ? (
         <div className="text-center text-muted-foreground py-12">
           <Search className="mx-auto mb-3 opacity-20" size={40} />

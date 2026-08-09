@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import Modal from './Modal';
 import { useToast } from '../hooks/useToast';
+import Skeleton from './ui/Skeleton';
 
 export default function Milestones({ projectId }) {
   const queryClient = useQueryClient();
@@ -64,9 +65,10 @@ export default function Milestones({ projectId }) {
 
   if (isLoading) {
     return (
-      <div className="animate-pulse space-y-4">
+      <div role="status" aria-live="polite" aria-label="Loading milestones" className="space-y-4">
+        <span className="sr-only">Loading milestones…</span>
         {[...Array(3)].map((_, i) => (
-          <div key={i} className="bg-gray-100 rounded-lg h-20"></div>
+          <Skeleton key={i} className="h-20 rounded-lg" />
         ))}
       </div>
     );

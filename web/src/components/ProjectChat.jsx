@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { useSocket } from '../hooks/useSocket';
 import { useAuth } from '../hooks/useAuth';
 import { preferredScrollBehavior } from '../lib/motion';
+import LoadingState from './ui/LoadingState';
 
 export default function ProjectChat({ projectId }) {
   const { user } = useAuth();
@@ -134,12 +135,7 @@ export default function ProjectChat({ projectId }) {
   }, {});
 
   if (isLoading) {
-    return (
-      <div role="status" className="flex items-center justify-center h-64 gap-3 text-gray-600">
-        <div aria-hidden="true" className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        <span>Loading messages…</span>
-      </div>
-    );
+    return <LoadingState label="Loading messages…" compact className="h-64 text-gray-600" spinnerClassName="border-blue-200 border-t-blue-600" />;
   }
 
   return (

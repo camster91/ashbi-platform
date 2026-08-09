@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { FolderOpen, Search, Plus, Trash2, X, ExternalLink, Image, FileText, Video, Palette, Globe } from 'lucide-react';
 import { api } from '../lib/api';
-import { Button, Card } from '../components/ui';
+import { Button, Card, LoadingState } from '../components/ui';
 
 const TYPE_ICONS = { image: Image, document: FileText, video: Video, brand: Palette, website: Globe };
 const ASSET_TYPES = ['image', 'document', 'video', 'brand', 'website', 'other'];
@@ -113,7 +113,7 @@ export default function AssetLibrary() {
         </Card>
       ) : isLoading ? (
         <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+          <LoadingState label="Loading assets…" compact />
         </div>
       ) : filteredAssets.length === 0 ? (
         <Card className="p-12 text-center">

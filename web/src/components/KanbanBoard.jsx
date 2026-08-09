@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
+import LoadingState from './ui/LoadingState';
 
 const COLUMNS = [
   { id: 'PENDING', title: 'To Do', color: 'bg-gray-100', description: 'Tasks waiting to be started' },
@@ -282,12 +283,7 @@ export default function KanbanBoard({ projectId }) {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64" role="status" aria-live="polite">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        <span className="ml-3 text-gray-600">Loading tasks...</span>
-      </div>
-    );
+    return <LoadingState label="Loading tasks…" compact className="h-64" spinnerClassName="border-blue-200 border-t-blue-600" />;
   }
 
   return (

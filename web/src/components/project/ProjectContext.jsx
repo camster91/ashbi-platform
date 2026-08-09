@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { formatRelativeTime } from '../../lib/utils';
+import Skeleton from '../ui/Skeleton';
 
 export default function ProjectContextCard({ projectId }) {
   const queryClient = useQueryClient();
@@ -41,10 +42,11 @@ export default function ProjectContextCard({ projectId }) {
 
   if (isLoading) {
     return (
-      <div className="bg-white rounded-lg shadow-sm border border-border p-4">
-        <div className="animate-pulse space-y-3">
-          <div className="h-4 bg-gray-200 rounded w-1/3"></div>
-          <div className="h-20 bg-gray-200 rounded"></div>
+      <div role="status" aria-live="polite" aria-label="Loading project context" className="bg-white rounded-lg shadow-sm border border-border p-4">
+        <span className="sr-only">Loading project context…</span>
+        <div className="space-y-3">
+          <Skeleton className="h-4 w-1/3" />
+          <Skeleton className="h-20" />
         </div>
       </div>
     );

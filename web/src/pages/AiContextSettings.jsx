@@ -12,6 +12,7 @@ import {
   Check,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import LoadingState from '../components/ui/LoadingState';
 import { cn } from '../lib/utils';
 
 export default function AiContextSettings() {
@@ -83,7 +84,7 @@ export default function AiContextSettings() {
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+        <LoadingState label="Loading AI context settings…" compact />
       </div>
     );
   }

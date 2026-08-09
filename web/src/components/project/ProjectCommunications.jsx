@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { formatRelativeTime, cn } from '../../lib/utils';
+import LoadingState from '../ui/LoadingState';
 
 const DIRECTION_FILTERS = [
   { value: 'all', label: 'All' },
@@ -55,11 +56,7 @@ export default function ProjectCommunications({ projectId }) {
   const total = data?.total || 0;
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-32">
-        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-      </div>
-    );
+    return <LoadingState label="Loading project communications…" size="sm" compact className="h-32" />;
   }
 
   return (
