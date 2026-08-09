@@ -389,10 +389,10 @@ export default function Layout({ children }) {
                     {user?.name?.charAt(0)?.toUpperCase()}
                   </span>
                 </div>
-                <Link to="/settings" className="p-1.5 text-white/60 hover:text-white rounded-lg hover:bg-white/10 transition-colors" title="Settings" onClick={() => setSidebarOpen(false)}>
+                <Link to="/settings" className="p-1.5 text-white/60 hover:text-white rounded-lg hover:bg-white/10 transition-colors" title="Settings" aria-label="Settings" onClick={() => setSidebarOpen(false)}>
                   <Settings className="w-3.5 h-3.5" />
                 </Link>
-                <button onClick={logout} className="p-1.5 text-white/60 hover:text-red-400 rounded-lg hover:bg-white/10 transition-colors" title="Logout">
+                <button onClick={logout} className="p-1.5 text-white/60 hover:text-red-400 rounded-lg hover:bg-white/10 transition-colors" title="Logout" aria-label="Logout">
                   <LogOut className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -416,6 +416,7 @@ export default function Layout({ children }) {
                     to="/settings"
                     className="p-2 text-white/60 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
                     title="Settings"
+                    aria-label="Settings"
                     onClick={() => setSidebarOpen(false)}
                   >
                     <Settings className="w-4 h-4" />
@@ -424,6 +425,7 @@ export default function Layout({ children }) {
                     onClick={logout}
                     className="p-2 text-white/60 hover:text-red-400 rounded-lg hover:bg-white/10 transition-colors"
                     title="Logout"
+                    aria-label="Logout"
                   >
                     <LogOut className="w-4 h-4" />
                   </button>

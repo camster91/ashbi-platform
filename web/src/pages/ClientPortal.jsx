@@ -790,6 +790,7 @@ function ProjectDetail({ projectId, token, onBack }) {
           <button
             type="button"
             className="cp-upload-zone"
+            aria-describedby="project-upload-help"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
             onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = BRAND.primary; }}
@@ -804,7 +805,7 @@ function ProjectDetail({ projectId, token, onBack }) {
             <p className="cp-text" style={{ fontWeight: 600, marginTop: '0.5rem' }}>
               {uploading ? 'Uploading...' : 'Drop files here or click to upload'}
             </p>
-            <p className="cp-text-muted" style={{ fontSize: '0.8rem' }}>PDF, images, documents — up to 50MB</p>
+            <p id="project-upload-help" className="cp-text-muted" style={{ fontSize: '0.8rem' }}>PDF, images, documents — up to 50MB</p>
           </button>
 
           {/* Upload error — surfaced so the user sees what failed instead of a ghost-success */}
@@ -1042,6 +1043,7 @@ function DocumentsTab({ projects, token }) {
       <button
         type="button"
         className="cp-upload-zone"
+        aria-describedby="documents-upload-help"
         onClick={() => fileInputRef.current?.click()}
         disabled={uploading || !selectedProjectId}
         onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = BRAND.primary; }}
@@ -1056,7 +1058,7 @@ function DocumentsTab({ projects, token }) {
         <p className="cp-text" style={{ fontWeight: 600, marginTop: '0.5rem' }}>
           {uploading ? 'Uploading...' : 'Drop files here or click to upload'}
         </p>
-        <p className="cp-text-muted" style={{ fontSize: '0.8rem' }}>PDF, images, documents — up to 50MB</p>
+        <p id="documents-upload-help" className="cp-text-muted" style={{ fontSize: '0.8rem' }}>PDF, images, documents — up to 50MB</p>
       </button>
 
       {/* Document list */}

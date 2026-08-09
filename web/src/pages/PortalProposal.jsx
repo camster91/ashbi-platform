@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
@@ -17,6 +17,12 @@ export default function PortalProposal() {
   const { token } = useParams();
   const [action, setAction] = useState(null); // 'approve' | 'decline' | null
   const [declineReason, setDeclineReason] = useState('');
+  const [declineError, setDeclineError] = useState('');
+  const declineRef = useRef(null);
+
+  useEffect(() => {
+    if (action === 'decline') declineRef.current?.focus();
+  }, [action]);
   const [completed, setCompleted] = useState(null); // 'approved' | 'declined'
 
   const { data: proposal, isLoading, error } = useQuery({
@@ -37,14 +43,20 @@ export default function PortalProposal() {
   };
 
   const handleDecline = () => {
-    if (!declineReason.trim()) return;
+    if (!declineReason.trim()) {
+      setDeclineError('Enter a reason for declining this proposal.');
+      declineRef.current?.focus();
+      return;
+    }
+    setDeclineError('');
     respondMutation.mutate({ action: 'decline', reason: declineReason.trim() });
   };
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-800" />
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center" role="status" aria-live="polite">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-800" aria-hidden="true" />
+        <span className="sr-only">Loading proposal</span>
       </div>
     );
   }
@@ -184,24 +196,29 @@ export default function PortalProposal() {
                 <h3 className="text-sm font-medium text-slate-700">Please let us know why you are declining:</h3>
                 <label htmlFor="decline-reason" className="sr-only">Reason for declining proposal</label>
                 <textarea
+                  ref={declineRef}
                   id="decline-reason"
                   value={declineReason}
-                  onChange={(e) => setDeclineReason(e.target.value)}
+                  onChange={(e) => { setDeclineReason(e.target.value); setDeclineError(''); }}
+                  required
+                  aria-invalid={!!declineError}
+                  aria-describedby={declineError ? 'decline-reason-error' : undefined}
                   placeholder="Your feedback helps us improve our proposals..."
                   className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 resize-none"
                   rows={4}
                 />
+                {declineError && <p id="decline-reason-error" role="alert" className="text-sm text-red-600">{declineError}</p>}
                 <div className="flex items-center gap-3">
                   <button
                     onClick={handleDecline}
-                    disabled={!declineReason.trim() || respondMutation.isPending}
+                    disabled={respondMutation.isPending}
                     className="px-5 py-2.5 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
                   >
                     {respondMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
                     Submit Decline
                   </button>
                   <button
-                    onClick={() => { setAction(null); setDeclineReason(''); }}
+                    onClick={() => { setAction(null); setDeclineReason(''); setDeclineError(''); }}
                     className="px-5 py-2.5 text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-100 transition-colors"
                   >
                     Cancel

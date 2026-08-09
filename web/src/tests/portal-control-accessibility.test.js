@@ -28,7 +28,7 @@ describe('critical portal and shell control semantics', () => {
   });
 
   it('names every cited mobile and collapse navigation control', () => {
-    for (const name of ['Collapse sidebar', 'Expand sidebar', 'Close navigation menu', 'Open navigation menu']) {
+    for (const name of ['Collapse sidebar', 'Expand sidebar', 'Close navigation menu', 'Open navigation menu', 'Settings', 'Logout']) {
       expect(layout).toContain(`aria-label="${name}"`);
     }
   });
@@ -38,8 +38,11 @@ describe('critical portal and shell control semantics', () => {
     expect(intake).toContain('htmlFor="respondent-email"');
     expect(intake).toContain('htmlFor={`intake-field-${i}`}');
     expect(intake).toContain('<div role="alert"');
+    expect(intake).toContain('aria-invalid={!!validationErrors.name}');
+    expect(intake).toContain('ref={summaryRef} tabIndex={-1} role="alert"');
     expect(proposal).toContain('htmlFor="decline-reason"');
     expect(proposal).toContain('<p role="alert"');
+    expect(proposal).toContain('ref={declineRef}');
   });
 
   it('exposes signature instructions and selected method to assistive technology', () => {
@@ -48,5 +51,7 @@ describe('critical portal and shell control semantics', () => {
     expect(contract).toContain('role="group" aria-label="Signature method"');
     expect(contract.match(/aria-pressed=\{signatureMode ===/g)).toHaveLength(2);
     expect(contract).toContain('<p role="alert"');
+    expect(contract).toContain('ref={signerRef}');
+    expect(contract).toContain('aria-label="Typed signature preview"');
   });
 });

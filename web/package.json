@@ -14,7 +14,6 @@
   },
   "dependencies": {
     "@capacitor/android": "^8.2.0",
-    "@sentry/react": "^10.0.0",
     "@capacitor/cli": "^8.2.0",
     "@capacitor/core": "^8.2.0",
     "@capacitor/push-notifications": "^8.0.2",
@@ -31,6 +30,7 @@
     "@radix-ui/react-tabs": "^1.1.1",
     "@radix-ui/react-toast": "^1.2.2",
     "@radix-ui/react-tooltip": "^1.1.3",
+    "@sentry/react": "^10.0.0",
     "@tanstack/react-query": "^5.60.2",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
@@ -54,6 +54,7 @@
     "@vitejs/plugin-react": "^6.0.3",
     "@vitest/coverage-v8": "^4.1.5",
     "autoprefixer": "^10.4.20",
+    "axe-core": "^4.13.0",
     "eslint": "^9.15.0",
     "eslint-plugin-react": "^7.37.2",
     "eslint-plugin-react-hooks": "^5.0.0",

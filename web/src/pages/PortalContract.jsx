@@ -127,6 +127,8 @@ export default function PortalContract() {
   const [signatureMode, setSignatureMode] = useState('draw'); // 'draw' | 'type'
   const [signatureData, setSignatureData] = useState(null);
   const [signed, setSigned] = useState(false);
+  const [validationError, setValidationError] = useState('');
+  const signerRef = useRef(null);
 
   const { data: contract, isLoading, error } = useQuery({
     queryKey: ['portal-contract', token],
@@ -142,7 +144,16 @@ export default function PortalContract() {
   });
 
   const handleSign = () => {
-    if (!signerName.trim()) return;
+    if (!signerName.trim()) {
+      setValidationError('Enter your full legal name.');
+      signerRef.current?.focus();
+      return;
+    }
+    if (signatureMode === 'draw' && !signatureData) {
+      setValidationError('Draw your signature or choose Type signature.');
+      return;
+    }
+    setValidationError('');
     const payload = {
       signerName: signerName.trim(),
       signatureType: signatureMode,
@@ -154,12 +165,11 @@ export default function PortalContract() {
     signMutation.mutate(payload);
   };
 
-  const canSign = signerName.trim() && (signatureMode === 'type' || signatureData);
-
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-800" />
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center" role="status" aria-live="polite">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-800" aria-hidden="true" />
+        <span className="sr-only">Loading contract</span>
       </div>
     );
   }
@@ -199,7 +209,7 @@ export default function PortalContract() {
       <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
         {/* Signed confirmation */}
         {(signed || alreadySigned) && (
-          <div className="rounded-xl border border-green-200 bg-green-50 p-6 text-center">
+          <div className="rounded-xl border border-green-200 bg-green-50 p-6 text-center" role="status" aria-live="polite">
             <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
             <h2 className="text-xl font-bold text-green-800 mb-1">Contract Signed</h2>
             <p className="text-green-600">
@@ -242,10 +252,14 @@ export default function PortalContract() {
                 Full Legal Name
               </label>
               <input
+                ref={signerRef}
                 id="signer-name"
                 type="text"
                 value={signerName}
-                onChange={(e) => setSignerName(e.target.value)}
+                onChange={(e) => { setSignerName(e.target.value); setValidationError(''); }}
+                required
+                aria-invalid={!!validationError && !signerName.trim()}
+                aria-describedby={validationError ? 'signature-validation-error' : undefined}
                 placeholder="Enter your full name"
                 className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
               />
@@ -288,7 +302,7 @@ export default function PortalContract() {
               {signatureMode === 'draw' ? (
                 <SignatureCanvas onSignatureChange={setSignatureData} />
               ) : (
-                <div className="border-2 border-dashed border-slate-300 rounded-lg bg-white p-6 text-center">
+                <div className="border-2 border-dashed border-slate-300 rounded-lg bg-white p-6 text-center" role="status" aria-live="polite" aria-label="Typed signature preview">
                   {signerName.trim() ? (
                     <p className="text-3xl font-signature text-slate-800" style={{ fontFamily: "'Caveat', cursive, serif" }}>
                       {signerName}
@@ -300,10 +314,12 @@ export default function PortalContract() {
               )}
             </div>
 
+            {validationError && <p id="signature-validation-error" role="alert" className="text-sm text-red-600 text-center">{validationError}</p>}
+
             {/* Sign button */}
             <button
               onClick={handleSign}
-              disabled={!canSign || signMutation.isPending}
+              disabled={signMutation.isPending}
               className="w-full px-6 py-3 bg-slate-800 text-white text-sm font-semibold rounded-lg hover:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 shadow-sm"
             >
               {signMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
