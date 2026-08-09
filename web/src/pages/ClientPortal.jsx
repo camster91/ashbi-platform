@@ -196,15 +196,19 @@ function LoginScreen() {
             <p className="cp-text-muted" style={{ textAlign: 'center', marginBottom: '1.5rem', fontSize: '0.875rem' }}>
               Enter your email to receive a secure login link.
             </p>
+            <label htmlFor="client-portal-email" className="cp-label">Email address</label>
             <input
+              id="client-portal-email"
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
               placeholder="your@email.com"
               required
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? 'client-portal-login-error' : undefined}
               className="cp-input"
             />
-            {error && <p className="cp-error">{error}</p>}
+            {error && <p id="client-portal-login-error" role="alert" className="cp-error">{error}</p>}
             <button type="submit" disabled={loading} className="cp-btn-primary" style={{ width: '100%' }}>
               {loading ? 'Sending...' : 'Send Login Link'}
             </button>
@@ -749,7 +753,7 @@ function ProjectDetail({ projectId, token, onBack }) {
             <div ref={chatEndRef} />
           </div>
           <form onSubmit={handleSendMessage} className="cp-chat-input-bar">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.7rem', color: connected ? '#15803d' : '#b91c1c' }}>
+            <div role="status" aria-live="polite" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.7rem', color: connected ? '#15803d' : '#b91c1c' }}>
               <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: '50%', background: connected ? '#15803d' : '#b91c1c', display: 'inline-block' }} />
               {connected ? 'Connected' : 'Reconnecting...'}
             </div>
@@ -759,10 +763,11 @@ function ProjectDetail({ projectId, token, onBack }) {
                 value={chatInput}
                 onChange={e => setChatInput(e.target.value)}
                 placeholder="Type a message..."
+                aria-label="Message to project team"
                 className="cp-input"
                 style={{ flex: 1 }}
               />
-              <button type="submit" className="cp-btn-primary" style={{ padding: '0.5rem 1rem' }} disabled={!chatInput.trim()}>
+              <button type="submit" className="cp-btn-primary" style={{ padding: '0.5rem 1rem' }} disabled={!chatInput.trim()} aria-label="Send message">
                 {Icons.send}
               </button>
             </div>
@@ -774,9 +779,19 @@ function ProjectDetail({ projectId, token, onBack }) {
       {activeView === 'documents' && (
         <div className="cp-space-y-4">
           {/* Upload area */}
-          <div
+          <input
+            type="file"
+            ref={fileInputRef}
+            multiple
+            className="cp-visually-hidden"
+            aria-label="Choose project documents to upload"
+            onChange={e => { if (e.target.files.length > 0) handleFileUpload(e.target.files); }}
+          />
+          <button
+            type="button"
             className="cp-upload-zone"
             onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
             onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = BRAND.primary; }}
             onDragLeave={e => { e.currentTarget.style.borderColor = BRAND.border; }}
             onDrop={e => {
@@ -785,19 +800,12 @@ function ProjectDetail({ projectId, token, onBack }) {
               if (e.dataTransfer.files.length > 0) handleFileUpload(e.dataTransfer.files);
             }}
           >
-            <input
-              type="file"
-              ref={fileInputRef}
-              multiple
-              style={{ display: 'none' }}
-              onChange={e => { if (e.target.files.length > 0) handleFileUpload(e.target.files); }}
-            />
             {Icons.upload}
             <p className="cp-text" style={{ fontWeight: 600, marginTop: '0.5rem' }}>
               {uploading ? 'Uploading...' : 'Drop files here or click to upload'}
             </p>
             <p className="cp-text-muted" style={{ fontSize: '0.8rem' }}>PDF, images, documents — up to 50MB</p>
-          </div>
+          </button>
 
           {/* Upload error — surfaced so the user sees what failed instead of a ghost-success */}
           {uploadError && (
@@ -853,7 +861,7 @@ function ProjectDetail({ projectId, token, onBack }) {
                     <button type="button" onClick={() => handleDownloadDoc(doc)} className="cp-btn-secondary" style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }}>
                       {Icons.download} Download
                     </button>
-                    <button onClick={() => handleDeleteDoc(doc.id)} className="cp-btn-danger" style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }}>
+                    <button type="button" onClick={() => handleDeleteDoc(doc.id)} className="cp-btn-danger" style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }} aria-label={`Delete ${doc.originalName}`}>
                       {Icons.trash}
                     </button>
                   </div>
@@ -1010,6 +1018,7 @@ function DocumentsTab({ projects, token }) {
       {/* Project selector */}
       {projects.length > 1 && (
         <select
+          aria-label="Project for documents"
           value={selectedProjectId}
           onChange={e => setSelectedProjectId(e.target.value)}
           className="cp-input"
@@ -1022,9 +1031,19 @@ function DocumentsTab({ projects, token }) {
       )}
 
       {/* Upload area */}
-      <div
+      <input
+        type="file"
+        ref={fileInputRef}
+        multiple
+        className="cp-visually-hidden"
+        aria-label="Choose documents to upload"
+        onChange={e => { if (e.target.files.length > 0) handleFileUpload(e.target.files); }}
+      />
+      <button
+        type="button"
         className="cp-upload-zone"
         onClick={() => fileInputRef.current?.click()}
+        disabled={uploading || !selectedProjectId}
         onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = BRAND.primary; }}
         onDragLeave={e => { e.currentTarget.style.borderColor = BRAND.border; }}
         onDrop={e => {
@@ -1033,19 +1052,12 @@ function DocumentsTab({ projects, token }) {
           if (e.dataTransfer.files.length > 0) handleFileUpload(e.dataTransfer.files);
         }}
       >
-        <input
-          type="file"
-          ref={fileInputRef}
-          multiple
-          style={{ display: 'none' }}
-          onChange={e => { if (e.target.files.length > 0) handleFileUpload(e.target.files); }}
-        />
         {Icons.upload}
         <p className="cp-text" style={{ fontWeight: 600, marginTop: '0.5rem' }}>
           {uploading ? 'Uploading...' : 'Drop files here or click to upload'}
         </p>
         <p className="cp-text-muted" style={{ fontSize: '0.8rem' }}>PDF, images, documents — up to 50MB</p>
-      </div>
+      </button>
 
       {/* Document list */}
       {loading ? (
@@ -1068,7 +1080,7 @@ function DocumentsTab({ projects, token }) {
                 <button type="button" onClick={() => handleDownloadDoc(doc)} className="cp-btn-secondary" style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }}>
                   {Icons.download} Download
                 </button>
-                <button onClick={() => handleDeleteDoc(doc.id)} className="cp-btn-danger" style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }}>
+                <button type="button" onClick={() => handleDeleteDoc(doc.id)} className="cp-btn-danger" style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }} aria-label={`Delete ${doc.originalName}`}>
                   {Icons.trash}
                 </button>
               </div>
@@ -1104,7 +1116,7 @@ function ChatTab({ projects, token }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2 className="cp-page-title" style={{ marginBottom: 0 }}>Chat</h2>
         {projects.length > 1 && (
-          <select value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)} className="cp-input" style={{ maxWidth: 240 }}>
+          <select aria-label="Project for chat" value={selectedProjectId} onChange={e => setSelectedProjectId(e.target.value)} className="cp-input" style={{ maxWidth: 240 }}>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         )}
@@ -1132,7 +1144,7 @@ function ChatTab({ projects, token }) {
           <div ref={chatEndRef} />
         </div>
         <form onSubmit={handleSend} className="cp-chat-input-bar">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.7rem', color: connected ? '#15803d' : '#b91c1c' }}>
+          <div role="status" aria-live="polite" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.7rem', color: connected ? '#15803d' : '#b91c1c' }}>
             <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: '50%', background: connected ? '#15803d' : '#b91c1c', display: 'inline-block' }} />
             {connected ? 'Connected' : 'Reconnecting...'}
           </div>
@@ -1142,10 +1154,11 @@ function ChatTab({ projects, token }) {
               value={input}
               onChange={e => setInput(e.target.value)}
               placeholder="Type a message..."
+              aria-label="Message to project team"
               className="cp-input"
               style={{ flex: 1 }}
             />
-            <button type="submit" className="cp-btn-primary" style={{ padding: '0.5rem 1rem' }} disabled={!input.trim()}>
+            <button type="submit" className="cp-btn-primary" style={{ padding: '0.5rem 1rem' }} disabled={!input.trim()} aria-label="Send message">
               {Icons.send}
             </button>
           </div>
@@ -1458,9 +1471,15 @@ const globalStyles = `
   /* Upload */
   .cp-upload-zone {
     border: 2px dashed ${BRAND.border}; border-radius: 16px; padding: 2rem;
+    display: block; width: 100%; color: inherit; font: inherit;
     text-align: center; cursor: pointer; transition: all 0.2s; background: ${BRAND.white};
   }
   .cp-upload-zone:hover { border-color: ${BRAND.primary}; background: ${BRAND.bg}; }
+  .cp-upload-zone:disabled { cursor: wait; opacity: 0.7; }
+  .cp-visually-hidden {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+  }
 
   /* Responsive */
   @media (max-width: 640px) {

@@ -121,10 +121,11 @@ export default function PortalIntakeForm() {
           {/* Name & Email (always shown) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">
+              <label htmlFor="respondent-name" className="block text-sm font-medium text-slate-300 mb-1">
                 Your Name <span className="text-red-400">*</span>
               </label>
               <input
+                id="respondent-name"
                 type="text"
                 value={respondentName}
                 onChange={e => setRespondentName(e.target.value)}
@@ -134,10 +135,11 @@ export default function PortalIntakeForm() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">
+              <label htmlFor="respondent-email" className="block text-sm font-medium text-slate-300 mb-1">
                 Your Email <span className="text-red-400">*</span>
               </label>
               <input
+                id="respondent-email"
                 type="email"
                 value={respondentEmail}
                 onChange={e => setRespondentEmail(e.target.value)}
@@ -151,12 +153,13 @@ export default function PortalIntakeForm() {
           {/* Dynamic fields */}
           {form.fields.map((field, i) => (
             <div key={i}>
-              <label className="block text-sm font-medium text-slate-300 mb-1">
+              <label htmlFor={`intake-field-${i}`} className="block text-sm font-medium text-slate-300 mb-1">
                 {field.label} {field.required && <span className="text-red-400">*</span>}
               </label>
 
               {field.type === 'TEXTAREA' ? (
                 <textarea
+                  id={`intake-field-${i}`}
                   value={answers[field.label] || ''}
                   onChange={e => updateAnswer(field.label, e.target.value)}
                   required={field.required}
@@ -166,6 +169,7 @@ export default function PortalIntakeForm() {
                 />
               ) : field.type === 'SELECT' ? (
                 <select
+                  id={`intake-field-${i}`}
                   value={answers[field.label] || ''}
                   onChange={e => updateAnswer(field.label, e.target.value)}
                   required={field.required}
@@ -179,6 +183,7 @@ export default function PortalIntakeForm() {
               ) : field.type === 'CHECKBOX' ? (
                 <div className="flex items-center gap-2">
                   <input
+                    id={`intake-field-${i}`}
                     type="checkbox"
                     checked={!!answers[field.label]}
                     onChange={e => updateAnswer(field.label, e.target.checked)}
@@ -192,6 +197,7 @@ export default function PortalIntakeForm() {
                 </div>
               ) : (
                 <input
+                  id={`intake-field-${i}`}
                   type={field.type === 'DATE' ? 'date' : field.type === 'EMAIL' ? 'email' : field.type === 'PHONE' ? 'tel' : 'text'}
                   value={answers[field.label] || ''}
                   onChange={e => updateAnswer(field.label, e.target.value)}
@@ -204,7 +210,7 @@ export default function PortalIntakeForm() {
           ))}
 
           {submitMutation.isError && (
-            <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+            <div role="alert" className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
               {submitMutation.error?.message || 'Failed to submit. Please try again.'}
             </div>
           )}

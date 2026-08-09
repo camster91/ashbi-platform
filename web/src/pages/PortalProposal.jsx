@@ -182,7 +182,9 @@ export default function PortalProposal() {
             {action === 'decline' ? (
               <div className="space-y-4">
                 <h3 className="text-sm font-medium text-slate-700">Please let us know why you are declining:</h3>
+                <label htmlFor="decline-reason" className="sr-only">Reason for declining proposal</label>
                 <textarea
+                  id="decline-reason"
                   value={declineReason}
                   onChange={(e) => setDeclineReason(e.target.value)}
                   placeholder="Your feedback helps us improve our proposals..."
@@ -206,7 +208,7 @@ export default function PortalProposal() {
                   </button>
                 </div>
                 {respondMutation.isError && (
-                  <p className="text-sm text-red-600">Something went wrong. Please try again.</p>
+                  <p role="alert" className="text-sm text-red-600">Something went wrong. Please try again.</p>
                 )}
               </div>
             ) : (

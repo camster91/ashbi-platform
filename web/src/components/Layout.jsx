@@ -315,15 +315,19 @@ export default function Layout({ children }) {
             {!sidebarCollapsed && (
               <>
                 <button
+                  type="button"
                   onClick={toggleCollapse}
                   className="ml-auto p-1.5 text-white/60 hover:text-white rounded-lg hover:bg-white/10 transition-colors hidden lg:flex"
                   title="Collapse sidebar"
+                  aria-label="Collapse sidebar"
                 >
                   <PanelLeftClose className="w-4 h-4" />
                 </button>
                 <button
+                  type="button"
                   onClick={() => setSidebarOpen(false)}
                   className="ml-auto p-2 text-white/60 hover:text-white lg:hidden"
+                  aria-label="Close navigation menu"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -331,9 +335,11 @@ export default function Layout({ children }) {
             )}
             {sidebarCollapsed && (
               <button
+                type="button"
                 onClick={toggleCollapse}
                 className="absolute bottom-20 left-1/2 -translate-x-1/2 p-1.5 text-white/60 hover:text-white rounded-lg hover:bg-white/10 transition-colors hidden lg:flex"
                 title="Expand sidebar"
+                aria-label="Expand sidebar"
               >
                 <PanelLeftOpen className="w-4 h-4" />
               </button>
@@ -436,8 +442,10 @@ export default function Layout({ children }) {
         {/* Top bar */}
         <header className="sticky top-0 z-30 flex items-center h-16 px-4 bg-card/80 backdrop-blur-md border-b border-border/60 lg:px-6 flex-shrink-0">
           <button
+            type="button"
             onClick={() => setSidebarOpen(true)}
             className="p-2 -ml-2 text-muted-foreground hover:text-foreground lg:hidden"
+            aria-label="Open navigation menu"
           >
             <Menu className="w-6 h-6" />
           </button>

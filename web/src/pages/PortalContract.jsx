@@ -91,6 +91,8 @@ function SignatureCanvas({ onSignatureChange }) {
           width={600}
           height={200}
           className="w-full h-40 cursor-crosshair touch-none"
+          role="img"
+          aria-label="Signature drawing area. Draw with a pointer or choose Type signature for keyboard entry."
           onMouseDown={startDrawing}
           onMouseMove={draw}
           onMouseUp={stopDrawing}
@@ -252,10 +254,11 @@ export default function PortalContract() {
             {/* Signature mode toggle */}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-2">Signature</label>
-              <div className="flex gap-2 mb-3">
+              <div className="flex gap-2 mb-3" role="group" aria-label="Signature method">
                 <button
                   type="button"
                   onClick={() => setSignatureMode('draw')}
+                  aria-pressed={signatureMode === 'draw'}
                   className={cn(
                     'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors',
                     signatureMode === 'draw'
@@ -269,6 +272,7 @@ export default function PortalContract() {
                 <button
                   type="button"
                   onClick={() => setSignatureMode('type')}
+                  aria-pressed={signatureMode === 'type'}
                   className={cn(
                     'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors',
                     signatureMode === 'type'
@@ -308,7 +312,7 @@ export default function PortalContract() {
             </button>
 
             {signMutation.isError && (
-              <p className="text-sm text-red-600 text-center">Something went wrong. Please try again.</p>
+              <p role="alert" className="text-sm text-red-600 text-center">Something went wrong. Please try again.</p>
             )}
 
             <p className="text-xs text-slate-400 text-center">
