@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { FolderOpen, ChevronRight, Plus, Clock, User, Tag } from 'lucide-react';
 import { api } from '../lib/api';
 import { EmptyState, LoadingState } from '../components/ui';
+import QueryErrorState from '../components/QueryErrorState';
 import { getHealthColor, getProjectStatusColor, getProjectStatusLabel, cn } from '../lib/utils';
 import CreateProjectModal from '../components/CreateProjectModal';
 
@@ -36,82 +37,6 @@ const KANBAN_COLUMNS = [
     headerColor: 'border-green-400 text-green-600',
     bgColor: 'bg-green-50/30',
     statuses: ['LAUNCHED', 'CANCELLED'],
-  },
-];
-
-// Hardcoded Ashbi Design projects for Phase 1 (fallback when API returns empty)
-const ASHBI_DESIGN_PROJECTS = [
-  {
-    id: 'ashbi-1', name: 'Motomotus',
-    client: { name: 'Morgan Campbell', email: 'morgan@motomotus.com' },
-    status: 'LAUNCHED', health: 'ON_TRACK',
-    createdAt: '2025-11-01', updatedAt: '2025-12-15',
-    tags: ['Web', 'Branding'],
-    aiSummary: 'Full website redesign and rebranding. Launched December 2025.',
-    _count: { tasks: 24, threads: 12 },
-  },
-  {
-    id: 'ashbi-2', name: 'TotalETO',
-    client: { name: 'TotalETO', email: 'info@totaleto.com' },
-    status: 'LAUNCHED', health: 'ON_TRACK',
-    createdAt: '2025-09-01', updatedAt: '2025-11-20',
-    tags: ['Web'],
-    aiSummary: 'E-commerce platform. totaleto.com launched.',
-    _count: { tasks: 18, threads: 8 },
-  },
-  {
-    id: 'ashbi-3', name: 'Evergreen',
-    client: { name: 'Walmart' },
-    status: 'ACTIVE', health: 'AT_RISK',
-    createdAt: '2026-02-01', updatedAt: '2026-04-15',
-    tags: ['Landing Page'],
-    aiSummary: 'Walmart landing page — past due since April 15.',
-    _count: { tasks: 16, threads: 9 },
-  },
-  {
-    id: 'ashbi-4', name: 'Numan',
-    client: { name: 'Bionic' },
-    status: 'ACTIVE', health: 'ON_TRACK',
-    createdAt: '2026-01-15', updatedAt: '2026-05-01',
-    tags: ['Web', 'Sub-Project'],
-    aiSummary: 'Bionic sub-project — Launch Updates.',
-    _count: { tasks: 12, threads: 6 },
-  },
-  {
-    id: 'ashbi-5', name: 'Wellington',
-    client: { name: 'Altus' },
-    status: 'ACTIVE', health: 'ON_TRACK',
-    createdAt: '2026-03-01', updatedAt: '2026-04-20',
-    tags: ['Portal'],
-    aiSummary: 'Altus portal — credentials in Notion.',
-    _count: { tasks: 10, threads: 5 },
-  },
-  {
-    id: 'ashbi-6', name: 'SSCA',
-    client: { name: 'SSCA' },
-    status: 'ACTIVE', health: 'ON_TRACK',
-    createdAt: '2026-03-15', updatedAt: '2026-05-05',
-    tags: ['Web'],
-    aiSummary: 'foursonline.wpenginepowered.com.',
-    _count: { tasks: 8, threads: 4 },
-  },
-  {
-    id: 'ashbi-7', name: 'Gallery',
-    client: { name: 'Ashbi Design' },
-    status: 'FINALIZING', health: 'AT_RISK',
-    createdAt: '2026-02-15', updatedAt: '2026-04-01',
-    tags: ['Web', 'Images'],
-    aiSummary: 'Images don\'t match descriptions — needs fixing.',
-    _count: { tasks: 14, threads: 7 },
-  },
-  {
-    id: 'ashbi-8', name: 'Commercial Decorating',
-    client: { name: 'Commercial Decorating' },
-    status: 'FINALIZING', health: 'AT_RISK',
-    createdAt: '2026-03-01', updatedAt: '2026-04-10',
-    tags: ['Web'],
-    aiSummary: 'Hero section + contact page updates needed.',
-    _count: { tasks: 10, threads: 5 },
   },
 ];
 
@@ -253,7 +178,7 @@ export default function Projects() {
     setSearchParams(nextParams, { replace: true });
   }, [searchParams, setSearchParams]);
 
-  const { data: projects = [], isLoading } = useQuery({
+  const { data: projects = [], isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['projects'],
     queryFn: () => api.getProjects().then((r) => r?.projects ?? []),
   });
@@ -273,6 +198,17 @@ export default function Projects() {
       <div className="flex items-center justify-center h-64">
         <LoadingState label="Loading projects…" compact />
       </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <QueryErrorState
+        error={error}
+        message="Projects could not be loaded"
+        onRetry={refetch}
+        isRetrying={isFetching}
+      />
     );
   }
 
