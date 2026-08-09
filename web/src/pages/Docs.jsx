@@ -24,6 +24,7 @@ import { useToast } from '../hooks/useToast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { cn } from '../lib/utils';
 import { Card, Button, LoadingState } from '../components/ui';
+import QueryErrorState from '../components/QueryErrorState';
 
 const NOTE_TYPES = [
   { value: '', label: 'All Types', icon: Layers },
@@ -59,7 +60,14 @@ export default function Docs() {
     if (searchParams.get('create') === 'true') setShowNewNote(true);
   }, [searchParams]);
 
-  const { data: notes = [], isLoading } = useQuery({
+  const {
+    data: notes = [],
+    isLoading,
+    isError: notesError,
+    error: notesRequestError,
+    refetch: refetchNotes,
+    isFetching: notesFetching,
+  } = useQuery({
     queryKey: ['all-notes', search, filterType],
     queryFn: () => api.getAllNotes({
       ...(search && { search }),
@@ -68,19 +76,37 @@ export default function Docs() {
     staleTime: 30000,
   });
 
-  const { data: projects = [] } = useQuery({
+  const {
+    data: projects = [],
+    isError: projectsError,
+    error: projectsRequestError,
+    refetch: refetchProjects,
+    isFetching: projectsFetching,
+  } = useQuery({
     queryKey: ['docs-projects'],
     queryFn: () => api.getProjects().then((response) => Array.isArray(response) ? response : response?.projects ?? []),
     enabled: showNewNote,
   });
 
-  const { data: templates = [] } = useQuery({
+  const {
+    data: templates = [],
+    isError: templatesError,
+    error: templatesRequestError,
+    refetch: refetchTemplates,
+    isFetching: templatesFetching,
+  } = useQuery({
     queryKey: ['note-templates'],
     queryFn: api.getNoteTemplates,
     enabled: showNewNote,
   });
 
-  const { data: team = [] } = useQuery({
+  const {
+    data: team = [],
+    isError: teamError,
+    error: teamRequestError,
+    refetch: refetchTeam,
+    isFetching: teamFetching,
+  } = useQuery({
     queryKey: ['team'],
     queryFn: api.getTeam,
     enabled: showNewNote || Boolean(editingId),
@@ -199,6 +225,13 @@ export default function Docs() {
   }, {});
 
   const pinnedNotes = notes.filter(n => n.isPinned);
+  const noteFormDataError = projectsRequestError || templatesRequestError || teamRequestError;
+  const noteFormDataFetching = projectsFetching || templatesFetching || teamFetching;
+  const retryNoteFormData = () => Promise.all([
+    refetchProjects(),
+    refetchTemplates(),
+    refetchTeam(),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -259,6 +292,16 @@ export default function Docs() {
               <X className="w-5 h-5" />
             </button>
           </div>
+          {(projectsError || templatesError || teamError) && (
+            <div className="mb-4">
+              <QueryErrorState
+                error={noteFormDataError}
+                message="Document form options could not be loaded"
+                onRetry={retryNoteFormData}
+                isRetrying={noteFormDataFetching}
+              />
+            </div>
+          )}
           <form onSubmit={handleCreate} className="space-y-3">
             <div>
               <label htmlFor="new-note-project" className="block text-sm font-medium mb-1">Project</label>
@@ -351,6 +394,13 @@ export default function Docs() {
         <div className="flex justify-center py-16">
           <LoadingState label="Loading documents…" compact />
         </div>
+      ) : notesError ? (
+        <QueryErrorState
+          error={notesRequestError}
+          message="Documents could not be loaded"
+          onRetry={refetchNotes}
+          isRetrying={notesFetching}
+        />
       ) : notes.length === 0 ? (
         <Card className="p-16 text-center">
           <BookOpen className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
