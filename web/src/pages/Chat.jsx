@@ -4,6 +4,8 @@ import { safeHtml } from '../lib/safeHtml';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
 import { preferredScrollBehavior } from '../lib/motion';
+import { LoadingState } from '../components/ui';
+import QueryErrorState from '../components/QueryErrorState';
 
 function formatTime(dateStr) {
   return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -43,6 +45,9 @@ export default function Chat() {
   const [input, setInput] = useState('');
   const [isThinking, setIsThinking] = useState(false);
   const [loadingConvs, setLoadingConvs] = useState(true);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [conversationError, setConversationError] = useState(null);
+  const [messageError, setMessageError] = useState(null);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -53,11 +58,13 @@ export default function Chat() {
   useEffect(() => { scrollToBottom(); }, [messages, isThinking]);
 
   const loadConversations = useCallback(async () => {
+    setLoadingConvs(true);
+    setConversationError(null);
     try {
       const data = await api.getAshChatConversations();
       setConversations(data);
     } catch (e) {
-      console.error('Failed to load conversations', e);
+      setConversationError(e);
     } finally {
       setLoadingConvs(false);
     }
@@ -66,18 +73,25 @@ export default function Chat() {
   useEffect(() => { loadConversations(); }, [loadConversations]);
 
   const loadMessages = async (id) => {
+    setActiveId(id);
+    setMessages([]);
+    setLoadingMessages(true);
+    setMessageError(null);
     try {
       const data = await api.getAshChatMessages(id);
       setMessages(data.messages);
-      setActiveId(id);
     } catch (e) {
-      console.error('Failed to load messages', e);
+      setMessageError(e);
+    } finally {
+      setLoadingMessages(false);
     }
   };
 
   const handleNewChat = () => {
     setActiveId(null);
     setMessages([]);
+    setMessageError(null);
+    setLoadingMessages(false);
     setInput('');
     inputRef.current?.focus();
   };
@@ -144,9 +158,14 @@ export default function Chat() {
 
         <div className="flex-1 overflow-y-auto p-2 space-y-4">
           {loadingConvs ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-            </div>
+            <LoadingState label="Loading conversations…" compact className="py-8" />
+          ) : conversationError ? (
+            <QueryErrorState
+              error={conversationError}
+              onRetry={loadConversations}
+              isRetrying={loadingConvs}
+              message="Conversations could not be loaded"
+            />
           ) : conversations.length === 0 ? (
             <p className="text-xs text-muted-foreground text-center py-8">No conversations yet</p>
           ) : (
@@ -156,27 +175,32 @@ export default function Chat() {
                   <p className="text-xs font-medium text-muted-foreground px-2 mb-1">{label}</p>
                   <div className="space-y-0.5">
                     {convs.map(c => (
-                      <button
+                      <div
                         key={c.id}
-                        onClick={() => loadMessages(c.id)}
                         className={cn(
-                          'w-full text-left px-2 py-2 rounded-lg group flex items-start gap-2 transition-colors',
+                          'w-full px-2 py-2 rounded-lg group flex items-start gap-2 transition-colors',
                           activeId === c.id
                             ? 'bg-primary/10 text-primary'
                             : 'hover:bg-muted text-foreground'
                         )}
                       >
-                        <span className="flex-1 min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => loadMessages(c.id)}
+                          className="flex-1 min-w-0 text-left rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                        >
                           <span className="block text-xs font-medium truncate">{c.title}</span>
                           <span className="block text-xs text-muted-foreground truncate mt-0.5">{c.lastMessage}</span>
-                        </span>
+                        </button>
                         <button
+                          type="button"
                           onClick={(e) => handleDeleteConversation(e, c.id)}
-                          className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:text-destructive"
+                          aria-label={`Delete ${c.title}`}
+                          className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity p-0.5 rounded hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
                         >
                           <Trash2 className="w-3 h-3" />
                         </button>
-                      </button>
+                      </div>
                     ))}
                   </div>
                 </div>
@@ -203,7 +227,16 @@ export default function Chat() {
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-          {messages.length === 0 && !isThinking && (
+          {loadingMessages ? (
+            <LoadingState label="Loading conversation…" compact className="h-full" />
+          ) : messageError ? (
+            <QueryErrorState
+              error={messageError}
+              onRetry={() => loadMessages(activeId)}
+              isRetrying={loadingMessages}
+              message="Conversation messages could not be loaded"
+            />
+          ) : messages.length === 0 && !isThinking ? (
             <div className="flex flex-col items-center justify-center h-full text-center">
               <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
                 <Bot className="w-8 h-8 text-primary" />
@@ -229,9 +262,9 @@ export default function Chat() {
                 ))}
               </div>
             </div>
-          )}
+          ) : null}
 
-          {messages.map((msg) => (
+          {!loadingMessages && !messageError && messages.map((msg) => (
             <div
               key={msg.id}
               className={cn('flex gap-3', msg.role === 'user' ? 'justify-end' : 'justify-start')}

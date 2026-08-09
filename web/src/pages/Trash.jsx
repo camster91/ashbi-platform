@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { X, RotateCcw, Trash2, Search, AlertTriangle } from 'lucide-react';
+import QueryErrorState from '../components/QueryErrorState';
 
 export default function Trash() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [search, setSearch] = useState('');
   const [confirmRestore, setConfirmRestore] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
@@ -13,13 +15,15 @@ export default function Trash() {
 
   const loadTrash = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const res = await api.request('/trash');
       setItems(res.items || []);
     } catch (err) {
-      console.error('Failed to load trash:', err);
+      setLoadError(err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   useEffect(() => { loadTrash(); }, []);
@@ -122,8 +126,17 @@ export default function Trash() {
         </div>
       )}
 
+      {!loading && loadError && (
+        <QueryErrorState
+          error={loadError}
+          onRetry={loadTrash}
+          isRetrying={loading}
+          message="Trash could not be loaded"
+        />
+      )}
+
       {/* Empty state */}
-      {!loading && filtered.length === 0 && (
+      {!loading && !loadError && filtered.length === 0 && (
         <div className="text-center py-16">
           <Trash2 className="w-12 h-12 mx-auto text-muted-foreground/40 mb-4" />
           <h3 className="text-lg font-medium mb-1">Trash is empty</h3>
@@ -134,7 +147,7 @@ export default function Trash() {
       )}
 
       {/* Items list */}
-      {!loading && filtered.length > 0 && (
+      {!loading && !loadError && filtered.length > 0 && (
         <div className="space-y-2">
           {filtered.map(item => (
             <div
