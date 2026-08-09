@@ -17,6 +17,7 @@ import { Button, Card, EmptyState, LoadingState } from '../components/ui';
 import Modal from '../components/Modal';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
+import QueryErrorState from '../components/QueryErrorState';
 
 const statusConfig = {
   DRAFT: { label: 'Draft', color: 'bg-muted text-muted-foreground' },
@@ -50,7 +51,14 @@ export default function Contracts() {
     if (formDraft.draft) setShowCreate(true);
   }, [formDraft.draft]);
 
-  const { data: contracts = [], isLoading } = useQuery({
+  const {
+    data: contracts = [],
+    isLoading,
+    isError: contractsError,
+    error: contractsRequestError,
+    refetch: refetchContracts,
+    isFetching: contractsFetching,
+  } = useQuery({
     queryKey: ['contracts', filterStatus],
     queryFn: () => api.getContracts(filterStatus ? { status: filterStatus } : {}),
   });
@@ -60,7 +68,14 @@ export default function Contracts() {
     queryFn: () => api.getClients().then((r) => r?.clients ?? []),
   });
 
-  const { data: approvedProposals = [] } = useQuery({
+  const {
+    data: approvedProposals = [],
+    isLoading: proposalsLoading,
+    isError: proposalsError,
+    error: proposalsRequestError,
+    refetch: refetchProposals,
+    isFetching: proposalsFetching,
+  } = useQuery({
     queryKey: ['proposals', 'APPROVED'],
     queryFn: () => api.getProposals({ status: 'APPROVED' }),
     enabled: showProposalPicker,
@@ -170,7 +185,16 @@ export default function Contracts() {
         onClose={() => setShowProposalPicker(false)}
         title="Generate Contract from Proposal"
       >
-        {approvedProposals.length === 0 ? (
+        {proposalsLoading ? (
+          <LoadingState label="Loading approved proposals…" compact />
+        ) : proposalsError ? (
+          <QueryErrorState
+            error={proposalsRequestError}
+            message="Approved proposals could not be loaded"
+            onRetry={refetchProposals}
+            isRetrying={proposalsFetching}
+          />
+        ) : approvedProposals.length === 0 ? (
           <div className="py-6 text-center text-sm text-muted-foreground">
             No approved proposals available.
           </div>
@@ -312,6 +336,13 @@ export default function Contracts() {
         <div className="flex justify-center py-12">
           <LoadingState label="Loading contracts…" compact />
         </div>
+      ) : contractsError ? (
+        <QueryErrorState
+          error={contractsRequestError}
+          message="Contracts could not be loaded"
+          onRetry={refetchContracts}
+          isRetrying={contractsFetching}
+        />
       ) : contracts.length === 0 ? (
         <Card>
           <EmptyState
