@@ -21,6 +21,8 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import Modal from '../components/Modal';
 import Button from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
+import LoadingState from '../components/ui/LoadingState';
+import QueryErrorState from '../components/QueryErrorState';
 import { cn } from '../lib/utils';
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -104,7 +106,17 @@ function roundToNextHour(date) {
 
 // ── Create / Edit Modal ────────────────────────────────────────────────────
 
-function EventModal({ isOpen, onClose, initialDate, editEvent, projects = [], team = [] }) {
+function EventModal({
+  isOpen,
+  onClose,
+  initialDate,
+  editEvent,
+  projects = [],
+  team = [],
+  eventFormDataError,
+  retryEventFormData,
+  eventFormDataFetching,
+}) {
   const queryClient = useQueryClient();
   const isEdit = !!editEvent;
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -204,6 +216,16 @@ function EventModal({ isOpen, onClose, initialDate, editEvent, projects = [], te
   return (
     <>
       <Modal isOpen={isOpen} onClose={onClose} title={isEdit ? 'Edit Event' : 'New Event'} size="lg">
+      {eventFormDataError && (
+        <div className="mb-4">
+          <QueryErrorState
+            error={eventFormDataError}
+            message="Event form options could not be loaded"
+            onRetry={retryEventFormData}
+            isRetrying={eventFormDataFetching}
+          />
+        </div>
+      )}
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Title */}
         <div>
@@ -573,7 +595,14 @@ function EventDetailModal({ event, isOpen, onClose, onEdit }) {
 // ── Upcoming Sidebar ───────────────────────────────────────────────────────
 
 function UpcomingSidebar({ onEventClick }) {
-  const { data: upcoming = [], isLoading } = useQuery({
+  const {
+    data: upcoming = [],
+    isLoading,
+    isError: upcomingError,
+    error: upcomingRequestError,
+    refetch: refetchUpcoming,
+    isFetching: upcomingFetching,
+  } = useQuery({
     queryKey: ['upcoming-events'],
     queryFn: () => api.getUpcomingEvents(10),
     refetchInterval: 60000,
@@ -590,12 +619,22 @@ function UpcomingSidebar({ onEventClick }) {
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary mx-auto" />
           </div>
         )}
-        {!isLoading && upcoming.length === 0 && (
+        {!isLoading && upcomingError && (
+          <div className="p-3">
+            <QueryErrorState
+              error={upcomingRequestError}
+              message="Upcoming events could not be loaded"
+              onRetry={refetchUpcoming}
+              isRetrying={upcomingFetching}
+            />
+          </div>
+        )}
+        {!isLoading && !upcomingError && upcoming.length === 0 && (
           <div className="px-4 py-8 text-center text-muted-foreground text-sm">
             No upcoming events
           </div>
         )}
-        {upcoming.map(event => {
+        {!upcomingError && upcoming.map(event => {
           const style = typeStyle(event.type);
           const Icon = TYPE_ICONS[event.type] || CalendarDays;
           return (
@@ -638,7 +677,14 @@ export default function Schedule() {
   // Week range for query
   const weekEnd = addDays(currentWeekStart, 7);
 
-  const { data: events = [], isLoading } = useQuery({
+  const {
+    data: events = [],
+    isLoading,
+    isError: calendarError,
+    error: calendarRequestError,
+    refetch: refetchCalendar,
+    isFetching: calendarFetching,
+  } = useQuery({
     queryKey: ['calendar', currentWeekStart.toISOString()],
     queryFn: () => api.getCalendarEvents({
       startDate: currentWeekStart.toISOString(),
@@ -646,12 +692,24 @@ export default function Schedule() {
     }),
   });
 
-  const { data: projects = [] } = useQuery({
+  const {
+    data: projects = [],
+    isError: projectsError,
+    error: projectsRequestError,
+    refetch: refetchProjects,
+    isFetching: projectsFetching,
+  } = useQuery({
     queryKey: ['projects-list'],
     queryFn: () => api.getProjects({ status: 'ACTIVE' }).then((r) => r?.projects ?? []),
   });
 
-  const { data: team = [] } = useQuery({
+  const {
+    data: team = [],
+    isError: teamError,
+    error: teamRequestError,
+    refetch: refetchTeam,
+    isFetching: teamFetching,
+  } = useQuery({
     queryKey: ['team'],
     queryFn: () => api.getTeam(),
   });
@@ -749,6 +807,9 @@ export default function Schedule() {
   }, []);
 
   const today = new Date();
+  const eventFormDataError = projectsRequestError || teamRequestError;
+  const eventFormDataFetching = projectsFetching || teamFetching;
+  const retryEventFormData = () => Promise.all([refetchProjects(), refetchTeam()]);
 
   return (
     <div className="max-w-7xl mx-auto space-y-4">
@@ -789,6 +850,16 @@ export default function Schedule() {
       {/* Layout: Calendar + Sidebar */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-4">
         {/* Calendar */}
+        {isLoading ? (
+          <LoadingState label="Loading calendar…" className="min-h-96" />
+        ) : calendarError ? (
+          <QueryErrorState
+            error={calendarRequestError}
+            message="Calendar events could not be loaded"
+            onRetry={refetchCalendar}
+            isRetrying={calendarFetching}
+          />
+        ) : (
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           {/* All-day row */}
           {allDayEvents.length > 0 && (
@@ -940,6 +1011,7 @@ export default function Schedule() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Sidebar */}
         <div className="space-y-4">
@@ -968,6 +1040,9 @@ export default function Schedule() {
         editEvent={editingEvent}
         projects={projects}
         team={team}
+        eventFormDataError={(projectsError || teamError) ? eventFormDataError : null}
+        retryEventFormData={retryEventFormData}
+        eventFormDataFetching={eventFormDataFetching}
       />
 
       {/* Detail Modal */}
