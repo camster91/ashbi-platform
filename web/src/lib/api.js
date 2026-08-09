@@ -424,8 +424,12 @@ export const api = {
   },
   getNote: (id) =>
     request(`/notes/${id}`),
+  getNoteTemplates: () =>
+    request('/notes/templates'),
   createNote: (projectId, data) =>
     request(`/projects/${projectId}/notes`, { method: 'POST', body: data }),
+  createNoteFromTemplate: (projectId, templateId, data) =>
+    request(`/projects/${projectId}/notes/from-template/${templateId}`, { method: 'POST', body: data }),
   updateNote: (id, data) =>
     request(`/notes/${id}`, { method: 'PUT', body: data }),
   deleteNote: (id) =>

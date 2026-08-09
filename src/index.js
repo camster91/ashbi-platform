@@ -278,7 +278,7 @@ await fastify.register(commentRoutes, { prefix: '/api/comments' });
 await fastify.register(attachmentRoutes, { prefix: '/api/attachments' });
 await fastify.register(timeRoutes, { prefix: '/api/time' });
 await fastify.register(milestoneRoutes, { prefix: '/api/milestones' });
-await fastify.register(noteRoutes, { prefix: '/api/notes' });
+await fastify.register(noteRoutes, { prefix: '/api' });
 await fastify.register(ashChatRoutes, { prefix: '/api/ash-chat' });
 await fastify.register(chatRoutes, { prefix: '/api/chat' });
 await fastify.register(searchRoutes, { prefix: '/api/search' });

@@ -554,23 +554,30 @@ model ChatReaction {
 }
 
 model Note {
-  id        String    @id @default(cuid())
-  title     String
-  content   String // Rich text / Markdown content
-  type      String    @default("NOTE") // NOTE, MEETING_NOTES, WIKI, DOC
-  isPinned  Boolean   @default(false)
-  tags      String    @default("[]") // JSON array of tags
-  projectId String
-  authorId  String
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id         String    @id @default(cuid())
+  title      String
+  content    String // Plain-text Markdown; clients must never render it as trusted HTML
+  type       String    @default("NOTE") // NOTE, MEETING_NOTES, WIKI, DOC
+  isPinned   Boolean   @default(false)
+  tags       String    @default("[]") // JSON array of tags
+  mentions   String    @default("[]") // JSON array of authorized mentioned user IDs
+  isTemplate Boolean   @default(false)
+  projectId  String
+  authorId   String
+  parentId   String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
   // Soft delete
-  deletedAt DateTime?
+  deletedAt  DateTime?
 
   // Relations
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  author  User    @relation("NoteAuthor", fields: [authorId], references: [id])
+  project  Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author   User    @relation("NoteAuthor", fields: [authorId], references: [id])
+  parent   Note?   @relation("NoteHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children Note[]  @relation("NoteHierarchy")
 
+  @@index([projectId, parentId])
+  @@index([projectId, isTemplate])
   @@map("notes")
 }
 

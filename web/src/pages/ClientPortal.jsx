@@ -1590,7 +1590,7 @@ const globalStyles = `
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
   .cp-btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
-  .cp-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .cp-btn-primary:disabled { opacity: 1; cursor: not-allowed; transform: none; }
 
   .cp-btn-secondary {
     display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.5rem 1rem;

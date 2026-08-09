@@ -55,3 +55,23 @@ test('soft delete rejects an organization mismatch before mutation', async () =>
   );
   assert.equal(mutated, false);
 });
+
+test('soft delete runs related-record cleanup inside the recovery transaction', async () => {
+  const calls = [];
+  const transaction = {
+    note: {
+      findUnique: async () => ({ id: 'parent-note', authorId: 'user-a' }),
+      updateMany: async args => { calls.push(['children', args]); return { count: 2 }; },
+      delete: async args => { calls.push(['delete', args]); },
+    },
+    trashedItem: { create: async args => { calls.push(['ledger', args]); return { id: 'trash-note' }; } },
+  };
+  await softDelete({
+    scopedPrisma: { $transaction: async callback => callback(transaction) },
+    entity: 'NOTE',
+    recordId: 'parent-note',
+    organizationId: 'org-a',
+    beforeDelete: tx => tx.note.updateMany({ where: { parentId: 'parent-note' }, data: { parentId: null } }),
+  });
+  assert.deepEqual(calls.map(([operation]) => operation), ['children', 'delete', 'ledger']);
+});

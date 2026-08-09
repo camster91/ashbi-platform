@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { permanentlyDeleteTrashedItem, restoreTrashedItem } from '../../services/trash-purge.service.js';
 
-function harness({ entity = 'NOTE', original = { id: 'note-a', deletedAt: new Date() }, deleteError } = {}) {
+function harness({ entity = 'NOTE', original = { id: 'note-a', deletedAt: new Date() }, deleteError, ledgerData } = {}) {
   const calls = [];
   const ledger = {
     id: 'trash-a',
@@ -10,6 +10,7 @@ function harness({ entity = 'NOTE', original = { id: 'note-a', deletedAt: new Da
     recordId: 'note-a',
     organizationId: 'org-a',
     restoredAt: null,
+    data: ledgerData,
   };
   const scopedPrisma = {
     trashedItem: {
@@ -116,7 +117,33 @@ test('restore proves tenant ledger ownership and restores the hidden row atomica
   assert.deepEqual(calls.map(([name]) => name), [
     'scoped-ledger', 'transaction', 'locked-ledger', 'find-original', 'restore-original', 'restore-ledger',
   ]);
-  assert.deepEqual(calls[4][1], { where: { id: ledger.recordId }, data: { deletedAt: null } });
+  assert.deepEqual(calls[4][1], { where: { id: ledger.recordId }, data: { deletedAt: null, parentId: null } });
   assert.equal(calls[5][1].where.id, ledger.id);
   assert.ok(calls[5][1].data.restoredAt instanceof Date);
+});
+
+test('restoring a note retains only an active parent from its original project', async () => {
+  const { scopedPrisma, rawPrisma, calls, ledger } = harness({ ledgerData: { parentId: 'parent-a', projectId: 'project-a' } });
+  let findCount = 0;
+  const transaction = {
+    trashedItem: {
+      findFirst: async () => ledger,
+      update: async args => args,
+    },
+    note: {
+      findFirst: async args => {
+        findCount += 1;
+        calls.push([findCount === 1 ? 'find-original' : 'find-parent', args]);
+        return findCount === 1 ? { id: ledger.recordId } : { id: 'parent-a' };
+      },
+      update: async args => { calls.push(['restore-original', args]); return args; },
+    },
+  };
+  rawPrisma.$transaction = async callback => callback(transaction);
+  await restoreTrashedItem({ scopedPrisma, rawPrisma, trashId: ledger.id });
+  const restore = calls.find(([name]) => name === 'restore-original')[1];
+  assert.deepEqual(restore.data, { deletedAt: null, parentId: 'parent-a' });
+  assert.deepEqual(calls.find(([name]) => name === 'find-parent')[1].where, {
+    id: 'parent-a', projectId: 'project-a', deletedAt: null,
+  });
 });

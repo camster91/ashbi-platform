@@ -8,7 +8,8 @@ test('note restore requires authentication and targets exactly one deleted note'
   assert.match(route, /post\('\/notes\/:id\/restore'/);
   assert.match(route, /onRequest: \[fastify\.authenticate\]/);
   assert.match(route, /where: \{ id, deletedAt: \{ not: null \} \}/);
-  assert.match(route, /data: \{ deletedAt: null \}/);
+  assert.match(route, /data: \{ deletedAt: null, parentId: parent\?\.id \|\| null \}/);
+  assert.match(route, /where: \{ id: existing\.parentId, projectId: existing\.projectId \}/);
 });
 
 test('note restore preserves author or administrator authorization', () => {

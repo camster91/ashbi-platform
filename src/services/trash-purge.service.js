@@ -77,7 +77,19 @@ export async function restoreTrashedItem({ scopedPrisma, rawPrisma, trashId }) {
     });
     if (!original) throw httpError('Original record no longer exists', 404);
 
-    await model.update({ where: { id: ledger.recordId }, data: { deletedAt: null } });
+    const restoreData = { deletedAt: null };
+    if (ledger.entity === 'NOTE') {
+      const formerParentId = ledger.data?.parentId;
+      const formerProjectId = ledger.data?.projectId;
+      const activeParent = formerParentId && formerProjectId
+        ? await transaction.note.findFirst({
+            where: { id: formerParentId, projectId: formerProjectId, deletedAt: null },
+            select: { id: true },
+          })
+        : null;
+      restoreData.parentId = activeParent?.id || null;
+    }
+    await model.update({ where: { id: ledger.recordId }, data: restoreData });
     await transaction.trashedItem.update({
       where: { id: ledger.id },
       data: { restoredAt: new Date() },

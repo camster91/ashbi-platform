@@ -1426,19 +1426,31 @@ export const milestoneUpdateSchema = milestoneCreateSchema.extend({
 });
 
 export const noteProjectCreateSchema = z.object({
-  title: z.string().min(1).max(200).optional(),
-  content: z.string().min(1).max(50_000),
-  type: z.enum(['NOTE', 'REMINDER', 'TASK', 'IDEA']).default('NOTE'),
+  title: z.string().trim().min(1).max(200),
+  content: z.string().max(50_000).default(''),
+  type: z.enum(['NOTE', 'MEETING_NOTES', 'WIKI', 'DOC']).default('NOTE'),
   tags: z.array(z.string().max(50)).max(20).optional(),
   isPinned: z.boolean().default(false),
+  isTemplate: z.boolean().default(false),
+  parentId: cuidId.nullable().optional(),
+  mentionUserIds: z.array(cuidId).max(50).default([]),
 });
 
 export const noteUpdateV2Schema = z.object({
-  title: z.string().min(1).max(200).optional(),
-  content: z.string().min(1).max(50_000).optional(),
-  type: z.enum(['NOTE', 'REMINDER', 'TASK', 'IDEA']).optional(),
+  title: z.string().trim().min(1).max(200).optional(),
+  content: z.string().max(50_000).optional(),
+  type: z.enum(['NOTE', 'MEETING_NOTES', 'WIKI', 'DOC']).optional(),
   tags: z.array(z.string().max(50)).max(20).optional(),
   isPinned: z.boolean().optional(),
+  isTemplate: z.boolean().optional(),
+  parentId: cuidId.nullable().optional(),
+  mentionUserIds: z.array(cuidId).max(50).optional(),
+});
+
+export const noteFromTemplateSchema = z.object({
+  title: z.string().trim().min(1).max(200).optional(),
+  parentId: cuidId.nullable().optional(),
+  mentionUserIds: z.array(cuidId).max(50).default([]),
 });
 
 export const onboardingClientSchema = z.object({
