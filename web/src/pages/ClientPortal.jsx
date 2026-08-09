@@ -350,7 +350,7 @@ function OverviewTab({ projects, invoices, retainer, unread, setActiveTab, setSe
           <p className="cp-text-muted" style={{ fontSize: '0.8rem' }}>
             Please review your invoices and make payment at your earliest convenience.
           </p>
-          <button onClick={() => setActiveTab('invoices')} className="cp-link" style={{ marginTop: '0.5rem', fontSize: '0.8rem' }}>
+          <button type="button" aria-label="View overdue invoices" onClick={() => setActiveTab('invoices')} className="cp-link" style={{ marginTop: '0.5rem', fontSize: '0.8rem' }}>
             View invoices &rarr;
           </button>
         </div>
@@ -418,7 +418,7 @@ function OverviewTab({ projects, invoices, retainer, unread, setActiveTab, setSe
           <h3 className="cp-section-title">Active Projects</h3>
           <div className="cp-space-y-3">
             {activeProjects.slice(0, 4).map(p => (
-              <button key={p.id} className="cp-card cp-card--interactive" onClick={() => { setSelectedProject(p.id); setActiveTab('projects'); }} style={{ width: '100%', textAlign: 'left' }}>
+              <button type="button" key={p.id} aria-label={`Open project ${p.name}`} className="cp-card cp-card--interactive" onClick={() => { setSelectedProject(p.id); setActiveTab('projects'); }} style={{ width: '100%', textAlign: 'left' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                   <span className="cp-text" style={{ fontWeight: 600 }}>{p.name}</span>
                   <span className={`cp-badge ${projectStatusColor(p.status)}`}>{projectStatusLabel(p.status)}</span>
@@ -438,7 +438,7 @@ function OverviewTab({ projects, invoices, retainer, unread, setActiveTab, setSe
               </button>
             ))}
             {activeProjects.length > 4 && (
-              <button onClick={() => setActiveTab('projects')} className="cp-link" style={{ fontSize: '0.85rem' }}>
+              <button type="button" aria-label="View all projects" onClick={() => setActiveTab('projects')} className="cp-link" style={{ fontSize: '0.85rem' }}>
                 View all projects &rarr;
               </button>
             )}
@@ -466,7 +466,7 @@ function OverviewTab({ projects, invoices, retainer, unread, setActiveTab, setSe
               </div>
             ))}
             {invoices.length > 3 && (
-              <button onClick={() => setActiveTab('invoices')} className="cp-link" style={{ fontSize: '0.85rem' }}>
+              <button type="button" aria-label="View all invoices" onClick={() => setActiveTab('invoices')} className="cp-link" style={{ fontSize: '0.85rem' }}>
                 View all invoices &rarr;
               </button>
             )}
@@ -489,7 +489,7 @@ function ProjectsTab({ projects, setSelectedProject }) {
       ) : (
         <div className="cp-grid-2">
           {projects.map(p => (
-            <button key={p.id} className="cp-card cp-card--interactive" onClick={() => setSelectedProject(p.id)} style={{ width: '100%', textAlign: 'left' }}>
+            <button type="button" key={p.id} aria-label={`Open project ${p.name}`} className="cp-card cp-card--interactive" onClick={() => setSelectedProject(p.id)} style={{ width: '100%', textAlign: 'left' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
                 <div>
                   <h3 className="cp-text" style={{ fontWeight: 600, marginBottom: '0.125rem' }}>{p.name}</h3>
@@ -694,7 +694,7 @@ function ProjectDetail({ projectId, token, onBack }) {
     return (
       <div className="cp-error-box">
         <p className="cp-error">{error || 'Project not found'}</p>
-        <button onClick={onBack} className="cp-link">Go back</button>
+        <button type="button" aria-label="Back to projects" onClick={onBack} className="cp-link">Go back</button>
       </div>
     );
   }
@@ -716,7 +716,7 @@ function ProjectDetail({ projectId, token, onBack }) {
     <div className="cp-space-y-4">
       {/* Back button + header */}
       <div>
-        <button onClick={onBack} className="cp-link" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', marginBottom: '0.75rem', fontSize: '0.85rem' }}>
+        <button type="button" aria-label="Back to projects" onClick={onBack} className="cp-link" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', marginBottom: '0.75rem', fontSize: '0.85rem' }}>
           {Icons.back} Back to Projects
         </button>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -968,6 +968,7 @@ function ProjectDetail({ projectId, token, onBack }) {
             >
               <span style={{ fontSize: '0.875rem' }}>{uploadError}</span>
               <button
+                type="button"
                 onClick={() => setUploadError(null)}
                 style={{
                   background: 'transparent',
@@ -978,7 +979,7 @@ function ProjectDetail({ projectId, token, onBack }) {
                   lineHeight: 1,
                   padding: '0 0.25rem',
                 }}
-                aria-label="Dismiss error"
+                aria-label="Dismiss upload error"
               >
                 ×
               </button>
@@ -1080,7 +1081,7 @@ function InvoicesTab({ invoices, token }) {
                         Pay Now
                       </a>
                     )}
-                    <button onClick={() => downloadPdf(inv)} className="cp-btn-secondary" style={{ fontSize: '0.8rem' }}>
+                    <button type="button" aria-label="Download invoice PDF" onClick={() => downloadPdf(inv)} className="cp-btn-secondary" style={{ fontSize: '0.8rem' }}>
                       {Icons.download} Download PDF
                     </button>
                   </div>
@@ -1475,7 +1476,7 @@ function PortalDashboard({ token }) {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           {contactName && <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem' }}>Hi, {contactName}</span>}
-          <button onClick={handleLogout} className="cp-btn-ghost" style={{ color: 'rgba(255,255,255,0.7)', borderColor: 'rgba(255,255,255,0.2)' }}>
+          <button type="button" aria-label="Log out of client portal" onClick={handleLogout} className="cp-btn-ghost" style={{ color: 'rgba(255,255,255,0.7)', borderColor: 'rgba(255,255,255,0.2)' }}>
             {Icons.logout} Logout
           </button>
         </div>
@@ -1606,7 +1607,7 @@ const globalStyles = `
   .cp-text { color: ${BRAND.text}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
   .cp-text-muted { color: ${BRAND.textMuted}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
   .cp-error { color: #b91c1c; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-  .cp-link { color: ${BRAND.primary}; cursor: pointer; text-decoration: none; font-weight: 500; background: none; border: none; font-size: inherit; font-family: inherit; }
+   .cp-link { color: ${BRAND.primary}; cursor: pointer; text-decoration: none; font-weight: 500; background: none; border: none; font-size: inherit; font-family: inherit; min-height: 44px; padding: 0.5rem 0; }
   .cp-link:hover { text-decoration: underline; }
    .cp-link:focus-visible, .cp-input:focus-visible, .cp-btn-primary:focus-visible, .cp-btn-secondary:focus-visible,
    .cp-btn-danger:focus-visible, .cp-btn-ghost:focus-visible, .cp-card--interactive:focus-visible {
@@ -1626,7 +1627,7 @@ const globalStyles = `
   .cp-btn-primary {
     display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.5rem 1.25rem;
     background: ${BRAND.primary}; color: ${BRAND.white}; opacity: 1 !important; border: none; border-radius: 10px;
-    font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: transform 0.2s;
+     font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: transform 0.2s; min-height: 44px;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
   .cp-btn-primary:hover { background: #211d40; transform: translateY(-1px); }
@@ -1635,7 +1636,7 @@ const globalStyles = `
   .cp-btn-secondary {
     display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.5rem 1rem;
     background: ${BRAND.white}; color: ${BRAND.primary}; border: 1.5px solid ${BRAND.border}; border-radius: 10px;
-    font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all 0.2s;
+     font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all 0.2s; min-height: 44px;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     text-decoration: none;
   }
@@ -1644,7 +1645,7 @@ const globalStyles = `
   .cp-btn-danger {
     display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.5rem 1rem;
     background: transparent; color: #b91c1c; border: 1.5px solid #b91c1c; border-radius: 10px;
-    font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all 0.2s;
+     font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all 0.2s; min-height: 44px; min-width: 44px;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
   .cp-btn-danger:hover { background: #fef2f2; }
@@ -1652,7 +1653,7 @@ const globalStyles = `
   .cp-btn-ghost {
     display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.375rem 0.75rem;
     background: transparent; color: ${BRAND.textMuted}; border: 1.5px solid ${BRAND.border}; border-radius: 10px;
-    font-size: 0.8rem; font-weight: 500; cursor: pointer; transition: all 0.2s;
+     font-size: 0.8rem; font-weight: 500; cursor: pointer; transition: all 0.2s; min-height: 44px; min-width: 44px;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
   .cp-btn-ghost:hover { border-color: currentColor; }
