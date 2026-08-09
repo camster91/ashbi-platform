@@ -22,11 +22,11 @@ test('scheduler bootstrap uses stable IDs and timezone-aware business schedules'
   await setupRecurringJobs();
   await setupRecurringJobs();
 
-  assert.equal(calls.length, 16);
-  const firstPass = calls.slice(0, 8);
-  const secondPass = calls.slice(8);
+  assert.equal(calls.length, 14);
+  const firstPass = calls.slice(0, 7);
+  const secondPass = calls.slice(7);
   assert.deepEqual(secondPass, firstPass);
-  assert.equal(new Set(firstPass.map(({ queue, id }) => `${queue}:${id}`)).size, 8);
+  assert.equal(new Set(firstPass.map(({ queue, id }) => `${queue}:${id}`)).size, 7);
 
   const names = firstPass.map(({ template }) => template.name);
   assert.deepEqual(names, [
@@ -37,7 +37,6 @@ test('scheduler bootstrap uses stable IDs and timezone-aware business schedules'
     'overdue-invoices',
     'trash-purge',
     'fleet-digest',
-    'scheduled-workflows',
   ]);
   for (const call of firstPass) {
     assert.equal(call.template.opts.attempts, 3);

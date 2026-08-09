@@ -17,17 +17,16 @@ import aiClient from '../ai/client.js';
 import env from '../config/env.js';
 import * as Sentry from '@sentry/node';
 import logger from '../utils/logger.js';
-import prisma from '../config/db.js';
-import { prisma as backgroundPrisma } from '../config/db.js';
+import prisma, { prisma as backgroundPrisma } from '../config/db.js';
 import { createScopedPrisma } from '../utils/prisma-tenant-proxy.js';
 import { resolveTenantOrganizationIds, runTenantJob } from './tenant-iteration.js';
 import { processRecurringInvoicesForAllOrganizations } from './recurring-invoices.js';
 import { purgeExpiredTrashForAllOrganizations } from './trash-purge.js';
 import {
   checkOverdueInvoicesForAllOrganizations,
-  runScheduledWorkflows,
 } from '../services/automation.service.js';
 import { runScheduledFleetDigest } from '../routes/wp-bridge.routes.js';
+import { resolveEmbeddingOrganizationId } from './embedding-ownership.js';
 
 // Helper to create workers with error handling for Redis unavailability
 function createWorker(queueName, processor, options = {}) {
@@ -407,9 +406,12 @@ const embeddingWorker = createWorker(
   async (job) => {
     const { clientId, content, source, sourceId, metadata } = job.data;
     console.log(`Generating embedding for ${source}:${sourceId || 'none'}`);
+    // Legacy queued jobs predate tenant IDs. Recover ownership only through
+    // the job's client FK; missing or deleted owners continue to fail closed.
+    const organizationId = await resolveEmbeddingOrganizationId(job.data);
     const result = await runTenantJob(
       prisma,
-      job.data?.organizationId,
+      organizationId,
       () => storeEmbedding(clientId, content, source, sourceId, metadata),
       backgroundPrisma,
     );
@@ -430,8 +432,6 @@ const scheduledWorker = createWorker(
         return purgeExpiredTrashForAllOrganizations();
       case 'fleet-digest':
         return runScheduledFleetDigest(logger);
-      case 'scheduled-workflows':
-        return runScheduledWorkflows();
       default:
         throw new Error(`Unknown scheduled maintenance job: ${job.name}`);
     }

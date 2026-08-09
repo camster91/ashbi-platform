@@ -30,6 +30,9 @@ class MockQueue {
   constructor(name) { this.name = name; }
   async add() { return { id: 'mock-job-id' }; }
   async upsertJobScheduler() { return { id: 'mock-scheduler-id' }; }
+  async removeRepeatable() { return true; }
+  async removeJobScheduler() { return true; }
+  async getJobs() { return []; }
   async close() {}
 }
 
@@ -139,6 +142,34 @@ export async function setupRecurringJobs() {
     removeOnFail: 500,
   };
 
+  // Remove the pre-job-scheduler repeat keys created by older API replicas,
+  // plus one checker that targeted unmodeled legacy bootstrap tables. This is
+  // safe to repeat and prevents an upgrade from retaining duplicate schedules.
+  await Promise.all([
+    healthQueue.removeRepeatable(
+      'update-all-health',
+      { every: 60 * 60 * 1000 },
+      'recurring-health-check',
+    ),
+    escalationQueue.removeRepeatable(
+      'check-all-escalations',
+      { every: 15 * 60 * 1000 },
+      'recurring-escalation-check',
+    ),
+    weeklyDigestQueue.removeRepeatable(
+      'generate-weekly-digest',
+      { pattern: '0 14 * * 1' },
+      'recurring-weekly-digest',
+    ),
+    scheduledQueue.removeJobScheduler('scheduled-workflows-minutely'),
+  ]);
+  const deprecatedWorkflowJobs = await scheduledQueue.getJobs(['wait', 'delayed', 'failed']);
+  await Promise.all(
+    deprecatedWorkflowJobs
+      .filter((job) => job.name === 'scheduled-workflows')
+      .map((job) => job.remove()),
+  );
+
   // upsertJobScheduler gives every logical schedule a stable Redis identity.
   // Multiple worker replicas can run this bootstrap without creating duplicate
   // repeat schedules.
@@ -163,7 +194,6 @@ export async function setupRecurringJobs() {
     ['overdue-invoices-hourly', { every: 60 * 60 * 1000 }, 'overdue-invoices'],
     ['trash-purge-daily-toronto', { pattern: '0 4 * * *', tz: 'America/Toronto' }, 'trash-purge'],
     ['fleet-digest-daily-toronto', { pattern: '0 9 * * *', tz: 'America/Toronto' }, 'fleet-digest'],
-    ['scheduled-workflows-minutely', { every: 60 * 1000 }, 'scheduled-workflows'],
   ];
   for (const [schedulerId, repeat, name] of scheduledJobs) {
     await scheduledQueue.upsertJobScheduler(
