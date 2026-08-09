@@ -8,9 +8,9 @@ const api = readFileSync(resolve(process.cwd(), 'src/lib/api.js'), 'utf8');
 
 describe('destructive action recovery contract', () => {
   it('offers entity-specific note undo and reports restore failure', () => {
-    expect(api).toContain('restoreNote: (id)');
+    expect(api).toContain('restoreTrashItem: (trashId)');
     expect(notes).toContain('label: `Undo delete ${title}`');
-    expect(notes).toContain('restoreMutation.mutate(id)');
+    expect(notes).toContain('restoreMutation.mutate(result.trashId)');
     expect(notes).toContain("title: 'Could not restore note'");
   });
 

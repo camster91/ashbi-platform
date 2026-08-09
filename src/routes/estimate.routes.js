@@ -3,6 +3,7 @@ import FormData from 'form-data';
 import env from '../config/env.js';
 import { validateBody, createEstimateSchema, updateEstimateSchema, estimateUpdateSchema } from '../validators/schemas.js';
 import { clampTake } from '../utils/query-limits.js';
+import { softDelete } from '../services/trash.service.js';
 
 export default async function estimateRoutes(fastify) {
   // List estimates
@@ -110,8 +111,13 @@ export default async function estimateRoutes(fastify) {
     const { id } = request.params;
     const existing = await request.prisma.estimate.findUnique({ where: { id } });
     if (!existing) return reply.status(404).send({ error: 'Estimate not found' });
-    await request.prisma.estimate.delete({ where: { id } });
-    return { success: true };
+    const { trashedItem } = await softDelete({
+      scopedPrisma: request.prisma,
+      entity: 'ESTIMATE',
+      recordId: id,
+      organizationId: request.user.organizationId,
+    });
+    return { success: true, trashId: trashedItem.id };
   });
 
   // Send estimate to client

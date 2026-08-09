@@ -1,6 +1,7 @@
 // Notes & Documents routes
 
 import { validateBody, noteProjectCreateSchema, noteUpdateV2Schema } from '../validators/schemas.js';
+import { softDelete } from '../services/trash.service.js';
 
 export default async function noteRoutes(fastify) {
   // List ALL notes across all projects (global docs view)
@@ -209,9 +210,14 @@ export default async function noteRoutes(fastify) {
       return reply.status(403).send({ error: 'Cannot delete this note' });
     }
 
-    await request.prisma.note.delete({ where: { id } });
+    const { trashedItem } = await softDelete({
+      scopedPrisma: request.prisma,
+      entity: 'NOTE',
+      recordId: id,
+      organizationId: request.user.organizationId,
+    });
 
-    return { success: true };
+    return { success: true, trashId: trashedItem.id };
   });
 
   // Restore one recently soft-deleted note. Explicit deletedAt criteria bypasses

@@ -1,40 +1,33 @@
-// Trash service — soft delete helper
-
-import prisma from '../config/db.js';
 import ENTITY_MAP from '../utils/entity-map.js';
 
-/**
- * Soft-delete a record by setting deletedAt and creating a TrashedItem entry.
- * @param {string} entity - upper-case entity name (e.g. 'CLIENT')
- * @param {string} recordId - the record ID
- */
-export async function softDelete(entity, recordId, organizationId = null) {
+/** Soft-delete one tenant-owned record and create its recovery ledger atomically. */
+export async function softDelete({ scopedPrisma, entity, recordId, organizationId }) {
   const modelName = ENTITY_MAP[entity];
-  const prismaModel = prisma[modelName];
-  if (!prismaModel) throw new Error(`Unknown entity type: ${entity}`);
+  if (!modelName) throw new Error(`Unknown entity type: ${entity}`);
+  if (!organizationId) throw new Error('Organization context is required');
 
-  const record = await prismaModel.findUnique({ where: { id: recordId } });
-  if (!record) throw new Error(`${entity} not found`);
+  return scopedPrisma.$transaction(async (transaction) => {
+    const model = transaction[modelName];
+    const record = await model.findUnique({ where: { id: recordId } });
+    if (!record) throw new Error(`${entity} not found`);
+    if (record.organizationId && record.organizationId !== organizationId) {
+      throw new Error('Trash organization mismatch');
+    }
 
-  const deletedAt = new Date();
-  const expiresAt = new Date(deletedAt.getTime() + 30 * 24 * 60 * 60 * 1000);
-
-  const [, trashedItem] = await prisma.$transaction([
-    prismaModel.update({
-      where: { id: recordId },
-      data: { deletedAt },
-    }),
-    prisma.trashedItem.create({
+    const deletedAt = new Date();
+    const expiresAt = new Date(deletedAt.getTime() + 30 * 24 * 60 * 60 * 1000);
+    await model.delete({ where: { id: recordId } });
+    const trashedItem = await transaction.trashedItem.create({
       data: {
         entity,
         recordId,
-        organizationId: organizationId || record.organizationId || null,
-        data: record,
+        organizationId,
+        data: JSON.parse(JSON.stringify(record)),
         deletedAt,
         expiresAt,
       },
-    }),
-  ]);
+    });
 
-  return { record, trashedItem };
+    return { record, trashedItem };
+  });
 }

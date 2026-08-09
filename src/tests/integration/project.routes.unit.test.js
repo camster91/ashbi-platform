@@ -23,6 +23,7 @@ describe('Project Routes (Unit)', { skip }, () => {
     
     fastify.decorate('authenticate', async (request, reply) => {
       request.user = { id: 'user-1', role: 'ADMIN', email: 'admin@example.com' };
+      request.prisma = mockPrisma;
     });
 
     mockPrisma = {

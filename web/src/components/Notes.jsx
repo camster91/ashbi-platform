@@ -45,7 +45,7 @@ export default function Notes({ projectId }) {
   // Delete note mutation
   const deleteMutation = useMutation({
     mutationFn: ({ id }) => api.deleteNote(id),
-    onSuccess: (_, { id, title }) => {
+    onSuccess: (result, { title }) => {
       queryClient.invalidateQueries({ queryKey: ['notes', projectId] });
       setSelectedNote(null);
       toast.success({
@@ -54,7 +54,7 @@ export default function Notes({ projectId }) {
         duration: 10000,
         action: {
           label: `Undo delete ${title}`,
-          onClick: () => restoreMutation.mutate(id),
+          onClick: () => restoreMutation.mutate(result.trashId),
         },
       });
     },
@@ -64,7 +64,7 @@ export default function Notes({ projectId }) {
   });
 
   const restoreMutation = useMutation({
-    mutationFn: api.restoreNote,
+    mutationFn: api.restoreTrashItem,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notes', projectId] });
       toast.success('Note restored', 'The deleted note is back in this project.');

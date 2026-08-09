@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
 import { validateBody, createExpenseSchema, fileUpload, expenseUpdateSchema } from '../validators/schemas.js';
+import { softDelete } from '../services/trash.service.js';
 
 const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
 
@@ -190,7 +191,12 @@ export default async function expenseRoutes(fastify) {
     });
     if (!existing) return reply.status(404).send({ error: 'Expense not found' });
 
-    await request.prisma.expense.delete({ where: { id: request.params.id } });
-    return { success: true };
+    const { trashedItem } = await softDelete({
+      scopedPrisma: request.prisma,
+      entity: 'EXPENSE',
+      recordId: request.params.id,
+      organizationId: request.user.organizationId,
+    });
+    return { success: true, trashId: trashedItem.id };
   });
 }

@@ -141,6 +141,44 @@ describe('useToast', () => {
       act(() => vi.advanceTimersByTime(4000));
       expect(screen.queryByRole('status')).not.toBeInTheDocument();
     });
+
+    it('shows an operable countdown that can be paused and resumed', () => {
+      function Harness() {
+        const toast = useToast();
+        return <button onClick={() => toast.success({ title: 'Item deleted', duration: 10000, action: { label: 'Undo', onClick: () => {} } })}>Delete</button>;
+      }
+      render(<ToastProvider><Harness /></ToastProvider>);
+      fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+      expect(screen.getByText('Undo available for 10 seconds')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Pause notification timer' }));
+      act(() => vi.advanceTimersByTime(3000));
+      expect(screen.getByText('Undo available for 10 seconds')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Resume notification timer' }));
+      act(() => vi.advanceTimersByTime(1100));
+      expect(screen.getByText('Undo available for 9 seconds')).toBeInTheDocument();
+    });
+
+    it('prevents a pending async action from running twice', async () => {
+      let resolveAction;
+      const action = vi.fn(() => new Promise((resolve) => { resolveAction = resolve; }));
+      function Harness() {
+        const toast = useToast();
+        return <button onClick={() => toast.info({ title: 'Deleted', action: { label: 'Undo', onClick: action, dismissOnClick: false } })}>Show</button>;
+      }
+      render(<ToastProvider><Harness /></ToastProvider>);
+      fireEvent.click(screen.getByRole('button', { name: 'Show' }));
+      const undo = screen.getByRole('button', { name: 'Undo' });
+
+      fireEvent.click(undo);
+      fireEvent.click(undo);
+      expect(action).toHaveBeenCalledOnce();
+      expect(undo).toBeDisabled();
+
+      await act(async () => resolveAction());
+      expect(undo).not.toBeDisabled();
+    });
   });
 
   describe('toast dismissal', () => {

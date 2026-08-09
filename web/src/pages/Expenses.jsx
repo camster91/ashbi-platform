@@ -8,6 +8,7 @@ import { api } from '../lib/api';
 import { Button, Card } from '../components/ui';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
+import { useToast } from '../hooks/useToast';
 
 const CATEGORIES = [
   { value: 'OFFICE', label: 'Office' },
@@ -54,6 +55,7 @@ const emptyForm = {
 
 export default function Expenses() {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState({ ...emptyForm });
@@ -123,10 +125,27 @@ export default function Expenses() {
 
   const deleteMutation = useMutation({
     mutationFn: (id) => api.deleteExpense(id),
-    onSuccess: () => {
+    onSuccess: (result, id) => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
       queryClient.invalidateQueries({ queryKey: ['expense-summary'] });
+      const description = expenseData.expenses.find((expense) => expense.id === id)?.description || 'Expense';
+      toast.success({
+        title: `${description} deleted`,
+        duration: 10000,
+        action: {
+          label: `Undo delete ${description}`,
+          onClick: async () => {
+            await api.restoreTrashItem(result.trashId);
+            await Promise.all([
+              queryClient.invalidateQueries({ queryKey: ['expenses'] }),
+              queryClient.invalidateQueries({ queryKey: ['expense-summary'] }),
+            ]);
+            toast.success('Expense restored');
+          },
+        },
+      });
     },
+    onError: (error) => toast.error('Failed to delete expense', error.message),
   });
 
   function resetForm() {

@@ -104,9 +104,21 @@ export default function Estimates() {
 
   const deleteMutation = useMutation({
     mutationFn: (id) => api.deleteEstimate(id),
-    onSuccess: () => {
+    onSuccess: (result, id) => {
       queryClient.invalidateQueries({ queryKey: ['estimates'] });
-      toast.success('Estimate deleted');
+      const title = estimatesData.estimates.find((estimate) => estimate.id === id)?.title || 'Estimate';
+      toast.success({
+        title: `${title} deleted`,
+        duration: 10000,
+        action: {
+          label: `Undo delete ${title}`,
+          onClick: async () => {
+            await api.restoreTrashItem(result.trashId);
+            await queryClient.invalidateQueries({ queryKey: ['estimates'] });
+            toast.success('Estimate restored');
+          },
+        },
+      });
     },
     onError: (err) => toast.error('Failed to delete estimate', err.message),
   });

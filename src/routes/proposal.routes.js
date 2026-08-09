@@ -2,6 +2,7 @@
 
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
+import { softDelete } from '../services/trash.service.js';
 import { queueEmbedding } from '../jobs/queue.js';
 import {
   validateBody,
@@ -251,9 +252,14 @@ export default async function proposalRoutes(fastify) {
       return reply.status(400).send({ error: 'Only DRAFT proposals can be deleted' });
     }
 
-    await request.prisma.proposal.delete({ where: { id } });
+    const { trashedItem } = await softDelete({
+      scopedPrisma: request.prisma,
+      entity: 'PROPOSAL',
+      recordId: id,
+      organizationId: request.user.organizationId,
+    });
 
-    return { success: true };
+    return { success: true, trashId: trashedItem.id };
   });
 
   // Send proposal (mark as SENT)

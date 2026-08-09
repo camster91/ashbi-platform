@@ -432,6 +432,8 @@ export const api = {
     request(`/notes/${id}`, { method: 'DELETE' }),
   restoreNote: (id) =>
     request(`/notes/${id}/restore`, { method: 'POST' }),
+  restoreTrashItem: (trashId) =>
+    request(`/trash/${trashId}/restore`, { method: 'POST' }),
   pinNote: (id) =>
     request(`/notes/${id}/pin`, { method: 'POST' }),
 

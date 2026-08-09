@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
-import { CheckCircle, XCircle, AlertTriangle, Info, X } from 'lucide-react';
+import { CheckCircle, XCircle, AlertTriangle, Info, Pause, Play, X } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 const ToastContext = createContext(null);
@@ -27,9 +27,42 @@ const ICON_STYLES = {
   info: 'text-blue-500',
 };
 
-function Toast({ id, type = 'info', title, message, action, onDismiss, onPause, onResume }) {
+function Toast({ id, type = 'info', title, message, action, duration, timer, now, onDismiss, onPause, onResume }) {
   const Icon = ICONS[type] || ICONS.info;
   const isError = type === 'error';
+  const actionPending = useRef(false);
+  const [isActionPending, setIsActionPending] = useState(false);
+  const isPaused = Boolean(timer && !timer.timeout);
+  const elapsed = timer?.timeout ? now - timer.startedAt : 0;
+  const remainingSeconds = timer
+    ? Math.max(0, Math.ceil((timer.remaining - elapsed) / 1000))
+    : 0;
+
+  const runAction = () => {
+    if (actionPending.current) return;
+    actionPending.current = true;
+    setIsActionPending(true);
+    try {
+      const result = action.onClick();
+      if (result && typeof result.then === 'function') {
+        result
+          .then(() => {
+            if (action.dismissOnClick !== false) onDismiss(id);
+          })
+          .catch(() => {})
+          .finally(() => {
+            actionPending.current = false;
+            setIsActionPending(false);
+          });
+        return;
+      }
+      if (action.dismissOnClick !== false) onDismiss(id);
+    } catch {
+      // The originating workflow reports failures through its normal error state.
+    }
+    actionPending.current = false;
+    setIsActionPending(false);
+  };
 
   return (
     <div
@@ -50,18 +83,24 @@ function Toast({ id, type = 'info', title, message, action, onDismiss, onPause, 
       <div className="flex-1 min-w-0">
         {title && <p className="font-semibold text-sm">{title}</p>}
         {message && <p className={cn('text-sm', title ? 'opacity-80 mt-0.5' : '')}>{message}</p>}
+        {timer && action?.label && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs opacity-80">
+            <span>Undo available for {remainingSeconds} {remainingSeconds === 1 ? 'second' : 'seconds'}</span>
+            <button
+              type="button"
+              aria-label={isPaused ? 'Resume notification timer' : 'Pause notification timer'}
+              onClick={() => (isPaused ? onResume(id) : onPause(id))}
+              className="rounded p-1 hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current dark:hover:bg-white/10"
+            >
+              {isPaused ? <Play className="h-3.5 w-3.5" aria-hidden="true" /> : <Pause className="h-3.5 w-3.5" aria-hidden="true" />}
+            </button>
+          </div>
+        )}
         {action?.label && typeof action.onClick === 'function' && (
           <button
             type="button"
-            onClick={() => {
-              try {
-                const result = action.onClick();
-                if (result && typeof result.catch === 'function') result.catch(() => {});
-              } catch {
-                // The originating workflow reports retry failures through its normal error state.
-              }
-              if (action.dismissOnClick !== false) onDismiss(id);
-            }}
+            onClick={runAction}
+            disabled={isActionPending}
             className="mt-2 rounded-full border border-current px-3 py-1 text-left text-xs font-semibold whitespace-normal hover:bg-black/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current focus-visible:ring-offset-2 dark:hover:bg-white/10"
           >
             {action.label}
@@ -82,6 +121,7 @@ function Toast({ id, type = 'info', title, message, action, onDismiss, onPause, 
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
   const [isMobile, setIsMobile] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
   const timers = useRef({});
 
   useEffect(() => {
@@ -99,12 +139,19 @@ export function ToastProvider({ children }) {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
+  useEffect(() => {
+    if (!toasts.some(({ duration }) => duration > 0)) return undefined;
+    const interval = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(interval);
+  }, [toasts]);
+
   const pause = useCallback((id) => {
     const timer = timers.current[id];
     if (!timer?.timeout) return;
     clearTimeout(timer.timeout);
     timer.remaining = Math.max(0, timer.remaining - (Date.now() - timer.startedAt));
     timer.timeout = null;
+    setNow(Date.now());
   }, []);
 
   const resume = useCallback((id) => {
@@ -112,6 +159,7 @@ export function ToastProvider({ children }) {
     if (!timer || timer.timeout || timer.remaining <= 0) return;
     timer.startedAt = Date.now();
     timer.timeout = setTimeout(() => dismiss(id), timer.remaining);
+    setNow(Date.now());
   }, [dismiss]);
 
   const toast = useCallback((type, titleOrOptions, message, duration = 4000) => {
@@ -128,7 +176,7 @@ export function ToastProvider({ children }) {
       msg = message;
     }
 
-    setToasts(prev => [...prev.slice(-4), { id, type, title, message: msg, action }]);
+    setToasts(prev => [...prev.slice(-4), { id, type, title, message: msg, action, duration }]);
     if (Number.isFinite(duration) && duration > 0) {
       timers.current[id] = {
         remaining: duration,
@@ -161,8 +209,8 @@ export function ToastProvider({ children }) {
         className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none"
       >
         {visibleToasts.map(t => (
-          <div key={t.id} className="pointer-events-auto animate-in slide-in-from-bottom-2 fade-in duration-300">
-            <Toast {...t} onDismiss={dismiss} onPause={pause} onResume={resume} />
+          <div key={t.id} className="pointer-events-auto animate-in slide-in-from-bottom-2 fade-in duration-300 motion-reduce:animate-none">
+            <Toast {...t} timer={timers.current[t.id]} now={now} onDismiss={dismiss} onPause={pause} onResume={resume} />
           </div>
         ))}
       </div>

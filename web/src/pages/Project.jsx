@@ -621,9 +621,21 @@ function ProjectNotes({ projectId }) {
 
   const deleteMutation = useMutation({
     mutationFn: (id) => api.deleteNote(id),
-    onSuccess: () => {
+    onSuccess: (result, id) => {
       queryClient.invalidateQueries({ queryKey: ['notes', projectId] });
-      toast.success('Note deleted');
+      const title = notes.find((note) => note.id === id)?.title || 'Note';
+      toast.success({
+        title: `${title} deleted`,
+        duration: 10000,
+        action: {
+          label: `Undo delete ${title}`,
+          onClick: async () => {
+            await api.restoreTrashItem(result.trashId);
+            await queryClient.invalidateQueries({ queryKey: ['notes', projectId] });
+            toast.success('Note restored');
+          },
+        },
+      });
     },
     onError: () => toast.error('Failed to delete note'),
   });

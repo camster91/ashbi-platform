@@ -69,9 +69,21 @@ export default function Proposals() {
 
   const deleteMutation = useMutation({
     mutationFn: (id) => api.deleteProposal(id),
-    onSuccess: () => {
+    onSuccess: (result, id) => {
       queryClient.invalidateQueries({ queryKey: ['proposals'] });
-      toast.success('Proposal deleted');
+      const title = proposals.find((proposal) => proposal.id === id)?.title || 'Proposal';
+      toast.success({
+        title: `${title} deleted`,
+        duration: 10000,
+        action: {
+          label: `Undo delete ${title}`,
+          onClick: async () => {
+            await api.restoreTrashItem(result.trashId);
+            await queryClient.invalidateQueries({ queryKey: ['proposals'] });
+            toast.success('Proposal restored');
+          },
+        },
+      });
     },
     onError: () => toast.error('Failed to delete proposal'),
   });
