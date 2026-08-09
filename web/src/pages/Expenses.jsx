@@ -366,8 +366,10 @@ export default function Expenses() {
           />
           {(filterCategory || filterClient || startDate || endDate || searchQuery) && (
             <button
+              type="button"
+              aria-label="Clear expense filters"
               onClick={() => { setFilterCategory(''); setFilterClient(''); setStartDate(''); setEndDate(''); setSearchQuery(''); }}
-              className="text-sm text-muted-foreground hover:text-foreground"
+              className="min-h-11 inline-flex items-center text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
             >
               Clear
             </button>
@@ -382,8 +384,8 @@ export default function Expenses() {
             <h2 className="text-lg font-semibold text-foreground">
               {editingId ? 'Edit Expense' : 'Add Expense'}
             </h2>
-            <button onClick={resetForm} className="text-muted-foreground hover:text-foreground">
-              <X className="w-5 h-5" />
+            <button type="button" onClick={resetForm} aria-label="Close expense form" className="min-h-11 min-w-11 inline-flex items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <X className="w-5 h-5" aria-hidden="true" />
             </button>
           </div>
           <DraftRecoveryNotice
