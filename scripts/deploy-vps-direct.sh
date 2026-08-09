@@ -84,8 +84,8 @@ docker run --rm --network "$NETWORK" --env-file "$ENV_FILE" "$IMAGE" npx prisma 
 docker run --rm --network "$NETWORK" --env-file "$ENV_FILE" "$IMAGE" node scripts/audit-wp-bridge-ownership.mjs
 
 PREVIOUS_IMAGE=$(docker inspect --format '{{.Config.Image}}' "$CONTAINER" 2>/dev/null || true)
-PREVIOUS_REVISION=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$CONTAINER" 2>/dev/null | sed -n 's/^APP_REVISION=//p' | tail -1)
-PREVIOUS_DIGEST=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$CONTAINER" 2>/dev/null | sed -n 's/^APP_IMAGE_DIGEST=//p' | tail -1)
+PREVIOUS_REVISION=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$CONTAINER" 2>/dev/null | sed -n 's/^APP_REVISION=//p' | tail -1 || true)
+PREVIOUS_DIGEST=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$CONTAINER" 2>/dev/null | sed -n 's/^APP_IMAGE_DIGEST=//p' | tail -1 || true)
 STAMP=$(date -u +%Y%m%d_%H%M%S_%N)
 ROLLBACK_CONTAINER="$CONTAINER-rollback-$STAMP"
 CUTOVER_STARTED=false
@@ -163,6 +163,7 @@ if [[ $READY != true ]]; then
   die 'candidate failed revision-aware readiness; previous release restored'
 fi
 
-record deployed "rollback=$ROLLBACK_CONTAINER;previous_digest=$PREVIOUS_DIGEST"
+RETAINED_ROLLBACK=${PREVIOUS_IMAGE:+$ROLLBACK_CONTAINER}
+record deployed "rollback=${RETAINED_ROLLBACK:-none};previous_digest=$PREVIOUS_DIGEST"
 CUTOVER_STARTED=false
-echo "deployed revision $REVISION as $IMAGE_ID; rollback container: ${ROLLBACK_CONTAINER:-none}"
+echo "deployed revision $REVISION as $IMAGE_ID; rollback container: ${RETAINED_ROLLBACK:-none}"

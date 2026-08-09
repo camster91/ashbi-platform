@@ -53,6 +53,7 @@ export function validateReleaseGates(root = process.cwd()) {
     [/flock -n/, 'does not serialize production changes'],
     [/npx prisma migrate status/, 'does not perform migration preflight'],
     [/PREVIOUS_IMAGE=/, 'does not capture the previous image'],
+    [/PREVIOUS_REVISION=.*tail -1 \|\| true/, 'does not support a first deployment without a prior container'],
     [/restore_previous/, 'does not implement automatic rollback'],
     [/trap emergency_rollback EXIT/, 'does not protect interrupted cutovers'],
     [/imageDigest.*IMAGE_ID/, 'does not verify revision-aware readiness'],
