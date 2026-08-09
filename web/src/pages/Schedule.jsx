@@ -17,6 +17,7 @@ import {
   Milestone,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import ConfirmDialog from '../components/ConfirmDialog';
 import Modal from '../components/Modal';
 import Button from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -106,6 +107,7 @@ function roundToNextHour(date) {
 function EventModal({ isOpen, onClose, initialDate, editEvent, projects = [], team = [] }) {
   const queryClient = useQueryClient();
   const isEdit = !!editEvent;
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const defaultStart = useMemo(() => {
     if (editEvent) return new Date(editEvent.startTime);
@@ -137,9 +139,22 @@ function EventModal({ isOpen, onClose, initialDate, editEvent, projects = [], te
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['calendar'] });
       queryClient.invalidateQueries({ queryKey: ['upcoming-events'] });
+      setConfirmingDelete(false);
       onClose();
     },
   });
+
+  const requestDelete = () => {
+    if (deleteMutation.isPending) return;
+    deleteMutation.reset();
+    setConfirmingDelete(true);
+  };
+
+  const cancelDelete = () => {
+    if (deleteMutation.isPending) return;
+    deleteMutation.reset();
+    setConfirmingDelete(false);
+  };
 
   const updateMutation = useMutation({
     mutationFn: (data) => api.updateCalendarEvent(editEvent.id, data),
@@ -187,7 +202,8 @@ function EventModal({ isOpen, onClose, initialDate, editEvent, projects = [], te
   const mutation = isEdit ? updateMutation : createMutation;
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={isEdit ? 'Edit Event' : 'New Event'} size="lg">
+    <>
+      <Modal isOpen={isOpen} onClose={onClose} title={isEdit ? 'Edit Event' : 'New Event'} size="lg">
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Title */}
         <div>
@@ -339,9 +355,9 @@ function EventModal({ isOpen, onClose, initialDate, editEvent, projects = [], te
             {isEdit && (
               <button
                 type="button"
-                onClick={() => deleteMutation.mutate()}
+                onClick={requestDelete}
                 disabled={deleteMutation.isPending}
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors"
+                className="inline-flex min-h-11 items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Trash2 className="w-4 h-4" />
                 {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
@@ -373,7 +389,18 @@ function EventModal({ isOpen, onClose, initialDate, editEvent, projects = [], te
           </div>
         )}
       </form>
-    </Modal>
+      </Modal>
+      <ConfirmDialog
+        isOpen={confirmingDelete}
+        title={editEvent ? `Permanently delete “${editEvent.title}”?` : 'Permanently delete this event?'}
+        description="This permanently removes the calendar event and cannot be undone."
+        confirmLabel="Delete event permanently"
+        onConfirm={() => deleteMutation.mutate()}
+        onCancel={cancelDelete}
+        pending={deleteMutation.isPending}
+        error={deleteMutation.error?.message}
+      />
+    </>
   );
 }
 
@@ -382,6 +409,7 @@ function EventModal({ isOpen, onClose, initialDate, editEvent, projects = [], te
 function EventDetailModal({ event, isOpen, onClose, onEdit }) {
   const queryClient = useQueryClient();
   const [rsvpStatus, setRsvpStatus] = useState(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const style = typeStyle(event?.type);
 
@@ -398,16 +426,30 @@ function EventDetailModal({ event, isOpen, onClose, onEdit }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['calendar'] });
       queryClient.invalidateQueries({ queryKey: ['upcoming-events'] });
+      setConfirmingDelete(false);
       onClose();
     },
   });
+
+  const requestDelete = () => {
+    if (deleteMutation.isPending) return;
+    deleteMutation.reset();
+    setConfirmingDelete(true);
+  };
+
+  const cancelDelete = () => {
+    if (deleteMutation.isPending) return;
+    deleteMutation.reset();
+    setConfirmingDelete(false);
+  };
 
   if (!event) return null;
 
   const Icon = TYPE_ICONS[event.type] || CalendarDays;
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="" ariaLabel="Event details" size="md">
+    <>
+      <Modal isOpen={isOpen} onClose={onClose} title="" ariaLabel="Event details" size="md">
       <div className="space-y-4">
         {/* Header */}
         <div className="flex items-start gap-3">
@@ -493,9 +535,9 @@ function EventDetailModal({ event, isOpen, onClose, onEdit }) {
         {/* Actions */}
         <div className="flex items-center justify-between pt-2 border-t border-border">
           <button
-            onClick={() => deleteMutation.mutate()}
+            onClick={requestDelete}
             disabled={deleteMutation.isPending}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors"
+            className="inline-flex min-h-11 items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Trash2 className="w-4 h-4" />
             {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
@@ -513,7 +555,18 @@ function EventDetailModal({ event, isOpen, onClose, onEdit }) {
           </div>
         </div>
       </div>
-    </Modal>
+      </Modal>
+      <ConfirmDialog
+        isOpen={confirmingDelete}
+        title={`Permanently delete “${event.title}”?`}
+        description="This permanently removes the calendar event and cannot be undone."
+        confirmLabel="Delete event permanently"
+        onConfirm={() => deleteMutation.mutate()}
+        onCancel={cancelDelete}
+        pending={deleteMutation.isPending}
+        error={deleteMutation.error?.message}
+      />
+    </>
   );
 }
 
