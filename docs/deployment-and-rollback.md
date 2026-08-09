@@ -9,7 +9,7 @@ Before upload, the operator runs the release gates, builds once with the full
 Git revision, and records both the Docker image ID and archive SHA-256. The
 same archive is uploaded to each environment. The VPS script verifies both
 identifiers before starting anything, takes an exclusive deployment lock,
-runs migration and ownership preflight checks, retains the prior container,
+runs migration deployment plus status and ownership preflight checks, retains the prior container,
 and requires `/api/health` to report the approved revision and image ID.
 
 The host must already contain its root-owned, mode-0600 environment file at

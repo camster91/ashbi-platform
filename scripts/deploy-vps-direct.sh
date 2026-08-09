@@ -80,6 +80,7 @@ docker load -i "$ARCHIVE" >/dev/null
 ACTUAL_IMAGE_ID=$(docker image inspect "$IMAGE" --format '{{.Id}}')
 [[ $ACTUAL_IMAGE_ID == "$IMAGE_ID" ]] || die 'loaded image ID does not match the approved artifact'
 
+docker run --rm --network "$NETWORK" --env-file "$ENV_FILE" "$IMAGE" npx prisma migrate deploy
 docker run --rm --network "$NETWORK" --env-file "$ENV_FILE" "$IMAGE" npx prisma migrate status
 docker run --rm --network "$NETWORK" --env-file "$ENV_FILE" "$IMAGE" node scripts/audit-wp-bridge-ownership.mjs
 
