@@ -22,14 +22,14 @@ async function downloadPortalDocument(token, doc) {
 }
 
 // ── Ashbi Design Brand ────────────────────────────────────────────────────────
-const BRAND = {
+export const BRAND = {
   primary: '#2e2958',
   accent: '#e6f354',
   bg: '#faf9f2',
   white: '#ffffff',
   text: '#2e2958',
-  textMuted: '#8a85a0',
-  border: '#e8e5dc',
+  textMuted: '#6b667f',
+  border: '#918c9f',
   cardBg: '#ffffff',
   hoverBg: '#f5f3ea',
 };
@@ -335,13 +335,13 @@ function OverviewTab({ projects, invoices, retainer, unread, setActiveTab, setSe
         </div>
         <div className="cp-card cp-stat">
           <p className="cp-stat-label">Outstanding</p>
-          <p className="cp-stat-value" style={{ color: unpaidTotal > 0 ? '#d97706' : '#16a34a' }}>
+          <p className="cp-stat-value" style={{ color: unpaidTotal > 0 ? '#b45309' : '#15803d' }}>
             {fmt(unpaidTotal, 'USD')}
           </p>
         </div>
         <div className="cp-card cp-stat">
           <p className="cp-stat-label">Upcoming Deadlines</p>
-          <p className="cp-stat-value" style={{ color: (unread?.upcomingDeadlines || 0) > 0 ? '#d97706' : BRAND.primary }}>
+          <p className="cp-stat-value" style={{ color: (unread?.upcomingDeadlines || 0) > 0 ? '#b45309' : BRAND.primary }}>
             {unread?.upcomingDeadlines ?? 0}
           </p>
         </div>
@@ -358,7 +358,7 @@ function OverviewTab({ projects, invoices, retainer, unread, setActiveTab, setSe
             </div>
             <div>
               <p className="cp-stat-label">Hours Used</p>
-              <p className="cp-text" style={{ fontWeight: 600, color: retainer.percentUsed >= 90 ? '#dc2626' : retainer.percentUsed >= 70 ? '#d97706' : '#16a34a' }}>
+              <p className="cp-text" style={{ fontWeight: 600, color: retainer.percentUsed >= 90 ? '#b91c1c' : retainer.percentUsed >= 70 ? '#b45309' : '#15803d' }}>
                 {retainer.hoursUsed}h
               </p>
             </div>
@@ -376,7 +376,7 @@ function OverviewTab({ projects, invoices, retainer, unread, setActiveTab, setSe
               <div style={{
                 height: '100%', borderRadius: 4, transition: 'width 0.3s',
                 width: `${Math.min(retainer.percentUsed, 100)}%`,
-                background: retainer.percentUsed >= 100 ? '#dc2626' : retainer.percentUsed >= 80 ? '#d97706' : retainer.percentUsed >= 60 ? BRAND.accent : '#16a34a'
+                background: retainer.percentUsed >= 100 ? '#b91c1c' : retainer.percentUsed >= 80 ? '#b45309' : retainer.percentUsed >= 60 ? BRAND.accent : '#15803d'
               }} />
             </div>
           </div>
@@ -403,7 +403,7 @@ function OverviewTab({ projects, invoices, retainer, unread, setActiveTab, setSe
                   <div style={{
                     height: '100%', borderRadius: 3, transition: 'width 0.3s',
                     width: `${p.progressPct}%`,
-                    background: p.progressPct >= 80 ? '#16a34a' : BRAND.primary
+                    background: p.progressPct >= 80 ? '#15803d' : BRAND.primary
                   }} />
                 </div>
               </button>
@@ -479,7 +479,7 @@ function ProjectsTab({ projects, setSelectedProject }) {
                     <div style={{
                       height: '100%', borderRadius: 4, transition: 'width 0.3s',
                       width: `${p.progressPct}%`,
-                      background: p.progressPct >= 80 ? '#16a34a' : p.progressPct >= 40 ? BRAND.primary : BRAND.textMuted
+                      background: p.progressPct >= 80 ? '#15803d' : p.progressPct >= 40 ? BRAND.primary : BRAND.textMuted
                     }} />
                   </div>
                 </div>
@@ -619,10 +619,10 @@ function ProjectDetail({ projectId, token, onBack }) {
   }
 
   const kanbanColumns = [
-    { key: 'TODO', label: 'To Do', tasks: tasks.TODO, color: '#d97706' },
-    { key: 'IN_PROGRESS', label: 'In Progress', tasks: tasks.IN_PROGRESS, color: '#84cc16' },
-    { key: 'DONE', label: 'Done', tasks: tasks.DONE, color: '#16a34a' },
-    { key: 'BLOCKED', label: 'Blocked', tasks: tasks.BLOCKED || [], color: '#dc2626' },
+    { key: 'TODO', label: 'To Do', tasks: tasks.TODO, color: '#b45309' },
+    { key: 'IN_PROGRESS', label: 'In Progress', tasks: tasks.IN_PROGRESS, color: '#4d7c0f' },
+    { key: 'DONE', label: 'Done', tasks: tasks.DONE, color: '#15803d' },
+    { key: 'BLOCKED', label: 'Blocked', tasks: tasks.BLOCKED || [], color: '#b91c1c' },
   ];
 
   const detailTabs = [
@@ -655,7 +655,7 @@ function ProjectDetail({ projectId, token, onBack }) {
           <div style={{
             height: '100%', borderRadius: 5, transition: 'width 0.3s',
             width: `${project.progressPct}%`,
-            background: project.progressPct >= 80 ? '#16a34a' : BRAND.primary
+            background: project.progressPct >= 80 ? '#15803d' : BRAND.primary
           }} />
         </div>
       </div>
@@ -749,8 +749,8 @@ function ProjectDetail({ projectId, token, onBack }) {
             <div ref={chatEndRef} />
           </div>
           <form onSubmit={handleSendMessage} className="cp-chat-input-bar">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.7rem', color: connected ? '#16a34a' : '#dc2626' }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: connected ? '#16a34a' : '#dc2626', display: 'inline-block' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.7rem', color: connected ? '#15803d' : '#b91c1c' }}>
+              <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: '50%', background: connected ? '#15803d' : '#b91c1c', display: 'inline-block' }} />
               {connected ? 'Connected' : 'Reconnecting...'}
             </div>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -1132,8 +1132,8 @@ function ChatTab({ projects, token }) {
           <div ref={chatEndRef} />
         </div>
         <form onSubmit={handleSend} className="cp-chat-input-bar">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.7rem', color: connected ? '#16a34a' : '#dc2626' }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: connected ? '#16a34a' : '#dc2626', display: 'inline-block' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.7rem', color: connected ? '#15803d' : '#b91c1c' }}>
+            <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: '50%', background: connected ? '#15803d' : '#b91c1c', display: 'inline-block' }} />
             {connected ? 'Connected' : 'Reconnecting...'}
           </div>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -1330,9 +1330,13 @@ const globalStyles = `
   /* Ashbi Client Portal — Design System */
   .cp-text { color: ${BRAND.text}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
   .cp-text-muted { color: ${BRAND.textMuted}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
-  .cp-error { color: #dc2626; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+  .cp-error { color: #b91c1c; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
   .cp-link { color: ${BRAND.primary}; cursor: pointer; text-decoration: none; font-weight: 500; background: none; border: none; font-size: inherit; font-family: inherit; }
   .cp-link:hover { text-decoration: underline; }
+  .cp-link:focus-visible, .cp-input:focus-visible, .cp-btn-primary:focus-visible, .cp-btn-secondary:focus-visible,
+  .cp-btn-danger:focus-visible, .cp-btn-ghost:focus-visible, .cp-card--interactive:focus-visible {
+    outline: 3px solid ${BRAND.primary}; outline-offset: 2px;
+  }
 
   .cp-input {
     width: 100%; padding: 0.625rem 0.875rem; border: 1.5px solid ${BRAND.border}; border-radius: 10px;
@@ -1363,7 +1367,7 @@ const globalStyles = `
 
   .cp-btn-danger {
     display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.5rem 1rem;
-    background: transparent; color: #dc2626; border: 1.5px solid #fecaca; border-radius: 10px;
+    background: transparent; color: #b91c1c; border: 1.5px solid #b91c1c; border-radius: 10px;
     font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all 0.2s;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
@@ -1397,18 +1401,18 @@ const globalStyles = `
     display: inline-flex; align-items: center; padding: 0.125rem 0.5rem;
     border-radius: 6px; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.02em; white-space: nowrap;
   }
-  .cp-badge--green { background: #dcfce7; color: #16a34a; }
-  .cp-badge--lime { background: #ecfccb; color: #65a30d; }
-  .cp-badge--orange { background: #ffedd5; color: #c2410c; }
-  .cp-badge--red { background: #fee2e2; color: #dc2626; }
-  .cp-badge--blue { background: #dbeafe; color: #2563eb; }
-  .cp-badge--purple { background: #ede9fe; color: #7c3aed; }
+  .cp-badge--green { background: #dcfce7; color: #166534; }
+  .cp-badge--lime { background: #ecfccb; color: #4d7c0f; }
+  .cp-badge--orange { background: #ffedd5; color: #9a3412; }
+  .cp-badge--red { background: #fee2e2; color: #b91c1c; }
+  .cp-badge--blue { background: #dbeafe; color: #1d4ed8; }
+  .cp-badge--purple { background: #ede9fe; color: #6d28d9; }
   .cp-badge--muted { background: #f1f0eb; color: ${BRAND.textMuted}; }
 
   .cp-alert {
     padding: 1rem 1.25rem; border-radius: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
-  .cp-alert--red { background: #fef2f2; border: 1.5px solid #fecaca; }
+  .cp-alert--red { background: #fef2f2; border: 1.5px solid #b91c1c; }
 
   .cp-page-title { font-size: 1.25rem; font-weight: 700; color: ${BRAND.text}; margin: 0 0 1rem; }
   .cp-section-title { font-size: 1rem; font-weight: 600; color: ${BRAND.text}; margin: 0 0 0.75rem; }

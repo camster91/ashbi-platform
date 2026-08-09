@@ -35,8 +35,8 @@
     --destructive-foreground: 0 0% 100%;
 
     /* Borders & Inputs */
-    --border: 250 20% 88%;
-    --input: 250 20% 88%;
+    --border: 250 12% 60%;
+    --input: 250 12% 60%;
     --ring: 250 39% 25%;
     --radius: 0.625rem;
 
@@ -92,8 +92,8 @@
     --destructive-foreground: 48 33% 97%;
 
     /* Borders & Inputs */
-    --border: 250 30% 22%;
-    --input: 250 30% 18%;
+    --border: 250 15% 45%;
+    --input: 250 15% 45%;
     --ring: 68 94% 61%;
   }
 }
@@ -114,6 +114,10 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 3px solid hsl(var(--ring));
+    outline-offset: 2px;
   }
 
   /* Brand headline style */
@@ -233,7 +237,6 @@
   html:focus-within {
     scroll-behavior: auto;
   }
-
   *,
   *::before,
   *::after {
