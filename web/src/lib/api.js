@@ -430,6 +430,8 @@ export const api = {
     request(`/notes/${id}`, { method: 'PUT', body: data }),
   deleteNote: (id) =>
     request(`/notes/${id}`, { method: 'DELETE' }),
+  restoreNote: (id) =>
+    request(`/notes/${id}/restore`, { method: 'POST' }),
   pinNote: (id) =>
     request(`/notes/${id}/pin`, { method: 'POST' }),
 

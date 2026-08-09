@@ -123,6 +123,24 @@ describe('useToast', () => {
       act(() => vi.advanceTimersByTime(60000));
       expect(screen.getByRole('alert')).toHaveTextContent('Needs attention');
     });
+
+    it('pauses auto-dismiss while hovered and resumes the remaining countdown', () => {
+      function Harness() {
+        const toast = useToast();
+        return <button onClick={() => toast.success({ title: 'Undo available', duration: 4000 })}>Show</button>;
+      }
+      render(<ToastProvider><Harness /></ToastProvider>);
+      fireEvent.click(screen.getByRole('button', { name: 'Show' }));
+      const notice = screen.getByRole('status');
+
+      fireEvent.mouseEnter(notice);
+      act(() => vi.advanceTimersByTime(10000));
+      expect(screen.getByRole('status')).toHaveTextContent('Undo available');
+
+      fireEvent.mouseLeave(notice);
+      act(() => vi.advanceTimersByTime(4000));
+      expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    });
   });
 
   describe('toast dismissal', () => {

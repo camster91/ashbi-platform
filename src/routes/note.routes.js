@@ -214,6 +214,30 @@ export default async function noteRoutes(fastify) {
     return { success: true };
   });
 
+  // Restore one recently soft-deleted note. Explicit deletedAt criteria bypasses
+  // the normal soft-delete read filter while tenant scoping remains enforced.
+  fastify.post('/notes/:id/restore', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const existing = await request.prisma.note.findFirst({
+      where: { id, deletedAt: { not: null } }
+    });
+
+    if (!existing) {
+      return reply.status(404).send({ error: 'Deleted note not found' });
+    }
+    if (existing.authorId !== request.user.id && request.user.role !== 'ADMIN') {
+      return reply.status(403).send({ error: 'Cannot restore this note' });
+    }
+
+    const note = await request.prisma.note.update({
+      where: { id },
+      data: { deletedAt: null }
+    });
+    return { success: true, note };
+  });
+
   // Toggle pin status
   fastify.post('/notes/:id/pin', {
     onRequest: [fastify.authenticate]

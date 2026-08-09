@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import Modal from './Modal';
+import { useToast } from '../hooks/useToast';
 
 export default function Milestones({ projectId }) {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedMilestone, setSelectedMilestone] = useState(null);
 
@@ -34,11 +36,13 @@ export default function Milestones({ projectId }) {
 
   // Delete milestone
   const deleteMutation = useMutation({
-    mutationFn: api.deleteMilestone,
-    onSuccess: () => {
+    mutationFn: ({ id }) => api.deleteMilestone(id),
+    onSuccess: (_, { name }) => {
       queryClient.invalidateQueries({ queryKey: ['milestones', projectId] });
       setSelectedMilestone(null);
-    }
+      toast.success(`Deleted “${name}”`, 'This permanent deletion cannot be undone. Associated tasks were kept and unlinked.');
+    },
+    onError: (error) => toast.error('Milestone was not deleted', error.message),
   });
 
   // Format date
@@ -194,16 +198,22 @@ export default function Milestones({ projectId }) {
         <MilestoneModal
           milestone={selectedMilestone}
           onSave={(data) => updateMutation.mutate({ id: selectedMilestone.id, data })}
-          onDelete={() => deleteMutation.mutate(selectedMilestone.id)}
+          onDelete={() => {
+            const confirmed = window.confirm(
+              `Permanently delete “${selectedMilestone.name}”? This cannot be undone. Associated tasks will be kept but unlinked from the milestone.`
+            );
+            if (confirmed) deleteMutation.mutate({ id: selectedMilestone.id, name: selectedMilestone.name });
+          }}
           onClose={() => setSelectedMilestone(null)}
           isLoading={updateMutation.isPending}
+          isDeleting={deleteMutation.isPending}
         />
       )}
     </div>
   );
 }
 
-function MilestoneModal({ milestone, onSave, onDelete, onClose, isLoading }) {
+function MilestoneModal({ milestone, onSave, onDelete, onClose, isLoading, isDeleting = false }) {
   const [formData, setFormData] = useState({
     name: milestone?.name || '',
     description: milestone?.description || '',
@@ -317,9 +327,10 @@ function MilestoneModal({ milestone, onSave, onDelete, onClose, isLoading }) {
               <button
                 type="button"
                 onClick={onDelete}
+                disabled={isDeleting}
                 className="text-red-600 hover:text-red-700"
               >
-                Delete
+                {isDeleting ? 'Deleting…' : 'Delete permanently'}
               </button>
             )}
           </div>

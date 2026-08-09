@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import Calendar from '../components/Calendar';
 import Milestones from '../components/Milestones';
 import Notes from '../components/Notes';
+import { ToastProvider } from '../hooks/useToast';
 import { api } from '../lib/api';
 
 vi.mock('../lib/api', () => ({
@@ -22,7 +23,11 @@ function renderWithQuery(ui) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <ToastProvider>{ui}</ToastProvider>
+    </QueryClientProvider>,
+  );
 }
 
 afterEach(() => vi.clearAllMocks());

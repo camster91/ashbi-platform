@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import Modal from './Modal';
+import { useToast } from '../hooks/useToast';
 
 const NOTE_TYPES = [
   { value: 'NOTE', label: 'Note', icon: '📝' },
@@ -12,6 +13,7 @@ const NOTE_TYPES = [
 
 export default function Notes({ projectId }) {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [selectedNote, setSelectedNote] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [filter, setFilter] = useState({ type: '', search: '' });
@@ -42,11 +44,38 @@ export default function Notes({ projectId }) {
 
   // Delete note mutation
   const deleteMutation = useMutation({
-    mutationFn: api.deleteNote,
-    onSuccess: () => {
+    mutationFn: ({ id }) => api.deleteNote(id),
+    onSuccess: (_, { id, title }) => {
       queryClient.invalidateQueries({ queryKey: ['notes', projectId] });
       setSelectedNote(null);
+      toast.success({
+        title: `Deleted “${title}”`,
+        message: 'You can undo this deletion for the next 10 seconds.',
+        duration: 10000,
+        action: {
+          label: `Undo delete ${title}`,
+          onClick: () => restoreMutation.mutate(id),
+        },
+      });
+    },
+    onError: (error) => {
+      toast.error('Note was not deleted', error.message);
     }
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: api.restoreNote,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notes', projectId] });
+      toast.success('Note restored', 'The deleted note is back in this project.');
+    },
+    onError: (error) => {
+      toast.error({
+        title: 'Could not restore note',
+        message: error.message || 'Open Trash or refresh before trying again.',
+        duration: 0,
+      });
+    },
   });
 
   // Pin note mutation
@@ -163,17 +192,18 @@ export default function Notes({ projectId }) {
         <NoteEditor
           note={selectedNote}
           onSave={(data) => updateMutation.mutate({ id: selectedNote.id, data })}
-          onDelete={() => deleteMutation.mutate(selectedNote.id)}
+          onDelete={() => deleteMutation.mutate({ id: selectedNote.id, title: selectedNote.title })}
           onPin={() => pinMutation.mutate(selectedNote.id)}
           onClose={() => setSelectedNote(null)}
           isLoading={updateMutation.isPending}
+          isDeleting={deleteMutation.isPending}
         />
       )}
     </div>
   );
 }
 
-function NoteEditor({ note, onSave, onDelete, onPin, onClose, isLoading }) {
+function NoteEditor({ note, onSave, onDelete, onPin, onClose, isLoading, isDeleting = false }) {
   const [formData, setFormData] = useState({
     title: note?.title || '',
     content: note?.content || '',
@@ -295,9 +325,10 @@ function NoteEditor({ note, onSave, onDelete, onPin, onClose, isLoading }) {
                 <button
                   type="button"
                   onClick={onDelete}
+                  disabled={isDeleting}
                   className="text-red-600 hover:text-red-700"
                 >
-                  Delete
+                  {isDeleting ? 'Deleting…' : 'Delete'}
                 </button>
               </>
             )}
