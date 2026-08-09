@@ -16,9 +16,11 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingState from '../components/ui/LoadingState';
 import QueryErrorState from '../components/QueryErrorState';
 import { cn } from '../lib/utils';
+import { useToast } from '../hooks/useToast';
 
 export default function AiContextSettings() {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const [editingKey, setEditingKey] = useState(null);
   const [editValue, setEditValue] = useState('');
   const [newKey, setNewKey] = useState('');
@@ -45,6 +47,7 @@ export default function AiContextSettings() {
       setEditingKey(null);
       setEditValue('');
     },
+    onError: (error) => toast.error(error.message || 'Failed to update AI context'),
   });
 
   const deleteMutation = useMutation({
@@ -63,6 +66,7 @@ export default function AiContextSettings() {
       setNewValue('');
       setShowAdd(false);
     },
+    onError: (error) => toast.error(error.message || 'Failed to add AI context'),
   });
 
   const startEdit = (item) => {

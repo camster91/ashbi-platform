@@ -71,6 +71,7 @@ export default function InvoiceChaser() {
       }
       setExpanded(prev => ({ ...prev, ...expandMap }));
     },
+    onError: (error) => toast.error(error.message || 'Failed to generate invoice reminders'),
   });
 
   const handleGenerateAll = () => {

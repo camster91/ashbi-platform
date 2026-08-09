@@ -8,9 +8,11 @@ import { api } from '../lib/api';
 import { Button, Card } from '../components/ui';
 import { cn } from '../lib/utils';
 import QueryErrorState from '../components/QueryErrorState';
+import { useToast } from '../hooks/useToast';
 
 export default function BrandSettings() {
   const queryClient = useQueryClient();
+  const toast = useToast();
   const fileInputRef = useRef(null);
   const [form, setForm] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -42,6 +44,7 @@ export default function BrandSettings() {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     },
+    onError: (error) => toast.error(error.message || 'Failed to save brand settings'),
   });
 
   async function handleLogoUpload(e) {
@@ -55,6 +58,7 @@ export default function BrandSettings() {
       setForm(prev => ({ ...prev, logoUrl: updated.logoUrl }));
     } catch (err) {
       console.error('Logo upload failed:', err);
+      toast.error(err.message || 'Logo upload failed');
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
