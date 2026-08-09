@@ -44,9 +44,12 @@ describe('manual request failure contract', () => {
     expect(source).toContain('operationError');
     expect(source).toContain('pendingAction');
     expect(source).toContain('role="alert"');
-    expect(source).toContain("disabled={pendingAction === `restore:${confirmRestore.id}`}");
-    expect(source).toContain("disabled={pendingAction === `delete:${confirmDelete.id}`}");
-    expect(source).toContain("disabled={pendingAction === 'empty'}");
+    expect(source).toContain("loading={pendingAction === `restore:${confirmRestore.id}`}");
+    expect(source).toContain("loading={pendingAction === `delete:${confirmDelete.id}`}");
+    expect(source).toContain("loading={pendingAction === 'empty'}");
+    expect(source).toContain('aria-label={`Restore ${item.typeLabel}: ${item.title}`}');
+    expect(source).toContain('aria-label={`Permanently delete ${item.typeLabel}: ${item.title}`}');
+    expect(source).toContain('min-h-11 min-w-11');
     expect(source).not.toContain("console.error('Restore failed:'");
     expect(source).not.toContain("console.error('Permanent delete failed:'");
     expect(source).not.toContain("console.error('Empty trash failed:'");

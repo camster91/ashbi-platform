@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import Modal from '../components/Modal';
+import Modal, { ModalFooter } from '../components/Modal';
 
 describe('Modal', () => {
   it('does not render while closed', () => {
@@ -66,5 +66,15 @@ describe('Modal', () => {
     rerender(<Modal isOpen={false} onClose={vi.fn()} ariaLabel="Untitled dialog">content</Modal>);
     expect(document.body.style.overflow).toBe('scroll');
     document.body.style.overflow = '';
+  });
+
+  it('keeps footer gutters within the mobile content inset', () => {
+    render(
+      <Modal isOpen onClose={vi.fn()} title="Mobile footer">
+        <ModalFooter><button>Continue</button></ModalFooter>
+      </Modal>
+    );
+    const footer = screen.getByRole('button', { name: 'Continue' }).parentElement;
+    expect(footer).toHaveClass('-mx-4', 'px-4', 'sm:-mx-6', 'sm:px-6');
   });
 });

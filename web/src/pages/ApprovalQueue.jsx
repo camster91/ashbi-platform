@@ -3,6 +3,7 @@ import { CheckCircle, XCircle, Eye, ChevronRight, Mail, FileText, DollarSign, Me
 import { safeHtml } from '../lib/safeHtml';
 import { api } from '../lib/api';
 import QueryErrorState from '../components/QueryErrorState';
+import Modal, { ModalFooter } from '../components/Modal';
 import { Button, LoadingState } from '../components/ui';
 
 const TYPE_ICONS = {
@@ -301,27 +302,37 @@ export default function ApprovalQueue() {
       </div>
 
       {/* Reject modal */}
-      {showRejectModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
-          <div className="bg-card rounded-xl shadow-xl border border-border max-w-md w-full p-6">
-            <h3 className="text-lg font-bold text-foreground mb-4">Reject & Return</h3>
-            <textarea
-              value={rejectNote}
-              onChange={e => setRejectNote(e.target.value)}
-              placeholder="Optional: feedback for the agent (e.g. 'Make tone warmer')"
-              className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-sm focus:ring-2 focus:ring-primary outline-none mb-4 h-24 resize-none"
-            />
-            <div className="flex gap-3">
-              <Button variant="outline" className="flex-1" onClick={() => { setShowRejectModal(false); setRejectNote(''); }}>
-                Cancel
-              </Button>
-              <Button variant="destructive" className="flex-1" onClick={() => selected && handleReject(selected.id)} loading={actionLoading}>
-                Reject
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Modal
+        isOpen={showRejectModal}
+        onClose={() => {
+          if (actionLoading) return;
+          setShowRejectModal(false);
+          setRejectNote('');
+        }}
+        title="Reject and return"
+        size="sm"
+        showCloseButton={!actionLoading}
+      >
+        <label htmlFor="approval-reject-note" className="block text-sm font-medium text-foreground mb-2">
+          Feedback for the requester <span className="font-normal text-muted-foreground">(optional)</span>
+        </label>
+        <textarea
+          id="approval-reject-note"
+          value={rejectNote}
+          onChange={e => setRejectNote(e.target.value)}
+          placeholder="For example: Make the tone warmer"
+          disabled={actionLoading}
+          className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground text-sm focus:ring-2 focus:ring-primary outline-none h-24 resize-none disabled:opacity-50"
+        />
+        <ModalFooter className="flex-col-reverse sm:flex-row">
+          <Button variant="outline" className="w-full sm:w-auto" disabled={actionLoading} onClick={() => { setShowRejectModal(false); setRejectNote(''); }}>
+            Cancel
+          </Button>
+          <Button variant="destructive" className="w-full sm:w-auto" onClick={() => selected && handleReject(selected.id)} loading={actionLoading}>
+            Reject approval
+          </Button>
+        </ModalFooter>
+      </Modal>
     </div>
   );
 }

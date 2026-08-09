@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import { X, RotateCcw, Trash2, Search, AlertTriangle } from 'lucide-react';
 import QueryErrorState from '../components/QueryErrorState';
+import Modal, { ModalFooter } from '../components/Modal';
+import { Button } from '../components/ui';
 
 export default function Trash() {
   const [items, setItems] = useState([]);
@@ -192,15 +194,19 @@ export default function Trash() {
 
               <div className="flex gap-2 shrink-0">
                 <button
+                  type="button"
+                  aria-label={`Restore ${item.typeLabel}: ${item.title}`}
                   onClick={() => { setOperationError(''); setConfirmRestore(item); }}
-                  className="p-2 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors"
+                  className="min-h-11 min-w-11 p-2 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors"
                   title="Restore"
                 >
                   <RotateCcw className="w-4 h-4" />
                 </button>
                 <button
+                  type="button"
+                  aria-label={`Permanently delete ${item.typeLabel}: ${item.title}`}
                   onClick={() => { setOperationError(''); setConfirmDelete(item); }}
-                  className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                  className="min-h-11 min-w-11 p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                   title="Delete permanently"
                 >
                   <X className="w-4 h-4" />
@@ -212,45 +218,49 @@ export default function Trash() {
       )}
 
       {/* Restore confirmation */}
-      {confirmRestore && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-card p-6 rounded-xl shadow-xl max-w-sm mx-4">
-            <h3 className="text-lg font-semibold mb-2">Restore this item?</h3>
+      <Modal
+        isOpen={Boolean(confirmRestore)}
+        onClose={() => {
+          if (pendingAction) return;
+          setOperationError('');
+          setConfirmRestore(null);
+        }}
+        title="Restore this item?"
+        size="sm"
+        showCloseButton={!pendingAction}
+      >
+        {confirmRestore && (
+          <>
             <p className="text-sm text-muted-foreground mb-1">
               <strong>{confirmRestore.typeLabel}</strong>: {confirmRestore.title}
             </p>
-            <p className="text-sm text-muted-foreground mb-4">
-              It will reappear in your lists immediately.
-            </p>
-            {operationError && <p role="alert" className="mb-4 text-sm text-red-600">{operationError}</p>}
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => { setOperationError(''); setConfirmRestore(null); }}
-                disabled={Boolean(pendingAction)}
-                className="px-4 py-2 text-sm border border-border rounded-lg hover:bg-muted transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handleRestore(confirmRestore.id, confirmRestore.type)}
-                disabled={pendingAction === `restore:${confirmRestore.id}`}
-                className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {pendingAction === `restore:${confirmRestore.id}` ? 'Restoring…' : 'Restore'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            <p className="text-sm text-muted-foreground">It will reappear in your lists immediately.</p>
+            {operationError && <p role="alert" className="mt-4 text-sm text-red-600">{operationError}</p>}
+            <ModalFooter className="flex-col-reverse sm:flex-row">
+              <Button variant="outline" className="w-full sm:w-auto" onClick={() => { setOperationError(''); setConfirmRestore(null); }} disabled={Boolean(pendingAction)}>Cancel</Button>
+              <Button className="w-full sm:w-auto" onClick={() => handleRestore(confirmRestore.id, confirmRestore.type)} loading={pendingAction === `restore:${confirmRestore.id}`}>Restore</Button>
+            </ModalFooter>
+          </>
+        )}
+      </Modal>
 
       {/* Permanent delete confirmation */}
-      {confirmDelete && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-card p-6 rounded-xl shadow-xl max-w-sm mx-4">
-            <div className="flex items-start gap-3 mb-3">
+      <Modal
+        isOpen={Boolean(confirmDelete)}
+        onClose={() => {
+          if (pendingAction) return;
+          setOperationError('');
+          setConfirmDelete(null);
+        }}
+        title="Permanently delete?"
+        size="sm"
+        showCloseButton={!pendingAction}
+      >
+        {confirmDelete && (
+          <>
+            <div className="flex items-start gap-3">
               <AlertTriangle className="w-6 h-6 text-red-500 shrink-0 mt-0.5" />
               <div>
-                <h3 className="text-lg font-semibold">Permanently delete?</h3>
                 <p className="text-sm text-muted-foreground mt-1">
                   <strong>{confirmDelete.typeLabel}</strong>: {confirmDelete.title}
                 </p>
@@ -260,59 +270,40 @@ export default function Trash() {
               </div>
             </div>
             {operationError && <p role="alert" className="mb-4 text-sm text-red-600">{operationError}</p>}
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => { setOperationError(''); setConfirmDelete(null); }}
-                disabled={Boolean(pendingAction)}
-                className="px-4 py-2 text-sm border border-border rounded-lg hover:bg-muted transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => handlePermanentDelete(confirmDelete.id, confirmDelete.type)}
-                disabled={pendingAction === `delete:${confirmDelete.id}`}
-                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {pendingAction === `delete:${confirmDelete.id}` ? 'Deleting…' : 'Delete Forever'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            <ModalFooter className="flex-col-reverse sm:flex-row">
+              <Button variant="outline" className="w-full sm:w-auto" onClick={() => { setOperationError(''); setConfirmDelete(null); }} disabled={Boolean(pendingAction)}>Cancel</Button>
+              <Button variant="destructive" className="w-full sm:w-auto" onClick={() => handlePermanentDelete(confirmDelete.id, confirmDelete.type)} loading={pendingAction === `delete:${confirmDelete.id}`}>Delete forever</Button>
+            </ModalFooter>
+          </>
+        )}
+      </Modal>
 
       {/* Empty trash confirmation */}
-      {showEmptyConfirm && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-card p-6 rounded-xl shadow-xl max-w-sm mx-4">
-            <div className="flex items-start gap-3 mb-3">
+      <Modal
+        isOpen={showEmptyConfirm}
+        onClose={() => {
+          if (pendingAction) return;
+          setOperationError('');
+          setShowEmptyConfirm(false);
+        }}
+        title="Empty the entire trash?"
+        size="sm"
+        showCloseButton={!pendingAction}
+      >
+        <div className="flex items-start gap-3">
               <AlertTriangle className="w-6 h-6 text-red-500 shrink-0 mt-0.5" />
               <div>
-                <h3 className="text-lg font-semibold">Empty the entire trash?</h3>
                 <p className="text-sm text-muted-foreground mt-1">
                   All {items.length} items will be permanently deleted. This cannot be undone.
                 </p>
               </div>
             </div>
             {operationError && <p role="alert" className="mb-4 text-sm text-red-600">{operationError}</p>}
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => { setOperationError(''); setShowEmptyConfirm(false); }}
-                disabled={Boolean(pendingAction)}
-                className="px-4 py-2 text-sm border border-border rounded-lg hover:bg-muted transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleEmptyTrash}
-                disabled={pendingAction === 'empty'}
-                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {pendingAction === 'empty' ? 'Emptying…' : 'Empty Trash'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+        <ModalFooter className="flex-col-reverse sm:flex-row">
+          <Button variant="outline" className="w-full sm:w-auto" onClick={() => { setOperationError(''); setShowEmptyConfirm(false); }} disabled={Boolean(pendingAction)}>Cancel</Button>
+          <Button variant="destructive" className="w-full sm:w-auto" onClick={handleEmptyTrash} loading={pendingAction === 'empty'}>Empty trash</Button>
+        </ModalFooter>
+      </Modal>
     </div>
   );
 }
