@@ -10,12 +10,16 @@ const EMBEDDING_MODEL = 'nomic-embed-text';
  * Generate an embedding vector using Ollama
  */
 export async function generateEmbedding(text) {
-  const response = await fetch(`${OLLAMA_BASE_URL}/api/embeddings`, {
+  const headers = { 'Content-Type': 'application/json' };
+  if (process.env.OLLAMA_API_KEY) {
+    headers.Authorization = `Bearer ${process.env.OLLAMA_API_KEY}`;
+  }
+  const response = await fetch(`${OLLAMA_BASE_URL}/api/embed`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({
       model: EMBEDDING_MODEL,
-      prompt: text
+      input: text
     })
   });
 
@@ -24,7 +28,11 @@ export async function generateEmbedding(text) {
   }
 
   const data = await response.json();
-  return data.embedding;
+  const embedding = data.embeddings?.[0];
+  if (!Array.isArray(embedding) || embedding.length === 0) {
+    throw new Error('Ollama embedding response did not include a vector');
+  }
+  return embedding;
 }
 
 /**
