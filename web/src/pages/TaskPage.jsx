@@ -115,18 +115,22 @@ function PageHeader({ task, onUpdate, isEditing }) {
             alt="Cover" 
             className="w-full h-full object-cover"
           />
-          <button 
+          <button
+            type="button"
+            aria-label="Remove cover image"
             onClick={() => onUpdate({ coverImage: null })}
-            className="absolute top-4 right-4 p-2 bg-black/50 text-white rounded-lg hover:bg-black/70 transition-colors"
+            className="absolute top-4 right-4 min-h-11 min-w-11 p-2 bg-black/50 text-white rounded-lg hover:bg-black/70 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
           >
             <Trash2 className="w-4 h-4" />
           </button>
         </div>
       ) : (
         <div className="flex justify-end mb-4">
-          <button 
+          <button
+            type="button"
+            aria-label="Add cover image"
             onClick={() => onUpdate({ coverImage: 'https://images.unsplash.com/photo-1557683316-973673baf926?w=1200&h=300&fit=crop' })}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors"
+            className="flex min-h-11 items-center gap-2 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <ImageIcon className="w-4 h-4" />
             Add cover
@@ -137,8 +141,10 @@ function PageHeader({ task, onUpdate, isEditing }) {
       {/* Icon picker */}
       <div className="relative mb-4">
         <button
+          type="button"
+          aria-label="Choose task icon"
           onClick={() => setShowIconPicker(!showIconPicker)}
-          className="text-5xl hover:scale-110 transition-transform"
+          className="min-h-11 min-w-11 rounded-lg text-5xl hover:scale-110 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {icon}
         </button>
@@ -148,9 +154,11 @@ function PageHeader({ task, onUpdate, isEditing }) {
             {emojis.map((emoji) => (
               <button
                 key={emoji}
+                type="button"
+                aria-label={`Choose task icon ${emoji}`}
                 onClick={() => handleIconSelect(emoji)}
                 className={cn(
-                  'text-2xl p-2 rounded-lg hover:bg-muted transition-colors',
+                  'min-h-11 min-w-11 text-2xl p-2 rounded-lg hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                   icon === emoji && 'bg-primary/10'
                 )}
               >
@@ -240,9 +248,11 @@ function PropertiesPanel({ task, onUpdate }) {
         <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
           Properties
         </span>
-        <button 
+        <button
+          type="button"
+          aria-label="Edit task properties"
           onClick={() => setIsEditing(!isEditing)}
-          className="text-xs text-primary hover:underline"
+          className="min-h-11 px-2 text-xs text-primary hover:underline rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {isEditing ? 'Done' : 'Edit'}
         </button>
@@ -341,10 +351,12 @@ function SubpagesList({ subpages, taskId, onCreateSubpage }) {
         {subpages.map((subpage) => (
           <button
             key={subpage.id}
+            type="button"
+            aria-label={`Open subpage ${subpage.title}`}
             onClick={() => navigate(`/task/${subpage.id}`)}
             className={cn(
-              'flex items-center gap-3 p-3 rounded-lg',
-              'bg-muted/50 hover:bg-muted transition-colors text-left'
+              'flex min-h-11 items-center gap-3 p-3 rounded-lg',
+              'bg-muted/50 hover:bg-muted transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
             )}
           >
             <span className="text-xl">{subpage.icon || '📄'}</span>
@@ -538,8 +550,10 @@ export default function TaskPage() {
     <div className="max-w-4xl mx-auto">
       {/* Back button */}
       <button
+        type="button"
+        aria-label="Go back to the previous page"
         onClick={() => navigate(-1)}
-        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4 transition-colors"
+        className="flex min-h-11 items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-4 transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <ArrowLeft className="w-4 h-4" />
         Back
