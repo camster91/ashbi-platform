@@ -6,8 +6,10 @@ import assert from 'node:assert/strict';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import jwt from '@fastify/jwt';
-import prisma from '../../config/db.js';
+import requestPrisma, { prisma, rawPrisma } from '../../config/db.js';
 import invoiceRoutes from '../../routes/invoice.routes.js';
+import { createScopedPrisma } from '../../utils/prisma-tenant-proxy.js';
+import { enterRequestContext } from '../../utils/request-context.js';
 import { shouldSkipHeavyTests } from '../_test-skip.js';
 
 const skip = shouldSkipHeavyTests();
@@ -18,10 +20,12 @@ let fastify;
 let authToken;
 let testClientId;
 let testUserId;
+let testOrganizationId;
 let createdInvoiceId;
 let createdInvoiceNumber;
 
 before(async () => {
+  if (skip) return;
   fastify = Fastify({ logger: false });
   await fastify.register(cookie);
   await fastify.register(jwt, {
@@ -29,7 +33,7 @@ before(async () => {
     cookie: { cookieName: 'token', signed: false }
   });
 
-  fastify.decorate('prisma', prisma);
+  fastify.decorate('prisma', requestPrisma);
 
   fastify.decorate('authenticate', async (request, reply) => {
     try { await request.jwtVerify(); }
@@ -43,11 +47,26 @@ before(async () => {
     } catch { return reply.status(401).send({ error: 'Unauthorized' }); }
   });
 
+  fastify.addHook('preHandler', async (request) => {
+    if (request.user?.organizationId) {
+      const scopedPrisma = createScopedPrisma(prisma, request.user.organizationId);
+      request.prisma = scopedPrisma;
+      enterRequestContext({ prisma: scopedPrisma, organizationId: request.user.organizationId });
+    }
+  });
+
   await fastify.register(invoiceRoutes, { prefix: '/api/invoices' });
   await fastify.ready();
 
   // Create test user + client
-  const user = await prisma.user.upsert({
+  const organization = await rawPrisma.organization.upsert({
+    where: { slug: 'invoice-integration-test' },
+    update: {},
+    create: { name: 'Invoice Integration Test', slug: 'invoice-integration-test' },
+  });
+  testOrganizationId = organization.id;
+
+  const user = await rawPrisma.user.upsert({
     where: { email: 'test-invoice@ashbi.ca' },
     update: {},
     create: {
@@ -55,12 +74,14 @@ before(async () => {
       name: 'Test User',
       password: 'hashed',
       role: 'ADMIN',
+      organizationId: organization.id,
     }
   });
   testUserId = user.id;
 
-  const client = await prisma.client.create({
+  const client = await rawPrisma.client.create({
     data: {
+      organizationId: organization.id,
       name: 'Test Client — Invoice Suite',
       contacts: {
         create: [{
@@ -73,19 +94,21 @@ before(async () => {
   });
   testClientId = client.id;
 
-  authToken = fastify.jwt.sign({ id: user.id, email: user.email, role: 'ADMIN' });
+  authToken = fastify.jwt.sign({ id: user.id, email: user.email, role: 'ADMIN', organizationId: organization.id });
 });
 
 after(async () => {
+  if (skip) return;
   // Cleanup
-  await prisma.invoicePayment.deleteMany({ where: { invoice: { clientId: testClientId } } });
-  await prisma.invoiceLineItem.deleteMany({ where: { invoice: { clientId: testClientId } } });
-  await prisma.invoice.deleteMany({ where: { clientId: testClientId } });
-  await prisma.lineItemTemplate.deleteMany({ where: { name: { startsWith: 'Test Template' } } });
-  await prisma.contact.deleteMany({ where: { clientId: testClientId } });
-  await prisma.client.delete({ where: { id: testClientId } });
-  await prisma.user.delete({ where: { id: testUserId } });
-  await prisma.$disconnect();
+  await rawPrisma.invoicePayment.deleteMany({ where: { invoice: { clientId: testClientId } } });
+  await rawPrisma.invoiceLineItem.deleteMany({ where: { invoice: { clientId: testClientId } } });
+  await rawPrisma.invoice.deleteMany({ where: { clientId: testClientId } });
+  await rawPrisma.lineItemTemplate.deleteMany({ where: { organizationId: testOrganizationId } });
+  await rawPrisma.contact.deleteMany({ where: { clientId: testClientId } });
+  await rawPrisma.client.deleteMany({ where: { organizationId: testOrganizationId } });
+  await rawPrisma.user.delete({ where: { id: testUserId } });
+  await rawPrisma.organization.delete({ where: { id: testOrganizationId } });
+  await rawPrisma.$disconnect();
   await fastify.close();
 });
 

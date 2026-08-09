@@ -1,30 +1,49 @@
 # Immutable deployment and rollback
 
-Production has one deployment controller: the GitHub release-promotion
-workflow using Docker over SSH. Coolify may monitor the service, but it must
-not have an automatic deployment webhook or mutate the production container.
+Production has one deployment controller: the reviewed direct-VPS release
+script at `scripts/deploy-vps-direct.sh`. GitHub Actions and Coolify do not
+deploy production. Coolify may monitor the service, but it must not have an
+automatic deployment webhook or mutate the production container.
 
-The pipeline runs the required release gates, publishes one multi-platform
-GHCR manifest, deploys that exact `image@sha256:digest` to staging, verifies
-the reported commit and digest, and only then promotes the identical reference
-to the protected production environment. Concurrent releases queue instead of
-cancelling a deployment midway.
+Before upload, the operator runs the release gates, builds once with the full
+Git revision, and records both the Docker image ID and archive SHA-256. The
+same archive is uploaded to each environment. The VPS script verifies both
+identifiers before starting anything, takes an exclusive deployment lock,
+runs migration and ownership preflight checks, retains the prior container,
+and requires `/api/health` to report the approved revision and image ID.
 
-Required environment secrets:
+The host must already contain its root-owned, mode-0600 environment file at
+`/opt/ashbi-platform/.env`. Runtime data is bind-mounted from the corresponding
+`data/uploads` and `data/config` directories.
 
-- staging: `STAGING_VPS_HOST`, `STAGING_VPS_SSH_KEY`
-- production: `VPS_HOST`, `VPS_SSH_KEY`
+Example release preparation from the reviewed checkout:
 
-Each host must already contain its root-owned, mode-0600 environment file:
-`/opt/ashbi-platform-staging/.env` or `/opt/ashbi-platform/.env`. Runtime data
-is bind-mounted from the corresponding `data/uploads` and `data/config`
-directories. On the first managed deployment, data from the existing
-container is copied into those persistent directories before replacement.
+```bash
+npm run check:release-gates
+npm run lint && npm run typecheck && npm test && npm --prefix web test && npm run build
+REVISION=$(git rev-parse HEAD)
+IMAGE="ashbi-platform:deploy-${REVISION:0:7}"
+ARCHIVE="ashbi-platform-${REVISION:0:7}.tar"
+docker build --build-arg APP_REVISION="$REVISION" -t "$IMAGE" .
+IMAGE_ID=$(docker image inspect "$IMAGE" --format '{{.Id}}')
+docker save -o "$ARCHIVE" "$IMAGE"
+ARCHIVE_SHA256=$(sha256sum "$ARCHIVE" | awk '{print $1}')
+scp "$ARCHIVE" scripts/deploy-vps-direct.sh root@HOST:/opt/ashbi-platform/releases/
+ssh root@HOST "bash /opt/ashbi-platform/releases/deploy-vps-direct.sh \
+  --archive /opt/ashbi-platform/releases/$ARCHIVE \
+  --archive-sha256 $ARCHIVE_SHA256 --image $IMAGE --image-id $IMAGE_ID \
+  --revision $REVISION"
+```
+
+The script appends every deployment, readiness failure, and rollback to
+`/opt/ashbi-platform/releases/history.tsv`. Upload archives may be deleted
+after public verification because the immutable image and retained rollback
+container remain on the host.
 
 ## Automated rollback test
 
-The reusable deployment workflow captures the prior image, revision, and
-digest before replacement. Readiness succeeds only when `/api/health` reports
+The direct release script captures the prior image, revision, and image ID
+before replacement. Readiness succeeds only when `/api/health` reports
 the expected full commit and image digest. A timeout automatically recreates
 the previous image with its previous revision metadata and fails the release.
 
@@ -33,18 +52,18 @@ Before enabling production promotion, rehearse this in staging:
 1. Deploy a known-good digest and confirm it appears in `releases/history.tsv`.
 2. Temporarily supply a test image whose health response has the wrong
    revision, or stop its application process.
-3. Confirm the workflow fails and the prior container is restored.
+3. Confirm the release command fails and the prior container is restored.
 4. Confirm the database and persistent upload/config directories are intact.
-5. Save the failed workflow URL and the resulting health response on issue
-   #294 as the rehearsal record.
+5. Save the release-history entries and resulting health response on issue
+   #294 as the rehearsal record. Never induce this failure on the live
+   production container; use an isolated staging container and port.
 
 ## Manual rollback
 
-Use the last known-good immutable image reference from
+Use the last known-good immutable image reference and image ID from
 `$ROOT_DIR/releases/history.tsv`; never roll back with a mutable `main` or
-`latest` tag. Re-run the reusable deployment procedure with that digest and
-its recorded revision. If GitHub Actions is unavailable, an infrastructure
-owner may run the equivalent `docker pull image@digest` and container restart
-on the host, then verify both fields at `/api/health`. Record who performed the
-rollback, timestamp, source release, target digest, reason, and verification
-result in the incident and GitHub release record.
+`latest` tag. The release script automatically restores the retained previous
+container when startup or readiness fails. For an operator-requested rollback,
+rerun the script using the recorded previous artifact, revision, and image ID,
+then verify both fields at `/api/health`. Record the operator, timestamp,
+source release, target image ID, reason, and verification result.

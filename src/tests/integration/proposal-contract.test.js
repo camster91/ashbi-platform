@@ -22,6 +22,7 @@ let createdProposalId;
 let createdContractId;
 
 before(async () => {
+  if (skip) return;
   fastify = Fastify({ logger: false });
   await fastify.register(cookie);
   await fastify.register(jwt, { secret: 'test-secret', cookie: { cookieName: 'token', signed: false } });
@@ -68,6 +69,7 @@ before(async () => {
 });
 
 after(async () => {
+  if (skip) return;
   try {
     await prisma.contract.deleteMany({ where: { clientId: testClientId } });
     await prisma.proposalLineItem.deleteMany({ where: { proposal: { clientId: testClientId } } });

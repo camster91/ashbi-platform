@@ -11,6 +11,8 @@ function copyWorkflows() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ashbi-release-gates-'));
   temporaryRoots.push(root);
   fs.cpSync(path.resolve('.github'), path.join(root, '.github'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'scripts'), { recursive: true });
+  fs.copyFileSync(path.resolve('scripts/deploy-vps-direct.sh'), path.join(root, 'scripts', 'deploy-vps-direct.sh'));
   return root;
 }
 
@@ -39,15 +41,18 @@ describe('mandatory release gates', () => {
     assert.ok(validateReleaseGates(root).some((failure) => failure.includes('type-check')));
   });
 
-  it('fails closed when a deploy bypass or continue-on-error is introduced', () => {
+  it('fails closed when a second deployment controller is introduced', () => {
     const root = copyWorkflows();
-    const workflow = path.join(root, '.github', 'workflows', 'deploy-coolify.yml');
-    const source = fs.readFileSync(workflow, 'utf8')
-      .replace('needs: release-gates', 'needs: []')
-      .concat('\ncontinue-on-error: true\n');
-    fs.writeFileSync(workflow, source);
+    const workflow = path.join(root, '.github', 'workflows', 'rogue-deploy.yml');
+    fs.writeFileSync(workflow, 'steps:\n  - uses: appleboy/ssh-action@v1\n');
     const failures = validateReleaseGates(root);
-    assert.ok(failures.some((failure) => failure.includes('continue-on-error')));
-    assert.ok(failures.some((failure) => failure.includes('publish without')));
+    assert.ok(failures.some((failure) => failure.includes('outside the direct VPS controller')));
+  });
+
+  it('fails closed when immutable artifact verification is removed', () => {
+    const root = copyWorkflows();
+    const deploy = path.join(root, 'scripts', 'deploy-vps-direct.sh');
+    fs.writeFileSync(deploy, fs.readFileSync(deploy, 'utf8').replace('sha256sum "$ARCHIVE"', 'echo unverified'));
+    assert.ok(validateReleaseGates(root).some((failure) => failure.includes('archive checksum')));
   });
 });
