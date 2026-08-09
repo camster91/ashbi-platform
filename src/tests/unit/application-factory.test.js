@@ -142,3 +142,37 @@ test('client work-management routes are owned by an ordered domain registrar', a
   assert.equal(new Set(registrations.map(({ plugin }) => plugin)).size, routeNames.length);
   assert.ok(registrations.every(({ plugin }) => typeof plugin === 'function'));
 });
+
+test('client communication routes are owned by an ordered domain registrar', async () => {
+  const factory = fs.readFileSync(new URL('../../index.js', import.meta.url), 'utf8');
+  const registrarUrl = new URL('../../domains/client-communications/register-routes.js', import.meta.url);
+  assert.equal(fs.existsSync(registrarUrl), true, 'client communications registrar must exist');
+
+  const registrar = fs.readFileSync(registrarUrl, 'utf8');
+  const { registerClientCommunicationRoutes } = await import(registrarUrl.href);
+  const routeNames = ['response', 'thread', 'webhook', 'client-portal', 'gmail'];
+  const expectedPrefixes = [
+    '/api/responses',
+    '/api/threads',
+    '/api/webhooks',
+    '/api/client-portal',
+    '/api/gmail',
+  ];
+
+  assert.match(factory, /registerClientCommunicationRoutes\(fastify\)/);
+  for (const route of routeNames) {
+    assert.doesNotMatch(factory, new RegExp(`routes\\/${route}\\.routes\\.js`));
+    assert.match(registrar, new RegExp(`routes\\/${route}\\.routes\\.js`));
+  }
+
+  const registrations = [];
+  await registerClientCommunicationRoutes({
+    async register(plugin, options) {
+      registrations.push({ plugin, prefix: options.prefix });
+    },
+  });
+
+  assert.deepEqual(registrations.map(({ prefix }) => prefix), expectedPrefixes);
+  assert.equal(new Set(registrations.map(({ plugin }) => plugin)).size, routeNames.length);
+  assert.ok(registrations.every(({ plugin }) => typeof plugin === 'function'));
+});

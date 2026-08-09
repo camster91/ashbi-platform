@@ -20,11 +20,7 @@ import { isCurrentUserSession } from './auth/session.js';
 
 // Routes
 import authRoutes from './routes/auth.routes.js';
-import clientPortalRoutes from './routes/client-portal.routes.js';
-import webhookRoutes from './routes/webhook.routes.js';
 import inboxRoutes from './routes/inbox.routes.js';
-import threadRoutes from './routes/thread.routes.js';
-import responseRoutes from './routes/response.routes.js';
 import teamRoutes from './routes/team.routes.js';
 import searchRoutes from './routes/search.routes.js';
 import aiRoutes from './routes/ai.routes.js';
@@ -47,7 +43,6 @@ import templateRoutes from './routes/template.routes.js';
 import aiTeamRoutes from './routes/ai-team.routes.js';
 import emailTriageRoutes from './routes/email-triage.routes.js';
 import aiContextRoutes from './routes/ai-context.routes.js';
-import gmailRoutes from './routes/gmail.routes.js';
 import pushRoutes from './routes/push.routes.js';
 import commandCenterRoutes from './routes/integrations.command-center.routes.js';
 import expenseRoutes from './routes/expense.routes.js';
@@ -71,6 +66,7 @@ import draftRoutes from './routes/draft.routes.js';
 import { registerCoreRevenueRoutes } from './domains/revenue/register-core-routes.js';
 import { registerCollaborationRoutes } from './domains/client-delivery/register-collaboration-routes.js';
 import { registerWorkManagementRoutes } from './domains/client-delivery/register-work-management-routes.js';
+import { registerClientCommunicationRoutes } from './domains/client-communications/register-routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -265,11 +261,7 @@ await fastify.register(ashChatRoutes, { prefix: '/api/ash-chat' });
 await fastify.register(chatRoutes, { prefix: '/api/chat' });
 await fastify.register(searchRoutes, { prefix: '/api/search' });
 await fastify.register(teamRoutes, { prefix: '/api/team' });
-await fastify.register(responseRoutes, { prefix: '/api/responses' });
-await fastify.register(threadRoutes, { prefix: '/api/threads' });
-await fastify.register(webhookRoutes, { prefix: '/api/webhooks' });
-await fastify.register(clientPortalRoutes, { prefix: '/api/client-portal' });
-await fastify.register(gmailRoutes, { prefix: '/api/gmail' });
+await registerClientCommunicationRoutes(fastify);
 
 // Hub-Hermes bridge initialization
 if (initializeRuntime) initHermesBridge(fastify);

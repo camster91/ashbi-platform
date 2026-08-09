@@ -40,6 +40,10 @@ project-collaboration sequence: messages, revisions, calendar, comments,
 attachments, time, and milestones. These registrars preserve their original
 prefixes and order. `src/domains/client-delivery/register-work-management-routes.js`
 owns the contiguous client-to-work sequence: clients, projects, and tasks.
+`src/domains/client-communications/register-routes.js` owns the contiguous
+response-to-delivery sequence: responses, threads, webhooks, the authenticated
+client portal, and Gmail. It preserves the existing order so inbound and
+outbound communication behavior remains unchanged.
 Subsequent independently reviewable slices should move
 existing registrations, without changing prefixes or relative order, into
 these domain groups:
