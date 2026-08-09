@@ -2,6 +2,7 @@
 // Migrated from ashbi-hub raw SQL to Prisma with $queryRaw for vector ops
 
 import prisma from '../config/db.js';
+import { randomUUID } from 'node:crypto';
 
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
 const EMBEDDING_MODEL = 'nomic-embed-text';
@@ -38,14 +39,31 @@ export async function generateEmbedding(text) {
 /**
  * Store an embedding for a client
  */
-export async function storeEmbedding(clientId, content, source, sourceId = null, metadata = {}) {
-  const embedding = await generateEmbedding(content);
+export async function assertEmbeddingClientOwnership(clientId, prismaClient = prisma) {
+  const client = await prismaClient.client.findFirst({
+    where: { id: clientId },
+    select: { id: true, organizationId: true },
+  });
+  if (!client) {
+    const error = new Error('The selected client is not available in this organization');
+    error.statusCode = 404;
+    throw error;
+  }
+  return client;
+}
+
+export async function storeEmbedding(clientId, content, source, sourceId = null, metadata = {}, options = {}) {
+  const prismaClient = options.prismaClient || prisma;
+  const embed = options.generateEmbedding || generateEmbedding;
+  await assertEmbeddingClientOwnership(clientId, prismaClient);
+  const embedding = await embed(content);
+  const id = randomUUID();
 
   // Use Prisma's $executeRaw for the vector column since it's an Unsupported type
-  await prisma.$executeRaw`
+  await prismaClient.$executeRaw`
     INSERT INTO "client_embeddings" ("id", "clientId", "source", "sourceId", "content", "embedding", "metadata", "createdAt", "updatedAt")
     VALUES (
-      gen_random_uuid(),
+      ${id},
       ${clientId},
       ${source},
       ${sourceId},
@@ -58,7 +76,7 @@ export async function storeEmbedding(clientId, content, source, sourceId = null,
     ON CONFLICT DO NOTHING
   `;
 
-  return { clientId, source, content: content.substring(0, 100) + '...' };
+  return { id, clientId, source, content: content.substring(0, 100) + '...' };
 }
 
 /**
@@ -116,35 +134,41 @@ export async function searchSimilar(query, limit = 5, clientId = null, organizat
 /**
  * Delete embeddings for a specific source
  */
-export async function deleteEmbeddings(source, sourceId) {
-  await prisma.$executeRaw`
-    DELETE FROM "client_embeddings"
-    WHERE source = ${source} AND "sourceId" = ${sourceId}
+export async function deleteEmbeddings(source, sourceId, organizationId, prismaClient = prisma) {
+  if (!organizationId) {
+    throw new Error('organizationId is required for scoped embedding deletion');
+  }
+  return prismaClient.$executeRaw`
+    DELETE FROM "client_embeddings" AS ce
+    USING clients AS c
+    WHERE ce.source = ${source}
+      AND ce."sourceId" = ${sourceId}
+      AND c."organizationId" = ${organizationId}
+      AND ce."clientId" = c.id
   `;
 }
 
 /**
  * Re-embed all content for a client (rebuild Client Brain)
  */
-export async function rebuildClientBrain(clientId) {
-  // Delete existing embeddings for this client
-  await prisma.$executeRaw`
-    DELETE FROM "client_embeddings"
-    WHERE "clientId" = ${clientId}
-  `;
-
-  const client = await prisma.client.findUnique({
+export async function rebuildClientBrain(clientId, options = {}) {
+  const prismaClient = options.prismaClient || prisma;
+  await assertEmbeddingClientOwnership(clientId, prismaClient);
+  const client = await prismaClient.client.findUnique({
     where: { id: clientId },
     include: {
       projects: { include: { threads: { include: { messages: true } } } },
       proposals: true,
-      invoices: true
     }
   });
 
-  if (!client) return;
+  if (!client) {
+    const error = new Error('The selected client is not available in this organization');
+    error.statusCode = 404;
+    throw error;
+  }
 
-  const embeddingPromises = [];
+  const embeddingInputs = [];
 
   // Embed client knowledge base
   if (client.knowledgeBase) {
@@ -152,46 +176,38 @@ export async function rebuildClientBrain(clientId) {
       ? JSON.parse(client.knowledgeBase)
       : client.knowledgeBase;
     if (Array.isArray(kb) && kb.length > 0) {
-      embeddingPromises.push(
-        storeEmbedding(clientId, kb.join(' '), 'KNOWLEDGE_BASE', null, { type: 'knowledge_base' })
-      );
+      embeddingInputs.push([clientId, kb.join(' '), 'KNOWLEDGE_BASE', null, { type: 'knowledge_base' }]);
     }
   }
 
   // Embed project threads and messages
   for (const project of client.projects) {
     if (project.aiSummary) {
-      embeddingPromises.push(
-        storeEmbedding(clientId, project.aiSummary, 'PROJECT', project.id, { projectName: project.name })
-      );
+      embeddingInputs.push([clientId, project.aiSummary, 'PROJECT', project.id, { projectName: project.name }]);
     }
     for (const thread of project.threads) {
       const lastMessage = thread.messages[thread.messages.length - 1];
       if (lastMessage) {
-        embeddingPromises.push(
-          storeEmbedding(
-            clientId,
-            `${thread.subject}: ${lastMessage.bodyText.substring(0, 500)}`,
-            'THREAD',
-            thread.id,
-            { project: project.name, threadSubject: thread.subject }
-          )
-        );
+        embeddingInputs.push([
+          clientId,
+          `${thread.subject}: ${lastMessage.bodyText.substring(0, 500)}`,
+          'THREAD',
+          thread.id,
+          { project: project.name, threadSubject: thread.subject },
+        ]);
       }
     }
   }
 
   // Embed proposals
   for (const proposal of client.proposals) {
-    embeddingPromises.push(
-      storeEmbedding(
-        clientId,
-        `Proposal: ${proposal.title} - ${proposal.notes || ''}`,
-        'PROPOSAL',
-        proposal.id,
-        { status: proposal.status, total: proposal.total }
-      )
-    );
+    embeddingInputs.push([
+      clientId,
+      `Proposal: ${proposal.title} - ${proposal.notes || ''}`,
+      'PROPOSAL',
+      proposal.id,
+      { status: proposal.status, total: proposal.total },
+    ]);
   }
 
   // PERFORMANCE (audit 2026-07-09, swarm finding): previously called
@@ -200,12 +216,51 @@ export async function rebuildClientBrain(clientId) {
   // typically handles at 1-4 concurrency before rate-limiting or
   // crashing. Chunk in groups of OLLAMA_CONCURRENCY to bound fan-out.
   const OLLAMA_CONCURRENCY = 4;
-  let completed = 0;
-  for (let i = 0; i < embeddingPromises.length; i += OLLAMA_CONCURRENCY) {
-    const chunk = embeddingPromises.slice(i, i + OLLAMA_CONCURRENCY);
-    await Promise.all(chunk);
-    completed += chunk.length;
+  if (embeddingInputs.length === 0) {
+    return {
+      clientId,
+      embeddingsCreated: 0,
+      embeddingsReplaced: 0,
+      existingEmbeddingsPreserved: true,
+    };
   }
 
-  return { clientId, embeddingsCreated: embeddingPromises.length };
+  const existing = await prismaClient.clientEmbedding.findMany({
+    where: { clientId },
+    select: { id: true },
+  });
+  const createdIds = [];
+  try {
+    for (let i = 0; i < embeddingInputs.length; i += OLLAMA_CONCURRENCY) {
+      const chunk = embeddingInputs.slice(i, i + OLLAMA_CONCURRENCY);
+      const settled = await Promise.allSettled(chunk.map((input) => storeEmbedding(...input, {
+        prismaClient,
+        generateEmbedding: options.generateEmbedding,
+      })));
+      createdIds.push(...settled
+        .filter((result) => result.status === 'fulfilled')
+        .map((result) => result.value.id));
+      const failed = settled.find((result) => result.status === 'rejected');
+      if (failed) throw failed.reason;
+    }
+
+    if (existing.length > 0) {
+      await prismaClient.clientEmbedding.deleteMany({
+        where: { id: { in: existing.map((item) => item.id) }, clientId },
+      });
+    }
+  } catch (error) {
+    if (createdIds.length > 0) {
+      await prismaClient.clientEmbedding.deleteMany({
+        where: { id: { in: createdIds }, clientId },
+      }).catch(() => {});
+    }
+    throw error;
+  }
+
+  return {
+    clientId,
+    embeddingsCreated: createdIds.length,
+    embeddingsReplaced: existing.length,
+  };
 }

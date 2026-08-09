@@ -2,7 +2,15 @@
 // RAG-powered search across client memories
 // Migrated from ashbi-hub with Prisma and auth decorators
 
-import { validateBody, semanticSearchEmbedSchema } from '../validators/schemas.js';
+import {
+  validateBody,
+  validateParams,
+  validateQuery,
+  semanticSearchEmbedSchema,
+  semanticSearchClientParamsSchema,
+  semanticSearchDeleteParamsSchema,
+  semanticSearchQuerySchema,
+} from '../validators/schemas.js';
 import {
   searchSimilar,
   storeEmbedding,
@@ -13,13 +21,10 @@ import {
 export default async function semanticSearchRoutes(fastify) {
   // Search across all client memories
   fastify.get('/search', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateQuery(semanticSearchQuerySchema),
   }, async (request) => {
     const { q, limit, clientId } = request.query;
-
-    if (!q) {
-      return { error: 'Query parameter "q" is required' };
-    }
 
     // SECURITY: enforce tenant scoping by passing the JWT-derived
     // organizationId into the embedding search. Without this, the
@@ -27,7 +32,7 @@ export default async function semanticSearchRoutes(fastify) {
     // matches when no clientId is provided.
     return searchSimilar(
       q,
-      parseInt(limit) || 5,
+      limit,
       clientId || null,
       request.organizationId
     );
@@ -55,26 +60,29 @@ export default async function semanticSearchRoutes(fastify) {
       return reply.status(400).send({ error: 'clientId, content, and source are required' });
     }
 
-    const result = await storeEmbedding(clientId, content, source, sourceId, metadata);
+    const result = await storeEmbedding(clientId, content, source, sourceId, metadata, {
+      prismaClient: request.prisma,
+    });
     return reply.status(201).send(result);
   });
 
   // Rebuild Client Brain for a specific client
   fastify.post('/rebuild/:clientId', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateParams(semanticSearchClientParamsSchema),
   }, async (request) => {
     const { clientId } = request.params;
-    const result = await rebuildClientBrain(clientId);
+    const result = await rebuildClientBrain(clientId, { prismaClient: request.prisma });
     return result;
   });
 
   // Delete embeddings for a specific source
   fastify.delete('/embeddings/:source/:sourceId', {
     onRequest: [fastify.authenticate],
-    preHandler: validateBody(semanticSearchEmbedSchema),
+    preHandler: validateParams(semanticSearchDeleteParamsSchema),
   }, async (request) => {
     const { source, sourceId } = request.params;
-    await deleteEmbeddings(source, sourceId);
-    return { success: true };
+    const deleted = await deleteEmbeddings(source, sourceId, request.organizationId, request.prisma);
+    return { success: true, deleted };
   });
 }

@@ -1231,7 +1231,7 @@ export const api = {
   rebuildClientBrain: (clientId) =>
     request(`/semantic-search/rebuild/${clientId}`, { method: 'POST' }),
   deleteEmbedding: (source, sourceId) =>
-    request(`/semantic-search/embeddings/${source}/${sourceId}`, { method: 'DELETE' }),
+    request(`/semantic-search/embeddings/${encodeURIComponent(source)}/${encodeURIComponent(sourceId)}`, { method: 'DELETE' }),
 
   // ===== AD COPY GENERATOR =====
   generateAdCopy: (data) =>

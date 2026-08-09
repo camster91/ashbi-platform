@@ -16,6 +16,7 @@ const modalConsumers = [
   'src/pages/Project.jsx',
   'src/pages/ProjectTemplates.jsx',
   'src/pages/RateCards.jsx',
+  'src/pages/SemanticSearch.jsx',
   'src/pages/Schedule.jsx',
   'src/pages/Trash.jsx',
 ];

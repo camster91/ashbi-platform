@@ -1529,6 +1529,21 @@ export const semanticSearchEmbedSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
+export const semanticSearchDeleteParamsSchema = z.object({
+  source: z.string().min(1).max(100),
+  sourceId: cuidId,
+});
+
+export const semanticSearchClientParamsSchema = z.object({
+  clientId: cuidId,
+});
+
+export const semanticSearchQuerySchema = z.object({
+  q: z.string().trim().min(1).max(2_000),
+  limit: z.coerce.number().int().min(1).max(50).default(5),
+  clientId: cuidId.optional(),
+});
+
 export const teamCreateSchema = teamInviteSchema; // alias
 
 export const teamResetPasswordSchema = z.object({
