@@ -82,6 +82,9 @@ export default async function authRoutes(fastify) {
     try {
       await request.jwtVerify();
       if (await isCurrentUserSession(request.prisma, request.user)) {
+        await request.prisma.pushSubscription.deleteMany({
+          where: { userId: request.user.id }
+        });
         await revokeUserSessions(request.prisma, request.user.id);
       }
     } catch {

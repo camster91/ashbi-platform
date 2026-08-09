@@ -42,6 +42,7 @@ import {
   Send,
   Share2,
   Phone,
+  Bell,
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { Download, Sun, Moon, Command } from 'lucide-react';
@@ -73,19 +74,34 @@ export default function Layout({ children }) {
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const sidebarRef = useRef(null);
   const { isInstallable, install } = useInstallPrompt();
-  const { permission, subscribed, subscribe } = usePushNotifications();
+  const { permission, subscribed, status: pushStatus, error: pushError, supported: pushSupported, offline: pushOffline, subscribe } = usePushNotifications();
   const { socket } = useSocket();
   const [installDismissed, setInstallDismissed] = useState(false);
+  const [notificationPromptDismissed, setNotificationPromptDismissed] = useState(false);
   const [quickAddOpen, setQuickAddOpen] = useState(false);
 
   const { showModal, closeModal } = useKeyboardShortcuts(navigate);
 
-  // Auto-subscribe to push on login if permission already granted
   useEffect(() => {
-    if (user && permission === 'granted' && !subscribed) {
+    if (!user?.id) return;
+    try {
+      setNotificationPromptDismissed(localStorage.getItem(`push-prompt-snoozed:${user.id}`) === 'true');
+    } catch {
+      setNotificationPromptDismissed(false);
+    }
+  }, [user?.id]);
+
+  // Re-register a previously approved browser subscription for this account.
+  useEffect(() => {
+    if (user?.id && permission === 'granted') {
       subscribe();
     }
-  }, [user, permission, subscribed, subscribe]);
+  }, [user?.id, permission, subscribe]);
+
+  const snoozeNotificationPrompt = () => {
+    setNotificationPromptDismissed(true);
+    try { localStorage.setItem(`push-prompt-snoozed:${user.id}`, 'true'); } catch { /* optional preference */ }
+  };
 
   // Cmd+K / Ctrl+K to open Quick Add
   useEffect(() => {
@@ -485,10 +501,7 @@ export default function Layout({ children }) {
             <div className="flex items-center gap-2">
               <Button
                 size="sm"
-                onClick={async () => {
-                  await install();
-                  if (permission !== 'granted') subscribe();
-                }}
+                onClick={install}
               >
                 Install
               </Button>
@@ -503,16 +516,22 @@ export default function Layout({ children }) {
         )}
 
         {/* Push notification prompt */}
-        {user && permission === 'default' && !subscribed && (
-          <div className="mx-4 mt-2 lg:mx-6 flex items-center justify-between rounded-lg bg-muted border border-border px-4 py-2">
-            <span className="text-sm text-muted-foreground">Enable push notifications to stay updated</span>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={subscribe}
-            >
-              Enable
-            </Button>
+        {user && pushSupported && permission === 'default' && !subscribed && !notificationPromptDismissed && (
+          <div className="mx-4 mt-2 lg:mx-6 flex flex-col gap-3 rounded-lg bg-muted border border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between" role="region" aria-labelledby="push-consent-title">
+            <div className="flex items-start gap-3">
+              <Bell className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
+              <div>
+                <p id="push-consent-title" className="text-sm font-medium text-foreground">Get important work updates</p>
+                <p className="text-xs text-muted-foreground">Ashbi can send browser notifications for assigned work and client activity. You can disable them anytime in Settings.</p>
+              </div>
+            </div>
+            <div className="flex min-h-11 shrink-0 items-center gap-2">
+              <Button size="sm" onClick={subscribe} disabled={pushOffline || pushStatus === 'subscribing'}>
+                {pushStatus === 'subscribing' ? 'Enabling...' : 'Enable notifications'}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={snoozeNotificationPrompt}>Not now</Button>
+            </div>
+            {pushError && <p className="text-sm text-destructive sm:basis-full" role="alert">{pushError}</p>}
           </div>
         )}
 

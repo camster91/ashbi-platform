@@ -15,9 +15,11 @@ import {
   Trash2,
   Copy,
   Link2,
+  Bell,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
+import { usePushNotifications } from '../hooks/usePushNotifications';
 import { Button, Card } from '../components/ui';
 
 function Section({ icon: Icon, title, description, children }) {
@@ -44,6 +46,47 @@ const TAG_COLORS = {
   audio:    'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
   cloud:    'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
 };
+
+function NotificationPreferences() {
+  const { permission, subscribed, status, error, supported, offline, subscribe, unsubscribe } = usePushNotifications();
+  const busy = status === 'subscribing' || status === 'unsubscribing';
+
+  let summary = 'Notifications are available but not enabled.';
+  if (!supported) summary = 'This browser does not support web push notifications.';
+  else if (offline) summary = 'You are offline. Reconnect to change this preference.';
+  else if (permission === 'denied') summary = 'Notifications are blocked in browser settings.';
+  else if (subscribed) summary = 'Notifications are enabled for this account and browser.';
+
+  return (
+    <div className="space-y-4">
+      <div aria-live="polite" aria-atomic="true">
+        <p className="text-sm font-medium text-foreground">{summary}</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Ashbi uses browser notifications for assigned work and client activity. This preference applies to this browser; signing out removes its server registration.
+        </p>
+      </div>
+
+      {permission === 'denied' && (
+        <p className="rounded-lg border border-border bg-muted p-3 text-sm text-foreground">
+          Open this site&apos;s browser permissions, change Notifications to Allow, then return here and select Try again.
+        </p>
+      )}
+      {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
+
+      <div className="flex flex-wrap gap-2">
+        {subscribed ? (
+          <Button type="button" variant="outline" onClick={unsubscribe} disabled={busy || offline}>
+            {status === 'unsubscribing' ? 'Disabling...' : 'Disable notifications'}
+          </Button>
+        ) : (
+          <Button type="button" onClick={subscribe} disabled={busy || offline || !supported}>
+            {status === 'subscribing' ? 'Enabling...' : permission === 'denied' ? 'Try again' : 'Enable notifications'}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function AIModelSection() {
   const [saved, setSaved] = useState(false);
@@ -491,6 +534,10 @@ export default function Settings() {
             )}
           </div>
         </form>
+      </Section>
+
+      <Section icon={Bell} title="Browser notifications" description="Inspect or change notifications for this browser">
+        <NotificationPreferences />
       </Section>
 
       {/* API Keys */}

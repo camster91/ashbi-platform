@@ -35,4 +35,12 @@ describe('authentication session contract', () => {
     assert.ok((server.match(/isCurrentUserSession\(prisma,/g) || []).length >= 3);
     assert.match(server, /io\.use\([\s\S]*isCurrentUserSession\(prisma, decoded\)/);
   });
+
+  it('removes account-bound push endpoints during authenticated logout', () => {
+    assert.match(authRoutes, /pushSubscription\.deleteMany\(\{\s*where:\s*\{ userId: request\.user\.id \}/);
+    assert.ok(
+      authRoutes.indexOf('pushSubscription.deleteMany') < authRoutes.indexOf('revokeUserSessions(request.prisma, request.user.id)'),
+      'push endpoints should be removed before the user session is revoked',
+    );
+  });
 });

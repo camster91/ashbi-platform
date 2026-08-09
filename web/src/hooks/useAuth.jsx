@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, createContext, useContext, useRef } f
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { purgePrivateCaches } from '../lib/private-cache';
+import { clearBrowserPushSubscription } from './usePushNotifications';
 
 const AuthContext = createContext(null);
 
@@ -78,6 +79,7 @@ export function AuthProvider({ children }) {
   }, [navigate]);
 
   const logout = useCallback(async () => {
+    await clearBrowserPushSubscription({ removeFromServer: true });
     try {
       await api.logout();
     } catch {
@@ -92,6 +94,7 @@ export function AuthProvider({ children }) {
   }, [navigate]);
 
   const expireSession = useCallback(async (message = '') => {
+    await clearBrowserPushSubscription();
     await purgePrivateCaches();
     if (!mountedRef.current) return;
     const returnTo = safeReturnPath(`${location.pathname}${location.search}${location.hash}`);

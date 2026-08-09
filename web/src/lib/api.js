@@ -360,6 +360,13 @@ export const api = {
   markAllNotificationsRead: () =>
     request('/notifications/read-all', { method: 'PATCH' }),
 
+  // Push notification preferences
+  getPushVapidKey: () => request('/push/vapid-key'),
+  subscribePush: (subscription) =>
+    request('/push/subscribe', { method: 'POST', body: subscription }),
+  unsubscribePush: (endpoint) =>
+    request('/push/unsubscribe', { method: 'POST', body: { endpoint } }),
+
   // Settings - Assignment Rules
   getAssignmentRules: () =>
     request('/settings/assignment-rules'),
