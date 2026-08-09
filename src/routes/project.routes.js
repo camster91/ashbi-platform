@@ -322,6 +322,25 @@ export default async function projectRoutes(fastify) {
 
   // ==================== COMMUNICATIONS ====================
 
+  // GET /:id/communications/:communicationId — get one full email safely
+  fastify.get('/:id/communications/:communicationId', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { id, communicationId } = request.params;
+    const communication = await request.prisma.projectCommunication.findFirst({
+      where: {
+        id: communicationId,
+        projectId: id
+      }
+    });
+
+    if (!communication) {
+      return reply.status(404).send({ error: 'Communication not found' });
+    }
+
+    return communication;
+  });
+
   // GET /:id/communications — get email history for a project
   fastify.get('/:id/communications', {
     onRequest: [fastify.authenticate]

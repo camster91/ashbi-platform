@@ -1087,6 +1087,8 @@ export const api = {
     const query = new URLSearchParams(params).toString();
     return request(`/projects/${projectId}/communications${query ? `?${query}` : ''}`);
   },
+  getProjectCommunication: (projectId, communicationId) =>
+    request(`/projects/${projectId}/communications/${communicationId}`),
 
   // ===== PROJECT CONTEXT =====
   getProjectContext: (projectId) =>
