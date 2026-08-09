@@ -1,12 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Bell, Check, CheckCheck, Trash2 } from 'lucide-react';
+import { Bell, Check, CheckCheck } from 'lucide-react';
 import { api } from '../lib/api';
 import { EmptyState, LoadingState } from '../components/ui';
+import QueryErrorState from '../components/QueryErrorState';
 
 export default function Notifications() {
   const queryClient = useQueryClient();
 
-  const { data: notifications = [], isLoading } = useQuery({
+  const { data: notifications = [], isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['notifications'],
     queryFn: () => api.getNotifications().then((r) => r?.notifications ?? []),
   });
@@ -35,7 +36,7 @@ export default function Notifications() {
           <button
             onClick={() => markAllReadMutation.mutate()}
             disabled={markAllReadMutation.isPending}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors"
+            className="min-h-11 flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors"
           >
             <CheckCheck className="w-4 h-4" />
             Mark all read
@@ -43,10 +44,29 @@ export default function Notifications() {
         )}
       </div>
 
+      {markAllReadMutation.isError && (
+        <p className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive" role="alert">
+          Notifications were not marked as read. Nothing was changed; try again when you are ready.
+        </p>
+      )}
+
+      {markReadMutation.isError && (
+        <p className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive" role="alert">
+          That notification could not be marked as read. It remains unread; try again when you are ready.
+        </p>
+      )}
+
       {isLoading ? (
         <div className="flex justify-center py-12">
           <LoadingState label="Loading notifications…" compact />
         </div>
+      ) : isError ? (
+        <QueryErrorState
+          error={error}
+          message="Notifications could not be loaded"
+          onRetry={refetch}
+          isRetrying={isFetching}
+        />
       ) : notifications.length === 0 ? (
         <EmptyState
           icon="notifications"
@@ -76,7 +96,9 @@ export default function Notifications() {
                 {!notification.read && (
                   <button
                     onClick={() => markReadMutation.mutate(notification.id)}
-                    className="p-1 text-muted-foreground hover:text-foreground rounded transition-colors shrink-0"
+                    disabled={markReadMutation.isPending}
+                    aria-label="Mark notification as read"
+                    className="min-h-11 min-w-11 inline-flex items-center justify-center text-muted-foreground hover:text-foreground rounded transition-colors shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
                     title="Mark as read"
                   >
                     <Check className="w-4 h-4" />
