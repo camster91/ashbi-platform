@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { preferredScrollBehavior } from '../lib/motion';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 const API = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '') : '';
 const SOCKET_URL = import.meta.env.PROD ? window.location.origin : 'http://localhost:3000';
@@ -36,6 +37,13 @@ async function downloadPortalInvoice(token, invoice) {
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(blobUrl);
+}
+
+async function deletePortalDocument(token, documentId) {
+  const response = await portalFetch(`/api/client-portal/documents/${documentId}`, token, {
+    method: 'DELETE',
+  });
+  if (!response.ok) throw new Error(`Delete failed (${response.status}) — the file remains available.`);
 }
 
 // ── Ashbi Design Brand ────────────────────────────────────────────────────────
@@ -524,6 +532,9 @@ function ProjectDetail({ projectId, token, onBack }) {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState(null);
   const [documents, setDocuments] = useState([]);
+  const [documentToDelete, setDocumentToDelete] = useState(null);
+  const [deletingDocument, setDeletingDocument] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
   const [revisionFeedback, setRevisionFeedback] = useState({});
   const [generalFeedback, setGeneralFeedback] = useState('');
   const [workflowStatus, setWorkflowStatus] = useState('');
@@ -601,21 +612,18 @@ function ProjectDetail({ projectId, token, onBack }) {
     }
   }
 
-  async function handleDeleteDoc(docId) {
+  async function handleDeleteDoc() {
+    if (!documentToDelete || deletingDocument) return;
+    setDeletingDocument(true);
+    setDeleteError('');
     try {
-      const res = await portalFetch(`/api/client-portal/documents/${docId}`, token, {
-        method: 'DELETE',
-      });
-      // Only remove from local state on confirmed success — previously this
-      // removed optimistically, leaving the user with a ghost-success when
-      // the server rejected (auth, 404, etc.).
-      if (res.ok) {
-        setDocuments(prev => prev.filter(d => d.id !== docId));
-      } else {
-        setUploadError(`Delete failed (${res.status}) — please refresh and try again`);
-      }
+      await deletePortalDocument(token, documentToDelete.id);
+      setDocuments(prev => prev.filter(d => d.id !== documentToDelete.id));
+      setDocumentToDelete(null);
     } catch (err) {
-      setUploadError(err?.message ?? 'Delete failed — please try again');
+      setDeleteError(err?.message ?? 'Delete failed — the file remains available.');
+    } finally {
+      setDeletingDocument(false);
     }
   }
 
@@ -992,7 +1000,7 @@ function ProjectDetail({ projectId, token, onBack }) {
                     <button type="button" onClick={() => handleDownloadDoc(doc)} className="cp-btn-secondary" style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }}>
                       {Icons.download} Download
                     </button>
-                    <button type="button" onClick={() => handleDeleteDoc(doc.id)} className="cp-btn-danger" style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }} aria-label={`Delete ${doc.originalName}`}>
+                    <button type="button" onClick={() => { setDeleteError(''); setDocumentToDelete(doc); }} disabled={deletingDocument} className="cp-btn-danger" style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem', minWidth: 44, minHeight: 44 }} aria-label={`Delete ${doc.originalName}`}>
                       {Icons.trash}
                     </button>
                   </div>
@@ -1002,6 +1010,16 @@ function ProjectDetail({ projectId, token, onBack }) {
           )}
         </div>
       )}
+      <ConfirmDialog
+        isOpen={Boolean(documentToDelete)}
+        title="Delete document?"
+        description={documentToDelete ? `Permanently delete “${documentToDelete.originalName}”? This removes the file from the client portal and cannot be undone.` : ''}
+        confirmLabel="Permanently delete"
+        onConfirm={handleDeleteDoc}
+        onCancel={() => { setDeleteError(''); setDocumentToDelete(null); }}
+        pending={deletingDocument}
+        error={deleteError}
+      />
     </div>
   );
 }
@@ -1110,6 +1128,9 @@ function DocumentsTab({ projects, token }) {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [documentToDelete, setDocumentToDelete] = useState(null);
+  const [deletingDocument, setDeletingDocument] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -1152,18 +1173,18 @@ function DocumentsTab({ projects, token }) {
     }
   }
 
-  async function handleDeleteDoc(docId) {
+  async function handleDeleteDoc() {
+    if (!documentToDelete || deletingDocument) return;
+    setDeletingDocument(true);
+    setDeleteError('');
     try {
-      const res = await portalFetch(`/api/client-portal/documents/${docId}`, token, {
-        method: 'DELETE',
-      });
-      if (res.ok) {
-        setDocuments(prev => prev.filter(d => d.id !== docId));
-      } else {
-        setUploadError(`Delete failed (${res.status}) — please refresh and try again`);
-      }
+      await deletePortalDocument(token, documentToDelete.id);
+      setDocuments(prev => prev.filter(d => d.id !== documentToDelete.id));
+      setDocumentToDelete(null);
     } catch (err) {
-      setUploadError(err?.message ?? 'Delete failed — please try again');
+      setDeleteError(err?.message ?? 'Delete failed — the file remains available.');
+    } finally {
+      setDeletingDocument(false);
     }
   }
 
@@ -1245,7 +1266,7 @@ function DocumentsTab({ projects, token }) {
                 <button type="button" onClick={() => handleDownloadDoc(doc)} className="cp-btn-secondary" style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }}>
                   {Icons.download} Download
                 </button>
-                <button type="button" onClick={() => handleDeleteDoc(doc.id)} className="cp-btn-danger" style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }} aria-label={`Delete ${doc.originalName}`}>
+                <button type="button" onClick={() => { setDeleteError(''); setDocumentToDelete(doc); }} disabled={deletingDocument} className="cp-btn-danger" style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem', minWidth: 44, minHeight: 44 }} aria-label={`Delete ${doc.originalName}`}>
                   {Icons.trash}
                 </button>
               </div>
@@ -1253,6 +1274,16 @@ function DocumentsTab({ projects, token }) {
           ))}
         </div>
       )}
+      <ConfirmDialog
+        isOpen={Boolean(documentToDelete)}
+        title="Delete document?"
+        description={documentToDelete ? `Permanently delete “${documentToDelete.originalName}”? This removes the file from the client portal and cannot be undone.` : ''}
+        confirmLabel="Permanently delete"
+        onConfirm={handleDeleteDoc}
+        onCancel={() => { setDeleteError(''); setDocumentToDelete(null); }}
+        pending={deletingDocument}
+        error={deleteError}
+      />
     </div>
   );
 }
