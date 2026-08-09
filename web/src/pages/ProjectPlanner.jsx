@@ -213,6 +213,11 @@ export default function ProjectPlanner() {
                 </button>
               </div>
               {saveTemplate.isSuccess && <p className="text-sm text-green-600">Template saved!</p>}
+              {saveTemplate.isError && (
+                <p role="alert" className="text-sm text-red-600 dark:text-red-400">
+                  {saveTemplate.error?.message || 'Failed to save template. Please try again.'}
+                </p>
+              )}
             </div>
           )}
 

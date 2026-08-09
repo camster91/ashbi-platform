@@ -38,9 +38,9 @@ export default function PortalEstimate() {
   });
 
   const respondMutation = useMutation({
-    mutationFn: (data) => api.approveEstimateByToken(viewToken, data.action),
-    onSuccess: (_, variables) => {
-      setCompleted(variables === 'approve' ? 'approved' : 'declined');
+    mutationFn: (action) => api.approveEstimateByToken(viewToken, action),
+    onSuccess: (_, action) => {
+      setCompleted(action === 'approve' ? 'approved' : 'declined');
     },
   });
 
