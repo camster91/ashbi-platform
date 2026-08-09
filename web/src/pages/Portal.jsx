@@ -34,7 +34,14 @@ const taskStatusIcons = {
 export default function Portal() {
   const { token } = useParams();
 
-  const { data: project, isLoading, error } = useQuery({
+  const {
+    data: project,
+    isLoading,
+    isError: portalError,
+    error,
+    refetch: refetchPortal,
+    isFetching: portalFetching,
+  } = useQuery({
     queryKey: ['portal', token],
     queryFn: () => api.getPortal(token),
     retry: false,
@@ -44,7 +51,28 @@ export default function Portal() {
     return <LoadingState label="Loading project portal…" className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 text-slate-700" spinnerClassName="border-slate-300 border-t-slate-800" />;
   }
 
-  if (error || !project) {
+  const portalNotFound = error?.status === 404;
+
+  if (portalError && !portalNotFound) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center px-6">
+        <div role="alert" className="max-w-md rounded-xl border border-red-200 bg-white p-8 text-center shadow-sm">
+          <h1 className="text-2xl font-bold text-slate-800 mb-2">Portal temporarily unavailable</h1>
+          <p className="text-slate-500">The project could not be loaded. Check your connection and try again.</p>
+          <button
+            type="button"
+            onClick={() => refetchPortal()}
+            disabled={portalFetching}
+            className="mt-5 min-h-11 rounded-lg bg-slate-900 px-5 py-2 text-sm font-medium text-white disabled:opacity-60"
+          >
+            {portalFetching ? 'Retrying…' : 'Retry'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (portalNotFound || !project) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
         <div className="text-center">

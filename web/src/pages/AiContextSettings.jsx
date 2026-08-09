@@ -14,6 +14,7 @@ import {
 import { api } from '../lib/api';
 import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingState from '../components/ui/LoadingState';
+import QueryErrorState from '../components/QueryErrorState';
 import { cn } from '../lib/utils';
 
 export default function AiContextSettings() {
@@ -25,7 +26,14 @@ export default function AiContextSettings() {
   const [showAdd, setShowAdd] = useState(false);
   const [contextToDelete, setContextToDelete] = useState(null);
 
-  const { data: contextItems = [], isLoading } = useQuery({
+  const {
+    data: contextItems = [],
+    isLoading,
+    isError: contextError,
+    error: contextRequestError,
+    refetch: refetchContext,
+    isFetching: contextFetching,
+  } = useQuery({
     queryKey: ['ai-context'],
     queryFn: () => api.getAiContext(),
   });
@@ -89,6 +97,17 @@ export default function AiContextSettings() {
       <div className="flex justify-center py-12">
         <LoadingState label="Loading AI context settings…" compact />
       </div>
+    );
+  }
+
+  if (contextError) {
+    return (
+      <QueryErrorState
+        error={contextRequestError}
+        message="AI context settings could not be loaded"
+        onRetry={refetchContext}
+        isRetrying={contextFetching}
+      />
     );
   }
 

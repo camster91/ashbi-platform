@@ -7,6 +7,7 @@ import {
 import { api } from '../lib/api';
 import { Button, Card } from '../components/ui';
 import { cn } from '../lib/utils';
+import QueryErrorState from '../components/QueryErrorState';
 
 export default function BrandSettings() {
   const queryClient = useQueryClient();
@@ -15,7 +16,14 @@ export default function BrandSettings() {
   const [uploading, setUploading] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const { data: brand, isLoading } = useQuery({
+  const {
+    data: brand,
+    isLoading,
+    isError: brandError,
+    error: brandRequestError,
+    refetch: refetchBrand,
+    isFetching: brandFetching,
+  } = useQuery({
     queryKey: ['brand-settings'],
     queryFn: api.getBrandSettings,
   });
@@ -63,11 +71,22 @@ export default function BrandSettings() {
     setForm(prev => ({ ...prev, [key]: value }));
   }
 
-  if (isLoading || !form) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
       </div>
+    );
+  }
+
+  if (brandError || !form) {
+    return (
+      <QueryErrorState
+        error={brandRequestError}
+        message="Brand settings could not be loaded"
+        onRetry={refetchBrand}
+        isRetrying={brandFetching}
+      />
     );
   }
 

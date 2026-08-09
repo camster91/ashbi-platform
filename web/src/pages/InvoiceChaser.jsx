@@ -19,6 +19,7 @@ import { api } from '../lib/api';
 import { useToast } from '../hooks/useToast';
 import { Button, Card, LoadingState } from '../components/ui';
 import { formatRelativeTime } from '../lib/utils';
+import QueryErrorState from '../components/QueryErrorState';
 
 function urgencyColor(days) {
   if (days > 30) return 'text-red-600 bg-red-50 dark:bg-red-900/20 dark:text-red-400';
@@ -41,7 +42,14 @@ export default function InvoiceChaser() {
   const [sendingEmail, setSendingEmail] = useState({});
   const [sendSuccess, setSendSuccess] = useState({});
 
-  const { data: overdueInvoices = [], isLoading, refetch } = useQuery({
+  const {
+    data: overdueInvoices = [],
+    isLoading,
+    isError: invoicesError,
+    error: invoicesRequestError,
+    refetch: refetchInvoices,
+    isFetching: invoicesFetching,
+  } = useQuery({
     queryKey: ['overdue-invoices'],
     queryFn: () => api.getOverdueInvoices(),
   });
@@ -119,7 +127,7 @@ export default function InvoiceChaser() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => refetch()} leftIcon={<RefreshCw className="w-4 h-4" />}>
+          <Button variant="outline" size="sm" onClick={() => refetchInvoices()} leftIcon={<RefreshCw className="w-4 h-4" />}>
             Refresh
           </Button>
           {overdueInvoices.length > 0 && (
@@ -153,6 +161,13 @@ export default function InvoiceChaser() {
         <div className="flex justify-center py-12">
           <LoadingState label="Loading overdue invoices…" compact />
         </div>
+      ) : invoicesError ? (
+        <QueryErrorState
+          error={invoicesRequestError}
+          message="Overdue invoices could not be loaded"
+          onRetry={refetchInvoices}
+          isRetrying={invoicesFetching}
+        />
       ) : overdueInvoices.length === 0 ? (
         <Card className="p-12 text-center">
           <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
