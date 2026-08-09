@@ -82,6 +82,25 @@ export default function ProposalDetail() {
     onError: () => toast.error('Failed to send proposal'),
   });
 
+  const generateContractMutation = useMutation({
+    mutationFn: () => api.createContractFromProposal(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['proposal', id] });
+      toast.success('Contract generated');
+    },
+    onError: (error) => toast.error('Failed to generate contract', error.message),
+  });
+
+  const createInvoiceMutation = useMutation({
+    mutationFn: () => api.createInvoiceFromProposal(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      toast.success('Invoice created');
+      navigate('/invoices');
+    },
+    onError: (error) => toast.error('Failed to create invoice', error.message),
+  });
+
   const addLineItem = () => {
     setLineItems([...lineItems, { description: '', quantity: 1, unitPrice: 0 }]);
   };
@@ -234,18 +253,16 @@ export default function ProposalDetail() {
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => api.createContractFromProposal(proposal.id).then(() => {
-                  queryClient.invalidateQueries({ queryKey: ['proposal', id] });
-                })}
+                onClick={() => generateContractMutation.mutate()}
+                loading={generateContractMutation.isPending}
               >
                 Generate Contract
               </Button>
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => api.createInvoiceFromProposal(proposal.id).then(() => {
-                  navigate('/invoices');
-                })}
+                onClick={() => createInvoiceMutation.mutate()}
+                loading={createInvoiceMutation.isPending}
               >
                 Create Invoice
               </Button>

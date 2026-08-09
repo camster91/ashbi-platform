@@ -22,4 +22,18 @@ describe('revenue detail workflow states', () => {
     }
     expect(invoice).toMatch(/Payment History[\s\S]*paymentsError[\s\S]*<QueryErrorState/);
   });
+
+  it('guards proposal-to-contract generation with explicit mutation state', () => {
+    expect(proposal).toContain('const generateContractMutation = useMutation({');
+    expect(proposal).toContain("onError: (error) => toast.error('Failed to generate contract', error.message)");
+    expect(proposal).toContain('onClick={() => generateContractMutation.mutate()}');
+    expect(proposal).toContain('loading={generateContractMutation.isPending}');
+  });
+
+  it('guards proposal-to-invoice generation with explicit mutation state', () => {
+    expect(proposal).toContain('const createInvoiceMutation = useMutation({');
+    expect(proposal).toContain("onError: (error) => toast.error('Failed to create invoice', error.message)");
+    expect(proposal).toContain('onClick={() => createInvoiceMutation.mutate()}');
+    expect(proposal).toContain('loading={createInvoiceMutation.isPending}');
+  });
 });
