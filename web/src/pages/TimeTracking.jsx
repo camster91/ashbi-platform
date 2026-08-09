@@ -7,6 +7,7 @@ import {
 import { api } from '../lib/api';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { Button, Card, LoadingState } from '../components/ui';
+import QueryErrorState from '../components/QueryErrorState';
 
 function formatDuration(seconds) {
   const h = Math.floor(seconds / 3600);
@@ -45,12 +46,25 @@ export default function TimeTracking() {
     return () => clearInterval(id);
   }, [timerRunning]);
 
-  const { data: entries = [], isLoading, refetch } = useQuery({
+  const {
+    data: entries = [],
+    isLoading,
+    isError: entriesError,
+    error: entriesRequestError,
+    refetch: refetchEntries,
+    isFetching: entriesFetching,
+  } = useQuery({
     queryKey: ['time-entries', projectId],
     queryFn: () => api.getTimeEntries(projectId).then((r) => r?.entries ?? []),
   });
 
-  const { data: project } = useQuery({
+  const {
+    data: project,
+    isError: projectError,
+    error: projectRequestError,
+    refetch: refetchProject,
+    isFetching: projectFetching,
+  } = useQuery({
     queryKey: ['project', projectId],
     queryFn: () => api.getProject(projectId),
   });
@@ -124,13 +138,22 @@ export default function TimeTracking() {
             Time Tracking
           </h1>
         </div>
-        <Button variant="outline" size="sm" onClick={() => refetch()} leftIcon={<RefreshCw className="w-4 h-4" />}>
+        <Button variant="outline" size="sm" onClick={() => refetchEntries()} leftIcon={<RefreshCw className="w-4 h-4" />}>
           Refresh
         </Button>
       </div>
 
+      {projectError && (
+        <QueryErrorState
+          error={projectRequestError}
+          message="Project context could not be loaded"
+          onRetry={refetchProject}
+          isRetrying={projectFetching}
+        />
+      )}
+
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+      {!entriesError && <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <Card className="p-4">
           <p className="text-xs text-muted-foreground uppercase tracking-wide">Total Hours</p>
           <p className="text-2xl font-bold mt-1">{totalHours}h</p>
@@ -146,7 +169,7 @@ export default function TimeTracking() {
             {((totalMinutes - billableMinutes) / 60).toFixed(1)}h
           </p>
         </Card>
-      </div>
+      </div>}
 
       {/* Timer */}
       <Card className="p-6">
@@ -252,6 +275,13 @@ export default function TimeTracking() {
         <div className="flex justify-center py-12">
           <LoadingState label="Loading time entries…" compact />
         </div>
+      ) : entriesError ? (
+        <QueryErrorState
+          error={entriesRequestError}
+          message="Time entries could not be loaded"
+          onRetry={refetchEntries}
+          isRetrying={entriesFetching}
+        />
       ) : entries.length === 0 ? (
         <Card className="p-12 text-center">
           <Clock className="w-12 h-12 text-muted-foreground mx-auto mb-4" />

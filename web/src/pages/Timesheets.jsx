@@ -7,6 +7,7 @@ import {
 import { api } from '../lib/api';
 import { useToast } from '../hooks/useToast';
 import { Card, Button, LoadingState } from '../components/ui';
+import QueryErrorState from '../components/QueryErrorState';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -56,7 +57,14 @@ export default function Timesheets() {
 
   const weekDates = useMemo(() => getWeekDates(weekStart), [weekStart]);
 
-  const { data, isLoading } = useQuery({
+  const {
+    data,
+    isLoading,
+    isError: timesheetsError,
+    error: timesheetsRequestError,
+    refetch: refetchTimesheets,
+    isFetching: timesheetsFetching,
+  } = useQuery({
     queryKey: ['weekly-timesheet', weekStart.toISOString()],
     queryFn: () => api.getWeeklyTimesheet(weekStart.toISOString()),
   });
@@ -155,7 +163,7 @@ export default function Timesheets() {
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      {!timesheetsError && <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <Card className="p-4">
           <p className="text-xs text-muted-foreground uppercase tracking-wide">Total Hours</p>
           <p className="text-2xl font-bold mt-1">{formatHours(grandTotals.total)}h</p>
@@ -181,13 +189,20 @@ export default function Timesheets() {
               : 0}%
           </p>
         </Card>
-      </div>
+      </div>}
 
       {/* Weekly grid */}
       {isLoading ? (
         <div className="flex justify-center py-12">
           <LoadingState label="Loading timesheets…" compact />
         </div>
+      ) : timesheetsError ? (
+        <QueryErrorState
+          error={timesheetsRequestError}
+          message="Timesheet data could not be loaded"
+          onRetry={refetchTimesheets}
+          isRetrying={timesheetsFetching}
+        />
       ) : timesheets.length === 0 ? (
         <Card className="p-12 text-center">
           <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
