@@ -34,9 +34,10 @@ export default function Notifications() {
         </div>
         {notifications.length > 0 && (
           <button
+            type="button"
             onClick={() => markAllReadMutation.mutate()}
             disabled={markAllReadMutation.isPending}
-            className="min-h-11 flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors"
+            className="min-h-11 min-w-11 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium text-primary hover:bg-primary/10 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <CheckCheck className="w-4 h-4" />
             Mark all read
@@ -95,10 +96,11 @@ export default function Notifications() {
                 </div>
                 {!notification.read && (
                   <button
+                    type="button"
                     onClick={() => markReadMutation.mutate(notification.id)}
                     disabled={markReadMutation.isPending}
                     aria-label="Mark notification as read"
-                    className="min-h-11 min-w-11 inline-flex items-center justify-center text-muted-foreground hover:text-foreground rounded transition-colors shrink-0 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="min-h-11 min-w-11 inline-flex items-center justify-center text-muted-foreground hover:text-foreground rounded transition-colors shrink-0 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     title="Mark as read"
                   >
                     <Check className="w-4 h-4" />
