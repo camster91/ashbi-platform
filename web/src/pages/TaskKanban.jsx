@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, ArrowLeft } from 'lucide-react';
 import { api } from '../lib/api';
 import LoadingState from '../components/ui/LoadingState';
+import QueryErrorState from '../components/QueryErrorState';
 
 const STATUS_COLUMNS = [
   { key: 'PENDING', label: 'To Do', headerColor: 'text-muted-foreground border-muted-foreground/30' },
@@ -26,7 +27,7 @@ export default function TaskKanban() {
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [showNewTask, setShowNewTask] = useState(null);
 
-  const { data: board = {}, isLoading, error } = useQuery({
+  const { data: board = {}, isLoading, error, isFetching, refetch } = useQuery({
     queryKey: ['kanban', projectId],
     queryFn: () => api.getKanbanBoard(projectId),
   });
@@ -65,6 +66,17 @@ export default function TaskKanban() {
     );
   }
 
+  if (error) {
+    return (
+      <QueryErrorState
+        error={error}
+        onRetry={refetch}
+        isRetrying={isFetching}
+        message="Task board could not be loaded"
+      />
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div>
@@ -75,12 +87,6 @@ export default function TaskKanban() {
         )}
         <h1 className="text-2xl font-heading font-bold text-foreground">Kanban Board</h1>
       </div>
-
-      {error && (
-        <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-red-600 text-sm">
-          Failed to load board
-        </div>
-      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 overflow-x-auto">
         {STATUS_COLUMNS.map(({ key, label, headerColor }) => {

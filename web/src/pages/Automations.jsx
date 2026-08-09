@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { Zap, Clock, FileText, FileSignature, AlertTriangle, CheckCircle, ArrowRight, RefreshCw } from 'lucide-react';
-import { Button, Card } from '../components/ui';
+import { Button, Card, LoadingState } from '../components/ui';
+import QueryErrorState from '../components/QueryErrorState';
 
 const TRIGGER_CONFIG = {
   PROPOSAL_APPROVED: {
@@ -60,7 +61,7 @@ export default function Automations() {
   const [page, setPage] = useState(0);
   const limit = 25;
 
-  const { data, isLoading, error, refetch } = useQuery({
+  const { data, isLoading, error, isFetching, refetch } = useQuery({
     queryKey: ['automation-history', page],
     queryFn: () => api.getAutomationHistory(page * limit, limit),
     refetchInterval: 60000,
@@ -138,12 +139,14 @@ export default function Automations() {
         </div>
 
         {isLoading ? (
-          <div className="p-8 text-center text-muted-foreground">
-            <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
-            Loading...
-          </div>
+          <LoadingState label="Loading automation history…" compact className="py-8" />
         ) : error ? (
-          <div className="p-8 text-center text-red-500">Failed to load automation history</div>
+          <QueryErrorState
+            error={error}
+            onRetry={refetch}
+            isRetrying={isFetching}
+            message="Automation history could not be loaded"
+          />
         ) : automations.length === 0 ? (
           <div className="p-12 text-center">
             <Zap className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
