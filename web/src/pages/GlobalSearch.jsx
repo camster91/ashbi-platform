@@ -225,10 +225,10 @@ export default function GlobalSearch() {
                     {result.description && (
                       <p className="text-sm text-muted-foreground line-clamp-2">{result.description}</p>
                     )}
-                    <div className="flex gap-4 text-xs text-muted-foreground mt-1.5">
-                      {result.clientName && <span>Client: {result.clientName}</span>}
-                      {result.projectName && <span>Project: {result.projectName}</span>}
-                      {result.status && <span>Status: {result.status}</span>}
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground mt-1.5">
+                      {result.clientName && <span className="min-w-0 break-words">Client: {result.clientName}</span>}
+                      {result.projectName && <span className="min-w-0 break-words">Project: {result.projectName}</span>}
+                      {result.status && <span className="min-w-0 break-words">Status: {result.status}</span>}
                       {result.lastActivity && (
                         <span>Updated: {new Date(result.lastActivity).toLocaleDateString('en-CA')}</span>
                       )}

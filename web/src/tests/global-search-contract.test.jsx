@@ -33,5 +33,7 @@ describe('global search result contract', () => {
     const source = readFileSync(path.join(process.cwd(), 'src/pages/GlobalSearch.jsx'), 'utf8');
     expect(source).toContain('text-red-700 dark:text-red-300');
     expect(source).toContain('{!error && (loading ? (');
+    expect(source).toContain('flex flex-wrap gap-x-4 gap-y-1');
+    expect(source).toContain('min-w-0 break-words');
   });
 });
