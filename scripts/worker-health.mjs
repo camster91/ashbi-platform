@@ -1,4 +1,5 @@
 import IORedis from 'ioredis';
+import { QUEUES } from '../src/jobs/queue-names.js';
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 const redis = new IORedis(redisUrl, {
@@ -19,7 +20,18 @@ try {
   if (process.env.APP_REVISION && heartbeat.revision !== process.env.APP_REVISION) {
     throw new Error(`worker revision mismatch (${heartbeat.revision})`);
   }
-  process.stdout.write(`${JSON.stringify({ ...heartbeat, ageMs })}\n`);
+  const failedEntries = await Promise.all(
+    Object.values(QUEUES).map(async (queue) => [queue, await redis.zcard(`bull:${queue}:failed`)]),
+  );
+  const failedJobs = Object.fromEntries(failedEntries);
+  const failedJobTotal = failedEntries.reduce((sum, [, count]) => sum + count, 0);
+  process.stdout.write(`${JSON.stringify({
+    ...heartbeat,
+    ageMs,
+    degraded: failedJobTotal > 0,
+    failedJobTotal,
+    failedJobs,
+  })}\n`);
 } catch (error) {
   process.stderr.write(`worker unhealthy: ${error.message}\n`);
   process.exitCode = 1;

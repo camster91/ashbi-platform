@@ -18,6 +18,9 @@ function copyWorkflows() {
   fs.mkdirSync(path.join(root, 'src', 'jobs'), { recursive: true });
   fs.copyFileSync(path.resolve('src/jobs/worker.js'), path.join(root, 'src', 'jobs', 'worker.js'));
   fs.copyFileSync(path.resolve('scripts/worker-health.mjs'), path.join(root, 'scripts', 'worker-health.mjs'));
+  fs.copyFileSync(path.resolve('scripts/smoke-production-health.mjs'), path.join(root, 'scripts', 'smoke-production-health.mjs'));
+  fs.mkdirSync(path.join(root, 'docs'), { recursive: true });
+  fs.copyFileSync(path.resolve('docs/observability-and-slos.md'), path.join(root, 'docs', 'observability-and-slos.md'));
   return root;
 }
 
@@ -32,9 +35,10 @@ describe('mandatory release gates', () => {
 
   it('exposes revision-aware readiness and documents rollback rehearsal', () => {
     const server = fs.readFileSync(path.resolve('src/index.js'), 'utf8');
+    const runtimeHealth = fs.readFileSync(path.resolve('src/services/runtime-health.service.js'), 'utf8');
     const runbook = fs.readFileSync(path.resolve('docs/deployment-and-rollback.md'), 'utf8');
     assert.match(server, /revision:\s*process\.env\.APP_REVISION/);
-    assert.match(server, /imageDigest:\s*process\.env\.APP_IMAGE_DIGEST/);
+    assert.match(runtimeHealth, /imageDigest:\s*process\.env\.APP_IMAGE_DIGEST/);
     assert.match(runbook, /Automated rollback test/);
     assert.match(runbook, /Manual rollback/);
   });
@@ -66,6 +70,13 @@ describe('mandatory release gates', () => {
     const deploy = path.join(root, 'scripts', 'deploy-vps-direct.sh');
     fs.writeFileSync(deploy, fs.readFileSync(deploy, 'utf8').replaceAll('health:worker', 'worker-check-omitted'));
     assert.ok(validateReleaseGates(root).some((failure) => failure.includes('worker readiness')));
+  });
+
+  it('fails closed when dependency-aware readiness is removed from direct deployment', () => {
+    const root = copyWorkflows();
+    const deploy = path.join(root, 'scripts', 'deploy-vps-direct.sh');
+    fs.writeFileSync(deploy, fs.readFileSync(deploy, 'utf8').replace('database\\":{\\"status\\":\\"ok', 'database check omitted'));
+    assert.ok(validateReleaseGates(root).some((failure) => failure.includes('dependency-aware readiness')));
   });
 
   it('fails closed when the Docker frontend build bypasses performance budgets', () => {

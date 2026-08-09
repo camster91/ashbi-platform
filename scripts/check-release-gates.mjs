@@ -16,6 +16,8 @@ export function validateReleaseGates(root = process.cwd()) {
   const packageJson = fs.readFileSync(path.join(root, 'package.json'), 'utf8');
   const worker = fs.readFileSync(path.join(root, 'src', 'jobs', 'worker.js'), 'utf8');
   const workerHealth = fs.readFileSync(path.join(root, 'scripts', 'worker-health.mjs'), 'utf8');
+  const productionSmoke = fs.readFileSync(path.join(root, 'scripts', 'smoke-production-health.mjs'), 'utf8');
+  const observabilityRunbook = fs.readFileSync(path.join(root, 'docs', 'observability-and-slos.md'), 'utf8');
   const failures = [];
 
   for (const [name, source] of allWorkflows) {
@@ -64,6 +66,12 @@ export function validateReleaseGates(root = process.cwd()) {
   if (!/ashbi:workers:heartbeat/.test(workerHealth)) {
     failures.push('worker health check does not verify the Redis heartbeat');
   }
+  if (!/EXPECTED_REVISION/.test(productionSmoke) || !/database.*redis.*worker/s.test(productionSmoke)) {
+    failures.push('production health smoke does not verify the exact revision and required dependencies');
+  }
+  if (!/OBSERVABILITY_OWNER/.test(observabilityRunbook) || !/Telemetry data policy/.test(observabilityRunbook)) {
+    failures.push('observability runbook does not define ownership and telemetry data policy');
+  }
 
   for (const [name, source] of allWorkflows) {
     if (/appleboy\/ssh-action|COOLIFY_TOKEN|applications\/.*\/start|deploy-vps\.yml/.test(source)) {
@@ -82,6 +90,7 @@ export function validateReleaseGates(root = process.cwd()) {
     [/restore_previous/, 'does not implement automatic rollback'],
     [/trap emergency_rollback EXIT/, 'does not protect interrupted cutovers'],
     [/imageDigest.*IMAGE_ID/, 'does not verify revision-aware readiness'],
+    [/database.*status.*ok[\s\S]*redis.*status.*ok[\s\S]*worker.*status.*ok/, 'does not require dependency-aware readiness'],
     [/start_worker_container/, 'does not start a dedicated worker'],
     [/health:worker/, 'does not require worker readiness'],
     [/ROLLBACK_WORKER_CONTAINER/, 'does not retain a worker rollback'],

@@ -11,6 +11,9 @@ same archive is uploaded to each environment. The VPS script verifies both
 identifiers before starting anything, takes an exclusive deployment lock,
 runs migration deployment plus status and ownership preflight checks, retains the prior API and worker containers,
 and requires both `/api/health` and the Redis-backed worker heartbeat to report the approved revision.
+The readiness response must also report healthy database, Redis, and worker
+dependencies. Queue failures and missing alert ownership are surfaced as a
+degraded state without incorrectly taking an otherwise usable API offline.
 
 The host must already contain its root-owned, mode-0600 environment file at
 `/opt/ashbi-platform/.env`. Runtime data is bind-mounted from the corresponding
@@ -34,6 +37,15 @@ ssh root@HOST "bash /opt/ashbi-platform/releases/deploy-vps-direct.sh \
   --archive-sha256 $ARCHIVE_SHA256 --image $IMAGE --image-id $IMAGE_ID \
   --revision $REVISION"
 ```
+
+After the public route is switched, run the revision-aware synthetic check:
+
+```bash
+EXPECTED_REVISION="$REVISION" npm run smoke:production-health -- https://hub.ashbi.ca
+```
+
+See `docs/observability-and-slos.md` for ownership, alert drills, telemetry
+data handling, and initial service objectives.
 
 The script appends every deployment, readiness failure, and rollback to
 `/opt/ashbi-platform/releases/history.tsv`. Upload archives may be deleted

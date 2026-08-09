@@ -75,7 +75,8 @@ export async function tenancyMiddleware(request, reply) {
         '/api/wp-bridge/hours'
       ].includes(request.url))
     ) ||
-    request.url === '/api/health'
+    request.url === '/api/health' ||
+    request.url === '/api/live'
   ) {
     request.prisma = prisma; // Use global for auth/portal/health/public routes
     enterRequestContext({ prisma, organizationId: null });

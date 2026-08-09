@@ -4,6 +4,8 @@ import { Queue, QueueEvents } from 'bullmq';
 import IORedis from 'ioredis';
 import env from '../config/env.js';
 import { withCurrentTenantJobData } from './tenant-iteration.js';
+import { QUEUES } from './queue-names.js';
+export { QUEUES } from './queue-names.js';
 
 // Create Redis connection - parse URL manually to handle special chars in password
 function parseRedisUrl(url) {
@@ -44,17 +46,6 @@ class MockQueueEvents {
 
 const QueueClass = isTestEnv ? MockQueue : Queue;
 const QueueEventsClass = isTestEnv ? MockQueueEvents : QueueEvents;
-
-// Queue names
-export const QUEUES = {
-  EMAIL_PROCESSING: 'email-processing',
-  PROJECT_HEALTH: 'project-health',
-  ESCALATION: 'escalation',
-  NOTIFICATIONS: 'notifications',
-  WEEKLY_DIGEST: 'weekly-digest',
-  EMBEDDING: 'embedding',
-  SCHEDULED: 'scheduled-maintenance'
-};
 
 // Create queues
 export const emailQueue = new QueueClass(QUEUES.EMAIL_PROCESSING, { connection });

@@ -46,6 +46,8 @@ const env = {
   // Sentry DSN for error tracking. Optional — if not set, Sentry.captureException
   // calls are no-ops. The src/index.js code path reads this directly.
   sentryDsn: process.env.SENTRY_DSN,
+  otlpEndpoint: process.env.OTLP_ENDPOINT,
+  observabilityOwner: process.env.OBSERVABILITY_OWNER,
 
   // Hermes webhook signature secret. Required for verifying inbound webhooks
   // from the Hermes notification system. If unset in production, the webhook
@@ -178,6 +180,7 @@ if (!env.isDev) {
     'MAILGUN_API_KEY',
     'MAILGUN_SIGNING_KEY',
     'COOLIFY_URL',
+    'OBSERVABILITY_OWNER',
   ];
   const missing = requiredInProduction.filter(key => !process.env[key]);
   if (missing.length > 0) {

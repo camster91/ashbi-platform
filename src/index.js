@@ -86,23 +86,17 @@ import draftRoutes from './routes/draft.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-import * as Sentry from '@sentry/node';
 import logger from './utils/logger.js';
 import { initSubscribers } from './subscribers/index.js';
 import { tenancyMiddleware } from './middleware/tenancy.js';
 import { getAuthProvider } from './auth/index.js';
 import { toClientErrorBody } from './utils/http-errors.js';
 import { buildHelmetOptions, permissionsPolicy } from './config/security-headers.js';
+import { initSentry, Sentry } from './observability/sentry.js';
+import { checkRuntimeHealth, closeRuntimeHealth } from './services/runtime-health.service.js';
 
 // Initialize Sentry error monitoring
-if (env.sentryDsn) {
-  Sentry.init({
-    dsn: env.sentryDsn,
-    environment: env.nodeEnv,
-    tracesSampleRate: env.isProduction ? 0.2 : 1.0,
-    enabled: true,
-    integrations: [Sentry.fastifyIntegration()],
-  });
+if (initSentry('api', [Sentry.fastifyIntegration()])) {
   logger.info('[Sentry] Error monitoring initialized');
 } else {
   logger.info('[Sentry] No SENTRY_DSN configured — skipping initialization');
@@ -162,7 +156,8 @@ fastify.addHook('onRequest', async (request, reply) => {
     request.url.startsWith('/api/portal') ||
     request.url.startsWith('/api/client-acquisition/config') ||
     request.url.startsWith('/api/client-acquisition/intake') ||
-    request.url === '/api/health'
+    request.url === '/api/health' ||
+    request.url === '/api/live'
   ) return;
   // Plugin-originated bridge writes authenticate with a provisioned per-site
   // HMAC and database-backed nonce in their route preHandler. Human bridge
@@ -297,13 +292,15 @@ await fastify.register(gmailRoutes, { prefix: '/api/gmail' });
 // Hub-Hermes bridge initialization
 initHermesBridge(fastify);
 
-fastify.get('/api/health', async () => {
-  return {
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    revision: process.env.APP_REVISION || 'unknown',
-    imageDigest: process.env.APP_IMAGE_DIGEST || 'unknown'
-  };
+fastify.get('/api/live', async () => ({
+  status: 'ok',
+  timestamp: new Date().toISOString(),
+  revision: process.env.APP_REVISION || 'unknown',
+}));
+
+fastify.get('/api/health', async (_request, reply) => {
+  const report = await checkRuntimeHealth();
+  return reply.code(report.ready ? 200 : 503).send(report);
 });
 
 // Static files
@@ -321,8 +318,20 @@ if (!env.isDev) {
 // Global Error Handler (Enterprise Grade)
 fastify.setErrorHandler((error, request, reply) => {
   const statusCode = error.statusCode || 500;
-  request.log.error({ err: error, userId: request.user?.id, url: request.url, method: request.method, organizationId: request.organizationId }, '🔥 Global Error Caught');
-  Sentry.captureException(error, { extra: { url: request.url, method: request.method, userId: request.user?.id, organizationId: request.organizationId, traceId: request.id } });
+  request.log.error({
+    errorName: error.name,
+    statusCode,
+    route: request.routeOptions?.url || 'unknown',
+    method: request.method,
+    traceId: request.id,
+  }, 'Global request error');
+  Sentry.captureException(error, {
+    extra: {
+      route: request.routeOptions?.url || 'unknown',
+      method: request.method,
+      traceId: request.id,
+    },
+  });
   reply.status(statusCode).send(toClientErrorBody(error, { traceId: request.id }));
 });
 
@@ -402,6 +411,7 @@ const start = async () => {
 const shutdown = async () => {
   logger.info('Shutting down...');
   await fastify.close();
+  await closeRuntimeHealth();
   await prisma.$disconnect();
   process.exit(0);
 };

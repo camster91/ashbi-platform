@@ -15,7 +15,6 @@ import { updateAllProjectHealth } from '../services/project.service.js';
 import { storeEmbedding } from '../services/embedding.service.js';
 import aiClient from '../ai/client.js';
 import env from '../config/env.js';
-import * as Sentry from '@sentry/node';
 import logger from '../utils/logger.js';
 import prisma, { prisma as backgroundPrisma } from '../config/db.js';
 import { createScopedPrisma } from '../utils/prisma-tenant-proxy.js';
@@ -27,6 +26,10 @@ import {
 } from '../services/automation.service.js';
 import { runScheduledFleetDigest } from '../routes/wp-bridge.routes.js';
 import { resolveEmbeddingOrganizationId } from './embedding-ownership.js';
+import { initSentry, Sentry } from '../observability/sentry.js';
+import { sendOperationalAlert } from '../observability/alerts.js';
+
+initSentry('worker');
 
 // Helper to create workers with error handling for Redis unavailability
 function createWorker(queueName, processor, options = {}) {
@@ -38,7 +41,38 @@ function createWorker(queueName, processor, options = {}) {
     });
 
     worker.on('failed', (job, err) => {
-      console.error(`[${queueName}] Job ${job?.id} failed:`, err.message);
+      logger.error({
+        errorName: err.name,
+        errorCode: err.code,
+        queue: queueName,
+        jobId: job?.id,
+        jobName: job?.name,
+        attemptsMade: job?.attemptsMade,
+      }, 'Worker job failed');
+      if (env.sentryDsn) {
+        Sentry.captureException(err, {
+          tags: { queue: queueName, jobName: job?.name || 'unknown' },
+          extra: { jobId: job?.id, attemptsMade: job?.attemptsMade },
+        });
+      }
+      const configuredAttempts = job?.opts?.attempts || 1;
+      if ((job?.attemptsMade || 0) >= configuredAttempts) {
+        sendOperationalAlert({
+          event: 'job_failed',
+          severity: 'error',
+          service: 'worker',
+          queue: queueName,
+          jobName: job?.name || 'unknown',
+          jobId: job?.id,
+          attemptsMade: job?.attemptsMade,
+        }).catch((alertError) => {
+          logger.error({
+            errorName: alertError.name,
+            queue: queueName,
+            jobId: job?.id,
+          }, 'Operational alert delivery failed');
+        });
+      }
     });
 
     worker.on('error', (err) => {

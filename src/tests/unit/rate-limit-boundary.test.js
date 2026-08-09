@@ -15,3 +15,9 @@ test('API requests remain protected, including queries and the API root', () => 
   }
   assert.equal(isNonApiRequest({ raw: { url: '/apiary' } }), true);
 });
+
+test('liveness and readiness probes are never exhausted by the API limiter', () => {
+  for (const url of ['/api/live', '/api/health', '/api/health?source=probe']) {
+    assert.equal(isNonApiRequest({ raw: { url } }), true, url);
+  }
+});

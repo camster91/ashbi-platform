@@ -12,6 +12,7 @@
     "start:api": "node --import ./src/tracing.js src/index.js",
     "start:worker": "node --import ./src/tracing.js src/jobs/worker.js",
     "health:worker": "node scripts/worker-health.mjs",
+    "smoke:production-health": "node scripts/smoke-production-health.mjs",
     "type-check": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "type-check:watch": "tsc --noEmit --watch",

@@ -197,7 +197,13 @@ READY=false
 for _ in $(seq 1 30); do
   BODY=$(curl -fsS --max-time 5 "http://127.0.0.1:${HOST_PORT}/api/health" || true)
   WORKER_HEALTH=$(docker exec "$WORKER_CONTAINER" npm run --silent health:worker 2>/dev/null || true)
-  if [[ $BODY == *"\"revision\":\"$REVISION\""* && $BODY == *"\"imageDigest\":\"$IMAGE_ID\""* && $WORKER_HEALTH == *"\"revision\":\"$REVISION\""* ]]; then
+  if [[ $BODY == *"\"ready\":true"* \
+    && $BODY == *"\"database\":{\"status\":\"ok\"}"* \
+    && $BODY == *"\"redis\":{\"status\":\"ok\"}"* \
+    && $BODY == *"\"worker\":{\"status\":\"ok\""* \
+    && $BODY == *"\"revision\":\"$REVISION\""* \
+    && $BODY == *"\"imageDigest\":\"$IMAGE_ID\""* \
+    && $WORKER_HEALTH == *"\"revision\":\"$REVISION\""* ]]; then
     READY=true
     break
   fi
