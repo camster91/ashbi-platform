@@ -49,7 +49,7 @@ export default function Login() {
   return (
     <div className="min-h-screen flex">
       {/* Left side - Branding */}
-      <div className="hidden lg:flex lg:w-1/2 xl:w-5/12 bg-[#2e2958] relative overflow-hidden">
+      <aside className="hidden lg:flex lg:w-1/2 xl:w-5/12 bg-[#2e2958] relative overflow-hidden">
         <div className="absolute inset-0">
           <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-[#e6f354] rounded-full blur-3xl opacity-10" />
           <div className="absolute bottom-[-5%] right-[-5%] w-[28rem] h-[28rem] bg-[#4a4294] rounded-full blur-3xl opacity-10" />
@@ -84,11 +84,11 @@ export default function Login() {
             ))}
           </div>
 
-          <div className="text-sm text-white/40">
+          <div className="text-sm text-white/70">
             {t('brand.copyright')}
           </div>
         </div>
-      </div>
+      </aside>
 
       {/* Right side - Login form */}
       <main className="flex-1 flex items-center justify-center p-4 sm:p-8 lg:p-12 bg-background">

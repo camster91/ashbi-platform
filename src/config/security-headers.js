@@ -4,7 +4,7 @@ function originFromDsn(dsn) {
 }
 
 export function buildHelmetOptions({ isProduction, corsOrigins = [], sentryDsn } = {}) {
-  const connectSrc = ["'self'", 'wss:', ...corsOrigins];
+  const connectSrc = ["'self'", 'wss:', 'https://fonts.googleapis.com', ...corsOrigins];
   const sentryOrigin = originFromDsn(sentryDsn);
   if (sentryOrigin) connectSrc.push(sentryOrigin);
   return {

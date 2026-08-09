@@ -43,6 +43,7 @@ test('CSP permits required assets while denying active third-party content', asy
   assert.match(csp, /object-src 'none'/);
   assert.match(csp, /frame-ancestors 'none'/);
   assert.match(csp, /font-src 'self' https:\/\/fonts\.gstatic\.com data:/);
+  assert.match(csp, /connect-src 'self' wss: https:\/\/fonts\.googleapis\.com https:\/\/hub\.ashbi\.ca/);
   assert.match(csp, /style-src 'self' https:\/\/fonts\.googleapis\.com 'unsafe-inline'/);
   assert.match(csp, /upgrade-insecure-requests/);
   assert.doesNotMatch(csp, /unsafe-eval/);
