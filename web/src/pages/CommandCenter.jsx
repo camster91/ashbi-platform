@@ -116,7 +116,7 @@ function GithubPanel({ data, loading, onRefresh }) {
       loading={loading}
       collapsible
       actions={
-        <button onClick={onRefresh} className="p-1 hover:text-foreground text-muted-foreground" title="Refresh">
+        <button type="button" onClick={onRefresh} className="min-h-11 min-w-11 inline-flex items-center justify-center rounded hover:text-foreground text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Refresh GitHub panel" title="Refresh">
           <RefreshCw className="w-3.5 h-3.5" />
         </button>
       }
@@ -162,7 +162,7 @@ function VpsPanel({ data, loading, onRefresh, onRestart }) {
       loading={loading}
       collapsible
       actions={
-        <button onClick={onRefresh} className="p-1 hover:text-foreground text-muted-foreground">
+        <button type="button" onClick={onRefresh} className="min-h-11 min-w-11 inline-flex items-center justify-center rounded hover:text-foreground text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Refresh VPS panel">
           <RefreshCw className="w-3.5 h-3.5" />
         </button>
       }
@@ -191,8 +191,10 @@ function VpsPanel({ data, loading, onRefresh, onRestart }) {
                   <span className="text-muted-foreground text-xs capitalize">{app.status || 'unknown'}</span>
                   {onRestart && (
                     <button
+                      type="button"
+                      aria-label={`Restart ${app.name}`}
                       onClick={() => onRestart(app.uuid || app.name)}
-                      className="p-0.5 hover:text-primary text-muted-foreground"
+                      className="min-h-11 min-w-11 inline-flex items-center justify-center rounded hover:text-primary text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       title="Restart"
                     >
                       <RotateCcw className="w-3 h-3" />
@@ -223,7 +225,7 @@ function SitesPanel({ data, loading, onRefresh }) {
       loading={loading}
       collapsible
       actions={
-        <button onClick={onRefresh} className="p-1 hover:text-foreground text-muted-foreground">
+        <button type="button" onClick={onRefresh} className="min-h-11 min-w-11 inline-flex items-center justify-center rounded hover:text-foreground text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Refresh Hostinger Sites panel">
           <RefreshCw className="w-3.5 h-3.5" />
         </button>
       }
@@ -289,7 +291,7 @@ function AgentsPanel({ data, loading, onRefresh, onRunAgent }) {
       loading={loading}
       collapsible
       actions={
-        <button onClick={onRefresh} className="p-1 hover:text-foreground text-muted-foreground">
+        <button type="button" onClick={onRefresh} className="min-h-11 min-w-11 inline-flex items-center justify-center rounded hover:text-foreground text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Refresh AI Agents panel">
           <RefreshCw className="w-3.5 h-3.5" />
         </button>
       }
@@ -309,9 +311,11 @@ function AgentsPanel({ data, loading, onRefresh, onRunAgent }) {
               <p className="text-xs text-muted-foreground">{agent.description}</p>
             </div>
             <button
+              type="button"
+              aria-label={`Run ${agent.displayName}`}
               onClick={() => handleRun(agent.name)}
               disabled={running[agent.name]}
-              className="flex items-center gap-1 px-2 py-1 rounded text-xs bg-primary/10 hover:bg-primary/20 text-primary disabled:opacity-50"
+              className="flex min-h-11 items-center gap-1 px-2 py-1 rounded text-xs bg-primary/10 hover:bg-primary/20 text-primary disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {running[agent.name] ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
               {running[agent.name] ? 'Running...' : 'Run'}
@@ -481,9 +485,11 @@ export default function CommandCenter() {
             <span className="text-sm font-medium capitalize">{overallHealth}</span>
           </div>
           <button
+            type="button"
+            aria-label="Refresh all command center panels"
             onClick={fetchAll}
             disabled={loading}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm hover:bg-primary/90 disabled:opacity-50"
+            className="flex min-h-11 items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm hover:bg-primary/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             Refresh All
@@ -624,8 +630,10 @@ function SummaryTile({ label, icon: Icon, health, value, sub }) {
 function ActionButton({ icon: Icon, label, description, onClick }) {
   return (
     <button
+      type="button"
+      aria-label={label}
       onClick={onClick}
-      className="w-full flex items-center gap-3 text-left p-2.5 rounded-lg hover:bg-muted/50 transition-colors"
+      className="w-full min-h-11 flex items-center gap-3 text-left p-2.5 rounded-lg hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <div className="p-1.5 rounded-md bg-primary/10">
         <Icon className="w-4 h-4 text-primary" />
