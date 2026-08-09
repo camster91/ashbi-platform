@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
-import { CheckCircle, XCircle, Clock, Eye, ChevronRight, Mail, FileText, Send, DollarSign, Megaphone, Code } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { CheckCircle, XCircle, Eye, ChevronRight, Mail, FileText, DollarSign, Megaphone, Code } from 'lucide-react';
 import { safeHtml } from '../lib/safeHtml';
 import { api } from '../lib/api';
-import { Button } from '../components/ui';
+import QueryErrorState from '../components/QueryErrorState';
+import { Button, LoadingState } from '../components/ui';
 
 const TYPE_ICONS = {
   EMAIL: Mail, PROPOSAL: FileText, CONTRACT: FileText,
@@ -63,7 +64,10 @@ function ContentPreview({ content, type }) {
 export default function ApprovalQueue() {
   const [approvals, setApprovals] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [isFetching, setIsFetching] = useState(false);
+  const [loadError, setLoadError] = useState(null);
+  const [actionError, setActionError] = useState('');
+  const fetchingRef = useRef(false);
   const [selectedId, setSelectedId] = useState(null);
   const [filterStatus, setFilterStatus] = useState('PENDING');
   const [filterType, setFilterType] = useState('');
@@ -78,6 +82,10 @@ export default function ApprovalQueue() {
   }, [filterStatus, filterType]);
 
   const fetchApprovals = async () => {
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
+    setIsFetching(true);
+    setLoadError('');
     try {
       const filters = {};
       if (filterStatus) filters.status = filterStatus;
@@ -85,31 +93,35 @@ export default function ApprovalQueue() {
       const data = await api.getApprovals(filters);
       setApprovals(data.approvals || []);
     } catch (err) {
-      setError(err.message);
+      setLoadError(err);
     } finally {
       setLoading(false);
+      setIsFetching(false);
+      fetchingRef.current = false;
     }
   };
 
   const handleApprove = async (id) => {
     setActionLoading(true);
+    setActionError('');
     try {
       await api.updateApproval(id, { status: 'APPROVED' });
       await fetchApprovals();
       setSelectedId(null);
-    } catch (err) { setError(err.message); }
+    } catch (err) { setActionError(err.message); }
     setActionLoading(false);
   };
 
   const handleReject = async (id) => {
     setActionLoading(true);
+    setActionError('');
     try {
       await api.updateApproval(id, { status: 'REJECTED', reviewNote: rejectNote });
       await fetchApprovals();
       setSelectedId(null);
       setRejectNote('');
       setShowRejectModal(false);
-    } catch (err) { setError(err.message); }
+    } catch (err) { setActionError(err.message); }
     setActionLoading(false);
   };
 
@@ -117,9 +129,9 @@ export default function ApprovalQueue() {
   const pendingCount = approvals.filter(a => a.status === 'PENDING').length;
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] -mx-4 sm:-mx-6">
+    <div className="flex flex-col lg:flex-row min-h-[calc(100vh-8rem)] lg:h-[calc(100vh-8rem)] -mx-4 sm:-mx-6">
       {/* List panel */}
-      <div className="w-80 flex-shrink-0 border-r border-border bg-card flex flex-col">
+      <div className="w-full lg:w-80 flex-shrink-0 border-b lg:border-b-0 lg:border-r border-border bg-card flex flex-col max-h-[50vh] lg:max-h-none">
         <div className="p-4 border-b border-border">
           <div className="flex items-center justify-between mb-3">
             <h1 className="text-lg font-bold text-foreground">Approvals</h1>
@@ -153,8 +165,15 @@ export default function ApprovalQueue() {
 
         <div className="flex-1 overflow-y-auto">
           {loading ? (
-            <div className="p-8 text-center text-muted-foreground text-sm">Loading...</div>
-          ) : approvals.length === 0 ? (
+            <LoadingState label="Loading approvals…" compact className="p-8" />
+          ) : loadError ? (
+            <QueryErrorState
+              error={loadError}
+              message="Failed to load approvals"
+              onRetry={fetchApprovals}
+              isRetrying={isFetching}
+            />
+          ) : !loadError && approvals.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground">
               <CheckCircle className="mx-auto mb-2 opacity-30" size={32} />
               <p className="text-sm">No approvals{filterStatus ? ` (${filterStatus.toLowerCase()})` : ''}</p>
@@ -205,8 +224,8 @@ export default function ApprovalQueue() {
           </div>
         ) : (
           <div className="p-6 max-w-3xl space-y-4">
-            {error && (
-              <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-red-600 text-sm">{error}</div>
+            {actionError && (
+              <div role="alert" className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-red-600 text-sm">{actionError}</div>
             )}
 
             {/* Header */}
