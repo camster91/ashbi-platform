@@ -4,7 +4,10 @@ import { api } from '../lib/api';
 export async function clearBrowserPushSubscription({ removeFromServer = false } = {}) {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return true;
   try {
-    const reg = await navigator.serviceWorker.ready;
+    // Session expiry and logout must not wait indefinitely for a service worker
+    // that is blocked, failed to install, or has not activated yet.
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (!reg) return true;
     const sub = await reg.pushManager?.getSubscription();
     if (!sub) return true;
     if (removeFromServer) await api.unsubscribePush(sub.endpoint);

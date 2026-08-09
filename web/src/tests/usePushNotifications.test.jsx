@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { usePushNotifications } from '../hooks/usePushNotifications';
+import { clearBrowserPushSubscription, usePushNotifications } from '../hooks/usePushNotifications';
 
 const apiMock = vi.hoisted(() => ({
   getPushVapidKey: vi.fn(),
@@ -27,7 +27,10 @@ function setBrowser({ permission = 'default', subscription = null, online = true
   Object.defineProperty(window, 'PushManager', { configurable: true, value: function PushManager() {} });
   Object.defineProperty(navigator, 'serviceWorker', {
     configurable: true,
-    value: { ready: Promise.resolve({ pushManager }) },
+    value: {
+      ready: Promise.resolve({ pushManager }),
+      getRegistration: vi.fn().mockResolvedValue({ pushManager }),
+    },
   });
   Object.defineProperty(navigator, 'onLine', { configurable: true, value: online });
   return pushManager;
@@ -87,6 +90,19 @@ describe('usePushNotifications', () => {
     expect(apiMock.unsubscribePush).toHaveBeenCalledWith(subscription.endpoint);
     expect(subscription.unsubscribe).toHaveBeenCalled();
     expect(result.current.subscribed).toBe(false);
+  });
+
+  it('does not block session cleanup when no service worker is active', async () => {
+    Object.defineProperty(navigator, 'serviceWorker', {
+      configurable: true,
+      value: {
+        ready: new Promise(() => {}),
+        getRegistration: vi.fn().mockResolvedValue(undefined),
+      },
+    });
+
+    await expect(clearBrowserPushSubscription()).resolves.toBe(true);
+    expect(navigator.serviceWorker.getRegistration).toHaveBeenCalledOnce();
   });
 
   it('explains blocked permission without attempting a subscription', async () => {
