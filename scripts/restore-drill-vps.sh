@@ -35,11 +35,19 @@ pg_restore -l "$work/database.dump" >/dev/null
 
 docker run -d --name "$container" --network none --tmpfs /var/lib/postgresql/data:rw,noexec,nosuid,size=1g \
   -e POSTGRES_PASSWORD="$password" -e POSTGRES_DB=ashbi_restore "$RESTORE_IMAGE" >/dev/null
-for _ in $(seq 1 60); do
-  docker exec "$container" pg_isready -U postgres -d ashbi_restore >/dev/null 2>&1 && break
+stable_ready_count=0
+for _ in $(seq 1 90); do
+  if docker exec "$container" pg_isready -U postgres -d ashbi_restore >/dev/null 2>&1; then
+    stable_ready_count=$((stable_ready_count + 1))
+    ((stable_ready_count >= 3)) && break
+  else
+    # The official image briefly starts and stops an initialization server.
+    # Reset the streak so that transient readiness cannot pass the drill.
+    stable_ready_count=0
+  fi
   sleep 1
 done
-docker exec "$container" pg_isready -U postgres -d ashbi_restore >/dev/null 2>&1 || die 'isolated PostgreSQL did not become ready'
+((stable_ready_count >= 3)) || die 'isolated PostgreSQL did not become stably ready'
 docker cp "$work/database.dump" "$container:/tmp/database.dump" >/dev/null
 docker exec "$container" pg_restore -U postgres -d ashbi_restore --no-owner --no-acl /tmp/database.dump
 

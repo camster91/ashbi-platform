@@ -41,6 +41,14 @@ test('restore drill is isolated, integrity checked, representative, and self-cle
   assert.match(restore, /trap cleanup EXIT/);
 });
 
+test('restore drill waits for stable PostgreSQL readiness across the initialization restart', () => {
+  assert.match(restore, /stable_ready_count=0/);
+  assert.match(restore, /stable_ready_count=\$\(\(stable_ready_count \+ 1\)\)/);
+  assert.match(restore, /stable_ready_count >= 3/);
+  assert.match(restore, /stable_ready_count=0/);
+  assert.doesNotMatch(restore, /pg_isready[^\n]+&& break/);
+});
+
 test('systemd schedule is persistent and the service is root-only and fail-visible', () => {
   assert.match(timer, /OnCalendar=\*-\*-\* 02:00:00 UTC/);
   assert.match(timer, /Persistent=true/);
