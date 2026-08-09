@@ -12,6 +12,8 @@ export default function Trash() {
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [showEmptyConfirm, setShowEmptyConfirm] = useState(false);
   const [typeFilter, setTypeFilter] = useState('ALL');
+  const [operationError, setOperationError] = useState('');
+  const [pendingAction, setPendingAction] = useState(null);
 
   const loadTrash = async () => {
     setLoading(true);
@@ -29,32 +31,49 @@ export default function Trash() {
   useEffect(() => { loadTrash(); }, []);
 
   const handleRestore = async (id, type) => {
+    const action = `restore:${id}`;
+    if (pendingAction) return;
+    setPendingAction(action);
+    setOperationError('');
     try {
       await api.request(`/trash/${id}/restore`, { method: 'POST' });
       setItems(items.filter(i => i.id !== id));
       setConfirmRestore(null);
     } catch (err) {
-      console.error('Restore failed:', err);
+      setOperationError(err?.message || 'This item could not be restored. Please try again.');
+    } finally {
+      setPendingAction(null);
     }
   };
 
   const handlePermanentDelete = async (id, type) => {
+    const action = `delete:${id}`;
+    if (pendingAction) return;
+    setPendingAction(action);
+    setOperationError('');
     try {
       await api.request(`/trash/${id}/permanent`, { method: 'DELETE' });
       setItems(items.filter(i => i.id !== id));
       setConfirmDelete(null);
     } catch (err) {
-      console.error('Permanent delete failed:', err);
+      setOperationError(err?.message || 'This item could not be permanently deleted. Please try again.');
+    } finally {
+      setPendingAction(null);
     }
   };
 
   const handleEmptyTrash = async () => {
+    if (pendingAction) return;
+    setPendingAction('empty');
+    setOperationError('');
     try {
       await api.request('/trash/empty', { method: 'DELETE' });
       setItems([]);
       setShowEmptyConfirm(false);
     } catch (err) {
-      console.error('Empty trash failed:', err);
+      setOperationError(err?.message || 'Trash could not be emptied. Please try again.');
+    } finally {
+      setPendingAction(null);
     }
   };
 
@@ -86,7 +105,7 @@ export default function Trash() {
         </div>
         {items.length > 0 && (
           <button
-            onClick={() => setShowEmptyConfirm(true)}
+            onClick={() => { setOperationError(''); setShowEmptyConfirm(true); }}
             className="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
           >
             <Trash2 className="w-4 h-4 inline mr-1" />
@@ -173,14 +192,14 @@ export default function Trash() {
 
               <div className="flex gap-2 shrink-0">
                 <button
-                  onClick={() => setConfirmRestore(item)}
+                  onClick={() => { setOperationError(''); setConfirmRestore(item); }}
                   className="p-2 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors"
                   title="Restore"
                 >
                   <RotateCcw className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={() => setConfirmDelete(item)}
+                  onClick={() => { setOperationError(''); setConfirmDelete(item); }}
                   className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
                   title="Delete permanently"
                 >
@@ -203,18 +222,21 @@ export default function Trash() {
             <p className="text-sm text-muted-foreground mb-4">
               It will reappear in your lists immediately.
             </p>
+            {operationError && <p role="alert" className="mb-4 text-sm text-red-600">{operationError}</p>}
             <div className="flex justify-end gap-3">
               <button
-                onClick={() => setConfirmRestore(null)}
-                className="px-4 py-2 text-sm border border-border rounded-lg hover:bg-muted transition-colors"
+                onClick={() => { setOperationError(''); setConfirmRestore(null); }}
+                disabled={Boolean(pendingAction)}
+                className="px-4 py-2 text-sm border border-border rounded-lg hover:bg-muted transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={() => handleRestore(confirmRestore.id, confirmRestore.type)}
-                className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                disabled={pendingAction === `restore:${confirmRestore.id}`}
+                className="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Restore
+                {pendingAction === `restore:${confirmRestore.id}` ? 'Restoring…' : 'Restore'}
               </button>
             </div>
           </div>
@@ -237,18 +259,21 @@ export default function Trash() {
                 </p>
               </div>
             </div>
+            {operationError && <p role="alert" className="mb-4 text-sm text-red-600">{operationError}</p>}
             <div className="flex justify-end gap-3">
               <button
-                onClick={() => setConfirmDelete(null)}
-                className="px-4 py-2 text-sm border border-border rounded-lg hover:bg-muted transition-colors"
+                onClick={() => { setOperationError(''); setConfirmDelete(null); }}
+                disabled={Boolean(pendingAction)}
+                className="px-4 py-2 text-sm border border-border rounded-lg hover:bg-muted transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={() => handlePermanentDelete(confirmDelete.id, confirmDelete.type)}
-                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                disabled={pendingAction === `delete:${confirmDelete.id}`}
+                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Delete Forever
+                {pendingAction === `delete:${confirmDelete.id}` ? 'Deleting…' : 'Delete Forever'}
               </button>
             </div>
           </div>
@@ -268,18 +293,21 @@ export default function Trash() {
                 </p>
               </div>
             </div>
+            {operationError && <p role="alert" className="mb-4 text-sm text-red-600">{operationError}</p>}
             <div className="flex justify-end gap-3">
               <button
-                onClick={() => setShowEmptyConfirm(false)}
-                className="px-4 py-2 text-sm border border-border rounded-lg hover:bg-muted transition-colors"
+                onClick={() => { setOperationError(''); setShowEmptyConfirm(false); }}
+                disabled={Boolean(pendingAction)}
+                className="px-4 py-2 text-sm border border-border rounded-lg hover:bg-muted transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleEmptyTrash}
-                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                disabled={pendingAction === 'empty'}
+                className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Empty Trash
+                {pendingAction === 'empty' ? 'Emptying…' : 'Empty Trash'}
               </button>
             </div>
           </div>

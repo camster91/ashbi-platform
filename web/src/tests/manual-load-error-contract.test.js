@@ -37,4 +37,18 @@ describe('manual request failure contract', () => {
     expect(source).toContain('onRetry={loadTrash}');
     expect(source).toMatch(/!loading\s*&&\s*!loadError\s*&&\s*filtered\.length === 0/);
   });
+
+  it('Trash reports operation failures and prevents duplicate destructive requests', () => {
+    const source = readPage('Trash.jsx');
+
+    expect(source).toContain('operationError');
+    expect(source).toContain('pendingAction');
+    expect(source).toContain('role="alert"');
+    expect(source).toContain("disabled={pendingAction === `restore:${confirmRestore.id}`}");
+    expect(source).toContain("disabled={pendingAction === `delete:${confirmDelete.id}`}");
+    expect(source).toContain("disabled={pendingAction === 'empty'}");
+    expect(source).not.toContain("console.error('Restore failed:'");
+    expect(source).not.toContain("console.error('Permanent delete failed:'");
+    expect(source).not.toContain("console.error('Empty trash failed:'");
+  });
 });
