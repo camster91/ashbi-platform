@@ -990,7 +990,7 @@ model Invoice {
   publicAccessRevokedAt   DateTime?
   clientId                String
   projectId               String?
-  proposalId              String?
+  proposalId              String?   @unique
   createdById             String
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt

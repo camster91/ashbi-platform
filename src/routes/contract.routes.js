@@ -95,9 +95,15 @@ export default async function contractRoutes(fastify) {
     if (!proposal) return reply.status(404).send({ error: 'Proposal not found' });
     if (proposal.status !== 'APPROVED') return reply.status(400).send({ error: 'Proposal must be approved first' });
 
-    // Check if contract already exists for this proposal
-    const existing = await fastify.prisma.contract.findUnique({ where: { proposalId: proposal.id } });
-    if (existing) return reply.status(400).send({ error: 'Contract already exists for this proposal' });
+    const contractInclude = {
+      client: { select: { id: true, name: true } },
+      createdBy: { select: { id: true, name: true } }
+    };
+    const existing = await fastify.prisma.contract.findUnique({
+      where: { proposalId: proposal.id },
+      include: contractInclude
+    });
+    if (existing) return existing;
 
     const deliverables = '<ul>' + proposal.lineItems.map(li => `<li>${li.description} (${li.quantity}x @ $${li.unitPrice})</li>`).join('') + '</ul>';
 
@@ -109,20 +115,25 @@ export default async function contractRoutes(fastify) {
       deliverables
     });
 
-    return fastify.prisma.contract.create({
-      data: {
-        title: `Contract: ${proposal.title}`,
-        templateType: 'PROJECT',
-        content: rendered?.content || '',
-        clientId: proposal.clientId,
-        proposalId: proposal.id,
-        createdById: request.user.id
-      },
-      include: {
-        client: { select: { id: true, name: true } },
-        createdBy: { select: { id: true, name: true } }
-      }
-    });
+    try {
+      return await fastify.prisma.contract.create({
+        data: {
+          title: `Contract: ${proposal.title}`,
+          templateType: 'PROJECT',
+          content: rendered?.content || '',
+          clientId: proposal.clientId,
+          proposalId: proposal.id,
+          createdById: request.user.id
+        },
+        include: contractInclude
+      });
+    } catch (error) {
+      if (error?.code !== 'P2002') throw error;
+      return fastify.prisma.contract.findUnique({
+        where: { proposalId: proposal.id },
+        include: contractInclude
+      });
+    }
   });
 
   // POST /:id/send — mark contract as SENT and email client

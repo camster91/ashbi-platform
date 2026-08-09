@@ -535,6 +535,17 @@ export default async function invoiceRoutes(fastify) {
     if (!proposal) return reply.status(404).send({ error: 'Proposal not found' });
     if (proposal.status !== 'APPROVED') return reply.status(400).send({ error: 'Proposal must be approved first' });
 
+    const invoiceInclude = {
+      client: { select: { id: true, name: true } },
+      lineItems: { orderBy: { position: 'asc' } },
+      payments: true,
+    };
+    const existing = await fastify.prisma.invoice.findUnique({
+      where: { proposalId: proposal.id },
+      include: invoiceInclude
+    });
+    if (existing) return existing;
+
     const invoiceNumber = await generateInvoiceNumber();
     const processedItems = proposal.lineItems.map((li, idx) => ({
       description: li.description,
@@ -547,29 +558,33 @@ export default async function invoiceRoutes(fastify) {
 
     const { subtotal, tax, total } = calcTotals(processedItems, HST_RATE, proposal.discount || 0);
 
-    return fastify.prisma.invoice.create({
-      data: {
-        invoiceNumber,
-        title: `Invoice for: ${proposal.title}`,
-        clientId: proposal.clientId,
-        projectId: proposal.projectId || null,
-        proposalId: proposal.id,
-        subtotal,
-        discountAmount: proposal.discount || 0,
-        taxRate: HST_RATE,
-        taxType: 'HST',
-        tax,
-        total,
-        notes: `Invoice for proposal: ${proposal.title}`,
-        createdById: request.user.id,
-        lineItems: { create: processedItems }
-      },
-      include: {
-        client: { select: { id: true, name: true } },
-        lineItems: { orderBy: { position: 'asc' } },
-        payments: true,
-      }
-    });
+    try {
+      return await fastify.prisma.invoice.create({
+        data: {
+          invoiceNumber,
+          title: `Invoice for: ${proposal.title}`,
+          clientId: proposal.clientId,
+          projectId: proposal.projectId || null,
+          proposalId: proposal.id,
+          subtotal,
+          discountAmount: proposal.discount || 0,
+          taxRate: HST_RATE,
+          taxType: 'HST',
+          tax,
+          total,
+          notes: `Invoice for proposal: ${proposal.title}`,
+          createdById: request.user.id,
+          lineItems: { create: processedItems }
+        },
+        include: invoiceInclude
+      });
+    } catch (error) {
+      if (error?.code !== 'P2002') throw error;
+      return fastify.prisma.invoice.findUnique({
+        where: { proposalId: proposal.id },
+        include: invoiceInclude
+      });
+    }
   });
 
   // ─── GET /client/:viewToken — public client view ────────────────────────────
