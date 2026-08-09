@@ -25,7 +25,7 @@ const KANBAN_COLUMNS = [
   {
     key: 'REVIEW',
     label: 'Review',
-    headerColor: 'border-yellow-400 text-yellow-600',
+    headerColor: 'border-yellow-400 text-yellow-700',
     bgColor: 'bg-yellow-50/30',
     statuses: ['FINALIZING'],
   },
@@ -298,7 +298,12 @@ export default function Projects() {
       />
 
       {/* Kanban Board */}
-      <div className="flex gap-4 overflow-x-auto pb-4">
+      <div
+        className="flex gap-4 overflow-x-auto pb-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        role="region"
+        aria-label="Project status board"
+        tabIndex={0}
+      >
         {columns.map((col) => (
           <KanbanColumn
             key={col.key}

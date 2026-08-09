@@ -75,6 +75,14 @@ describe('Projects client-origin creation', () => {
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/projects'));
   });
 
+  it('keeps the horizontally scrollable status board keyboard accessible', async () => {
+    renderProjects(['/projects']);
+
+    const board = await screen.findByRole('region', { name: 'Project status board' });
+    expect(board).toHaveAttribute('tabindex', '0');
+    expect(screen.getByRole('heading', { name: 'Review' }).parentElement).toHaveClass('text-yellow-700');
+  });
+
   it('fails safely when the URL names an unavailable client', async () => {
     renderProjects(['/projects?create=true&clientId=missing-client']);
 
