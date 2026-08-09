@@ -13,7 +13,7 @@ async function sendNotificationEmail({ userId, type, title, message, data }) {
  * Create a notification record and optionally send an email.
  * Emits a `notification:new` Socket.IO event for real-time delivery.
  */
-export async function createNotification({ userId, type, title, message, data, sendEmail = false }) {
+export async function createNotification({ userId, type, title, message, data, sendEmail = false }, { io } = {}) {
   const notification = await prisma.notification.create({
     data: {
       userId,
@@ -25,7 +25,6 @@ export async function createNotification({ userId, type, title, message, data, s
   });
 
   // Emit real-time event via Socket.IO
-  const { io } = await import('../index.js');
   if (io) {
     io.to(`user:${userId}`).emit('notification:new', {
       id: notification.id,

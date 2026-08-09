@@ -5,11 +5,11 @@
   "type": "module",
   "main": "src/index.js",
   "scripts": {
-    "dev": "tsx watch src/index.js",
+    "dev": "tsx watch src/server.js",
     "dev:web": "npm --prefix web run dev",
     "dev:worker": "tsx watch --import ./src/tracing.js src/jobs/worker.js",
     "start": "npm run start:api",
-    "start:api": "node --import ./src/tracing.js src/index.js",
+    "start:api": "node --import ./src/tracing.js src/server.js",
     "start:worker": "node --import ./src/tracing.js src/jobs/worker.js",
     "health:worker": "node scripts/worker-health.mjs",
     "smoke:production-health": "node scripts/smoke-production-health.mjs",

@@ -99,6 +99,8 @@ upgrades, login/account transitions, session expiry, and logout purge every lega
 
 Production has one controller: the immutable direct-VPS procedure in [docs/deployment-and-rollback.md](docs/deployment-and-rollback.md). GitHub Actions and Coolify do not promote production. Every release uses the reviewed revision, archive checksum, immutable image ID, migration/status preflight, dependency-aware API/worker readiness, retained rollback containers, trusted HTTPS verification, and the encrypted backup policy in [docs/backup-and-restore.md](docs/backup-and-restore.md).
 
+Backend construction, process lifecycle, dependency direction, and the incremental route-domain plan are documented in [docs/backend-application-boundaries.md](docs/backend-application-boundaries.md).
+
 ## Features
 
 ### Code-present core

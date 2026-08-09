@@ -1,5 +1,4 @@
 import bus, { EVENTS } from '../utils/events.js';
-import { io } from '../index.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -9,7 +8,7 @@ import logger from '../utils/logger.js';
  * and broadcasts relevant events to connected frontend clients
  * via Socket.IO.
  */
-export function initSocketBridge() {
+export function initSocketBridge(io) {
   logger.info('🔌 Connecting Event Bus to Socket.IO Bridge...');
 
   // Broadcast Project Updates

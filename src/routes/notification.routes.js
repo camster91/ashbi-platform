@@ -62,8 +62,7 @@ export default async function notificationRoutes(fastify) {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - parseInt(olderThanDays));
 
-    const { prisma } = await import('../index.js');
-    const result = await prisma.notification.deleteMany({
+    const result = await request.prisma.notification.deleteMany({
       where: {
         read: true,
         createdAt: { lt: cutoffDate }

@@ -63,7 +63,6 @@ import invoiceChaserRoutes from './routes/invoice-chaser.routes.js';
 import aiContextRoutes from './routes/ai-context.routes.js';
 import gmailRoutes from './routes/gmail.routes.js';
 import pushRoutes from './routes/push.routes.js';
-import { initVapid } from './utils/web-push.js';
 import commandCenterRoutes from './routes/integrations.command-center.routes.js';
 import expenseRoutes from './routes/expense.routes.js';
 import automationRoutes from './routes/automation.routes.js';
@@ -94,11 +93,17 @@ import { toClientErrorBody } from './utils/http-errors.js';
 import { buildHelmetOptions, permissionsPolicy } from './config/security-headers.js';
 import { initSentry, Sentry } from './observability/sentry.js';
 import { checkRuntimeHealth, closeRuntimeHealth } from './services/runtime-health.service.js';
+import { getRequestPrisma } from './utils/request-context.js';
 
+/**
+ * Construct the complete API application without binding a network port.
+ * Runtime-only bridges can be disabled for isolated construction tests.
+ */
+export async function buildApp({ initializeRuntime = true, jwtSecret = env.jwtSecret } = {}) {
 // Initialize Sentry error monitoring
-if (initSentry('api', [Sentry.fastifyIntegration()])) {
+if (initializeRuntime && initSentry('api', [Sentry.fastifyIntegration()])) {
   logger.info('[Sentry] Error monitoring initialized');
-} else {
+} else if (initializeRuntime) {
   logger.info('[Sentry] No SENTRY_DSN configured — skipping initialization');
 }
 
@@ -110,7 +115,7 @@ const fastify = Fastify({
 });
 
 // Attach Sentry error handler (must be after Fastify creation, before plugins/routes)
-if (env.sentryDsn) {
+if (initializeRuntime && env.sentryDsn) {
   Sentry.setupFastifyErrorHandler(fastify);
 }
 
@@ -145,7 +150,7 @@ await fastify.register(rateLimit, {
   // files can lock users out of the application shell before they call an API.
   allowList: isNonApiRequest,
 });
-await fastify.register(jwt, { secret: env.jwtSecret, cookie: { cookieName: 'token', signed: false } });
+await fastify.register(jwt, { secret: jwtSecret, cookie: { cookieName: 'token', signed: false } });
 
 // JWT verification hook — runs for ALL /api/* requests BEFORE tenancyMiddleware
 fastify.addHook('onRequest', async (request, reply) => {
@@ -212,7 +217,6 @@ fastify.decorate('adminOnly', async (request, reply) => {
 // prisma otherwise. This matches the wrapping done on `db.js`'s default
 // export — every call to `fastify.prisma.X.findMany()` now auto-scopes when
 // the request has an organizationId.
-import { getRequestPrisma } from './utils/request-context.js';
 fastify.decorate('prisma', new Proxy({}, {
   get(_t, prop) {
     const client = getRequestPrisma() ?? prisma;
@@ -290,7 +294,7 @@ await fastify.register(clientPortalRoutes, { prefix: '/api/client-portal' });
 await fastify.register(gmailRoutes, { prefix: '/api/gmail' });
 
 // Hub-Hermes bridge initialization
-initHermesBridge(fastify);
+if (initializeRuntime) initHermesBridge(fastify);
 
 fastify.get('/api/live', async () => ({
   status: 'ok',
@@ -337,6 +341,9 @@ fastify.setErrorHandler((error, request, reply) => {
 
 // Socket.IO
 const io = new SocketIO(fastify.server, { cors: { origin: env.isDev ? 'http://localhost:*' : env.corsOrigins, credentials: true } });
+fastify.addHook('onClose', async () => {
+  await new Promise((resolve) => io.close(resolve));
+});
 io.use(async (socket, next) => {
   try {
     // Accept an explicit auth payload for native/non-browser clients or the
@@ -392,44 +399,15 @@ fastify.decorate('io', io);
 fastify.decorate('notify', async (userId, type, data) => {
   try {
     const { createNotification } = await import('./services/notification.service.js');
-    await createNotification({ userId, type, title: type, message: JSON.stringify(data), data });
+    await createNotification({ userId, type, title: type, message: JSON.stringify(data), data }, { io });
   } catch (err) { logger.error({ err }, '[notify] Failed to persist notification'); }
   io.to(`user:${userId}`).emit('notification', { type, data });
 });
 
 // Initialization
-initSubscribers();
+if (initializeRuntime) initSubscribers({ fastify, io });
 
-const start = async () => {
-  try {
-    try { initVapid(); } catch (e) { logger.warn({ err: e }, 'Web push init failed'); }
-    await fastify.listen({ port: env.port, host: '0.0.0.0' });
-    logger.info(`🚀 Agency Hub running at http://localhost:${env.port}`);
-  } catch (err) { fastify.log.error(err); process.exit(1); }
-};
+return fastify;
+}
 
-const shutdown = async () => {
-  logger.info('Shutting down...');
-  await fastify.close();
-  await closeRuntimeHealth();
-  await prisma.$disconnect();
-  process.exit(0);
-};
-
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
-
-process.on('unhandledRejection', (reason) => {
-  logger.error({ err: reason }, 'Unhandled promise rejection');
-  if (env.sentryDsn) Sentry.captureException(reason);
-});
-
-process.on('uncaughtException', (err) => {
-  logger.fatal({ err }, 'Uncaught exception');
-  if (env.sentryDsn) Sentry.captureException(err);
-  process.exit(1);
-});
-
-start();
-
-export { fastify, io };
+export { closeRuntimeHealth, env, logger, prisma, Sentry };

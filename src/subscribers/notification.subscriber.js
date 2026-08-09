@@ -1,5 +1,4 @@
 import bus, { EVENTS } from '../utils/events.js';
-import { fastify } from '../index.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -7,7 +6,7 @@ import logger from '../utils/logger.js';
  * 
  * Centralizes all real-time and persistent user notifications.
  */
-export function initNotificationSubscriber() {
+export function initNotificationSubscriber(fastify) {
   // Task Blocked Notification
   bus.on(EVENTS.TASK_BLOCKED, async ({ task, user, reason }) => {
     try {

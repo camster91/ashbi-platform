@@ -4,7 +4,7 @@ module.exports = {
   apps: [
     {
       name: 'agency-hub-api',
-      script: 'src/index.js',
+      script: 'src/server.js',
       instances: 1,
       autorestart: true,
       watch: false,

@@ -6,12 +6,12 @@ import logger from '../utils/logger.js';
 /**
  * Initialize all Enterprise Event Subscribers
  */
-export function initSubscribers() {
+export function initSubscribers({ fastify, io }) {
   logger.info('🛰️  Initializing Enterprise Event Subscribers...');
   
   initAiSubscriber();
-  initNotificationSubscriber();
-  initSocketBridge();
+  initNotificationSubscriber(fastify);
+  initSocketBridge(io);
   
   logger.info('✅ Event Subscribers Ready');
 }
