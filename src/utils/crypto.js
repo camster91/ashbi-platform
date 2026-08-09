@@ -6,10 +6,34 @@ const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
 const TAG_LENGTH = 16;
 
-function getKey() {
-  const key = process.env.CREDENTIALS_KEY;
-  if (!key) {
-    throw new Error('CREDENTIALS_KEY environment variable is required for credential encryption');
+const ENVELOPE_VERSION = 'v1';
+const KEY_VERSION_PATTERN = /^[a-zA-Z0-9._-]{1,40}$/;
+
+function readKeyring() {
+  let configured = {};
+  if (process.env.CREDENTIALS_KEYRING) {
+    try {
+      configured = JSON.parse(process.env.CREDENTIALS_KEYRING);
+    } catch {
+      throw new Error('CREDENTIALS_KEYRING must be a JSON object');
+    }
+    if (!configured || Array.isArray(configured) || typeof configured !== 'object') {
+      throw new Error('CREDENTIALS_KEYRING must be a JSON object');
+    }
+  }
+  if (process.env.CREDENTIALS_KEY) configured.legacy ??= process.env.CREDENTIALS_KEY;
+  return configured;
+}
+
+function activeKeyVersion() {
+  return process.env.CREDENTIALS_ACTIVE_KEY_VERSION || 'legacy';
+}
+
+function getKey(version) {
+  if (!KEY_VERSION_PATTERN.test(version)) throw new Error('Invalid credential key version');
+  const key = readKeyring()[version];
+  if (typeof key !== 'string' || !key) {
+    throw new Error(`Credential encryption key version is unavailable: ${version}`);
   }
   // Hash the key to ensure it's exactly 32 bytes for AES-256
   return crypto.createHash('sha256').update(key).digest();
@@ -27,35 +51,49 @@ export function safeEqual(a, b) {
   return crypto.timingSafeEqual(ah, bh);
 }
 
-export function encrypt(plaintext) {
+export function encryptWithVersion(plaintext, version) {
   if (!plaintext) return plaintext;
-  const key = getKey();
+  const key = getKey(version);
   const iv = crypto.randomBytes(IV_LENGTH);
   const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
   let encrypted = cipher.update(plaintext, 'utf8', 'hex');
   encrypted += cipher.final('hex');
   const tag = cipher.getAuthTag();
-  // Store as iv:tag:ciphertext
-  return `${iv.toString('hex')}:${tag.toString('hex')}:${encrypted}`;
+  return `${ENVELOPE_VERSION}:${version}:${iv.toString('hex')}:${tag.toString('hex')}:${encrypted}`;
 }
 
-export function decrypt(ciphertext, { audit = false, label } = {}) {
+export function encrypt(plaintext) {
+  return encryptWithVersion(plaintext, activeKeyVersion());
+}
+
+export function getCiphertextKeyVersion(ciphertext) {
   if (!ciphertext) return ciphertext;
-  const key = getKey();
   const parts = ciphertext.split(':');
-  if (parts.length !== 3) {
+  if (parts.length === 3) return 'legacy';
+  if (parts.length === 5 && parts[0] === ENVELOPE_VERSION && KEY_VERSION_PATTERN.test(parts[1])) return parts[1];
+  throw new Error('Invalid encrypted format');
+}
+
+export function decrypt(ciphertext) {
+  if (!ciphertext) return ciphertext;
+  const parts = ciphertext.split(':');
+  const version = getCiphertextKeyVersion(ciphertext);
+  const key = getKey(version);
+  const [ivHex, tagHex, encrypted] = parts.length === 3 ? parts : parts.slice(2);
+  const iv = Buffer.from(ivHex, 'hex');
+  const tag = Buffer.from(tagHex, 'hex');
+  if (iv.length !== IV_LENGTH || tag.length !== TAG_LENGTH || !/^[a-f0-9]+$/i.test(encrypted)) {
     throw new Error('Invalid encrypted format');
   }
-  // Audit log: track every decryption of sensitive credentials
-  if (audit || label) {
-    console.warn(`[CREDENTIAL AUDIT] Decryption accessed${label ? `: ${label}` : ''} at ${new Date().toISOString()}`);
-  }
-  const iv = Buffer.from(parts[0], 'hex');
-  const tag = Buffer.from(parts[1], 'hex');
-  const encrypted = parts[2];
   const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
   decipher.setAuthTag(tag);
   let decrypted = decipher.update(encrypted, 'hex', 'utf8');
   decrypted += decipher.final('utf8');
   return decrypted;
+}
+
+export function getActiveCredentialKeyVersion() {
+  const version = activeKeyVersion();
+  getKey(version);
+  return version;
 }

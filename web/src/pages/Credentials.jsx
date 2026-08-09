@@ -110,7 +110,7 @@ export default function Credentials() {
 
   function startEdit(cred) {
     // Fetch decrypted password
-    api.getCredentialPassword(cred.id).then(({ password }) => {
+    api.getCredentialPassword(cred.id, 'edit credential').then(({ password }) => {
       setForm({
         label: cred.label,
         username: cred.username || '',
@@ -142,7 +142,7 @@ export default function Credentials() {
 
   async function copyPassword(id) {
     try {
-      const { password } = await api.getCredentialPassword(id);
+      const { password } = await api.getCredentialPassword(id, 'copy credential password');
       await navigator.clipboard.writeText(password);
       setCopiedId(id);
       setTimeout(() => setCopiedId(null), 2000);
@@ -160,7 +160,7 @@ export default function Credentials() {
       });
     } else {
       try {
-        const { password } = await api.getCredentialPassword(id);
+        const { password } = await api.getCredentialPassword(id, 'display credential password');
         setVisiblePasswords((prev) => ({ ...prev, [id]: password }));
       } catch (e) {
         console.error('Failed to fetch password', e);
@@ -243,7 +243,7 @@ export default function Credentials() {
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">Label *</label>
                 <input
-                  type="text"
+                  type="password"
                   value={form.label}
                   onChange={(e) => setForm({ ...form, label: e.target.value })}
                   required

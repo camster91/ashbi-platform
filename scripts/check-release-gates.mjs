@@ -18,6 +18,13 @@ export function validateReleaseGates(root = process.cwd()) {
   const workerHealth = fs.readFileSync(path.join(root, 'scripts', 'worker-health.mjs'), 'utf8');
   const productionSmoke = fs.readFileSync(path.join(root, 'scripts', 'smoke-production-health.mjs'), 'utf8');
   const observabilityRunbook = fs.readFileSync(path.join(root, 'docs', 'observability-and-slos.md'), 'utf8');
+  const credentialRunbook = fs.readFileSync(path.join(root, 'docs', 'credential-vault-security.md'), 'utf8');
+  const credentialMigration = fs.readFileSync(
+    path.join(root, 'prisma', 'migrations', '20260809094500_credential_vault_audit_rotation', 'migration.sql'),
+    'utf8',
+  );
+  const credentialDrill = fs.readFileSync(path.join(root, 'scripts', 'drill-credential-rotation.mjs'), 'utf8');
+  const nodeTestRunner = fs.readFileSync(path.join(root, 'scripts', 'run-node-tests.mjs'), 'utf8');
   const failures = [];
 
   for (const [name, source] of allWorkflows) {
@@ -71,6 +78,21 @@ export function validateReleaseGates(root = process.cwd()) {
   }
   if (!/OBSERVABILITY_OWNER/.test(observabilityRunbook) || !/Telemetry data policy/.test(observabilityRunbook)) {
     failures.push('observability runbook does not define ownership and telemetry data policy');
+  }
+  if (!/"rotate:credential-keys"\s*:/.test(packageJson) || !/"audit:credential-access"\s*:/.test(packageJson)) {
+    failures.push('package.json does not expose credential rotation and access-review controls');
+  }
+  if (!/CREDENTIALS_KEY_OWNER/.test(credentialRunbook) || !/Rollback and emergency procedure/.test(credentialRunbook)) {
+    failures.push('credential vault runbook does not define key ownership and emergency rollback');
+  }
+  if (!/BEFORE UPDATE OR DELETE/.test(credentialMigration) || !/credentials_enforce_ownership/.test(credentialMigration)) {
+    failures.push('credential migration does not enforce immutable audits and tenant ownership');
+  }
+  if (!/confirm-disposable/.test(credentialDrill) || !/localhost/.test(credentialDrill)) {
+    failures.push('credential rotation drill is not guarded to a disposable local database');
+  }
+  if (!/spawnSync\(process\.execPath/.test(nodeTestRunner) || /find .*xargs/.test(packageJson)) {
+    failures.push('backend test commands are not cross-platform or do not propagate the Node test exit status');
   }
 
   for (const [name, source] of allWorkflows) {

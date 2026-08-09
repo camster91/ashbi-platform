@@ -21,6 +21,15 @@ function copyWorkflows() {
   fs.copyFileSync(path.resolve('scripts/smoke-production-health.mjs'), path.join(root, 'scripts', 'smoke-production-health.mjs'));
   fs.mkdirSync(path.join(root, 'docs'), { recursive: true });
   fs.copyFileSync(path.resolve('docs/observability-and-slos.md'), path.join(root, 'docs', 'observability-and-slos.md'));
+  fs.copyFileSync(path.resolve('docs/credential-vault-security.md'), path.join(root, 'docs', 'credential-vault-security.md'));
+  fs.copyFileSync(path.resolve('scripts/drill-credential-rotation.mjs'), path.join(root, 'scripts', 'drill-credential-rotation.mjs'));
+  fs.copyFileSync(path.resolve('scripts/run-node-tests.mjs'), path.join(root, 'scripts', 'run-node-tests.mjs'));
+  const migrationDir = path.join(root, 'prisma', 'migrations', '20260809094500_credential_vault_audit_rotation');
+  fs.mkdirSync(migrationDir, { recursive: true });
+  fs.copyFileSync(
+    path.resolve('prisma/migrations/20260809094500_credential_vault_audit_rotation/migration.sql'),
+    path.join(migrationDir, 'migration.sql'),
+  );
   return root;
 }
 
@@ -118,5 +127,12 @@ describe('mandatory release gates', () => {
       fs.readFileSync(workflow, 'utf8').replace('TENANT_INTEGRATION_DATABASE_URL:', 'DISABLED_TENANT_DATABASE_URL:'),
     );
     assert.ok(validateReleaseGates(root).some((failure) => failure.includes('dedicated-database')));
+  });
+
+  it('fails closed when credential audit immutability is removed', () => {
+    const root = copyWorkflows();
+    const migration = path.join(root, 'prisma', 'migrations', '20260809094500_credential_vault_audit_rotation', 'migration.sql');
+    fs.writeFileSync(migration, fs.readFileSync(migration, 'utf8').replace('BEFORE UPDATE OR DELETE', 'BEFORE INSERT'));
+    assert.ok(validateReleaseGates(root).some((failure) => failure.includes('immutable audits')));
   });
 });

@@ -949,7 +949,7 @@ export const creativeBriefUpdateSchema = z.object({
 });
 
 // ── Credentials (encrypted vault) ─────────────────────────────────────────
-export const credentialSchema = z.object({
+const credentialFields = z.object({
   label: z.string().min(1).max(200),
   username: z.string().min(1).max(200).optional(),
   password: z.string().min(1).max(1000), // pre-encryption; service encrypts
@@ -959,6 +959,15 @@ export const credentialSchema = z.object({
   clientId: cuidId.optional(),
   projectId: cuidId.optional(),
 });
+export const credentialCreateSchema = credentialFields.refine(
+  (value) => Boolean(value.clientId || value.projectId),
+  { message: 'A client or project owner is required' },
+);
+export const credentialUpdateSchema = credentialFields.partial().refine(
+  (value) => Object.keys(value).length > 0,
+  { message: 'At least one credential field is required' },
+);
+export const credentialSchema = credentialCreateSchema;
 
 // ── Draft responses (Notion-style inline drafts) ──────────────────────────
 export const draftSchema = z.object({
@@ -1340,8 +1349,6 @@ export const creativeBriefGenerateSchema = z.object({
   tone: z.enum(['professional', 'friendly', 'concise']).default('professional'),
 });
 
-export const credentialCreateSchema = credentialSchema; // alias for routes that import a different name
-
 export const draftUpsertSchema = z.object({
   data: z.unknown().refine(
     (value) => value !== undefined && JSON.stringify(value).length <= 100_000,
@@ -1547,16 +1554,7 @@ export const calendarEventCreateSchema = z.object({
 
 export const calendarEventUpdateSchema = calendarEventCreateSchema.partial();
 
-export const credentialUpsertSchema = z.object({
-  label: z.string().min(1).max(200),
-  username: z.string().min(1).max(200).optional(),
-  password: z.string().min(1).max(1000),
-  url: z.string().url().max(2048).optional(),
-  notes: z.string().max(5_000).optional(),
-  category: z.string().min(1).max(50).optional(),
-  clientId: cuidId.optional(),
-  projectId: cuidId.optional(),
-});
+export const credentialUpsertSchema = credentialCreateSchema;
 
 export const retainerGenerateInvoiceSchema = z.object({
   currency: z.enum(['USD', 'CAD', 'EUR', 'GBP']).default('USD'),

@@ -143,7 +143,7 @@ test('admin provisioning binds ownership and stores only encrypted site credenti
   assert.equal(created.organizationId, 'org-a');
   assert.equal(created.url, 'https://a.example');
   assert.notEqual(created.bridgeSecretEncrypted, 'one-time-site-secret');
-  assert.match(created.bridgeSecretEncrypted, /^[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/);
+  assert.match(created.bridgeSecretEncrypted, /^v1:[a-zA-Z0-9._-]+:[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/);
 });
 
 test('credential rotation remains tenant-scoped and replaces encrypted material', async () => {

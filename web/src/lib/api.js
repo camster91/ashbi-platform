@@ -747,10 +747,10 @@ export const api = {
     const query = new URLSearchParams(params).toString();
     return request(`/credentials${query ? `?${query}` : ''}`);
   },
-  getCredential: (id) =>
-    request(`/credentials/${id}`),
-  getCredentialPassword: (id) =>
-    request(`/credentials/${id}/password`),
+  getCredential: (id, purpose = 'view credential detail') =>
+    request(`/credentials/${id}`, { headers: { 'X-Credential-Purpose': purpose } }),
+  getCredentialPassword: (id, purpose) =>
+    request(`/credentials/${id}/password`, { headers: { 'X-Credential-Purpose': purpose } }),
   createCredential: (data) =>
     request('/credentials', { method: 'POST', body: data }),
   updateCredential: (id, data) =>

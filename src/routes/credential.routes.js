@@ -1,8 +1,23 @@
 // Credentials Vault routes
 
-import { encrypt, decrypt } from '../utils/crypto.js';
-import { validateBody, credentialUpsertSchema, credentialSchema } from '../validators/schemas.js';
+import { encrypt, getActiveCredentialKeyVersion } from '../utils/crypto.js';
+import { validateBody, credentialCreateSchema, credentialUpdateSchema } from '../validators/schemas.js';
 import { clampTake } from '../utils/query-limits.js';
+import {
+  normalizeCredentialPurpose,
+  recordMissingCredentialAccess,
+  revealCredentialSecret,
+} from '../services/credential-vault.service.js';
+
+function auditContext(request, purpose, route) {
+  return {
+    organizationId: request.user.organizationId,
+    actorUserId: request.user.id,
+    purpose,
+    route,
+    traceId: request.id,
+  };
+}
 
 export default async function credentialRoutes(fastify) {
   // List credentials with optional filters (admin only)
@@ -38,6 +53,7 @@ export default async function credentialRoutes(fastify) {
     onRequest: [fastify.adminOnly]
   }, async (request, reply) => {
     const { id } = request.params;
+    const purpose = normalizeCredentialPurpose(request.headers['x-credential-purpose']);
 
     const credential = await request.prisma.credential.findUnique({
       where: { id },
@@ -48,12 +64,22 @@ export default async function credentialRoutes(fastify) {
     });
 
     if (!credential) {
+      await recordMissingCredentialAccess({
+        prisma: request.prisma,
+        credentialId: id,
+        context: auditContext(request, purpose, '/api/credentials/:id'),
+      });
       return reply.status(404).send({ error: 'Credential not found' });
     }
 
+    const password = await revealCredentialSecret({
+      prisma: request.prisma,
+      credential,
+      context: auditContext(request, purpose, '/api/credentials/:id'),
+    });
     return {
       ...credential,
-      password: decrypt(credential.password, { audit: true, label: `credential:${id}:${credential.label}` })
+      password,
     };
   });
 
@@ -62,28 +88,42 @@ export default async function credentialRoutes(fastify) {
     onRequest: [fastify.adminOnly]
   }, async (request, reply) => {
     const { id } = request.params;
+    const purpose = normalizeCredentialPurpose(request.headers['x-credential-purpose']);
 
     const credential = await request.prisma.credential.findUnique({
       where: { id },
-      select: { password: true }
+      select: { id: true, password: true }
     });
 
     if (!credential) {
+      await recordMissingCredentialAccess({
+        prisma: request.prisma,
+        credentialId: id,
+        context: auditContext(request, purpose, '/api/credentials/:id/password'),
+      });
       return reply.status(404).send({ error: 'Credential not found' });
     }
 
-    return { password: decrypt(credential.password, { audit: true, label: `credential-password:${id}` }) };
+    const password = await revealCredentialSecret({
+      prisma: request.prisma,
+      credential,
+      context: auditContext(request, purpose, '/api/credentials/:id/password'),
+    });
+    return { password };
   });
 
   // Create credential (admin only)
   fastify.post('/', {
     onRequest: [fastify.adminOnly],
-    preHandler: validateBody(credentialUpsertSchema),
+    preHandler: validateBody(credentialCreateSchema),
   }, async (request, reply) => {
     const { label, username, password, url, notes, category, clientId, projectId } = request.body;
 
     if (!label || !password) {
       return reply.status(400).send({ error: 'Label and password are required' });
+    }
+    if (!clientId && !projectId) {
+      return reply.status(400).send({ error: 'A client or project owner is required' });
     }
 
     const credential = await request.prisma.credential.create({
@@ -91,6 +131,7 @@ export default async function credentialRoutes(fastify) {
         label,
         username: username || null,
         password: encrypt(password),
+        encryptionVersion: getActiveCredentialKeyVersion(),
         url: url || null,
         notes: notes || null,
         category: category || 'OTHER',
@@ -112,7 +153,7 @@ export default async function credentialRoutes(fastify) {
   // Update credential (admin only)
   fastify.put('/:id', {
     onRequest: [fastify.adminOnly],
-    preHandler: validateBody(credentialSchema),
+    preHandler: validateBody(credentialUpdateSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { label, username, password, url, notes, category, clientId, projectId } = request.body;
@@ -120,7 +161,10 @@ export default async function credentialRoutes(fastify) {
     const data = {};
     if (label !== undefined) data.label = label;
     if (username !== undefined) data.username = username;
-    if (password !== undefined) data.password = encrypt(password);
+    if (password !== undefined) {
+      data.password = encrypt(password);
+      data.encryptionVersion = getActiveCredentialKeyVersion();
+    }
     if (url !== undefined) data.url = url;
     if (notes !== undefined) data.notes = notes;
     if (category !== undefined) data.category = category;
@@ -145,7 +189,6 @@ export default async function credentialRoutes(fastify) {
   // Delete credential (admin only)
   fastify.delete('/:id', {
     onRequest: [fastify.adminOnly],
-    preHandler: validateBody(credentialSchema),
   }, async (request, reply) => {
     const { id } = request.params;
 

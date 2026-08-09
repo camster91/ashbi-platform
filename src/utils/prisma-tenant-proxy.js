@@ -34,7 +34,7 @@ const DIRECT_SCOPED_MODELS = new Set([
   'assignmentrule', 'template', 'unmatchedemail', 'lineitemtemplate',
   'weeklydigest', 'tasktemplate', 'outreachsequence', 'emailtriageitem',
   'aicontext', 'ashconversation', 'projecttemplate', 'brandsettings',
-  'pipelinestage', 'promptversion'
+  'pipelinestage', 'promptversion', 'credential', 'credentialaccessaudit'
 ]);
 
 // Models that are intentionally shared across organizations. Every Prisma
@@ -60,6 +60,10 @@ const DIRECT_PARENT_RELATIONS = {
   wpreport: [{ relation: 'site', field: 'siteId', model: 'wpsite', delegate: 'wPSite', required: true }],
   wpalert: [{ relation: 'site', field: 'siteId', model: 'wpsite', delegate: 'wPSite' }],
   wpbridgenonce: [{ relation: 'site', field: 'siteId', model: 'wpsite', delegate: 'wPSite', required: true }],
+  credential: [
+    { relation: 'client', field: 'clientId', model: 'client', delegate: 'client' },
+    { relation: 'project', field: 'projectId', model: 'project', delegate: 'project' },
+  ],
 };
 
 const RESTRICTED_MODELS = new Set([]);
@@ -88,7 +92,6 @@ const TENANT_PATHS = {
   retainerplan:     ['client'],
   pipelinedeal:     ['client'],
   expense:          ['client'],
-  credential:       ['client'],
   clientembedding:  ['client'],
   report:           ['client'],
   aiteammessage:    ['client'],

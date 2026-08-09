@@ -51,6 +51,8 @@ model Organization {
   brandSettings      BrandSettings[]
   pipelineStages     PipelineStage[]
   promptVersions     PromptVersion[]
+  credentials        Credential[]
+  credentialAudits   CredentialAccessAudit[]
 
   @@map("organizations")
 }
@@ -1045,24 +1047,47 @@ model WeeklyDigest {
 }
 
 model Credential {
-  id        String   @id @default(cuid())
-  label     String
-  username  String?
-  password  String // AES-256 encrypted
-  url       String?
-  notes     String?
-  category  String   @default("OTHER") // WP_ADMIN, HOSTING, DNS, FTP, STRIPE, OTHER
-  clientId  String?
-  projectId String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                String       @id @default(cuid())
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  label             String
+  username          String?
+  password          String // Versioned AES-256-GCM envelope
+  encryptionVersion String       @default("legacy")
+  url               String?
+  notes             String?
+  category          String       @default("OTHER") // WP_ADMIN, HOSTING, DNS, FTP, STRIPE, OTHER
+  clientId          String?
+  projectId         String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
   client  Client?  @relation(fields: [clientId], references: [id], onDelete: Cascade)
   project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([clientId])
   @@index([projectId])
+  @@index([organizationId])
   @@map("credentials")
+}
+
+model CredentialAccessAudit {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  credentialId   String
+  actorUserId    String
+  purpose        String
+  outcome        String
+  route          String
+  traceId        String?
+  keyVersion     String?
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([credentialId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@map("credential_access_audits")
 }
 
 model TaskTemplate {

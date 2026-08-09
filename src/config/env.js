@@ -41,6 +41,9 @@ const env = {
 
   // Credentials vault encryption key
   credentialsKey: process.env.CREDENTIALS_KEY,
+  credentialsKeyring: process.env.CREDENTIALS_KEYRING,
+  credentialsActiveKeyVersion: process.env.CREDENTIALS_ACTIVE_KEY_VERSION || 'legacy',
+  credentialsKeyOwner: process.env.CREDENTIALS_KEY_OWNER,
 
   // Observability
   // Sentry DSN for error tracking. Optional — if not set, Sentry.captureException
@@ -181,6 +184,7 @@ if (!env.isDev) {
     'MAILGUN_SIGNING_KEY',
     'COOLIFY_URL',
     'OBSERVABILITY_OWNER',
+    'CREDENTIALS_KEY_OWNER',
   ];
   const missing = requiredInProduction.filter(key => !process.env[key]);
   if (missing.length > 0) {
