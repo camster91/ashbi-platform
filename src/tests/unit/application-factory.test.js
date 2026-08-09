@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import test from 'node:test';
 import { buildApp } from '../../index.js';
 import { registerCoreRevenueRoutes } from '../../domains/revenue/register-core-routes.js';
+import { registerWorkManagementRoutes } from '../../domains/client-delivery/register-work-management-routes.js';
 
 test('buildApp constructs the complete API without listening', async () => {
   const app = await buildApp({ initializeRuntime: false, jwtSecret: 'test-only-jwt-secret' });
@@ -108,6 +109,30 @@ test('project collaboration routes are owned by an ordered domain registrar', as
 
   const registrations = [];
   await registerCollaborationRoutes({
+    async register(plugin, options) {
+      registrations.push({ plugin, prefix: options.prefix });
+    },
+  });
+
+  assert.deepEqual(registrations.map(({ prefix }) => prefix), expectedPrefixes);
+  assert.equal(new Set(registrations.map(({ plugin }) => plugin)).size, routeNames.length);
+  assert.ok(registrations.every(({ plugin }) => typeof plugin === 'function'));
+});
+
+test('client work-management routes are owned by an ordered domain registrar', async () => {
+  const factory = fs.readFileSync(new URL('../../index.js', import.meta.url), 'utf8');
+  const registrar = fs.readFileSync(new URL('../../domains/client-delivery/register-work-management-routes.js', import.meta.url), 'utf8');
+  const routeNames = ['client', 'project', 'task'];
+  const expectedPrefixes = ['/api/clients', '/api/projects', '/api/tasks'];
+
+  assert.match(factory, /registerWorkManagementRoutes\(fastify\)/);
+  for (const route of routeNames) {
+    assert.doesNotMatch(factory, new RegExp(`routes\\/${route}\\.routes\\.js`));
+    assert.match(registrar, new RegExp(`routes\\/${route}\\.routes\\.js`));
+  }
+
+  const registrations = [];
+  await registerWorkManagementRoutes({
     async register(plugin, options) {
       registrations.push({ plugin, prefix: options.prefix });
     },

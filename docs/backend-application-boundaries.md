@@ -37,8 +37,10 @@ a time. `src/domains/revenue/register-core-routes.js` owns the first extracted
 proposal-to-cash sequence: invoice chasing, invoices, contracts, and proposals.
 `src/domains/client-delivery/register-collaboration-routes.js` owns the next
 project-collaboration sequence: messages, revisions, calendar, comments,
-attachments, time, and milestones. Both registrars preserve their original
-prefixes and order. Subsequent independently reviewable slices should move
+attachments, time, and milestones. These registrars preserve their original
+prefixes and order. `src/domains/client-delivery/register-work-management-routes.js`
+owns the contiguous client-to-work sequence: clients, projects, and tasks.
+Subsequent independently reviewable slices should move
 existing registrations, without changing prefixes or relative order, into
 these domain groups:
 

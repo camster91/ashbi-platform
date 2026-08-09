@@ -23,12 +23,9 @@ import authRoutes from './routes/auth.routes.js';
 import clientPortalRoutes from './routes/client-portal.routes.js';
 import webhookRoutes from './routes/webhook.routes.js';
 import inboxRoutes from './routes/inbox.routes.js';
-import clientRoutes from './routes/client.routes.js';
-import projectRoutes from './routes/project.routes.js';
 import threadRoutes from './routes/thread.routes.js';
 import responseRoutes from './routes/response.routes.js';
 import teamRoutes from './routes/team.routes.js';
-import taskRoutes from './routes/task.routes.js';
 import searchRoutes from './routes/search.routes.js';
 import aiRoutes from './routes/ai.routes.js';
 import notificationRoutes from './routes/notification.routes.js';
@@ -73,6 +70,7 @@ import trashRoutes from './routes/trash.routes.js';
 import draftRoutes from './routes/draft.routes.js';
 import { registerCoreRevenueRoutes } from './domains/revenue/register-core-routes.js';
 import { registerCollaborationRoutes } from './domains/client-delivery/register-collaboration-routes.js';
+import { registerWorkManagementRoutes } from './domains/client-delivery/register-work-management-routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -221,9 +219,7 @@ fastify.decorate('authenticateWithApiKey', authenticateApiKey);
 
 // Routes
 await fastify.register(authRoutes, { prefix: '/api/auth' });
-await fastify.register(clientRoutes, { prefix: '/api/clients' });
-await fastify.register(projectRoutes, { prefix: '/api/projects' });
-await fastify.register(taskRoutes, { prefix: '/api/tasks' });
+await registerWorkManagementRoutes(fastify);
 await fastify.register(inboxRoutes, { prefix: '/api/inbox' });
 await fastify.register(dashboardRoutes, { prefix: '/api/dashboard' });
 await fastify.register(aiRoutes, { prefix: '/api/ai' });
