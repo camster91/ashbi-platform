@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import prismaPkg from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { permanentlyDeleteTrashedItem } from '../../services/trash-purge.service.js';
+import { permanentlyDeleteTrashedItem, restoreTrashedItem } from '../../services/trash-purge.service.js';
 import { softDelete } from '../../services/trash.service.js';
 import { createScopedPrisma } from '../../utils/prisma-tenant-proxy.js';
 
@@ -49,13 +49,27 @@ test('real database permanent purge physically removes a soft-deleted record and
       },
     });
     const scopedPrisma = createScopedPrisma(raw, organizationId);
-    const { trashedItem: ledger } = await softDelete({
+    const { trashedItem: firstLedger } = await softDelete({
       scopedPrisma,
       entity: 'NOTE',
       recordId: note.id,
       organizationId,
     });
     assert.notEqual((await raw.note.findUnique({ where: { id: note.id } })).deletedAt, null);
+    const restored = await restoreTrashedItem({
+      scopedPrisma,
+      rawPrisma: raw,
+      trashId: firstLedger.id,
+    });
+    assert.equal(restored.restoredId, note.id);
+    assert.equal((await raw.note.findUnique({ where: { id: note.id } })).deletedAt, null);
+
+    const { trashedItem: ledger } = await softDelete({
+      scopedPrisma,
+      entity: 'NOTE',
+      recordId: note.id,
+      organizationId,
+    });
 
     const result = await permanentlyDeleteTrashedItem({
       scopedPrisma,

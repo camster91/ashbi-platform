@@ -1,6 +1,5 @@
 import { rawPrisma } from '../config/db.js';
-import { permanentlyDeleteTrashedItem } from '../services/trash-purge.service.js';
-import ENTITY_MAP from '../utils/entity-map.js';
+import { permanentlyDeleteTrashedItem, restoreTrashedItem } from '../services/trash-purge.service.js';
 
 export default async function trashRoutes(fastify) {
   fastify.get('/', { onRequest: [fastify.authenticate] }, async (request) => {
@@ -18,29 +17,17 @@ export default async function trashRoutes(fastify) {
   });
 
   fastify.post('/:id/restore', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const trashed = await request.prisma.trashedItem.findFirst({
-      where: { id: request.params.id },
-    });
-    if (!trashed) return reply.status(404).send({ error: 'Trashed item not found' });
-    if (trashed.restoredAt) return reply.status(400).send({ error: 'Item already restored' });
-
-    const modelName = ENTITY_MAP[trashed.entity];
-    const model = modelName ? request.prisma[modelName] : null;
-    if (!model) return reply.status(500).send({ error: 'Unknown entity type' });
-
-    const existing = await model.findFirst({
-      where: { id: trashed.recordId, deletedAt: { not: null } },
-    });
-    if (!existing) return reply.status(404).send({ error: 'Original record no longer exists' });
-
-    await request.prisma.$transaction([
-      model.update({ where: { id: trashed.recordId }, data: { deletedAt: null } }),
-      request.prisma.trashedItem.update({
-        where: { id: trashed.id },
-        data: { restoredAt: new Date() },
-      }),
-    ]);
-    return { success: true, restoredId: trashed.recordId };
+    try {
+      const result = await restoreTrashedItem({
+        scopedPrisma: request.prisma,
+        rawPrisma,
+        trashId: request.params.id,
+      });
+      return { success: true, ...result };
+    } catch (error) {
+      if (error.statusCode) return reply.status(error.statusCode).send({ error: error.message });
+      throw error;
+    }
   });
 
   fastify.delete('/:id/permanent', { onRequest: [fastify.adminOnly] }, async (request, reply) => {

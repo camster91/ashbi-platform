@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { permanentlyDeleteTrashedItem } from '../../services/trash-purge.service.js';
+import { permanentlyDeleteTrashedItem, restoreTrashedItem } from '../../services/trash-purge.service.js';
 
 function harness({ entity = 'NOTE', original = { id: 'note-a', deletedAt: new Date() }, deleteError } = {}) {
   const calls = [];
@@ -91,4 +91,32 @@ test('unknown entity and hard-delete failure retain the recovery ledger', async 
     /database refused delete/,
   );
   assert.equal(failed.calls.some(([name]) => name === 'delete-ledger'), false);
+});
+
+test('restore proves tenant ledger ownership and restores the hidden row atomically through raw Prisma', async () => {
+  const { scopedPrisma, rawPrisma, calls, ledger } = harness();
+  const transaction = {
+    trashedItem: {
+      findFirst: async (args) => { calls.push(['locked-ledger', args]); return ledger; },
+      update: async (args) => { calls.push(['restore-ledger', args]); return { ...ledger, restoredAt: args.data.restoredAt }; },
+    },
+    note: {
+      findFirst: async (args) => { calls.push(['find-original', args]); return { id: ledger.recordId }; },
+      update: async (args) => { calls.push(['restore-original', args]); return { id: ledger.recordId, deletedAt: null }; },
+    },
+  };
+  rawPrisma.$transaction = async (callback, options) => {
+    calls.push(['transaction', options]);
+    return callback(transaction);
+  };
+
+  const result = await restoreTrashedItem({ scopedPrisma, rawPrisma, trashId: ledger.id });
+
+  assert.deepEqual(result, { restoredId: ledger.recordId, entity: 'NOTE' });
+  assert.deepEqual(calls.map(([name]) => name), [
+    'scoped-ledger', 'transaction', 'locked-ledger', 'find-original', 'restore-original', 'restore-ledger',
+  ]);
+  assert.deepEqual(calls[4][1], { where: { id: ledger.recordId }, data: { deletedAt: null } });
+  assert.equal(calls[5][1].where.id, ledger.id);
+  assert.ok(calls[5][1].data.restoredAt instanceof Date);
 });
