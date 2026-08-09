@@ -27,7 +27,7 @@ test('historical plans carry an explicit superseded or historical warning', () =
 
 test('canonical product status links every open product and external gate', () => {
   const status = read('docs/product-status.md');
-  for (const issue of [108, 111, 118, 277, 280, 282, 285, 286, 287, 288, 289, 290, 291, 303, 305, 309, 310, 315, 316, 317, 318, 319, 320, 321, 322, 378, 379, 380, 381]) {
+  for (const issue of [108, 111, 118, 277, 280, 282, 283, 285, 286, 287, 288, 289, 290, 291, 292, 303, 305, 308, 309, 310, 315, 316, 317, 318, 319, 320, 321, 322, 323, 324, 378, 379, 380, 381]) {
     assert.match(status, new RegExp(`issues/${issue}(?:\\)|$)`), `missing issue #${issue}`);
   }
   assert.match(status, /not yet proven as a general-market replacement/i);
