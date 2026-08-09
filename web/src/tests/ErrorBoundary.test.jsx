@@ -59,7 +59,7 @@ describe('ErrorBoundary', () => {
       );
 
       expect(screen.queryByText('Something went wrong')).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: /try again/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /reload application/i })).not.toBeInTheDocument();
     });
   });
 
@@ -85,14 +85,14 @@ describe('ErrorBoundary', () => {
       expect(screen.getByText('Custom error message')).toBeInTheDocument();
     });
 
-    it('shows a "Try Again" button in the fallback UI', () => {
+    it('shows an explicit reload button in the fallback UI', () => {
       render(
         <ErrorBoundary>
           <ThrowOnRender />
         </ErrorBoundary>
       );
 
-      expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /reload application/i })).toBeInTheDocument();
     });
 
     it('shows AlertTriangle icon in the error UI', () => {
@@ -136,7 +136,7 @@ describe('ErrorBoundary', () => {
   });
 
   describe('retry behavior', () => {
-    it('reloads the page when "Try Again" is clicked', () => {
+    it('reloads the page when "Reload application" is clicked', () => {
       const reloadMock = vi.fn();
       window.location.reload = reloadMock;
 
@@ -146,11 +146,22 @@ describe('ErrorBoundary', () => {
         </ErrorBoundary>
       );
 
-      const retryButton = screen.getByRole('button', { name: /try again/i });
+      const retryButton = screen.getByRole('button', { name: /reload application/i });
       fireEvent.click(retryButton);
 
       expect(reloadMock).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it('does not claim an error was logged when no reporting callback exists', () => {
+    render(
+      <ErrorBoundary>
+        <ThrowOnRender />
+      </ErrorBoundary>
+    );
+
+    expect(screen.queryByText(/has been logged/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Reloading may discard unsaved changes/i)).toBeInTheDocument();
   });
 
   describe('unhandled promise rejection', () => {

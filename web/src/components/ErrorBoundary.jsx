@@ -97,8 +97,8 @@ class ErrorBoundary extends Component {
               </p>
             </div>
 
-            <p className="text-xs text-slate-500 dark:text-slate-500 mb-6">
-              This error has been logged. If this problem persists, please contact support.
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-6">
+              Reloading may discard unsaved changes. Copy the details above before reloading if you need to share them for support.
             </p>
 
             <button
@@ -106,7 +106,7 @@ class ErrorBoundary extends Component {
               className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
             >
               <RefreshCw className="w-4 h-4" />
-              Try Again
+              Reload application
             </button>
           </div>
         </div>

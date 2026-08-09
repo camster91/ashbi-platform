@@ -43,7 +43,7 @@ export default function Inbox() {
     },
   });
 
-  const { data: inboxData, isLoading, isError, refetch } = useQuery({
+  const { data: inboxData, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['inbox'],
     queryFn: () => api.getInbox(),
     refetchInterval: 30000,
@@ -55,7 +55,7 @@ export default function Inbox() {
   });
 
   if (isError) {
-    return <QueryErrorState onRetry={refetch} message="Failed to load inbox" />;
+    return <QueryErrorState onRetry={refetch} error={error} isRetrying={isFetching} message="Failed to load inbox" />;
   }
 
   if (isLoading) {

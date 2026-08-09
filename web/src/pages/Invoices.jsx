@@ -65,7 +65,7 @@ export default function Invoices() {
   }, [formDraft.draft]);
 
   // Queries
-  const { data: invoiceData = { invoices: [], stats: {} }, isLoading, isError, refetch } = useQuery({
+  const { data: invoiceData = { invoices: [], stats: {} }, isLoading, isError, error: loadError, refetch, isFetching } = useQuery({
     queryKey: ['invoices', filterStatus, searchQuery],
     queryFn: () => api.getInvoices({
       ...(filterStatus ? { status: filterStatus } : {}),
@@ -297,7 +297,7 @@ export default function Invoices() {
 
           {/* Invoice List */}
           {isError ? (
-            <QueryErrorState onRetry={refetch} message="Failed to load invoices" />
+            <QueryErrorState onRetry={refetch} error={loadError} isRetrying={isFetching} message="Failed to load invoices" />
           ) : isLoading ? (
             <div className="flex justify-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />

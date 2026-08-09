@@ -166,7 +166,7 @@ export default function Clients() {
   });
   const [onboardResult, setOnboardResult] = useState(null);
 
-  const { data: clients = [], isLoading, isError, refetch } = useQuery({
+  const { data: clients = [], isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['clients'],
     queryFn: () => api.getClients().then((r) => r?.clients ?? []),
   });
@@ -207,7 +207,7 @@ export default function Clients() {
   });
 
   if (isError) {
-    return <QueryErrorState onRetry={refetch} message="Failed to load clients" />;
+    return <QueryErrorState onRetry={refetch} error={error} isRetrying={isFetching} message="Failed to load clients" />;
   }
 
   if (isLoading) {

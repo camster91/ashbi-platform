@@ -76,7 +76,7 @@ describe('ErrorBoundary Integration', () => {
       expect(screen.getByText('Something went wrong')).toBeInTheDocument();
     });
 
-    it('shows "Try Again" button in error state', () => {
+    it('shows an explicit reload button in error state', () => {
       function BrokenComponent() {
         throw new Error('Oops');
       }
@@ -87,7 +87,7 @@ describe('ErrorBoundary Integration', () => {
         </ErrorBoundary>
       );
 
-      expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /reload application/i })).toBeInTheDocument();
     });
 
     it('isolates errors to the ErrorBoundary scope', () => {
