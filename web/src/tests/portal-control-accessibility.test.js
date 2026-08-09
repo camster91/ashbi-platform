@@ -7,6 +7,7 @@ const layout = readFileSync(resolve(process.cwd(), 'src/components/Layout.jsx'),
 const intake = readFileSync(resolve(process.cwd(), 'src/pages/PortalIntakeForm.jsx'), 'utf8');
 const proposal = readFileSync(resolve(process.cwd(), 'src/pages/PortalProposal.jsx'), 'utf8');
 const contract = readFileSync(resolve(process.cwd(), 'src/pages/PortalContract.jsx'), 'utf8');
+const app = readFileSync(resolve(process.cwd(), 'src/App.jsx'), 'utf8');
 
 describe('critical portal and shell control semantics', () => {
   it('uses native upload buttons and named file inputs instead of clickable divs', () => {
@@ -14,6 +15,14 @@ describe('critical portal and shell control semantics', () => {
     expect(portal.match(/<button\s+type="button"\s+className="cp-upload-zone"/g)).toHaveLength(2);
     expect(portal).toContain('aria-label="Choose project documents to upload"');
     expect(portal).toContain('aria-label="Choose documents to upload"');
+  });
+
+  it('exchanges URL magic tokens for an httpOnly-cookie session and supports real logout', () => {
+    expect(app).toContain('path="/client-portal/verify"');
+    expect(portal).toContain("portalFetch('/api/client-portal/verify-token'");
+    expect(portal).toContain("window.history.replaceState({}, '', '/client-portal')");
+    expect(portal).toContain("portalFetch('/api/client-portal/logout'");
+    expect(portal).not.toContain('/pdf?token=');
   });
 
   it('names chat fields, send actions, delete actions, and connection status', () => {

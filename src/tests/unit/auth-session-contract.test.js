@@ -21,7 +21,10 @@ describe('authentication session contract', () => {
 
   it('never stores an unhashed random password for portal-created users', () => {
     assert.doesNotMatch(clientPortal, /password:\s*randomUUID\(\)/);
-    assert.equal((clientPortal.match(/password:\s*await bcrypt\.hash\(randomUUID\(\), 12\)/g) || []).length, 2);
+    const passwordWrites = clientPortal.match(/password:\s*[^,\n]+/g) || [];
+    const secureWrites = clientPortal.match(/password:\s*await bcrypt\.hash\(randomUUID\(\), 12\)/g) || [];
+    assert.ok(passwordWrites.length > 0);
+    assert.equal(secureWrites.length, passwordWrites.length);
   });
 
   it('provides a sanitized production audit and reset path for legacy hashes', () => {

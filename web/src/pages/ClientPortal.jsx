@@ -6,15 +6,32 @@ import { preferredScrollBehavior } from '../lib/motion';
 const API = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '') : '';
 const SOCKET_URL = import.meta.env.PROD ? window.location.origin : 'http://localhost:3000';
 
+function portalFetch(pathname, token, options = {}) {
+  const headers = new Headers(options.headers || {});
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  return fetch(`${API}${pathname}`, { ...options, headers, credentials: 'include' });
+}
+
 async function downloadPortalDocument(token, doc) {
-  const response = await fetch(`${API}/api/client-portal/documents/${doc.id}/download`, {
-    headers: { Authorization: `Bearer ${token}` }
-  });
+  const response = await portalFetch(`/api/client-portal/documents/${doc.id}/download`, token);
   if (!response.ok) throw new Error(`Download failed (${response.status})`);
   const blobUrl = URL.createObjectURL(await response.blob());
   const anchor = document.createElement('a');
   anchor.href = blobUrl;
   anchor.download = doc.originalName || 'download';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(blobUrl);
+}
+
+async function downloadPortalInvoice(token, invoice) {
+  const response = await portalFetch(`/api/client-portal/invoices/${invoice.id}/pdf`, token);
+  if (!response.ok) throw new Error(`Invoice download failed (${response.status})`);
+  const blobUrl = URL.createObjectURL(await response.blob());
+  const anchor = document.createElement('a');
+  anchor.href = blobUrl;
+  anchor.download = `invoice-${invoice.invoiceNumber || invoice.id}.pdf`;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
@@ -29,6 +46,7 @@ export const BRAND = {
   white: '#ffffff',
   text: '#2e2958',
   textMuted: '#6b667f',
+  danger: '#b91c1c',
   border: '#918c9f',
   cardBg: '#ffffff',
   hoverBg: '#f5f3ea',
@@ -250,10 +268,11 @@ function useProjectChat(projectId, token) {
   const socketRef = useRef(null);
 
   useEffect(() => {
-    if (!projectId || !token) return;
+    if (!projectId) return;
 
     const socket = io(SOCKET_URL, {
-      auth: { token },
+      auth: token ? { token } : {},
+      withCredentials: true,
       transports: ['websocket', 'polling'],
     });
     socketRef.current = socket;
@@ -273,9 +292,7 @@ function useProjectChat(projectId, token) {
     });
 
     // Load initial messages
-    fetch(`${API}/api/client-portal/projects/${projectId}/messages`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
+    portalFetch(`/api/client-portal/projects/${projectId}/messages`, token)
       .then(r => r.json())
       .then(data => setMessages(Array.isArray(data) ? data : []))
       .catch(() => {});
@@ -289,9 +306,9 @@ function useProjectChat(projectId, token) {
 
   const sendMessage = useCallback(async (content) => {
     if (!content.trim()) return;
-    const res = await fetch(`${API}/api/client-portal/projects/${projectId}/messages`, {
+    const res = await portalFetch(`/api/client-portal/projects/${projectId}/messages`, token, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content })
     });
     if (res.ok) {
@@ -515,11 +532,10 @@ function ProjectDetail({ projectId, token, onBack }) {
     async function load() {
       try {
         setLoading(true);
-        const headers = { Authorization: `Bearer ${token}` };
         const [projRes, tasksRes, docsRes] = await Promise.all([
-          fetch(`${API}/api/client-portal/projects/${projectId}`, { headers }),
-          fetch(`${API}/api/client-portal/projects/${projectId}/tasks`, { headers }),
-          fetch(`${API}/api/client-portal/projects/${projectId}/documents`, { headers }),
+          portalFetch(`/api/client-portal/projects/${projectId}`, token),
+          portalFetch(`/api/client-portal/projects/${projectId}/tasks`, token),
+          portalFetch(`/api/client-portal/projects/${projectId}/documents`, token),
         ]);
         if (!projRes.ok) throw new Error('Failed to load project');
         const projData = await projRes.json();
@@ -558,9 +574,8 @@ function ProjectDetail({ projectId, token, onBack }) {
       for (const file of files) {
         const formData = new FormData();
         formData.append('file', file);
-        const res = await fetch(`${API}/api/client-portal/projects/${projectId}/upload`, {
+        const res = await portalFetch(`/api/client-portal/projects/${projectId}/upload`, token, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
           body: formData
         });
         if (!res.ok) {
@@ -568,9 +583,7 @@ function ProjectDetail({ projectId, token, onBack }) {
         }
       }
       // Refresh documents list regardless — partial success is still a refresh
-      const res = await fetch(`${API}/api/client-portal/projects/${projectId}/documents`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await portalFetch(`/api/client-portal/projects/${projectId}/documents`, token);
       const data = await res.json();
       setDocuments(Array.isArray(data) ? data : []);
       if (failed.length > 0) {
@@ -585,9 +598,8 @@ function ProjectDetail({ projectId, token, onBack }) {
 
   async function handleDeleteDoc(docId) {
     try {
-      const res = await fetch(`${API}/api/client-portal/documents/${docId}`, {
+      const res = await portalFetch(`/api/client-portal/documents/${docId}`, token, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
       });
       // Only remove from local state on confirmed success — previously this
       // removed optimistically, leaving the user with a ghost-success when
@@ -878,13 +890,21 @@ function ProjectDetail({ projectId, token, onBack }) {
 
 // ── Invoices Tab ──────────────────────────────────────────────────────────────
 function InvoicesTab({ invoices, token }) {
-  function downloadPdf(invoiceId) {
-    window.open(`${API}/api/client-portal/invoices/${invoiceId}/pdf?token=${token}`, '_blank');
+  const [downloadError, setDownloadError] = useState('');
+
+  async function downloadPdf(invoice) {
+    setDownloadError('');
+    try {
+      await downloadPortalInvoice(token, invoice);
+    } catch {
+      setDownloadError('The invoice could not be downloaded. Refresh your session and try again.');
+    }
   }
 
   return (
     <div className="cp-space-y-4">
       <h2 className="cp-page-title">Invoices</h2>
+      {downloadError && <p className="cp-error" role="alert">{downloadError}</p>}
       {invoices.length === 0 ? (
         <div className="cp-card" style={{ padding: '3rem', textAlign: 'center' }}>
           <p className="cp-text-muted">No invoices found.</p>
@@ -920,7 +940,7 @@ function InvoicesTab({ invoices, token }) {
                         Pay Now
                       </a>
                     )}
-                    <button onClick={() => downloadPdf(inv.id)} className="cp-btn-secondary" style={{ fontSize: '0.8rem' }}>
+                    <button onClick={() => downloadPdf(inv)} className="cp-btn-secondary" style={{ fontSize: '0.8rem' }}>
                       {Icons.download} Download PDF
                     </button>
                   </div>
@@ -946,9 +966,7 @@ function DocumentsTab({ projects, token }) {
   useEffect(() => {
     if (!selectedProjectId) return;
     setLoading(true);
-    fetch(`${API}/api/client-portal/projects/${selectedProjectId}/documents`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
+    portalFetch(`/api/client-portal/projects/${selectedProjectId}/documents`, token)
       .then(r => r.json())
       .then(data => { setDocuments(Array.isArray(data) ? data : []); })
       .catch(() => setDocuments([]))
@@ -964,18 +982,15 @@ function DocumentsTab({ projects, token }) {
       for (const file of files) {
         const formData = new FormData();
         formData.append('file', file);
-        const res = await fetch(`${API}/api/client-portal/projects/${selectedProjectId}/upload`, {
+        const res = await portalFetch(`/api/client-portal/projects/${selectedProjectId}/upload`, token, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
           body: formData
         });
         if (!res.ok) {
           failed.push({ name: file.name, status: res.status });
         }
       }
-      const res = await fetch(`${API}/api/client-portal/projects/${selectedProjectId}/documents`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const res = await portalFetch(`/api/client-portal/projects/${selectedProjectId}/documents`, token);
       const data = await res.json();
       setDocuments(Array.isArray(data) ? data : []);
       if (failed.length > 0) {
@@ -990,9 +1005,8 @@ function DocumentsTab({ projects, token }) {
 
   async function handleDeleteDoc(docId) {
     try {
-      const res = await fetch(`${API}/api/client-portal/documents/${docId}`, {
+      const res = await portalFetch(`/api/client-portal/documents/${docId}`, token, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
         setDocuments(prev => prev.filter(d => d.id !== docId));
@@ -1185,13 +1199,12 @@ function PortalDashboard({ token }) {
   useEffect(() => {
     async function load() {
       try {
-        const headers = { Authorization: `Bearer ${token}` };
         const [meRes, invRes, projRes, retRes, unreadRes] = await Promise.all([
-          fetch(`${API}/api/client-portal/me`, { headers }),
-          fetch(`${API}/api/client-portal/invoices`, { headers }),
-          fetch(`${API}/api/client-portal/projects`, { headers }),
-          fetch(`${API}/api/client-portal/retainer`, { headers }),
-          fetch(`${API}/api/client-portal/unread-count`, { headers }).catch(() => ({ json: () => ({ recentMessages: 0, upcomingDeadlines: 0 }) })),
+          portalFetch('/api/client-portal/me', token),
+          portalFetch('/api/client-portal/invoices', token),
+          portalFetch('/api/client-portal/projects', token),
+          portalFetch('/api/client-portal/retainer', token),
+          portalFetch('/api/client-portal/unread-count', token).catch(() => ({ json: () => ({ recentMessages: 0, upcomingDeadlines: 0 }) })),
         ]);
         if (meRes.status === 401) {
           setError('Your session has expired. Please request a new login link.');
@@ -1215,8 +1228,12 @@ function PortalDashboard({ token }) {
     load();
   }, [token]);
 
-  function handleLogout() {
-    window.location.href = '/client-portal';
+  async function handleLogout() {
+    try {
+      await portalFetch('/api/client-portal/logout', token, { method: 'POST' });
+    } finally {
+      window.location.assign('/client-portal');
+    }
   }
 
   if (loading) {
@@ -1333,10 +1350,59 @@ function PortalDashboard({ token }) {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function ClientPortal() {
   const [searchParams] = useSearchParams();
-  const token = searchParams.get('token');
+  const magicToken = searchParams.get('token');
+  const [sessionState, setSessionState] = useState('checking');
+  const [sessionError, setSessionError] = useState('');
 
-  if (!token) return <LoginScreen />;
-  return <PortalDashboard token={token} />;
+  useEffect(() => {
+    let cancelled = false;
+    async function establishSession() {
+      try {
+        const response = magicToken
+          ? await portalFetch('/api/client-portal/verify-token', null, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token: magicToken }),
+            })
+          : await portalFetch('/api/client-portal/me', null);
+        if (cancelled) return;
+        if (response.ok) {
+          window.history.replaceState({}, '', '/client-portal');
+          setSessionState('active');
+          return;
+        }
+        if (magicToken) {
+          setSessionError('This login link is invalid, expired, or has been revoked. Request a new link.');
+          setSessionState('error');
+        } else {
+          setSessionState('anonymous');
+        }
+      } catch {
+        if (!cancelled) {
+          setSessionError('We could not verify your session. Check your connection and try again.');
+          setSessionState('error');
+        }
+      }
+    }
+    establishSession();
+    return () => { cancelled = true; };
+  }, [magicToken]);
+
+  if (sessionState === 'checking') {
+    return <div className="cp-login-bg" role="status" aria-live="polite"><p style={{ color: BRAND.white }}>Verifying your secure session…</p></div>;
+  }
+  if (sessionState === 'error') {
+    return (
+      <div className="cp-login-bg">
+        <div className="cp-login-card">
+          <p className="cp-error" role="alert">{sessionError}</p>
+          <a href="/client-portal" className="cp-link">Request a new login link</a>
+        </div>
+      </div>
+    );
+  }
+  if (sessionState === 'anonymous') return <LoginScreen />;
+  return <PortalDashboard token={null} />;
 }
 
 // ── Global Styles ─────────────────────────────────────────────────────────────

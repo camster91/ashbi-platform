@@ -339,11 +339,11 @@ fastify.setErrorHandler((error, request, reply) => {
 const io = new SocketIO(fastify.server, { cors: { origin: env.isDev ? 'http://localhost:*' : env.corsOrigins, credentials: true } });
 io.use(async (socket, next) => {
   try {
-    // SECURITY (audit 2026-07-09, swarm finding): only accept the JWT
-    // via `handshake.auth.token`. The previous \`socket.handshake.query?.token\`
-    // fallback leaked the token into nginx/Traefik/Coolify access logs
-    // and Referer headers (WebSocket upgrade URL is query-encoded).
-    const token = socket.handshake.auth?.token;
+    // Accept an explicit auth payload for native/non-browser clients or the
+    // same httpOnly cookie used by browser sessions. Never accept query-string
+    // tokens: WebSocket upgrade URLs are routinely logged by proxies.
+    const cookieToken = fastify.parseCookie(socket.handshake.headers.cookie || '').token;
+    const token = socket.handshake.auth?.token || cookieToken;
     if (!token) return next(new Error('Authentication required'));
     const decoded = await fastify.jwt.verify(token);
     if (!(await isCurrentUserSession(prisma, decoded))) {

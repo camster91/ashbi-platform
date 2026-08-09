@@ -182,6 +182,7 @@ function AppRoutes() {
           <Route path="/portal/form/:token" element={<QueryRoute><PortalIntakeForm /></QueryRoute>} />
           <Route path="/portal/estimate/:viewToken" element={<QueryRoute><PortalEstimate /></QueryRoute>} />
           <Route path="/client-portal" element={<ClientPortal />} />
+          <Route path="/client-portal/verify" element={<ClientPortal />} />
           <Route path="/client/login" element={<ClientPortal />} />
           <Route path="/client/dashboard" element={<ClientPortal />} />
           <Route path="/" element={<RootRedirect />} />

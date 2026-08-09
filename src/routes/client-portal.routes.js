@@ -6,7 +6,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
 import bcrypt from 'bcrypt';
-import { isCurrentUserSession, sessionCookieMaxAge } from '../auth/session.js';
+import { isCurrentUserSession, revokeUserSessions, sessionCookieMaxAge, signUserSession } from '../auth/session.js';
 import { validateBody, validateParams, clientPortalMessageSchema, requestAccessSchema, fileUpload, clientPortalTokenRedeemSchema } from '../validators/schemas.js';
 
 const PORTAL_BASE = env.hubUrl;
@@ -17,9 +17,12 @@ async function sendMagicLinkEmail(toEmail, toName, magicLink) {
   const MAILGUN_API_KEY = process.env.MAILGUN_API_KEY;
   const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN;
   if (!MAILGUN_API_KEY || !MAILGUN_DOMAIN) {
-    console.log('[client-portal] Mailgun not configured — magic link:', magicLink);
-    return;
+    console.warn('[client-portal] Mailgun not configured; access request accepted without exposing its token');
+    return false;
   }
+
+  const safeName = String(toName).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]);
+  const safeLink = String(magicLink).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
 
   const body = new URLSearchParams();
   body.append('from', `Ashbi Design <noreply@${MAILGUN_DOMAIN}>`);
@@ -28,12 +31,12 @@ async function sendMagicLinkEmail(toEmail, toName, magicLink) {
   body.append('html', `
     <div style="font-family:sans-serif;max-width:520px;margin:0 auto;background:#2e2958;color:#f1f5f9;padding:40px;border-radius:12px;">
       <h2 style="color:#e6f354;margin-top:0;">Ashbi Design — Client Portal</h2>
-      <p>Hi ${toName},</p>
+      <p>Hi ${safeName},</p>
       <p>Click the button below to access your portal. This link expires in <strong>1 hour</strong>.</p>
-      <a href="${magicLink}" style="display:inline-block;margin:24px 0;padding:14px 28px;background:#e6f354;color:#2e2958;border-radius:8px;text-decoration:none;font-weight:600;">
+      <a href="${safeLink}" style="display:inline-block;margin:24px 0;padding:14px 28px;background:#e6f354;color:#2e2958;border-radius:8px;text-decoration:none;font-weight:600;">
         Access My Portal
       </a>
-      <p style="font-size:12px;color:#94a3b8;">If you didn't request this, you can safely ignore it.<br>Link: ${magicLink}</p>
+      <p style="font-size:12px;color:#94a3b8;">If you didn't request this, you can safely ignore it.<br>Link: ${safeLink}</p>
     </div>
   `);
 
@@ -46,7 +49,41 @@ async function sendMagicLinkEmail(toEmail, toName, magicLink) {
   if (!res.ok) {
     const text = await res.text();
     console.error('[client-portal] Mailgun error:', res.status, text);
+    return false;
   }
+  return true;
+}
+
+export async function resolvePortalPrincipal(prisma, payload) {
+  if (!payload?.id || !payload?.contactId || !payload?.clientId || payload.role !== 'CLIENT') return null;
+
+  const [user, contact, client] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: payload.id },
+      select: { id: true, email: true, name: true, role: true, clientId: true, organizationId: true, isActive: true, sessionVersion: true },
+    }),
+    prisma.contact.findFirst({
+      where: { id: payload.contactId, clientId: payload.clientId },
+      select: { id: true, email: true, name: true, clientId: true },
+    }),
+    prisma.client.findFirst({
+      where: {
+        id: payload.clientId,
+        deletedAt: null,
+        status: 'ACTIVE',
+        relationshipStatus: { notIn: ['ARCHIVED', 'CHURNED'] },
+      },
+      select: { id: true, organizationId: true, name: true },
+    }),
+  ]);
+
+  if (!user?.isActive || user.role !== 'CLIENT' || user.clientId !== payload.clientId) return null;
+  if (!contact || !client || user.organizationId !== client.organizationId) return null;
+  if (user.email.toLowerCase() !== contact.email.toLowerCase()) return null;
+  if (payload.organizationId && payload.organizationId !== client.organizationId) return null;
+  if (!Number.isInteger(payload.sessionVersion) || payload.sessionVersion !== user.sessionVersion) return null;
+
+  return { user, contact, client };
 }
 
 // ── Routes ───────────────────────────────────────────────────────────────────
@@ -69,15 +106,16 @@ export default async function clientPortalRoutes(fastify) {
 
       const payload = fastify.jwt.verify(rawToken);
 
-      if (!(await isCurrentUserSession(request.prisma, payload))) {
-        return reply.status(401).send({ error: 'Session expired or revoked' });
-      }
+      if (!(await isCurrentUserSession(request.prisma, payload))) return reply.status(401).send({ error: 'Session expired or revoked' });
+      const principal = await resolvePortalPrincipal(request.prisma, payload);
+      if (!principal) return reply.status(401).send({ error: 'Session expired or revoked' });
 
-      if (payload.role !== 'CLIENT') {
-        return reply.status(403).send({ error: 'Not authorized' });
-      }
-
-      request.clientUser = payload; // { contactId, clientId, role }
+      request.clientUser = {
+        ...payload,
+        contactId: principal.contact.id,
+        clientId: principal.client.id,
+        organizationId: principal.client.organizationId,
+      };
     } catch (err) {
       return reply.status(401).send({ error: 'Invalid or expired token' });
     }
@@ -87,14 +125,22 @@ export default async function clientPortalRoutes(fastify) {
 
   // POST /api/client-portal/request-access
   // Sends a magic link email — link points to /verify-token which sets a secure cookie
-  fastify.post('/client-portal/request-access', {
+  fastify.post('/request-access', {
     preHandler: [validateBody(requestAccessSchema)],
   }, async (request, reply) => {
     const { email } = request.body;
 
+    const normalizedEmail = email.toLowerCase().trim();
     const contact = await request.prisma.contact.findFirst({
-      where: { email: email.toLowerCase().trim() },
-      include: { client: true }
+      where: {
+        email: normalizedEmail,
+        client: {
+          deletedAt: null,
+          status: 'ACTIVE',
+          relationshipStatus: { notIn: ['ARCHIVED', 'CHURNED'] },
+        },
+      },
+      include: { client: { select: { id: true, name: true, organizationId: true } } },
     });
 
     if (!contact) {
@@ -102,7 +148,33 @@ export default async function clientPortalRoutes(fastify) {
       return { sent: true };
     }
 
-    const token = fastify.jwt.sign({ contactId: contact.id, clientId: contact.clientId, role: 'CLIENT' }, { expiresIn: '1h' });
+    let user = await request.prisma.user.findUnique({ where: { email: normalizedEmail } });
+    if (user && (user.role !== 'CLIENT' || user.clientId !== contact.clientId || user.organizationId !== contact.client.organizationId || !user.isActive)) {
+      return { sent: true };
+    }
+    if (!user) {
+      user = await request.prisma.user.create({
+        data: {
+          email: normalizedEmail,
+          name: contact.name,
+          password: await bcrypt.hash(randomUUID(), 12),
+          role: 'CLIENT',
+          clientId: contact.clientId,
+          organizationId: contact.client.organizationId,
+        },
+      });
+    }
+
+    const token = fastify.jwt.sign({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      contactId: contact.id,
+      clientId: contact.clientId,
+      organizationId: contact.client.organizationId,
+      role: 'CLIENT',
+      sessionVersion: user.sessionVersion,
+    }, { expiresIn: '1h' });
     // Magic link now goes to the verify endpoint which POSTs the token
     const magicLink = `${PORTAL_BASE}/client-portal/verify?token=${token}`;
     await sendMagicLinkEmail(contact.email, contact.name, magicLink);
@@ -113,7 +185,7 @@ export default async function clientPortalRoutes(fastify) {
   // POST /api/client-portal/verify-token
   // Exchanges a magic-link token for an httpOnly secure cookie
   // This avoids JWT tokens appearing in browser history / Referer headers
-  fastify.post('/client-portal/verify-token', {
+  fastify.post('/verify-token', {
     preHandler: validateBody(clientPortalTokenRedeemSchema),
   }, async (request, reply) => {
     const { token } = request.body || {};
@@ -125,16 +197,10 @@ export default async function clientPortalRoutes(fastify) {
     try {
       const payload = fastify.jwt.verify(token);
 
-      if (payload.role !== 'CLIENT') {
-        return reply.status(403).send({ error: 'Not authorized' });
-      }
+      const principal = await resolvePortalPrincipal(request.prisma, payload);
+      if (!principal) return reply.status(401).send({ error: 'Invalid, expired, or revoked token' });
 
-      // Re-issue a new token with longer expiry for the session cookie
-      const sessionToken = fastify.jwt.sign({
-        contactId: payload.contactId,
-        clientId: payload.clientId,
-        role: 'CLIENT'
-      }, { expiresIn: env.jwtExpiresIn });
+      const sessionToken = signUserSession(fastify.jwt, principal.user, { contactId: principal.contact.id });
 
       reply
         .setCookie('token', sessionToken, {
@@ -146,8 +212,8 @@ export default async function clientPortalRoutes(fastify) {
         })
         .send({
           user: {
-            contactId: payload.contactId,
-            clientId: payload.clientId,
+            contactId: principal.contact.id,
+            clientId: principal.client.id,
             role: 'CLIENT'
           }
         });
@@ -156,8 +222,20 @@ export default async function clientPortalRoutes(fastify) {
     }
   });
 
+  fastify.post('/logout', { preHandler: clientAuth }, async (request, reply) => {
+    await revokeUserSessions(request.prisma, request.clientUser.id);
+    return reply
+      .clearCookie('token', {
+        path: '/',
+        httpOnly: true,
+        secure: env.isProduction,
+        sameSite: env.isProduction ? 'strict' : 'lax',
+      })
+      .send({ success: true });
+  });
+
   // GET /api/client-portal/me
-  fastify.get('/client-portal/me', { preHandler: clientAuth }, async (request, reply) => {
+  fastify.get('/me', { preHandler: clientAuth }, async (request, reply) => {
     const { contactId, clientId } = request.clientUser;
 
     const [contact, client] = await Promise.all([
@@ -175,7 +253,7 @@ export default async function clientPortalRoutes(fastify) {
   // ── Projects ─────────────────────────────────────────────────────────────────
 
   // GET /api/client-portal/projects
-  fastify.get('/client-portal/projects', { preHandler: clientAuth }, async (request, reply) => {
+  fastify.get('/projects', { preHandler: clientAuth }, async (request, reply) => {
     const { clientId } = request.clientUser;
 
     const projects = await request.prisma.project.findMany({
@@ -227,7 +305,7 @@ export default async function clientPortalRoutes(fastify) {
   });
 
   // GET /api/client-portal/projects/:id
-  fastify.get('/client-portal/projects/:id', { preHandler: clientAuth }, async (request, reply) => {
+  fastify.get('/projects/:id', { preHandler: clientAuth }, async (request, reply) => {
     const { clientId } = request.clientUser;
     const { id } = request.params;
 
@@ -266,7 +344,7 @@ export default async function clientPortalRoutes(fastify) {
   });
 
   // GET /api/client-portal/projects/:id/tasks — Kanban tasks
-  fastify.get('/client-portal/projects/:id/tasks', { preHandler: clientAuth }, async (request, reply) => {
+  fastify.get('/projects/:id/tasks', { preHandler: clientAuth }, async (request, reply) => {
     const { clientId } = request.clientUser;
     const { id } = request.params;
 
@@ -311,7 +389,7 @@ export default async function clientPortalRoutes(fastify) {
   // ── Messages / Chat ──────────────────────────────────────────────────────────
 
   // GET /api/client-portal/projects/:id/messages
-  fastify.get('/client-portal/projects/:id/messages', { preHandler: clientAuth }, async (request, reply) => {
+  fastify.get('/projects/:id/messages', { preHandler: clientAuth }, async (request, reply) => {
     const { clientId } = request.clientUser;
     const { id } = request.params;
     const { limit = '50', before, after } = request.query;
@@ -341,7 +419,7 @@ export default async function clientPortalRoutes(fastify) {
   });
 
   // POST /api/client-portal/projects/:id/messages
-  fastify.post('/client-portal/projects/:id/messages', { preHandler: [clientAuth, validateBody(clientPortalMessageSchema)] }, async (request, reply) => {
+  fastify.post('/projects/:id/messages', { preHandler: [clientAuth, validateBody(clientPortalMessageSchema)] }, async (request, reply) => {
     const { clientId, contactId } = request.clientUser;
     const { id } = request.params;
     const { content, type } = request.body;
@@ -397,7 +475,7 @@ export default async function clientPortalRoutes(fastify) {
   // ── Documents / File Uploads ─────────────────────────────────────────────────
 
   // GET /api/client-portal/projects/:id/documents
-  fastify.get('/client-portal/projects/:id/documents', { preHandler: clientAuth }, async (request, reply) => {
+  fastify.get('/projects/:id/documents', { preHandler: clientAuth }, async (request, reply) => {
     const { clientId } = request.clientUser;
     const { id } = request.params;
 
@@ -417,7 +495,7 @@ export default async function clientPortalRoutes(fastify) {
     return documents;
   });
 
-  fastify.get('/client-portal/documents/:docId/download', { preHandler: clientAuth }, async (request, reply) => {
+  fastify.get('/documents/:docId/download', { preHandler: clientAuth }, async (request, reply) => {
     const { clientId } = request.clientUser;
     const doc = await request.prisma.attachment.findUnique({ where: { id: request.params.docId } });
     if (!doc || doc.entityType !== 'PROJECT' || doc.path.startsWith('/uploads/quarantine/')) {
@@ -440,7 +518,7 @@ export default async function clientPortalRoutes(fastify) {
   });
 
   // POST /api/client-portal/projects/:id/upload — Upload document
-  fastify.post('/client-portal/projects/:id/upload', { preHandler: clientAuth }, async (request, reply) => {
+  fastify.post('/projects/:id/upload', { preHandler: clientAuth }, async (request, reply) => {
     const { clientId, contactId } = request.clientUser;
     const { id } = request.params;
 
@@ -509,7 +587,7 @@ export default async function clientPortalRoutes(fastify) {
   });
 
   // DELETE /api/client-portal/documents/:docId — Delete uploaded doc
-  fastify.delete('/client-portal/documents/:docId', { preHandler: clientAuth }, async (request, reply) => {
+  fastify.delete('/documents/:docId', { preHandler: clientAuth }, async (request, reply) => {
     const { clientId } = request.clientUser;
     const { docId } = request.params;
 
@@ -546,7 +624,7 @@ export default async function clientPortalRoutes(fastify) {
   // ── Invoices ─────────────────────────────────────────────────────────────────
 
   // GET /api/client-portal/invoices
-  fastify.get('/client-portal/invoices', { preHandler: clientAuth }, async (request, reply) => {
+  fastify.get('/invoices', { preHandler: clientAuth }, async (request, reply) => {
     const { clientId } = request.clientUser;
 
     const invoices = await request.prisma.invoice.findMany({
@@ -571,7 +649,7 @@ export default async function clientPortalRoutes(fastify) {
   });
 
   // GET /api/client-portal/invoices/:id/pdf
-  fastify.get('/client-portal/invoices/:id/pdf', { preHandler: clientAuth }, async (request, reply) => {
+  fastify.get('/invoices/:id/pdf', { preHandler: clientAuth }, async (request, reply) => {
     const { clientId } = request.clientUser;
     const { id } = request.params;
 
@@ -599,7 +677,7 @@ export default async function clientPortalRoutes(fastify) {
   // ── Retainer ─────────────────────────────────────────────────────────────────
 
   // GET /api/client-portal/retainer
-  fastify.get('/client-portal/retainer', { preHandler: clientAuth }, async (request, reply) => {
+  fastify.get('/retainer', { preHandler: clientAuth }, async (request, reply) => {
     const { clientId } = request.clientUser;
 
     const retainer = await request.prisma.retainerPlan.findUnique({
@@ -628,7 +706,7 @@ export default async function clientPortalRoutes(fastify) {
   // ── Unread message count ────────────────────────────────────────────────────
 
   // GET /api/client-portal/unread-count
-  fastify.get('/client-portal/unread-count', { preHandler: clientAuth }, async (request, reply) => {
+  fastify.get('/unread-count', { preHandler: clientAuth }, async (request, reply) => {
     const { clientId } = request.clientUser;
 
     // Get all project IDs for this client

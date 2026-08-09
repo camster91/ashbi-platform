@@ -12,6 +12,47 @@ const viewports = [
 ];
 
 test.describe('Client portal accessibility', () => {
+  test('exchanges and removes magic tokens, uses the cookie session, and performs server logout', async ({ page }) => {
+    let exchangedToken = '';
+    let logoutCalled = false;
+    await page.route('**/api/client-portal/**', async route => {
+      const request = route.request();
+      const pathname = new URL(request.url()).pathname;
+      if (pathname.endsWith('/verify-token')) {
+        exchangedToken = request.postDataJSON().token;
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: { role: 'CLIENT' } }) });
+      }
+      if (pathname.endsWith('/logout')) {
+        logoutCalled = true;
+        return route.fulfill({ status: 200, contentType: 'application/json', body: '{"success":true}' });
+      }
+      if (pathname.endsWith('/me')) {
+        return route.fulfill({
+          status: logoutCalled ? 401 : 200,
+          contentType: 'application/json',
+          body: logoutCalled ? '{"error":"revoked"}' : JSON.stringify({ client: { name: 'Fixture Client' }, contact: { name: 'Fixture Contact' } }),
+        });
+      }
+      if (pathname.endsWith('/projects') || pathname.endsWith('/invoices')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+      }
+      if (pathname.endsWith('/retainer')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: 'null' });
+      }
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '{"recentMessages":0,"upcomingDeadlines":0}' });
+    });
+
+    await page.goto('/client-portal/verify?token=one-time-magic-token');
+    await expect(page).toHaveURL(/\/client-portal$/);
+    await expect(page.getByText('Fixture Client')).toBeVisible();
+    expect(exchangedToken).toBe('one-time-magic-token');
+    expect(page.url()).not.toContain('token=');
+
+    await page.getByRole('button', { name: 'Logout' }).click();
+    await expect(page.getByRole('button', { name: 'Send Login Link' })).toBeVisible();
+    expect(logoutCalled).toBe(true);
+  });
+
   test('login reflows without overflow at supported breakpoints', async ({ page }) => {
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
