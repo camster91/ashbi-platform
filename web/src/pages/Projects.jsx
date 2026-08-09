@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { FolderOpen, ChevronRight, Plus, Clock, User, Tag } from 'lucide-react';
 import { api } from '../lib/api';
-import LoadingState from '../components/ui/LoadingState';
+import { EmptyState, LoadingState } from '../components/ui';
 import { getHealthColor, getProjectStatusColor, getProjectStatusLabel, cn } from '../lib/utils';
 import CreateProjectModal from '../components/CreateProjectModal';
 
@@ -218,9 +218,12 @@ function KanbanColumn({ column, projects, count }) {
       {/* Cards */}
       <div className={cn('flex-1 space-y-2 overflow-y-auto max-h-[calc(100vh-260px)] p-1', column.bgColor, 'rounded-lg')}>
         {projects.length === 0 ? (
-          <div className="text-center py-8 text-xs text-muted-foreground">
-            No projects
-          </div>
+          <EmptyState
+            icon="projects"
+            title="No projects"
+            description={`No projects are currently in ${column.label.toLowerCase()}.`}
+            className="py-8"
+          />
         ) : (
           projects.map((project) => (
             <ProjectCard key={project.id} project={project} />

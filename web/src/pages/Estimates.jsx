@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useToast } from '../hooks/useToast';
-import { Button, Card, LoadingState } from '../components/ui';
+import { Button, Card, EmptyState, LoadingState } from '../components/ui';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 
@@ -297,12 +297,16 @@ export default function Estimates() {
           <LoadingState label="Loading estimates…" compact />
         </div>
       ) : estimates.length === 0 ? (
-        <Card className="p-12 text-center">
-          <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-lg font-medium">No estimates found</h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            {filterStatus || searchQuery ? 'Try adjusting your filters.' : 'Create your first estimate to get started.'}
-          </p>
+        <Card>
+          <EmptyState
+            icon={filterStatus || searchQuery ? 'search' : 'document'}
+            title="No estimates found"
+            description={filterStatus || searchQuery ? 'Try adjusting or clearing your filters.' : 'Create your first estimate to get started.'}
+            actionLabel={filterStatus || searchQuery ? 'Clear Filters' : 'Create Estimate'}
+            onAction={filterStatus || searchQuery
+              ? () => { setFilterStatus(''); setSearchQuery(''); }
+              : () => { resetForm(); setShowCreate(true); }}
+          />
         </Card>
       ) : (
         <div className="space-y-3">

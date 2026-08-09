@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Bell, Check, CheckCheck, Trash2 } from 'lucide-react';
 import { api } from '../lib/api';
-import LoadingState from '../components/ui/LoadingState';
+import { EmptyState, LoadingState } from '../components/ui';
 
 export default function Notifications() {
   const queryClient = useQueryClient();
@@ -48,11 +48,11 @@ export default function Notifications() {
           <LoadingState label="Loading notifications…" compact />
         </div>
       ) : notifications.length === 0 ? (
-        <div className="text-center py-12">
-          <Bell className="w-12 h-12 text-muted-foreground mx-auto mb-4 opacity-30" />
-          <h3 className="text-lg font-medium">No notifications</h3>
-          <p className="text-sm text-muted-foreground mt-1">You're all caught up!</p>
-        </div>
+        <EmptyState
+          icon="notifications"
+          title="No notifications"
+          description="You're all caught up. New activity will appear here."
+        />
       ) : (
         <div className="space-y-2">
           {notifications.map(notification => (

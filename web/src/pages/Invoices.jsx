@@ -9,7 +9,7 @@ import {
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
-import { Button, Card, LoadingState } from '../components/ui';
+import { Button, Card, EmptyState, LoadingState } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
@@ -326,12 +326,16 @@ export default function Invoices() {
           ) : isLoading ? (
             <LoadingState label="Loading invoices…" compact className="py-12" />
           ) : sortedInvoices.length === 0 ? (
-            <Card className="p-12 text-center">
-              <Receipt className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-medium">No invoices found</h3>
-              <p className="text-sm text-muted-foreground mt-1">
-                {filterStatus || searchQuery ? 'Try adjusting your filters.' : 'Create your first invoice to get started.'}
-              </p>
+            <Card>
+              <EmptyState
+                icon={filterStatus || searchQuery ? 'search' : 'invoice'}
+                title="No invoices found"
+                description={filterStatus || searchQuery ? 'Try adjusting or clearing your filters.' : 'Create your first invoice to start billing clients.'}
+                actionLabel={filterStatus || searchQuery ? 'Clear Filters' : 'Create Invoice'}
+                onAction={filterStatus || searchQuery
+                  ? () => { setFilterStatus(''); setSearchQuery(''); }
+                  : () => setShowCreate(true)}
+              />
             </Card>
           ) : (
             <div className="space-y-2">

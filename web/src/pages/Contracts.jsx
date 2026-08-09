@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useToast } from '../hooks/useToast';
-import { Button, Card, LoadingState } from '../components/ui';
+import { Button, Card, EmptyState, LoadingState } from '../components/ui';
 import Modal from '../components/Modal';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
@@ -313,10 +313,16 @@ export default function Contracts() {
           <LoadingState label="Loading contracts…" compact />
         </div>
       ) : contracts.length === 0 ? (
-        <Card className="p-12 text-center">
-          <ScrollText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-lg font-medium">No contracts yet</h3>
-          <p className="text-sm text-muted-foreground mt-1">Create a contract or generate one from an approved proposal.</p>
+        <Card>
+          <EmptyState
+            icon="document"
+            title={filterStatus ? `No ${filterStatus.toLowerCase()} contracts` : 'No contracts yet'}
+            description={filterStatus
+              ? 'Try another status or clear the current filter.'
+              : 'Create a contract or generate one from an approved proposal.'}
+            actionLabel={filterStatus ? 'Clear Filter' : 'Create Contract'}
+            onAction={filterStatus ? () => setFilterStatus('') : () => setShowCreate(true)}
+          />
         </Card>
       ) : (
         <div className="space-y-3">

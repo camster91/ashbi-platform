@@ -23,7 +23,7 @@ import {
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
 import { useToast } from '../hooks/useToast';
-import { Button, Card, LoadingState } from '../components/ui';
+import { Button, Card, EmptyState, LoadingState } from '../components/ui';
 import CreateClientModal from '../components/CreateClientModal';
 import QueryErrorState from '../components/QueryErrorState';
 
@@ -436,16 +436,16 @@ export default function Clients() {
 
       {/* Client List */}
       {sorted.length === 0 ? (
-        <Card className="p-12 text-center">
-          <Building className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-lg font-medium">
-            {search ? 'No clients match your search' : 'No clients yet'}
-          </h3>
-          {!search && (
-            <p className="text-sm text-muted-foreground mt-1">
-              Use "Onboard Client" to set up a complete client with retainer, or "Add Client" for a quick add.
-            </p>
-          )}
+        <Card>
+          <EmptyState
+            icon={search ? 'search' : 'team'}
+            title={search ? 'No clients match your search' : 'No clients yet'}
+            description={search
+              ? `We couldn't find a client matching "${search}".`
+              : 'Onboard a complete client with a retainer, or add one for a quick start.'}
+            actionLabel={search ? 'Clear Search' : 'Add Client'}
+            onAction={search ? () => setSearch('') : () => setShowCreateModal(true)}
+          />
         </Card>
       ) : (
         <div className="rounded-xl border border-border bg-card overflow-hidden">
