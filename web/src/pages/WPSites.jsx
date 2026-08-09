@@ -359,7 +359,7 @@ function SitesTab({ queryClient }) {
         }`}>
           {alert.type === 'success' ? <Shield className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
           <span className="text-sm">{alert.msg}</span>
-          <button onClick={() => setAlert(null)} className="ml-auto"><X className="w-4 h-4" /></button>
+          <button type="button" onClick={() => setAlert(null)} className="ml-auto min-h-11 min-w-11 inline-flex items-center justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Dismiss alert"><X className="w-4 h-4" aria-hidden="true" /></button>
         </div>
       )}
 
@@ -593,7 +593,7 @@ function FleetOpsTab({ queryClient }) {
         }`}>
           {alert.type === 'success' ? <Shield className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
           <span className="text-sm">{alert.msg}</span>
-          <button onClick={() => setAlert(null)} className="ml-auto"><X className="w-4 h-4" /></button>
+          <button type="button" onClick={() => setAlert(null)} className="ml-auto min-h-11 min-w-11 inline-flex items-center justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Dismiss alert"><X className="w-4 h-4" aria-hidden="true" /></button>
         </div>
       )}
 
@@ -963,7 +963,7 @@ function LoginTab() {
         }`}>
           {alert.type === 'success' ? <Shield className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
           <span className="text-sm">{alert.msg}</span>
-          <button onClick={() => setAlert(null)} className="ml-auto"><X className="w-4 h-4" /></button>
+          <button type="button" onClick={() => setAlert(null)} className="ml-auto min-h-11 min-w-11 inline-flex items-center justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Dismiss alert"><X className="w-4 h-4" aria-hidden="true" /></button>
         </div>
       )}
 
@@ -1405,7 +1405,7 @@ function RecentLoginsTab({ queryClient }) {
         }`}>
           {alert.type === 'success' ? <Shield className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
           <span className="text-sm">{alert.msg}</span>
-          <button onClick={() => setAlert(null)} className="ml-auto"><X className="w-4 h-4" /></button>
+          <button type="button" onClick={() => setAlert(null)} className="ml-auto min-h-11 min-w-11 inline-flex items-center justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Dismiss alert"><X className="w-4 h-4" aria-hidden="true" /></button>
         </div>
       )}
 
