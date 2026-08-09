@@ -944,8 +944,18 @@ function TaskCategory({ title, icon: Icon, tasks = [], color, collapsed = false 
   return (
     <div className="bg-card rounded-lg border border-border">
       <div
-        className="px-4 py-3 border-b flex items-center gap-2 cursor-pointer hover:bg-secondary/30 transition-colors"
+        role="button"
+        tabIndex={0}
+        aria-expanded={!isCollapsed}
+        aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${title} tasks`}
+        className="px-4 py-3 border-b flex items-center gap-2 cursor-pointer hover:bg-secondary/30 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         onClick={() => setIsCollapsed(!isCollapsed)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setIsCollapsed((value) => !value);
+          }
+        }}
       >
         {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
         <Icon className={cn('w-4 h-4', colors[color]?.split(' ')[0])} />
