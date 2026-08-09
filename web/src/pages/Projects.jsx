@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { FolderOpen, ChevronRight, Plus, Clock, User, Tag } from 'lucide-react';
@@ -231,8 +231,23 @@ function KanbanColumn({ column, projects, count }) {
 }
 
 export default function Projects() {
-  const [searchParams] = useSearchParams();
-  const [showCreateModal, setShowCreateModal] = useState(searchParams.get('create') === 'true');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const showCreateModal = searchParams.get('create') === 'true';
+  const preselectedClientId = searchParams.get('clientId') || '';
+
+  const openCreateModal = useCallback(() => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('create', 'true');
+    nextParams.delete('clientId');
+    setSearchParams(nextParams);
+  }, [searchParams, setSearchParams]);
+
+  const closeCreateModal = useCallback(() => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('create');
+    nextParams.delete('clientId');
+    setSearchParams(nextParams, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ['projects'],
@@ -268,7 +283,7 @@ export default function Projects() {
           </p>
         </div>
         <button
-          onClick={() => setShowCreateModal(true)}
+          onClick={openCreateModal}
           className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 flex items-center gap-2 transition-colors"
         >
           <Plus className="w-4 h-4" />
@@ -278,7 +293,8 @@ export default function Projects() {
 
       <CreateProjectModal
         isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
+        onClose={closeCreateModal}
+        preselectedClientId={preselectedClientId}
       />
 
       {/* Kanban Board */}

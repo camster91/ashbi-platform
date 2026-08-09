@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Modal, { ModalFooter } from './Modal';
 import { api } from '../lib/api';
@@ -26,6 +26,28 @@ export default function CreateProjectModal({ isOpen, onClose, preselectedClientI
     queryFn: () => api.getTeam(),
     enabled: isOpen,
   });
+
+  const clientOptions = clients?.clients || [];
+  const clientsLoaded = Array.isArray(clients?.clients);
+  const preselectedClientIsValid = useMemo(
+    () => !preselectedClientId || clientOptions.some((client) => client.id === preselectedClientId),
+    [clientOptions, preselectedClientId],
+  );
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setFormData((current) => ({
+      ...current,
+      clientId: preselectedClientId || '',
+    }));
+    setError('');
+  }, [isOpen, preselectedClientId]);
+
+  useEffect(() => {
+    if (!isOpen || !clientsLoaded || !preselectedClientId || preselectedClientIsValid) return;
+    setFormData((current) => ({ ...current, clientId: '' }));
+    setError('The selected client is unavailable. Choose another client to continue.');
+  }, [clientsLoaded, isOpen, preselectedClientId, preselectedClientIsValid]);
 
   const mutation = useMutation({
     mutationFn: (data) => api.createProject(data),
@@ -69,18 +91,19 @@ export default function CreateProjectModal({ isOpen, onClose, preselectedClientI
     <Modal isOpen={isOpen} onClose={onClose} title="Create New Project">
       <form onSubmit={handleSubmit}>
         {error && (
-          <div className="mb-4 p-3 text-sm text-red-600 bg-red-50 rounded-lg">
+          <div id="create-project-error" role="alert" className="mb-4 p-3 text-sm text-red-600 bg-red-50 rounded-lg">
             {error}
           </div>
         )}
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="create-project-name" className="block text-sm font-medium text-gray-700 mb-1">
               Project Name *
             </label>
             <input
               type="text"
+              id="create-project-name"
               name="name"
               value={formData.name}
               onChange={handleChange}
@@ -91,17 +114,19 @@ export default function CreateProjectModal({ isOpen, onClose, preselectedClientI
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="create-project-client" className="block text-sm font-medium text-gray-700 mb-1">
               Client *
             </label>
             <select
+              id="create-project-client"
               name="clientId"
               value={formData.clientId}
               onChange={handleChange}
+              aria-describedby={error ? 'create-project-error' : undefined}
               className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
             >
               <option value="">Select a client</option>
-              {(clients?.clients || []).map((client) => (
+              {clientOptions.map((client) => (
                 <option key={client.id} value={client.id}>
                   {client.name}
                 </option>
@@ -110,10 +135,11 @@ export default function CreateProjectModal({ isOpen, onClose, preselectedClientI
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="create-project-description" className="block text-sm font-medium text-gray-700 mb-1">
               Description
             </label>
             <textarea
+              id="create-project-description"
               name="description"
               value={formData.description}
               onChange={handleChange}
@@ -124,10 +150,11 @@ export default function CreateProjectModal({ isOpen, onClose, preselectedClientI
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label htmlFor="create-project-owner" className="block text-sm font-medium text-gray-700 mb-1">
               Default Owner
             </label>
             <select
+              id="create-project-owner"
               name="defaultOwnerId"
               value={formData.defaultOwnerId}
               onChange={handleChange}
