@@ -1,5 +1,7 @@
 # Agency Hub - UX/UI Improvement Plan
 
+> **Superseded visual plan.** Use issues [#315](https://github.com/camster91/ashbi-platform/issues/315), [#316](https://github.com/camster91/ashbi-platform/issues/316), [#317](https://github.com/camster91/ashbi-platform/issues/317), [#318](https://github.com/camster91/ashbi-platform/issues/318), and [#322](https://github.com/camster91/ashbi-platform/issues/322) for current design-system, component, accessibility, motion, and baseline work. Retained as historical input only.
+
 ## Current State Analysis
 
 ### Strengths

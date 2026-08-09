@@ -2,7 +2,7 @@
 
 Repository changes follow the issue-to-release policy in [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Agency management platform for operations, finance, and project management.
+Agency management platform for operations, finance, project management, team collaboration, and client delivery. Product claims and remaining gates are classified in [docs/product-status.md](docs/product-status.md); route presence alone is not treated as launch proof.
 
 ## Brand
 
@@ -19,7 +19,7 @@ Agency management platform for operations, finance, and project management.
 ## Structure
 
 ```
-ashbi-design/
+ashbi-platform/
 ├── src/                    # Backend (Fastify)
 │   ├── routes/             # API endpoints
 │   ├── services/           # Business logic
@@ -34,28 +34,47 @@ ashbi-design/
 │   │   └── lib/            # Utilities
 │   └── package.json
 ├── prisma/                 # Database schema
-├── docker-compose.yml      # Production deployment
+├── docker-compose.yml      # Local service composition
 └── package.json
 ```
 
 ## Development
+
+Prerequisites: Node.js 20+ (the production image currently uses 22), PostgreSQL 16 with pgvector, and Redis 7+. The backend does not implicitly load `.env`; export it into each backend/worker shell. Prisma reads it through `prisma.config.ts`.
 
 ```bash
 # Install locked dependencies
 npm ci
 npm ci --prefix web
 
-# Start backend
-npm run dev
+# Create a local environment from the sanitized template, then edit placeholders
+cp .env.example .env
 
-# Start frontend (in another terminal)
-npm run dev:web
-
-# Generate Prisma client
+# Apply the committed migration chain and generate Prisma
+npx prisma migrate deploy
 npm run db:generate
 
-# Push schema changes
-npm run db:push
+# Export .env in each Git Bash/WSL backend or worker shell
+set -a; source .env; set +a
+
+# Start backend, frontend, and worker in separate shells
+npm run dev
+npm run dev:web
+npm run dev:worker
+```
+
+The API defaults to `http://localhost:3000`; Vite serves `http://localhost:5173` and proxies API/socket traffic. PostgreSQL and Redis must already be running. Bootstrap the first administrator with `POST /api/auth/register` using the local `ADMIN_INVITE_TOKEN`; never commit or document its value. `prisma db push` is restricted to disposable local databases—shared and production environments use the committed migrations.
+
+Run the supported gates with:
+
+```bash
+npm run lint
+npm run type-check
+npm test
+npm run test:integration
+npm test --prefix web -- --run
+npm run build
+npm run check:release-gates
 ```
 
 ### Dependency and build ownership
@@ -78,39 +97,24 @@ upgrades, login/account transitions, session expiry, and logout purge every lega
 
 ## Deployment
 
-```bash
-# Build
-docker-compose build
-
-# Run
-docker-compose up -d
-```
+Production has one controller: the immutable direct-VPS procedure in [docs/deployment-and-rollback.md](docs/deployment-and-rollback.md). GitHub Actions and Coolify do not promote production. Every release uses the reviewed revision, archive checksum, immutable image ID, migration/status preflight, dependency-aware API/worker readiness, retained rollback containers, trusted HTTPS verification, and the encrypted backup policy in [docs/backup-and-restore.md](docs/backup-and-restore.md).
 
 ## Features
 
-### Core (MVP)
+### Code-present core
 - Clients CRM with health tracking
 - Projects with tasks, milestones, time tracking
 - Invoices, proposals, contracts
 - Client portal with view tokens
 - User authentication and team management
 
-### AI Agents
-- Email triage and drafting
-- Content generation (blog, social, LinkedIn)
-- Lead generation
-- Call screening
-
-### Integrations
-- Shopify
-- WordPress
-- Upwork
-- Gmail
+These capabilities are code-present, but production/market readiness varies by workflow and external provider. See the canonical status map before describing any integration or AI workflow as supported.
 
 ## Tech Stack
 
 - **Frontend**: React + Vite + Tailwind CSS
 - **Backend**: Fastify + Prisma
-- **Database**: PostgreSQL
+- **Database**: PostgreSQL 16 + pgvector
+- **Jobs/cache**: Redis + BullMQ worker
 - **AI**: Anthropic Claude, Google Gemini, Ollama
-- **Deploy**: Docker + Coolify
+- **Deploy**: immutable Docker image through the reviewed direct-VPS controller

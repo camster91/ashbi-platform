@@ -1,5 +1,7 @@
 # Production Deployment Checklist
 
+> **Superseded deployment document.** GitHub-secret rendering and Coolify promotion below are historical and must not be used. The only current production path is [docs/deployment-and-rollback.md](docs/deployment-and-rollback.md), with [docs/backup-and-restore.md](docs/backup-and-restore.md) for recoverability. Retained for audit history.
+
 ## Environment Variable Strategy (audit 2026-07-10)
 
 All **sensitive** values live in GH secrets, not in `.env` on the VPS:

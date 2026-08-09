@@ -20,9 +20,10 @@ sudo redis-server /etc/redis/redis.conf --daemonize yes   # Redis, port 6379
 
 - The local DB is `ashbihub`, role `ashbihub` / password `localdevpass`
   (SUPERUSER, local dev only), with the `vector` extension already enabled.
-- If the DB is ever empty/reset, resync the schema with `npx prisma db push`
-  (there are no committed migration files; `db push` is the source of truth
-  for local dev). `npx prisma generate` is already handled by the update script.
+- If a disposable local DB is empty, apply the committed chain with
+  `npx prisma migrate deploy`. Use `prisma db push` only for throwaway schema
+  experiments; it is not the source of truth for shared or production data.
+  `npx prisma generate` is already handled by the update script.
 
 ### Env vars: the app does NOT auto-load `.env`
 `src/` never imports `dotenv`, so `npm run dev` / `dev:web` / `dev:worker` do
