@@ -22,6 +22,7 @@ import { api } from '../lib/api';
 import { useToast } from '../hooks/useToast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { Button, Card, EmptyState, LoadingState } from '../components/ui';
+import QueryErrorState from '../components/QueryErrorState';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 
@@ -49,7 +50,14 @@ export default function Proposals() {
     if (formDraft.draft) setShowCreate(true);
   }, [formDraft.draft]);
 
-  const { data: proposals = [], isLoading } = useQuery({
+  const {
+    data: proposals = [],
+    isLoading,
+    isError: proposalsError,
+    error: proposalsRequestError,
+    refetch: refetchProposals,
+    isFetching: proposalsFetching,
+  } = useQuery({
     queryKey: ['proposals', filterStatus],
     queryFn: () => api.getProposals(filterStatus ? { status: filterStatus } : {}),
   });
@@ -221,6 +229,13 @@ export default function Proposals() {
         <div className="flex justify-center py-12">
           <LoadingState label="Loading proposals…" compact />
         </div>
+      ) : proposalsError ? (
+        <QueryErrorState
+          error={proposalsRequestError}
+          message="Proposals could not be loaded"
+          onRetry={refetchProposals}
+          isRetrying={proposalsFetching}
+        />
       ) : proposals.length === 0 ? (
         <Card>
           <EmptyState

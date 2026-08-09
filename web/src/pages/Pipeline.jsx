@@ -7,7 +7,8 @@ import {
   Plus, Trash2, MoveRight, Sparkles, Loader2,
 } from 'lucide-react';
 import { api } from '../lib/api';
-import { Card } from '../components/ui';
+import { Card, LoadingState } from '../components/ui';
+import QueryErrorState from '../components/QueryErrorState';
 import Modal, { ModalFooter } from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 
@@ -228,7 +229,14 @@ export default function Pipeline() {
   const [expandedStage, setExpandedStage] = useState(null);
   const [showCreateDeal, setShowCreateDeal] = useState(false);
 
-  const { data, isLoading } = useQuery({
+  const {
+    data,
+    isLoading,
+    isError: pipelineError,
+    error: pipelineRequestError,
+    refetch: refetchPipeline,
+    isFetching: pipelineFetching,
+  } = useQuery({
     queryKey: ['pipeline'],
     // There is no /reports/pipeline endpoint; the deal pipeline lives at
     // /pipeline (stages+deals) and /pipeline/analytics (conversion metrics).
@@ -249,7 +257,21 @@ export default function Pipeline() {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-heading font-bold text-foreground">Pipeline</h1>
-        <div className="flex items-center justify-center h-64 text-muted-foreground">Loading pipeline data...</div>
+        <LoadingState label="Loading pipeline data…" />
+      </div>
+    );
+  }
+
+  if (pipelineError) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-heading font-bold text-foreground">Pipeline</h1>
+        <QueryErrorState
+          error={pipelineRequestError}
+          message="Pipeline data could not be loaded"
+          onRetry={refetchPipeline}
+          isRetrying={pipelineFetching}
+        />
       </div>
     );
   }
