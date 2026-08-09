@@ -453,7 +453,7 @@ export default function Layout({ children }) {
           </button>
 
           {/* Search */}
-          <form onSubmit={handleSearch} className="flex-1 max-w-xl mx-4">
+          <form onSubmit={handleSearch} className="mx-2 min-w-0 max-w-xl flex-1 sm:mx-4">
             <div
               className={cn(
                 'relative group transition-all duration-200',

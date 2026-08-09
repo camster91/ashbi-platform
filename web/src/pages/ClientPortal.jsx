@@ -1585,11 +1585,11 @@ const globalStyles = `
 
   .cp-btn-primary {
     display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.5rem 1.25rem;
-    background: ${BRAND.primary}; color: ${BRAND.white}; border: none; border-radius: 10px;
-    font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.2s;
+    background: ${BRAND.primary}; color: ${BRAND.white}; opacity: 1 !important; border: none; border-radius: 10px;
+    font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: transform 0.2s;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
-  .cp-btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+  .cp-btn-primary:hover { background: #211d40; transform: translateY(-1px); }
   .cp-btn-primary:disabled { opacity: 1; cursor: not-allowed; transform: none; }
 
   .cp-btn-secondary {

@@ -1453,13 +1453,15 @@ export const noteFromTemplateSchema = z.object({
   mentionUserIds: z.array(cuidId).max(50).default([]),
 });
 
+export const onboardingTaskActionSchema = z.object({
+  taskId: z.string().regex(/^[a-z][a-z0-9-]{1,63}$/),
+});
+
 export const onboardingClientSchema = z.object({
   name: z.string().min(1).max(200),
   email: z.string().email().max(255),
-  company: z.string().max(200).optional(),
-  projectType: z.string().max(100).optional(),
-  budget: z.number().positive().max(10_000_000).optional(),
-  timeline: z.string().max(200).optional(),
+  contactName: z.string().min(1).max(200),
+  retainerTier: z.enum(['999', '1999', '3999']),
   notes: z.string().max(10_000).optional(),
 });
 

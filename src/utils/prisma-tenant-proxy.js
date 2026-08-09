@@ -34,7 +34,8 @@ const DIRECT_SCOPED_MODELS = new Set([
   'assignmentrule', 'template', 'unmatchedemail', 'lineitemtemplate',
   'weeklydigest', 'tasktemplate', 'outreachsequence', 'emailtriageitem',
   'aicontext', 'ashconversation', 'projecttemplate', 'brandsettings',
-  'pipelinestage', 'promptversion', 'credential', 'credentialaccessaudit'
+  'pipelinestage', 'promptversion', 'credential', 'credentialaccessaudit',
+  'onboardingprogress'
 ]);
 
 // Models that are intentionally shared across organizations. Every Prisma
@@ -64,6 +65,7 @@ const DIRECT_PARENT_RELATIONS = {
     { relation: 'client', field: 'clientId', model: 'client', delegate: 'client' },
     { relation: 'project', field: 'projectId', model: 'project', delegate: 'project' },
   ],
+  onboardingprogress: [{ relation: 'user', field: 'userId', model: 'user', delegate: 'user', required: true }],
 };
 
 const RESTRICTED_MODELS = new Set([]);

@@ -1153,6 +1153,16 @@ export const api = {
   // ===== ONBOARDING =====
   onboardClient: (data) =>
     request('/onboarding/client', { method: 'POST', body: data }),
+  getOnboardingProgress: () =>
+    request('/onboarding/progress', { silent: true }),
+  startOnboarding: () =>
+    request('/onboarding/progress/start', { method: 'POST', silent: true }),
+  skipOnboardingTask: (taskId) =>
+    request('/onboarding/progress/tasks/skip', { method: 'POST', body: { taskId }, silent: true }),
+  skipOnboarding: () =>
+    request('/onboarding/progress/skip', { method: 'POST', silent: true }),
+  restartOnboarding: () =>
+    request('/onboarding/progress/restart', { method: 'POST', silent: true }),
 
   // ===== EMAIL SEND =====
   sendEmail: (data) =>

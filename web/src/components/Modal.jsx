@@ -115,14 +115,14 @@ export default function Modal({
           aria-label={title ? undefined : (ariaLabel || 'Dialog')}
           tabIndex={-1}
           className={cn(
-            'relative w-full bg-white rounded-lg shadow-xl',
+            'relative w-full rounded-lg border border-border bg-card text-card-foreground shadow-xl',
             sizeClasses[size]
           )}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
           {(title || showCloseButton) && (
-            <div className="flex items-center justify-between px-6 py-4 border-b">
+            <div className="flex items-center justify-between border-b border-border px-6 py-4">
               {title && (
                 <h2 id={titleId} className="text-lg font-semibold">
                   {title}
@@ -132,7 +132,7 @@ export default function Modal({
                 <button
                   onClick={onClose}
                   aria-label="Close modal"
-                  className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"
+                  className="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -141,7 +141,7 @@ export default function Modal({
           )}
 
           {/* Content */}
-          <div className="px-6 py-4">{children}</div>
+          <div className="px-4 py-4 sm:px-6">{children}</div>
         </div>
       </div>
     </div>
@@ -153,7 +153,7 @@ export function ModalFooter({ children, className }) {
   return (
     <div
       className={cn(
-        'flex items-center justify-end gap-3 px-6 py-4 border-t -mx-6 -mb-4 mt-4',
+        'flex items-center justify-end gap-3 border-t border-border px-6 py-4 -mx-6 -mb-4 mt-4',
         className
       )}
     >

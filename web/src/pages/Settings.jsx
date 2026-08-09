@@ -16,6 +16,7 @@ import {
   Copy,
   Link2,
   Bell,
+  ListChecks,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
@@ -84,6 +85,57 @@ function NotificationPreferences() {
           </Button>
         )}
       </div>
+    </div>
+  );
+}
+
+function OnboardingPreferences() {
+  const queryClient = useQueryClient();
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['onboarding-progress'],
+    queryFn: api.getOnboardingProgress,
+    retry: false,
+  });
+  const restart = useMutation({
+    mutationFn: api.restartOnboarding,
+    onSuccess: progress => {
+      queryClient.setQueryData(['onboarding-progress'], progress);
+      window.dispatchEvent(new Event('ashbi:onboarding-restart'));
+    },
+  });
+
+  if (isLoading) return <p role="status" className="text-sm text-muted-foreground">Loading onboarding progress…</p>;
+  if (error) return <p role="alert" className="text-sm text-destructive">Onboarding progress could not be loaded.</p>;
+  if (!data?.supported) return <p className="text-sm text-muted-foreground">{data?.reason || 'Onboarding is not available for this role.'}</p>;
+
+  const stateLabel = {
+    eligible: 'Not started',
+    in_progress: 'In progress',
+    completed: 'Completed',
+    skipped: 'Skipped',
+  }[data.state] || 'Available';
+
+  return (
+    <div className="space-y-3">
+      <div aria-live="polite">
+        <p className="text-sm font-medium text-foreground">{stateLabel}</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          {data.completedCount} of {data.totalCount} role-specific tasks are completed or explicitly skipped. Progress is saved to this account, not this browser.
+        </p>
+      </div>
+      {restart.error && <p role="alert" className="text-sm text-destructive">{restart.error.message || 'Onboarding could not be restarted.'}</p>}
+      <Button
+        type="button"
+        variant="outline"
+        disabled={restart.isPending}
+        onClick={() => {
+          if (window.confirm('Restart your onboarding checklist? Previously skipped tasks will be available again. Verified completed work will remain complete.')) {
+            restart.mutate();
+          }
+        }}
+      >
+        {restart.isPending ? 'Restarting…' : 'Restart getting started'}
+      </Button>
     </div>
   );
 }
@@ -538,6 +590,10 @@ export default function Settings() {
 
       <Section icon={Bell} title="Browser notifications" description="Inspect or change notifications for this browser">
         <NotificationPreferences />
+      </Section>
+
+      <Section icon={ListChecks} title="Getting started" description="Resume or restart your role-specific first-success checklist">
+        <OnboardingPreferences />
       </Section>
 
       {/* API Keys */}

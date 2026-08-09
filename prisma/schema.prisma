@@ -53,6 +53,7 @@ model Organization {
   promptVersions     PromptVersion[]
   credentials        Credential[]
   credentialAudits   CredentialAccessAudit[]
+  onboardingProgress OnboardingProgress[]
 
   @@map("organizations")
 }
@@ -77,33 +78,52 @@ model User {
   updatedAt           DateTime     @updatedAt
 
   // Relations
-  assignedThreads   Thread[]           @relation("AssignedTo")
-  assignedTasks     Task[]             @relation("TaskAssignee")
-  draftedResponses  Response[]         @relation("DraftedBy")
-  approvedResponses Response[]         @relation("ApprovedBy")
-  notifications     Notification[]
-  internalNotes     InternalNote[]
-  chatMessages      ChatMessage[]      @relation("ChatAuthor")
-  chatReactions     ChatReaction[]
-  notes             Note[]             @relation("NoteAuthor")
-  timeEntries       TimeEntry[]
-  attachments       Attachment[]
-  activities        Activity[]
-  taskComments      TaskComment[]      @relation("CommentAuthor")
-  createdEvents     CalendarEvent[]    @relation("EventCreator")
-  eventAttendees    EventAttendee[]
-  proposals         Proposal[]         @relation("ProposalCreator")
-  contracts         Contract[]         @relation("ContractCreator")
-  invoices          Invoice[]          @relation("InvoiceCreator")
-  pushSubscriptions PushSubscription[]
-  snippets          Snippet[]
-  proposalVersions  ProposalVersion[]
-  timeSessions      TimeSession[]
-  apiKeys           ApiKey[]
-  formDrafts        FormDraft[]
+  assignedThreads    Thread[]            @relation("AssignedTo")
+  assignedTasks      Task[]              @relation("TaskAssignee")
+  draftedResponses   Response[]          @relation("DraftedBy")
+  approvedResponses  Response[]          @relation("ApprovedBy")
+  notifications      Notification[]
+  internalNotes      InternalNote[]
+  chatMessages       ChatMessage[]       @relation("ChatAuthor")
+  chatReactions      ChatReaction[]
+  notes              Note[]              @relation("NoteAuthor")
+  timeEntries        TimeEntry[]
+  attachments        Attachment[]
+  activities         Activity[]
+  taskComments       TaskComment[]       @relation("CommentAuthor")
+  createdEvents      CalendarEvent[]     @relation("EventCreator")
+  eventAttendees     EventAttendee[]
+  proposals          Proposal[]          @relation("ProposalCreator")
+  contracts          Contract[]          @relation("ContractCreator")
+  invoices           Invoice[]           @relation("InvoiceCreator")
+  pushSubscriptions  PushSubscription[]
+  snippets           Snippet[]
+  proposalVersions   ProposalVersion[]
+  timeSessions       TimeSession[]
+  apiKeys            ApiKey[]
+  formDrafts         FormDraft[]
+  onboardingProgress OnboardingProgress?
 
   @@index([organizationId])
   @@map("users")
+}
+
+model OnboardingProgress {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String       @unique
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roleSnapshot   String
+  skippedTaskIds Json         @default("[]")
+  startedAt      DateTime?
+  dismissedAt    DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId, userId])
+  @@map("onboarding_progress")
 }
 
 model FormDraft {
