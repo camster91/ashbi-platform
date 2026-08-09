@@ -25,8 +25,14 @@ export async function verifySiteRequest({ prismaClient, siteUrl, timestamp, nonc
   if (Math.abs(Math.floor(now / 1000) - timestampSeconds) > WP_BRIDGE_REPLAY_WINDOW_SECONDS) {
     return { valid: false, code: 'STALE_SIGNATURE' };
   }
+  let normalizedSiteUrl;
+  try {
+    normalizedSiteUrl = canonicalSiteUrl(siteUrl);
+  } catch {
+    return { valid: false, code: 'MALFORMED_SITE_URL' };
+  }
   const site = await prismaClient.wPSite.findFirst({
-    where: { url: canonicalSiteUrl(siteUrl) },
+    where: { url: normalizedSiteUrl },
     select: { id: true, organizationId: true, bridgeSecretEncrypted: true }
   });
   if (!site?.organizationId || !site.bridgeSecretEncrypted) return { valid: false, code: 'SITE_NOT_PROVISIONED' };
@@ -42,6 +48,14 @@ export async function verifySiteRequest({ prismaClient, siteUrl, timestamp, nonc
 
   const nonceHash = crypto.createHash('sha256').update(String(nonce)).digest('hex');
   try {
+    await prismaClient.wPBridgeNonce.deleteMany({
+      where: {
+        organizationId: site.organizationId,
+        createdAt: {
+          lt: new Date(now - (WP_BRIDGE_REPLAY_WINDOW_SECONDS * 2 * 1000))
+        }
+      }
+    });
     await prismaClient.wPBridgeNonce.create({
       data: { organizationId: site.organizationId, siteId: site.id, nonceHash }
     });

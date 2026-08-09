@@ -6,9 +6,11 @@ import { prisma as backgroundPrisma } from '../config/db.js';
 import crypto from 'crypto';
 import env from '../config/env.js';
 import { runTenantJob } from '../jobs/tenant-iteration.js';
+import { encrypt } from '../utils/crypto.js';
+import { canonicalSiteUrl } from '../security/wp-bridge-auth.js';
 
 async function withSiteTenant(siteUrl, callback) {
-  const site = await prisma.wPSite.findFirst({ where: { url: siteUrl } });
+  const site = await prisma.wPSite.findFirst({ where: { url: canonicalSiteUrl(siteUrl) } });
   if (!site?.organizationId) throw new Error('Site not found or not provisioned for a tenant');
   return runTenantJob(prisma, site.organizationId, (tenantPrisma) => callback(tenantPrisma, site), backgroundPrisma);
 }
@@ -60,7 +62,7 @@ export async function recordMagicLoginEvent({
   return prisma.wPMagicLoginLog.create({
     data: {
       siteId,
-      siteUrl,
+      siteUrl: site.url,
       userId: Number.isFinite(userId) ? userId : null,
       hubUserId: hubUserId || null,
       ip: ip || '0.0.0.0',
@@ -172,9 +174,10 @@ export async function listSites(userId, { prismaClient = prisma } = {}) {
   const healthy = sites.filter(s => s.status === 'ACTIVE').length;
   const warnings = sites.filter(s => s.status === 'MAINTENANCE').length;
   const errors = sites.filter(s => s.status === 'ERROR').length;
+  const safeSites = sites.map(({ bridgeSecretEncrypted: _secret, ...site }) => site);
 
   return {
-    sites,
+    sites: safeSites,
     meta: {
       total: sites.length,
       healthy,
@@ -187,14 +190,16 @@ export async function listSites(userId, { prismaClient = prisma } = {}) {
 /**
  * Register a new WP site
  */
-export async function registerSite(data) {
+export async function registerSite(data, { prismaClient = prisma, bridgeSecret } = {}) {
   const { siteUrl, siteName, wordpressVersion, phpVersion, activePlugins, theme, clientId, projectId, bridgeVersion, ttfb, dbSize, diskBytes, diskUsagePct, pluginUpdates } = data;
+  const normalizedSiteUrl = canonicalSiteUrl(siteUrl);
 
-  return prisma.wPSite.create({
+  return prismaClient.wPSite.create({
     data: {
-      name: siteName || new URL(siteUrl).hostname,
-      url: siteUrl,
-      adminUrl: `${siteUrl}/wp-admin`,
+      name: siteName || new URL(normalizedSiteUrl).hostname,
+      url: normalizedSiteUrl,
+      adminUrl: `${normalizedSiteUrl}/wp-admin`,
+      bridgeSecretEncrypted: encrypt(bridgeSecret),
       wpVersion: wordpressVersion,
       phpVersion,
       pluginCount: Array.isArray(activePlugins) ? activePlugins.length : (activePlugins || 0),
@@ -211,6 +216,13 @@ export async function registerSite(data) {
       healthScore: 100,
       alerts: '[]'
     }
+  });
+}
+
+export async function rotateSiteSecret(siteId, { prismaClient = prisma, bridgeSecret } = {}) {
+  return prismaClient.wPSite.update({
+    where: { id: siteId },
+    data: { bridgeSecretEncrypted: encrypt(bridgeSecret) }
   });
 }
 
@@ -258,7 +270,7 @@ export async function recordBackup(siteUrl, report) {
   return tenantPrisma.wPBackup.create({
     data: {
       siteId: site.id,
-      siteUrl,
+      siteUrl: site.url,
       timestamp: report.timestamp ? new Date(report.timestamp) : new Date(),
       dbSuccess: !!report.dbSuccess,
       filesSuccess: !!report.filesSuccess,
@@ -283,7 +295,7 @@ export async function recordReport(siteUrl, report) {
     where: { siteId_month: { siteId: site.id, month } },
     create: {
       siteId: site.id,
-      siteUrl,
+      siteUrl: site.url,
       month,
       uptime: JSON.stringify(report.uptime || {}),
       updates: JSON.stringify(report.updates || {}),
@@ -311,7 +323,7 @@ export async function recordAlert(siteUrl, alertType, details) {
   return withSiteTenant(siteUrl, (tenantPrisma, site) => tenantPrisma.wPAlert.create({
     data: {
       siteId: site.id,
-      siteUrl,
+      siteUrl: site.url,
       alertType,
       details: JSON.stringify(details || {})
     }
@@ -322,8 +334,8 @@ export async function recordAlert(siteUrl, alertType, details) {
  * Get recent alerts for a site
  */
 export async function getAlerts(siteUrl, limit = 50) {
-  return withSiteTenant(siteUrl, (tenantPrisma) => tenantPrisma.wPAlert.findMany({
-    where: { siteUrl },
+  return withSiteTenant(siteUrl, (tenantPrisma, site) => tenantPrisma.wPAlert.findMany({
+    where: { siteUrl: site.url },
     orderBy: { createdAt: 'desc' },
     take: limit
   }));
@@ -333,8 +345,8 @@ export async function getAlerts(siteUrl, limit = 50) {
  * Get recent backups for a site
  */
 export async function getBackups(siteUrl, limit = 20) {
-  return withSiteTenant(siteUrl, (tenantPrisma) => tenantPrisma.wPBackup.findMany({
-    where: { siteUrl },
+  return withSiteTenant(siteUrl, (tenantPrisma, site) => tenantPrisma.wPBackup.findMany({
+    where: { siteUrl: site.url },
     orderBy: { timestamp: 'desc' },
     take: limit
   }));
@@ -344,8 +356,8 @@ export async function getBackups(siteUrl, limit = 20) {
  * Get reports for a site
  */
 export async function getReports(siteUrl) {
-  return withSiteTenant(siteUrl, (tenantPrisma) => tenantPrisma.wPReport.findMany({
-    where: { siteUrl },
+  return withSiteTenant(siteUrl, (tenantPrisma, site) => tenantPrisma.wPReport.findMany({
+    where: { siteUrl: site.url },
     orderBy: { createdAt: 'desc' },
     take: 12
   }));
@@ -357,7 +369,7 @@ export async function getReports(siteUrl) {
 export async function logSupportHours(siteUrl, hours, description, month) {
   return withSiteTenant(siteUrl, (tenantPrisma, site) => tenantPrisma.supportHourEntry.create({
     data: {
-      siteUrl,
+      siteUrl: site.url,
       clientId: site.clientId || null,
       projectId: site.projectId || null,
       month: month || new Date().toISOString().slice(0, 7),

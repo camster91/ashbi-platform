@@ -31,19 +31,11 @@ class Ashbi_Health {
             'wordpressVersion' => get_bloginfo( 'version' ),
             'phpVersion'       => PHP_VERSION,
             'activePlugins'    => $active,
+            'pluginCount'      => count( $active ),
             'theme'            => wp_get_theme()->get( 'Name' ),
             'bridgeVersion'    => defined( 'ASHBI_BRIDGE_VERSION' ) ? ASHBI_BRIDGE_VERSION : '1.5.0',
             'timestamp'        => (string) time(),
         ];
-
-        // Hub still expects secretKey on first register so it can store the
-        // shared secret. HMAC headers are also sent so the hub can migrate
-        // to signature-only verification. Filter to omit the body secret
-        // once the hub no longer needs it:
-        //   add_filter( 'ashbi_outbound_include_secret_key', '__return_false' );
-        if ( apply_filters( 'ashbi_outbound_include_secret_key', true ) ) {
-            $body['secretKey'] = get_option( 'ashbi_secret_key' );
-        }
 
         $json     = wp_json_encode( $body );
         $signed   = Ashbi_Auth::sign_outbound( $json );
@@ -51,7 +43,11 @@ class Ashbi_Health {
             'Authorization' => 'Bearer ' . $api_key,
         ] );
 
-        $response = wp_remote_post( $hub_url . '/api/wp-bridge', [
+        // The site must first be provisioned by an Ashbi admin. This signed
+        // health update confirms the pasted per-site credential without
+        // allowing a plugin to choose its own organization.
+        $response = wp_remote_request( $hub_url . '/api/wp-bridge', [
+            'method'    => 'PUT',
             'body'      => $signed['body'],
             'headers'   => $headers,
             'timeout'   => 30,
@@ -83,10 +79,6 @@ class Ashbi_Health {
             'phpVersion'    => PHP_VERSION,
             'bridgeVersion' => defined( 'ASHBI_BRIDGE_VERSION' ) ? ASHBI_BRIDGE_VERSION : '1.5.0',
         ];
-        if ( apply_filters( 'ashbi_outbound_include_secret_key', true ) ) {
-            $body['secretKey'] = get_option( 'ashbi_secret_key' );
-        }
-
         // Use PUT /api/wp-bridge for health updates (hub's updateSiteHealth handler).
         $json    = wp_json_encode( $body );
         $signed  = Ashbi_Auth::sign_outbound( $json );

@@ -58,15 +58,15 @@ test('production route uses async preHandler (regression guard)', () => {
   const routePath = path.resolve(__dirname, '..', '..', 'routes', 'wp-bridge.routes.js');
   const src = fs.readFileSync(routePath, 'utf-8');
 
-  // Match `verifyBackupHmac = async (...)` and reject `verifyBackupHmac = (...)` without `async`.
+  // The per-site verifier factory must return an async hook.
   assert.match(
     src,
-    /(const|let|var)\s+verifyBackupHmac\s*=\s*async\s*\(/,
-    'verifyBackupHmac must be declared `async` (sync hooks hang the Fastify v5 chain)'
+    /return\s+async\s+function\s+verifySiteHmac\s*\(/,
+    'verifySiteHmac must be async (sync hooks hang the Fastify v5 chain)'
   );
 
-  // The hook must be wired into the /backup route via `preHandler: verifyBackupHmac`.
-  assert.match(src, /preHandler\s*:\s*verifyBackupHmac/, 'preHandler must wire verifyBackupHmac on /backup');
+  // The hook must be wired into the /backup route.
+  assert.match(src, /preHandler\s*:\s*verifySiteHmac/, 'preHandler must wire verifySiteHmac on /backup');
 
   // And /backup must be wired under the wp-bridge plugin prefix.
   assert.match(src, /fastify\.post\s*\(\s*['"]\/backup['"]/, "must register POST /backup");
@@ -74,19 +74,8 @@ test('production route uses async preHandler (regression guard)', () => {
   // The preParsing hook must capture rawBody.
   assert.match(src, /request\.rawBody\s*=/, 'preParsing hook must capture request.rawBody');
 
-  // The hook must read `request.body.timestamp` (the primary read
-  // after PR #17's wire-format change) before falling back to
-  // `request.body._timestamp` (the legacy field name).
-  assert.match(
-    src,
-    /request\.body\.timestamp/,
-    'verifyBackupHmac must read request.body.timestamp as the primary field (PR-B wire-format fix)'
-  );
-  assert.match(
-    src,
-    /request\.body\._timestamp/,
-    'verifyBackupHmac must keep _timestamp as a backward-compat fallback (PR-B wire-format fix)'
-  );
+  assert.match(src, /x-ashbi-timestamp/, 'site verifier must read the signed timestamp header');
+  assert.match(src, /x-ashbi-nonce/, 'site verifier must read the single-use nonce header');
 });
 
 function buildSignature({ timestamp, body, secret }) {

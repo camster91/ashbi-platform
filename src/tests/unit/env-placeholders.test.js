@@ -19,10 +19,11 @@ import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const envJsPath = path.join(__dirname, '..', '..', 'config', 'env.js');
+const envJsUrl = pathToFileURL(envJsPath).href;
 
 /**
  * Run `node -e "import('<env.js>')"` in a child process with the given
@@ -37,7 +38,7 @@ function runEnvWithEnv(envOverrides) {
   return new Promise((resolve) => {
     const child = spawn(
       process.execPath,
-      ['-e', `import(${JSON.stringify(envJsPath)})`],
+      ['-e', `import(${JSON.stringify(envJsUrl)})`],
       {
         env: { ...process.env, ...envOverrides },
         cwd: path.resolve(__dirname, '..', '..', '..'),

@@ -1,5 +1,4 @@
 import { Readable } from 'node:stream';
-import crypto from 'crypto';
 import { z } from 'zod';
 import env from '../config/env.js';
 import { prisma } from '../config/db.js';
@@ -7,10 +6,10 @@ import { resolveTenantOrganizationIds, runTenantJob } from '../jobs/tenant-itera
 import { validateBody, validateQuery } from '../validators/schemas.js';
 import {
   registerSite,
+  rotateSiteSecret,
   updateSiteHealth,
   listSites,
   deleteSite,
-  verifySecret,
   recordBackup,
   recordReport,
   recordAlert,
@@ -33,10 +32,11 @@ import {
   listFleetOps,
   PER_SITE_TIMEOUT_MS
 } from '../services/fleetOps.service.js';
+import { canonicalSiteUrl, issueSiteSecret, verifySiteRequest } from '../security/wp-bridge-auth.js';
 
 // Capture the unparsed HTTP body into request.rawBody so the HMAC verify can
-// recompute sha256(timestamp + raw_body) the same way the plugin did. Used
-// only on routes that need exact-byte HMAC matching (currently POST /backup).
+// recompute sha256(timestamp.nonce.raw_body) over the exact bytes sent by
+// the plugin. Every plugin-originated write uses this hook.
 const captureRawBodyHook = async (request, _reply, payload) => {
   const chunks = [];
   for await (const chunk of payload) {
@@ -48,75 +48,34 @@ const captureRawBodyHook = async (request, _reply, payload) => {
   return Readable.from(Buffer.from(raw));
 };
 
-// HMAC verify for POST /api/wp-bridge/backup. Returns truthy (reply already
-// sent with 401) on rejection, falsy on acceptance.
-const HMAC_REPLAY_WINDOW_SECONDS = 300;
-
-const verifyBackupHmac = async (request, reply) => {
-  const headerSig = request.headers['x-ashbi-signature'];
-  if (!headerSig || typeof headerSig !== 'string' || !headerSig.startsWith('sha256=')) {
-    reply.status(401).send({ error: 'Missing or malformed X-Ashbi-Signature header' });
-    return reply;
-  }
-  const providedHex = headerSig.slice('sha256='.length);
-
-  // Accept `timestamp` (current wire format — set by plugin's send_backup_report
-  // after PR #17) as the primary read. Fall back to `_timestamp` for backward
-  // compatibility with older plugin versions that prefixed internal fields with
-  // an underscore. The canonical string the signature is computed over remains
-  // `timestamp + body`, so the wire format the plugin uses to compute the HMAC
-  // must match the field name we read here.
-  const timestamp =
-    request.body && (
-      request.body.timestamp !== undefined
-        ? request.body.timestamp
-        : request.body._timestamp
-    );
-  if (timestamp === undefined || timestamp === null || !/^\d+$/.test(String(timestamp))) {
-    reply.status(401).send({ error: 'Missing or invalid timestamp' });
-    return reply;
-  }
-  const tsSec = parseInt(String(timestamp), 10);
-  const nowSec = Math.floor(Date.now() / 1000);
-  if (Math.abs(nowSec - tsSec) > HMAC_REPLAY_WINDOW_SECONDS) {
-    reply.status(401).send({ error: 'Timestamp outside replay window' });
-    return reply;
-  }
-
-  if (!env.wpBridgeSecret) {
-    if (request.log && request.log.error) {
-      request.log.error('wpBridgeSecret not configured');
+export function buildVerifySiteHmac(prismaClient) {
+  return async function verifySiteHmac(request, reply) {
+    const result = await verifySiteRequest({
+      prismaClient,
+      siteUrl: request.body?.siteUrl,
+      timestamp: request.headers['x-ashbi-timestamp'],
+      nonce: request.headers['x-ashbi-nonce'],
+      signature: request.headers['x-ashbi-signature'],
+      rawBody: request.rawBody || ''
+    });
+    if (!result.valid) {
+      return reply.status(401).send({ error: 'Invalid site signature', code: result.code });
     }
-    reply.status(401).send({ error: 'Server missing wpBridgeSecret configuration' });
-    return reply;
-  }
-
-  const rawBody = request.rawBody || '';
-  const expectedHex = crypto
-    .createHmac('sha256', env.wpBridgeSecret)
-    .update(String(timestamp) + rawBody)
-    .digest('hex');
-
-  let sigBuf;
-  let expectedBuf;
-  try {
-    sigBuf = Buffer.from(providedHex, 'hex');
-    expectedBuf = Buffer.from(expectedHex, 'hex');
-  } catch {
-    reply.status(401).send({ error: 'Invalid signature encoding' });
-    return reply;
-  }
-
-  if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
-    reply.status(401).send({ error: 'Invalid signature' });
-    return reply;
-  }
-  // accept: returning a Promise (because this function is `async`) is what
-  // actually advances the Fastify v5 hook runner chain. Returning
-  // `undefined` synchronously leaves the chain hung.
-};
+    request.wpBridgeSite = result.site;
+  };
+}
 
 export default async function wpBridgeRoutes(fastify) {
+  const verifySiteHmac = buildVerifySiteHmac(prisma);
+  const provisionSiteSchema = z.object({
+    siteUrl: z.string().url().max(2048).refine((value) => {
+      const url = new URL(value);
+      return url.protocol === 'https:' && !url.username && !url.password;
+    }, 'siteUrl must be an HTTPS URL without embedded credentials'),
+    siteName: z.string().trim().min(1).max(255).optional(),
+    clientId: z.string().min(1).max(255).optional(),
+    projectId: z.string().min(1).max(255).optional()
+  });
   // Convert BigInt values (dbSize, filesSize) to strings for JSON serialization
   const serializeBigInt = (obj) =>
     JSON.parse(JSON.stringify(obj, (_, v) => (typeof v === 'bigint' ? v.toString() : v)));
@@ -132,21 +91,29 @@ export default async function wpBridgeRoutes(fastify) {
     return listSites(request.user.id, { prismaClient: request.prisma });
   });
 
-  fastify.post('/', { config: { public: true } }, async (request, reply) => {
-    const { siteUrl, siteName, secretKey } = request.body;
-    if (!secretKey || !verifySecret(secretKey)) {
-      return reply.status(401).send({ error: 'Invalid secret key' });
-    }
+  fastify.post('/', {
+    onRequest: [fastify.authenticate, fastify.adminOnly],
+    preHandler: validateBody(provisionSiteSchema)
+  }, async (request, reply) => {
+    const { siteUrl } = request.body;
     if (!siteUrl) return reply.status(400).send({ error: 'siteUrl is required' });
-    const site = await registerSite(request.body);
-    return reply.status(201).send({ success: true, site: serializeBigInt(site) });
+    const existing = await request.prisma.wPSite.findFirst({
+      where: { url: canonicalSiteUrl(siteUrl) },
+      select: { id: true }
+    });
+    if (existing) return reply.status(409).send({ error: 'Site is already provisioned' });
+    const bridgeSecret = issueSiteSecret();
+    const site = await registerSite(request.body, { prismaClient: request.prisma, bridgeSecret });
+    const { bridgeSecretEncrypted: _encryptedSecret, ...safeSite } = site;
+    return reply.status(201).send({ success: true, site: serializeBigInt(safeSite), bridgeSecret });
   });
 
-  fastify.put('/', { config: { public: true } }, async (request, reply) => {
-    const { siteUrl, secretKey, ...healthData } = request.body;
-    if (!secretKey || !verifySecret(secretKey)) {
-      return reply.status(401).send({ error: 'Invalid secret key' });
-    }
+  fastify.put('/', {
+    config: { public: true },
+    preParsing: captureRawBodyHook,
+    preHandler: verifySiteHmac
+  }, async (request, reply) => {
+    const { siteUrl, timestamp: _timestamp, nonce: _nonce, ...healthData } = request.body;
     if (!siteUrl) return reply.status(400).send({ error: 'siteUrl is required' });
     try {
       const result = await updateSiteHealth(siteUrl, healthData);
@@ -157,15 +124,14 @@ export default async function wpBridgeRoutes(fastify) {
   });
 
   // Bridge plugin backup event (v1.7.0+).
-  // Now HMAC-signed by the plugin: header X-Ashbi-Signature: sha256={hmac}
-  // over `_timestamp + raw_body`. Backwards-compatible envelope (still sends
-  // siteUrl/secretKey/report). HMAC verify is the source of truth.
+  // Per-site HMAC over timestamp.nonce.raw_body; nonce persistence makes each
+  // otherwise-valid request single-use inside the replay window.
   fastify.post(
     '/backup',
     {
       config: { public: true },
       preParsing: captureRawBodyHook,
-      preHandler: verifyBackupHmac
+      preHandler: verifySiteHmac
     },
     async (request, reply) => {
       const { siteUrl, report } = request.body || {};
@@ -179,15 +145,12 @@ export default async function wpBridgeRoutes(fastify) {
     }
   );
 
-  // Bridge plugin monthly maintenance report (v1.7.0+). secretKey-only auth for now.
+  // Bridge plugin monthly maintenance report (v1.7.0+).
   fastify.post(
     '/report',
-    { config: { public: true } },
+    { config: { public: true }, preParsing: captureRawBodyHook, preHandler: verifySiteHmac },
     async (request, reply) => {
-      const { siteUrl, secretKey, report } = request.body;
-      if (!secretKey || !verifySecret(secretKey)) {
-        return reply.status(401).send({ error: 'Invalid secret key' });
-      }
+      const { siteUrl, report } = request.body;
       if (!siteUrl) return reply.status(400).send({ error: 'siteUrl is required' });
       try {
         const r = await recordReport(siteUrl, report || {});
@@ -198,15 +161,12 @@ export default async function wpBridgeRoutes(fastify) {
     }
   );
 
-  // Bridge plugin alert: new admin, admin promoted, security event (v1.7.0+). secretKey-only auth.
+  // Bridge plugin alert: new admin, admin promoted, security event (v1.7.0+).
   fastify.post(
     '/alert',
-    { config: { public: true } },
+    { config: { public: true }, preParsing: captureRawBodyHook, preHandler: verifySiteHmac },
     async (request, reply) => {
-      const { siteUrl, secretKey, alertType, details } = request.body;
-      if (!secretKey || !verifySecret(secretKey)) {
-        return reply.status(401).send({ error: 'Invalid secret key' });
-      }
+      const { siteUrl, alertType, details } = request.body;
       if (!siteUrl || !alertType) {
         return reply.status(400).send({ error: 'siteUrl and alertType required' });
       }
@@ -215,15 +175,12 @@ export default async function wpBridgeRoutes(fastify) {
     }
   );
 
-  // Log support hours (retainer tracking) from plugin or manual entry. secretKey-only auth.
+  // Log support hours (retainer tracking) from the plugin.
   fastify.post(
     '/hours',
-    { config: { public: true } },
+    { config: { public: true }, preParsing: captureRawBodyHook, preHandler: verifySiteHmac },
     async (request, reply) => {
-      const { siteUrl, secretKey, hours, description, month } = request.body;
-      if (!secretKey || !verifySecret(secretKey)) {
-        return reply.status(401).send({ error: 'Invalid secret key' });
-      }
+      const { siteUrl, hours, description, month } = request.body;
       if (!siteUrl || typeof hours !== 'number') {
         return reply.status(400).send({ error: 'siteUrl and hours required' });
       }
@@ -259,6 +216,15 @@ export default async function wpBridgeRoutes(fastify) {
     const { id } = request.params;
     await deleteSite(id);
     return reply.status(204).send();
+  });
+
+  fastify.post('/:id/rotate-secret', {
+    config: { skipValidation: true },
+    onRequest: [fastify.authenticate, fastify.adminOnly]
+  }, async (request) => {
+    const bridgeSecret = issueSiteSecret();
+    await rotateSiteSecret(request.params.id, { prismaClient: request.prisma, bridgeSecret });
+    return { success: true, bridgeSecret };
   });
 
   // ====================== FLEET DASHBOARD (Plan 6) ======================

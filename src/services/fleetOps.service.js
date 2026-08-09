@@ -26,8 +26,8 @@
 // route imports `prisma` at module load, so we can't monkey-patch it).
 
 import prisma from '../config/db.js';
-import env from '../config/env.js';
 import { signRequest } from '../lib/hmac-client.js';
+import { decrypt } from '../utils/crypto.js';
 
 export const PER_SITE_TIMEOUT_MS = 10_000;
 
@@ -94,6 +94,13 @@ export async function fanOutOneSite({
   dryRun = false
 }) {
   const start = Date.now();
+  if (!secret) {
+    return {
+      siteUrl,
+      status: 'error',
+      error: 'site credential is not provisioned'
+    };
+  }
   const req = buildPerSiteRequest({ siteUrl, endpoint, payload, secret, timestamp });
 
   if (dryRun) {
@@ -206,7 +213,7 @@ export async function executeFanOutPure({
         siteUrl: site.url,
         endpoint,
         payload,
-        secret,
+        secret: site.bridgeSecret || secret,
         timestamp: ts,
         fetchImpl,
         timeoutMs,
@@ -229,25 +236,39 @@ export async function executeFanOutPure({
  * - neither: returns [] (caller should reject before calling executeFleetOp)
  */
 export async function resolveTargetSites({ targetAll, targetSites } = {}) {
+  const select = { id: true, url: true, name: true, bridgeSecretEncrypted: true };
+  let sites;
   if (targetAll === true) {
-    return prisma.wPSite.findMany({
-      select: { id: true, url: true, name: true },
+    sites = await prisma.wPSite.findMany({
+      select,
       orderBy: { createdAt: 'asc' }
     });
-  }
-  if (Array.isArray(targetSites) && targetSites.length > 0) {
-    return prisma.wPSite.findMany({
+  } else if (Array.isArray(targetSites) && targetSites.length > 0) {
+    sites = await prisma.wPSite.findMany({
       where: {
         OR: [
           { id: { in: targetSites } },
           { url: { in: targetSites } }
         ]
       },
-      select: { id: true, url: true, name: true },
+      select,
       orderBy: { createdAt: 'asc' }
     });
+  } else {
+    return [];
   }
-  return [];
+  return sites.map(({ bridgeSecretEncrypted, ...site }) => {
+    try {
+      return {
+        ...site,
+        bridgeSecret: bridgeSecretEncrypted
+          ? decrypt(bridgeSecretEncrypted, { audit: true, label: `wp-fleet:${site.id}` })
+          : null
+      };
+    } catch {
+      return { ...site, bridgeSecret: null };
+    }
+  });
 }
 
 /**
@@ -325,7 +346,6 @@ export async function executeFleetOp({
     targetSites: targetArr,
     endpoint,
     payload,
-    secret: env.wpBridgeSecret,
     fetchImpl,
     timeoutMs,
     dryRun

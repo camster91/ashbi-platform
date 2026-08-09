@@ -141,7 +141,7 @@ function TabButton({ id, activeTab, onSelect, icon, children, testId }) {
 function SitesTab({ queryClient }) {
   const [showAdd, setShowAdd] = useState(false);
   const [addUrl, setAddUrl] = useState('');
-  const [addKey, setAddKey] = useState('');
+  const [provisionedSecret, setProvisionedSecret] = useState('');
   const [alert, setAlert] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
 
@@ -163,14 +163,11 @@ function SitesTab({ queryClient }) {
 
   const registerMutation = useMutation({
     mutationFn: (data) => api.registerWPSite(data),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['wp-sites'] });
       queryClient.invalidateQueries({ queryKey: ['wp-fleet-status'] });
-      setShowAdd(false);
       setAddUrl('');
-      setAddKey('');
-      setAlert({ type: 'success', msg: 'Site registered successfully!' });
-      setTimeout(() => setAlert(null), 3000);
+      setProvisionedSecret(data.bridgeSecret);
     },
     onError: (err) => {
       setAlert({ type: 'error', msg: err.message || 'Failed to register site' });
@@ -280,7 +277,16 @@ function SitesTab({ queryClient }) {
   const handleRegister = (e) => {
     e.preventDefault();
     if (!addUrl.trim()) return;
-    registerMutation.mutate({ siteUrl: addUrl, secretKey: addKey });
+    registerMutation.mutate({ siteUrl: addUrl });
+  };
+
+  const copyProvisionedSecret = async () => {
+    try {
+      await navigator.clipboard.writeText(provisionedSecret);
+      setAlert({ type: 'success', msg: 'Per-site key copied.' });
+    } catch {
+      setAlert({ type: 'error', msg: 'Copy failed. Select the key and copy it manually.' });
+    }
   };
 
   const fleetByUrl = new Map();
@@ -312,7 +318,7 @@ function SitesTab({ queryClient }) {
         >
           Send digest
         </Button>
-        <Button onClick={() => setShowAdd(true)} leftIcon={<Plus className="w-4 h-4" />}>
+        <Button onClick={() => { setProvisionedSecret(''); setShowAdd(true); }} leftIcon={<Plus className="w-4 h-4" />}>
           Add Site
         </Button>
       </div>
@@ -446,14 +452,14 @@ function SitesTab({ queryClient }) {
             <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm shrink-0">2</div>
             <div>
               <p className="font-medium text-foreground">Configure the Plugin</p>
-              <p className="text-sm text-muted-foreground mt-0.5">Enter your Ashbi Hub URL and secret key in the plugin settings</p>
+              <p className="text-sm text-muted-foreground mt-0.5">Enter your Ashbi Hub URL and the per-site key generated here</p>
             </div>
           </div>
           <div className="flex gap-3">
             <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm shrink-0">3</div>
             <div>
               <p className="font-medium text-foreground">Register Your Site</p>
-              <p className="text-sm text-muted-foreground mt-0.5">Click "Add Site" above and enter your site URL and secret key</p>
+              <p className="text-sm text-muted-foreground mt-0.5">Click "Add Site" above, provision the URL, then copy its one-time key into the plugin</p>
             </div>
           </div>
           <div className="flex gap-3">
@@ -467,12 +473,26 @@ function SitesTab({ queryClient }) {
       </Card>
 
       {showAdd && (
-        <div role="button" tabIndex={0} className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowAdd(false)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { setShowAdd(false); e.preventDefault(); } }}>
-          <div className="bg-card rounded-xl border border-border p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
+        <div role="presentation" className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowAdd(false)}>
+          <div role="dialog" aria-modal="true" aria-labelledby="add-wp-site-title" className="bg-card rounded-xl border border-border p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Add WordPress Site</h3>
-              <button onClick={() => setShowAdd(false)} className="p-1 text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
+              <h3 id="add-wp-site-title" className="text-lg font-semibold">Add WordPress Site</h3>
+              <button aria-label="Close add WordPress site dialog" onClick={() => setShowAdd(false)} className="p-1 text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
             </div>
+            {provisionedSecret ? (
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Copy this key into the plugin now. For security, it will not be shown again.
+                </p>
+                <label className="block text-sm font-medium" htmlFor="wp-bridge-secret">Per-site secret</label>
+                <textarea id="wp-bridge-secret" readOnly value={provisionedSecret}
+                  className="w-full min-h-24 px-3 py-2 rounded-lg border border-border bg-background text-sm font-mono break-all" />
+                <div className="flex justify-end gap-2">
+                  <Button type="button" variant="secondary" onClick={copyProvisionedSecret}>Copy key</Button>
+                  <Button type="button" onClick={() => setShowAdd(false)}>Done</Button>
+                </div>
+              </div>
+            ) : (
             <form onSubmit={handleRegister} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Site URL</label>
@@ -480,17 +500,12 @@ function SitesTab({ queryClient }) {
                   placeholder="https://yoursite.com"
                   className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" required />
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Secret Key</label>
-                <input type="text" value={addKey} onChange={e => setAddKey(e.target.value)}
-                  placeholder="From WP Bridge plugin settings"
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" />
-              </div>
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" type="button" onClick={() => setShowAdd(false)}>Cancel</Button>
                 <Button type="submit" loading={registerMutation.isPending}>Register Site</Button>
               </div>
             </form>
+            )}
           </div>
         </div>
       )}

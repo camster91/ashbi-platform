@@ -65,14 +65,16 @@ class HmacSignTest extends Ashbi_TestCase {
         $this->assertMatchesRegularExpression( '/^sha256=[0-9a-f]{64}$/', $headers['X-Ashbi-Signature'] );
     }
 
-    public function test_signature_matches_timestamp_plus_body(): void {
+    public function test_signature_matches_timestamp_nonce_and_body(): void {
         $this->invoke( [ 'timestamp' => '2026-07-03 12:00:00', 'dbSuccess' => true ] );
         $last = end( $GLOBALS['__ashbi_test_remote_log'] );
         $headers = $last['args']['headers'] ?? [];
         $body    = $last['args']['body'];
-        $decoded = json_decode( $body, true );
-
-        $expected = hash_hmac( 'sha256', $decoded['timestamp'] . $body, 'super-secret-key-abc123' );
+        $expected = hash_hmac(
+            'sha256',
+            $headers['X-Ashbi-Timestamp'] . '.' . $headers['X-Ashbi-Nonce'] . '.' . $body,
+            'super-secret-key-abc123'
+        );
         $this->assertSame( 'sha256=' . $expected, $headers['X-Ashbi-Signature'] ?? null );
     }
 
@@ -101,7 +103,7 @@ class HmacSignTest extends Ashbi_TestCase {
         $body = $m[1];
 
         $this->assertStringNotContainsString( "'secretKey'", $body, 'PR #17 must remove secretKey from backup report body' );
-        $this->assertStringContainsString( "'X-Ashbi-Signature'", $body, 'PR #17 must add X-Ashbi-Signature header' );
+        $this->assertStringContainsString( 'Ashbi_Auth::sign_outbound', $body, 'backup reports must use the shared per-site signer' );
         $this->assertStringContainsString( "'nonce'", $body, 'PR #17 must include nonce in body' );
         $this->assertStringContainsString( "'timestamp'", $body, 'PR #17 must include timestamp in body' );
     }

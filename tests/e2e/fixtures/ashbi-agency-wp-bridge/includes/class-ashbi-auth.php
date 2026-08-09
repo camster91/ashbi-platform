@@ -80,7 +80,7 @@ class Ashbi_Auth {
 	/**
 	 * Build outbound HMAC headers for hub POSTs/PUTs.
 	 *
-	 * Canonical string matches verify_signature(): timestamp + raw body.
+	 * Canonical string for hub-bound writes: timestamp.nonce.raw body.
 	 *
 	 * @param string      $body   Exact JSON body that will be sent.
 	 * @param string|null $secret Optional override; defaults to ashbi_secret_key.
@@ -91,8 +91,9 @@ class Ashbi_Auth {
 		$secret = is_string( $secret ) ? $secret : (string) get_option( 'ashbi_secret_key', '' );
 		$body   = (string) $body;
 		$timestamp = (string) time();
+		$nonce = bin2hex( random_bytes( 16 ) );
 		$signature = $secret !== ''
-			? hash_hmac( 'sha256', $timestamp . $body, $secret )
+			? hash_hmac( 'sha256', $timestamp . '.' . $nonce . '.' . $body, $secret )
 			: '';
 
 		$headers = [
@@ -100,6 +101,7 @@ class Ashbi_Auth {
 		];
 		if ( $signature !== '' ) {
 			$headers['X-Ashbi-Timestamp'] = $timestamp;
+			$headers['X-Ashbi-Nonce'] = $nonce;
 			$headers['X-Ashbi-Signature'] = 'sha256=' . $signature;
 		}
 

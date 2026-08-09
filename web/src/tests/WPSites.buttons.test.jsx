@@ -115,6 +115,25 @@ describe('WPSites row buttons (PR-E: hub-ui-buttons-wire)', () => {
     delete window.confirm;
   });
 
+  it('provisions a site without accepting a caller secret and shows the one-time key', async () => {
+    api.registerWPSite.mockResolvedValue({
+      success: true,
+      site: { id: 'site-new', url: 'https://new.example' },
+      bridgeSecret: 'one-time-site-secret'
+    });
+    setup({ sites: [], fleet: { ...SAMPLE_FLEET, totalSites: 0, sites: [] } });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Add Site' }));
+    fireEvent.change(screen.getByPlaceholderText('https://yoursite.com'), {
+      target: { value: 'https://new.example' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Register Site' }));
+
+    await waitFor(() => expect(api.registerWPSite).toHaveBeenCalledWith({ siteUrl: 'https://new.example' }));
+    expect(await screen.findByDisplayValue('one-time-site-secret')).toBeInTheDocument();
+    expect(screen.getByText(/will not be shown again/i)).toBeInTheDocument();
+  });
+
   it('Magic Login button POSTs /api/wp-bridge/fleet/magic-login with { user_id, targetSites: [siteId] } and opens returned URL in a new tab', async () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,

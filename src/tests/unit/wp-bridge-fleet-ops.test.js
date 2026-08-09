@@ -123,6 +123,53 @@ describe('aggregateFleetOpResults', () => {
 });
 
 describe('executeFanOutPure — concurrency + isolation', () => {
+  test('each site receives a signature made with only its provisioned credential', async () => {
+    const seen = [];
+    const mockFetch = async (url, init) => {
+      seen.push({ url, init });
+      return { ok: true, status: 200, text: async () => '{}' };
+    };
+    const sites = [
+      { id: 's1', url: 'https://a.com', bridgeSecret: 'site-a-secret' },
+      { id: 's2', url: 'https://b.com', bridgeSecret: 'site-b-secret' }
+    ];
+    const out = await executeFanOutPure({
+      targetSites: sites,
+      endpoint: 'command',
+      payload: { cmd: 'wp option get blogname' },
+      fetchImpl: mockFetch,
+      now: () => 1718000000000
+    });
+
+    assert.equal(out.succeeded, 2);
+    for (const [index, call] of seen.entries()) {
+      const expectedSecret = sites[index].bridgeSecret;
+      assert.equal(verifyRequest({
+        signatureHeader: call.init.headers['X-Ashbi-Signature'],
+        timestamp: call.init.headers['X-Ashbi-Timestamp'],
+        body: call.init.body,
+        secret: expectedSecret
+      }), true);
+      assert.equal(verifyRequest({
+        signatureHeader: call.init.headers['X-Ashbi-Signature'],
+        timestamp: call.init.headers['X-Ashbi-Timestamp'],
+        body: call.init.body,
+        secret: sites[1 - index].bridgeSecret
+      }), false);
+    }
+  });
+
+  test('an unprovisioned site fails individually without a fleet-secret fallback', async () => {
+    const out = await executeFanOutPure({
+      targetSites: [{ id: 's1', url: 'https://a.com', bridgeSecret: null }],
+      endpoint: 'command',
+      payload: { cmd: 'wp option get blogname' },
+      fetchImpl: async () => { throw new Error('fetch must not run'); }
+    });
+    assert.equal(out.failed, 1);
+    assert.match(out.results[0].error, /credential is not provisioned/);
+  });
+
   test('empty target list short-circuits to zeros', async () => {
     const out = await executeFanOutPure({
       targetSites: [],

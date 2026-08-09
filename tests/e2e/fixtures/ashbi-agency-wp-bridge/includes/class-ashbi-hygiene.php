@@ -322,15 +322,11 @@ class Ashbi_Hygiene {
             'timestamp' => $timestamp,
             'report'    => $report,
         ] );
-        $signature = hash_hmac( 'sha256', $timestamp . $body, $secret );
+        $signed = Ashbi_Auth::sign_outbound( $body, $secret );
 
         wp_remote_post( $hub_url . '/api/wp-bridge/report', [
-            'body'      => $body,
-            'headers'   => [
-                'Content-Type'       => 'application/json',
-                'X-Ashbi-Timestamp'  => $timestamp,
-                'X-Ashbi-Signature'  => 'sha256=' . $signature,
-            ],
+            'body'      => $signed['body'],
+            'headers'   => $signed['headers'],
             'timeout'   => 15,
             'blocking'  => false,
             'sslverify' => true,
@@ -359,15 +355,11 @@ class Ashbi_Hygiene {
                     'timestamp' => $timestamp,
                     'details'   => $details,
                 ] );
-                $signature = hash_hmac( 'sha256', $timestamp . $body, $secret );
+                $signed = Ashbi_Auth::sign_outbound( $body, $secret );
 
                 wp_remote_post( $hub_url . '/api/wp-bridge/alert', [
-                    'body'      => $body,
-                    'headers'   => [
-                        'Content-Type'      => 'application/json',
-                        'X-Ashbi-Timestamp' => $timestamp,
-                        'X-Ashbi-Signature' => 'sha256=' . $signature,
-                    ],
+                    'body'      => $signed['body'],
+                    'headers'   => $signed['headers'],
                     'timeout'   => 10,
                     'blocking'  => false,
                     'sslverify' => true,
