@@ -21,7 +21,8 @@ import {
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import { usePushNotifications } from '../hooks/usePushNotifications';
-import { Button, Card } from '../components/ui';
+import QueryErrorState from '../components/QueryErrorState';
+import { Button, Card, LoadingState } from '../components/ui';
 
 function Section({ icon: Icon, title, description, children }) {
   return (
@@ -143,12 +144,24 @@ function OnboardingPreferences() {
 function AIModelSection() {
   const [saved, setSaved] = useState(false);
 
-  const { data: aiData, isLoading } = useQuery({
+  const {
+    data: aiData,
+    isLoading: aiLoading,
+    isFetching: aiFetching,
+    error: aiError,
+    refetch: refetchAIProvider,
+  } = useQuery({
     queryKey: ['ai-provider'],
     queryFn: () => api.getAIProvider(),
   });
 
-  const { data: modelData } = useQuery({
+  const {
+    data: modelData,
+    isLoading: modelsLoading,
+    isFetching: modelsFetching,
+    error: modelsError,
+    refetch: refetchModels,
+  } = useQuery({
     queryKey: ['ollama-models'],
     queryFn: () => api.getOllamaModels(),
   });
@@ -181,8 +194,15 @@ function AIModelSection() {
 
   return (
     <Section icon={Bot} title="AI Model" description="Choose which Ollama model powers all AI features">
-      {isLoading ? (
-        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary" />
+      {aiLoading || modelsLoading ? (
+        <LoadingState label="Loading AI model settings…" compact className="justify-start" size="sm" />
+      ) : aiError || modelsError ? (
+        <QueryErrorState
+          error={aiError || modelsError}
+          message="Failed to load AI model settings"
+          onRetry={() => Promise.all([refetchAIProvider(), refetchModels()])}
+          isRetrying={aiFetching || modelsFetching}
+        />
       ) : (
         <div className="space-y-5">
           {Object.entries(families).map(([family, items]) => (
@@ -244,7 +264,13 @@ function ApiKeysSection() {
   const [newKeyName, setNewKeyName] = useState('');
   const [createdKey, setCreatedKey] = useState(null);
 
-  const { data: keysData = { keys: [] }, isLoading } = useQuery({
+  const {
+    data: keysData = { keys: [] },
+    isLoading,
+    isFetching: keysFetching,
+    error: keysError,
+    refetch: refetchKeys,
+  } = useQuery({
     queryKey: ['api-keys'],
     queryFn: () => api.getApiKeys(),
   });
@@ -269,6 +295,11 @@ function ApiKeysSection() {
 
   return (
     <div className="space-y-4">
+      {(createMutation.error || deleteMutation.error) && (
+        <p role="alert" className="text-sm text-destructive">
+          {(createMutation.error || deleteMutation.error).message || 'The API key change could not be completed. Try again.'}
+        </p>
+      )}
       {/* Create new key */}
       <div className="flex gap-2">
         <input
@@ -321,8 +352,15 @@ function ApiKeysSection() {
 
       {/* Existing keys */}
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading...</p>
-      ) : keysData.keys.length === 0 ? (
+        <LoadingState label="Loading API keys…" compact className="justify-start" size="sm" />
+      ) : keysError ? (
+        <QueryErrorState
+          error={keysError}
+          message="Failed to load API keys"
+          onRetry={refetchKeys}
+          isRetrying={keysFetching}
+        />
+      ) : !keysError && keysData.keys.length === 0 ? (
         <p className="text-sm text-muted-foreground">No API keys yet. Create one above.</p>
       ) : (
         <div className="space-y-2">
@@ -337,6 +375,9 @@ function ApiKeysSection() {
                 </p>
               </div>
               <button
+                type="button"
+                aria-label={`Revoke ${key.name}`}
+                disabled={deleteMutation.isPending}
                 onClick={() => {
                   if (confirm('Revoke this API key? Any integrations using it will stop working.')) {
                     deleteMutation.mutate(key.id);
