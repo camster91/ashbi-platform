@@ -584,7 +584,7 @@ export default function Layout({ children }) {
                   type="button"
                   onClick={() => setMoreMenuOpen(!moreMenuOpen)}
                   className={cn(
-                    'w-full flex flex-col items-center justify-center py-2.5 text-xs transition-all active:scale-90',
+                    'w-full min-h-11 flex flex-col items-center justify-center py-2.5 text-xs transition-all active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                     moreMenuOpen ? 'text-primary' : 'text-muted-foreground'
                   )}
                   aria-expanded={moreMenuOpen}
@@ -619,7 +619,7 @@ export default function Layout({ children }) {
                             key={action.label}
                             to={action.href}
                             onClick={() => setMoreMenuOpen(false)}
-                            className="flex items-center gap-4 px-5 py-3 text-sm hover:bg-primary/5 transition-colors"
+                            className="min-h-11 flex items-center gap-4 px-5 py-3 text-sm hover:bg-primary/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             role="menuitem"
                           >
                             <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
@@ -643,7 +643,7 @@ export default function Layout({ children }) {
                                 to={item.href}
                                 onClick={() => setMoreMenuOpen(false)}
                                 className={cn(
-                                  'flex items-center gap-4 px-5 py-3 text-sm transition-colors',
+                                  'min-h-11 flex items-center gap-4 px-5 py-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                                   location.pathname === item.href ? 'bg-primary/5 text-primary' : 'hover:bg-primary/5'
                                 )}
                                 role="menuitem"
@@ -664,8 +664,10 @@ export default function Layout({ children }) {
                       {/* Theme & Settings */}
                       <div className="border-t border-border/40 py-2 bg-muted/30">
                         <button
+                          type="button"
+                          aria-label="Change theme"
                           onClick={() => { toggleTheme(); setMoreMenuOpen(false); }}
-                          className="w-full flex items-center gap-4 px-5 py-3 text-sm hover:bg-primary/5 transition-colors"
+                          className="w-full min-h-11 flex items-center gap-4 px-5 py-3 text-sm hover:bg-primary/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           role="menuitem"
                         >
                           <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
@@ -676,7 +678,7 @@ export default function Layout({ children }) {
                         <Link
                           to="/settings"
                           onClick={() => setMoreMenuOpen(false)}
-                          className="flex items-center gap-4 px-5 py-3 text-sm hover:bg-primary/5 transition-colors"
+                           className="min-h-11 flex items-center gap-4 px-5 py-3 text-sm hover:bg-primary/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           role="menuitem"
                         >
                           <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
@@ -684,9 +686,11 @@ export default function Layout({ children }) {
                           </div>
                           <span className="font-medium">Settings</span>
                         </Link>
-                        <button
-                          onClick={() => { logout(); setMoreMenuOpen(false); }}
-                          className="w-full flex items-center gap-4 px-5 py-3 text-sm text-destructive hover:bg-destructive/10 transition-colors"
+                         <button
+                           type="button"
+                           aria-label="Log out"
+                           onClick={() => { logout(); setMoreMenuOpen(false); }}
+                           className="w-full min-h-11 flex items-center gap-4 px-5 py-3 text-sm text-destructive hover:bg-destructive/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
                           role="menuitem"
                         >
                           <div className="w-8 h-8 rounded-lg bg-destructive/10 flex items-center justify-center">
