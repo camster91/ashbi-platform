@@ -178,13 +178,13 @@ export default function GlobalSearch() {
       </div>
 
       {error && (
-        <div role="alert" className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 text-sm">
+        <div role="alert" className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-300 text-sm">
           {error}
         </div>
       )}
 
       {/* Results */}
-      {loading ? (
+      {!error && (loading ? (
         <div role="status" aria-live="polite" className="text-center text-muted-foreground py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4" />
           Searching...
@@ -242,7 +242,7 @@ export default function GlobalSearch() {
             );
           })}
         </div>
-      )}
+      ))}
     </div>
   );
 }

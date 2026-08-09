@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { normalizeSearchResults, resultDestination } from '../pages/GlobalSearch';
 
 describe('global search result contract', () => {
@@ -25,5 +27,11 @@ describe('global search result contract', () => {
     expect(resultDestination({ type: 'thread', id: 'th1' })).toBe('/thread/th1');
     expect(resultDestination({ type: 'message', threadId: 'th1', messageId: 'm 1' }))
       .toBe('/thread/th1?message=m%201');
+  });
+
+  it('renders an accessible error without a contradictory empty state', () => {
+    const source = readFileSync(path.join(process.cwd(), 'src/pages/GlobalSearch.jsx'), 'utf8');
+    expect(source).toContain('text-red-700 dark:text-red-300');
+    expect(source).toContain('{!error && (loading ? (');
   });
 });
