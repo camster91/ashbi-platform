@@ -1,79 +1,71 @@
-/**
- * Soft Delete Service
- * Centralized soft-delete logic for all major entities.
- * Every model with `deletedAt` gets a delete, restore, and permanentDelete method.
- * List queries automatically filter out deleted items via request.prisma proxy.
- */
+/** Single source of truth for application soft deletion. */
+export const SOFT_DELETE_MODELS = Object.freeze([
+  'client', 'project', 'task', 'note', 'timeEntry', 'retainerPlan',
+  'proposal', 'contract', 'invoice', 'expense', 'estimate',
+]);
+const SOFT_DELETE_MODEL_SET = new Set(SOFT_DELETE_MODELS);
 
-const WITH_DELETED = Symbol('withDeleted');
-
-const SOFT_DELETE_MODELS = new Set([
-  'client','project','task','note','timeEntry','retainerPlan',
-  'proposal','contract','invoice','expense','estimate','trashedItem'
+export const WITH_DELETED = Symbol('withDeleted');
+const SOFT_DELETE_WRAPPED = Symbol('softDeleteWrapped');
+const READ_OPERATIONS = new Set([
+  'findFirst', 'findFirstOrThrow', 'findUnique', 'findUniqueOrThrow',
+  'findMany', 'count', 'aggregate', 'groupBy',
 ]);
 
-/**
- * Wraps a Prisma client to add soft-delete behavior:
- * - delete() sets deletedAt instead of removing rows
- * - findMany/findFirst/findUnique filter deletedAt: null by default
- * - Pass { where: { deletedAt: { not: null } } } or use prisma[WITH_DELETED]() to include deleted
- */
-export function withSoftDelete(prisma) {
-  return new Proxy(prisma, {
-    get(target, model, receiver) {
-      if (model === WITH_DELETED) {
-        return () => target;
-      }
-      if (typeof target[model] !== 'object') {
-        return Reflect.get(target, model, receiver);
-      }
-      if (!SOFT_DELETE_MODELS.has(model)) {
-        return target[model];
-      }
-      return new Proxy(target[model], {
-        get(t, key) {
-          const fn = t[key];
-          if (typeof fn !== 'function') return fn;
-          
-          return async (...args) => {
-            const [arg = {}] = args;
-            
-            // delete → update deletedAt
-            if (key === 'delete' || key === 'deleteMany') {
-              const data = { deletedAt: new Date() };
-              if (key === 'delete') {
-                return t.update({ ...arg, data });
-              } else {
-                return t.updateMany({ ...arg, data });
-              }
-            }
-            
-            // find queries: inject deletedAt: null unless explicitly including deleted
-            if ((key === 'findMany' || key === 'findFirst' || key === 'findFirstOrThrow' || key === 'findUnique') && arg.where) {
-              if (arg.where.deletedAt === undefined) {
-                return fn.call(t, { ...arg, where: { ...arg.where, deletedAt: null } });
-              }
-            }
-            
-            // count: exclude deleted by default
-            if (key === 'count' && arg && !arg.where?.deletedAt) {
-              const where = arg.where || {};
-              if (where.deletedAt === undefined) {
-                return fn.call(t, { ...arg, where: { ...where, deletedAt: null } });
-              }
-            }
-            
-            // aggregate: exclude deleted by default
-            if (key === 'aggregate' && arg && arg.where && arg.where.deletedAt === undefined) {
-              return fn.call(t, { ...arg, where: { ...arg.where, deletedAt: null } });
-            }
-            
-            return fn.apply(t, args);
-          };
-        }
-      });
-    }
-  });
+function hasExplicitDeletedAt(args) {
+  return Object.prototype.hasOwnProperty.call(args?.where ?? {}, 'deletedAt')
+    && args.where.deletedAt !== undefined;
 }
 
-export { WITH_DELETED };
+function activeRecordArgs(args = {}, operation) {
+  if (hasExplicitDeletedAt(args)) return args;
+  const scoped = { ...args, where: { ...(args.where ?? {}), deletedAt: null } };
+  if (operation === 'findMany' && (!Number.isFinite(scoped.take) || scoped.take > 100)) {
+    scoped.take = 100;
+  }
+  return scoped;
+}
+
+/**
+ * Adds consistent read/delete semantics to any Prisma-like client. Applying
+ * this wrapper more than once is idempotent. Explicit `where.deletedAt` and
+ * WITH_DELETED are reviewed escape hatches for restore and purge paths.
+ */
+export function withSoftDelete(prisma) {
+  if (prisma?.[SOFT_DELETE_WRAPPED]) return prisma;
+
+  return new Proxy(prisma, {
+    get(target, model, receiver) {
+      if (model === SOFT_DELETE_WRAPPED) return true;
+      if (model === WITH_DELETED) return () => target;
+      if (model === '$transaction') {
+        return (input, ...options) => {
+          if (typeof input !== 'function') return target.$transaction(input, ...options);
+          return target.$transaction((transaction) => input(withSoftDelete(transaction)), ...options);
+        };
+      }
+
+      const delegate = Reflect.get(target, model, receiver);
+      if (!SOFT_DELETE_MODEL_SET.has(model) || typeof delegate !== 'object' || delegate === null) {
+        return typeof delegate === 'function' ? delegate.bind(target) : delegate;
+      }
+
+      return new Proxy(delegate, {
+        get(modelTarget, operation) {
+          const method = modelTarget[operation];
+          if (typeof method !== 'function') return method;
+          if (operation === 'delete') {
+            return (args = {}) => modelTarget.update({ ...args, data: { deletedAt: new Date() } });
+          }
+          if (operation === 'deleteMany') {
+            return (args = {}) => modelTarget.updateMany({ ...args, data: { deletedAt: new Date() } });
+          }
+          if (READ_OPERATIONS.has(operation)) {
+            return (args = {}) => method.call(modelTarget, activeRecordArgs(args, operation));
+          }
+          return method.bind(modelTarget);
+        },
+      });
+    },
+  });
+}

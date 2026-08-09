@@ -216,6 +216,17 @@ export function createScopedPrisma(prisma, organizationId) {
   return new Proxy(softPrisma, {
     get(target, modelName) {
       if (modelName === Symbol.for('__proxy__')) return true;
+      // Preserve both policies inside interactive transactions. Array-form
+      // transactions already receive promises created through this proxy.
+      if (modelName === '$transaction') {
+        return (input, ...options) => {
+          if (typeof input !== 'function') return target.$transaction(input, ...options);
+          return target.$transaction(
+            (transaction) => input(createScopedPrisma(transaction, organizationId)),
+            ...options,
+          );
+        };
+      }
       const model = target[modelName];
 
       // Not a Prisma model or non-object → return as-is (still has soft-delete)

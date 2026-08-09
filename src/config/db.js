@@ -15,20 +15,7 @@ const { PrismaClient } = prismaPkg;
 // only `log:` throws "PrismaClient needs non-empty, valid PrismaClientOptions".
 // Use the official pg driver adapter and pass DATABASE_URL through it.
 import { PrismaPg } from '@prisma/adapter-pg';
-
-const SOFT_DELETE_MODELS = new Set([
-  'client',
-  'project',
-  'invoice',
-  'proposal',
-  'contract',
-  'expense',
-  'task',
-  'retainerPlan',
-  'timeEntry',
-  'estimate',
-  'note',
-]);
+import { withSoftDelete } from '../services/soft-delete.service.js';
 
 // Prisma 7: lazy proxy to defer PrismaClient construction
 const globalForPrisma = /** @type {{ prisma?: PrismaClient }} */ (globalThis);
@@ -46,70 +33,11 @@ const base = new Proxy({}, {
   },
 });
 
-function buildExtension() {
-  const modelQueries = {};
-
-  for (const model of SOFT_DELETE_MODELS) {
-    modelQueries[model] = {
-      findFirst: softDeleteFilter,
-      findFirstOrThrow: softDeleteFilter,
-      findUnique: softDeleteFilter,
-      findUniqueOrThrow: softDeleteFilter,
-      findMany: softDeleteFilter,
-      count: softDeleteFilter,
-      groupBy: softDeleteFilter,
-      aggregate: softDeleteFilter,
-      delete: softDeleteWrite,
-      deleteMany: softDeleteWriteMany,
-    };
-  }
-
-  return base.$extends({
-    query: modelQueries,
-  });
-}
-
-function isDeletedAtExplicit(args) {
-  if (!args?.where) return false;
-  // If deletedAt is explicitly in the where clause (any value), user is opting out
-  return Object.prototype.hasOwnProperty.call(args.where, 'deletedAt');
-}
-
-function softDeleteFilter({ model, operation, args, query }) {
-  if (isDeletedAtExplicit(args)) {
-    return query(args);
-  }
-  if (args?.where) {
-    args.where = { ...args.where, deletedAt: null };
-  } else {
-    args = { ...args, where: { deletedAt: null } };
-  }
-  // Enforce default pagination limit on findMany
-  if (operation === 'findMany' && (!args.take || args.take > 100)) {
-    args = { ...args, take: 100 };
-  }
-  return query(args);
-}
-
-async function softDeleteWrite({ model, operation, args, query }) {
-  return base[model].update({
-    where: args.where,
-    data: { deletedAt: new Date() },
-  });
-}
-
-async function softDeleteWriteMany({ model, operation, args, query }) {
-  return base[model].updateMany({
-    where: args.where,
-    data: { deletedAt: new Date() },
-  });
-}
-
-// Lazy prisma export - defer $extends until first use
-const globalForExtended = /** @type {{ prisma?: ReturnType<typeof buildExtension> }} */ (globalThis);
+// Lazy global client using the same policy as request and job scoping.
+const globalForExtended = /** @type {{ prisma?: ReturnType<typeof withSoftDelete> }} */ (globalThis);
 export const prisma = new Proxy({}, {
   get(_target, prop) {
-    const client = (globalForExtended.prisma ??= buildExtension());
+    const client = (globalForExtended.prisma ??= withSoftDelete(base));
     const value = /** @type {any} */ (client)[prop];
     return typeof value === 'function' ? value.bind(client) : value;
   },

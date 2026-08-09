@@ -102,6 +102,22 @@ test('relationship-scoped create verifies the parent before writing', async () =
   assert.equal(createCalls.length, 1);
 });
 
+test('callback transactions retain tenant and soft-delete policies', async () => {
+  const calls = [];
+  const transaction = {
+    client: { findMany: async (args) => { calls.push(args); return []; } },
+  };
+  const scoped = createScopedPrisma({
+    $transaction: async (callback) => callback(transaction),
+  }, 'org-a');
+
+  await scoped.$transaction((tx) => tx.client.findMany());
+  assert.deepEqual(calls[0], {
+    where: { deletedAt: null, organizationId: 'org-a' },
+    take: 100,
+  });
+});
+
 test('relationship-scoped update preserves a unique where after tenant preflight', async () => {
   const updateCalls = [];
   const scoped = createScopedPrisma({
