@@ -5,6 +5,9 @@ import { describe, expect, it } from 'vitest';
 const notes = readFileSync(resolve(process.cwd(), 'src/components/Notes.jsx'), 'utf8');
 const project = readFileSync(resolve(process.cwd(), 'src/pages/Project.jsx'), 'utf8');
 const docs = readFileSync(resolve(process.cwd(), 'src/pages/Docs.jsx'), 'utf8');
+const estimates = readFileSync(resolve(process.cwd(), 'src/pages/Estimates.jsx'), 'utf8');
+const expenses = readFileSync(resolve(process.cwd(), 'src/pages/Expenses.jsx'), 'utf8');
+const proposals = readFileSync(resolve(process.cwd(), 'src/pages/Proposals.jsx'), 'utf8');
 const milestones = readFileSync(resolve(process.cwd(), 'src/components/Milestones.jsx'), 'utf8');
 const invoices = readFileSync(resolve(process.cwd(), 'src/pages/Invoices.jsx'), 'utf8');
 const invoiceDetail = readFileSync(resolve(process.cwd(), 'src/pages/InvoiceDetail.jsx'), 'utf8');
@@ -23,6 +26,16 @@ describe('destructive action recovery contract', () => {
     ['global docs', docs],
   ])('reports failed Undo recovery on the active %s surface', (_surface, source) => {
     expect(source).toContain("title: 'Could not restore note'");
+    expect(source).toContain("message: error.message || 'Open Trash or refresh before trying again.'");
+    expect(source).toContain('duration: 0');
+  });
+
+  it.each([
+    ['estimate', estimates, 'estimate'],
+    ['expense', expenses, 'expense'],
+    ['proposal', proposals, 'proposal'],
+  ])('reports failed Undo recovery for a deleted %s', (_surface, source, entity) => {
+    expect(source).toContain(`title: 'Could not restore ${entity}'`);
     expect(source).toContain("message: error.message || 'Open Trash or refresh before trying again.'");
     expect(source).toContain('duration: 0');
   });

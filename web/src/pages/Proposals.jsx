@@ -90,9 +90,18 @@ export default function Proposals() {
         action: {
           label: `Undo delete ${title}`,
           onClick: async () => {
-            await api.restoreTrashItem(result.trashId);
-            await queryClient.invalidateQueries({ queryKey: ['proposals'] });
-            toast.success('Proposal restored');
+            try {
+              await api.restoreTrashItem(result.trashId);
+              await queryClient.invalidateQueries({ queryKey: ['proposals'] });
+              toast.success('Proposal restored');
+            } catch (error) {
+              toast.error({
+                title: 'Could not restore proposal',
+                message: error.message || 'Open Trash or refresh before trying again.',
+                duration: 0,
+              });
+              throw error;
+            }
           },
         },
       });

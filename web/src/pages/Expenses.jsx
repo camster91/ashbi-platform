@@ -148,12 +148,21 @@ export default function Expenses() {
         action: {
           label: `Undo delete ${description}`,
           onClick: async () => {
-            await api.restoreTrashItem(result.trashId);
-            await Promise.all([
-              queryClient.invalidateQueries({ queryKey: ['expenses'] }),
-              queryClient.invalidateQueries({ queryKey: ['expense-summary'] }),
-            ]);
-            toast.success('Expense restored');
+            try {
+              await api.restoreTrashItem(result.trashId);
+              await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ['expenses'] }),
+                queryClient.invalidateQueries({ queryKey: ['expense-summary'] }),
+              ]);
+              toast.success('Expense restored');
+            } catch (error) {
+              toast.error({
+                title: 'Could not restore expense',
+                message: error.message || 'Open Trash or refresh before trying again.',
+                duration: 0,
+              });
+              throw error;
+            }
           },
         },
       });

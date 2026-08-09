@@ -124,9 +124,18 @@ export default function Estimates() {
         action: {
           label: `Undo delete ${title}`,
           onClick: async () => {
-            await api.restoreTrashItem(result.trashId);
-            await queryClient.invalidateQueries({ queryKey: ['estimates'] });
-            toast.success('Estimate restored');
+            try {
+              await api.restoreTrashItem(result.trashId);
+              await queryClient.invalidateQueries({ queryKey: ['estimates'] });
+              toast.success('Estimate restored');
+            } catch (error) {
+              toast.error({
+                title: 'Could not restore estimate',
+                message: error.message || 'Open Trash or refresh before trying again.',
+                duration: 0,
+              });
+              throw error;
+            }
           },
         },
       });
