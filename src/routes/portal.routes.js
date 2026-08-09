@@ -334,9 +334,6 @@ export default async function portalRoutes(fastify) {
         client: {
           select: { id: true, name: true, email: true }
         },
-        project: {
-          select: { id: true, name: true }
-        },
         payments: {
           orderBy: { paidAt: 'desc' }
         },
@@ -370,7 +367,6 @@ export default async function portalRoutes(fastify) {
       paidAt: invoice.paidAt,
       sentAt: invoice.sentAt,
       client: invoice.client,
-      project: invoice.project,
       createdBy: { name: invoice.createdBy.name },
       lineItems: invoice.lineItems.map(li => ({
         id: li.id,

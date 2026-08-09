@@ -8,6 +8,7 @@ import cookie from '@fastify/cookie';
 import jwt from '@fastify/jwt';
 import requestPrisma, { prisma, rawPrisma } from '../../config/db.js';
 import invoiceRoutes from '../../routes/invoice.routes.js';
+import portalRoutes from '../../routes/portal.routes.js';
 import { createScopedPrisma } from '../../utils/prisma-tenant-proxy.js';
 import { enterRequestContext } from '../../utils/request-context.js';
 import { shouldSkipHeavyTests } from '../_test-skip.js';
@@ -59,6 +60,7 @@ before(async () => {
   });
 
   await fastify.register(invoiceRoutes, { prefix: '/api/invoices' });
+  await fastify.register(portalRoutes, { prefix: '/api/portal' });
   await fastify.ready();
 
   // Create test user + client
@@ -492,6 +494,15 @@ describe('Invoice CRUD', { skip }, () => {
     assert.equal(body.id, createdInvoiceId);
     assert.ok(!('internalNotes' in body), 'Internal notes should not be exposed publicly');
     console.log('  ✓ Public client view works (no auth required)');
+  });
+
+  test('GET /api/portal/invoice/:viewToken — browser-facing public invoice view', async () => {
+    const invoice = await rawPrisma.invoice.findUnique({ where: { id: createdInvoiceId } });
+    const res = await fastify.inject({ method: 'GET', url: `/api/portal/invoice/${invoice.viewToken}` });
+    assert.equal(res.statusCode, 200, `Expected 200, got ${res.statusCode}: ${res.body}`);
+    const body = JSON.parse(res.body);
+    assert.equal(body.id, createdInvoiceId);
+    assert.equal(body.invoiceNumber, createdInvoiceNumber);
   });
 
   test('invoice public link can be revoked', async () => {
