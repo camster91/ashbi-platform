@@ -102,8 +102,9 @@ class ErrorBoundary extends Component {
             </p>
 
             <button
+              type="button"
               onClick={this.handleRetry}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+              className="min-h-11 min-w-11 inline-flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
             >
               <RefreshCw className="w-4 h-4" />
               Reload application

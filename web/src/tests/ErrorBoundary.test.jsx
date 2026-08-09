@@ -164,6 +164,18 @@ describe('ErrorBoundary', () => {
     expect(screen.getByText(/Reloading may discard unsaved changes/i)).toBeInTheDocument();
   });
 
+  it('keeps the recovery control explicit, touch-sized, and visibly focused', () => {
+    render(
+      <ErrorBoundary>
+        <ThrowOnRender />
+      </ErrorBoundary>
+    );
+
+    const button = screen.getByRole('button', { name: /reload application/i });
+    expect(button).toHaveAttribute('type', 'button');
+    expect(button).toHaveClass('min-h-11', 'min-w-11', 'focus-visible:outline-none', 'focus-visible:ring-2');
+  });
+
   describe('unhandled promise rejection', () => {
     it('sets up and tears down unhandledrejection listener', () => {
       const addSpy = vi.spyOn(window, 'addEventListener');
