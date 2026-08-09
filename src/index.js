@@ -15,6 +15,7 @@ import { fileURLToPath } from 'url';
 
 import env from './config/env.js';
 import prisma from './config/db.js';
+import { isNonApiRequest } from './config/rateLimit.js';
 import { isCurrentUserSession } from './auth/session.js';
 
 // Routes
@@ -145,7 +146,15 @@ await fastify.register(compress, { global: true });
 await fastify.register(cors, { origin: env.isDev ? ['http://localhost:3000', 'http://localhost:5173'] : env.corsOrigins, credentials: true });
 await fastify.register(cookie);
 await fastify.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } });
-await fastify.register(rateLimit, { global: true, max: 100, timeWindow: '1 minute', skipOnError: true });
+await fastify.register(rateLimit, {
+  global: true,
+  max: 100,
+  timeWindow: '1 minute',
+  skipOnError: true,
+  // Frontend navigation loads many immutable chunks in parallel. Counting those
+  // files can lock users out of the application shell before they call an API.
+  allowList: isNonApiRequest,
+});
 await fastify.register(jwt, { secret: env.jwtSecret, cookie: { cookieName: 'token', signed: false } });
 
 // JWT verification hook — runs for ALL /api/* requests BEFORE tenancyMiddleware
