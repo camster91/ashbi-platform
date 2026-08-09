@@ -141,7 +141,7 @@ function AdminRoute({ children }) {
   if (authState.status === 'error') return <AuthCheckFailure authState={authState} onRetry={checkAuth} />;
   if (!user) return <Navigate to="/login" replace state={{ reason: authState.reason, returnTo: safePrivateReturn(location) }} />;
   if (user.role !== 'ADMIN') return (
-    <section role="alert" className="m-6 rounded-xl border border-amber-300 bg-amber-50 p-5 text-amber-950">
+    <section role="alert" className="m-6 rounded-xl border border-warning/40 bg-warning/10 p-5 text-foreground">
       <h1 className="font-semibold">Administrator access required</h1>
       <p className="mt-1 text-sm">Your account is signed in, but it does not have permission to open this page.</p>
     </section>
@@ -156,9 +156,9 @@ function NotFound() {
   return (
     <div className="min-h-[60vh] flex items-center justify-center p-6">
       <div className="text-center max-w-md">
-        <h1 className="text-3xl font-bold text-slate-800 mb-2">404</h1>
-        <p className="text-slate-600 mb-4">We couldn't find that page.</p>
-        <a href="/dashboard" className="text-blue-600 hover:underline">
+        <h1 className="text-3xl font-bold text-foreground mb-2">404</h1>
+        <p className="text-muted-foreground mb-4">We couldn't find that page.</p>
+        <a href="/dashboard" className="text-primary hover:underline">
           Go to dashboard →
         </a>
       </div>

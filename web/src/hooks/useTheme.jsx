@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react';
 
-export function useTheme() {
+function storageKey(scopeId) {
+  return scopeId ? `theme:${scopeId}` : 'theme:public';
+}
+
+export function useTheme(scopeId = null) {
   const [theme, setTheme] = useState(() => {
-    const stored = localStorage.getItem('theme');
+    const stored = localStorage.getItem(storageKey(scopeId));
     if (stored) return stored;
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
@@ -14,8 +18,8 @@ export function useTheme() {
     } else {
       root.classList.remove('dark');
     }
-    localStorage.setItem('theme', theme);
-  }, [theme]);
+    localStorage.setItem(storageKey(scopeId), theme);
+  }, [scopeId, theme]);
 
   const toggle = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
 

@@ -123,7 +123,7 @@ export default function Login() {
           </div>
 
           {sessionNotice && (
-            <div role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+            <div role="status" className="rounded-xl border border-warning/40 bg-warning/10 p-4 text-sm text-foreground">
               {sessionNotice} Locally saved drafts remain on this device.
             </div>
           )}
@@ -144,9 +144,9 @@ export default function Login() {
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder={t('auth.emailPlaceholder')}
                     className={cn(
-                      'w-full pl-11 pr-4 py-3 bg-white border border-border rounded-xl',
-                      'text-foreground placeholder:text-muted-foreground',
-                      'focus:outline-none focus:ring-2 focus:ring-[#e6f354]/30 focus:border-transparent',
+                      'w-full pl-11 pr-4 py-3 bg-card border border-border rounded-xl',
+                      'text-card-foreground placeholder:text-muted-foreground',
+                      'focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent',
                       'transition-all duration-200'
                     )}
                     required
@@ -169,9 +169,9 @@ export default function Login() {
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder={t('auth.passwordPlaceholder')}
                     className={cn(
-                      'w-full pl-11 pr-12 py-3 bg-white border border-border rounded-xl',
-                      'text-foreground placeholder:text-muted-foreground',
-                      'focus:outline-none focus:ring-2 focus:ring-[#e6f354]/30 focus:border-transparent',
+                      'w-full pl-11 pr-12 py-3 bg-card border border-border rounded-xl',
+                      'text-card-foreground placeholder:text-muted-foreground',
+                      'focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent',
                       'transition-all duration-200'
                     )}
                     required
@@ -190,7 +190,7 @@ export default function Login() {
               </div>
 
               <div className="flex items-center justify-end text-sm">
-                <Link to="/forgot-password" className="text-[#2e2958] hover:text-[#3f3580] font-medium transition-colors">
+                <Link to="/forgot-password" className="text-primary hover:text-primary/80 font-medium transition-colors">
                   {t('auth.forgotPassword')}
                 </Link>
               </div>
@@ -213,10 +213,10 @@ export default function Login() {
               aria-describedby={error ? 'login-error' : undefined}
               className={cn(
                 'w-full flex items-center justify-center gap-2 py-3 px-6',
-                'bg-[#2e2958] text-white rounded-full',
-                'hover:bg-[#3f3580]',
-                'shadow-[0_4px_14px_rgba(46,41,88,0.35)] hover:shadow-[0_6px_20px_rgba(46,41,88,0.45)]',
-                'hover:scale-[1.02] active:scale-[0.98]',
+                'bg-primary text-primary-foreground rounded-full',
+                'hover:bg-primary/90',
+                'shadow-md hover:shadow-lg',
+                'motion-safe:hover:scale-[1.02] motion-safe:active:scale-[0.98]',
                 'transition-all duration-200',
                 'font-semibold text-base',
                 'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100'
