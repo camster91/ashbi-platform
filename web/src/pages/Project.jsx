@@ -16,7 +16,6 @@ import {
   Send,
   Plus,
   Check,
-  X,
   Share2,
   LayoutTemplate,
   Copy,
@@ -44,6 +43,8 @@ import { useToast } from '../hooks/useToast';
 import ProjectCommunications from '../components/project/ProjectCommunications';
 import ProjectContextCard from '../components/project/ProjectContext';
 import QueryErrorState from '../components/QueryErrorState';
+import Modal from '../components/Modal';
+import { Button, LoadingState } from '../components/ui';
 
 export default function Project() {
   const { id } = useParams();
@@ -111,7 +112,13 @@ export default function Project() {
     },
   });
 
-  const { data: templates = [] } = useQuery({
+  const {
+    data: templates = [],
+    isLoading: templatesLoading,
+    isFetching: templatesFetching,
+    error: templatesError,
+    refetch: refetchTemplates,
+  } = useQuery({
     queryKey: ['task-templates'],
     queryFn: () => api.getTaskTemplates(),
     enabled: showTemplateModal,
@@ -125,12 +132,26 @@ export default function Project() {
     },
   });
 
-  function copyPortalLink() {
+  async function copyPortalLink() {
     if (!project?.viewToken) return;
     const url = `${window.location.origin}/portal/${project.viewToken}`;
-    navigator.clipboard.writeText(url);
-    setShareCopied(true);
-    setTimeout(() => setShareCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(url);
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    } catch {
+      toast.error('Portal link could not be copied');
+    }
+  }
+
+  async function copyDraftUpdate() {
+    if (!draftResult) return;
+    try {
+      await navigator.clipboard.writeText(`Subject: ${draftResult.subject}\n\n${draftResult.body}`);
+      toast.success('Draft copied to clipboard');
+    } catch {
+      toast.error('Draft could not be copied');
+    }
   }
 
   if (isLoading) {
@@ -344,23 +365,28 @@ export default function Project() {
       <ProjectNotes projectId={id} />
 
       {/* Draft Update Modal */}
-      {showDraftModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-card rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-scale-in">
-            <div className="px-6 py-4 border-b flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Draft Client Update</h2>
-              <button onClick={() => { setShowDraftModal(false); setDraftResult(null); }} className="p-1 hover:bg-muted rounded">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
+      <Modal
+        isOpen={showDraftModal}
+        onClose={() => {
+          if (draftUpdateMutation.isPending) return;
+          setShowDraftModal(false);
+          setDraftResult(null);
+          draftUpdateMutation.reset();
+        }}
+        title="Draft client update"
+        size="lg"
+        showCloseButton={!draftUpdateMutation.isPending}
+      >
+        <div className="max-h-[70vh] overflow-y-auto space-y-4">
               {!draftResult ? (
                 <>
                   <div>
-                    <label className="block text-sm font-medium mb-1">Raw notes / talking points</label>
+                    <label htmlFor="draft-update-notes" className="block text-sm font-medium mb-1">Raw notes / talking points</label>
                     <textarea
+                      id="draft-update-notes"
                       value={draftNotes}
                       onChange={(e) => setDraftNotes(e.target.value)}
+                      disabled={draftUpdateMutation.isPending}
                       rows={6}
                       className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
                       placeholder="Enter your raw notes about project progress, updates, etc..."
@@ -371,21 +397,25 @@ export default function Project() {
                       type="checkbox"
                       checked={includeRevisions}
                       onChange={(e) => setIncludeRevisions(e.target.checked)}
+                      disabled={draftUpdateMutation.isPending}
                       className="rounded border-border"
                     />
                     Include revision round status
                   </label>
-                  <button
+                  {draftUpdateMutation.error && (
+                    <p role="alert" className="text-sm text-destructive">
+                      {draftUpdateMutation.error.message || 'The client update could not be drafted. Your notes remain available.'}
+                    </p>
+                  )}
+                  <Button
                     onClick={() => draftUpdateMutation.mutate({ rawNotes: draftNotes, includeRevisionStatus: includeRevisions })}
                     disabled={draftUpdateMutation.isPending || !draftNotes.trim()}
-                    className="w-full px-4 py-2 bg-accent text-accent-foreground rounded-lg hover:opacity-90 flex items-center justify-center gap-2 disabled:opacity-50"
+                    loading={draftUpdateMutation.isPending}
+                    className="w-full"
+                    leftIcon={<Sparkles className="w-4 h-4" />}
                   >
-                    {draftUpdateMutation.isPending ? (
-                      <><RefreshCw className="w-4 h-4 animate-spin" /> Generating...</>
-                    ) : (
-                      <><Sparkles className="w-4 h-4" /> Generate Draft</>
-                    )}
-                  </button>
+                    Generate draft
+                  </Button>
                 </>
               ) : (
                 <>
@@ -401,39 +431,49 @@ export default function Project() {
                   <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded">
                     Cameron must review and approve before sending to the client.
                   </p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => { navigator.clipboard.writeText(`Subject: ${draftResult.subject}\n\n${draftResult.body}`); }}
-                      className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 flex items-center justify-center gap-2"
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <Button
+                      onClick={copyDraftUpdate}
+                      className="flex-1"
+                      leftIcon={<Send className="w-4 h-4" />}
                     >
-                      <Send className="w-4 h-4" /> Copy to Clipboard
-                    </button>
-                    <button
+                      Copy to clipboard
+                    </Button>
+                    <Button
+                      variant="outline"
                       onClick={() => setDraftResult(null)}
-                      className="px-4 py-2 border border-border rounded-lg hover:bg-secondary"
                     >
                       Regenerate
-                    </button>
+                    </Button>
                   </div>
                 </>
               )}
-            </div>
-          </div>
         </div>
-      )}
+      </Modal>
 
       {/* Apply Template Modal */}
-      {showTemplateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-card rounded-xl shadow-xl max-w-md w-full animate-scale-in">
-            <div className="px-6 py-4 border-b flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Apply Task Template</h2>
-              <button onClick={() => setShowTemplateModal(false)} className="p-1 hover:bg-muted rounded">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6 space-y-3">
-              {templates.length === 0 ? (
+      <Modal
+        isOpen={showTemplateModal}
+        onClose={() => {
+          if (applyTemplateMutation.isPending) return;
+          setShowTemplateModal(false);
+          applyTemplateMutation.reset();
+        }}
+        title="Apply task template"
+        size="sm"
+        showCloseButton={!applyTemplateMutation.isPending}
+      >
+        <div className="space-y-3">
+              {templatesLoading ? (
+                <LoadingState label="Loading task templates…" compact size="sm" />
+              ) : templatesError ? (
+                <QueryErrorState
+                  error={templatesError}
+                  message="Failed to load task templates"
+                  onRetry={refetchTemplates}
+                  isRetrying={templatesFetching}
+                />
+              ) : templates.length === 0 ? (
                 <p className="text-sm text-muted-foreground text-center py-4">No templates available</p>
               ) : (
                 templates.map((tmpl) => (
@@ -451,31 +491,36 @@ export default function Project() {
                 ))
               )}
               {applyTemplateMutation.isPending && (
-                <div className="flex items-center justify-center py-2 text-sm text-muted-foreground">
-                  <RefreshCw className="w-4 h-4 animate-spin mr-2" /> Applying...
-                </div>
+                <p role="status" className="py-2 text-center text-sm text-muted-foreground">Applying template…</p>
               )}
-            </div>
-          </div>
+              {applyTemplateMutation.error && (
+                <p role="alert" className="text-sm text-destructive">
+                  {applyTemplateMutation.error.message || 'The task template could not be applied. No retry was sent automatically.'}
+                </p>
+              )}
         </div>
-      )}
+      </Modal>
 
       {/* Paste Message Modal */}
-      {showPasteModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-card rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-scale-in">
-            <div className="px-6 py-4 border-b flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Paste Message</h2>
-              <button onClick={() => setShowPasteModal(false)} className="p-1 hover:bg-muted rounded">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6 space-y-4">
+      <Modal
+        isOpen={showPasteModal}
+        onClose={() => {
+          if (pasteMutation.isPending) return;
+          setShowPasteModal(false);
+          pasteMutation.reset();
+        }}
+        title="Paste message"
+        size="lg"
+        showCloseButton={!pasteMutation.isPending}
+      >
+        <div className="max-h-[70vh] overflow-y-auto space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-1">Source</label>
+                <label htmlFor="paste-message-source" className="block text-sm font-medium mb-1">Source</label>
                 <select
+                  id="paste-message-source"
                   value={pasteSource}
                   onChange={(e) => setPasteSource(e.target.value)}
+                  disabled={pasteMutation.isPending}
                   className="w-full border border-border rounded-lg px-3 py-2 text-sm"
                 >
                   <option value="email">Email</option>
@@ -485,30 +530,33 @@ export default function Project() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Content</label>
+                <label htmlFor="paste-message-content" className="block text-sm font-medium mb-1">Content</label>
                 <textarea
+                  id="paste-message-content"
                   value={pasteContent}
                   onChange={(e) => setPasteContent(e.target.value)}
+                  disabled={pasteMutation.isPending}
                   rows={10}
                   className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
                   placeholder="Paste message content here..."
                 />
               </div>
-              <button
+              {pasteMutation.error && (
+                <p role="alert" className="text-sm text-destructive">
+                  {pasteMutation.error.message || 'The message could not be processed. Your pasted content remains available.'}
+                </p>
+              )}
+              <Button
                 onClick={() => pasteMutation.mutate({ content: pasteContent, source: pasteSource, projectId: id })}
                 disabled={pasteMutation.isPending || !pasteContent.trim()}
-                className="w-full px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 flex items-center justify-center gap-2 disabled:opacity-50"
+                loading={pasteMutation.isPending}
+                className="w-full"
+                leftIcon={<ClipboardPaste className="w-4 h-4" />}
               >
-                {pasteMutation.isPending ? (
-                  <><RefreshCw className="w-4 h-4 animate-spin" /> Processing...</>
-                ) : (
-                  <><ClipboardPaste className="w-4 h-4" /> Process &amp; Extract</>
-                )}
-              </button>
-            </div>
-          </div>
+                Process and extract
+              </Button>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }
