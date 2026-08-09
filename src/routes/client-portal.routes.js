@@ -7,7 +7,7 @@ import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
 import bcrypt from 'bcrypt';
 import { isCurrentUserSession, revokeUserSessions, sessionCookieMaxAge, signUserSession } from '../auth/session.js';
-import { validateBody, validateParams, clientPortalMessageSchema, requestAccessSchema, fileUpload, clientPortalTokenRedeemSchema } from '../validators/schemas.js';
+import { validateBody, validateParams, clientPortalMessageSchema, requestAccessSchema, fileUpload, clientPortalTokenRedeemSchema, clientPortalRevisionResponseSchema, clientPortalFeedbackSchema } from '../validators/schemas.js';
 
 const PORTAL_BASE = env.hubUrl;
 const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
@@ -323,6 +323,14 @@ export default async function clientPortalRoutes(fastify) {
         createdAt: true,
         updatedAt: true,
         client: { select: { name: true } },
+        milestones: {
+          select: { id: true, name: true, description: true, dueDate: true, status: true, completedAt: true },
+          orderBy: { dueDate: 'asc' },
+        },
+        revisionRounds: {
+          select: { id: true, roundNumber: true, status: true, notes: true, requestedAt: true, approvedAt: true, updatedAt: true },
+          orderBy: { roundNumber: 'desc' },
+        },
         _count: { select: { tasks: true } }
       }
     });
@@ -341,6 +349,72 @@ export default async function clientPortalRoutes(fastify) {
       totalTasks: project._count.tasks,
       progressPct: project._count.tasks > 0 ? Math.round((completedCount / project._count.tasks) * 100) : 0
     };
+  });
+
+  fastify.post('/projects/:id/revisions/:revisionId/respond', {
+    preHandler: [clientAuth, validateBody(clientPortalRevisionResponseSchema)],
+  }, async (request, reply) => {
+    const { clientId, contactId, id: userId } = request.clientUser;
+    const { id: projectId, revisionId } = request.params;
+    const { action, feedback } = request.body;
+    const revision = await request.prisma.revisionRound.findFirst({
+      where: { id: revisionId, projectId, project: { clientId } },
+      select: { id: true, roundNumber: true, status: true },
+    });
+    if (!revision) return reply.status(404).send({ error: 'Revision round not found' });
+    if (revision.status === 'APPROVED') return reply.status(409).send({ error: 'Revision round is already approved' });
+
+    const now = new Date();
+    const updated = await request.prisma.$transaction(async transaction => {
+      const response = await transaction.revisionRound.updateMany({
+        where: { id: revision.id, status: { not: 'APPROVED' } },
+        data: action === 'APPROVE'
+          ? { status: 'APPROVED', approvedAt: now }
+          : { status: 'OPEN', approvedAt: null },
+      });
+      if (response.count !== 1) return null;
+      await transaction.activity.create({
+        data: {
+          type: action === 'APPROVE' ? 'CLIENT_REVISION_APPROVED' : 'CLIENT_REVISION_CHANGES_REQUESTED',
+          action: action === 'APPROVE' ? 'approved' : 'requested_changes',
+          entityType: 'REVISION_ROUND',
+          entityId: revision.id,
+          entityName: `Revision round ${revision.roundNumber}`,
+          metadata: JSON.stringify({ contactId, feedback: feedback || null }),
+          projectId,
+          userId,
+        },
+      });
+      return transaction.revisionRound.findUnique({ where: { id: revision.id } });
+    });
+    if (!updated) return reply.status(409).send({ error: 'Revision round is no longer awaiting a response' });
+    return updated;
+  });
+
+  fastify.post('/projects/:id/feedback', {
+    preHandler: [clientAuth, validateBody(clientPortalFeedbackSchema)],
+  }, async (request, reply) => {
+    const { clientId, contactId, id: userId } = request.clientUser;
+    const { id: projectId } = request.params;
+    const project = await request.prisma.project.findFirst({
+      where: { id: projectId, clientId },
+      select: { id: true, name: true },
+    });
+    if (!project) return reply.status(404).send({ error: 'Project not found' });
+    const activity = await request.prisma.activity.create({
+      data: {
+        type: 'CLIENT_FEEDBACK',
+        action: 'commented',
+        entityType: 'PROJECT',
+        entityId: project.id,
+        entityName: project.name,
+        metadata: JSON.stringify({ contactId, message: request.body.message }),
+        projectId: project.id,
+        userId,
+      },
+      select: { id: true, createdAt: true },
+    });
+    return reply.status(201).send(activity);
   });
 
   // GET /api/client-portal/projects/:id/tasks — Kanban tasks
@@ -622,6 +696,38 @@ export default async function clientPortalRoutes(fastify) {
   });
 
   // ── Invoices ─────────────────────────────────────────────────────────────────
+
+  fastify.get('/contracts', { preHandler: clientAuth }, async (request) => {
+    const { clientId } = request.clientUser;
+    const contracts = await request.prisma.contract.findMany({
+      where: { clientId, deletedAt: null, status: { in: ['SENT', 'SIGNED'] } },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        templateType: true,
+        signToken: true,
+        publicAccessExpiresAt: true,
+        publicAccessRevokedAt: true,
+        signedAt: true,
+        clientSigName: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+    const now = Date.now();
+    return contracts.map(contract => {
+      const canReview = contract.status === 'SENT'
+        && !contract.publicAccessRevokedAt
+        && (!contract.publicAccessExpiresAt || new Date(contract.publicAccessExpiresAt).getTime() > now);
+      return {
+        ...contract,
+        signToken: canReview ? contract.signToken : null,
+        canReview,
+      };
+    });
+  });
 
   // GET /api/client-portal/invoices
   fastify.get('/invoices', { preHandler: clientAuth }, async (request, reply) => {

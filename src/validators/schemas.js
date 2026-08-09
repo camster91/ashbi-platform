@@ -959,6 +959,19 @@ const credentialFields = z.object({
   clientId: cuidId.optional(),
   projectId: cuidId.optional(),
 });
+
+export const clientPortalRevisionResponseSchema = z.object({
+  action: z.enum(['APPROVE', 'REQUEST_CHANGES']),
+  feedback: z.string().trim().max(5_000).optional(),
+}).superRefine((value, context) => {
+  if (value.action === 'REQUEST_CHANGES' && !value.feedback) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['feedback'], message: 'Feedback is required when requesting changes' });
+  }
+});
+
+export const clientPortalFeedbackSchema = z.object({
+  message: z.string().trim().min(1).max(5_000),
+});
 export const credentialCreateSchema = credentialFields.refine(
   (value) => Boolean(value.clientId || value.projectId),
   { message: 'A client or project owner is required' },

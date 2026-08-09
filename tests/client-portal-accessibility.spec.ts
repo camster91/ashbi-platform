@@ -53,6 +53,60 @@ test.describe('Client portal accessibility', () => {
     expect(logoutCalled).toBe(true);
   });
 
+  test('shows milestones and contracts and submits auditable revision and project feedback', async ({ page }) => {
+    let revisionPayload: Record<string, string> | null = null;
+    let projectFeedback = '';
+    await page.route('**/api/client-portal/**', async route => {
+      const request = route.request();
+      const pathname = new URL(request.url()).pathname;
+      const json = (body: unknown, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
+      if (pathname.endsWith('/verify-token')) return json({ user: { role: 'CLIENT' } });
+      if (pathname.endsWith('/me')) return json({ client: { name: 'Fixture Client' }, contact: { name: 'Fixture Contact' } });
+      if (pathname.endsWith('/contracts')) return json([{ id: 'contract-a', title: 'Project agreement', status: 'SENT', signToken: 'sign-a', canReview: true }]);
+      if (pathname.endsWith('/projects/project-a/revisions/revision-a/respond')) {
+        revisionPayload = request.postDataJSON();
+        return json({ id: 'revision-a', roundNumber: 1, status: revisionPayload.action === 'APPROVE' ? 'APPROVED' : 'OPEN' });
+      }
+      if (pathname.endsWith('/projects/project-a/feedback')) {
+        projectFeedback = request.postDataJSON().message;
+        return json({ id: 'activity-a' }, 201);
+      }
+      if (pathname.endsWith('/projects/project-a/tasks')) return json({ columns: { TODO: [], IN_PROGRESS: [], DONE: [], BLOCKED: [] } });
+      if (pathname.endsWith('/projects/project-a/documents')) return json([]);
+      if (pathname.endsWith('/projects/project-a')) return json({
+        id: 'project-a', name: 'Portal Project', status: 'ACTIVE', progressPct: 25,
+        milestones: [{ id: 'milestone-a', name: 'Design review', description: 'Review the first design.', dueDate: '2026-08-20T12:00:00.000Z', status: 'IN_PROGRESS' }],
+        revisionRounds: [{ id: 'revision-a', roundNumber: 1, status: 'IN_REVIEW', notes: 'Homepage and contact page' }],
+      });
+      if (pathname.endsWith('/projects')) return json([{ id: 'project-a', name: 'Portal Project', status: 'ACTIVE', updatedAt: '2026-08-09T12:00:00.000Z', totalTasks: 1, completedTasks: 0, progressPct: 0 }]);
+      if (pathname.endsWith('/invoices')) return json([]);
+      if (pathname.endsWith('/retainer')) return json(null);
+      return json({ recentMessages: 0, upcomingDeadlines: 0 });
+    });
+
+    await page.goto('/client-portal/verify?token=workflow-token');
+    await page.getByRole('button', { name: /Projects \(1\)/ }).click();
+    await page.getByRole('button', { name: /Portal Project/ }).click();
+    await expect(page.getByRole('heading', { name: 'Milestones' })).toBeVisible();
+    await expect(page.getByText('Design review')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Revision approvals' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Request changes' }).click();
+    await expect(page.getByRole('alert')).toContainText('Describe the changes');
+    await page.getByLabel('Feedback for round 1').fill('Please adjust the homepage hierarchy.');
+    await page.getByRole('button', { name: 'Request changes' }).click();
+    await expect(page.getByRole('status')).toContainText('Change request sent');
+    expect(revisionPayload).toEqual({ action: 'REQUEST_CHANGES', feedback: 'Please adjust the homepage hierarchy.' });
+
+    await page.getByLabel('Message to the project team').fill('The new direction looks good.');
+    await page.getByRole('button', { name: 'Send feedback' }).click();
+    await expect(page.getByRole('status')).toContainText('feedback was sent');
+    expect(projectFeedback).toBe('The new direction looks good.');
+
+    await page.getByRole('button', { name: /Contracts \(1\)/ }).click();
+    await expect(page.getByRole('link', { name: 'Review and sign' })).toHaveAttribute('href', '/portal/contract/sign-a');
+  });
+
   test('login reflows without overflow at supported breakpoints', async ({ page }) => {
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);

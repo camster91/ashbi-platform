@@ -58,7 +58,7 @@ function fmt(amount, currency) {
 }
 function fmtDate(d) {
   if (!d) return '—';
-  return new Date(d).toLocaleDateString({ year: 'numeric', month: 'short', day: 'numeric' });
+  return new Date(d).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 function fmtRelative(d) {
   if (!d) return '';
@@ -524,6 +524,11 @@ function ProjectDetail({ projectId, token, onBack }) {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState(null);
   const [documents, setDocuments] = useState([]);
+  const [revisionFeedback, setRevisionFeedback] = useState({});
+  const [generalFeedback, setGeneralFeedback] = useState('');
+  const [workflowStatus, setWorkflowStatus] = useState('');
+  const [workflowError, setWorkflowError] = useState('');
+  const [submittingWorkflow, setSubmittingWorkflow] = useState(false);
   const chatEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const { messages, connected, sendMessage } = useProjectChat(projectId, token);
@@ -622,6 +627,58 @@ function ProjectDetail({ projectId, token, onBack }) {
     }
   }
 
+  async function handleRevisionResponse(revision, action) {
+    const feedback = revisionFeedback[revision.id]?.trim() || '';
+    if (action === 'REQUEST_CHANGES' && !feedback) {
+      setWorkflowError('Describe the changes you need before submitting.');
+      return;
+    }
+    setSubmittingWorkflow(true);
+    setWorkflowError('');
+    setWorkflowStatus('');
+    try {
+      const response = await portalFetch(`/api/client-portal/projects/${projectId}/revisions/${revision.id}/respond`, token, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, feedback: feedback || undefined }),
+      });
+      if (!response.ok) throw new Error(`Response failed (${response.status})`);
+      const updated = await response.json();
+      setProject(current => ({
+        ...current,
+        revisionRounds: current.revisionRounds.map(item => item.id === updated.id ? { ...item, ...updated } : item),
+      }));
+      setWorkflowStatus(action === 'APPROVE' ? `Revision round ${revision.roundNumber} approved.` : `Change request sent for revision round ${revision.roundNumber}.`);
+      setRevisionFeedback(current => ({ ...current, [revision.id]: '' }));
+    } catch (err) {
+      setWorkflowError(err?.message || 'The revision response could not be saved.');
+    } finally {
+      setSubmittingWorkflow(false);
+    }
+  }
+
+  async function handleGeneralFeedback(event) {
+    event.preventDefault();
+    if (!generalFeedback.trim()) return;
+    setSubmittingWorkflow(true);
+    setWorkflowError('');
+    setWorkflowStatus('');
+    try {
+      const response = await portalFetch(`/api/client-portal/projects/${projectId}/feedback`, token, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: generalFeedback.trim() }),
+      });
+      if (!response.ok) throw new Error(`Feedback failed (${response.status})`);
+      setGeneralFeedback('');
+      setWorkflowStatus('Your feedback was sent to the project team.');
+    } catch (err) {
+      setWorkflowError(err?.message || 'Your feedback could not be saved.');
+    } finally {
+      setSubmittingWorkflow(false);
+    }
+  }
+
   if (loading) {
     return <div className="cp-loading">Loading project...</div>;
   }
@@ -676,6 +733,65 @@ function ProjectDetail({ projectId, token, onBack }) {
         </div>
       </div>
 
+      {project.milestones?.length > 0 && (
+        <section className="cp-card" style={{ padding: '1rem 1.25rem' }} aria-labelledby="portal-milestones-title">
+          <h3 id="portal-milestones-title" className="cp-section-title">Milestones</h3>
+          <div className="cp-space-y-2">
+            {project.milestones.map(milestone => (
+              <div key={milestone.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div>
+                  <p className="cp-text" style={{ fontWeight: 600 }}>{milestone.name}</p>
+                  {milestone.description && <p className="cp-text-muted" style={{ fontSize: '0.8rem' }}>{milestone.description}</p>}
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <span className={`cp-badge ${milestone.status === 'COMPLETED' ? 'cp-badge--green' : 'cp-badge--blue'}`}>{milestone.status.replaceAll('_', ' ')}</span>
+                  <p className="cp-text-muted" style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>Due {fmtDate(milestone.dueDate)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {project.revisionRounds?.length > 0 && (
+        <section className="cp-card" style={{ padding: '1rem 1.25rem' }} aria-labelledby="portal-revisions-title">
+          <h3 id="portal-revisions-title" className="cp-section-title">Revision approvals</h3>
+          <div className="cp-space-y-3">
+            {project.revisionRounds.map(revision => (
+              <div key={revision.id} style={{ borderTop: `1px solid ${BRAND.border}`, paddingTop: '0.75rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+                  <p className="cp-text" style={{ fontWeight: 600 }}>Round {revision.roundNumber}</p>
+                  <span className={`cp-badge ${revision.status === 'APPROVED' ? 'cp-badge--green' : 'cp-badge--orange'}`}>{revision.status.replaceAll('_', ' ')}</span>
+                </div>
+                {revision.notes && <p className="cp-text-muted" style={{ fontSize: '0.8rem', marginTop: '0.5rem' }}>{revision.notes}</p>}
+                {revision.status !== 'APPROVED' && (
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <label htmlFor={`revision-feedback-${revision.id}`} className="cp-label">Feedback for round {revision.roundNumber}</label>
+                    <textarea id={`revision-feedback-${revision.id}`} className="cp-input" rows={3} value={revisionFeedback[revision.id] || ''} onChange={event => setRevisionFeedback(current => ({ ...current, [revision.id]: event.target.value }))} placeholder="Describe requested changes, or approve when everything looks right." />
+                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                      <button type="button" className="cp-btn-primary" disabled={submittingWorkflow} onClick={() => handleRevisionResponse(revision, 'APPROVE')}>Approve round</button>
+                      <button type="button" className="cp-btn-secondary" disabled={submittingWorkflow} onClick={() => handleRevisionResponse(revision, 'REQUEST_CHANGES')}>Request changes</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="cp-card" style={{ padding: '1rem 1.25rem' }} aria-labelledby="portal-feedback-title">
+        <h3 id="portal-feedback-title" className="cp-section-title">Project feedback</h3>
+        <form onSubmit={handleGeneralFeedback}>
+          <label htmlFor="portal-project-feedback" className="cp-label">Message to the project team</label>
+          <textarea id="portal-project-feedback" className="cp-input" rows={3} value={generalFeedback} onChange={event => setGeneralFeedback(event.target.value)} required />
+          <button type="submit" className="cp-btn-primary" style={{ marginTop: '0.5rem' }} disabled={submittingWorkflow || !generalFeedback.trim()}>Send feedback</button>
+        </form>
+      </section>
+
+      {workflowStatus && <p role="status" aria-live="polite" className="cp-alert" style={{ background: '#f0fdf4', color: '#166534' }}>{workflowStatus}</p>}
+      {workflowError && <p role="alert" className="cp-alert cp-alert--red cp-error">{workflowError}</p>}
+
       {/* Detail tabs */}
       <div style={{ display: 'flex', gap: '0.25rem', borderBottom: `2px solid ${BRAND.border}` }}>
         {detailTabs.map(tab => (
@@ -688,9 +804,11 @@ function ProjectDetail({ projectId, token, onBack }) {
               fontWeight: activeView === tab.id ? 600 : 400,
               color: activeView === tab.id ? BRAND.primary : BRAND.textMuted,
               borderBottom: activeView === tab.id ? `2px solid ${BRAND.accent}` : '2px solid transparent',
+              borderTop: 0,
+              borderRight: 0,
+              borderLeft: 0,
               marginBottom: '-2px',
               background: 'none',
-              border: 'none',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -954,6 +1072,37 @@ function InvoicesTab({ invoices, token }) {
   );
 }
 
+function ContractsTab({ contracts }) {
+  return (
+    <div className="cp-space-y-4">
+      <h2 className="cp-page-title">Contracts</h2>
+      {contracts.length === 0 ? (
+        <div className="cp-card" style={{ padding: '3rem', textAlign: 'center' }}>
+          <p className="cp-text-muted">No contracts are currently available.</p>
+        </div>
+      ) : (
+        <div className="cp-space-y-3">
+          {contracts.map(contract => (
+            <article key={contract.id} className="cp-card" style={{ padding: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+              <div>
+                <h3 className="cp-card-title">{contract.title}</h3>
+                <p className="cp-text-muted" style={{ fontSize: '0.8rem' }}>
+                  {contract.status === 'SIGNED' ? `Signed ${fmtDate(contract.signedAt)}` : 'Awaiting your signature'}
+                </p>
+              </div>
+              {contract.canReview ? (
+                <a className="cp-btn-primary" href={`/portal/contract/${contract.signToken}`}>Review and sign</a>
+              ) : (
+                <span className={`cp-badge ${contract.status === 'SIGNED' ? 'cp-badge--green' : 'cp-badge--muted'}`}>{contract.status}</span>
+              )}
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Documents Tab ─────────────────────────────────────────────────────────────
 function DocumentsTab({ projects, token }) {
   const [selectedProjectId, setSelectedProjectId] = useState(projects[0]?.id || '');
@@ -1188,6 +1337,7 @@ function ChatTab({ projects, token }) {
 function PortalDashboard({ token }) {
   const [me, setMe] = useState(null);
   const [invoices, setInvoices] = useState([]);
+  const [contracts, setContracts] = useState([]);
   const [projects, setProjects] = useState([]);
   const [retainer, setRetainer] = useState(null);
   const [unread, setUnread] = useState({ recentMessages: 0, upcomingDeadlines: 0 });
@@ -1199,9 +1349,10 @@ function PortalDashboard({ token }) {
   useEffect(() => {
     async function load() {
       try {
-        const [meRes, invRes, projRes, retRes, unreadRes] = await Promise.all([
+        const [meRes, invRes, contractRes, projRes, retRes, unreadRes] = await Promise.all([
           portalFetch('/api/client-portal/me', token),
           portalFetch('/api/client-portal/invoices', token),
+          portalFetch('/api/client-portal/contracts', token),
           portalFetch('/api/client-portal/projects', token),
           portalFetch('/api/client-portal/retainer', token),
           portalFetch('/api/client-portal/unread-count', token).catch(() => ({ json: () => ({ recentMessages: 0, upcomingDeadlines: 0 }) })),
@@ -1211,11 +1362,12 @@ function PortalDashboard({ token }) {
           setLoading(false);
           return;
         }
-        const [meData, invData, projData, retData, unreadData] = await Promise.all([
-          meRes.json(), invRes.json(), projRes.json(), retRes.json(), unreadRes.json ? unreadRes.json() : unreadRes
+        const [meData, invData, contractData, projData, retData, unreadData] = await Promise.all([
+          meRes.json(), invRes.json(), contractRes.json(), projRes.json(), retRes.json(), unreadRes.json ? unreadRes.json() : unreadRes
         ]);
         setMe(meData);
         setInvoices(Array.isArray(invData) ? invData : []);
+        setContracts(Array.isArray(contractData) ? contractData : []);
         setProjects(Array.isArray(projData) ? projData : []);
         setRetainer(retData || null);
         setUnread(unreadData || { recentMessages: 0, upcomingDeadlines: 0 });
@@ -1262,6 +1414,7 @@ function PortalDashboard({ token }) {
     { id: 'overview', label: 'Overview', icon: Icons.overview },
     { id: 'projects', label: `Projects (${projects.length})`, icon: Icons.projects },
     { id: 'invoices', label: `Invoices (${invoices.length})`, icon: Icons.invoices },
+    { id: 'contracts', label: `Contracts (${contracts.length})`, icon: Icons.documents },
     { id: 'documents', label: 'Documents', icon: Icons.documents },
     { id: 'chat', label: 'Chat', icon: Icons.chat },
   ];
@@ -1307,7 +1460,8 @@ function PortalDashboard({ token }) {
                 padding: '0.75rem 1rem', fontSize: '0.85rem', fontWeight: activeTab === tab.id ? 600 : 400,
                 color: activeTab === tab.id ? BRAND.primary : BRAND.textMuted,
                 borderBottom: activeTab === tab.id ? `3px solid ${BRAND.accent}` : '3px solid transparent',
-                marginBottom: '-2px', background: 'none', border: 'none', cursor: 'pointer',
+                borderTop: 0, borderRight: 0, borderLeft: 0,
+                marginBottom: '-2px', background: 'none', cursor: 'pointer',
                 display: 'flex', alignItems: 'center', gap: '0.375rem', transition: 'all 0.2s', whiteSpace: 'nowrap'
               }}
             >
@@ -1335,6 +1489,7 @@ function PortalDashboard({ token }) {
           />
         )}
         {activeTab === 'invoices' && <InvoicesTab invoices={invoices} token={token} />}
+        {activeTab === 'contracts' && <ContractsTab contracts={contracts} />}
         {activeTab === 'documents' && <DocumentsTab projects={projects} token={token} />}
         {activeTab === 'chat' && <ChatTab projects={projects} token={token} />}
       </main>

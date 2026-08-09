@@ -8,6 +8,8 @@ import clientPortalRoutes from '../../routes/client-portal.routes.js';
 describe('client portal cookie session flow', () => {
   let app;
   let sessionVersion = 2;
+  const activityRows = [];
+  let revisionStatus = 'IN_REVIEW';
   const user = {
     id: 'portal-user', email: 'client@example.com', name: 'Client User', role: 'CLIENT',
     clientId: 'client-a', organizationId: 'org-a', isActive: true,
@@ -32,7 +34,36 @@ describe('client portal cookie session flow', () => {
         findFirst: async ({ where }) => (where.id === client.id ? client : null),
         findUnique: async ({ where }) => (where.id === client.id ? client : null),
       },
+      project: {
+        findFirst: async ({ where }) => (where.id === 'project-a' && where.clientId === client.id ? { id: 'project-a', name: 'Portal Project' } : null),
+      },
+      revisionRound: {
+        findFirst: async ({ where }) => (where.id === 'revision-a' && where.projectId === 'project-a' && where.project?.clientId === client.id
+          ? { id: 'revision-a', roundNumber: 1, status: revisionStatus }
+          : null),
+        updateMany: async () => {
+          if (revisionStatus === 'APPROVED') return { count: 0 };
+          revisionStatus = 'APPROVED';
+          return { count: 1 };
+        },
+        findUnique: async () => ({ id: 'revision-a', roundNumber: 1, status: revisionStatus }),
+      },
+      activity: {
+        create: async ({ data }) => {
+          const row = { id: `activity-${activityRows.length + 1}`, createdAt: new Date(), ...data };
+          activityRows.push(row);
+          return row;
+        },
+      },
+      contract: {
+        findMany: async () => [{
+          id: 'contract-a', title: 'Project agreement', status: 'SENT', signToken: 'sign-a',
+          templateType: 'PROJECT', publicAccessExpiresAt: null, publicAccessRevokedAt: null,
+          signedAt: null, clientSigName: null, createdAt: new Date(), updatedAt: new Date(),
+        }],
+      },
     };
+    prisma.$transaction = async callback => callback(prisma);
     app.decorate('prisma', prisma);
     app.decorate('io', { to: () => ({ emit: () => {} }) });
     app.addHook('preHandler', async request => { request.prisma = prisma; });
@@ -76,5 +107,41 @@ describe('client portal cookie session flow', () => {
 
     const revoked = await app.inject({ method: 'GET', url: '/api/client-portal/me', headers: { cookie: sessionCookie } });
     assert.equal(revoked.statusCode, 401);
+  });
+
+  it('scopes contracts and records client revision approval and feedback as durable activities', async () => {
+    const bearer = app.jwt.sign({ ...user, contactId: contact.id, sessionVersion }, { expiresIn: '1h' });
+    const headers = { authorization: `Bearer ${bearer}` };
+    const contracts = await app.inject({ method: 'GET', url: '/api/client-portal/contracts', headers });
+    assert.equal(contracts.statusCode, 200);
+    assert.equal(contracts.json()[0].canReview, true);
+
+    const approval = await app.inject({
+      method: 'POST',
+      url: '/api/client-portal/projects/project-a/revisions/revision-a/respond',
+      headers,
+      payload: { action: 'APPROVE' },
+    });
+    assert.equal(approval.statusCode, 200);
+    assert.equal(approval.json().status, 'APPROVED');
+    assert.equal(activityRows.at(-1).type, 'CLIENT_REVISION_APPROVED');
+
+    const feedback = await app.inject({
+      method: 'POST',
+      url: '/api/client-portal/projects/project-a/feedback',
+      headers,
+      payload: { message: 'Please update the launch copy.' },
+    });
+    assert.equal(feedback.statusCode, 201);
+    assert.equal(activityRows.at(-1).type, 'CLIENT_FEEDBACK');
+    assert.match(activityRows.at(-1).metadata, /launch copy/);
+
+    const crossClient = await app.inject({
+      method: 'POST',
+      url: '/api/client-portal/projects/project-b/feedback',
+      headers,
+      payload: { message: 'Must not cross tenant boundaries.' },
+    });
+    assert.equal(crossClient.statusCode, 404);
   });
 });
