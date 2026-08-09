@@ -232,6 +232,40 @@ describe('useAuth', () => {
       expect(result.current.user).toEqual(mockUser);
       expect(result.current.authState).toMatchObject({ status: 'error', reason: 'server' });
     });
+
+    it('ignores a stale session check that finishes after a newer check', async () => {
+      const initialUser = { id: '1', email: 'initial@example.com', role: 'ADMIN' };
+      api.me.mockResolvedValue(initialUser);
+      const { result } = renderHook(() => useAuth(), { wrapper });
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+      let resolveOlder;
+      let resolveNewer;
+      const older = new Promise((resolve) => { resolveOlder = resolve; });
+      const newer = new Promise((resolve) => { resolveNewer = resolve; });
+      api.me.mockReset();
+      api.me.mockReturnValueOnce(older).mockReturnValueOnce(newer);
+
+      let olderCheck;
+      let newerCheck;
+      act(() => {
+        olderCheck = result.current.checkAuth();
+        newerCheck = result.current.checkAuth();
+      });
+
+      await act(async () => {
+        resolveNewer({ id: 'new', email: 'new@example.com', role: 'ADMIN' });
+        await newerCheck;
+      });
+      await act(async () => {
+        resolveOlder({ id: 'old', email: 'old@example.com', role: 'ADMIN' });
+        await olderCheck;
+      });
+
+      expect(result.current.user.email).toBe('new@example.com');
+      expect(result.current.authState).toMatchObject({ status: 'authenticated' });
+      expect(result.current.isLoading).toBe(false);
+    });
   });
 
   describe('memoization', () => {

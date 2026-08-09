@@ -127,7 +127,7 @@ function PrivateRoute({ children }) {
   const location = useLocation();
   if (isLoading) return <PageLoader />;
   if (authState.status === 'error') return <AuthCheckFailure authState={authState} onRetry={checkAuth} />;
-  return user ? children : <Navigate to="/login" replace state={{ reason: authState.reason, returnTo: safePrivateReturn(location) }} />;
+  return user ? children : <Navigate to="/login" replace state={{ reason: authState.reason, message: authState.message, returnTo: safePrivateReturn(location) }} />;
 }
 
 function safePrivateReturn(location) {
@@ -139,7 +139,7 @@ function AdminRoute({ children }) {
   const location = useLocation();
   if (isLoading) return <PageLoader />;
   if (authState.status === 'error') return <AuthCheckFailure authState={authState} onRetry={checkAuth} />;
-  if (!user) return <Navigate to="/login" replace state={{ reason: authState.reason, returnTo: safePrivateReturn(location) }} />;
+  if (!user) return <Navigate to="/login" replace state={{ reason: authState.reason, message: authState.message, returnTo: safePrivateReturn(location) }} />;
   if (user.role !== 'ADMIN') return (
     <section role="alert" className="m-6 rounded-xl border border-warning/40 bg-warning/10 p-5 text-foreground">
       <h1 className="font-semibold">Administrator access required</h1>

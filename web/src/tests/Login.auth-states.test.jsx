@@ -58,4 +58,15 @@ describe('Login authentication states', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /sign in/i })).toBeEnabled());
   });
 
+  it('explains an explicitly revoked session without claiming ordinary expiry', () => {
+    renderLogin({
+      pathname: '/login',
+      state: { reason: 'revoked', returnTo: '/invoices' },
+    });
+
+    expect(screen.getByRole('status')).toHaveTextContent(/session was revoked/i);
+    expect(screen.getByRole('status')).toHaveTextContent(/sign in again/i);
+    expect(screen.getByRole('status')).toHaveTextContent(/drafts remain/i);
+  });
+
 });

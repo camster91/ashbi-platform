@@ -23,6 +23,11 @@ export function authFailureReason(error) {
   return 'unknown';
 }
 
+export function sessionEndReason(message) {
+  const normalized = typeof message === 'string' ? message.toLowerCase() : '';
+  return normalized.includes('revoked') && !normalized.includes('expired') ? 'revoked' : 'expired';
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -30,36 +35,44 @@ export function AuthProvider({ children }) {
   const navigate = useNavigate();
   const location = useLocation();
   const mountedRef = useRef(true);
+  const authCheckSequenceRef = useRef(0);
 
   useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; };
+    return () => {
+      mountedRef.current = false;
+      authCheckSequenceRef.current += 1;
+    };
   }, []);
 
   const checkAuth = useCallback(async () => {
+    const sequence = ++authCheckSequenceRef.current;
+    const isCurrentCheck = () => mountedRef.current && sequence === authCheckSequenceRef.current;
     if (mountedRef.current) {
       setIsLoading(true);
       setAuthState((current) => ({ ...current, status: 'checking' }));
     }
     try {
       const userData = await api.me();
-      if (mountedRef.current) {
+      if (isCurrentCheck()) {
         setUser(userData);
         setAuthState({ status: 'authenticated', reason: null, message: '' });
       }
     } catch (error) {
-      if (mountedRef.current) {
+      if (isCurrentCheck()) {
         const reason = authFailureReason(error);
         if (reason === 'signed_out') {
           await purgePrivateCaches();
-          setUser(null);
-          setAuthState({ status: 'unauthenticated', reason, message: error.message || '' });
+          if (isCurrentCheck()) {
+            setUser(null);
+            setAuthState({ status: 'unauthenticated', reason, message: error.message || '' });
+          }
         } else {
           setAuthState({ status: 'error', reason, message: error.message || '' });
         }
       }
     } finally {
-      if (mountedRef.current) setIsLoading(false);
+      if (isCurrentCheck()) setIsLoading(false);
     }
   }, []);
 
@@ -68,6 +81,7 @@ export function AuthProvider({ children }) {
   }, [checkAuth]);
 
   const login = useCallback(async (email, password, returnTo = '/dashboard') => {
+    authCheckSequenceRef.current += 1;
     const { user: userData } = await api.login(email, password);
     await purgePrivateCaches();
     if (mountedRef.current) {
@@ -79,6 +93,7 @@ export function AuthProvider({ children }) {
   }, [navigate]);
 
   const logout = useCallback(async () => {
+    authCheckSequenceRef.current += 1;
     await clearBrowserPushSubscription({ removeFromServer: true });
     try {
       await api.logout();
@@ -93,14 +108,15 @@ export function AuthProvider({ children }) {
     }
   }, [navigate]);
 
-  const expireSession = useCallback(async (message = '') => {
+  const expireSession = useCallback(async (message = '', reason = sessionEndReason(message)) => {
+    authCheckSequenceRef.current += 1;
     await clearBrowserPushSubscription();
     await purgePrivateCaches();
     if (!mountedRef.current) return;
     const returnTo = safeReturnPath(`${location.pathname}${location.search}${location.hash}`);
     setUser(null);
-    setAuthState({ status: 'unauthenticated', reason: 'expired', message });
-    navigate('/login', { replace: true, state: { reason: 'expired', message, returnTo } });
+    setAuthState({ status: 'unauthenticated', reason, message });
+    navigate('/login', { replace: true, state: { reason, message, returnTo } });
   }, [location.hash, location.pathname, location.search, navigate]);
 
   return (

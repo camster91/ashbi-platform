@@ -26,8 +26,12 @@ export default function Login() {
   const { t, currentLang, setLang, languages } = useTranslation();
   const location = useLocation();
   const returnTo = location.state?.returnTo || '/dashboard';
-  const sessionNotice = location.state?.reason === 'expired'
-    ? (location.state?.message || 'Your session expired. Sign in again to return to your work.')
+  const sessionNotices = {
+    expired: 'Your session expired. Sign in again to return to your work.',
+    revoked: 'Your session was revoked. Sign in again to return to your work. If this is unexpected, contact an administrator.',
+  };
+  const sessionNotice = sessionNotices[location.state?.reason]
+    ? (location.state?.message || sessionNotices[location.state.reason])
     : '';
 
   const features = [

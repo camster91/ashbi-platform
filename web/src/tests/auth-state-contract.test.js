@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { authFailureReason, safeReturnPath } from '../hooks/useAuth';
+import { authFailureReason, safeReturnPath, sessionEndReason } from '../hooks/useAuth';
 
 describe('auth transition contract', () => {
   it('classifies authentication and transient failures separately', () => {
@@ -16,5 +16,11 @@ describe('auth transition contract', () => {
     expect(safeReturnPath('//attacker.example')).toBe('/dashboard');
     expect(safeReturnPath('/login')).toBe('/dashboard');
     expect(safeReturnPath('/forgot-password?next=/admin')).toBe('/dashboard');
+  });
+
+  it('distinguishes an explicit revocation from ordinary expiry', () => {
+    expect(sessionEndReason('This session was revoked by an administrator.')).toBe('revoked');
+    expect(sessionEndReason('Your session expired.')).toBe('expired');
+    expect(sessionEndReason('Session expired or revoked.')).toBe('expired');
   });
 });
