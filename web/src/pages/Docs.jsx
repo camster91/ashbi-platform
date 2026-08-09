@@ -583,13 +583,13 @@ function NoteCard({
           {note.title}
         </button>
         <div className="flex items-center gap-0.5 flex-shrink-0">
-          <button onClick={onPin} className="p-1 text-muted-foreground hover:text-foreground rounded transition-colors" title={note.isPinned ? 'Unpin' : 'Pin'}>
+          <button type="button" onClick={onPin} aria-label={`${note.isPinned ? 'Unpin' : 'Pin'} ${note.title}`} className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-foreground rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" title={note.isPinned ? 'Unpin' : 'Pin'}>
             {note.isPinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
           </button>
-          <button onClick={onEdit} className="p-1 text-muted-foreground hover:text-foreground rounded transition-colors" aria-label={`Edit ${note.title}`}>
+          <button type="button" onClick={onEdit} className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-foreground rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Edit ${note.title}`}>
             <Edit2 className="w-3.5 h-3.5" />
           </button>
-          <button onClick={onDelete} className="p-1 text-muted-foreground hover:text-destructive rounded transition-colors" aria-label={`Delete ${note.title}`}>
+          <button type="button" onClick={onDelete} className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-destructive rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={`Delete ${note.title}`}>
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         </div>

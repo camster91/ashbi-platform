@@ -845,16 +845,17 @@ function ProjectNotes({ projectId }) {
                   </p>
                 </div>
                 <div className="flex items-center gap-1 flex-shrink-0">
-                  <button onClick={() => pinMutation.mutate(note.id)} className="p-1 text-muted-foreground hover:text-foreground rounded transition-colors" title={note.isPinned ? 'Unpin' : 'Pin'}>
+                  <button type="button" onClick={() => pinMutation.mutate(note.id)} aria-label={`${note.isPinned ? 'Unpin' : 'Pin'} ${note.title}`} className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-foreground rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" title={note.isPinned ? 'Unpin' : 'Pin'}>
                     {note.isPinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
                   </button>
-                  <button onClick={() => startEdit(note)} className="p-1 text-muted-foreground hover:text-foreground rounded transition-colors">
+                  <button type="button" onClick={() => startEdit(note)} aria-label={`Edit ${note.title}`} className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-foreground rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                     <Edit2 className="w-3.5 h-3.5" />
                   </button>
                   <button
                     onClick={() => { deleteMutation.reset(); setNoteToDelete(note); }}
                     aria-label={`Delete ${note.title}`}
-                    className="p-1 text-muted-foreground hover:text-destructive rounded transition-colors"
+                    type="button"
+                    className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-destructive rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
