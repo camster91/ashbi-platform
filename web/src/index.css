@@ -89,6 +89,12 @@
     --destructive: 0 63% 31%;
     --destructive-foreground: 48 33% 97%;
 
+    /* Status colours */
+    --success: 142 70% 32%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 58%;
+    --warning-foreground: 250 39% 10%;
+
     /* Borders & Inputs */
     --border: 250 15% 45%;
     --input: 250 15% 45%;

@@ -30,8 +30,8 @@ const Button = forwardRef(({
   };
 
   const sizes = {
-    xs: 'h-7 px-2.5 text-xs',
-    sm: 'h-8 px-3 text-sm',
+    xs: 'min-h-11 px-2.5 text-xs',
+    sm: 'min-h-11 px-3 text-sm',
     md: 'h-10 px-4 text-sm',
     lg: 'h-12 px-6 text-base',
     xl: 'h-14 px-8 text-base',
@@ -49,28 +49,27 @@ const Button = forwardRef(({
     <button
       ref={ref}
       disabled={showDisabled || showLoading}
+      aria-busy={showLoading || undefined}
       className={cn(
         'inline-flex items-center justify-center gap-2 rounded-lg font-medium',
-        'transition-all duration-200 ease-out',
+        'transition-colors duration-200 ease-out motion-reduce:transition-none',
         'focus:outline-none focus:ring-4 focus:ring-offset-0',
-        'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:transform-none',
-        'hover:-translate-y-0.5 hover:shadow-md',
-        'active:translate-y-0 active:shadow-sm',
-        variants[variant],
-        sizes[size],
+        'disabled:opacity-50 disabled:cursor-not-allowed',
+        variants[variant] || variants.primary,
+        sizes[size] || sizes.md,
         className
       )}
       {...props}
     >
       {showLoading && (
-        <Loader2 className={cn('animate-spin', iconSizes[size])} />
+        <Loader2 aria-hidden="true" className={cn('animate-spin motion-reduce:animate-none', iconSizes[size] || iconSizes.md)} />
       )}
       {!showLoading && leftIcon && (
-        <span className={cn(iconSizes[size])}>{leftIcon}</span>
+        <span aria-hidden="true" className={cn(iconSizes[size] || iconSizes.md)}>{leftIcon}</span>
       )}
       {children}
       {!showLoading && rightIcon && (
-        <span className={cn(iconSizes[size])}>{rightIcon}</span>
+        <span aria-hidden="true" className={cn(iconSizes[size] || iconSizes.md)}>{rightIcon}</span>
       )}
     </button>
   );

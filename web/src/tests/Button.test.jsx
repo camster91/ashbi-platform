@@ -35,6 +35,7 @@ describe('Button Component', () => {
     
     const button = screen.getByRole('button');
     expect(button).toBeDisabled();
+    expect(button).toHaveAttribute('aria-busy', 'true');
     // Loader icon should be present (lucide-react uses SVGs)
     expect(document.querySelector('svg')).toBeInTheDocument();
   });
@@ -64,6 +65,18 @@ describe('Button Component', () => {
     rerender(<Button variant="outline" size="sm">Outline Small</Button>);
     button = screen.getByRole('button');
     expect(button.className).toContain('border-2');
-    expect(button.className).toContain('h-8');
+    expect(button.className).toContain('min-h-11');
+  });
+
+  it('maps status variants and avoids motion-based hover effects', () => {
+    const { rerender } = render(<Button variant="success">Saved</Button>);
+    let button = screen.getByRole('button');
+    expect(button.className).toContain('bg-success');
+    expect(button.className).not.toContain('hover:-translate-y');
+
+    rerender(<Button variant="warning">Review</Button>);
+    button = screen.getByRole('button');
+    expect(button.className).toContain('bg-warning');
+    expect(button.className).toContain('motion-reduce:transition-none');
   });
 });
