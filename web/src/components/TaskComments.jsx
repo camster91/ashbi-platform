@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
+import ConfirmDialog from './ConfirmDialog';
 import Skeleton from './ui/Skeleton';
 
 export default function TaskComments({ taskId }) {
@@ -9,6 +10,7 @@ export default function TaskComments({ taskId }) {
   const [showMentions, setShowMentions] = useState(false);
   const [mentionSearch, setMentionSearch] = useState('');
   const [cursorPosition, setCursorPosition] = useState(0);
+  const [commentToDelete, setCommentToDelete] = useState(null);
   const inputRef = useRef(null);
 
   // Fetch comments
@@ -38,8 +40,21 @@ export default function TaskComments({ taskId }) {
     mutationFn: api.deleteComment,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['task-comments', taskId] });
+      setCommentToDelete(null);
     }
   });
+
+  const requestCommentDeletion = (comment) => {
+    if (deleteMutation.isPending) return;
+    deleteMutation.reset();
+    setCommentToDelete(comment);
+  };
+
+  const cancelCommentDeletion = () => {
+    if (deleteMutation.isPending) return;
+    deleteMutation.reset();
+    setCommentToDelete(null);
+  };
 
   // Handle input change and @mention detection
   const handleInputChange = (e) => {
@@ -152,8 +167,11 @@ export default function TaskComments({ taskId }) {
               {/* Actions */}
               <div className="flex gap-2 mt-1">
                 <button
-                  onClick={() => deleteMutation.mutate(comment.id)}
-                  className="text-xs text-gray-400 hover:text-red-500"
+                  type="button"
+                  onClick={() => requestCommentDeletion(comment)}
+                  disabled={deleteMutation.isPending}
+                  aria-label={`Delete comment by ${comment.author?.name || 'Unknown author'}`}
+                  className="inline-flex min-h-11 items-center rounded px-2 text-xs text-gray-500 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Delete
                 </button>
@@ -208,6 +226,19 @@ export default function TaskComments({ taskId }) {
           </button>
         </div>
       </form>
+
+      <ConfirmDialog
+        isOpen={Boolean(commentToDelete)}
+        title={`Permanently delete ${commentToDelete?.author?.name || 'this author'}'s comment?`}
+        description={commentToDelete
+          ? `“${commentToDelete.content}” This permanently removes the comment from the task and cannot be undone.`
+          : ''}
+        confirmLabel="Delete comment permanently"
+        onConfirm={() => commentToDelete && deleteMutation.mutate(commentToDelete.id)}
+        onCancel={cancelCommentDeletion}
+        pending={deleteMutation.isPending}
+        error={deleteMutation.error?.message}
+      />
     </div>
   );
 }
