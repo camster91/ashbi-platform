@@ -121,6 +121,7 @@ export default function Expenses() {
       queryClient.invalidateQueries({ queryKey: ['expense-summary'] });
       resetForm();
     },
+    onError: (error) => toast.error('Failed to create expense', error.message),
   });
 
   const updateMutation = useMutation({
@@ -131,6 +132,7 @@ export default function Expenses() {
       queryClient.invalidateQueries({ queryKey: ['expense-summary'] });
       resetForm();
     },
+    onError: (error) => toast.error('Failed to update expense', error.message),
   });
 
   const deleteMutation = useMutation({
@@ -196,6 +198,7 @@ export default function Expenses() {
         receiptUrl = result.url;
       } catch (err) {
         console.error('Receipt upload failed:', err);
+        toast.error('Receipt upload failed', err.message);
         setUploading(false);
         return;
       }

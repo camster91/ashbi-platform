@@ -75,6 +75,7 @@ export default function Proposals() {
       setShowCreate(false);
       navigate(`/proposal/${proposal.id}`);
     },
+    onError: (error) => toast.error('Failed to create proposal', error.message),
   });
 
   const deleteMutation = useMutation({

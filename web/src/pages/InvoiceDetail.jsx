@@ -169,6 +169,7 @@ export default function InvoiceDetail() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoice', id] });
     },
+    onError: (error) => toast.error('Failed to generate payment link', error.message),
   });
 
   const startEdit = () => {
