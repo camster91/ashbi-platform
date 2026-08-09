@@ -3,8 +3,10 @@ import { getVapidPublicKey, sendPushToAll } from '../utils/web-push.js';
 import {validateBody, pushSendSchema, pushSubscribeSchema, pushUnsubscribeSchema} from '../validators/schemas.js';
 
 export default async function pushRoutes(fastify) {
-  // Get VAPID public key (no auth needed — frontend needs this to subscribe)
-  fastify.get('/vapid-key', async () => {
+  // Authentication establishes the tenant context required by application routes.
+  fastify.get('/vapid-key', {
+    onRequest: [fastify.authenticate],
+  }, async () => {
     return { publicKey: getVapidPublicKey() };
   });
 
