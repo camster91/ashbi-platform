@@ -672,14 +672,14 @@ export default async function taskRoutes(fastify) {
     preHandler: [validateBody(taskCreateQuickSchema)],
   }, async (request) => {
     const { projectId } = request.params;
-    const { title, assigneeId, priority = 'NORMAL' } = request.body;
+    const { title, assigneeId, priority = 'NORMAL', status = 'PENDING' } = request.body;
 
     const task = await fastify.prisma.task.create({
       data: {
         projectId,
         title,
         description: '',
-        status: 'NOT_STARTED',
+        status,
         priority,
         assigneeId,
         startDate: new Date()

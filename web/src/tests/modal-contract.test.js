@@ -9,6 +9,7 @@ const modalConsumers = [
   'src/components/CreateTeamMemberModal.jsx',
   'src/components/Milestones.jsx',
   'src/components/Notes.jsx',
+  'src/components/QuickAdd.jsx',
   'src/pages/AssetLibrary.jsx',
   'src/pages/ApprovalQueue.jsx',
   'src/pages/Contracts.jsx',

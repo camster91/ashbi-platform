@@ -119,6 +119,12 @@ export const createClientSchema = z.object({
   name: z.string().min(1).max(200),
   domain: z.string().max(255).optional(),
   status: z.enum(['ACTIVE', 'INACTIVE', 'PROSPECT']).optional().default('ACTIVE'),
+  contacts: z.array(z.object({
+    email: z.string().email().max(255),
+    name: z.string().min(1).max(200),
+    role: z.string().max(100).optional(),
+    isPrimary: z.boolean().default(false),
+  })).max(10).optional(),
 });
 
 export const updateClientSchema = z.object({
@@ -772,6 +778,7 @@ export const taskCreateQuickSchema = z.object({
   title: z.string().min(1).max(500),
   assigneeId: cuidId.optional(),
   priority: z.enum(['LOW', 'NORMAL', 'HIGH', 'CRITICAL']).default('NORMAL'),
+  status: z.enum(['PENDING', 'IN_PROGRESS', 'BLOCKED', 'REVIEW', 'COMPLETED']).default('PENDING'),
 });
 
 export const projectCreateSchema = z.object({

@@ -50,7 +50,7 @@ export default async function clientRoutes(fastify) {
     onRequest: [fastify.authenticate],
     preHandler: [validateBody(createClientSchema)],
   }, async (request, reply) => {
-    const { name, domain, status } = request.body;
+    const { name, domain, status, contacts } = request.body;
 
     // Check for duplicate domain
     if (domain) {
@@ -63,7 +63,13 @@ export default async function clientRoutes(fastify) {
     }
 
     const client = await request.prisma.client.create({
-      data: { name, domain, status }
+      data: {
+        name,
+        domain,
+        status,
+        contacts: contacts?.length ? { create: contacts } : undefined
+      },
+      include: contacts?.length ? { contacts: true } : undefined
     });
 
     return reply.status(201).send(client);
