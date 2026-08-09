@@ -83,3 +83,37 @@ test('core revenue registrar preserves route order and prefixes', async () => {
   assert.equal(new Set(registrations.map(({ plugin }) => plugin)).size, 4);
   assert.ok(registrations.every(({ plugin }) => typeof plugin === 'function'));
 });
+
+test('project collaboration routes are owned by an ordered domain registrar', async () => {
+  const factory = fs.readFileSync(new URL('../../index.js', import.meta.url), 'utf8');
+  const registrarUrl = new URL('../../domains/client-delivery/register-collaboration-routes.js', import.meta.url);
+  const registrar = fs.readFileSync(registrarUrl, 'utf8');
+  const { registerCollaborationRoutes } = await import(registrarUrl.href);
+  const routeNames = ['message', 'revision', 'calendar', 'comment', 'attachment', 'time', 'milestone'];
+  const expectedPrefixes = [
+    '/api/messages',
+    '/api/revisions',
+    '/api/calendar',
+    '/api/comments',
+    '/api/attachments',
+    '/api/time',
+    '/api/milestones',
+  ];
+
+  assert.match(factory, /registerCollaborationRoutes\(fastify\)/);
+  for (const route of routeNames) {
+    assert.doesNotMatch(factory, new RegExp(`routes\\/${route}\\.routes\\.js`));
+    assert.match(registrar, new RegExp(`routes\\/${route}\\.routes\\.js`));
+  }
+
+  const registrations = [];
+  await registerCollaborationRoutes({
+    async register(plugin, options) {
+      registrations.push({ plugin, prefix: options.prefix });
+    },
+  });
+
+  assert.deepEqual(registrations.map(({ prefix }) => prefix), expectedPrefixes);
+  assert.equal(new Set(registrations.map(({ plugin }) => plugin)).size, routeNames.length);
+  assert.ok(registrations.every(({ plugin }) => typeof plugin === 'function'));
+});
