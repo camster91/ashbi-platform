@@ -40,6 +40,9 @@ export function validateReleaseGates(root = process.cwd()) {
     if (!release.includes(command)) failures.push(`release-gates.yml is missing ${command}`);
   }
   if (!/^\s*workflow_call:\s*$/m.test(release)) failures.push('release-gates.yml is not reusable');
+  if (!/TENANT_INTEGRATION_DATABASE_URL:\s*postgresql:\/\/postgres:testpass@localhost:5432\/testdb/.test(release)) {
+    failures.push('release-gates.yml does not enable dedicated-database policy integration tests');
+  }
   const browserJob = release.split(/^  browser:/m)[1]?.split(/^  stack-e2e:/m)[0] ?? '';
   if (!browserJob.includes('npm run build')) failures.push('release-gates.yml browser job does not build the production frontend');
 

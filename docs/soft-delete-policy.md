@@ -38,4 +38,16 @@ node --test src/tests/unit/soft-delete-policy.test.js src/tests/unit/tenant-poli
 
 The tests cover schema classification, all read and delete families, bypass
 rules, idempotency, tenant composition, and callback transactions. Database
-integration coverage additionally requires `TENANT_INTEGRATION_DATABASE_URL`.
+integration coverage additionally requires a dedicated, disposable PostgreSQL
+database in `TENANT_INTEGRATION_DATABASE_URL`:
+
+```sh
+TENANT_INTEGRATION_DATABASE_URL=postgresql://... \
+  node --test src/tests/integration/soft-delete-policy.database.test.js
+```
+
+The database matrix creates isolated records for every classified model,
+exercises every supported read plus single/many delete and restore paths, and
+inspects Prisma query events to prove each read emits one SQL statement with
+exactly one `deletedAt IS NULL` predicate. Never point this destructive test at
+a shared development, staging, or production database.

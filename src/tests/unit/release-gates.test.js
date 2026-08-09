@@ -87,4 +87,14 @@ describe('mandatory release gates', () => {
     fs.writeFileSync(workflow, `${source.slice(0, start)}${browser}${source.slice(end)}`);
     assert.ok(validateReleaseGates(root).some((failure) => failure.includes('browser job')));
   });
+
+  it('fails closed when dedicated-database policy tests are allowed to skip in release gates', () => {
+    const root = copyWorkflows();
+    const workflow = path.join(root, '.github', 'workflows', 'release-gates.yml');
+    fs.writeFileSync(
+      workflow,
+      fs.readFileSync(workflow, 'utf8').replace('TENANT_INTEGRATION_DATABASE_URL:', 'DISABLED_TENANT_DATABASE_URL:'),
+    );
+    assert.ok(validateReleaseGates(root).some((failure) => failure.includes('dedicated-database')));
+  });
 });
