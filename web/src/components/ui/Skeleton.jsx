@@ -1,11 +1,12 @@
 import { cn } from '../../lib/utils';
 
 // Base skeleton component
-function Skeleton({ className, ...props }) {
+function Skeleton({ className, 'aria-hidden': ariaHidden = true, ...props }) {
   return (
     <div
+      aria-hidden={ariaHidden}
       className={cn(
-        'animate-pulse rounded-md bg-muted skeleton-shimmer',
+        'animate-pulse rounded-md bg-muted skeleton-shimmer motion-reduce:animate-none',
         className
       )}
       {...props}
@@ -84,7 +85,7 @@ export function SkeletonAvatar({ size = 'md', className, ...props }) {
 
   return (
     <Skeleton
-      className={cn('rounded-full', sizes[size], className)}
+      className={cn('rounded-full', sizes[size] ?? sizes.md, className)}
       {...props}
     />
   );

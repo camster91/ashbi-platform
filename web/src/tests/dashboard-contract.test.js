@@ -22,6 +22,8 @@ describe('dashboard production contract', () => {
     expect(dashboard).toContain('Task data is temporarily unavailable');
     expect(dashboard).toContain('All projects on track');
     expect(dashboard).toContain('Inbox is clear');
+    expect(dashboard).toContain("import { Card, Skeleton } from '../components/ui'");
+    expect(dashboard.match(/<Skeleton/g)).toHaveLength(4);
   });
 
   it('only targets registered dashboard, project, and recurring-revenue routes', () => {

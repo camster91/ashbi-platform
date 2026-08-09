@@ -24,7 +24,7 @@ import {
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import { useSocket } from '../hooks/useSocket';
-import { Card } from '../components/ui';
+import { Card, Skeleton } from '../components/ui';
 import { formatRelativeTime, cn } from '../lib/utils';
 import TimeTrackerWidget from '../components/widgets/TimeTrackerWidget';
 import UpcomingEventsWidget from '../components/widgets/UpcomingEventsWidget';
@@ -59,18 +59,18 @@ export default function Dashboard() {
       <div role="status" aria-live="polite" aria-label="Loading dashboard" className="space-y-6 min-h-[60vh]">
         <span className="sr-only">Loading dashboard…</span>
         {/* Greeting skeleton */}
-        <div className="h-10 w-64 bg-muted rounded-lg animate-pulse" />
-        <p className="h-4 w-48 bg-muted rounded animate-pulse" />
+        <Skeleton className="h-10 w-64 rounded-lg" />
+        <Skeleton className="h-4 w-48" />
         {/* Stat card skeletons */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map(i => (
-            <div key={i} aria-hidden="true" className="h-28 bg-muted rounded-xl animate-pulse motion-reduce:animate-none" />
+            <Skeleton key={i} className="h-28 rounded-xl" />
           ))}
         </div>
         {/* Activity + Notifications skeletons */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {[1, 2].map(i => (
-            <div key={i} aria-hidden="true" className="h-80 bg-muted rounded-xl animate-pulse motion-reduce:animate-none" />
+            <Skeleton key={i} className="h-80 rounded-xl" />
           ))}
         </div>
       </div>
@@ -329,7 +329,7 @@ export default function Dashboard() {
                   <div className="flex items-start gap-3">
                     <div className={cn(
                       'w-2 h-2 rounded-full mt-2 flex-shrink-0',
-                      needsResponse ? 'bg-red-500 animate-pulse' : 'bg-green-400'
+                      needsResponse ? 'bg-red-500 animate-pulse motion-reduce:animate-none' : 'bg-green-400'
                     )} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground">{msg.clientName}</p>
@@ -663,7 +663,7 @@ function StatCard({ icon: Icon, iconColor, iconBg, label, value, subtitle, badge
       {...ariaAttrs}
     >
       {badge && (
-        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-lg border-2 border-background animate-pulse">
+        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-lg border-2 border-background animate-pulse motion-reduce:animate-none">
           {badge}
         </span>
       )}
