@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useMutation } from '@tanstack/react-query';
 import { Send, MessageSquare, Plus, Trash2, Loader2, Bot, User } from 'lucide-react';
 import { safeHtml } from '../lib/safeHtml';
 import { api } from '../lib/api';
@@ -6,6 +7,7 @@ import { cn } from '../lib/utils';
 import { preferredScrollBehavior } from '../lib/motion';
 import { LoadingState } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 function formatTime(dateStr) {
   return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -48,6 +50,7 @@ export default function Chat() {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [conversationError, setConversationError] = useState(null);
   const [messageError, setMessageError] = useState(null);
+  const [conversationToDelete, setConversationToDelete] = useState(null);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -96,12 +99,14 @@ export default function Chat() {
     inputRef.current?.focus();
   };
 
-  const handleDeleteConversation = async (e, id) => {
-    e.stopPropagation();
-    await api.deleteAshChatConversation(id);
-    if (activeId === id) handleNewChat();
-    setConversations(prev => prev.filter(c => c.id !== id));
-  };
+  const deleteConversationMutation = useMutation({
+    mutationFn: (id) => api.deleteAshChatConversation(id),
+    onSuccess: (_, id) => {
+      if (activeId === id) handleNewChat();
+      setConversations(prev => prev.filter(c => c.id !== id));
+      setConversationToDelete(null);
+    },
+  });
 
   const handleSend = async () => {
     const text = input.trim();
@@ -148,7 +153,9 @@ export default function Chat() {
             <span className="font-semibold text-sm text-foreground">Chat with Ash</span>
           </div>
           <button
+            type="button"
             onClick={handleNewChat}
+            aria-label="Start a new conversation"
             className="p-1.5 rounded-lg hover:bg-muted transition-colors"
             title="New chat"
           >
@@ -194,9 +201,13 @@ export default function Chat() {
                         </button>
                         <button
                           type="button"
-                          onClick={(e) => handleDeleteConversation(e, c.id)}
+                          onClick={() => {
+                            deleteConversationMutation.reset();
+                            setConversationToDelete(c);
+                          }}
                           aria-label={`Delete ${c.title}`}
-                          className="opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity p-0.5 rounded hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive"
+                          disabled={deleteConversationMutation.isPending}
+                          className="min-h-11 min-w-11 inline-flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity rounded hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive disabled:opacity-50"
                         >
                           <Trash2 className="w-3 h-3" />
                         </button>
@@ -332,6 +343,7 @@ export default function Chat() {
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Message Ash..."
+              aria-label="Message Ash"
               rows={1}
               className={cn(
                 'flex-1 resize-none px-4 py-3 text-sm bg-background border border-border rounded-xl',
@@ -347,7 +359,9 @@ export default function Chat() {
               }}
             />
             <button
+              type="button"
               onClick={handleSend}
+              aria-label="Send message to Ash"
               disabled={!input.trim() || isThinking}
               className={cn(
                 'p-3 rounded-xl transition-all duration-200',
@@ -362,6 +376,19 @@ export default function Chat() {
           <p className="text-xs text-muted-foreground text-center mt-2">Enter to send · Shift+Enter for new line</p>
         </div>
       </div>
+      <ConfirmDialog
+        isOpen={Boolean(conversationToDelete)}
+        title="Delete conversation?"
+        description={conversationToDelete ? `Permanently delete “${conversationToDelete.title}”? This permanently removes the conversation and its messages. This cannot be undone.` : ''}
+        confirmLabel="Permanently delete"
+        onConfirm={() => conversationToDelete && deleteConversationMutation.mutate(conversationToDelete.id)}
+        onCancel={() => {
+          deleteConversationMutation.reset();
+          setConversationToDelete(null);
+        }}
+        pending={deleteConversationMutation.isPending}
+        error={deleteConversationMutation.error?.message}
+      />
     </div>
   );
 }
