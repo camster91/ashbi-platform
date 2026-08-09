@@ -437,7 +437,7 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
                 Paid {formatDate(invoice.paidAt)}
               </span>
             )}
-            <span className="text-muted-foreground/60">
+            <span className="text-muted-foreground">
               {invoice._count?.lineItems} item{invoice._count?.lineItems !== 1 ? 's' : ''}
             </span>
           </div>

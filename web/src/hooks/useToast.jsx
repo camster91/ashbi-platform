@@ -84,7 +84,7 @@ function Toast({ id, type = 'info', title, message, action, duration, timer, now
         {title && <p className="font-semibold text-sm">{title}</p>}
         {message && <p className={cn('text-sm', title ? 'opacity-80 mt-0.5' : '')}>{message}</p>}
         {timer && action?.label && (
-          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs opacity-80">
+          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
             <span>Undo available for {remainingSeconds} {remainingSeconds === 1 ? 'second' : 'seconds'}</span>
             <button
               type="button"

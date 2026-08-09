@@ -264,7 +264,7 @@ export default function Layout({ children }) {
       <div className="space-y-0.5">
         <button
           onClick={() => toggleSection(key)}
-          className="w-full flex items-center px-3 py-1.5 text-xs font-semibold text-white/40 uppercase tracking-wider hover:text-white/70 transition-colors"
+          className="w-full flex items-center px-3 py-1.5 text-xs font-semibold text-white/70 uppercase tracking-wider hover:text-white transition-colors"
         >
           <ChevronRight className={cn('w-3 h-3 mr-1 transition-transform duration-150', show && 'rotate-90')} />
           {label}
