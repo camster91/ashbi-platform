@@ -32,9 +32,12 @@ domain module, never domain module -> entry point.
 
 ## Route domains
 
-Registrations currently remain in `src/index.js` so this extraction does not
-change route order. Subsequent independently reviewable slices should move the
-existing registrations, without changing prefixes, into these domain groups:
+Route registration is moving out of `src/index.js` one contiguous vertical at
+a time. `src/domains/revenue/register-core-routes.js` owns the first extracted
+proposal-to-cash sequence: invoice chasing, invoices, contracts, and proposals.
+It preserves the original prefixes and order. Subsequent independently
+reviewable slices should move existing registrations, without changing prefixes
+or relative order, into these domain groups:
 
 1. identity and access: auth, team, settings, API keys, credentials;
 2. client delivery: clients, projects, tasks, notes, files, portal, chat;
