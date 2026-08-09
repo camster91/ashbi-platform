@@ -43,6 +43,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import ProjectCommunications from '../components/project/ProjectCommunications';
 import ProjectContextCard from '../components/project/ProjectContext';
+import QueryErrorState from '../components/QueryErrorState';
 
 export default function Project() {
   const { id } = useParams();
@@ -59,7 +60,7 @@ export default function Project() {
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
 
-  const { data: project, isLoading } = useQuery({
+  const { data: project, isLoading, isError, error, isFetching, refetch } = useQuery({
     queryKey: ['project', id],
     queryFn: () => api.getProject(id),
   });
@@ -134,14 +135,25 @@ export default function Project() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div role="status" aria-live="polite" className="flex items-center justify-center h-64 gap-3 text-muted-foreground">
+        <div aria-hidden="true" className="animate-spin motion-reduce:animate-none rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <span>Loading project…</span>
       </div>
     );
   }
 
+  if (isError) {
+    return <QueryErrorState error={error} onRetry={refetch} isRetrying={isFetching} message="Project could not be loaded" />;
+  }
+
   if (!project) {
-    return <div className="text-center py-8">Project not found</div>;
+    return (
+      <div role="status" className="text-center py-8">
+        <p className="font-medium">Project not found</p>
+        <p className="mt-1 text-sm text-muted-foreground">It may have been removed or you may no longer have access.</p>
+        <Link to="/projects" className="mt-4 inline-block text-sm font-medium text-primary underline">Return to projects</Link>
+      </div>
+    );
   }
 
   return (

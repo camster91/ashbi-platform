@@ -31,13 +31,14 @@ import UpcomingEventsWidget from '../components/widgets/UpcomingEventsWidget';
 import OutreachFunnelWidget from '../components/widgets/OutreachFunnelWidget';
 import RevenueSparklineWidget from '../components/widgets/RevenueSparklineWidget';
 import WPSiteHealthWidget from '../components/widgets/WPSiteHealthWidget';
+import QueryErrorState from '../components/QueryErrorState';
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { notifications: liveNotifications } = useSocket();
 
-  const { data: stats, isLoading, isError, failureCount, refetch } = useQuery({
+  const { data: stats, isLoading, isError, error, isFetching, refetch } = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: () => api.getDashboardStats(),
     refetchInterval: 30000,
@@ -55,20 +56,21 @@ export default function Dashboard() {
   // Show skeleton on first load (no data yet)
   if (isLoading && !stats) {
     return (
-      <div className="space-y-6 min-h-[60vh]">
+      <div role="status" aria-live="polite" aria-label="Loading dashboard" className="space-y-6 min-h-[60vh]">
+        <span className="sr-only">Loading dashboard…</span>
         {/* Greeting skeleton */}
         <div className="h-10 w-64 bg-muted rounded-lg animate-pulse" />
         <p className="h-4 w-48 bg-muted rounded animate-pulse" />
         {/* Stat card skeletons */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[1, 2, 3, 4].map(i => (
-            <div key={i} className="h-28 bg-muted rounded-xl animate-pulse" />
+            <div key={i} aria-hidden="true" className="h-28 bg-muted rounded-xl animate-pulse motion-reduce:animate-none" />
           ))}
         </div>
         {/* Activity + Notifications skeletons */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {[1, 2].map(i => (
-            <div key={i} className="h-80 bg-muted rounded-xl animate-pulse" />
+            <div key={i} aria-hidden="true" className="h-80 bg-muted rounded-xl animate-pulse motion-reduce:animate-none" />
           ))}
         </div>
       </div>
@@ -76,21 +78,10 @@ export default function Dashboard() {
   }
 
   // Show error banner if query keeps failing after retries
-  if (isError && !stats && failureCount >= 3) {
+  if (isError && !stats) {
     return (
       <div className="space-y-6 min-h-[60vh]">
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6 text-center">
-          <p className="text-red-600 dark:text-red-400 font-semibold">Failed to load dashboard stats</p>
-          <p className="text-sm text-red-500 dark:text-red-400 mt-1">
-            Could not fetch dashboard data after multiple attempts. Try refreshing the page.
-          </p>
-          <button
-            onClick={() => refetch()}
-            className="mt-4 px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-          >
-            Retry
-          </button>
-        </div>
+        <QueryErrorState error={error} onRetry={refetch} isRetrying={isFetching} message="Dashboard data could not be loaded" />
       </div>
     );
   }
