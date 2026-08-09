@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth, AuthProvider } from './hooks/useAuth';
 import Layout from './components/Layout';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -19,8 +19,9 @@ import PortalEstimate from './pages/PortalEstimate';
 import ClientPortal from './pages/ClientPortal';
 
 function RootRedirect() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, authState, checkAuth } = useAuth();
   if (isLoading) return <PageLoader />;
+  if (authState.status === 'error') return <AuthCheckFailure authState={authState} onRetry={checkAuth} />;
   return user ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />;
 }
 
@@ -78,23 +79,59 @@ const Trash = lazy(() => import('./pages/Trash'));
 
 function PageLoader() {
   return (
-    <div className="flex items-center justify-center min-h-[60vh]">
-      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+    <div role="status" aria-live="polite" aria-label="Checking your session" className="flex items-center justify-center min-h-[60vh] gap-3 text-muted-foreground">
+      <div aria-hidden="true" className="animate-spin motion-reduce:animate-none rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <span>Checking your session…</span>
     </div>
   );
 }
 
+function AuthCheckFailure({ authState, onRetry }) {
+  const copy = {
+    offline: ['You appear to be offline', 'Reconnect and try again. You have not been signed out, and locally saved drafts remain on this device.'],
+    timeout: ['The session check timed out', 'The server took too long to respond. Try again; you have not been signed out.'],
+    server: ['We could not verify your session', 'The service is temporarily unavailable. Try again; you have not been signed out.'],
+    forbidden: ['Access could not be verified', 'Your account may not have permission for this workspace. Try again or contact an administrator.'],
+    unknown: ['We could not verify your session', 'Try again. You have not been signed out.'],
+  };
+  const [title, message] = copy[authState.reason] || copy.unknown;
+  return (
+    <main className="min-h-screen flex items-center justify-center bg-background p-6">
+      <section role="alert" className="w-full max-w-lg rounded-2xl border border-border bg-card p-6 text-center shadow-sm">
+        <h1 className="text-2xl font-semibold text-foreground">{title}</h1>
+        <p className="mt-3 text-muted-foreground">{message}</p>
+        <button type="button" onClick={onRetry} className="mt-6 rounded-full bg-primary px-5 py-2.5 font-medium text-primary-foreground">
+          Try again
+        </button>
+      </section>
+    </main>
+  );
+}
+
 function PrivateRoute({ children }) {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, authState, checkAuth } = useAuth();
+  const location = useLocation();
   if (isLoading) return <PageLoader />;
-  return user ? children : <Navigate to="/login" />;
+  if (authState.status === 'error') return <AuthCheckFailure authState={authState} onRetry={checkAuth} />;
+  return user ? children : <Navigate to="/login" replace state={{ reason: authState.reason, returnTo: safePrivateReturn(location) }} />;
+}
+
+function safePrivateReturn(location) {
+  return `${location.pathname}${location.search}${location.hash}`;
 }
 
 function AdminRoute({ children }) {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, authState, checkAuth } = useAuth();
+  const location = useLocation();
   if (isLoading) return <PageLoader />;
-  if (!user) return <Navigate to="/login" />;
-  if (user.role !== 'ADMIN') return <Navigate to="/" replace />;
+  if (authState.status === 'error') return <AuthCheckFailure authState={authState} onRetry={checkAuth} />;
+  if (!user) return <Navigate to="/login" replace state={{ reason: authState.reason, returnTo: safePrivateReturn(location) }} />;
+  if (user.role !== 'ADMIN') return (
+    <section role="alert" className="m-6 rounded-xl border border-amber-300 bg-amber-50 p-5 text-amber-950">
+      <h1 className="font-semibold">Administrator access required</h1>
+      <p className="mt-1 text-sm">Your account is signed in, but it does not have permission to open this page.</p>
+    </section>
+  );
   return children;
 }
 
@@ -199,14 +236,13 @@ function AppRoutes() {
 
 // Component to handle global API error events
 function GlobalErrorHandler({ children }) {
-  const { logout } = useAuth();
+  const { expireSession } = useAuth();
   const toast = useToast();
 
   useEffect(() => {
     const handleUnauthorized = (event) => {
       const { message } = event.detail;
-      toast.error('Session Expired', message || 'Please log in again.');
-      logout();
+      expireSession(message || 'Your session expired. Please sign in again.');
     };
 
     const handleApiError = (event) => {
@@ -237,7 +273,7 @@ function GlobalErrorHandler({ children }) {
       window.removeEventListener('api:unauthorized', handleUnauthorized);
       window.removeEventListener('api:error', handleApiError);
     };
-  }, [logout, toast]);
+  }, [expireSession, toast]);
 
   return children;
 }

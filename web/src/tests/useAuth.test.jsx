@@ -82,8 +82,8 @@ describe('useAuth', () => {
       expect(result.current.user).toEqual(mockUser);
     });
 
-    it('sets user to null when checkAuth fails (not authenticated)', async () => {
-      api.me.mockRejectedValue(new Error('Unauthorized'));
+    it('sets user to null when checkAuth returns 401', async () => {
+      api.me.mockRejectedValue(Object.assign(new Error('Unauthorized'), { status: 401 }));
 
       const { result } = renderHook(() => useAuth(), { wrapper });
 
@@ -92,13 +92,24 @@ describe('useAuth', () => {
       });
 
       expect(result.current.user).toBeNull();
+      expect(result.current.authState).toMatchObject({ status: 'unauthenticated', reason: 'signed_out' });
+    });
+
+    it('does not masquerade a transient auth failure as logout', async () => {
+      api.me.mockRejectedValue(Object.assign(new Error('Service unavailable'), { status: 503 }));
+
+      const { result } = renderHook(() => useAuth(), { wrapper });
+
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+      expect(result.current.user).toBeNull();
+      expect(result.current.authState).toMatchObject({ status: 'error', reason: 'server' });
     });
   });
 
   describe('login', () => {
     it('calls api.login and sets user on success', async () => {
       const mockUser = { id: '1', email: 'test@example.com', name: 'Test', role: 'ADMIN' };
-      api.me.mockRejectedValue(new Error('Unauthorized'));
+      api.me.mockRejectedValue(Object.assign(new Error('Unauthorized'), { status: 401 }));
       api.login.mockResolvedValue({ user: mockUser });
 
       const { result } = renderHook(() => useAuth(), { wrapper });
@@ -118,7 +129,7 @@ describe('useAuth', () => {
     });
 
     it('propagates login errors', async () => {
-      api.me.mockRejectedValue(new Error('Unauthorized'));
+      api.me.mockRejectedValue(Object.assign(new Error('Unauthorized'), { status: 401 }));
       api.login.mockRejectedValue(new Error('Invalid credentials'));
 
       const { result } = renderHook(() => useAuth(), { wrapper });
@@ -201,7 +212,7 @@ describe('useAuth', () => {
       expect(result.current.user.email).toBe('updated@example.com');
     });
 
-    it('handles checkAuth failure gracefully', async () => {
+    it('preserves the current user during a transient recheck failure', async () => {
       const mockUser = { id: '1', email: 'test@example.com', role: 'ADMIN' };
       api.me.mockResolvedValue(mockUser);
 
@@ -212,13 +223,14 @@ describe('useAuth', () => {
       });
 
       // Now simulate a session expiry
-      api.me.mockRejectedValue(new Error('Unauthorized'));
+      api.me.mockRejectedValue(Object.assign(new Error('Service unavailable'), { status: 503 }));
 
       await act(async () => {
         await result.current.checkAuth();
       });
 
-      expect(result.current.user).toBeNull();
+      expect(result.current.user).toEqual(mockUser);
+      expect(result.current.authState).toMatchObject({ status: 'error', reason: 'server' });
     });
   });
 

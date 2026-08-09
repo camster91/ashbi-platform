@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth';
+import { Link, useLocation } from 'react-router-dom';
+import { authFailureReason, useAuth } from '../hooks/useAuth';
 import { useTranslation } from '../hooks/useTranslation';
 import {
   Sparkles,
@@ -24,7 +24,11 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const { login } = useAuth();
   const { t, currentLang, setLang, languages } = useTranslation();
-  const navigate = useNavigate();
+  const location = useLocation();
+  const returnTo = location.state?.returnTo || '/dashboard';
+  const sessionNotice = location.state?.reason === 'expired'
+    ? (location.state?.message || 'Your session expired. Sign in again to return to your work.')
+    : '';
 
   const features = [
     { icon: Zap, key: 'brand.feature1' },
@@ -38,9 +42,17 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      await login(email, password);
+      await login(email, password, returnTo);
     } catch (err) {
-      setError(err.message || t('auth.invalidCredentials'));
+      const reason = authFailureReason(err);
+      const messages = {
+        signed_out: t('auth.invalidCredentials'),
+        forbidden: 'This account does not have access to this workspace.',
+        offline: 'You appear to be offline. Reconnect and try again.',
+        timeout: 'Sign-in timed out. Check your connection and try again.',
+        server: 'Sign-in is temporarily unavailable. Please try again shortly.',
+      };
+      setError(messages[reason] || err.message || t('auth.invalidCredentials'));
     } finally {
       setIsLoading(false);
     }
@@ -110,7 +122,13 @@ export default function Login() {
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          {sessionNotice && (
+            <div role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+              {sessionNotice} Locally saved drafts remain on this device.
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} aria-busy={isLoading} className="space-y-6">
             <div className="space-y-4">
               {/* Email field */}
               <div className="space-y-2">
@@ -132,6 +150,7 @@ export default function Login() {
                       'transition-all duration-200'
                     )}
                     required
+                    aria-describedby={error ? 'login-error' : undefined}
                   />
                 </div>
               </div>
@@ -156,6 +175,7 @@ export default function Login() {
                       'transition-all duration-200'
                     )}
                     required
+                    aria-describedby={error ? 'login-error' : undefined}
                   />
                   <button
                     type="button"
@@ -169,21 +189,16 @@ export default function Login() {
                 </div>
               </div>
 
-              {/* Remember me & Forgot password */}
-              <div className="flex items-center justify-between text-sm">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" className="w-4 h-4 rounded border-border text-primary focus:ring-[#e6f354]/30" />
-                  <span className="text-muted-foreground">{t('auth.rememberMe')}</span>
-                </label>
-                <a href="/forgot-password" className="text-[#2e2958] hover:text-[#3f3580] font-medium transition-colors">
+              <div className="flex items-center justify-end text-sm">
+                <Link to="/forgot-password" className="text-[#2e2958] hover:text-[#3f3580] font-medium transition-colors">
                   {t('auth.forgotPassword')}
-                </a>
+                </Link>
               </div>
             </div>
 
             {/* Error message */}
             {error && (
-              <div className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 flex items-start gap-3 animate-shake">
+              <div id="login-error" role="alert" className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 flex items-start gap-3 motion-safe:animate-shake">
                 <div className="w-5 h-5 rounded-full bg-destructive/20 flex items-center justify-center flex-shrink-0 mt-0.5">
                   <span className="text-destructive text-xs">!</span>
                 </div>
@@ -195,6 +210,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={isLoading}
+              aria-describedby={error ? 'login-error' : undefined}
               className={cn(
                 'w-full flex items-center justify-center gap-2 py-3 px-6',
                 'bg-[#2e2958] text-white rounded-full',
@@ -207,7 +223,10 @@ export default function Login() {
               )}
             >
               {isLoading ? (
-                <span className="inline-block w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <>
+                  <span aria-hidden="true" className="inline-block w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin motion-reduce:animate-none" />
+                  <span>Signing in…</span>
+                </>
               ) : (
                 <>
                   {t('auth.signIn')}
