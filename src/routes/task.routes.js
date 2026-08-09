@@ -67,7 +67,7 @@ export default async function taskRoutes(fastify) {
     // thousands of open tasks. Caller can use pagination params if they need
     // more — previously this returned every assigned task with no `take`.
     const { limit = '200', offset = '0' } = request.query ?? {};
-    const tasks = await fastify.prisma.task.findMany({
+    const tasks = await request.prisma.task.findMany({
       where: {
         assigneeId: request.user.id,
         status: { not: 'COMPLETED' }
@@ -167,8 +167,8 @@ export default async function taskRoutes(fastify) {
     if (blockedBy !== undefined) data.blockedBy = blockedBy;
     if (dependsOnId !== undefined) data.dependsOnId = dependsOnId || null;
 
-    const prevTask = await fastify.prisma.task.findUnique({ where: { id } });
-    const task = await fastify.prisma.task.update({
+    const prevTask = await request.prisma.task.findUnique({ where: { id } });
+    const task = await request.prisma.task.update({
       where: { id },
       data,
       include: {
@@ -191,7 +191,7 @@ export default async function taskRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const task = await fastify.prisma.task.update({
+    const task = await request.prisma.task.update({
       where: { id },
       data: {
         status: 'COMPLETED',
@@ -213,7 +213,7 @@ export default async function taskRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const task = await fastify.prisma.task.findUnique({ where: { id } });
+    const task = await request.prisma.task.findUnique({ where: { id } });
 
     if (!task) {
       return reply.status(404).send({ error: 'Task not found' });
@@ -224,7 +224,7 @@ export default async function taskRoutes(fastify) {
       return reply.status(403).send({ error: 'Not authorized to delete this task' });
     }
 
-    await fastify.prisma.task.delete({ where: { id } });
+    await request.prisma.task.delete({ where: { id } });
 
     return { success: true };
   });
@@ -239,7 +239,7 @@ export default async function taskRoutes(fastify) {
     // updates is an array of { id, category, priority }
     const results = await Promise.all(
       updates.map(update =>
-        fastify.prisma.task.update({
+        request.prisma.task.update({
           where: { id: update.id },
           data: {
             category: update.category,
@@ -260,7 +260,7 @@ export default async function taskRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const task = await fastify.prisma.task.findUnique({
+    const task = await request.prisma.task.findUnique({
       where: { id },
       include: {
         project: {
@@ -341,7 +341,7 @@ export default async function taskRoutes(fastify) {
     if (coverImage !== undefined) updateData.coverImage = coverImage;
     if (properties !== undefined) updateData.properties = JSON.stringify(properties);
 
-    const task = await fastify.prisma.task.update({
+    const task = await request.prisma.task.update({
       where: { id },
       data: updateData,
       include: {
@@ -361,7 +361,7 @@ export default async function taskRoutes(fastify) {
     const { id } = request.params;
     const { title, icon, content } = request.body;
 
-    const parentTask = await fastify.prisma.task.findUnique({
+    const parentTask = await request.prisma.task.findUnique({
       where: { id },
       select: { projectId: true }
     });
@@ -370,10 +370,10 @@ export default async function taskRoutes(fastify) {
       return reply.status(404).send({ error: 'Parent task not found' });
     }
 
-    const subpage = await fastify.prisma.task.create({
+    const subpage = await request.prisma.task.create({
       data: {
         title: title || 'Untitled',
-        icon: icon || 'ðŸ“„',
+        icon: icon || '📄',
         content: JSON.stringify(content || [{ type: 'paragraph', content: '' }]),
         isPage: true,
         parentId: id,
@@ -399,7 +399,7 @@ export default async function taskRoutes(fastify) {
     let currentId = id;
 
     while (currentId) {
-      const task = await fastify.prisma.task.findUnique({
+      const task = await request.prisma.task.findUnique({
         where: { id: currentId },
         select: { id: true, title: true, icon: true, parentId: true, projectId: true }
       });
@@ -418,7 +418,7 @@ export default async function taskRoutes(fastify) {
 
     // Add project at root if all tasks are from same project
     if (breadcrumbs.length > 0 && breadcrumbs[0].projectId) {
-      const project = await fastify.prisma.project.findUnique({
+      const project = await request.prisma.project.findUnique({
         where: { id: breadcrumbs[0].projectId },
         select: { id: true, name: true }
       });
@@ -426,7 +426,7 @@ export default async function taskRoutes(fastify) {
         breadcrumbs.unshift({
           id: project.id,
           title: project.name,
-          icon: 'ðŸ“',
+          icon: '📁',
           isProject: true
         });
       }
@@ -448,7 +448,7 @@ export default async function taskRoutes(fastify) {
     const searchQuery = q.toLowerCase();
 
     // Search users
-    const users = await fastify.prisma.user.findMany({
+    const users = await request.prisma.user.findMany({
       where: {
         isActive: true,
         OR: [
@@ -472,7 +472,7 @@ export default async function taskRoutes(fastify) {
       tasksWhere.projectId = projectId;
     }
 
-    const tasks = await fastify.prisma.task.findMany({
+    const tasks = await request.prisma.task.findMany({
       where: tasksWhere,
       select: {
         id: true,
@@ -496,7 +496,7 @@ export default async function taskRoutes(fastify) {
         id: t.id,
         type: 'task',
         title: t.title,
-        icon: t.icon || (t.isPage ? 'ðŸ“„' : 'âœ“'),
+        icon: t.icon || (t.isPage ? '📄' : '✓'),
         projectName: t.project?.name
       }))
     };
@@ -526,7 +526,7 @@ export default async function taskRoutes(fastify) {
           return reply.status(400).send({ error: 'Circular dependency detected' });
         }
         visited.add(currentId);
-        const dep = await fastify.prisma.task.findUnique({
+        const dep = await request.prisma.task.findUnique({
           where: { id: currentId },
           select: { dependsOnId: true }
         });
@@ -534,7 +534,7 @@ export default async function taskRoutes(fastify) {
       }
     }
 
-    const task = await fastify.prisma.task.update({
+    const task = await request.prisma.task.update({
       where: { id },
       data: { dependsOnId: dependsOnId || null },
       include: {
@@ -563,7 +563,7 @@ export default async function taskRoutes(fastify) {
       where.assigneeId = request.user.id;
     }
 
-    const tasks = await fastify.prisma.task.findMany({
+    const tasks = await request.prisma.task.findMany({
       where,
       include: {
         project: { select: { id: true, name: true } },
@@ -621,7 +621,7 @@ export default async function taskRoutes(fastify) {
   }, async (request) => {
     const { projectId } = request.params;
 
-    const tasks = await fastify.prisma.task.findMany({
+    const tasks = await request.prisma.task.findMany({
       where: { projectId },
       include: {
         assignee: { select: { id: true, name: true, email: true } }
@@ -651,7 +651,7 @@ export default async function taskRoutes(fastify) {
     const { id } = request.params;
     const { status } = request.body;
 
-    const task = await fastify.prisma.task.update({
+    const task = await request.prisma.task.update({
       where: { id },
       data: {
         status,
@@ -674,7 +674,7 @@ export default async function taskRoutes(fastify) {
     const { projectId } = request.params;
     const { title, assigneeId, priority = 'NORMAL', status = 'PENDING' } = request.body;
 
-    const task = await fastify.prisma.task.create({
+    const task = await request.prisma.task.create({
       data: {
         projectId,
         title,
