@@ -409,7 +409,7 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
             <Button size="sm" variant="outline" onClick={onMarkPaid} leftIcon={<DollarSign className="w-3 h-3" />}>Mark Paid</Button>
           )}
           {isAdmin && invoice.status !== 'PAID' && (
-            <Button size="sm" variant="ghost" onClick={onDelete} leftIcon={<Trash2 className="w-3 h-3" />} className="text-destructive hover:text-destructive">Void</Button>
+            <Button size="sm" variant="ghost" onClick={onDelete} leftIcon={<Trash2 className="w-3 h-3" />} className="text-red-700 hover:text-red-800 dark:text-red-300 dark:hover:text-red-200">Void</Button>
           )}
         </div>
       </div>
