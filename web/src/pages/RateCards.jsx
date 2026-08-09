@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Pencil, Trash2, X, Star, DollarSign } from 'lucide-react';
 import { api } from '../lib/api';
-import { Card, CardHeader, CardTitle, CardContent, Skeleton } from '../components/ui';
+import { Card, CardContent, Skeleton, LoadingState } from '../components/ui';
 import Button from '../components/ui/Button';
+import Modal, { ModalFooter } from '../components/Modal';
+import QueryErrorState from '../components/QueryErrorState';
 import { useToast } from '../hooks/useToast';
 import { cn } from '../lib/utils';
 
@@ -16,12 +18,24 @@ export default function RateCards() {
   const [editingCard, setEditingCard] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
 
-  const { data: rateCardsData, isLoading } = useQuery({
+  const {
+    data: rateCardsData,
+    isLoading,
+    isFetching: rateCardsFetching,
+    error: rateCardsError,
+    refetch: refetchRateCards,
+  } = useQuery({
     queryKey: ['rateCards'],
     queryFn: () => api.getRateCards(),
   });
 
-  const { data: clientsData } = useQuery({
+  const {
+    data: clientsData,
+    isLoading: clientsLoading,
+    isFetching: clientsFetching,
+    error: clientsError,
+    refetch: refetchClients,
+  } = useQuery({
     queryKey: ['clients-for-ratecards'],
     queryFn: () => api.getClients(),
   });
@@ -81,6 +95,7 @@ export default function RateCards() {
     if (a.clientId && !b.clientId) return 1;
     return a.name.localeCompare(b.name);
   });
+  const formPending = createMutation.isPending || updateMutation.isPending;
 
   return (
     <div className="space-y-6">
@@ -103,6 +118,8 @@ export default function RateCards() {
             <Skeleton key={i} className="h-24 rounded-xl" />
           ))}
         </div>
+      ) : rateCardsError ? (
+        <QueryErrorState error={rateCardsError} message="Failed to load rate cards" onRetry={refetchRateCards} isRetrying={rateCardsFetching} />
       ) : sortedCards.length === 0 ? (
         <Card className="text-center py-12">
           <DollarSign className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
@@ -129,6 +146,7 @@ export default function RateCards() {
 
       {modalOpen && (
         <RateCardModal
+          isOpen={modalOpen}
           card={editingCard}
           clients={clients}
           onSubmit={(data) => {
@@ -138,17 +156,30 @@ export default function RateCards() {
               createMutation.mutate(data);
             }
           }}
-          onClose={closeModal}
-          isLoading={createMutation.isPending || updateMutation.isPending}
+          onClose={() => {
+            if (formPending) return;
+            closeModal();
+          }}
+          isLoading={formPending}
+          mutationError={createMutation.error || updateMutation.error}
+          clientsLoading={clientsLoading}
+          clientsFetching={clientsFetching}
+          clientsError={clientsError}
+          refetchClients={refetchClients}
         />
       )}
 
       {deleteConfirm && (
         <DeleteConfirmModal
+          isOpen={Boolean(deleteConfirm)}
           card={deleteConfirm}
-          onConfirm={() => deleteMutation.mutate(deleteConfirm.id)}
-          onCancel={() => setDeleteConfirm(null)}
+          onConfirm={() => deleteConfirm && deleteMutation.mutate(deleteConfirm.id)}
+          onCancel={() => {
+            if (deleteMutation.isPending) return;
+            setDeleteConfirm(null);
+          }}
           isLoading={deleteMutation.isPending}
+          mutationError={deleteMutation.error}
         />
       )}
     </div>
@@ -223,7 +254,7 @@ function RateCardRow({ card, onEdit, onDelete }) {
   );
 }
 
-function RateCardModal({ card, clients, onSubmit, onClose, isLoading }) {
+function RateCardModal({ card, clients, onSubmit, onClose, isOpen, isLoading, mutationError, clientsLoading, clientsFetching, clientsError, refetchClients }) {
   const isEditing = !!card;
   const [name, setName] = useState(card?.name ?? '');
   const [clientId, setClientId] = useState(card?.clientId ?? '');
@@ -263,22 +294,13 @@ function RateCardModal({ card, clients, onSubmit, onClose, isLoading }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-6 border-b border-border">
-          <h2 className="text-lg font-heading font-semibold">
-            {isEditing ? 'Edit Rate Card' : 'New Rate Card'}
-          </h2>
-          <Button variant="ghost" size="sm" onClick={onClose}>
-            <X className="w-5 h-5" />
-          </Button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+    <Modal isOpen={isOpen} onClose={onClose} title={isEditing ? 'Edit rate card' : 'New rate card'} size="lg" showCloseButton={!isLoading}>
+        <form onSubmit={handleSubmit} className="max-h-[70vh] overflow-y-auto space-y-5">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium mb-1.5">Name *</label>
+              <label htmlFor="rate-card-name" className="block text-sm font-medium mb-1.5">Name *</label>
               <input
+                id="rate-card-name"
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -288,19 +310,23 @@ function RateCardModal({ card, clients, onSubmit, onClose, isLoading }) {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1.5">Client</label>
-              <select
-                value={clientId}
-                onChange={(e) => setClientId(e.target.value)}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-              >
-                <option value="">Global (all clients)</option>
-                {clients.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              <label htmlFor="rate-card-client" className="block text-sm font-medium mb-1.5">Client</label>
+              {clientsLoading ? (
+                <LoadingState label="Loading clients…" compact size="sm" />
+              ) : clientsError ? (
+                <QueryErrorState error={clientsError} message="Failed to load clients" onRetry={refetchClients} isRetrying={clientsFetching} />
+              ) : (
+                <select
+                  id="rate-card-client"
+                  value={clientId}
+                  onChange={(e) => setClientId(e.target.value)}
+                  disabled={isLoading}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                >
+                  <option value="">Global (all clients)</option>
+                  {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              )}
             </div>
           </div>
 
@@ -324,48 +350,53 @@ function RateCardModal({ card, clients, onSubmit, onClose, isLoading }) {
 
             <div className="space-y-2">
               {rates.map((rate, idx) => (
-                <div key={idx} className="flex items-start gap-2">
+                <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 items-start gap-2">
                   <input
+                    aria-label={`Service ${idx + 1} name`}
                     type="text"
                     value={rate.serviceName}
                     onChange={(e) => updateRate(idx, 'serviceName', e.target.value)}
                     placeholder="Service name"
-                    className="flex-1 min-w-0 rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    className="sm:col-span-3 min-w-0 rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                   />
                   <select
+                    aria-label={`Service ${idx + 1} unit`}
                     value={rate.unit}
                     onChange={(e) => updateRate(idx, 'unit', e.target.value)}
-                    className="w-28 rounded-lg border border-border bg-background px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    className="sm:col-span-2 rounded-lg border border-border bg-background px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                   >
                     <option value="hour">Hour</option>
                     <option value="project">Project</option>
                     <option value="item">Item</option>
                   </select>
-                  <div className="relative">
+                  <div className="relative sm:col-span-2">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
                     <input
+                      aria-label={`Service ${idx + 1} rate`}
                       type="number"
                       value={rate.rate}
                       onChange={(e) => updateRate(idx, 'rate', e.target.value)}
                       placeholder="0.00"
                       step="0.01"
                       min="0"
-                      className="w-24 rounded-lg border border-border bg-background pl-7 pr-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                      className="w-full rounded-lg border border-border bg-background pl-7 pr-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                     />
                   </div>
                   <input
+                    aria-label={`Service ${idx + 1} description`}
                     type="text"
                     value={rate.description}
                     onChange={(e) => updateRate(idx, 'description', e.target.value)}
                     placeholder="Description"
-                    className="w-32 rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 hidden sm:block"
+                    className="sm:col-span-4 rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                   />
                   <Button
                     type="button"
                     variant="ghost"
                     size="xs"
+                    aria-label={`Remove service ${idx + 1}`}
                     onClick={() => removeRate(idx)}
-                    className="text-destructive hover:text-destructive"
+                    className="sm:col-span-1 text-destructive hover:text-destructive"
                   >
                     <X className="w-4 h-4" />
                   </Button>
@@ -374,37 +405,35 @@ function RateCardModal({ card, clients, onSubmit, onClose, isLoading }) {
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-border">
+          {mutationError && <p role="alert" className="text-sm text-destructive">{mutationError.message || 'The rate card could not be saved. Your entries remain available.'}</p>}
+          <ModalFooter className="flex-col-reverse sm:flex-row">
             <Button variant="outline" type="button" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" isLoading={isLoading}>
+            <Button type="submit" loading={isLoading} disabled={Boolean(clientsError)}>
               {isEditing ? 'Save Changes' : 'Create Rate Card'}
             </Button>
-          </div>
+          </ModalFooter>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
-function DeleteConfirmModal({ card, onConfirm, onCancel, isLoading }) {
+function DeleteConfirmModal({ card, onConfirm, onCancel, isOpen, isLoading, mutationError }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-      <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md p-6">
-        <h2 className="text-lg font-heading font-semibold mb-2">Delete Rate Card</h2>
+    <Modal isOpen={isOpen} onClose={onCancel} title="Delete rate card" size="sm" showCloseButton={!isLoading}>
         <p className="text-sm text-muted-foreground mb-6">
           Are you sure you want to delete <strong>{card.name}</strong>? This action cannot be undone.
         </p>
-        <div className="flex justify-end gap-3">
+        {mutationError && <p role="alert" className="mb-4 text-sm text-destructive">{mutationError.message || 'The rate card could not be deleted. It remains available.'}</p>}
+        <ModalFooter className="flex-col-reverse sm:flex-row">
           <Button variant="outline" onClick={onCancel} disabled={isLoading}>
             Cancel
           </Button>
-          <Button variant="destructive" onClick={onConfirm} isLoading={isLoading}>
+          <Button variant="destructive" onClick={onConfirm} loading={isLoading}>
             Delete
           </Button>
-        </div>
-      </div>
-    </div>
+        </ModalFooter>
+    </Modal>
   );
 }
