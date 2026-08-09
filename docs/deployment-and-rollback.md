@@ -40,6 +40,9 @@ The script appends every deployment, readiness failure, and rollback to
 after public verification because the immutable image and retained rollback
 container remain on the host.
 
+Use `--environment staging` or `--environment rehearsal` for non-production
+records; the environment is included in every history outcome field.
+
 ## Automated rollback test
 
 The direct release script captures the prior image, revision, and image ID

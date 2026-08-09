@@ -5,7 +5,8 @@ usage() {
   cat <<'EOF'
 Usage: deploy-vps-direct.sh \
   --archive PATH --archive-sha256 SHA256 --image IMAGE --image-id SHA256_ID \
-  --revision GIT_SHA [--root-dir PATH] [--container NAME] [--host-port PORT]
+  --revision GIT_SHA [--environment NAME] [--root-dir PATH] \
+  [--container NAME] [--host-port PORT]
 
 Runs on the VPS as root. The archive must already be present on the host.
 EOF
@@ -15,6 +16,7 @@ ROOT_DIR=/opt/ashbi-platform
 CONTAINER=ashbi-platform
 HOST_PORT=3002
 NETWORK=ashbi-hub-src_default
+ENVIRONMENT=production
 ARCHIVE=
 ARCHIVE_SHA256=
 IMAGE=
@@ -32,6 +34,7 @@ while (($#)); do
     --container) CONTAINER=${2:-}; shift 2 ;;
     --host-port) HOST_PORT=${2:-}; shift 2 ;;
     --network) NETWORK=${2:-}; shift 2 ;;
+    --environment) ENVIRONMENT=${2:-}; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -41,7 +44,7 @@ die() { echo "release error: $*" >&2; exit 1; }
 record() {
   local outcome=$1 detail=${2:-}
   printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$outcome" "$REVISION" "$IMAGE" \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$ENVIRONMENT:$outcome" "$REVISION" "$IMAGE" \
     "$IMAGE_ID" "$ARCHIVE_SHA256" "$detail" >> "$HISTORY"
 }
 
@@ -56,6 +59,7 @@ ARCHIVE=$(realpath -e "$ARCHIVE")
 [[ $ARCHIVE_SHA256 =~ ^[0-9a-f]{64}$ ]] || die 'archive checksum must be lowercase SHA-256'
 [[ $IMAGE_ID =~ ^sha256:[0-9a-f]{64}$ ]] || die 'image ID must be an immutable sha256 identifier'
 [[ $CONTAINER =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]+$ ]] || die 'invalid container name'
+[[ $ENVIRONMENT =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]+$ ]] || die 'invalid environment name'
 [[ $HOST_PORT =~ ^[0-9]+$ ]] && ((HOST_PORT >= 1024 && HOST_PORT <= 65535)) || die 'invalid host port'
 ENV_FILE="$ROOT_DIR/.env"
 DATA_DIR="$ROOT_DIR/data"
