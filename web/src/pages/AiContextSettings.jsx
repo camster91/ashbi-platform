@@ -12,6 +12,7 @@ import {
   Check,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import ConfirmDialog from '../components/ConfirmDialog';
 import LoadingState from '../components/ui/LoadingState';
 import { cn } from '../lib/utils';
 
@@ -22,6 +23,7 @@ export default function AiContextSettings() {
   const [newKey, setNewKey] = useState('');
   const [newValue, setNewValue] = useState('');
   const [showAdd, setShowAdd] = useState(false);
+  const [contextToDelete, setContextToDelete] = useState(null);
 
   const { data: contextItems = [], isLoading } = useQuery({
     queryKey: ['ai-context'],
@@ -40,6 +42,7 @@ export default function AiContextSettings() {
   const deleteMutation = useMutation({
     mutationFn: (key) => api.deleteAiContext(key),
     onSuccess: () => {
+      setContextToDelete(null);
       queryClient.invalidateQueries({ queryKey: ['ai-context'] });
     },
   });
@@ -224,11 +227,7 @@ export default function AiContextSettings() {
                     <Pencil className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => {
-                      if (confirm(`Delete "${item.key}"?`)) {
-                        deleteMutation.mutate(item.key);
-                      }
-                    }}
+                    onClick={() => { deleteMutation.reset(); setContextToDelete(item); }}
                     className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10 transition-colors"
                     title="Delete"
                     disabled={deleteMutation.isPending}
@@ -239,7 +238,17 @@ export default function AiContextSettings() {
               )}
             </div>
           </div>
-        ))}
+      ))}
+      <ConfirmDialog
+        isOpen={Boolean(contextToDelete)}
+        title="Delete AI context"
+        description={contextToDelete ? `Permanently delete “${contextToDelete.key}”? Ash will stop using this instruction and the deletion cannot be undone.` : ''}
+        confirmLabel="Delete context"
+        onConfirm={() => contextToDelete && deleteMutation.mutate(contextToDelete.key)}
+        onCancel={() => { deleteMutation.reset(); setContextToDelete(null); }}
+        pending={deleteMutation.isPending}
+        error={deleteMutation.error?.message}
+      />
       </div>
 
       {/* Preview */}

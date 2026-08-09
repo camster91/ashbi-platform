@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { FolderOpen, Search, Plus, Trash2, Image, FileText, Video, Palette, Globe } from 'lucide-react';
 import { api } from '../lib/api';
+import ConfirmDialog from '../components/ConfirmDialog';
 import { Button, Card, LoadingState } from '../components/ui';
 import Modal, { ModalFooter } from '../components/Modal';
 import QueryErrorState from '../components/QueryErrorState';
@@ -22,6 +23,7 @@ export default function AssetLibrary() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [showUpload, setShowUpload] = useState(false);
   const [newAsset, setNewAsset] = useState({ name: '', type: 'image', category: 'logo', url: '', description: '' });
+  const [assetToDelete, setAssetToDelete] = useState(null);
 
   const { data: assets = [], isLoading, isFetching, error: assetsError, refetch } = useQuery({
     queryKey: ['assets', clientId],
@@ -40,7 +42,10 @@ export default function AssetLibrary() {
 
   const deleteMutation = useMutation({
     mutationFn: (id) => api.deleteAsset(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['assets', clientId] }),
+    onSuccess: () => {
+      setAssetToDelete(null);
+      queryClient.invalidateQueries({ queryKey: ['assets', clientId] });
+    },
   });
 
   const filteredAssets = assets.filter(a => {
@@ -145,7 +150,7 @@ export default function AssetLibrary() {
               <p className="text-sm font-medium text-foreground truncate">{asset.name}</p>
               <div className="flex items-center justify-between mt-1">
                 <span className="text-xs text-muted-foreground">{asset.category}</span>
-                <button onClick={() => { deleteMutation.reset(); if (confirm(`Delete ${asset.name}?`)) deleteMutation.mutate(asset.id); }}
+                <button onClick={() => { deleteMutation.reset(); setAssetToDelete(asset); }}
                   type="button" aria-label={`Delete asset ${asset.name}`} disabled={deleteMutation.isPending}
                   className="min-h-11 min-w-11 p-1 text-muted-foreground hover:text-red-500 rounded opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100 transition-opacity disabled:opacity-50">
                   <Trash2 className="w-3 h-3" />
@@ -155,6 +160,16 @@ export default function AssetLibrary() {
           ))}
         </div>
       )}
+      <ConfirmDialog
+        isOpen={Boolean(assetToDelete)}
+        title="Delete asset"
+        description={assetToDelete ? `Permanently delete “${assetToDelete.name}” from the library? This cannot be undone.` : ''}
+        confirmLabel="Delete asset"
+        onConfirm={() => assetToDelete && deleteMutation.mutate(assetToDelete.id)}
+        onCancel={() => { deleteMutation.reset(); setAssetToDelete(null); }}
+        pending={deleteMutation.isPending}
+        error={deleteMutation.error?.message}
+      />
 
       <Modal
         isOpen={showUpload}

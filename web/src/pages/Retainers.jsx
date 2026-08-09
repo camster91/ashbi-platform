@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useToast } from '../hooks/useToast';
+import ConfirmDialog from '../components/ConfirmDialog';
 import { Button, Card, LoadingState } from '../components/ui';
 
 function HoursBar({ percentUsed }) {
@@ -39,6 +40,7 @@ export default function Retainers() {
   const [showCreate, setShowCreate] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [logHoursFor, setLogHoursFor] = useState(null);
+  const [invoiceToGenerate, setInvoiceToGenerate] = useState(null);
 
   const { data: allRetainers = [], isLoading: isLoadingAll, refetch } = useQuery({
     queryKey: ['all-retainers'],
@@ -85,6 +87,7 @@ export default function Retainers() {
   const generateInvoiceMutation = useMutation({
     mutationFn: ({ clientId, data }) => api.generateRetainerInvoice(clientId, data),
     onSuccess: (result) => {
+      setInvoiceToGenerate(null);
       queryClient.invalidateQueries({ queryKey: ['all-retainers'] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       toast.success('Invoice generated', `${result.invoice?.invoiceNumber} — go to Invoices to send it`);
@@ -310,9 +313,8 @@ export default function Retainers() {
                       <button
                         onClick={() => {
                           const currency = plan.monthlyAmountCad && !plan.monthlyAmountUsd ? 'CAD' : 'USD';
-                          if (confirm(`Generate a ${currency} invoice for ${plan.client?.name || plan.clientId}?\n\nAmount: ${currency === 'CAD' ? '$' + plan.monthlyAmountCad : '$' + plan.monthlyAmountUsd} ${currency}/mo`)) {
-                            generateInvoiceMutation.mutate({ clientId: plan.clientId, data: { currency } });
-                          }
+                          generateInvoiceMutation.reset();
+                          setInvoiceToGenerate({ plan, currency });
                         }}
                         className="p-1 text-muted-foreground hover:text-primary rounded"
                         title="Generate monthly invoice"
@@ -391,6 +393,17 @@ export default function Retainers() {
           ))}
         </div>
       )}
+      <ConfirmDialog
+        isOpen={Boolean(invoiceToGenerate)}
+        title="Generate retainer invoice"
+        description={invoiceToGenerate ? `Generate a ${invoiceToGenerate.currency} invoice for ${invoiceToGenerate.plan.client?.name || invoiceToGenerate.plan.clientId}? Amount: $${invoiceToGenerate.currency === 'CAD' ? invoiceToGenerate.plan.monthlyAmountCad : invoiceToGenerate.plan.monthlyAmountUsd} ${invoiceToGenerate.currency}. This creates a draft invoice; it is not sent automatically.` : ''}
+        confirmLabel="Generate invoice"
+        destructive={false}
+        onConfirm={() => invoiceToGenerate && generateInvoiceMutation.mutate({ clientId: invoiceToGenerate.plan.clientId, data: { currency: invoiceToGenerate.currency } })}
+        onCancel={() => { generateInvoiceMutation.reset(); setInvoiceToGenerate(null); }}
+        pending={generateInvoiceMutation.isPending}
+        error={generateInvoiceMutation.error?.message}
+      />
     </div>
   );
 }

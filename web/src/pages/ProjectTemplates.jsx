@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
+import ConfirmDialog from '../components/ConfirmDialog';
 import { FileText, Trash2, Plus, ArrowRight, ListTodo, Clock, FolderOpen } from 'lucide-react';
 import QueryErrorState from '../components/QueryErrorState';
 import Modal, { ModalFooter } from '../components/Modal';
@@ -29,6 +30,7 @@ export default function ProjectTemplates() {
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectClientId, setNewProjectClientId] = useState('');
   const [expandedTemplate, setExpandedTemplate] = useState(null);
+  const [templateToDelete, setTemplateToDelete] = useState(null);
 
   const { data: templates = [], isLoading, isFetching, error: templatesError, refetch: refetchTemplates } = useQuery({
     queryKey: ['project-templates'],
@@ -54,7 +56,10 @@ export default function ProjectTemplates() {
 
   const deleteTemplate = useMutation({
     mutationFn: (id) => api.deleteProjectTemplate(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['project-templates'] }),
+    onSuccess: () => {
+      setTemplateToDelete(null);
+      queryClient.invalidateQueries({ queryKey: ['project-templates'] });
+    },
   });
 
   const handleUseTemplate = (template) => {
@@ -154,7 +159,7 @@ export default function ProjectTemplates() {
                       <button
                         type="button"
                         aria-label={`Delete template ${template.name}`}
-                        onClick={() => { if (confirm('Delete this template?')) deleteTemplate.mutate(template.id); }}
+                        onClick={() => { deleteTemplate.reset(); setTemplateToDelete(template); }}
                         disabled={deleteTemplate.isPending}
                         className="min-h-11 min-w-11 p-1.5 text-muted-foreground hover:text-red-600 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
                       >
@@ -205,6 +210,16 @@ export default function ProjectTemplates() {
           })}
         </div>
       )}
+      <ConfirmDialog
+        isOpen={Boolean(templateToDelete)}
+        title="Delete project template"
+        description={templateToDelete ? `Permanently delete “${templateToDelete.name}”? Existing projects are unchanged, but this template cannot be recovered.` : ''}
+        confirmLabel="Delete template"
+        onConfirm={() => templateToDelete && deleteTemplate.mutate(templateToDelete.id)}
+        onCancel={() => { deleteTemplate.reset(); setTemplateToDelete(null); }}
+        pending={deleteTemplate.isPending}
+        error={deleteTemplate.error?.message}
+      />
 
       {/* Create From Template Dialog */}
       <Modal

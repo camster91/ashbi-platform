@@ -5,6 +5,7 @@ import {
   Clock, Play, Square, Plus, DollarSign, Timer, Trash2, RefreshCw, ArrowLeft
 } from 'lucide-react';
 import { api } from '../lib/api';
+import ConfirmDialog from '../components/ConfirmDialog';
 import { Button, Card, LoadingState } from '../components/ui';
 
 function formatDuration(seconds) {
@@ -32,6 +33,7 @@ export default function TimeTracking() {
   const [timerSeconds, setTimerSeconds] = useState(0);
   const [timerDesc, setTimerDesc] = useState('');
   const [showManual, setShowManual] = useState(false);
+  const [entryToDelete, setEntryToDelete] = useState(null);
   const [manualForm, setManualForm] = useState({
     description: '', hours: '', minutes: '', billable: true
   });
@@ -63,6 +65,7 @@ export default function TimeTracking() {
   const deleteMutation = useMutation({
     mutationFn: (id) => api.deleteTimeEntry(id),
     onSuccess: () => {
+      setEntryToDelete(null);
       queryClient.invalidateQueries({ queryKey: ['time-entries', projectId] });
     },
   });
@@ -291,9 +294,8 @@ export default function TimeTracking() {
                   </td>
                   <td className="px-2 py-3">
                     <button
-                      onClick={() => {
-                        if (confirm('Delete this time entry?')) deleteMutation.mutate(entry.id);
-                      }}
+                      onClick={() => { deleteMutation.reset(); setEntryToDelete(entry); }}
+                      aria-label={`Delete time entry ${entry.description || entry.id}`}
                       className="p-1 text-muted-foreground hover:text-red-500 rounded transition-colors"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -305,6 +307,16 @@ export default function TimeTracking() {
           </table>
         </Card>
       )}
+      <ConfirmDialog
+        isOpen={Boolean(entryToDelete)}
+        title="Delete time entry"
+        description={entryToDelete ? `Permanently delete the ${formatDuration(entryToDelete.duration)} time entry${entryToDelete.description ? ` for “${entryToDelete.description}”` : ''}? This changes reported and billable hours and cannot be undone.` : ''}
+        confirmLabel="Delete time entry"
+        onConfirm={() => entryToDelete && deleteMutation.mutate(entryToDelete.id)}
+        onCancel={() => { deleteMutation.reset(); setEntryToDelete(null); }}
+        pending={deleteMutation.isPending}
+        error={deleteMutation.error?.message}
+      />
     </div>
   );
 }

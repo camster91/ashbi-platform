@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import Modal from './Modal';
 import { useToast } from '../hooks/useToast';
+import ConfirmDialog from './ConfirmDialog';
 import Skeleton from './ui/Skeleton';
 
 export default function Milestones({ projectId }) {
@@ -10,6 +11,7 @@ export default function Milestones({ projectId }) {
   const toast = useToast();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedMilestone, setSelectedMilestone] = useState(null);
+  const [milestoneToDelete, setMilestoneToDelete] = useState(null);
 
   // Fetch milestones
   const { data: milestones = [], isLoading } = useQuery({
@@ -39,11 +41,11 @@ export default function Milestones({ projectId }) {
   const deleteMutation = useMutation({
     mutationFn: ({ id }) => api.deleteMilestone(id),
     onSuccess: (_, { name }) => {
+      setMilestoneToDelete(null);
       queryClient.invalidateQueries({ queryKey: ['milestones', projectId] });
       setSelectedMilestone(null);
       toast.success(`Deleted “${name}”`, 'This permanent deletion cannot be undone. Associated tasks were kept and unlinked.');
     },
-    onError: (error) => toast.error('Milestone was not deleted', error.message),
   });
 
   // Format date
@@ -200,17 +202,22 @@ export default function Milestones({ projectId }) {
         <MilestoneModal
           milestone={selectedMilestone}
           onSave={(data) => updateMutation.mutate({ id: selectedMilestone.id, data })}
-          onDelete={() => {
-            const confirmed = window.confirm(
-              `Permanently delete “${selectedMilestone.name}”? This cannot be undone. Associated tasks will be kept but unlinked from the milestone.`
-            );
-            if (confirmed) deleteMutation.mutate({ id: selectedMilestone.id, name: selectedMilestone.name });
-          }}
+          onDelete={() => { deleteMutation.reset(); setMilestoneToDelete(selectedMilestone); }}
           onClose={() => setSelectedMilestone(null)}
           isLoading={updateMutation.isPending}
           isDeleting={deleteMutation.isPending}
         />
       )}
+      <ConfirmDialog
+        isOpen={Boolean(milestoneToDelete)}
+        title="Delete milestone"
+        description={milestoneToDelete ? `Permanently delete “${milestoneToDelete.name}”? This cannot be undone. Associated tasks will be kept but unlinked from the milestone.` : ''}
+        confirmLabel="Delete milestone"
+        onConfirm={() => milestoneToDelete && deleteMutation.mutate({ id: milestoneToDelete.id, name: milestoneToDelete.name })}
+        onCancel={() => { deleteMutation.reset(); setMilestoneToDelete(null); }}
+        pending={deleteMutation.isPending}
+        error={deleteMutation.error?.message}
+      />
     </div>
   );
 }

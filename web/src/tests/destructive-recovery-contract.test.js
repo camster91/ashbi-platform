@@ -17,7 +17,7 @@ describe('destructive action recovery contract', () => {
   });
 
   it('requires explicit consequence confirmation for permanent milestone deletion', () => {
-    expect(milestones).toContain('Permanently delete “${selectedMilestone.name}”?');
+    expect(milestones).toContain('Permanently delete “${milestoneToDelete.name}”?');
     expect(milestones).toContain('This cannot be undone. Associated tasks will be kept but unlinked');
     expect(milestones).toContain('disabled={isDeleting}');
   });

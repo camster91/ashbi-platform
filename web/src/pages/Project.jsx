@@ -45,6 +45,7 @@ import ProjectContextCard from '../components/project/ProjectContext';
 import QueryErrorState from '../components/QueryErrorState';
 import Modal from '../components/Modal';
 import { Button, LoadingState } from '../components/ui';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 export default function Project() {
   const { id } = useParams();
@@ -652,6 +653,7 @@ function ProjectNotes({ projectId }) {
   const [expandedId, setExpandedId] = useState(null);
   const [form, setForm] = useState({ title: '', content: '', type: 'NOTE', tags: '' });
   const [editForm, setEditForm] = useState({});
+  const [noteToDelete, setNoteToDelete] = useState(null);
 
   const { data: notes = [] } = useQuery({
     queryKey: ['notes', projectId],
@@ -682,6 +684,7 @@ function ProjectNotes({ projectId }) {
   const deleteMutation = useMutation({
     mutationFn: (id) => api.deleteNote(id),
     onSuccess: (result, id) => {
+      setNoteToDelete(null);
       queryClient.invalidateQueries({ queryKey: ['notes', projectId] });
       const title = notes.find((note) => note.id === id)?.title || 'Note';
       toast.success({
@@ -840,7 +843,8 @@ function ProjectNotes({ projectId }) {
                     <Edit2 className="w-3.5 h-3.5" />
                   </button>
                   <button
-                    onClick={() => { if (confirm('Delete this note?')) deleteMutation.mutate(note.id); }}
+                    onClick={() => { deleteMutation.reset(); setNoteToDelete(note); }}
+                    aria-label={`Delete ${note.title}`}
                     className="p-1 text-muted-foreground hover:text-destructive rounded transition-colors"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -901,6 +905,16 @@ function ProjectNotes({ projectId }) {
           ))}
         </ul>
       )}
+      <ConfirmDialog
+        isOpen={Boolean(noteToDelete)}
+        title="Delete note"
+        description={noteToDelete ? `Delete “${noteToDelete.title || 'Note'}”? You can undo this action for 10 seconds.` : ''}
+        confirmLabel="Delete note"
+        onConfirm={() => noteToDelete && deleteMutation.mutate(noteToDelete.id)}
+        onCancel={() => { deleteMutation.reset(); setNoteToDelete(null); }}
+        pending={deleteMutation.isPending}
+        error={deleteMutation.error?.message}
+      />
     </div>
   );
 }

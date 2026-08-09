@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useToast } from '../hooks/useToast';
+import ConfirmDialog from '../components/ConfirmDialog';
 import { cn } from '../lib/utils';
 import { Card, Button, LoadingState } from '../components/ui';
 
@@ -52,6 +53,7 @@ export default function Docs() {
   const [newNoteProjectId, setNewNoteProjectId] = useState('');
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [newForm, setNewForm] = useState({ title: '', content: '', type: 'NOTE', tags: '', parentId: '', mentionUserIds: [], isTemplate: false });
+  const [noteToDelete, setNoteToDelete] = useState(null);
 
   useEffect(() => {
     if (searchParams.get('create') === 'true') setShowNewNote(true);
@@ -97,6 +99,7 @@ export default function Docs() {
   const deleteMutation = useMutation({
     mutationFn: (id) => api.deleteNote(id),
     onSuccess: (result, id) => {
+      setNoteToDelete(null);
       queryClient.invalidateQueries({ queryKey: ['all-notes'] });
       const title = notes.find((note) => note.id === id)?.title || 'Note';
       toast.success({
@@ -370,7 +373,7 @@ export default function Docs() {
                     onEdit={() => startEdit(note)}
                     onUpdate={handleUpdate}
                     onCancelEdit={() => setEditingId(null)}
-                    onDelete={() => { if (confirm('Delete this note?')) deleteMutation.mutate(note.id); }}
+                    onDelete={() => { deleteMutation.reset(); setNoteToDelete(note); }}
                     onPin={() => pinMutation.mutate(note.id)}
                     updatePending={updateMutation.isPending}
                   />
@@ -394,7 +397,7 @@ export default function Docs() {
                 onEdit={startEdit}
                 onUpdate={handleUpdate}
                 onCancelEdit={() => setEditingId(null)}
-                onDelete={(id) => { if (confirm('Delete this note?')) deleteMutation.mutate(id); }}
+                onDelete={(id) => { deleteMutation.reset(); setNoteToDelete(notes.find((note) => note.id === id) || { id, title: 'Note' }); }}
                 onPin={(id) => pinMutation.mutate(id)}
                 updatePending={updateMutation.isPending}
               />
@@ -402,6 +405,16 @@ export default function Docs() {
           </div>
         </>
       )}
+      <ConfirmDialog
+        isOpen={Boolean(noteToDelete)}
+        title="Delete note"
+        description={noteToDelete ? `Delete “${noteToDelete.title || 'Note'}”? You can undo this action for 10 seconds.` : ''}
+        confirmLabel="Delete note"
+        onConfirm={() => noteToDelete && deleteMutation.mutate(noteToDelete.id)}
+        onCancel={() => { deleteMutation.reset(); setNoteToDelete(null); }}
+        pending={deleteMutation.isPending}
+        error={deleteMutation.error?.message}
+      />
     </div>
   );
 }

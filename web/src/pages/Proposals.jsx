@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useToast } from '../hooks/useToast';
+import ConfirmDialog from '../components/ConfirmDialog';
 import { Button, Card, EmptyState, LoadingState } from '../components/ui';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
@@ -41,6 +42,7 @@ export default function Proposals() {
   const [showGenerator, setShowGenerator] = useState(false);
   const [filterStatus, setFilterStatus] = useState('');
   const [form, setForm] = useState({ clientId: '', title: '', notes: '' });
+  const [proposalToDelete, setProposalToDelete] = useState(null);
   const formDraft = useAutosave('proposal', 'new', form);
 
   useEffect(() => {
@@ -70,6 +72,7 @@ export default function Proposals() {
   const deleteMutation = useMutation({
     mutationFn: (id) => api.deleteProposal(id),
     onSuccess: (result, id) => {
+      setProposalToDelete(null);
       queryClient.invalidateQueries({ queryKey: ['proposals'] });
       const title = proposals.find((proposal) => proposal.id === id)?.title || 'Proposal';
       toast.success({
@@ -277,7 +280,7 @@ export default function Proposals() {
                     </button>
                     {proposal.status === 'DRAFT' && (
                       <button
-                        onClick={() => { if (confirm('Delete this proposal?')) deleteMutation.mutate(proposal.id); }}
+                        onClick={() => { deleteMutation.reset(); setProposalToDelete(proposal); }}
                         className="p-1.5 text-muted-foreground hover:text-destructive rounded"
                         title="Delete"
                       >
@@ -291,6 +294,16 @@ export default function Proposals() {
           })}
         </div>
       )}
+      <ConfirmDialog
+        isOpen={Boolean(proposalToDelete)}
+        title="Delete proposal"
+        description={proposalToDelete ? `Delete “${proposalToDelete.title || 'Proposal'}”? You can undo this action for 10 seconds.` : ''}
+        confirmLabel="Delete proposal"
+        onConfirm={() => proposalToDelete && deleteMutation.mutate(proposalToDelete.id)}
+        onCancel={() => { deleteMutation.reset(); setProposalToDelete(null); }}
+        pending={deleteMutation.isPending}
+        error={deleteMutation.error?.message}
+      />
     </div>
   );
 }
