@@ -2,7 +2,10 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import { FileText, Trash2, Plus, ArrowRight, Loader2, X, ListTodo, Clock, FolderOpen } from 'lucide-react';
+import { FileText, Trash2, Plus, ArrowRight, ListTodo, Clock, FolderOpen } from 'lucide-react';
+import QueryErrorState from '../components/QueryErrorState';
+import Modal, { ModalFooter } from '../components/Modal';
+import { Button, LoadingState } from '../components/ui';
 
 const TYPE_LABELS = {
   WEBSITE: 'Website Redesign',
@@ -27,12 +30,12 @@ export default function ProjectTemplates() {
   const [newProjectClientId, setNewProjectClientId] = useState('');
   const [expandedTemplate, setExpandedTemplate] = useState(null);
 
-  const { data: templates = [], isLoading } = useQuery({
+  const { data: templates = [], isLoading, isFetching, error: templatesError, refetch: refetchTemplates } = useQuery({
     queryKey: ['project-templates'],
     queryFn: () => api.getProjectTemplates(),
   });
 
-  const { data: clients = [] } = useQuery({
+  const { data: clients = [], isLoading: clientsLoading, isFetching: clientsFetching, error: clientsError, refetch: refetchClients } = useQuery({
     queryKey: ['clients'],
     queryFn: () => api.getClients().then((r) => r?.clients ?? []),
   });
@@ -62,11 +65,11 @@ export default function ProjectTemplates() {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <LoadingState label="Loading project templates…" />;
+  }
+
+  if (templatesError) {
+    return <QueryErrorState error={templatesError} message="Failed to load project templates" onRetry={refetchTemplates} isRetrying={isFetching} />;
   }
 
   return (
@@ -86,6 +89,12 @@ export default function ProjectTemplates() {
           <Plus className="w-4 h-4" /> Create with AI
         </button>
       </div>
+
+      {deleteTemplate.error && (
+        <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          {deleteTemplate.error.message || 'The template could not be deleted. It remains available.'}
+        </p>
+      )}
 
       {/* Template List */}
       {templates.length === 0 ? (
@@ -143,8 +152,11 @@ export default function ProjectTemplates() {
                         Use Template <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                       <button
+                        type="button"
+                        aria-label={`Delete template ${template.name}`}
                         onClick={() => { if (confirm('Delete this template?')) deleteTemplate.mutate(template.id); }}
-                        className="p-1.5 text-muted-foreground hover:text-red-600 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
+                        disabled={deleteTemplate.isPending}
+                        className="min-h-11 min-w-11 p-1.5 text-muted-foreground hover:text-red-600 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -195,23 +207,29 @@ export default function ProjectTemplates() {
       )}
 
       {/* Create From Template Dialog */}
-      {showCreateDialog && selectedTemplate && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-card rounded-xl shadow-xl border border-border w-full max-w-md p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-foreground">Create from Template</h3>
-              <button onClick={() => setShowCreateDialog(false)} className="p-1 text-muted-foreground hover:text-foreground rounded-lg">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      <Modal
+        isOpen={showCreateDialog}
+        onClose={() => {
+          if (createFromTemplate.isPending) return;
+          setShowCreateDialog(false);
+          createFromTemplate.reset();
+        }}
+        title="Create from template"
+        size="sm"
+        showCloseButton={!createFromTemplate.isPending}
+      >
+        {selectedTemplate && (
+          <div className="space-y-4">
             <p className="text-sm text-muted-foreground">Using template: <strong className="text-foreground">{selectedTemplate.name}</strong></p>
 
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Project Name</label>
+              <label htmlFor="template-project-name" className="block text-sm font-medium text-foreground mb-1">Project name</label>
               <input
+                id="template-project-name"
                 type="text"
                 value={newProjectName}
                 onChange={e => setNewProjectName(e.target.value)}
+                disabled={createFromTemplate.isPending}
                 placeholder="e.g., Acme Corp Website Redesign"
                 className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary outline-none"
                 autoFocus
@@ -219,41 +237,50 @@ export default function ProjectTemplates() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-foreground mb-1">Client</label>
-              <select
-                value={newProjectClientId}
-                onChange={e => setNewProjectClientId(e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary outline-none"
-              >
-                <option value="">Select a client...</option>
-                {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <label htmlFor="template-project-client" className="block text-sm font-medium text-foreground mb-1">Client</label>
+              {clientsLoading ? (
+                <LoadingState label="Loading clients…" compact size="sm" />
+              ) : clientsError ? (
+                <QueryErrorState error={clientsError} message="Failed to load clients" onRetry={refetchClients} isRetrying={clientsFetching} />
+              ) : (
+                <select
+                  id="template-project-client"
+                  value={newProjectClientId}
+                  onChange={e => setNewProjectClientId(e.target.value)}
+                  disabled={createFromTemplate.isPending}
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-background text-foreground focus:ring-2 focus:ring-primary outline-none"
+                >
+                  <option value="">Select a client...</option>
+                  {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              )}
             </div>
 
             {createFromTemplate.isError && (
-              <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 text-sm">
+              <div role="alert" className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 text-sm">
                 {createFromTemplate.error?.message || 'Failed to create project'}
               </div>
             )}
 
-            <div className="flex gap-2 justify-end pt-2">
-              <button
+            <ModalFooter className="flex-col-reverse sm:flex-row">
+              <Button
+                variant="outline"
                 onClick={() => setShowCreateDialog(false)}
-                className="px-4 py-2 text-sm text-muted-foreground bg-muted rounded-lg hover:bg-muted/80"
+                disabled={createFromTemplate.isPending}
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => createFromTemplate.mutate({ templateId: selectedTemplate.id, clientId: newProjectClientId, name: newProjectName.trim() })}
                 disabled={!newProjectName.trim() || !newProjectClientId || createFromTemplate.isPending}
-                className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 disabled:opacity-50"
+                loading={createFromTemplate.isPending}
               >
-                {createFromTemplate.isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating...</> : 'Create Project'}
-              </button>
-            </div>
+                Create project
+              </Button>
+            </ModalFooter>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
     </div>
   );
 }
