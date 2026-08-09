@@ -10,6 +10,7 @@ import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 import { useToast } from '../hooks/useToast';
 import ConfirmDialog from '../components/ConfirmDialog';
+import QueryErrorState from '../components/QueryErrorState';
 
 const CATEGORIES = [
   { value: 'OFFICE', label: 'Office' },
@@ -78,7 +79,14 @@ export default function Expenses() {
   const [searchQuery, setSearchQuery] = useState('');
 
   // Queries
-  const { data: expenseData = { expenses: [], total: 0 }, isLoading } = useQuery({
+  const {
+    data: expenseData = { expenses: [], total: 0 },
+    isLoading,
+    isError: expensesError,
+    error: expensesRequestError,
+    refetch: refetchExpenses,
+    isFetching: expensesFetching,
+  } = useQuery({
     queryKey: ['expenses', filterCategory, filterClient, startDate, endDate, searchQuery],
     queryFn: () => api.getExpenses({
       ...(filterCategory ? { category: filterCategory } : {}),
@@ -532,6 +540,13 @@ export default function Expenses() {
       <Card>
         {isLoading ? (
           <div className="p-8 text-center text-muted-foreground">Loading expenses...</div>
+        ) : expensesError ? (
+          <QueryErrorState
+            error={expensesRequestError}
+            message="Expenses could not be loaded"
+            onRetry={refetchExpenses}
+            isRetrying={expensesFetching}
+          />
         ) : expenses.length === 0 ? (
           <div className="p-8 text-center">
             <Receipt className="w-12 h-12 text-muted-foreground/50 mx-auto mb-3" />

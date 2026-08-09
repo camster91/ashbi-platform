@@ -10,6 +10,7 @@ import { Button, Card, EmptyState, LoadingState } from '../components/ui';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 import ConfirmDialog from '../components/ConfirmDialog';
+import QueryErrorState from '../components/QueryErrorState';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -66,7 +67,14 @@ export default function Estimates() {
   }, [formDraft.draft, draftKey]);
 
   // Queries
-  const { data: estimatesData = { estimates: [] }, isLoading } = useQuery({
+  const {
+    data: estimatesData = { estimates: [] },
+    isLoading,
+    isError: estimatesError,
+    error: estimatesRequestError,
+    refetch: refetchEstimates,
+    isFetching: estimatesFetching,
+  } = useQuery({
     queryKey: ['estimates', filterStatus, searchQuery],
     queryFn: () => api.getEstimates({
       ...(filterStatus ? { status: filterStatus } : {}),
@@ -299,6 +307,13 @@ export default function Estimates() {
         <div className="flex justify-center py-12">
           <LoadingState label="Loading estimates…" compact />
         </div>
+      ) : estimatesError ? (
+        <QueryErrorState
+          error={estimatesRequestError}
+          message="Estimates could not be loaded"
+          onRetry={refetchEstimates}
+          isRetrying={estimatesFetching}
+        />
       ) : estimates.length === 0 ? (
         <Card>
           <EmptyState
