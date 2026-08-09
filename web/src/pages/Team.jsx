@@ -16,6 +16,7 @@ import { api } from '../lib/api';
 import { cn } from '../lib/utils';
 import { useToast } from '../hooks/useToast';
 import { Card, Button, LoadingState } from '../components/ui';
+import QueryErrorState from '../components/QueryErrorState';
 import CreateTeamMemberModal from '../components/CreateTeamMemberModal';
 
 const roleColors = {
@@ -44,17 +45,37 @@ export default function Team() {
   const [editForm, setEditForm] = useState({});
   const [view, setView] = useState('team'); // team | resources
 
-  const { data: team = [], isLoading } = useQuery({
+  const {
+    data: team = [],
+    isLoading,
+    isError: teamError,
+    error: teamRequestError,
+    refetch: refetchTeam,
+    isFetching: teamFetching,
+  } = useQuery({
     queryKey: ['team'],
     queryFn: () => api.getTeam(),
   });
 
-  const { data: workload = [] } = useQuery({
+  const {
+    data: workload = [],
+    isError: workloadError,
+    error: workloadRequestError,
+    refetch: refetchWorkload,
+    isFetching: workloadFetching,
+  } = useQuery({
     queryKey: ['team-workload'],
     queryFn: () => api.getWorkload(),
   });
 
-  const { data: allocationsData, isLoading: allocLoading } = useQuery({
+  const {
+    data: allocationsData,
+    isLoading: allocLoading,
+    isError: allocationsError,
+    error: allocationsRequestError,
+    refetch: refetchAllocations,
+    isFetching: allocationsFetching,
+  } = useQuery({
     queryKey: ['team-allocations'],
     queryFn: () => api.getTeamAllocations(),
     enabled: view === 'resources',
@@ -86,6 +107,17 @@ export default function Team() {
       <div className="flex items-center justify-center h-64">
         <LoadingState label="Loading team…" compact />
       </div>
+    );
+  }
+
+  if (teamError) {
+    return (
+      <QueryErrorState
+        error={teamRequestError}
+        message="Team members could not be loaded"
+        onRetry={refetchTeam}
+        isRetrying={teamFetching}
+      />
     );
   }
 
@@ -136,6 +168,15 @@ export default function Team() {
 
       {view === 'team' ? (
         <>
+          {workloadError && (
+            <QueryErrorState
+              error={workloadRequestError}
+              message="Team workload could not be loaded"
+              onRetry={refetchWorkload}
+              isRetrying={workloadFetching}
+            />
+          )}
+
           {/* Workload Overview */}
           {workload.length > 0 && (
             <div>
@@ -312,9 +353,14 @@ export default function Team() {
         /* Resource Allocation View */
         <div>
           {allocLoading ? (
-            <div className="flex items-center justify-center h-48">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-            </div>
+            <LoadingState label="Loading resource allocation…" compact />
+          ) : allocationsError ? (
+            <QueryErrorState
+              error={allocationsRequestError}
+              message="Resource allocation could not be loaded"
+              onRetry={refetchAllocations}
+              isRetrying={allocationsFetching}
+            />
           ) : allocations.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <BarChart3 className="w-12 h-12 mx-auto mb-3 opacity-20" />

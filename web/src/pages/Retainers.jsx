@@ -17,6 +17,7 @@ import { api } from '../lib/api';
 import { useToast } from '../hooks/useToast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { Button, Card, LoadingState } from '../components/ui';
+import QueryErrorState from '../components/QueryErrorState';
 
 function HoursBar({ percentUsed }) {
   const color =
@@ -42,7 +43,14 @@ export default function Retainers() {
   const [logHoursFor, setLogHoursFor] = useState(null);
   const [invoiceToGenerate, setInvoiceToGenerate] = useState(null);
 
-  const { data: allRetainers = [], isLoading: isLoadingAll, refetch } = useQuery({
+  const {
+    data: allRetainers = [],
+    isLoading: isLoadingAll,
+    isError: retainersError,
+    error: retainersRequestError,
+    refetch,
+    isFetching: retainersFetching,
+  } = useQuery({
     queryKey: ['all-retainers'],
     queryFn: () => api.getRetainerList(),
   });
@@ -230,6 +238,13 @@ export default function Retainers() {
         <div className="flex justify-center py-12">
           <LoadingState label="Loading retainers…" compact />
         </div>
+      ) : retainersError ? (
+        <QueryErrorState
+          error={retainersRequestError}
+          message="Retainer plans could not be loaded"
+          onRetry={refetch}
+          isRetrying={retainersFetching}
+        />
       ) : allRetainers.length === 0 ? (
         <Card className="p-12 text-center">
           <TrendingUp className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
