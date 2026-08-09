@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { Button, Card, LoadingState, Skeleton } from '../components/ui';
+import Modal, { ModalFooter } from '../components/Modal';
 
 const STATUS_COLORS = {
   HEALTHY: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
@@ -142,6 +143,8 @@ function SitesTab({ queryClient }) {
   const [showAdd, setShowAdd] = useState(false);
   const [addUrl, setAddUrl] = useState('');
   const [provisionedSecret, setProvisionedSecret] = useState('');
+  const [copyError, setCopyError] = useState('');
+  const [secretCopied, setSecretCopied] = useState(false);
   const [alert, setAlert] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
 
@@ -167,6 +170,8 @@ function SitesTab({ queryClient }) {
       queryClient.invalidateQueries({ queryKey: ['wp-sites'] });
       queryClient.invalidateQueries({ queryKey: ['wp-fleet-status'] });
       setAddUrl('');
+      setCopyError('');
+      setSecretCopied(false);
       setProvisionedSecret(data.bridgeSecret);
     },
     onError: (err) => {
@@ -280,12 +285,36 @@ function SitesTab({ queryClient }) {
     registerMutation.mutate({ siteUrl: addUrl });
   };
 
+  const openAddDialog = () => {
+    registerMutation.reset();
+    setProvisionedSecret('');
+    setCopyError('');
+    setSecretCopied(false);
+    setShowAdd(true);
+  };
+
+  const closeAddDialog = () => {
+    if (registerMutation.isPending || provisionedSecret) return;
+    registerMutation.reset();
+    setAddUrl('');
+    setShowAdd(false);
+  };
+
+  const finishProvisioning = () => {
+    setProvisionedSecret('');
+    setCopyError('');
+    setSecretCopied(false);
+    setShowAdd(false);
+  };
+
   const copyProvisionedSecret = async () => {
     try {
       await navigator.clipboard.writeText(provisionedSecret);
-      setAlert({ type: 'success', msg: 'Per-site key copied.' });
+      setCopyError('');
+      setSecretCopied(true);
     } catch {
-      setAlert({ type: 'error', msg: 'Copy failed. Select the key and copy it manually.' });
+      setSecretCopied(false);
+      setCopyError('Copy failed. Select the key and copy it manually.');
     }
   };
 
@@ -318,7 +347,7 @@ function SitesTab({ queryClient }) {
         >
           Send digest
         </Button>
-        <Button onClick={() => { setProvisionedSecret(''); setShowAdd(true); }} leftIcon={<Plus className="w-4 h-4" />}>
+        <Button onClick={openAddDialog} leftIcon={<Plus className="w-4 h-4" />}>
           Add Site
         </Button>
       </div>
@@ -473,43 +502,41 @@ function SitesTab({ queryClient }) {
         </div>
       </Card>
 
-      {showAdd && (
-        <div role="presentation" className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowAdd(false)}>
-          <div role="dialog" aria-modal="true" aria-labelledby="add-wp-site-title" className="bg-card rounded-xl border border-border p-6 w-full max-w-md mx-4" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 id="add-wp-site-title" className="text-lg font-semibold">Add WordPress Site</h3>
-              <button aria-label="Close add WordPress site dialog" onClick={() => setShowAdd(false)} className="p-1 text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
-            </div>
-            {provisionedSecret ? (
-              <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">
-                  Copy this key into the plugin now. For security, it will not be shown again.
-                </p>
-                <label className="block text-sm font-medium" htmlFor="wp-bridge-secret">Per-site secret</label>
-                <textarea id="wp-bridge-secret" readOnly value={provisionedSecret}
-                  className="w-full min-h-24 px-3 py-2 rounded-lg border border-border bg-background text-sm font-mono break-all" />
-                <div className="flex justify-end gap-2">
-                  <Button type="button" variant="secondary" onClick={copyProvisionedSecret}>Copy key</Button>
-                  <Button type="button" onClick={() => setShowAdd(false)}>Done</Button>
-                </div>
-              </div>
-            ) : (
-            <form onSubmit={handleRegister} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">Site URL</label>
-                <input type="url" value={addUrl} onChange={e => setAddUrl(e.target.value)}
-                  placeholder="https://yoursite.com"
-                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" required />
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button variant="ghost" type="button" onClick={() => setShowAdd(false)}>Cancel</Button>
-                <Button type="submit" loading={registerMutation.isPending}>Register Site</Button>
-              </div>
-            </form>
-            )}
+      <Modal
+        isOpen={showAdd}
+        onClose={closeAddDialog}
+        title={provisionedSecret ? 'Save WordPress bridge key' : 'Add WordPress site'}
+        size="sm"
+        showCloseButton={!registerMutation.isPending && !provisionedSecret}
+      >
+        {provisionedSecret ? (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Copy this key into the plugin now. For security, it will not be shown again. This dialog stays open until you confirm that the key is saved.
+            </p>
+            <label className="block text-sm font-medium" htmlFor="wp-bridge-secret">Per-site secret</label>
+            <textarea id="wp-bridge-secret" readOnly value={provisionedSecret} className="w-full min-h-24 px-3 py-2 rounded-lg border border-border bg-background text-base font-mono break-all" />
+            {copyError && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">{copyError}</p>}
+            {secretCopied && <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">Key copied. Store it in the plugin before continuing.</p>}
+            <ModalFooter>
+              <Button type="button" variant="secondary" onClick={copyProvisionedSecret}>Copy key</Button>
+              <Button type="button" onClick={finishProvisioning}>I saved this key</Button>
+            </ModalFooter>
           </div>
-        </div>
-      )}
+        ) : (
+          <form onSubmit={handleRegister} className="space-y-4">
+            <div>
+              <label htmlFor="wp-site-url" className="block text-sm font-medium mb-1">Site URL</label>
+              <input id="wp-site-url" type="url" value={addUrl} onChange={(event) => setAddUrl(event.target.value)} disabled={registerMutation.isPending} placeholder="https://yoursite.com" className="w-full px-3 py-2 rounded-lg border border-border bg-background text-base" autoComplete="url" required />
+            </div>
+            {registerMutation.error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">{registerMutation.error.message || 'The site could not be registered. Your URL is still available; review it and try again.'}</p>}
+            <ModalFooter>
+              <Button variant="ghost" type="button" onClick={closeAddDialog} disabled={registerMutation.isPending}>Cancel</Button>
+              <Button type="submit" loading={registerMutation.isPending} disabled={registerMutation.isPending || !addUrl.trim()}>Register Site</Button>
+            </ModalFooter>
+          </form>
+        )}
+      </Modal>
     </div>
   );
 }
