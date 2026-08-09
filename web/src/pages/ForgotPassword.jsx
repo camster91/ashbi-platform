@@ -43,8 +43,9 @@ export default function ForgotPassword() {
       <div className="w-full max-w-md">
         {/* Back button */}
         <button
+          type="button"
           onClick={() => navigate('/login')}
-          className="flex items-center gap-2 text-primary hover:text-primary-600 font-medium mb-8 transition-colors"
+          className="min-h-11 inline-flex items-center gap-2 text-primary hover:text-primary-600 font-medium mb-8 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
         >
           <ArrowLeft className="w-4 h-4" />
           {t('common.back')}
@@ -126,11 +127,12 @@ export default function ForgotPassword() {
               <p className="text-sm text-muted-foreground">
                 Didn't receive the email? Check your spam folder or{' '}
                 <button
+                  type="button"
                   onClick={() => {
                     setSubmitted(false);
                     setEmail('');
                   }}
-                  className="text-primary hover:text-primary-600 font-medium transition-colors"
+                  className="min-h-11 inline-flex items-center text-primary hover:text-primary-600 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
                 >
                   {t('auth.tryAgain')}
                 </button>
