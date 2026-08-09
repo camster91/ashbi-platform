@@ -60,9 +60,11 @@ mv "$archive.tmp" "$archive"
 completed=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 bytes=$(stat -c %s "$archive")
 sha256=$(sha256sum "$archive" | awk '{print $1}')
-printf '{"status":"ok","startedAt":"%s","completedAt":"%s","revision":"%s","archive":"%s","bytes":%s,"sha256":"%s","retentionDays":%s}\n' \
-  "$started" "$completed" "$revision" "$(basename "$archive")" "$bytes" "$sha256" "$RETENTION_DAYS" > "$status_tmp"
-chmod 0600 "$status_tmp"
+printf '{"status":"ok","startedAt":"%s","completedAt":"%s","revision":"%s","bytes":%s,"retentionDays":%s}\n' \
+  "$started" "$completed" "$revision" "$bytes" "$RETENTION_DAYS" > "$status_tmp"
+# This deliberately contains no archive path, checksum, credentials, or tenant
+# data. It must be readable by the non-root API through the config bind mount.
+chmod 0644 "$status_tmp"
 mv "$status_tmp" "$STATUS_FILE"
 
 # Delete only successfully named encrypted archives after a new archive exists.
