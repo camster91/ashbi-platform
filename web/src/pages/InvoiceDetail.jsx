@@ -101,8 +101,35 @@ export default function InvoiceDetail() {
 
   const deleteMutation = useMutation({
     mutationFn: () => api.deleteInvoice(id),
-    onSuccess: () => navigate('/invoices'),
-    onError: () => toast.error('Failed to delete invoice'),
+    onSuccess: (result) => {
+      const duration = Math.max(1000, new Date(result.undoExpiresAt).getTime() - Date.now());
+      toast.success({
+        title: `${invoice.invoiceNumber} voided`,
+        duration,
+        action: {
+          label: `Undo void ${invoice.invoiceNumber}`,
+          onClick: async () => {
+            try {
+              await api.undoInvoiceVoid(id);
+              await Promise.all([
+                queryClient.invalidateQueries({ queryKey: ['invoice', id] }),
+                queryClient.invalidateQueries({ queryKey: ['invoices'] }),
+              ]);
+              navigate(`/invoices/${id}`);
+              toast.success(`${invoice.invoiceNumber} restored`);
+            } catch (error) {
+              toast.error({
+                title: error.status === 410 ? 'Invoice void undo expired' : 'Could not restore invoice',
+                message: error.message,
+                duration: 0,
+              });
+            }
+          },
+        },
+      });
+      navigate('/invoices');
+    },
+    onError: (error) => toast.error('Failed to void invoice', error.message),
   });
 
   const [copyLinkMsg, setCopyLinkMsg] = useState('');

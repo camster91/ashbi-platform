@@ -6,6 +6,8 @@ import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-d
 import { validateBody, createInvoiceSchema, updateInvoiceSchema, markInvoicePaidSchema, sendInvoiceSchema, lineItemTemplateCreateSchema, invoiceBulkIdsSchema, invoiceBulkArchiveSchema, bulkMarkPaidSchema } from '../validators/schemas.js';
 
 const HST_RATE = 13; // Ontario HST
+const VOID_UNDO_WINDOW_MS = 10_000;
+const VOIDABLE_STATUSES = new Set(['DRAFT', 'SENT', 'OVERDUE']);
 
 export default async function invoiceRoutes(fastify) {
 
@@ -300,14 +302,44 @@ export default async function invoiceRoutes(fastify) {
 
   // ─── DELETE /:id — archive/void invoice ────────────────────────────────────
   fastify.delete('/:id', { onRequest: [fastify.adminOnly] }, async (request, reply) => {
-    const invoice = await fastify.prisma.invoice.findUnique({ where: { id: request.params.id } });
+    const invoice = await request.prisma.invoice.findUnique({ where: { id: request.params.id } });
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
     if (invoice.status === 'PAID') return reply.status(400).send({ error: 'Cannot void a paid invoice' });
+    if (!VOIDABLE_STATUSES.has(invoice.status)) {
+      return reply.status(409).send({ error: 'Invoice is already void or cannot be voided' });
+    }
 
-    return fastify.prisma.invoice.update({
+    const voidedAt = new Date();
+    const updated = await request.prisma.invoice.update({
       where: { id: request.params.id },
-      data: { status: 'VOID' }
+      data: { status: 'VOID', voidedAt, voidedFromStatus: invoice.status }
     });
+    return {
+      ...updated,
+      undoExpiresAt: new Date(voidedAt.getTime() + VOID_UNDO_WINDOW_MS),
+    };
+  });
+
+  fastify.post('/:id/undo-void', { onRequest: [fastify.adminOnly] }, async (request, reply) => {
+    return request.prisma.$transaction(async (transaction) => {
+      const invoice = await transaction.invoice.findUnique({ where: { id: request.params.id } });
+      if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
+      if (invoice.status !== 'VOID' || !VOIDABLE_STATUSES.has(invoice.voidedFromStatus)) {
+        return reply.status(409).send({ error: 'Invoice void has already been undone' });
+      }
+      if (!invoice.voidedAt || Date.now() - invoice.voidedAt.getTime() > VOID_UNDO_WINDOW_MS) {
+        return reply.status(410).send({ error: 'Invoice void undo window has expired' });
+      }
+
+      return transaction.invoice.update({
+        where: { id: invoice.id },
+        data: {
+          status: invoice.voidedFromStatus,
+          voidedAt: null,
+          voidedFromStatus: null,
+        },
+      });
+    }, { isolationLevel: 'Serializable' });
   });
 
   // ─── POST /:id/send — send invoice to client ───────────────────────────────

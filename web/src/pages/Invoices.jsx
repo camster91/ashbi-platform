@@ -121,7 +121,32 @@ export default function Invoices() {
 
   const deleteMutation = useMutation({
     mutationFn: (id) => api.deleteInvoice(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['invoices'] }),
+    onSuccess: (result, id) => {
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      const invoiceNumber = invoices.find((invoice) => invoice.id === id)?.invoiceNumber || 'invoice';
+      const duration = Math.max(1000, new Date(result.undoExpiresAt).getTime() - Date.now());
+      toast.success({
+        title: `${invoiceNumber} voided`,
+        duration,
+        action: {
+          label: `Undo void ${invoiceNumber}`,
+          onClick: async () => {
+            try {
+              await api.undoInvoiceVoid(id);
+              await queryClient.invalidateQueries({ queryKey: ['invoices'] });
+              toast.success(`${invoiceNumber} restored`);
+            } catch (error) {
+              toast.error({
+                title: error.status === 410 ? 'Invoice void undo expired' : 'Could not restore invoice',
+                message: error.message,
+                duration: 0,
+              });
+            }
+          },
+        },
+      });
+    },
+    onError: (error) => toast.error('Failed to void invoice', error.message),
   });
 
   // Form helpers

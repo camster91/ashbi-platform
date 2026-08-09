@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 
 const notes = readFileSync(resolve(process.cwd(), 'src/components/Notes.jsx'), 'utf8');
 const milestones = readFileSync(resolve(process.cwd(), 'src/components/Milestones.jsx'), 'utf8');
+const invoices = readFileSync(resolve(process.cwd(), 'src/pages/Invoices.jsx'), 'utf8');
+const invoiceDetail = readFileSync(resolve(process.cwd(), 'src/pages/InvoiceDetail.jsx'), 'utf8');
 const api = readFileSync(resolve(process.cwd(), 'src/lib/api.js'), 'utf8');
 
 describe('destructive action recovery contract', () => {
@@ -18,5 +20,13 @@ describe('destructive action recovery contract', () => {
     expect(milestones).toContain('Permanently delete “${selectedMilestone.name}”?');
     expect(milestones).toContain('This cannot be undone. Associated tasks will be kept but unlinked');
     expect(milestones).toContain('disabled={isDeleting}');
+  });
+
+  it('offers a bounded, named Undo action for invoice void on list and detail surfaces', () => {
+    expect(api).toContain('undoInvoiceVoid: (id)');
+    expect(invoices).toContain('label: `Undo void ${invoiceNumber}`');
+    expect(invoiceDetail).toContain('label: `Undo void ${invoice.invoiceNumber}`');
+    expect(invoices).toContain('Invoice void undo expired');
+    expect(invoiceDetail).toContain('Invoice void undo expired');
   });
 });

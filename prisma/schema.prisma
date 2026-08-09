@@ -945,6 +945,8 @@ model Invoice {
   transactionId           String?
   paidAt                  DateTime?
   sentAt                  DateTime?
+  voidedAt                DateTime?
+  voidedFromStatus        String?
   isRecurring             Boolean   @default(false)
   recurringInterval       String? // MONTHLY | QUARTERLY | ANNUALLY
   recurringNextDate       DateTime?

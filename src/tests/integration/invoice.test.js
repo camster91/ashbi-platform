@@ -461,6 +461,40 @@ describe('Invoice CRUD', { skip }, () => {
     assert.equal(res.statusCode, 200);
     const body = JSON.parse(res.body);
     assert.equal(body.status, 'VOID');
+    assert.equal(body.voidedFromStatus, 'DRAFT');
+    assert.ok(new Date(body.undoExpiresAt) > new Date());
+
+    const undoRes = await fastify.inject({
+      method: 'POST',
+      url: `/api/invoices/${draftId}/undo-void`,
+      headers: authHeader(),
+    });
+    assert.equal(undoRes.statusCode, 200, undoRes.body);
+    assert.equal(JSON.parse(undoRes.body).status, 'DRAFT');
+
+    const duplicateUndo = await fastify.inject({
+      method: 'POST',
+      url: `/api/invoices/${draftId}/undo-void`,
+      headers: authHeader(),
+    });
+    assert.equal(duplicateUndo.statusCode, 409);
+
+    const secondVoid = await fastify.inject({
+      method: 'DELETE',
+      url: `/api/invoices/${draftId}`,
+      headers: authHeader(),
+    });
+    assert.equal(secondVoid.statusCode, 200);
+    await rawPrisma.invoice.update({
+      where: { id: draftId },
+      data: { voidedAt: new Date(Date.now() - 11_000) },
+    });
+    const expiredUndo = await fastify.inject({
+      method: 'POST',
+      url: `/api/invoices/${draftId}/undo-void`,
+      headers: authHeader(),
+    });
+    assert.equal(expiredUndo.statusCode, 410);
     console.log('  ✓ Voided draft invoice');
   });
 

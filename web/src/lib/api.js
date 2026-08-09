@@ -650,6 +650,8 @@ export const api = {
     request(`/invoices/${id}`, { method: 'PUT', body: data }),
   deleteInvoice: (id) =>
     request(`/invoices/${id}`, { method: 'DELETE' }),
+  undoInvoiceVoid: (id) =>
+    request(`/invoices/${id}/undo-void`, { method: 'POST' }),
   createInvoiceFromProposal: (proposalId) =>
     request(`/invoices/from-proposal/${proposalId}`, { method: 'POST' }),
   sendInvoice: (id) =>
