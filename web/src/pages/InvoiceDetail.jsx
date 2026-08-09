@@ -14,6 +14,7 @@ import { useToast } from '../hooks/useToast';
 import { Button, Card, LoadingState } from '../components/ui';
 import Modal, { ModalFooter } from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
+import QueryErrorState from '../components/QueryErrorState';
 
 const HST_RATE = 13;
 const INITIAL_PAYMENT_FORM = { paymentMethod: 'BANK', paymentNotes: '', transactionId: '' };
@@ -51,7 +52,14 @@ export default function InvoiceDetail() {
   const [showVoidConfirm, setShowVoidConfirm] = useState(false);
   const pdfRef = useRef(null);
 
-  const { data: invoice, isLoading } = useQuery({
+  const {
+    data: invoice,
+    isLoading,
+    isError: invoiceError,
+    error: invoiceRequestError,
+    refetch: refetchInvoice,
+    isFetching: invoiceFetching,
+  } = useQuery({
     queryKey: ['invoice', id],
     queryFn: () => api.getInvoice(id),
   });
@@ -63,7 +71,13 @@ export default function InvoiceDetail() {
     setEditing(true);
   }, [formDraft.draft]);
 
-  const { data: payments = [] } = useQuery({
+  const {
+    data: payments = [],
+    isError: paymentsError,
+    error: paymentsRequestError,
+    refetch: refetchPayments,
+    isFetching: paymentsFetching,
+  } = useQuery({
     queryKey: ['invoice-payments', id],
     queryFn: () => api.getInvoicePayments(id),
     enabled: !!invoice,
@@ -208,6 +222,17 @@ export default function InvoiceDetail() {
 
   if (isLoading) {
     return <LoadingState label="Loading invoice…" className="min-h-96" />;
+  }
+
+  if (invoiceError) {
+    return (
+      <QueryErrorState
+        error={invoiceRequestError}
+        message="Invoice details could not be loaded"
+        onRetry={refetchInvoice}
+        isRetrying={invoiceFetching}
+      />
+    );
   }
 
   if (!invoice) {
@@ -744,22 +769,31 @@ export default function InvoiceDetail() {
               )}
 
               {/* Payment History */}
-              {payments.length > 0 && (
+              {(paymentsError || payments.length > 0) && (
                 <Card className="p-4">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Payment History</p>
-                  <div className="space-y-2">
-                    {payments.map(p => (
-                      <div key={p.id} className="flex items-center justify-between text-sm">
-                        <div>
-                          <p className="font-medium">{fmt(p.amount)}</p>
-                          <p className="text-xs text-muted-foreground">{p.method} · {formatDate(p.paidAt)}</p>
-                          {p.transactionId && <p className="text-xs text-muted-foreground font-mono">{p.transactionId}</p>}
-                          {p.notes && <p className="text-xs text-muted-foreground">{p.notes}</p>}
+                  {paymentsError ? (
+                    <QueryErrorState
+                      error={paymentsRequestError}
+                      message="Payment history could not be loaded"
+                      onRetry={refetchPayments}
+                      isRetrying={paymentsFetching}
+                    />
+                  ) : (
+                    <div className="space-y-2">
+                      {payments.map(p => (
+                        <div key={p.id} className="flex items-center justify-between text-sm">
+                          <div>
+                            <p className="font-medium">{fmt(p.amount)}</p>
+                            <p className="text-xs text-muted-foreground">{p.method} · {formatDate(p.paidAt)}</p>
+                            {p.transactionId && <p className="text-xs text-muted-foreground font-mono">{p.transactionId}</p>}
+                            {p.notes && <p className="text-xs text-muted-foreground">{p.notes}</p>}
+                          </div>
+                          <CheckCircle className="w-4 h-4 text-green-500" />
                         </div>
-                        <CheckCircle className="w-4 h-4 text-green-500" />
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </Card>
               )}
 

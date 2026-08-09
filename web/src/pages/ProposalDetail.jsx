@@ -17,6 +17,7 @@ import { useToast } from '../hooks/useToast';
 import { Button, Card, LoadingState } from '../components/ui';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
+import QueryErrorState from '../components/QueryErrorState';
 
 export default function ProposalDetail() {
   const { id } = useParams();
@@ -24,7 +25,14 @@ export default function ProposalDetail() {
   const queryClient = useQueryClient();
   const toast = useToast();
 
-  const { data: proposal, isLoading } = useQuery({
+  const {
+    data: proposal,
+    isLoading,
+    isError: proposalError,
+    error: proposalRequestError,
+    refetch: refetchProposal,
+    isFetching: proposalFetching,
+  } = useQuery({
     queryKey: ['proposal', id],
     queryFn: () => api.getProposal(id),
   });
@@ -102,6 +110,17 @@ export default function ProposalDetail() {
       <div className="flex justify-center py-12">
         <LoadingState label="Loading proposal…" compact />
       </div>
+    );
+  }
+
+  if (proposalError) {
+    return (
+      <QueryErrorState
+        error={proposalRequestError}
+        message="Proposal details could not be loaded"
+        onRetry={refetchProposal}
+        isRetrying={proposalFetching}
+      />
     );
   }
 
