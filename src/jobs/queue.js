@@ -164,11 +164,16 @@ export async function setupRecurringJobs() {
     scheduledQueue.removeJobScheduler('scheduled-workflows-minutely'),
   ]);
   const deprecatedWorkflowJobs = await scheduledQueue.getJobs(['wait', 'delayed', 'failed']);
-  await Promise.all(
-    deprecatedWorkflowJobs
-      .filter((job) => job.name === 'scheduled-workflows')
-      .map((job) => job.remove()),
-  );
+  for (const job of deprecatedWorkflowJobs.filter((candidate) => candidate.name === 'scheduled-workflows')) {
+    try {
+      await job.remove();
+    } catch (error) {
+      // A previous worker may have locked the last occurrence during a rolling
+      // cutover. The compatibility processor completes it as a no-op below.
+      if (!error.message.includes('locked by another worker')) throw error;
+      console.warn(`[scheduler] Deprecated workflow job ${job.id} is active; allowing no-op completion`);
+    }
+  }
 
   // upsertJobScheduler gives every logical schedule a stable Redis identity.
   // Multiple worker replicas can run this bootstrap without creating duplicate

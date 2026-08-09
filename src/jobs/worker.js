@@ -432,6 +432,8 @@ const scheduledWorker = createWorker(
         return purgeExpiredTrashForAllOrganizations();
       case 'fleet-digest':
         return runScheduledFleetDigest(logger);
+      case 'scheduled-workflows':
+        return { skipped: true, reason: 'deprecated unmodeled workflow scheduler' };
       default:
         throw new Error(`Unknown scheduled maintenance job: ${job.name}`);
     }

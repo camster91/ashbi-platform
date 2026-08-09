@@ -12,12 +12,21 @@ import {
 
 test('scheduler bootstrap uses stable IDs and timezone-aware business schedules', async () => {
   const calls = [];
+  let lockedCleanupAttempts = 0;
   const queues = [healthQueue, escalationQueue, weeklyDigestQueue, scheduledQueue];
   for (const queue of queues) {
     queue.upsertJobScheduler = async (id, repeat, template) => {
       calls.push({ queue: queue.name, id, repeat, template });
     };
   }
+  scheduledQueue.getJobs = async () => [{
+    id: 'deprecated-active-job',
+    name: 'scheduled-workflows',
+    remove: async () => {
+      lockedCleanupAttempts += 1;
+      throw new Error('Job could not be removed because it is locked by another worker');
+    },
+  }];
 
   await setupRecurringJobs();
   await setupRecurringJobs();
@@ -26,6 +35,7 @@ test('scheduler bootstrap uses stable IDs and timezone-aware business schedules'
   const firstPass = calls.slice(0, 7);
   const secondPass = calls.slice(7);
   assert.deepEqual(secondPass, firstPass);
+  assert.equal(lockedCleanupAttempts, 2);
   assert.equal(new Set(firstPass.map(({ queue, id }) => `${queue}:${id}`)).size, 7);
 
   const names = firstPass.map(({ template }) => template.name);
