@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Ashbi encrypted production backup
+
+[Timer]
+OnCalendar=*-*-* 02:00:00 UTC
+RandomizedDelaySec=15m
+Persistent=true
+Unit=ashbi-backup.service
+
+[Install]
+WantedBy=timers.target
