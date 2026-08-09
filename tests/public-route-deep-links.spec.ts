@@ -40,3 +40,28 @@ test('every public deep link loads only its selected route chunk without overflo
 
   expect(pageErrors).toEqual([]);
 });
+
+test('reduced-motion preference suppresses utility and custom animations', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/login', { waitUntil: 'networkidle' });
+
+  const motion = await page.evaluate(() => {
+    const probe = document.createElement('div');
+    probe.className = 'animate-spin animate-pulse animate-bounce animate-shake animate-fade-in transition-all';
+    document.body.append(probe);
+    const styles = getComputedStyle(probe);
+    const result = {
+      animationName: styles.animationName,
+      opacity: styles.opacity,
+      transform: styles.transform,
+      transitionDuration: styles.transitionDuration,
+    };
+    probe.remove();
+    return result;
+  });
+
+  expect(motion.animationName).toBe('none');
+  expect(motion.opacity).toBe('1');
+  expect(motion.transform).toBe('none');
+  expect(Number.parseFloat(motion.transitionDuration)).toBeLessThanOrEqual(0.00001);
+});

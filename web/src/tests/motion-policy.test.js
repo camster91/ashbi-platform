@@ -14,10 +14,20 @@ describe('reduced-motion policy', () => {
 
   it('globally disables nonessential animation, transforms, transitions, and smooth scrolling', () => {
     const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');
-    expect(css).toContain('@media (prefers-reduced-motion: reduce)');
-    expect(css).toContain('animation-iteration-count: 1 !important');
-    expect(css).toContain('transition-duration: 0.01ms !important');
-    expect(css).toContain('scroll-behavior: auto !important');
-    expect(css).toContain('transform: none !important');
+    const reducedMotion = css.slice(
+      css.indexOf('@media (prefers-reduced-motion: reduce)'),
+      css.indexOf('/* Scrollbar styling */')
+    );
+
+    expect(reducedMotion).toContain('*,\n  *::before,\n  *::after');
+    expect(reducedMotion).toContain('animation: none !important;');
+    expect(reducedMotion).not.toContain('animation-iteration-count');
+    expect(reducedMotion).not.toContain('animation-duration');
+    expect(reducedMotion).toContain('transition-duration: 0.01ms !important;');
+    expect(reducedMotion).toContain('scroll-behavior: auto !important;');
+    expect(reducedMotion).toContain('transform: none !important;');
+    expect(reducedMotion).toMatch(
+      /\.animate-fade-in,\s*\.animate-slide-up,\s*\.animate-scale-in\s*{[^}]*opacity:\s*1;[^}]*transform:\s*none;/s
+    );
   });
 });
