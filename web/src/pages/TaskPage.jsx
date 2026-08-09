@@ -27,14 +27,34 @@ import { api } from '../lib/api';
 import { formatDate, cn } from '../lib/utils';
 import NotionEditor from '../components/NotionEditor';
 import { Button, Badge, Card, EmptyState, LoadingState } from '../components/ui';
+import QueryErrorState from '../components/QueryErrorState';
 
 // Breadcrumbs component
 function Breadcrumbs({ taskId }) {
-  const { data: breadcrumbs } = useQuery({
+  const {
+    data: breadcrumbs,
+    isError: breadcrumbsError,
+    error: breadcrumbsRequestError,
+    refetch: refetchBreadcrumbs,
+    isFetching: breadcrumbsFetching,
+  } = useQuery({
     queryKey: ['task-breadcrumbs', taskId],
     queryFn: () => api.getTaskBreadcrumbs(taskId),
     enabled: !!taskId
   });
+
+  if (breadcrumbsError) {
+    return (
+      <div className="mb-4">
+        <QueryErrorState
+          error={breadcrumbsRequestError}
+          message="Task location could not be loaded"
+          onRetry={refetchBreadcrumbs}
+          isRetrying={breadcrumbsFetching}
+        />
+      </div>
+    );
+  }
 
   if (!breadcrumbs || breadcrumbs.length === 0) return null;
 
@@ -430,7 +450,14 @@ export default function TaskPage() {
   const queryClient = useQueryClient();
   const [content, setContent] = useState([]);
 
-  const { data: task, isLoading } = useQuery({
+  const {
+    data: task,
+    isLoading,
+    isError: taskError,
+    error: taskRequestError,
+    refetch: refetchTask,
+    isFetching: taskFetching,
+  } = useQuery({
     queryKey: ['task', id],
     queryFn: () => api.getTaskPage(id),
     enabled: !!id
@@ -481,6 +508,17 @@ export default function TaskPage() {
       <div className="flex items-center justify-center h-64">
         <LoadingState label="Loading task…" compact />
       </div>
+    );
+  }
+
+  if (taskError) {
+    return (
+      <QueryErrorState
+        error={taskRequestError}
+        message="Task details could not be loaded"
+        onRetry={refetchTask}
+        isRetrying={taskFetching}
+      />
     );
   }
 

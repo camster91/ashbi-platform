@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import LoadingState from '../components/ui/LoadingState';
+import QueryErrorState from '../components/QueryErrorState';
 import { useAuth } from '../hooks/useAuth';
 import { formatRelativeTime, getHealthColor, getProjectStatusColor, getProjectStatusLabel, cn } from '../lib/utils';
 
@@ -34,12 +35,25 @@ export default function Client() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'ADMIN';
 
-  const { data: client, isLoading } = useQuery({
+  const {
+    data: client,
+    isLoading,
+    isError: clientError,
+    error: clientRequestError,
+    refetch: refetchClient,
+    isFetching: clientFetching,
+  } = useQuery({
     queryKey: ['client', id],
     queryFn: () => api.getClient(id),
   });
 
-  const { data: insights } = useQuery({
+  const {
+    data: insights,
+    isError: insightsError,
+    error: insightsRequestError,
+    refetch: refetchInsights,
+    isFetching: insightsFetching,
+  } = useQuery({
     queryKey: ['client-insights', id],
     queryFn: () => api.getClientInsights(id),
   });
@@ -49,6 +63,17 @@ export default function Client() {
       <div className="flex items-center justify-center h-64">
         <LoadingState label="Loading client…" compact />
       </div>
+    );
+  }
+
+  if (clientError) {
+    return (
+      <QueryErrorState
+        error={clientRequestError}
+        message="Client details could not be loaded"
+        onRetry={refetchClient}
+        isRetrying={clientFetching}
+      />
     );
   }
 
@@ -306,7 +331,14 @@ export default function Client() {
           </div>
 
           {/* Insights */}
-          {insights && (
+          {insightsError ? (
+            <QueryErrorState
+              error={insightsRequestError}
+              message="Client insights could not be loaded"
+              onRetry={refetchInsights}
+              isRetrying={insightsFetching}
+            />
+          ) : insights && (
             <div className="bg-card rounded-xl border border-border">
               <div className="px-4 py-3 border-b border-border">
                 <h3 className="font-semibold text-foreground">Insights</h3>

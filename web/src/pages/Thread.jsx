@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import LoadingState from '../components/ui/LoadingState';
+import QueryErrorState from '../components/QueryErrorState';
 import {
   formatDateTime,
   formatRelativeTime,
@@ -46,7 +47,14 @@ export default function Thread() {
   const [gmailReplyTo, setGmailReplyTo] = useState('');
   const [gmailDraftMeta, setGmailDraftMeta] = useState(null); // { gmailThreadId, lastMessageId }
 
-  const { data: thread, isLoading } = useQuery({
+  const {
+    data: thread,
+    isLoading,
+    isError: threadError,
+    error: threadRequestError,
+    refetch: refetchThread,
+    isFetching: threadFetching,
+  } = useQuery({
     queryKey: ['thread', id],
     queryFn: () => api.getThread(id),
   });
@@ -133,6 +141,17 @@ export default function Thread() {
       <div className="flex items-center justify-center h-64">
         <LoadingState label="Loading conversation…" compact />
       </div>
+    );
+  }
+
+  if (threadError) {
+    return (
+      <QueryErrorState
+        error={threadRequestError}
+        message="Conversation could not be loaded"
+        onRetry={refetchThread}
+        isRetrying={threadFetching}
+      />
     );
   }
 
