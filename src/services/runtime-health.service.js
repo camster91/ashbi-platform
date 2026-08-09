@@ -1,4 +1,5 @@
 import IORedis from 'ioredis';
+import { readFile } from 'node:fs/promises';
 
 import { rawPrisma } from '../config/db.js';
 import env from '../config/env.js';
@@ -7,6 +8,8 @@ import { QUEUES } from '../jobs/queue-names.js';
 const WORKER_HEARTBEAT_KEY = 'ashbi:workers:heartbeat';
 const REQUIRED_WORKER_FRESHNESS_MS = 45_000;
 const CHECK_TIMEOUT_MS = 2_500;
+const REQUIRED_BACKUP_FRESHNESS_MS = 30 * 60 * 60 * 1_000;
+const BACKUP_STATUS_PATH = process.env.BACKUP_STATUS_PATH || '/app/config/backup-status.json';
 
 let healthRedis;
 
@@ -46,6 +49,7 @@ export async function checkRuntimeHealth({
   now = Date.now(),
   alertDestinationConfigured = Boolean(env.sentryDsn || env.otlpEndpoint || env.notificationWebhookUrl),
   alertOwnerConfigured = Boolean(env.observabilityOwner),
+  readBackupStatus = () => readFile(BACKUP_STATUS_PATH, 'utf8'),
 } = {}) {
   const checks = {};
 
@@ -97,6 +101,19 @@ export async function checkRuntimeHealth({
     }
   }
 
+  try {
+    const backup = JSON.parse(await withTimeout(readBackupStatus(), 'backup status'));
+    const ageMs = now - Date.parse(backup.completedAt);
+    const fresh = backup.status === 'ok' && Number.isFinite(ageMs) && ageMs >= 0 && ageMs <= REQUIRED_BACKUP_FRESHNESS_MS;
+    checks.backup = {
+      status: fresh ? 'ok' : 'unavailable',
+      ageMs: Number.isFinite(ageMs) ? ageMs : null,
+      completedAt: typeof backup.completedAt === 'string' ? backup.completedAt : null,
+    };
+  } catch {
+    checks.backup = checkResult(false);
+  }
+
   const ready = ['database', 'redis', 'worker'].every((name) => checks[name].status === 'ok');
   const failedJobTotal = Object.values(failedJobs).reduce(
     (sum, count) => sum + (Number.isInteger(count) ? count : 0),
@@ -109,7 +126,7 @@ export async function checkRuntimeHealth({
   return {
     ready,
     status: ready ? 'ok' : 'unavailable',
-    degraded: failedJobTotal > 0 || !alerting.destinationConfigured || !alerting.ownerConfigured,
+    degraded: failedJobTotal > 0 || checks.backup.status !== 'ok' || !alerting.destinationConfigured || !alerting.ownerConfigured,
     checks,
     failedJobs,
     failedJobTotal,
@@ -126,4 +143,4 @@ export async function closeRuntimeHealth() {
   healthRedis = undefined;
 }
 
-export { REQUIRED_WORKER_FRESHNESS_MS, WORKER_HEARTBEAT_KEY };
+export { REQUIRED_BACKUP_FRESHNESS_MS, REQUIRED_WORKER_FRESHNESS_MS, WORKER_HEARTBEAT_KEY };

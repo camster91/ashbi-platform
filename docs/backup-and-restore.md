@@ -12,7 +12,7 @@ Ashbi's direct-VPS release path uses a root-owned systemd timer, not GitHub Acti
 - Access: archives and status are root-only. The public recipient is stored in `/etc/ashbi-backup`; the restore identity is outside the runtime tree and mode 0600.
 - Ownership: a named operations owner and off-host archive destination remain mandatory production-governance gates; they must not be invented in source control.
 
-The job fails non-zero for missing tools, database/container failure, invalid dump catalog, absent configuration, empty output, unsafe paths, invalid retention, or encryption failure. It writes `backups/status.json` only after the encrypted archive is complete. Monitoring must alert when the timer fails or this status becomes older than the RPO.
+The job fails non-zero for missing tools, database/container failure, invalid dump catalog, absent configuration, empty output, unsafe paths, invalid retention, or encryption failure. It writes `data/config/backup-status.json` only after the encrypted archive is complete. The API reads this mounted file and reports backup freshness without exposing archive names or checksums. A missing, invalid, or older-than-30-hour status degrades health without taking otherwise healthy dependencies offline. Monitoring must alert when the timer fails or this status becomes older than the RPO.
 
 ## Installation
 

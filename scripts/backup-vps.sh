@@ -12,7 +12,7 @@ POSTGRES_CONTAINER=${ASHBI_POSTGRES_CONTAINER:-ashbi-hub-postgres}
 DATABASE_NAME=${ASHBI_DATABASE_NAME:-ashbihub}
 DATABASE_USER=${ASHBI_DATABASE_USER:-ashbihub}
 RETENTION_DAYS=${ASHBI_BACKUP_RETENTION_DAYS:-30}
-STATUS_FILE=${ASHBI_BACKUP_STATUS_FILE:-$ROOT_DIR/backups/status.json}
+STATUS_FILE=${ASHBI_BACKUP_STATUS_FILE:-$ROOT_DIR/data/config/backup-status.json}
 
 die() { printf 'backup error: %s\n' "$*" >&2; exit 1; }
 [[ $(id -u) == 0 ]] || die 'must run as root'
@@ -21,10 +21,12 @@ die() { printf 'backup error: %s\n' "$*" >&2; exit 1; }
 [[ $RETENTION_DAYS =~ ^[0-9]+$ ]] && ((RETENTION_DAYS >= 7 && RETENTION_DAYS <= 365)) || die 'retention must be 7-365 days'
 [[ -s $RECIPIENT_FILE ]] || die "age recipient file is missing or empty: $RECIPIENT_FILE"
 [[ -f $ROOT_DIR/.env && -d $ROOT_DIR/data ]] || die 'runtime configuration or persistent data directory is missing'
+[[ $STATUS_FILE == "$ROOT_DIR"/data/config/* ]] || die 'status file must be inside the mounted configuration directory'
 for command in age docker pg_restore sha256sum tar flock; do command -v "$command" >/dev/null || die "missing command: $command"; done
 docker inspect "$POSTGRES_CONTAINER" >/dev/null 2>&1 || die 'PostgreSQL container is unavailable'
 
 mkdir -p "$BACKUP_DIR"
+mkdir -p "$(dirname "$STATUS_FILE")"
 chmod 0700 "$ROOT_DIR/backups" "$BACKUP_DIR"
 exec 9>"$ROOT_DIR/backups/backup.lock"
 flock -n 9 || die 'another backup is already running'
@@ -66,4 +68,3 @@ mv "$status_tmp" "$STATUS_FILE"
 # Delete only successfully named encrypted archives after a new archive exists.
 find "$BACKUP_DIR" -maxdepth 1 -type f -name 'ashbi-full-????????_??????-???????.tar.age' -mtime "+$RETENTION_DAYS" -delete
 printf 'BACKUP_ARCHIVE=%s\nBACKUP_SHA256=%s\nBACKUP_BYTES=%s\n' "$archive" "$sha256" "$bytes"
-

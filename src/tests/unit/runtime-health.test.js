@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { checkRuntimeHealth, WORKER_HEARTBEAT_KEY } from '../../services/runtime-health.service.js';
+import { checkRuntimeHealth, REQUIRED_BACKUP_FRESHNESS_MS, WORKER_HEARTBEAT_KEY } from '../../services/runtime-health.service.js';
 import { QUEUES } from '../../jobs/queue-names.js';
 
 function healthyDependencies({ failed = {}, heartbeat = {} } = {}) {
@@ -10,6 +10,7 @@ function healthyDependencies({ failed = {}, heartbeat = {} } = {}) {
     now,
     alertDestinationConfigured: true,
     alertOwnerConfigured: true,
+    readBackupStatus: async () => JSON.stringify({ status: 'ok', completedAt: new Date(now - 60_000).toISOString() }),
     db: { $queryRawUnsafe: async () => [{ '?column?': 1 }] },
     redis: {
       status: 'ready',
@@ -33,6 +34,7 @@ test('readiness proves database, Redis, worker freshness, and release identity',
   assert.equal(report.ready, true);
   assert.equal(report.status, 'ok');
   assert.equal(report.degraded, false);
+  assert.equal(report.checks.backup.status, 'ok');
   assert.deepEqual(Object.keys(report.failedJobs).sort(), Object.values(QUEUES).sort());
 });
 
@@ -62,4 +64,28 @@ test('retained job failures produce a degraded but dependency-ready report', asy
   assert.equal(report.degraded, true);
   assert.equal(report.failedJobTotal, 3);
   assert.equal(report.failedJobs.embedding, 3);
+});
+
+test('missing, invalid, or stale backups degrade health without taking dependencies offline', async () => {
+  const missing = healthyDependencies();
+  missing.readBackupStatus = async () => { throw new Error('missing'); };
+  const missingReport = await checkRuntimeHealth({ ...missing, revision: 'release-1' });
+  assert.equal(missingReport.ready, true);
+  assert.equal(missingReport.degraded, true);
+  assert.equal(missingReport.checks.backup.status, 'unavailable');
+
+  const stale = healthyDependencies();
+  stale.readBackupStatus = async () => JSON.stringify({
+    status: 'ok',
+    completedAt: new Date(stale.now - REQUIRED_BACKUP_FRESHNESS_MS - 1).toISOString(),
+    archive: 'must-not-be-exposed.tar.age',
+    sha256: 'must-not-be-exposed',
+  });
+  const staleReport = await checkRuntimeHealth({ ...stale, revision: 'release-1' });
+  assert.equal(staleReport.ready, true);
+  assert.equal(staleReport.degraded, true);
+  assert.equal(staleReport.checks.backup.status, 'unavailable');
+  assert.equal(staleReport.checks.backup.ageMs, REQUIRED_BACKUP_FRESHNESS_MS + 1);
+  assert.equal('archive' in staleReport.checks.backup, false);
+  assert.equal('sha256' in staleReport.checks.backup, false);
 });

@@ -15,6 +15,7 @@ test('production backup is encrypted, atomic, locked, and validates the database
   assert.match(backup, /mv "\$archive\.tmp" "\$archive"/);
   assert.match(backup, /chmod 0600/);
   assert.match(backup, /status":"ok"/);
+  assert.match(backup, /data\/config\/backup-status\.json/);
 });
 
 test('backup includes database, persistent files, runtime configuration, and bounded retention', () => {
