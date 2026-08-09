@@ -801,10 +801,14 @@ function ProjectDetail({ projectId, token, onBack }) {
       {workflowError && <p role="alert" className="cp-alert cp-alert--red cp-error">{workflowError}</p>}
 
       {/* Detail tabs */}
-      <div style={{ display: 'flex', gap: '0.25rem', borderBottom: `2px solid ${BRAND.border}` }}>
+      <div role="tablist" aria-label="Project detail sections" style={{ display: 'flex', gap: '0.25rem', borderBottom: `2px solid ${BRAND.border}` }}>
         {detailTabs.map(tab => (
           <button
             key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={activeView === tab.id}
+            className="cp-tab"
             onClick={() => setActiveView(tab.id)}
             style={{
               padding: '0.625rem 1rem',
@@ -1482,10 +1486,14 @@ function PortalDashboard({ token }) {
         background: BRAND.white, borderBottom: `2px solid ${BRAND.border}`,
         padding: '0 1.5rem', position: 'sticky', top: 56, zIndex: 10
       }}>
-        <div style={{ maxWidth: 960, margin: '0 auto', display: 'flex', gap: '0.25rem', overflowX: 'auto' }}>
+        <div role="tablist" aria-label="Portal sections" style={{ maxWidth: 960, margin: '0 auto', display: 'flex', gap: '0.25rem', overflowX: 'auto' }}>
           {tabs.map(tab => (
             <button
               key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              className="cp-tab"
               onClick={() => { setActiveTab(tab.id); if (tab.id !== 'projects') setSelectedProject(null); }}
               style={{
                 padding: '0.75rem 1rem', fontSize: '0.85rem', fontWeight: activeTab === tab.id ? 600 : 400,
@@ -1600,10 +1608,11 @@ const globalStyles = `
   .cp-error { color: #b91c1c; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
   .cp-link { color: ${BRAND.primary}; cursor: pointer; text-decoration: none; font-weight: 500; background: none; border: none; font-size: inherit; font-family: inherit; }
   .cp-link:hover { text-decoration: underline; }
-  .cp-link:focus-visible, .cp-input:focus-visible, .cp-btn-primary:focus-visible, .cp-btn-secondary:focus-visible,
-  .cp-btn-danger:focus-visible, .cp-btn-ghost:focus-visible, .cp-card--interactive:focus-visible {
-    outline: 3px solid ${BRAND.primary}; outline-offset: 2px;
-  }
+   .cp-link:focus-visible, .cp-input:focus-visible, .cp-btn-primary:focus-visible, .cp-btn-secondary:focus-visible,
+   .cp-btn-danger:focus-visible, .cp-btn-ghost:focus-visible, .cp-card--interactive:focus-visible {
+     outline: 3px solid ${BRAND.primary}; outline-offset: 2px;
+   }
+   .cp-tab:focus-visible { outline: 3px solid ${BRAND.primary}; outline-offset: -3px; }
 
   .cp-input {
     width: 100%; padding: 0.625rem 0.875rem; border: 1.5px solid ${BRAND.border}; border-radius: 10px;
