@@ -18,7 +18,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { withSoftDelete } from '../services/soft-delete.service.js';
 
 // Prisma 7: lazy proxy to defer PrismaClient construction
-const globalForPrisma = /** @type {{ prisma?: PrismaClient }} */ (globalThis);
+const globalForPrisma = /** @type {{ ashbiRawPrisma?: PrismaClient }} */ (globalThis);
 const buildBase = () => new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
   log: process.env.NODE_ENV === 'development'
@@ -27,19 +27,19 @@ const buildBase = () => new PrismaClient({
 });
 const base = new Proxy({}, {
   get(_target, prop) {
-    const client = (globalForPrisma.prisma ??= buildBase());
+    const client = (globalForPrisma.ashbiRawPrisma ??= buildBase());
     const value = /** @type {any} */ (client)[prop];
     return typeof value === 'function' ? value.bind(client) : value;
   },
 });
 
-// Lazy global client using the same policy as request and job scoping.
-const globalForExtended = /** @type {{ prisma?: ReturnType<typeof withSoftDelete> }} */ (globalThis);
+// The policy proxy is cheap to create and delegates to the lazy raw client.
+// Keep it module-local so it can never replace its own underlying global cache.
+const softDeletePrisma = withSoftDelete(base);
 export const prisma = new Proxy({}, {
   get(_target, prop) {
-    const client = (globalForExtended.prisma ??= withSoftDelete(base));
-    const value = /** @type {any} */ (client)[prop];
-    return typeof value === 'function' ? value.bind(client) : value;
+    const value = /** @type {any} */ (softDeletePrisma)[prop];
+    return typeof value === 'function' ? value.bind(softDeletePrisma) : value;
   },
 });
 // Also export base for admin ops that need to see deleted records

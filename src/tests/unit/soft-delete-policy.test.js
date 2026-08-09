@@ -78,3 +78,10 @@ test('callback transactions retain the soft-delete policy', async () => {
   await prisma.$transaction((tx) => tx.note.findMany());
   assert.deepEqual(calls[0], { where: { deletedAt: null }, take: 100 });
 });
+
+test('the production lazy client keeps raw and policy caches separate', async () => {
+  process.env.DATABASE_URL ||= 'postgresql://test:test@127.0.0.1:5432/test';
+  const { prisma } = await import('../../config/db.js');
+  assert.equal(typeof prisma.note.findMany, 'function');
+  assert.equal(typeof prisma.note.delete, 'function');
+});
