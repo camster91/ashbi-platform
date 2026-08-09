@@ -18,5 +18,7 @@ describe('task page accessibility contract', () => {
     expect(source).toContain('aria-label="Go back to the previous page"');
     expect(source).toContain('aria-label={`Open subpage ${subpage.title}`}');
     expect(source).toContain('type="button"');
+    expect(source).toContain('<Button type="button" size="sm" onClick={onCreateSubpage}');
+    expect(source).toContain('<Button type="button" size="sm" variant="outline" onClick={onCreateSubpage}');
   });
 });

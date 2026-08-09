@@ -321,7 +321,7 @@ function SubpagesList({ subpages, taskId, onCreateSubpage }) {
       <div className="mt-8 pt-8 border-t border-border">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-heading font-semibold text-foreground">Subpages</h3>
-          <Button size="sm" onClick={onCreateSubpage} leftIcon={<Plus className="w-4 h-4" />}>
+          <Button type="button" size="sm" onClick={onCreateSubpage} leftIcon={<Plus className="w-4 h-4" />}>
             Add subpage
           </Button>
         </div>
@@ -342,7 +342,7 @@ function SubpagesList({ subpages, taskId, onCreateSubpage }) {
         <h3 className="font-heading font-semibold text-foreground">
           Subpages ({subpages.length})
         </h3>
-        <Button size="sm" variant="outline" onClick={onCreateSubpage} leftIcon={<Plus className="w-4 h-4" />}>
+        <Button type="button" size="sm" variant="outline" onClick={onCreateSubpage} leftIcon={<Plus className="w-4 h-4" />}>
           Add subpage
         </Button>
       </div>
