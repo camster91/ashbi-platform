@@ -12,6 +12,7 @@ import {
   Activity, Zap, Database, Code2
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
+import SharedBadge from '../components/ui/Badge';
 import { api } from '../lib/api';
 
 const REFRESH_INTERVAL = 60_000; // 60 seconds
@@ -33,8 +34,13 @@ const healthBorder = {
 
 function StatusDot({ health = 'unknown', size = 'sm', animate = false }) {
   const sizes = { xs: 'w-1.5 h-1.5', sm: 'w-2.5 h-2.5', md: 'w-3.5 h-3.5' };
+  const labels = { green: 'Healthy', yellow: 'Warning', red: 'Critical', unknown: 'Unknown' };
   return (
-    <span className={`inline-block rounded-full flex-shrink-0 ${sizes[size]} ${healthClasses[health] || healthClasses.unknown} ${animate && health === 'red' ? 'animate-pulse' : ''}`} />
+    <span
+      role="img"
+      aria-label={`${labels[health] || labels.unknown} status`}
+      className={`inline-block rounded-full flex-shrink-0 ${sizes[size] || sizes.sm} ${healthClasses[health] || healthClasses.unknown} ${animate && health === 'red' ? 'animate-pulse motion-reduce:animate-none' : ''}`}
+    />
   );
 }
 
@@ -50,14 +56,22 @@ function SectionCard({ title, icon: Icon, health, children, loading, actions, co
             {health && <StatusDot health={health} size="md" animate={health === 'red'} />}
             <Icon className="w-4 h-4 text-muted-foreground" />
             <CardTitle className="text-base">{title}</CardTitle>
-            {loading && <RefreshCw className="w-3 h-3 animate-spin text-muted-foreground" />}
+            {loading && (
+              <span role="status" className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                <RefreshCw aria-hidden="true" className="w-3 h-3 animate-spin motion-reduce:animate-none" />
+                <span className="sr-only">Refreshing {title}</span>
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {actions}
             {collapsible && (
               <button
+                type="button"
                 onClick={() => setCollapsed(c => !c)}
-                className="text-muted-foreground hover:text-foreground p-1"
+                aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${title}`}
+                aria-expanded={!collapsed}
+                className="min-h-11 min-w-11 inline-flex items-center justify-center text-muted-foreground hover:text-foreground"
               >
                 {collapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
               </button>
@@ -70,19 +84,9 @@ function SectionCard({ title, icon: Icon, health, children, loading, actions, co
   );
 }
 
-function Badge({ children, variant = 'default' }) {
-  const styles = {
-    default: 'bg-muted text-muted-foreground',
-    green: 'bg-green-500/10 text-green-600 dark:text-green-400',
-    yellow: 'bg-yellow-400/10 text-yellow-600 dark:text-yellow-400',
-    red: 'bg-red-500/10 text-red-600 dark:text-red-400',
-    blue: 'bg-blue-500/10 text-blue-600 dark:text-blue-400',
-  };
-  return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${styles[variant]}`}>
-      {children}
-    </span>
-  );
+function CommandBadge({ children, variant = 'default' }) {
+  const colors = { default: 'default', green: 'success', yellow: 'warning', red: 'danger', blue: 'info' };
+  return <SharedBadge variant="subtle" color={colors[variant] || 'default'}>{children}</SharedBadge>;
 }
 
 function TimeAgo({ date }) {
@@ -167,9 +171,9 @@ function VpsPanel({ data, loading, onRefresh, onRestart }) {
       {data && !data.error && (
         <>
           <div className="flex gap-3 mb-3 text-sm flex-wrap">
-            <Badge variant="green">✓ {data.running ?? 0} running</Badge>
-            {data.stopped > 0 && <Badge variant="yellow">⏸ {data.stopped} stopped</Badge>}
-            {data.errored > 0 && <Badge variant="red">✕ {data.errored} errored</Badge>}
+            <CommandBadge variant="green">✓ {data.running ?? 0} running</CommandBadge>
+            {data.stopped > 0 && <CommandBadge variant="yellow">⏸ {data.stopped} stopped</CommandBadge>}
+            {data.errored > 0 && <CommandBadge variant="red">✕ {data.errored} errored</CommandBadge>}
           </div>
           <div className="space-y-1.5">
             {data.apps?.map(app => (
@@ -227,9 +231,9 @@ function SitesPanel({ data, loading, onRefresh }) {
       {data?.error && <p className="text-red-400 text-sm">{data.error}</p>}
       {data?.summary && (
         <div className="flex gap-3 mb-3 flex-wrap">
-          <Badge variant="green">✓ {data.summary.healthy} up</Badge>
-          {data.summary.warning > 0 && <Badge variant="yellow">⚠ {data.summary.warning} warn</Badge>}
-          {data.summary.critical > 0 && <Badge variant="red">✕ {data.summary.critical} down</Badge>}
+          <CommandBadge variant="green">✓ {data.summary.healthy} up</CommandBadge>
+          {data.summary.warning > 0 && <CommandBadge variant="yellow">⚠ {data.summary.warning} warn</CommandBadge>}
+          {data.summary.critical > 0 && <CommandBadge variant="red">✕ {data.summary.critical} down</CommandBadge>}
         </div>
       )}
       <div className="space-y-1.5">
@@ -249,9 +253,9 @@ function SitesPanel({ data, loading, onRefresh }) {
             <div className="flex items-center gap-2 text-muted-foreground text-xs">
               {site.latencyMs && <span>{site.latencyMs}ms</span>}
               {site.status && typeof site.status === 'number' && (
-                <Badge variant={site.status >= 500 ? 'red' : site.status >= 400 ? 'yellow' : 'green'}>
+                <CommandBadge variant={site.status >= 500 ? 'red' : site.status >= 400 ? 'yellow' : 'green'}>
                   {site.status}
-                </Badge>
+                </CommandBadge>
               )}
             </div>
           </div>
@@ -320,7 +324,7 @@ function AgentsPanel({ data, loading, onRefresh, onRunAgent }) {
           <p className="text-xs text-muted-foreground mb-1.5">Recent logs:</p>
           <div className="flex flex-wrap gap-1">
             {data.recentLogs.map(log => (
-              <Badge key={log.date} variant="default">{log.date}</Badge>
+              <CommandBadge key={log.date} variant="default">{log.date}</CommandBadge>
             ))}
           </div>
         </div>
@@ -346,7 +350,7 @@ function TasksPanel({ data, loading }) {
           <span className="text-muted-foreground">Today: <strong>{data.todayCount ?? 0}</strong></span>
           <span className="text-muted-foreground">In Progress: <strong>{data.inProgressCount ?? 0}</strong></span>
           {data.overdueCount > 0 && (
-            <Badge variant="red">⚠ {data.overdueCount} overdue</Badge>
+            <CommandBadge variant="red">⚠ {data.overdueCount} overdue</CommandBadge>
           )}
         </div>
       )}
@@ -362,7 +366,7 @@ function TasksPanel({ data, loading }) {
               {task.project && <p className="text-xs text-muted-foreground">{task.project}</p>}
             </div>
             <div className="flex items-center gap-1 ml-2 flex-shrink-0">
-              <Badge variant={priorityColor[task.priority] || 'default'}>{task.priority}</Badge>
+              <CommandBadge variant={priorityColor[task.priority] || 'default'}>{task.priority}</CommandBadge>
             </div>
           </div>
         ))}

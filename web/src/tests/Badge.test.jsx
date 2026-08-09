@@ -22,12 +22,20 @@ describe('Badge Component', () => {
     const { rerender } = render(<Badge color="success" variant="solid">Success Solid</Badge>);
     let badge = screen.getByText('Success Solid');
     expect(badge.className).toContain('bg-success');
-    expect(badge.className).toContain('text-white');
+    expect(badge.className).toContain('text-success-foreground');
 
     rerender(<Badge color="danger" variant="outline">Danger Outline</Badge>);
     badge = screen.getByText('Danger Outline');
     expect(badge.className).toContain('border-destructive');
     expect(badge.className).toContain('border-2');
+  });
+
+  it('falls back safely and keeps decorative dots out of the accessibility tree', () => {
+    const { container } = render(<Badge color="unknown" variant="unknown" size="unknown" dot>Fallback</Badge>);
+    const badge = screen.getByText('Fallback');
+    expect(badge.className).toContain('bg-muted');
+    expect(badge.className).toContain('px-2');
+    expect(container.querySelector('.w-1\\.5')).toHaveAttribute('aria-hidden', 'true');
   });
 
   it('applies size classes', () => {

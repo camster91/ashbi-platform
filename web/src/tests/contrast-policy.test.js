@@ -64,6 +64,15 @@ describe('WCAG contrast policy', () => {
     expect(ratio(hsl(250, 15, 45), hsl(250, 39, 10))).toBeGreaterThanOrEqual(3);
   });
 
+  it('semantic solid statuses meet 4.5:1 in light and dark themes', () => {
+    expect(ratio(white, hsl(142, 72, 28))).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(white, hsl(32, 95, 32))).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(white, hsl(199, 85, 30))).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(white, hsl(142, 70, 30))).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(hsl(250, 39, 10), hsl(38, 92, 58))).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(hsl(250, 39, 10), hsl(199, 80, 42))).toBeGreaterThanOrEqual(4.5);
+  });
+
   it('keeps inaccessible legacy portal overrides out and defines visible focus', () => {
     const portal = readFileSync(resolve(process.cwd(), 'src/pages/ClientPortal.jsx'), 'utf8');
     const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');

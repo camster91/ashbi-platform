@@ -10,49 +10,42 @@ const Badge = forwardRef(({
   className,
   ...props
 }, ref) => {
-  const variants = {
-    default: 'bg-muted text-muted-foreground',
-    outline: 'border-2 bg-transparent',
-    subtle: 'bg-opacity-10',
-    solid: 'text-white',
-  };
-
   const colors = {
     default: {
       default: 'bg-muted text-muted-foreground',
       outline: 'border-muted-foreground text-muted-foreground',
       subtle: 'bg-muted text-muted-foreground',
-      solid: 'bg-muted-foreground text-white',
+      solid: 'bg-muted-foreground text-background',
     },
     primary: {
       default: 'bg-primary text-primary-foreground',
       outline: 'border-primary text-primary',
       subtle: 'bg-primary/10 text-primary',
-      solid: 'bg-primary text-white',
+      solid: 'bg-primary text-primary-foreground',
     },
     success: {
       default: 'bg-success text-success-foreground',
       outline: 'border-success text-success',
       subtle: 'bg-success/10 text-success',
-      solid: 'bg-success text-white',
+      solid: 'bg-success text-success-foreground',
     },
     warning: {
       default: 'bg-warning text-warning-foreground',
       outline: 'border-warning text-warning',
       subtle: 'bg-warning/10 text-warning',
-      solid: 'bg-warning text-white',
+      solid: 'bg-warning text-warning-foreground',
     },
     danger: {
       default: 'bg-destructive text-destructive-foreground',
       outline: 'border-destructive text-destructive',
       subtle: 'bg-destructive/10 text-destructive',
-      solid: 'bg-destructive text-white',
+      solid: 'bg-destructive text-destructive-foreground',
     },
     info: {
       default: 'bg-info text-info-foreground',
       outline: 'border-info text-info',
       subtle: 'bg-info/10 text-info',
-      solid: 'bg-info text-white',
+      solid: 'bg-info text-info-foreground',
     },
   };
 
@@ -77,15 +70,15 @@ const Badge = forwardRef(({
       ref={ref}
       className={cn(
         'inline-flex items-center gap-1.5 font-medium rounded-full',
-        sizes[size],
-        colors[color][variant],
+        sizes[size] || sizes.sm,
+        (colors[color] || colors.default)[variant] || colors.default.default,
         variant === 'outline' && 'border-2',
         className
       )}
       {...props}
     >
       {dot && (
-        <span className={cn('w-1.5 h-1.5 rounded-full', dotColors[color])} />
+        <span aria-hidden="true" className={cn('w-1.5 h-1.5 rounded-full', dotColors[color] || dotColors.default)} />
       )}
       {children}
     </span>

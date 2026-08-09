@@ -39,11 +39,11 @@
     --radius: 0.625rem;
 
     /* Status Colors */
-    --success: 142 76% 36%;
+    --success: 142 72% 28%;
     --success-foreground: 0 0% 100%;
-    --warning: 38 92% 50%;
+    --warning: 32 95% 32%;
     --warning-foreground: 0 0% 100%;
-    --info: 199 89% 48%;
+    --info: 199 85% 30%;
     --info-foreground: 0 0% 100%;
 
     /* Priority Colors */
@@ -90,10 +90,12 @@
     --destructive-foreground: 48 33% 97%;
 
     /* Status colours */
-    --success: 142 70% 32%;
+    --success: 142 70% 30%;
     --success-foreground: 0 0% 100%;
     --warning: 38 92% 58%;
     --warning-foreground: 250 39% 10%;
+    --info: 199 80% 42%;
+    --info-foreground: 250 39% 10%;
 
     /* Borders & Inputs */
     --border: 250 15% 45%;
