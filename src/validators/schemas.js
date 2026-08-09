@@ -1580,6 +1580,10 @@ export const timeEntryCreateNewSchema = timeEntryCreateSchema; // alias
 
 export const timeEntryUpdateNewSchema = timeEntryUpdateSchema; // alias
 
+export const timesheetRejectSchema = z.object({
+  reason: z.string().trim().min(1).max(2_000),
+});
+
 export const webhookEmailTestSchema = z.object({
   to: z.string().email().max(255),
   subject: z.string().min(1).max(500).default('Test email from Hub'),

@@ -1500,6 +1500,7 @@ export const api = {
     return request(`/time-entries/timesheets/weekly${query}`);
   },
   approveTimesheetEntry: (id) => request(`/time-entries/timesheets/${id}/approve`, { method: 'PATCH' }),
+  rejectTimesheetEntry: (id, reason) => request(`/time-entries/timesheets/${id}/reject`, { method: 'PATCH', body: { reason } }),
 
   // ===== AUTOSAVE DRAFT =====
   saveDraft: (entity, id, data, expectedRevision, baseUpdatedAt) =>

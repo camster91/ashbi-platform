@@ -1,6 +1,6 @@
 // Time Tracking routes
 
-import { validateBody, timeEntryCreateNewSchema, timeEntryUpdateNewSchema } from '../validators/schemas.js';
+import { validateBody, timeEntryCreateNewSchema, timeEntryUpdateNewSchema, timesheetRejectSchema } from '../validators/schemas.js';
 
 export default async function timeRoutes(fastify) {
   // Get time entries for a project
@@ -366,9 +366,41 @@ export default async function timeRoutes(fastify) {
 
     const entry = await request.prisma.timeEntry.update({
       where: { id },
-      data: { approvedById: request.user.id }
+      data: {
+        reviewStatus: 'APPROVED',
+        reviewedAt: new Date(),
+        reviewedById: request.user.id,
+        rejectionReason: null
+      }
     });
 
     return entry;
+  });
+
+  // Reject a timesheet entry
+  fastify.patch('/timesheets/:id/reject', {
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(timesheetRejectSchema)
+  }, async (request, reply) => {
+    if (request.user.role !== 'ADMIN') {
+      return reply.status(403).send({ error: 'Admin only' });
+    }
+
+    const reason = typeof request.body?.reason === 'string' ? request.body.reason.trim() : '';
+    if (!reason) return reply.status(400).send({ error: 'Rejection reason is required' });
+
+    const { id } = request.params;
+    const existing = await request.prisma.timeEntry.findUnique({ where: { id } });
+    if (!existing) return reply.status(404).send({ error: 'Time entry not found' });
+
+    return request.prisma.timeEntry.update({
+      where: { id },
+      data: {
+        reviewStatus: 'REJECTED',
+        reviewedAt: new Date(),
+        reviewedById: request.user.id,
+        rejectionReason: reason
+      }
+    });
   });
 }

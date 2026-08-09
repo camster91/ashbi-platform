@@ -630,6 +630,10 @@ model TimeEntry {
   source      String    @default("MANUAL")
   invoiced    Boolean   @default(false) // Has this been included in an invoice?
   invoiceId   String? // Link to invoice if billed
+  reviewStatus   String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  reviewedAt     DateTime?
+  reviewedById   String?
+  rejectionReason String?
   taskId      String?
   projectId   String
   userId      String
@@ -647,6 +651,7 @@ model TimeEntry {
   @@index([projectId])
   @@index([userId])
   @@index([invoiceId])
+  @@index([reviewStatus])
   @@index([userId, date])
   @@map("time_entries")
 }

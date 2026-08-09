@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useToast } from '../hooks/useToast';
+import { useAuth } from '../hooks/useAuth';
 import { Card, Button, LoadingState } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
 
@@ -45,6 +46,8 @@ function formatWeekRange(weekStart) {
 export default function Timesheets() {
   const queryClient = useQueryClient();
   const toast = useToast();
+  const { user } = useAuth();
+  const canReview = user?.role === 'ADMIN';
 
   const [weekOffset, setWeekOffset] = useState(0);
   const [expandedCell, setExpandedCell] = useState(null);
@@ -79,7 +82,7 @@ export default function Timesheets() {
   });
 
   const rejectMutation = useMutation({
-    mutationFn: (id) => api.approveTimesheetEntry(id),
+    mutationFn: ({ id, reason }) => api.rejectTimesheetEntry(id, reason),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['weekly-timesheet'] });
       toast.success('Entry rejected');
@@ -308,9 +311,10 @@ export default function Timesheets() {
                                         key={entry.id}
                                         entry={entry}
                                         onApprove={() => approveMutation.mutate(entry.id)}
-                                        onReject={() => rejectMutation.mutate(entry.id)}
+                                        onReject={(reason) => rejectMutation.mutate({ id: entry.id, reason })}
                                         isApproving={approveMutation.isPending}
                                         isRejecting={rejectMutation.isPending}
+                                        canReview={canReview}
                                       />
                                     ))}
                                   </div>
@@ -393,9 +397,13 @@ export default function Timesheets() {
 
 /* ─── Entry detail sub-component ─── */
 
-function EntryDetail({ entry, onApprove, onReject, isApproving, isRejecting }) {
+function EntryDetail({ entry, onApprove, onReject, isApproving, isRejecting, canReview }) {
   const hours = formatHours(entry.duration);
   const isBillable = entry.billable;
+  const [showReject, setShowReject] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const isApproved = entry.reviewStatus === 'APPROVED';
+  const isRejected = entry.reviewStatus === 'REJECTED';
 
   return (
     <div className="px-2 py-1.5 rounded-md bg-background border border-border text-[11px] leading-snug space-y-1">
@@ -422,7 +430,47 @@ function EntryDetail({ entry, onApprove, onReject, isApproving, isRejecting }) {
         </div>
       </div>
 
-      {/* Approve / Reject */}
+      {(isApproved || isRejected) ? (
+        <div className="pt-1 border-t border-border">
+          <span className={`text-[10px] font-semibold ${isApproved ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
+            {isApproved ? 'Approved' : 'Rejected'}
+          </span>
+          {isRejected && entry.rejectionReason && (
+            <p className="mt-0.5 text-[10px] text-muted-foreground">{entry.rejectionReason}</p>
+          )}
+        </div>
+      ) : !canReview ? (
+        <div className="pt-1 border-t border-border text-[10px] font-medium text-muted-foreground">Pending review</div>
+      ) : showReject ? (
+        <form
+          className="space-y-1.5 pt-1 border-t border-border"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (rejectionReason.trim()) onReject(rejectionReason.trim());
+          }}
+        >
+          <label htmlFor={`timesheet-rejection-${entry.id}`} className="block text-[10px] font-medium text-foreground">
+            Rejection reason
+          </label>
+          <textarea
+            id={`timesheet-rejection-${entry.id}`}
+            value={rejectionReason}
+            onChange={(event) => setRejectionReason(event.target.value)}
+            rows={2}
+            required
+            disabled={isRejecting}
+            className="w-full rounded border border-border bg-background px-2 py-1 text-[11px] text-foreground"
+          />
+          <div className="flex gap-1.5">
+            <button type="submit" disabled={!rejectionReason.trim() || isRejecting} className="rounded bg-red-600 px-2 py-1 text-[10px] font-medium text-white disabled:opacity-50">
+              {isRejecting ? 'Rejecting…' : 'Confirm rejection'}
+            </button>
+            <button type="button" onClick={() => { setShowReject(false); setRejectionReason(''); }} disabled={isRejecting} className="rounded px-2 py-1 text-[10px] text-muted-foreground hover:bg-muted">
+              Cancel
+            </button>
+          </div>
+        </form>
+      ) : (
       <div className="flex items-center gap-1.5 pt-1 border-t border-border">
         <button
           onClick={onApprove}
@@ -432,13 +480,14 @@ function EntryDetail({ entry, onApprove, onReject, isApproving, isRejecting }) {
           <CheckCircle2 className="w-2.5 h-2.5" /> Approve
         </button>
         <button
-          onClick={onReject}
+          onClick={() => setShowReject(true)}
           disabled={isRejecting}
           className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium rounded bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50 transition-colors disabled:opacity-50"
         >
           <XCircle className="w-2.5 h-2.5" /> Reject
         </button>
       </div>
+      )}
     </div>
   );
 }
