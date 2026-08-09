@@ -13,6 +13,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import { Button, Card, LoadingState } from '../components/ui';
 import Modal, { ModalFooter } from '../components/Modal';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 const HST_RATE = 13;
 const INITIAL_PAYMENT_FORM = { paymentMethod: 'BANK', paymentNotes: '', transactionId: '' };
@@ -47,6 +48,7 @@ export default function InvoiceDetail() {
   const [showMarkPaid, setShowMarkPaid] = useState(false);
   const [payForm, setPayForm] = useState(INITIAL_PAYMENT_FORM);
   const [showPdf, setShowPdf] = useState(false);
+  const [showVoidConfirm, setShowVoidConfirm] = useState(false);
   const pdfRef = useRef(null);
 
   const { data: invoice, isLoading } = useQuery({
@@ -105,6 +107,7 @@ export default function InvoiceDetail() {
   const deleteMutation = useMutation({
     mutationFn: () => api.deleteInvoice(id),
     onSuccess: (result) => {
+      setShowVoidConfirm(false);
       const duration = Math.max(1000, new Date(result.undoExpiresAt).getTime() - Date.now());
       toast.success({
         title: `${invoice.invoiceNumber} voided`,
@@ -328,7 +331,7 @@ export default function InvoiceDetail() {
           )}
           {isAdmin && !isPaid && (
             <button
-              onClick={() => window.confirm(`Void ${invoice.invoiceNumber}?`) && deleteMutation.mutate()}
+              onClick={() => { deleteMutation.reset(); setShowVoidConfirm(true); }}
               className="p-1.5 text-muted-foreground hover:text-destructive rounded" title="Void invoice">
               <Trash2 className="w-4 h-4" />
             </button>
@@ -360,7 +363,7 @@ export default function InvoiceDetail() {
             Print
           </Button>
           {isAdmin && !isPaid && (
-            <Button variant="ghost" size="sm" leftIcon={<Trash2 className="w-4 h-4" />} onClick={() => window.confirm(`Void ${invoice.invoiceNumber}?`) && deleteMutation.mutate()} className="text-destructive">
+            <Button variant="ghost" size="sm" leftIcon={<Trash2 className="w-4 h-4" />} onClick={() => { deleteMutation.reset(); setShowVoidConfirm(true); }} className="text-destructive">
               Void
             </Button>
           )}
@@ -862,6 +865,16 @@ export default function InvoiceDetail() {
           </ModalFooter>
         </form>
       </Modal>
+      <ConfirmDialog
+        isOpen={showVoidConfirm}
+        title="Void invoice"
+        description={`Void ${invoice.invoiceNumber}? You can undo this action for 10 seconds.`}
+        confirmLabel="Void invoice"
+        onConfirm={() => deleteMutation.mutate()}
+        onCancel={() => { deleteMutation.reset(); setShowVoidConfirm(false); }}
+        pending={deleteMutation.isPending}
+        error={deleteMutation.error?.message}
+      />
     </div>
   );
 }

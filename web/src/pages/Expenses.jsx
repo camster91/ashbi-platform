@@ -9,6 +9,7 @@ import { Button, Card } from '../components/ui';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 import { useToast } from '../hooks/useToast';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 const CATEGORIES = [
   { value: 'OFFICE', label: 'Office' },
@@ -61,6 +62,7 @@ export default function Expenses() {
   const [form, setForm] = useState({ ...emptyForm });
   const [receiptFile, setReceiptFile] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [expenseToDelete, setExpenseToDelete] = useState(null);
   const draftKey = editingId || 'new';
   const formDraft = useAutosave('expense', draftKey, form);
 
@@ -126,6 +128,7 @@ export default function Expenses() {
   const deleteMutation = useMutation({
     mutationFn: (id) => api.deleteExpense(id),
     onSuccess: (result, id) => {
+      setExpenseToDelete(null);
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
       queryClient.invalidateQueries({ queryKey: ['expense-summary'] });
       const description = expenseData.expenses.find((expense) => expense.id === id)?.description || 'Expense';
@@ -608,11 +611,7 @@ export default function Expenses() {
                           <Pencil className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => {
-                            if (window.confirm('Delete this expense?')) {
-                              deleteMutation.mutate(expense.id);
-                            }
-                          }}
+                          onClick={() => { deleteMutation.reset(); setExpenseToDelete(expense); }}
                           className="p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors text-muted-foreground hover:text-red-600"
                           title="Delete"
                         >
@@ -627,6 +626,16 @@ export default function Expenses() {
           </div>
         )}
       </Card>
+      <ConfirmDialog
+        isOpen={Boolean(expenseToDelete)}
+        title="Delete expense"
+        description={expenseToDelete ? `Delete “${expenseToDelete.description || 'this expense'}”? You can undo this action for 10 seconds.` : ''}
+        confirmLabel="Delete expense"
+        onConfirm={() => expenseToDelete && deleteMutation.mutate(expenseToDelete.id)}
+        onCancel={() => { deleteMutation.reset(); setExpenseToDelete(null); }}
+        pending={deleteMutation.isPending}
+        error={deleteMutation.error?.message}
+      />
     </div>
   );
 }

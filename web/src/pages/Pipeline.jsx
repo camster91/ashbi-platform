@@ -9,6 +9,7 @@ import {
 import { api } from '../lib/api';
 import { Card } from '../components/ui';
 import Modal, { ModalFooter } from '../components/Modal';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 const PRIMARY = '#2e2958';
 const ACCENT = '#e6f354';
@@ -399,6 +400,7 @@ export default function Pipeline() {
 // ── Stage Detail (with deal actions) ──────────────────────────────────
 function StageDetail({ stage, stages, config, onClose }) {
   const queryClient = useQueryClient();
+  const [itemToDelete, setItemToDelete] = useState(null);
 
   const moveMutation = useMutation({
     mutationFn: ({ id, stageId }) => api.updatePipelineDeal(id, { stageId }),
@@ -407,13 +409,15 @@ function StageDetail({ stage, stages, config, onClose }) {
 
   const deleteMutation = useMutation({
     mutationFn: (id) => api.deletePipelineDeal(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pipeline'] }),
+    onSuccess: () => {
+      setItemToDelete(null);
+      queryClient.invalidateQueries({ queryKey: ['pipeline'] });
+    },
   });
 
   const handleDelete = (deal) => {
-    const name = deal.name || deal.title || 'this deal';
-    if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
-    deleteMutation.mutate(deal.id);
+    deleteMutation.reset();
+    setItemToDelete(deal);
   };
 
   if (!stage) return null;
@@ -502,7 +506,17 @@ function StageDetail({ stage, stages, config, onClose }) {
             );
           })}
         </div>
-      )}
-    </Card>
+       )}
+       <ConfirmDialog
+         isOpen={Boolean(itemToDelete)}
+         title="Delete pipeline item"
+         description={itemToDelete ? `Permanently delete “${nameFor(itemToDelete)}”? This cannot be undone.` : ''}
+         confirmLabel="Permanently delete"
+         onConfirm={() => itemToDelete && deleteMutation.mutate(itemToDelete.id)}
+         onCancel={() => { deleteMutation.reset(); setItemToDelete(null); }}
+         pending={deleteMutation.isPending}
+         error={deleteMutation.error?.message}
+       />
+     </Card>
   );
 }

@@ -9,6 +9,7 @@ import { useToast } from '../hooks/useToast';
 import { Button, Card, EmptyState, LoadingState } from '../components/ui';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -45,6 +46,7 @@ export default function Estimates() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [editingEstimate, setEditingEstimate] = useState(null);
+  const [estimateToDelete, setEstimateToDelete] = useState(null);
 
   const [form, setForm] = useState({
     clientId: '',
@@ -105,6 +107,7 @@ export default function Estimates() {
   const deleteMutation = useMutation({
     mutationFn: (id) => api.deleteEstimate(id),
     onSuccess: (result, id) => {
+      setEstimateToDelete(null);
       queryClient.invalidateQueries({ queryKey: ['estimates'] });
       const title = estimatesData.estimates.find((estimate) => estimate.id === id)?.title || 'Estimate';
       toast.success({
@@ -317,17 +320,23 @@ export default function Estimates() {
               onEdit={() => openEdit(estimate)}
               onSend={() => sendMutation.mutate(estimate.id)}
               onConvert={() => convertMutation.mutate(estimate.id)}
-              onDelete={() => {
-                if (window.confirm('Delete this estimate?')) {
-                  deleteMutation.mutate(estimate.id);
-                }
-              }}
+              onDelete={() => { deleteMutation.reset(); setEstimateToDelete(estimate); }}
               sendLoading={sendMutation.isPending && sendMutation.variables === estimate.id}
               convertLoading={convertMutation.isPending && convertMutation.variables === estimate.id}
             />
           ))}
         </div>
       )}
+      <ConfirmDialog
+        isOpen={Boolean(estimateToDelete)}
+        title="Delete estimate"
+        description={estimateToDelete ? `Delete “${estimateToDelete.title || 'this estimate'}”? You can undo this action for 10 seconds.` : ''}
+        confirmLabel="Delete estimate"
+        onConfirm={() => estimateToDelete && deleteMutation.mutate(estimateToDelete.id)}
+        onCancel={() => { deleteMutation.reset(); setEstimateToDelete(null); }}
+        pending={deleteMutation.isPending}
+        error={deleteMutation.error?.message}
+      />
     </div>
   );
 }

@@ -13,6 +13,7 @@ import { Button, Card, EmptyState, LoadingState } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 const HST_RATE = 13;
 
@@ -44,6 +45,7 @@ export default function Invoices() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreate, setShowCreate] = useState(initCreate);
   const [activeTab, setActiveTab] = useState('list'); // 'list' | 'collections'
+  const [invoiceToVoid, setInvoiceToVoid] = useState(null);
 
   const [form, setForm] = useState({
     clientId: initClientId,
@@ -122,6 +124,7 @@ export default function Invoices() {
   const deleteMutation = useMutation({
     mutationFn: (id) => api.deleteInvoice(id),
     onSuccess: (result, id) => {
+      setInvoiceToVoid(null);
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       const invoiceNumber = invoices.find((invoice) => invoice.id === id)?.invoiceNumber || 'invoice';
       const duration = Math.max(1000, new Date(result.undoExpiresAt).getTime() - Date.now());
@@ -347,16 +350,22 @@ export default function Invoices() {
                   onView={() => navigate(`/invoices/${invoice.id}`)}
                   onSend={() => sendMutation.mutate(invoice.id)}
                   onMarkPaid={() => markPaidMutation.mutate({ id: invoice.id, data: { paymentMethod: 'BANK' } })}
-                  onDelete={() => {
-                    if (window.confirm(`Void invoice ${invoice.invoiceNumber}?`)) {
-                      deleteMutation.mutate(invoice.id);
-                    }
-                  }}
+                  onDelete={() => { deleteMutation.reset(); setInvoiceToVoid(invoice); }}
                   sendLoading={sendMutation.isPending && sendMutation.variables === invoice.id}
                 />
               ))}
             </div>
           )}
+          <ConfirmDialog
+            isOpen={Boolean(invoiceToVoid)}
+            title="Void invoice"
+            description={invoiceToVoid ? `Void ${invoiceToVoid.invoiceNumber}? You can undo this action for 10 seconds.` : ''}
+            confirmLabel="Void invoice"
+            onConfirm={() => invoiceToVoid && deleteMutation.mutate(invoiceToVoid.id)}
+            onCancel={() => { deleteMutation.reset(); setInvoiceToVoid(null); }}
+            pending={deleteMutation.isPending}
+            error={deleteMutation.error?.message}
+          />
         </>
       )}
     </div>
