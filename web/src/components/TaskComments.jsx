@@ -115,7 +115,7 @@ export default function TaskComments({ taskId }) {
     return parts.map((part, i) => {
       if (part.startsWith('@')) {
         return (
-          <span key={i} className="text-blue-600 font-medium">
+          <span key={i} className="text-primary font-medium">
             {part}
           </span>
         );
@@ -137,29 +137,29 @@ export default function TaskComments({ taskId }) {
 
   return (
     <div className="space-y-4">
-      <h4 className="font-medium text-gray-900">Comments ({comments.length})</h4>
+      <h4 className="font-medium text-foreground">Comments ({comments.length})</h4>
 
       {/* Comments List */}
       <div className="space-y-3">
         {comments.map((comment) => (
           <div key={comment.id} className="flex gap-3">
             {/* Avatar */}
-            <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-sm font-medium text-gray-600">
+            <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-sm font-medium text-muted-foreground">
               {comment.author?.name?.charAt(0) || '?'}
             </div>
 
             {/* Content */}
             <div className="flex-1">
-              <div className="bg-gray-50 rounded-lg p-3">
+              <div className="bg-muted/50 rounded-lg p-3">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="font-medium text-gray-900 text-sm">
+                  <span className="font-medium text-foreground text-sm">
                     {comment.author?.name}
                   </span>
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-muted-foreground">
                     {formatTime(comment.createdAt)}
                   </span>
                 </div>
-                <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                <p className="text-sm text-foreground whitespace-pre-wrap">
                   {renderContent(comment.content)}
                 </p>
               </div>
@@ -171,7 +171,7 @@ export default function TaskComments({ taskId }) {
                   onClick={() => requestCommentDeletion(comment)}
                   disabled={deleteMutation.isPending}
                   aria-label={`Delete comment by ${comment.author?.name || 'Unknown author'}`}
-                  className="inline-flex min-h-11 items-center rounded px-2 text-xs text-gray-500 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex min-h-11 items-center rounded px-2 text-xs text-muted-foreground hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Delete
                 </button>
@@ -181,7 +181,7 @@ export default function TaskComments({ taskId }) {
         ))}
 
         {comments.length === 0 && (
-          <p className="text-sm text-gray-500 text-center py-4">
+          <p className="text-sm text-muted-foreground text-center py-4">
             No comments yet. Be the first to comment!
           </p>
         )}
@@ -196,22 +196,22 @@ export default function TaskComments({ taskId }) {
               value={content}
               onChange={handleInputChange}
               placeholder="Write a comment... Use @name to mention someone"
-              className="w-full border rounded-lg px-3 py-2 text-sm resize-none"
+              className="w-full border border-border bg-background text-foreground placeholder:text-muted-foreground rounded-lg px-3 py-2 text-sm resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               rows={2}
             />
 
             {/* Mention Dropdown */}
             {showMentions && mentionableUsers.length > 0 && (
-              <div className="absolute bottom-full left-0 w-full bg-white border rounded-lg shadow-lg mb-1 max-h-40 overflow-y-auto z-10">
+              <div className="absolute bottom-full left-0 w-full bg-card text-card-foreground border border-border rounded-lg shadow-lg mb-1 max-h-40 overflow-y-auto z-10">
                 {mentionableUsers.map((user) => (
                   <button
                     key={user.id}
                     type="button"
                     onClick={() => insertMention(user)}
-                    className="w-full text-left px-3 py-2 hover:bg-gray-50 text-sm"
+                    className="w-full text-left px-3 py-2 hover:bg-muted text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                   >
                     <span className="font-medium">{user.name}</span>
-                    <span className="text-gray-500 ml-2">{user.email}</span>
+                    <span className="text-muted-foreground ml-2">{user.email}</span>
                   </button>
                 ))}
               </div>
@@ -220,7 +220,7 @@ export default function TaskComments({ taskId }) {
           <button
             type="submit"
             disabled={!content.trim() || addMutation.isPending}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 self-end"
+            className="bg-primary text-primary-foreground px-4 py-2 rounded-lg hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 self-end"
           >
             {addMutation.isPending ? '...' : 'Post'}
           </button>

@@ -23,4 +23,14 @@ describe('task comment deletion contract', () => {
     expect(source).toContain('error={deleteMutation.error?.message}');
     expect(source).not.toContain('onClick={() => deleteMutation.mutate(comment.id)}');
   });
+
+  it('uses semantic theme tokens for readable light and dark states', () => {
+    expect(source).not.toMatch(/(?:text|bg|border|hover:bg|hover:text)-(?:gray|blue|red)-\d+/);
+    expect(source).not.toContain('bg-white');
+    expect(source).toContain('text-foreground');
+    expect(source).toContain('text-muted-foreground');
+    expect(source).toContain('bg-muted');
+    expect(source).toContain('bg-primary');
+    expect(source).toContain('focus-visible:ring-2');
+  });
 });
