@@ -224,6 +224,45 @@
   100% { background-position: 200% 0; }
 }
 
+/*
+ * Shared motion contract: no interaction or status depends on movement.
+ * Reduced-motion users receive immediate/static entrance, hover, loading,
+ * transition, and scrolling behavior while visible state feedback remains.
+ */
+@media (prefers-reduced-motion: reduce) {
+  html:focus-within {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
+
+  .animate-fade-in,
+  .animate-slide-up,
+  .animate-scale-in {
+    opacity: 1;
+    transform: none;
+  }
+
+  .hover-lift:hover,
+  [class*='hover:-translate-']:hover,
+  [class*='hover:scale-']:hover,
+  [class*='group-hover:scale-'] {
+    transform: none !important;
+  }
+
+  .skeleton-shimmer {
+    background-position: 0 0;
+  }
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 8px;

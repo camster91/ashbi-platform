@@ -3,6 +3,7 @@ import { Send, MessageSquare, Plus, Trash2, Loader2, Bot, User } from 'lucide-re
 import { safeHtml } from '../lib/safeHtml';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
+import { preferredScrollBehavior } from '../lib/motion';
 
 function formatTime(dateStr) {
   return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -46,7 +47,7 @@ export default function Chat() {
   const inputRef = useRef(null);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: preferredScrollBehavior() });
   };
 
   useEffect(() => { scrollToBottom(); }, [messages, isThinking]);

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { useSocket } from '../hooks/useSocket';
 import { useAuth } from '../hooks/useAuth';
+import { preferredScrollBehavior } from '../lib/motion';
 
 export default function ProjectChat({ projectId }) {
   const { user } = useAuth();
@@ -73,7 +74,7 @@ export default function ProjectChat({ projectId }) {
 
   // Scroll to bottom on new messages
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: preferredScrollBehavior() });
   }, [messages]);
 
   // Send message mutation
@@ -134,8 +135,9 @@ export default function ProjectChat({ projectId }) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      <div role="status" className="flex items-center justify-center h-64 gap-3 text-gray-600">
+        <div aria-hidden="true" className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <span>Loading messages…</span>
       </div>
     );
   }

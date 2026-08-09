@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
+import { preferredScrollBehavior } from '../lib/motion';
 
 const API = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '') : '';
 const SOCKET_URL = import.meta.env.PROD ? window.location.origin : 'http://localhost:3000';
@@ -533,7 +534,7 @@ function ProjectDetail({ projectId, token, onBack }) {
   }, [projectId, token]);
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    chatEndRef.current?.scrollIntoView({ behavior: preferredScrollBehavior() });
   }, [messages]);
 
   async function handleSendMessage(e) {
@@ -1087,7 +1088,7 @@ function ChatTab({ projects, token }) {
   const chatEndRef = useRef(null);
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    chatEndRef.current?.scrollIntoView({ behavior: preferredScrollBehavior() });
   }, [messages]);
 
   async function handleSend(e) {

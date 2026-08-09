@@ -4,6 +4,7 @@ import { Bot, X, Send, Loader2 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import { cn } from '../lib/utils';
 import { api } from '../lib/api';
+import { preferredScrollBehavior } from '../lib/motion';
 
 function formatTimeAgo(date) {
   const now = Date.now();
@@ -49,7 +50,7 @@ export default function GlobalAIChat() {
 
   // Scroll to bottom on new messages
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: preferredScrollBehavior() });
   }, [messages, isTyping]);
 
   // Focus input when drawer opens
@@ -200,7 +201,7 @@ export default function GlobalAIChat() {
             {/* Typing indicator */}
             {isTyping && (
               <div className="flex items-start">
-                <div className="bg-muted border border-border rounded-2xl rounded-bl-md px-4 py-3 flex items-center gap-1">
+                <div role="status" aria-label="Ash is typing" className="bg-muted border border-border rounded-2xl rounded-bl-md px-4 py-3 flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: '0ms' }} />
                   <span className="w-2 h-2 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: '150ms' }} />
                   <span className="w-2 h-2 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: '300ms' }} />
@@ -235,7 +236,7 @@ export default function GlobalAIChat() {
                 aria-label="Send message"
               >
                 {isLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <Loader2 aria-hidden="true" className="w-4 h-4 animate-spin" />
                 ) : (
                   <Send className="w-4 h-4" />
                 )}
