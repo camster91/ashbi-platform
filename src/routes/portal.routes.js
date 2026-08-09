@@ -5,6 +5,7 @@ import { createPaymentLink } from '../services/stripe.service.js';
 import { onProposalApproved, onContractSigned } from '../services/automation.service.js';
 import crypto from 'crypto';
 import { validateBody, bookingSchema, contractSignSchema, formSubmitSchema, proposalDeclineSchema } from '../validators/schemas.js';
+import { publicAccessFailure } from '../utils/public-document-access.js';
 
 export default async function portalRoutes(fastify) {
   // ==================== PROJECT PORTAL ====================
@@ -94,7 +95,7 @@ export default async function portalRoutes(fastify) {
       include: {
         lineItems: true,
         client: {
-          select: { id: true, name: true, email: true, company: true }
+          select: { id: true, name: true, email: true }
         },
         project: {
           select: { id: true, name: true }
@@ -108,6 +109,8 @@ export default async function portalRoutes(fastify) {
     if (!proposal) {
       return reply.status(404).send({ error: 'Proposal not found' });
     }
+    const accessFailure = publicAccessFailure(proposal);
+    if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
 
     // Mark as VIEWED if currently SENT
     if (proposal.status === 'SENT') {
@@ -150,6 +153,8 @@ export default async function portalRoutes(fastify) {
     if (!proposal) {
       return reply.status(404).send({ error: 'Proposal not found' });
     }
+    const accessFailure = publicAccessFailure(proposal);
+    if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
     if (proposal.status === 'APPROVED') {
       return reply.status(400).send({ error: 'Proposal already approved' });
     }
@@ -164,7 +169,8 @@ export default async function portalRoutes(fastify) {
       where: { id: proposal.id },
       data: {
         status: 'APPROVED',
-        approvedAt: new Date()
+        approvedAt: new Date(),
+        publicAccessRevokedAt: new Date(),
       }
     });
 
@@ -185,6 +191,8 @@ export default async function portalRoutes(fastify) {
     if (!proposal) {
       return reply.status(404).send({ error: 'Proposal not found' });
     }
+    const accessFailure = publicAccessFailure(proposal);
+    if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
     if (proposal.status === 'APPROVED') {
       return reply.status(400).send({ error: 'Proposal already approved' });
     }
@@ -197,6 +205,7 @@ export default async function portalRoutes(fastify) {
       data: {
         status: 'DECLINED',
         declinedAt: new Date(),
+        publicAccessRevokedAt: new Date(),
         // Store decline reason in internalNotes (no dedicated field)
         internalNotes: reason
           ? `${proposal.internalNotes ? proposal.internalNotes + '\n' : ''}[Client declined] ${reason}`
@@ -217,7 +226,7 @@ export default async function portalRoutes(fastify) {
       where: { signToken },
       include: {
         client: {
-          select: { id: true, name: true, email: true, company: true }
+          select: { id: true, name: true, email: true }
         },
         proposal: {
           select: { id: true, title: true, total: true }
@@ -231,6 +240,8 @@ export default async function portalRoutes(fastify) {
     if (!contract) {
       return reply.status(404).send({ error: 'Contract not found' });
     }
+    const accessFailure = publicAccessFailure(contract);
+    if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
 
     return {
       id: contract.id,
@@ -250,12 +261,14 @@ export default async function portalRoutes(fastify) {
   // Sign contract
   fastify.post('/contract/:signToken/sign', { preHandler: [validateBody(contractSignSchema)] }, async (request, reply) => {
     const { signToken } = request.params;
-    const { name, signature } = request.body;
+    const { signerName, signatureType, signatureImage, agreement } = request.body;
 
     const contract = await request.prisma.contract.findUnique({ where: { signToken } });
     if (!contract) {
       return reply.status(404).send({ error: 'Contract not found' });
     }
+    const accessFailure = publicAccessFailure(contract);
+    if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
     if (contract.status === 'SIGNED') {
       return reply.status(400).send({ error: 'Contract already signed' });
     }
@@ -263,20 +276,35 @@ export default async function portalRoutes(fastify) {
       return reply.status(400).send({ error: 'Contract has been voided' });
     }
 
-    // Hash the signature image for integrity verification
-    const sigHash = crypto.createHash('sha256').update(signature).digest('hex');
+    if (!agreement) return reply.status(400).send({ error: 'Explicit agreement is required' });
+    const signatureSecret = process.env.CONTRACT_SIGNATURE_SECRET || process.env.JWT_SECRET;
+    if (!signatureSecret) return reply.status(503).send({ error: 'Contract signing is unavailable' });
     const now = new Date();
+    const signedContentHash = crypto.createHash('sha256').update(contract.content).digest('hex');
+    const signatureDataHash = crypto.createHash('sha256')
+      .update(signatureType === 'draw' ? signatureImage : signerName)
+      .digest('hex');
+    const sigHash = crypto.createHmac('sha256', signatureSecret)
+      .update(`${contract.id}:${signedContentHash}:${signerName}:${signatureType}:${signatureDataHash}:${now.toISOString()}`)
+      .digest('hex');
 
-    const updated = await request.prisma.contract.update({
-      where: { id: contract.id },
+    const updated = await request.prisma.contract.updateMany({
+      where: { id: contract.id, status: 'SENT', publicAccessRevokedAt: null },
       data: {
         status: 'SIGNED',
         clientSigHash: sigHash,
-        clientSigName: name,
+        clientSigName: signerName,
         clientSigDate: now,
-        signedAt: now
+        signedAt: now,
+        signedContentHash,
+        signatureType,
+        signatureDataHash,
+        signerIp: request.ip,
+        signerUserAgent: String(request.headers['user-agent'] || '').slice(0, 500),
+        publicAccessRevokedAt: now,
       }
     });
+    if (updated.count !== 1) return reply.status(409).send({ error: 'Contract is no longer awaiting signature' });
 
     // Trigger automation: contract signed
     onContractSigned(contract.id).catch(err =>
@@ -286,8 +314,10 @@ export default async function portalRoutes(fastify) {
     return {
       success: true,
       status: 'SIGNED',
-      signedAt: updated.signedAt,
-      signerName: name
+      signedAt: now,
+      signerName,
+      signedContentHash,
+      signatureType,
     };
   });
 
@@ -302,7 +332,7 @@ export default async function portalRoutes(fastify) {
       include: {
         lineItems: { orderBy: { position: 'asc' } },
         client: {
-          select: { id: true, name: true, email: true, company: true }
+          select: { id: true, name: true, email: true }
         },
         project: {
           select: { id: true, name: true }
@@ -319,6 +349,8 @@ export default async function portalRoutes(fastify) {
     if (!invoice) {
       return reply.status(404).send({ error: 'Invoice not found' });
     }
+    const accessFailure = publicAccessFailure(invoice);
+    if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
 
     return {
       id: invoice.id,
@@ -365,6 +397,8 @@ export default async function portalRoutes(fastify) {
     if (!invoice) {
       return reply.status(404).send({ error: 'Invoice not found' });
     }
+    const accessFailure = publicAccessFailure(invoice);
+    if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
     if (invoice.status === 'PAID') {
       return reply.status(400).send({ error: 'Invoice already paid' });
     }
@@ -374,7 +408,7 @@ export default async function portalRoutes(fastify) {
 
     // If there's already a Stripe payment link, return it
     if (invoice.stripePaymentLink) {
-      return { paymentUrl: invoice.stripePaymentLink };
+      return { checkoutUrl: invoice.stripePaymentLink };
     }
 
     try {
@@ -388,11 +422,12 @@ export default async function portalRoutes(fastify) {
         where: { id: invoice.id },
         data: {
           stripePaymentLink: result.paymentLink,
+          stripeCheckoutSessionId: result.checkoutSessionId,
           stripePaymentIntentId: result.paymentIntentId
         }
       });
 
-      return { paymentUrl: result.paymentLink };
+      return { checkoutUrl: result.paymentLink };
     } catch (error) {
       fastify.log.error('Stripe payment link creation failed:', error);
       return reply.status(500).send({ error: 'Failed to create payment session' });

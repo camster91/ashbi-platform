@@ -751,7 +751,7 @@ export const api = {
   getPortalProposal: (token) =>
     request(`/portal/proposal/${token}`),
   respondPortalProposal: (token, data) =>
-    request(`/portal/proposal/${token}/respond`, { method: 'POST', body: data }),
+    request(`/portal/proposal/${token}/${data.action}`, { method: 'POST', body: data.action === 'decline' ? { reason: data.reason } : {} }),
   getPortalContract: (token) =>
     request(`/portal/contract/${token}`),
   signPortalContract: (token, data) =>

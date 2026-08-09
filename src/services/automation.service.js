@@ -11,6 +11,7 @@ import { resolveTenantOrganizationIds, runTenantJob } from '../jobs/tenant-itera
 // ==================== EMAIL HELPER ====================
 
 async function sendEmail(to, subject, html) {
+  if (process.env.NODE_ENV === 'test' && process.env.ASHBI_RUN_EMAIL_TESTS !== '1') return false;
   if (!process.env.MAILGUN_API_KEY || !process.env.MAILGUN_DOMAIN) {
     console.log(`[Automation] Email not configured — would send to ${to}: ${subject}`);
     return false;
@@ -40,9 +41,9 @@ async function sendEmail(to, subject, html) {
 
 // ==================== NOTIFICATION HELPER ====================
 
-async function createAdminNotification(type, title, message, data = null) {
+async function createAdminNotification(type, title, message, data = null, organizationId = null) {
   const admin = await prisma.user.findFirst({
-    where: { role: 'ADMIN' },
+    where: { role: 'ADMIN', ...(organizationId ? { organizationId } : {}) },
     select: { id: true }
   });
 
@@ -64,9 +65,9 @@ async function createAdminNotification(type, title, message, data = null) {
 
 // ==================== ACTIVITY LOG HELPER ====================
 
-async function logAutomation(type, action, entityType, entityId, entityName, metadata = {}) {
+async function logAutomation(type, action, entityType, entityId, entityName, metadata = {}, organizationId = null) {
   const admin = await prisma.user.findFirst({
-    where: { role: 'ADMIN' },
+    where: { role: 'ADMIN', ...(organizationId ? { organizationId } : {}) },
     select: { id: true }
   });
 
@@ -107,7 +108,7 @@ export async function onProposalApproved(proposalId) {
     const proposal = await prisma.proposal.findUnique({
       where: { id: proposalId },
       include: {
-        client: { select: { id: true, name: true } },
+        client: { select: { id: true, name: true, organizationId: true } },
         lineItems: true,
         createdBy: { select: { id: true, name: true } }
       }
@@ -157,6 +158,7 @@ export async function onProposalApproved(proposalId) {
     try {
       // Find the first pipeline stage (usually "New" or similar)
       const defaultStage = await prisma.pipelineStage.findFirst({
+        where: { organizationId: proposal.client.organizationId },
         orderBy: { order: 'asc' },
         select: { id: true }
       });
@@ -184,7 +186,8 @@ export async function onProposalApproved(proposalId) {
       'PROPOSAL_APPROVED',
       'Proposal Approved',
       `"${proposal.title}" for ${proposal.client.name} was approved. A draft contract has been auto-created.`,
-      { proposalId, contractId: contract.id, clientName: proposal.client.name }
+      { proposalId, contractId: contract.id, clientName: proposal.client.name },
+      proposal.client.organizationId,
     );
 
     // Log activity
@@ -194,7 +197,8 @@ export async function onProposalApproved(proposalId) {
       'CONTRACT',
       contract.id,
       contract.title,
-      { trigger: 'PROPOSAL_APPROVED', proposalId, proposalTitle: proposal.title }
+      { trigger: 'PROPOSAL_APPROVED', proposalId, proposalTitle: proposal.title },
+      proposal.client.organizationId,
     );
 
   } catch (err) {
@@ -211,7 +215,7 @@ export async function onContractSigned(contractId) {
     const contract = await prisma.contract.findUnique({
       where: { id: contractId },
       include: {
-        client: { select: { id: true, name: true } },
+        client: { select: { id: true, name: true, organizationId: true } },
         proposal: { select: { id: true, title: true, total: true } },
         createdBy: { select: { id: true, name: true } }
       }
@@ -231,7 +235,8 @@ export async function onContractSigned(contractId) {
         description: `Auto-created from signed contract: ${contract.title}`,
         status: 'STARTING_UP',
         health: 'ON_TRACK',
-        clientId: contract.clientId
+        clientId: contract.clientId,
+        organizationId: contract.client.organizationId,
       }
     });
 
@@ -271,7 +276,8 @@ export async function onContractSigned(contractId) {
       'CONTRACT_SIGNED',
       'Contract Signed',
       `${contract.client.name} signed "${contract.title}". Project "${projectName}" auto-created.`,
-      { contractId, projectId: project.id, clientName: contract.client.name }
+      { contractId, projectId: project.id, clientName: contract.client.name },
+      contract.client.organizationId,
     );
 
     // Log activity
@@ -281,7 +287,8 @@ export async function onContractSigned(contractId) {
       'PROJECT',
       project.id,
       project.name,
-      { trigger: 'CONTRACT_SIGNED', contractId, contractTitle: contract.title }
+      { trigger: 'CONTRACT_SIGNED', contractId, contractTitle: contract.title },
+      contract.client.organizationId,
     );
 
   } catch (err) {

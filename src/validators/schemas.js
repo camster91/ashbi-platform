@@ -210,8 +210,14 @@ export const bookingSchema = z.object({
 });
 
 export const contractSignSchema = z.object({
-  name: z.string().min(1).max(200),
-  signature: z.string().min(1).max(50000), // base64 signature data
+  signerName: z.string().min(1).max(200),
+  signatureType: z.enum(['type', 'draw']),
+  signatureImage: z.string().min(1).max(50000).optional(),
+  agreement: z.literal(true),
+}).superRefine((value, ctx) => {
+  if (value.signatureType === 'draw' && !value.signatureImage) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['signatureImage'], message: 'Drawn signatures require signatureImage' });
+  }
 });
 
 export const formSubmitSchema = z.object({

@@ -9,6 +9,7 @@ import jwt from '@fastify/jwt';
 import requestPrisma, { prisma, rawPrisma } from '../../config/db.js';
 import proposalRoutes from '../../routes/proposal.routes.js';
 import contractRoutes from '../../routes/contract.routes.js';
+import portalRoutes from '../../routes/portal.routes.js';
 import { shouldSkipHeavyTests } from '../_test-skip.js';
 import { createScopedPrisma } from '../../utils/prisma-tenant-proxy.js';
 import { enterRequestContext } from '../../utils/request-context.js';
@@ -57,6 +58,7 @@ before(async () => {
 
   await fastify.register(proposalRoutes, { prefix: '/api/proposals' });
   await fastify.register(contractRoutes, { prefix: '/api/contracts' });
+  await fastify.register(portalRoutes, { prefix: '/api/portal' });
   await fastify.ready();
 
   const organization = await rawPrisma.organization.upsert({
@@ -96,8 +98,9 @@ after(async () => {
     await rawPrisma.contract.deleteMany({ where: { clientId: testClientId } });
     await rawPrisma.proposalLineItem.deleteMany({ where: { proposal: { clientId: testClientId } } });
     await rawPrisma.proposal.deleteMany({ where: { clientId: testClientId } });
-    await rawPrisma.task.deleteMany({ where: { projectId: testProjectId } });
-    await rawPrisma.project.delete({ where: { id: testProjectId } }).catch(() => null);
+    await rawPrisma.task.deleteMany({ where: { project: { clientId: testClientId } } });
+    await rawPrisma.project.deleteMany({ where: { clientId: testClientId } });
+    await rawPrisma.activity.deleteMany({ where: { userId: testUserId } });
     await rawPrisma.contact.deleteMany({ where: { clientId: testClientId } });
     await rawPrisma.client.delete({ where: { id: testClientId } }).catch(() => null);
     await rawPrisma.user.delete({ where: { id: testUserId } }).catch(() => null);
@@ -190,17 +193,23 @@ describe('Proposal CRUD', { skip }, () => {
     console.log(`  ✓ Sent proposal`);
   });
 
-  test('POST /api/proposals/client/:viewToken/approve — approve proposal', async () => {
+  test('POST /api/portal/proposal/:viewToken/approve — approve proposal from the browser-facing route', async () => {
     const proposal = await rawPrisma.proposal.findUnique({ where: { id: createdProposalId } });
     const res = await fastify.inject({
       method: 'POST',
-      url: `/api/proposals/client/${proposal.viewToken}/approve`,
+      url: `/api/portal/proposal/${proposal.viewToken}/approve`,
     });
 
     assert.equal(res.statusCode, 200);
     const body = JSON.parse(res.body);
     assert.equal(body.status, 'APPROVED');
     assert.ok(body.approvedAt);
+    for (let attempt = 0; attempt < 20 && !createdContractId; attempt += 1) {
+      const contract = await rawPrisma.contract.findUnique({ where: { proposalId: createdProposalId } });
+      createdContractId = contract?.id;
+      if (!createdContractId) await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    assert.ok(createdContractId, 'Approval automation should create a draft contract');
     console.log(`  ✓ Approved proposal`);
   });
 
@@ -210,30 +219,14 @@ describe('Proposal CRUD', { skip }, () => {
 
 describe('Contract CRUD', { skip }, () => {
 
-  test('POST /api/contracts — create contract from proposal', async () => {
-    const res = await fastify.inject({
-      method: 'POST',
-      url: '/api/contracts',
-      headers: authHeaders(),
-      payload: {
-        title: 'Brand Redesign Contract',
-        content: '<h1>Scope of Work</h1><p>Full brand redesign including strategy and visual identity.</p>',
-        templateType: 'PROJECT',
-        clientId: testClientId,
-        proposalId: createdProposalId,
-      },
-    });
-
-    assert.equal(res.statusCode, 200, `Expected 200, got ${res.statusCode}: ${res.body}`);
-    const body = JSON.parse(res.body);
-    assert.ok(body.id);
+  test('proposal approval creates a draft contract exactly once', async () => {
+    const body = await rawPrisma.contract.findUnique({ where: { id: createdContractId } });
+    assert.ok(body);
     assert.equal(body.status, 'DRAFT');
-    assert.equal(body.title, 'Brand Redesign Contract');
     assert.ok(body.signToken, 'Should have a signToken for client signing');
     assert.equal(body.proposalId, createdProposalId);
-
-    createdContractId = body.id;
-    console.log(`  ✓ Created contract from proposal`);
+    assert.equal(await rawPrisma.contract.count({ where: { proposalId: createdProposalId } }), 1);
+    console.log(`  ✓ Created one contract from proposal approval`);
   });
 
   test('GET /api/contracts — list contracts', async () => {
@@ -276,14 +269,18 @@ describe('Contract CRUD', { skip }, () => {
     console.log(`  ✓ Sent contract for signing`);
   });
 
-  test('POST /api/contracts/sign/:signToken — sign contract', async () => {
+  test('GET and POST /api/portal/contract/:signToken — browser-facing contract journey', async () => {
     const contract = await rawPrisma.contract.findUnique({ where: { id: createdContractId } });
+
+    const view = await fastify.inject({ method: 'GET', url: `/api/portal/contract/${contract.signToken}` });
+    assert.equal(view.statusCode, 200, `Expected portal view 200, got ${view.statusCode}: ${view.body}`);
 
     const res = await fastify.inject({
       method: 'POST',
-      url: `/api/contracts/sign/${contract.signToken}`,
+      url: `/api/portal/contract/${contract.signToken}/sign`,
       payload: {
         signerName: 'Jane Prop',
+        signatureType: 'type',
         agreement: true,
       },
     });
@@ -292,14 +289,22 @@ describe('Contract CRUD', { skip }, () => {
     const body = JSON.parse(res.body);
     assert.equal(body.status, 'SIGNED');
     assert.ok(body.signedAt);
-    assert.equal(body.clientSigName, 'Jane Prop');
+    assert.equal(body.signerName, 'Jane Prop');
     assert.ok(body.signedContentHash);
+    let createdProject;
+    for (let attempt = 0; attempt < 20 && !createdProject; attempt += 1) {
+      createdProject = await rawPrisma.project.findFirst({
+        where: { clientId: testClientId, id: { not: testProjectId } },
+      });
+      if (!createdProject) await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    assert.equal(createdProject?.organizationId, testOrganizationId);
     console.log(`  ✓ Signed contract`);
   });
 
   test('signed contract link is revoked and record remains available to tenant', async () => {
     const contract = await rawPrisma.contract.findUnique({ where: { id: createdContractId } });
-    const publicRes = await fastify.inject({ method: 'GET', url: `/api/contracts/sign/${contract.signToken}` });
+    const publicRes = await fastify.inject({ method: 'GET', url: `/api/portal/contract/${contract.signToken}` });
     assert.equal(publicRes.statusCode, 410);
     const tenantRes = await fastify.inject({ method: 'GET', url: `/api/contracts/${createdContractId}`, headers: authHeaders() });
     assert.equal(tenantRes.statusCode, 200);
