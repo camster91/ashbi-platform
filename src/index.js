@@ -26,8 +26,6 @@ import searchRoutes from './routes/search.routes.js';
 import aiRoutes from './routes/ai.routes.js';
 import notificationRoutes from './routes/notification.routes.js';
 import settingsRoutes from './routes/settings.routes.js';
-import chatRoutes from './routes/chat.routes.js';
-import ashChatRoutes from './routes/ash-chat.routes.js';
 import noteRoutes from './routes/note.routes.js';
 import mailgunRoutes from './routes/mailgun.routes.js';
 import mailgunHitlRoutes from './routes/mailgun-hitl.routes.js';
@@ -67,6 +65,7 @@ import { registerCoreRevenueRoutes } from './domains/revenue/register-core-route
 import { registerCollaborationRoutes } from './domains/client-delivery/register-collaboration-routes.js';
 import { registerWorkManagementRoutes } from './domains/client-delivery/register-work-management-routes.js';
 import { registerClientCommunicationRoutes } from './domains/client-communications/register-routes.js';
+import { registerConversationRoutes } from './domains/client-communications/register-conversation-routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -257,8 +256,7 @@ await fastify.register(mailgunHitlRoutes, { prefix: '/api/mailgun-hitl' });
 await fastify.register(mailgunRoutes, { prefix: '/api/mailgun' });
 await registerCollaborationRoutes(fastify);
 await fastify.register(noteRoutes, { prefix: '/api' });
-await fastify.register(ashChatRoutes, { prefix: '/api/ash-chat' });
-await fastify.register(chatRoutes, { prefix: '/api/chat' });
+await registerConversationRoutes(fastify);
 await fastify.register(searchRoutes, { prefix: '/api/search' });
 await fastify.register(teamRoutes, { prefix: '/api/team' });
 await registerClientCommunicationRoutes(fastify);

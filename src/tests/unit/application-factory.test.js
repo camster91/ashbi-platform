@@ -176,3 +176,31 @@ test('client communication routes are owned by an ordered domain registrar', asy
   assert.equal(new Set(registrations.map(({ plugin }) => plugin)).size, routeNames.length);
   assert.ok(registrations.every(({ plugin }) => typeof plugin === 'function'));
 });
+
+test('conversation routes are owned by an ordered domain registrar', async () => {
+  const factory = fs.readFileSync(new URL('../../index.js', import.meta.url), 'utf8');
+  const registrarUrl = new URL('../../domains/client-communications/register-conversation-routes.js', import.meta.url);
+  assert.equal(fs.existsSync(registrarUrl), true, 'conversation registrar must exist');
+
+  const registrar = fs.readFileSync(registrarUrl, 'utf8');
+  const { registerConversationRoutes } = await import(registrarUrl.href);
+  const routeNames = ['ash-chat', 'chat'];
+  const expectedPrefixes = ['/api/ash-chat', '/api/chat'];
+
+  assert.match(factory, /registerConversationRoutes\(fastify\)/);
+  for (const route of routeNames) {
+    assert.doesNotMatch(factory, new RegExp(`routes\\/${route}\\.routes\\.js`));
+    assert.match(registrar, new RegExp(`routes\\/${route}\\.routes\\.js`));
+  }
+
+  const registrations = [];
+  await registerConversationRoutes({
+    async register(plugin, options) {
+      registrations.push({ plugin, prefix: options.prefix });
+    },
+  });
+
+  assert.deepEqual(registrations.map(({ prefix }) => prefix), expectedPrefixes);
+  assert.equal(new Set(registrations.map(({ plugin }) => plugin)).size, routeNames.length);
+  assert.ok(registrations.every(({ plugin }) => typeof plugin === 'function'));
+});

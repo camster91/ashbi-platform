@@ -44,6 +44,9 @@ owns the contiguous client-to-work sequence: clients, projects, and tasks.
 response-to-delivery sequence: responses, threads, webhooks, the authenticated
 client portal, and Gmail. It preserves the existing order so inbound and
 outbound communication behavior remains unchanged.
+`src/domains/client-communications/register-conversation-routes.js` owns the
+adjacent Ash AI and project-chat routes, preserving their established order and
+prefixes independently from communication delivery integrations.
 Subsequent independently reviewable slices should move
 existing registrations, without changing prefixes or relative order, into
 these domain groups:
