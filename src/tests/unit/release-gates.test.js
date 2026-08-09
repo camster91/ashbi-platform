@@ -13,6 +13,7 @@ function copyWorkflows() {
   fs.cpSync(path.resolve('.github'), path.join(root, '.github'), { recursive: true });
   fs.mkdirSync(path.join(root, 'scripts'), { recursive: true });
   fs.copyFileSync(path.resolve('scripts/deploy-vps-direct.sh'), path.join(root, 'scripts', 'deploy-vps-direct.sh'));
+  fs.copyFileSync(path.resolve('Dockerfile'), path.join(root, 'Dockerfile'));
   return root;
 }
 
@@ -54,5 +55,18 @@ describe('mandatory release gates', () => {
     const deploy = path.join(root, 'scripts', 'deploy-vps-direct.sh');
     fs.writeFileSync(deploy, fs.readFileSync(deploy, 'utf8').replace('sha256sum "$ARCHIVE"', 'echo unverified'));
     assert.ok(validateReleaseGates(root).some((failure) => failure.includes('archive checksum')));
+  });
+
+  it('fails closed when the Docker frontend build bypasses performance budgets', () => {
+    const root = copyWorkflows();
+    const dockerfile = path.join(root, 'Dockerfile');
+    fs.writeFileSync(
+      dockerfile,
+      fs.readFileSync(dockerfile, 'utf8').replace(
+        'COPY scripts/check-frontend-budgets.mjs /app/scripts/check-frontend-budgets.mjs',
+        '# verifier omitted',
+      ),
+    );
+    assert.ok(validateReleaseGates(root).some((failure) => failure.includes('performance budget verifier')));
   });
 });

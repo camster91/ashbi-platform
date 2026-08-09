@@ -7,6 +7,7 @@ WORKDIR /app/web
 COPY web/package.json web/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 COPY web/ ./
+COPY scripts/check-frontend-budgets.mjs /app/scripts/check-frontend-budgets.mjs
 RUN npm run build
 
 # Stage 2: Build backend + production image
