@@ -54,6 +54,7 @@ import { isComingSoon } from '../lib/featureFlags';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import NotificationsDropdown from './NotificationsDropdown';
 import LiveTimer from './LiveTimer';
+import Modal, { ModalFooter } from './Modal';
 import { Button } from './ui';
 import { useInstallPrompt } from '../hooks/useInstallPrompt';
 import { usePushNotifications } from '../hooks/usePushNotifications';
@@ -740,29 +741,24 @@ function ShortcutsModal({ onClose }) {
   ];
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-foreground/30 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl shadow-xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-          <h3 className="text-base font-semibold text-foreground">Keyboard Shortcuts</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-        <div className="px-5 py-3 space-y-2 max-h-[60vh] overflow-y-auto">
-          {shortcuts.map((s) => (
-            <div key={s.keys} className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">{s.action}</span>
-              <kbd className="px-2 py-1 text-xs font-mono font-medium bg-muted border border-border rounded">{s.keys}</kbd>
-            </div>
-          ))}
-        </div>
-        <div className="px-5 py-3 border-t border-border bg-muted/30">
-          <button onClick={onClose} className="w-full py-2 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors">
-            Got it
-          </button>
-        </div>
+    <Modal
+      isOpen
+      onClose={onClose}
+      title="Keyboard Shortcuts"
+      size="sm"
+    >
+      <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+        {shortcuts.map((s) => (
+          <div key={s.keys} className="flex items-center justify-between gap-4 text-sm">
+            <span className="text-muted-foreground">{s.action}</span>
+            <kbd className="shrink-0 px-2 py-1 text-xs font-mono font-medium bg-muted border border-border rounded">{s.keys}</kbd>
+          </div>
+        ))}
       </div>
-    </div>
+      <ModalFooter>
+        <Button onClick={onClose} className="w-full">Got it</Button>
+      </ModalFooter>
+    </Modal>
   );
 }
 
