@@ -194,7 +194,8 @@ export default function Chat() {
                         <button
                           type="button"
                           onClick={() => loadMessages(c.id)}
-                          className="flex-1 min-w-0 text-left rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                          aria-label={`Open conversation ${c.title}`}
+                          className="flex-1 min-w-0 min-h-11 text-left rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                         >
                           <span className="block text-xs font-medium truncate">{c.title}</span>
                           <span className="block text-xs text-muted-foreground truncate mt-0.5">{c.lastMessage}</span>
@@ -263,10 +264,12 @@ export default function Chat() {
                   "Summarize active projects",
                   "Any overdue invoices?"
                 ].map(s => (
-                  <button
-                    key={s}
-                    onClick={() => { setInput(s); inputRef.current?.focus(); }}
-                    className="text-left text-sm px-3 py-2 rounded-lg bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors"
+                   <button
+                     key={s}
+                     type="button"
+                     aria-label={`Use suggestion: ${s}`}
+                     onClick={() => { setInput(s); inputRef.current?.focus(); }}
+                     className="min-h-11 text-left text-sm px-3 py-2 rounded-lg bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                   >
                     {s}
                   </button>
