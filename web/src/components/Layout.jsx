@@ -43,6 +43,7 @@ import {
   Share2,
   Phone,
   Bell,
+  MessageSquare,
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { Download, Sun, Moon, Command } from 'lucide-react';
@@ -153,6 +154,7 @@ export default function Layout({ children }) {
   const coreNav = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, exact: true },
     { name: 'Inbox', href: '/inbox', icon: Inbox, badge: stats?.needsResponse },
+    { name: 'Chat', href: '/chat', icon: MessageSquare },
     { name: 'Projects', href: '/projects', icon: FolderOpen, id: 'projects-link' },
     { name: 'Clients', href: '/clients', icon: Users, id: 'clients-link' },
     { name: 'Invoices', href: '/invoices', icon: Receipt },
@@ -167,6 +169,7 @@ export default function Layout({ children }) {
     { name: 'Contracts', href: '/contracts', icon: ScrollText },
     { name: 'Expenses', href: '/expenses', icon: Wallet },
     { name: 'Schedule', href: '/schedule', icon: Calendar },
+    { name: 'Docs', href: '/docs', icon: BookOpen },
   ];
 
   // Admin — collapsible section, only visible to admins
