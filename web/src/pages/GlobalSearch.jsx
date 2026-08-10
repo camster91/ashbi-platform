@@ -164,9 +164,10 @@ export default function GlobalSearch() {
           {FILTERS.map(f => (
             <button
               key={f.value}
+              type="button"
               onClick={() => handleFilter(f.value)}
               aria-pressed={filter === f.value}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+              className={`min-h-11 px-3 py-1.5 rounded-lg text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                 filter === f.value
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -208,8 +209,10 @@ export default function GlobalSearch() {
             return (
               <button
                 key={`${result.type}-${result.id}`}
+                type="button"
                 onClick={() => goToResult(result)}
-                className="w-full bg-card border border-border rounded-xl p-4 hover:border-primary/40 hover:shadow-md transition text-left"
+                aria-label={`Open ${result.type} ${result.name || result.title}`}
+                className="w-full min-h-11 bg-card border border-border rounded-xl p-4 hover:border-primary/40 hover:shadow-md transition text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <div className="flex items-start gap-3">
                   <Icon className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
