@@ -592,7 +592,8 @@ function InvoiceCreateForm({
                 {templates.slice(0, 4).map(t => (
                   <button key={t.id} type="button"
                     onClick={() => onApplyTemplate(t)}
-                    className="text-xs px-2 py-1 rounded border border-border bg-muted hover:bg-muted/80 text-muted-foreground">
+                    aria-label={`Apply invoice template ${t.name}`}
+                    className="min-h-11 px-2 py-1 rounded border border-border bg-muted hover:bg-muted/80 text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                     + {t.name}
                   </button>
                 ))}
@@ -639,7 +640,8 @@ function InvoiceCreateForm({
                     {fmt((parseFloat(li.quantity) || 1) * (parseFloat(li.unitPrice) || 0))}
                   </span>
                   <button type="button" onClick={() => onLineItemRemove(idx)}
-                    className="col-span-1 text-muted-foreground hover:text-destructive text-center text-lg leading-none">
+                    aria-label={`Remove line item ${idx + 1}`}
+                    className="col-span-1 min-h-11 min-w-11 text-muted-foreground hover:text-destructive text-center text-lg leading-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                     ×
                   </button>
                 </div>
@@ -664,7 +666,8 @@ function InvoiceCreateForm({
                       </select>
                     </div>
                     <button type="button" onClick={() => onLineItemRemove(idx)}
-                      className="p-2 text-muted-foreground hover:text-destructive rounded hover:bg-muted">
+                      aria-label={`Remove line item ${idx + 1}`}
+                      className="min-h-11 min-w-11 inline-flex items-center justify-center p-2 text-muted-foreground hover:text-destructive rounded hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -694,7 +697,8 @@ function InvoiceCreateForm({
           </div>
 
           <button type="button" onClick={onLineItemAdd}
-            className="text-sm text-primary hover:underline mt-2">
+            aria-label="Add invoice line item"
+            className="min-h-11 text-sm text-primary hover:underline mt-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             + Add line item
           </button>
         </div>
