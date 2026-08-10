@@ -264,8 +264,10 @@ export default function Contracts() {
                 onClick={(e) => e.target.select()}
               />
               <button
+                type="button"
                 onClick={() => navigator.clipboard.writeText(aiResult)}
-                className="mt-1 text-xs underline"
+                aria-label="Copy AI result to clipboard"
+                className="min-h-11 inline-flex items-center mt-1 text-xs underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 style={{ color: '#2e2958' }}
               >
                 Copy to clipboard
@@ -328,7 +330,7 @@ export default function Contracts() {
             </div>
             <div className="flex gap-2">
               <Button type="submit" loading={createMutation.isPending}>Create</Button>
-              <Button variant="ghost" onClick={() => setShowCreate(false)}>Cancel</Button>
+              <Button type="button" variant="ghost" onClick={() => setShowCreate(false)}>Cancel</Button>
             </div>
           </form>
         </Card>
@@ -369,8 +371,11 @@ export default function Contracts() {
                   <ScrollText className="w-5 h-5 text-muted-foreground flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <button
+                      type="button"
                       onClick={() => setExpandedId(isExpanded ? null : contract.id)}
-                      className="text-sm font-medium text-foreground hover:text-primary truncate block text-left"
+                      aria-expanded={isExpanded}
+                      aria-label={`${isExpanded ? 'Collapse' : 'Expand'} contract ${contract.title}`}
+                      className="min-h-11 text-sm font-medium text-foreground hover:text-primary truncate block text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       {contract.title}
                     </button>
@@ -398,8 +403,10 @@ export default function Contracts() {
                       </Button>
                     )}
                     <button
+                      type="button"
                       onClick={() => openAiRefine(contract)}
-                      className="p-1.5 text-muted-foreground hover:text-foreground rounded"
+                      aria-label={`Refine contract ${contract.title} with AI`}
+                      className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-muted-foreground hover:text-foreground rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       title="AI Refine"
                       style={{ '--tw-text-opacity': 1 }}
                     >
@@ -407,8 +414,10 @@ export default function Contracts() {
                     </button>
                     {(contract.status === 'SENT' || contract.status === 'SIGNED') && (
                       <button
+                        type="button"
                         onClick={() => navigator.clipboard.writeText(`${window.location.origin}/portal/contract/${contract.signToken}`)}
-                        className="p-1.5 text-muted-foreground hover:text-foreground rounded"
+                        aria-label={`Copy signing link for ${contract.title}`}
+                        className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-muted-foreground hover:text-foreground rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         title="Copy signing link"
                       >
                         <ExternalLink className="w-4 h-4" />
