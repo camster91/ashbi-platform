@@ -218,7 +218,7 @@ export default function Layout({ children }) {
           aria-label={sidebarCollapsed ? item.name : undefined}
           id={item.id}
           className={cn(
-            'flex items-center text-sm font-medium rounded-lg transition-all duration-150',
+            'flex min-h-11 items-center text-sm font-medium rounded-lg transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white',
             sidebarCollapsed ? 'px-2.5 py-2 justify-center' : 'px-3 py-1.5',
             'group relative',
             isActive

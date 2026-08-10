@@ -12,6 +12,7 @@ describe('shell route discoverability contract', () => {
   });
 
   it('keeps discoverable navigation links keyboard-visible', () => {
+    expect(layout).toContain('flex min-h-11 items-center');
     expect(layout).toContain('focus-visible:outline-none focus-visible:ring-2');
   });
 });
