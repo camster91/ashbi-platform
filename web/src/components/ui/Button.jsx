@@ -32,7 +32,7 @@ const Button = forwardRef(({
   const sizes = {
     xs: 'min-h-11 px-2.5 text-xs',
     sm: 'min-h-11 px-3 text-sm',
-    md: 'h-10 px-4 text-sm',
+    md: 'min-h-11 px-4 text-sm',
     lg: 'h-12 px-6 text-base',
     xl: 'h-14 px-8 text-base',
   };
@@ -53,7 +53,7 @@ const Button = forwardRef(({
       className={cn(
         'inline-flex items-center justify-center gap-2 rounded-lg font-medium',
         'transition-colors duration-200 ease-out motion-reduce:transition-none',
-        'focus:outline-none focus:ring-4 focus:ring-offset-0',
+        'focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-offset-0',
         'disabled:opacity-50 disabled:cursor-not-allowed',
         variants[variant] || variants.primary,
         sizes[size] || sizes.md,
