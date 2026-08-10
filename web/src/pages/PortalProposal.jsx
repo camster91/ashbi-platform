@@ -89,7 +89,7 @@ export default function PortalProposal() {
       <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
         {/* Completion confirmation */}
         {(completed || alreadyResponded) && (
-          <div className={cn(
+          <div role="status" aria-live="polite" className={cn(
             'rounded-xl border p-6 text-center',
             (completed === 'approved' || proposal.status === 'APPROVED')
               ? 'bg-green-50 border-green-200'
@@ -206,16 +206,19 @@ export default function PortalProposal() {
                 {declineError && <p id="decline-reason-error" role="alert" className="text-sm text-red-600">{declineError}</p>}
                 <div className="flex items-center gap-3">
                   <button
+                    type="button"
                     onClick={handleDecline}
                     disabled={respondMutation.isPending}
-                    className="px-5 py-2.5 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                    aria-busy={respondMutation.isPending}
+                    className="min-h-11 px-5 py-2.5 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2"
                   >
                     {respondMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
                     Submit Decline
                   </button>
                   <button
+                    type="button"
                     onClick={() => { setAction(null); setDeclineReason(''); setDeclineError(''); }}
-                    className="px-5 py-2.5 text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-100 transition-colors"
+                    className="min-h-11 px-5 py-2.5 text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2"
                   >
                     Cancel
                   </button>
@@ -227,18 +230,21 @@ export default function PortalProposal() {
             ) : (
               <div className="flex flex-col sm:flex-row items-center gap-3">
                 <button
+                  type="button"
                   onClick={handleApprove}
                   disabled={respondMutation.isPending}
-                  className="w-full sm:w-auto px-6 py-3 bg-slate-800 text-white text-sm font-semibold rounded-lg hover:bg-slate-900 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 shadow-sm"
+                  aria-busy={respondMutation.isPending}
+                  className="min-h-11 w-full sm:w-auto px-6 py-3 bg-slate-800 text-white text-sm font-semibold rounded-lg hover:bg-slate-900 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-800 focus-visible:ring-offset-2"
                 >
                   {respondMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
                   <CheckCircle className="w-4 h-4" />
                   Approve Proposal
                 </button>
                 <button
+                  type="button"
                   onClick={() => setAction('decline')}
                   disabled={respondMutation.isPending}
-                  className="w-full sm:w-auto px-6 py-3 border border-slate-200 text-slate-600 text-sm font-semibold rounded-lg hover:bg-slate-50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                  className="min-h-11 w-full sm:w-auto px-6 py-3 border border-slate-200 text-slate-600 text-sm font-semibold rounded-lg hover:bg-slate-50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2"
                 >
                   <XCircle className="w-4 h-4" />
                   Decline
