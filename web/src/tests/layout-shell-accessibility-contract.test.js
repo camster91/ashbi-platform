@@ -19,6 +19,12 @@ describe('layout shell accessibility contract', () => {
     expect(source).toContain('aria-label="Dismiss install banner"');
   });
 
+  it('keeps the skip link keyboard-visible and touch-sized', () => {
+    expect(source).toContain('focus-visible:not-sr-only');
+    expect(source).toContain('focus-visible:min-h-11');
+    expect(source).toContain('focus-visible:ring-2');
+  });
+
   it('makes quick-create controls named, native, and keyboard-visible', () => {
     expect(source).toContain('aria-label="Open quick create menu"');
     expect(source).toContain('aria-label={label}');
