@@ -150,8 +150,10 @@ function MoveToDropdown({ deal, stages, currentStageId, onMove }) {
 
   return (
     <div className="relative" ref={ref}>
-      <button onClick={(e) => { e.stopPropagation(); setOpen(v => !v); }}
-        className="p-1.5 rounded-md hover:bg-muted transition-colors"
+      <button type="button" onClick={(e) => { e.stopPropagation(); setOpen(v => !v); }}
+        aria-expanded={open}
+        aria-label={`Move ${deal.name} to another stage`}
+        className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-md hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         title="Move to stage">
         <MoveRight className="w-4 h-4 text-muted-foreground" />
       </button>
@@ -159,8 +161,8 @@ function MoveToDropdown({ deal, stages, currentStageId, onMove }) {
         <div className="absolute right-0 top-full mt-1 z-30 w-48 bg-white rounded-lg shadow-lg border py-1 text-sm">
           <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground">Move to</div>
           {otherStages.map(s => (
-            <button key={s.id}
-              className="w-full text-left px-3 py-1.5 hover:bg-gray-50"
+            <button key={s.id} type="button" role="menuitem"
+              className="min-h-11 w-full text-left px-3 py-1.5 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onClick={(e) => { e.stopPropagation(); setOpen(false); onMove(deal.id, s.id); }}>
               {s.label || s.name}
             </button>
@@ -203,8 +205,10 @@ function AIScoreButton({ deal, stageLabel }) {
 
   return (
     <div className="relative" ref={ref}>
-      <button onClick={fetchScore}
-        className="p-1.5 rounded-md hover:bg-muted transition-colors"
+      <button type="button" onClick={fetchScore}
+        aria-expanded={show}
+        aria-label={`Show AI lead score for ${deal.name}`}
+        className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-md hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         title="AI Lead Score">
         {loading ? <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
           : <Sparkles className="w-4 h-4" style={{ color: ACCENT }} />}
@@ -288,8 +292,9 @@ export default function Pipeline() {
           <p className="text-sm text-muted-foreground mt-1">Track deals from lead to payment</p>
         </div>
         <button
+          type="button"
           onClick={() => setShowCreateDeal(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg transition-all hover:opacity-90 hover:-translate-y-0.5 hover:shadow-md"
+          className="min-h-11 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg transition-all hover:opacity-90 hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           style={{ backgroundColor: PRIMARY }}>
           <Plus className="w-4 h-4" />
           New Deal
@@ -320,8 +325,11 @@ export default function Pipeline() {
               return (
                 <div key={stage.key} className="flex items-stretch flex-1">
                   <button
+                    type="button"
+                    aria-expanded={isExpanded}
+                    aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${stage.label} stage`}
                     onClick={() => setExpandedStage(isExpanded ? null : stage.key)}
-                    className={`flex-1 relative p-4 rounded-xl border-2 transition-all duration-200 hover:scale-[1.02] ${
+                    className={`flex-1 relative p-4 rounded-xl border-2 transition-all duration-200 hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                       isExpanded ? `${config.border} shadow-lg` : 'border-border hover:border-primary/30'
                     }`}
                   >
@@ -359,8 +367,11 @@ export default function Pipeline() {
             return (
               <div key={stage.key} style={{ width: `${widthPct}%` }} className="mx-auto">
                 <button
+                  type="button"
+                  aria-expanded={isExpanded}
+                  aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${stage.label} stage`}
                   onClick={() => setExpandedStage(isExpanded ? null : stage.key)}
-                  className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${
+                  className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                     isExpanded ? `${config.border} shadow-lg` : 'border-border'
                   }`}
                 >
