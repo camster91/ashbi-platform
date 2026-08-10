@@ -127,7 +127,7 @@ function MiniCalendar({ selectedDate, onSelect }) {
         data-date={dateStr}
         onClick={() => onSelect(dateStr)}
         className={cn(
-          'w-10 h-10 rounded-lg text-sm font-medium transition-all',
+          'min-h-11 min-w-11 w-10 h-10 rounded-lg text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-800 focus-visible:ring-offset-2',
           isPast && 'text-slate-300 cursor-not-allowed',
           !isPast && !isSelected && 'text-slate-700 hover:bg-slate-100',
           isSelected && 'bg-slate-800 text-white shadow-sm',
@@ -146,7 +146,7 @@ function MiniCalendar({ selectedDate, onSelect }) {
           type="button"
           onClick={prevMonth}
           aria-label={`Previous month, ${new Date(year, month - 1, 1).toLocaleDateString({ month: 'long', year: 'numeric' })}`}
-          className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors"
+          className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2"
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
@@ -155,7 +155,7 @@ function MiniCalendar({ selectedDate, onSelect }) {
           type="button"
           onClick={nextMonth}
           aria-label={`Next month, ${new Date(year, month + 1, 1).toLocaleDateString({ month: 'long', year: 'numeric' })}`}
-          className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors"
+          className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-lg hover:bg-slate-100 text-slate-600 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2"
         >
           <ChevronRight className="w-4 h-4" />
         </button>
@@ -244,7 +244,7 @@ export default function PortalBooking() {
           </div>
         </header>
         <main className="max-w-3xl mx-auto px-6 py-8">
-          <div className="rounded-xl border border-green-200 bg-green-50 p-8 text-center">
+          <div role="status" aria-live="polite" className="rounded-xl border border-green-200 bg-green-50 p-8 text-center">
             <CheckCircle className="w-14 h-14 text-green-500 mx-auto mb-4" />
             <h2 className="text-2xl font-bold text-green-800 mb-2">Booking Confirmed</h2>
             <p className="text-green-600 mb-4">
@@ -337,7 +337,7 @@ export default function PortalBooking() {
                       disabled={!available}
                       onClick={() => setSelectedSlot(time)}
                       className={cn(
-                        'px-3 py-2.5 rounded-lg text-sm font-medium border transition-all',
+                        'min-h-11 px-3 py-2.5 rounded-lg text-sm font-medium border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-800 focus-visible:ring-offset-2',
                         !available && 'opacity-40 cursor-not-allowed bg-slate-50 border-slate-100 text-slate-400',
                         available && selectedSlot !== time && 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50',
                         selectedSlot === time && 'bg-slate-800 border-slate-800 text-white shadow-sm'
@@ -421,7 +421,8 @@ export default function PortalBooking() {
             <button
               type="submit"
               disabled={!name.trim() || !email.trim() || bookMutation.isPending}
-              className="w-full px-6 py-3 bg-slate-800 text-white text-sm font-semibold rounded-lg hover:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 shadow-sm"
+              aria-busy={bookMutation.isPending}
+              className="min-h-11 w-full px-6 py-3 bg-slate-800 text-white text-sm font-semibold rounded-lg hover:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-800 focus-visible:ring-offset-2"
             >
               {bookMutation.isPending ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
