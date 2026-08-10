@@ -200,17 +200,21 @@ export default function Automations() {
         {totalPages > 1 && (
           <div className="px-5 py-3 border-t border-border flex items-center justify-between">
             <button
+              type="button"
+              aria-label="Previous automation page"
               onClick={() => setPage(p => Math.max(0, p - 1))}
               disabled={page === 0}
-              className="text-sm text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed"
+              className="min-h-11 min-w-11 px-2 text-sm text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               Previous
             </button>
             <span className="text-sm text-muted-foreground">Page {page + 1} of {totalPages}</span>
             <button
+              type="button"
+              aria-label="Next automation page"
               onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
               disabled={page >= totalPages - 1}
-              className="text-sm text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed"
+              className="min-h-11 min-w-11 px-2 text-sm text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               Next
             </button>

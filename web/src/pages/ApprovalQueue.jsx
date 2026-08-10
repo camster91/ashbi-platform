@@ -185,8 +185,11 @@ export default function ApprovalQueue() {
               return (
                 <button
                   key={a.id}
+                  type="button"
                   onClick={() => setSelectedId(isSelected ? null : a.id)}
-                  className={`w-full text-left px-4 py-3 border-b border-border hover:bg-muted/50 transition-colors ${
+                  aria-label={`${isSelected ? 'Collapse' : 'Open'} approval ${a.title}`}
+                  aria-expanded={isSelected}
+                  className={`w-full min-h-11 text-left px-4 py-3 border-b border-border hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring ${
                     isSelected ? 'bg-primary/5 border-l-2 border-l-primary' : ''
                   }`}
                 >
