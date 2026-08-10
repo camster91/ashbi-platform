@@ -129,8 +129,9 @@ export default function AiContextSettings() {
           </p>
         </div>
         <button
+          type="button"
           onClick={() => setShowAdd(true)}
-          className="flex items-center gap-2 px-3 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
+          className="min-h-11 inline-flex items-center gap-2 px-3 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <Plus className="w-4 h-4" />
           Add Context
@@ -142,7 +143,12 @@ export default function AiContextSettings() {
         <div className="bg-card rounded-xl border border-primary/20 p-4 space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-foreground">New Context Entry</h3>
-            <button onClick={() => setShowAdd(false)} className="text-muted-foreground hover:text-foreground">
+            <button
+              type="button"
+              onClick={() => setShowAdd(false)}
+              aria-label="Close new context form"
+              className="min-h-11 min-w-11 inline-flex items-center justify-center rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -162,15 +168,17 @@ export default function AiContextSettings() {
           />
           <div className="flex justify-end gap-2">
             <button
+              type="button"
               onClick={() => setShowAdd(false)}
-              className="px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors"
+              className="min-h-11 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               Cancel
             </button>
             <button
+              type="button"
               onClick={handleAdd}
               disabled={!newKey.trim() || !newValue.trim() || addMutation.isPending}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              className="min-h-11 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {addMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
               Save
@@ -218,15 +226,17 @@ export default function AiContextSettings() {
                     />
                     <div className="flex justify-end gap-2">
                       <button
+                        type="button"
                         onClick={cancelEdit}
-                        className="px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors"
+                        className="min-h-11 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         Cancel
                       </button>
                       <button
+                        type="button"
                         onClick={() => handleSave(item.key)}
                         disabled={saveMutation.isPending}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                        className="min-h-11 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         {saveMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
                         Save
@@ -243,15 +253,19 @@ export default function AiContextSettings() {
               {editingKey !== item.key && (
                 <div className="flex items-center gap-1 flex-shrink-0">
                   <button
+                    type="button"
                     onClick={() => startEdit(item)}
-                    className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors"
+                    aria-label={`Edit AI context ${item.key}`}
+                    className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     title="Edit"
                   >
                     <Pencil className="w-4 h-4" />
                   </button>
                   <button
+                    type="button"
                     onClick={() => { deleteMutation.reset(); setContextToDelete(item); }}
-                    className="p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10 transition-colors"
+                    aria-label={`Delete AI context ${item.key}`}
+                    className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 text-muted-foreground hover:text-destructive rounded-lg hover:bg-destructive/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     title="Delete"
                     disabled={deleteMutation.isPending}
                   >
