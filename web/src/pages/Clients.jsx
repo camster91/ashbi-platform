@@ -73,7 +73,8 @@ function QuickNoteInput({ clientId, onSaved }) {
       <button
         type="submit"
         disabled={saving || !note.trim()}
-        className="px-2 py-1 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50"
+        aria-label="Save quick client note"
+        className="min-h-11 min-w-11 inline-flex items-center justify-center px-2 py-1 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
       </button>
@@ -157,9 +158,11 @@ export default function Clients() {
         </div>
         <div className="flex gap-2">
           <button
+            type="button"
+            aria-label="Toggle client health"
             onClick={() => { setShowHealth(!showHealth); if (!showHealth) refetchHealth(); }}
             className={cn(
-              'px-3 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors',
+              'min-h-11 inline-flex items-center px-3 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
               showHealth
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -187,8 +190,8 @@ export default function Clients() {
               <Sparkles className="w-5 h-5 text-primary" />
               <h2 className="text-lg font-semibold">Quick Client Onboarding</h2>
             </div>
-            <button onClick={() => { setShowOnboarding(false); setOnboardResult(null); }}>
-              <X className="w-5 h-5 text-muted-foreground hover:text-foreground" />
+            <button type="button" aria-label="Close client onboarding" onClick={() => { setShowOnboarding(false); setOnboardResult(null); }} className="min-h-11 min-w-11 inline-flex items-center justify-center rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <X className="w-5 h-5 text-muted-foreground hover:text-foreground" aria-hidden="true" />
             </button>
           </div>
 
@@ -312,8 +315,10 @@ export default function Clients() {
                 return (
                   <button
                     key={client.id}
+                    type="button"
+                    aria-label={`Open client health for ${client.name}`}
                     onClick={() => navigate(`/client/${client.id}`)}
-                    className={cn('p-3 rounded-lg border text-left transition-all hover:shadow-md', classes.border)}
+                    className={cn('w-full min-h-11 p-3 rounded-lg border text-left transition-all hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', classes.border)}
                   >
                     <div className="flex items-center justify-between mb-2">
                       <span className="font-medium text-sm text-foreground truncate">{client.name}</span>
@@ -405,8 +410,10 @@ export default function Clients() {
                     )}>
                       <td className="px-4 py-3">
                         <button
+                          type="button"
+                          aria-label={`${isExpanded ? 'Collapse' : 'Expand'} client ${client.name}`}
                           onClick={() => setExpandedClient(isExpanded ? null : client.id)}
-                          className="flex items-center gap-3 text-left w-full"
+                          className="min-h-11 flex items-center gap-3 text-left w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
                         >
                           <div className={cn(
                             'w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold shrink-0',
