@@ -29,6 +29,7 @@ export default function PortalEstimate() {
   const { viewToken } = useParams();
   const [action, setAction] = useState(null);
   const [declineReason, setDeclineReason] = useState('');
+  const [declineError, setDeclineError] = useState('');
   const [completed, setCompleted] = useState(null);
 
   const { data: estimate, isLoading, error } = useQuery({
@@ -49,7 +50,11 @@ export default function PortalEstimate() {
   };
 
   const handleDecline = () => {
-    if (!declineReason.trim()) return;
+    if (!declineReason.trim()) {
+      setDeclineError('Enter a reason for declining this estimate.');
+      return;
+    }
+    setDeclineError('');
     respondMutation.mutate('decline');
   };
 
@@ -113,7 +118,7 @@ export default function PortalEstimate() {
       <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
         {/* Approval / Decline confirmation banner */}
         {(completed || alreadyResponded) && (
-          <div className={cn(
+          <div role="status" aria-live="polite" className={cn(
             'rounded-xl border p-6 text-center',
             isApproved ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
           )}>
@@ -251,39 +256,49 @@ export default function PortalEstimate() {
             {action === 'decline' ? (
               <div className="space-y-4">
                 <h3 className="text-sm font-medium text-slate-700">Please let us know why you are declining:</h3>
+                <label htmlFor="estimate-decline-reason" className="sr-only">Reason for declining estimate</label>
                 <textarea
+                  id="estimate-decline-reason"
                   value={declineReason}
-                  onChange={(e) => setDeclineReason(e.target.value)}
+                  onChange={(e) => { setDeclineReason(e.target.value); setDeclineError(''); }}
+                  aria-invalid={Boolean(declineError)}
+                  aria-describedby={declineError ? 'estimate-decline-reason-error' : undefined}
                   placeholder="Your feedback helps us improve our estimates..."
                   className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 resize-none"
                   rows={4}
                 />
+                {declineError && <p id="estimate-decline-reason-error" role="alert" className="text-sm text-red-600">{declineError}</p>}
                 <div className="flex items-center gap-3">
                   <button
+                    type="button"
                     onClick={handleDecline}
                     disabled={!declineReason.trim() || respondMutation.isPending}
-                    className="px-5 py-2.5 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                    aria-busy={respondMutation.isPending}
+                    className="min-h-11 px-5 py-2.5 bg-red-600 text-white text-sm font-medium rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2"
                   >
                     {respondMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
                     Submit Decline
                   </button>
                   <button
-                    onClick={() => { setAction(null); setDeclineReason(''); }}
-                    className="px-5 py-2.5 text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-100 transition-colors"
+                    type="button"
+                    onClick={() => { setAction(null); setDeclineReason(''); setDeclineError(''); }}
+                    className="min-h-11 px-5 py-2.5 text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-100 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2"
                   >
                     Cancel
                   </button>
                 </div>
                 {respondMutation.isError && (
-                  <p className="text-sm text-red-600">Something went wrong. Please try again.</p>
+                  <p role="alert" className="text-sm text-red-600">Something went wrong. Please try again.</p>
                 )}
               </div>
             ) : (
               <div className="flex flex-col sm:flex-row items-center gap-3">
                 <button
+                  type="button"
                   onClick={handleApprove}
                   disabled={respondMutation.isPending}
-                  className="w-full sm:w-auto px-6 py-3 text-white text-sm font-semibold rounded-lg hover:opacity-90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 shadow-sm"
+                  aria-busy={respondMutation.isPending}
+                  className="min-h-11 w-full sm:w-auto px-6 py-3 text-white text-sm font-semibold rounded-lg hover:opacity-90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2e2958] focus-visible:ring-offset-2"
                   style={{ backgroundColor: '#2e2958' }}
                 >
                   {respondMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -291,9 +306,10 @@ export default function PortalEstimate() {
                   Approve Estimate
                 </button>
                 <button
+                  type="button"
                   onClick={() => setAction('decline')}
                   disabled={respondMutation.isPending}
-                  className="w-full sm:w-auto px-6 py-3 border border-slate-200 text-slate-600 text-sm font-semibold rounded-lg hover:bg-slate-50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                  className="min-h-11 w-full sm:w-auto px-6 py-3 border border-slate-200 text-slate-600 text-sm font-semibold rounded-lg hover:bg-slate-50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2"
                 >
                   <XCircle className="w-4 h-4" />
                   Decline
