@@ -678,16 +678,19 @@ export default function Settings() {
               { label: 'Command Center', href: '/admin/command-center', desc: 'VPS & GitHub integrations' },
               { label: 'Automations', href: '/automations', desc: 'Workflow automation log' },
               { label: 'Credentials', href: '/credentials', desc: 'Stored API keys & passwords' },
-              { label: 'Reports', href: '/reports', desc: 'P&L, team utilization' },
+              { label: 'Reports (planned)', desc: 'P&L and team utilization will appear after the finance workflow is approved.' },
             ].map(({ label, href, desc }) => (
-              <a
+              href ? <a
                 key={href}
                 href={href}
-                className="p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                className="min-h-11 p-3 rounded-lg border border-border hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <p className="text-sm font-medium text-foreground">{label}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
-              </a>
+              </a> : <div key={label} aria-disabled="true" className="min-h-11 p-3 rounded-lg border border-dashed border-border bg-muted/30">
+                <p className="text-sm font-medium text-muted-foreground">{label}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+              </div>
             ))}
           </div>
         </Section>
