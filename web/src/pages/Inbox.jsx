@@ -31,6 +31,9 @@ export default function Inbox() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [triageResult, setTriageResult] = useState(null);
+  const [priorityFilter, setPriorityFilter] = useState('');
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [compactView, setCompactView] = useState(false);
 
   const triageMutation = useMutation({
     mutationFn: () => api.triageInbox(),
@@ -81,6 +84,9 @@ export default function Inbox() {
   }
 
   const threads = inboxData?.threads || [];
+  const visibleThreads = priorityFilter
+    ? threads.filter(thread => thread.priority === priorityFilter)
+    : threads;
 
   return (
     <div className="space-y-6">
@@ -92,6 +98,7 @@ export default function Inbox() {
         </div>
         <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={() => triageMutation.mutate()}
             disabled={triageMutation.isPending}
             className={cn(
@@ -108,13 +115,42 @@ export default function Inbox() {
             )}
             {triageMutation.isPending ? 'Triaging...' : 'AI Triage'}
           </button>
-          <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 rounded-lg transition-colors">
-            <Filter className="w-4 h-4" />
-            Filter
-          </button>
-          <button className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 rounded-lg transition-colors">
+          <div className="relative">
+            <button
+              type="button"
+              aria-expanded={filterOpen}
+              aria-controls="inbox-filter-menu"
+              onClick={() => setFilterOpen(value => !value)}
+              className="min-h-11 inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Filter className="w-4 h-4" />
+              {priorityFilter ? `Filter: ${priorityFilter}` : 'Filter'}
+            </button>
+            {filterOpen && (
+              <div id="inbox-filter-menu" role="menu" aria-label="Filter inbox threads" className="absolute right-0 top-full z-20 mt-2 min-w-44 rounded-lg border border-border bg-card p-1 shadow-lg">
+                {[['', 'All priorities'], ['CRITICAL', 'Critical'], ['HIGH', 'High'], ['NORMAL', 'Normal']].map(([value, label]) => (
+                  <button
+                    key={value || 'all'}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={priorityFilter === value}
+                    onClick={() => { setPriorityFilter(value); setFilterOpen(false); }}
+                    className="min-h-11 w-full rounded px-3 py-2 text-left text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            aria-pressed={compactView}
+            onClick={() => setCompactView(value => !value)}
+            className="min-h-11 inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground bg-muted hover:bg-muted/80 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
             <MoreHorizontal className="w-4 h-4" />
-            View
+            {compactView ? 'Comfortable view' : 'Compact view'}
           </button>
         </div>
       </div>
@@ -165,14 +201,14 @@ export default function Inbox() {
               {triageResult.summary.lowPriority > 0 && <span className="text-muted-foreground">{triageResult.summary.lowPriority} low-priority</span>}
             </span>
           </div>
-          <button onClick={() => setTriageResult(null)} className="text-muted-foreground hover:text-foreground text-sm">
+          <button type="button" onClick={() => setTriageResult(null)} className="min-h-11 px-2 text-muted-foreground hover:text-foreground text-sm rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             Dismiss
           </button>
         </div>
       )}
 
       {/* Priority Threads Section (if there are critical/high priority items) */}
-      {threads.some(t => t.priority === 'CRITICAL' || t.priority === 'HIGH') && (
+      {visibleThreads.some(t => t.priority === 'CRITICAL' || t.priority === 'HIGH') && (
         <div className="bg-destructive/5 border border-destructive/20 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-3">
             <Flame className="w-5 h-5 text-destructive" />
@@ -182,7 +218,7 @@ export default function Inbox() {
             </span>
           </div>
           <div className="space-y-2">
-            {threads
+            {visibleThreads
               .filter(t => t.priority === 'CRITICAL' || t.priority === 'HIGH')
               .slice(0, 3)
               .map(thread => (
@@ -197,16 +233,16 @@ export default function Inbox() {
         <div className="px-4 py-3 border-b border-border flex items-center justify-between">
           <h2 className="font-heading font-semibold text-foreground">All Threads</h2>
           <span className="text-sm text-muted-foreground">
-            {threads.length} {threads.length === 1 ? 'thread' : 'threads'}
+            {visibleThreads.length} {visibleThreads.length === 1 ? 'thread' : 'threads'}
           </span>
         </div>
 
-        {threads.length === 0 ? (
+        {visibleThreads.length === 0 ? (
           <EmptyInbox onBrowseProjects={() => navigate('/projects')} />
         ) : (
           <ul className="divide-y divide-border">
-            {threads.map((thread) => (
-              <ThreadRow key={thread.id} thread={thread} />
+            {visibleThreads.map((thread) => (
+              <ThreadRow key={thread.id} thread={thread} compact={compactView} />
             ))}
           </ul>
         )}
@@ -263,7 +299,7 @@ function PriorityThreadRow({ thread }) {
   );
 }
 
-function ThreadRow({ thread }) {
+function ThreadRow({ thread, compact = false }) {
   const latestMessage = thread.messages?.[0];
 
   const priorityConfig = {
@@ -280,7 +316,8 @@ function ThreadRow({ thread }) {
       <Link
         to={`/thread/${thread.id}`}
         className={cn(
-          'flex items-center gap-4 px-4 py-4',
+          'flex items-center gap-4 px-4',
+          compact ? 'py-2' : 'py-4',
           'hover:bg-muted/50 transition-colors duration-200',
           'group',
           thread.priority === 'CRITICAL' && 'border-l-4 border-l-destructive bg-destructive/5'
