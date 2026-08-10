@@ -112,7 +112,8 @@ function SignatureCanvas({ onSignatureChange }) {
         <button
           type="button"
           onClick={clear}
-          className="mt-2 text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1 transition-colors"
+          aria-label="Clear drawn signature"
+          className="min-h-11 inline-flex items-center mt-2 text-xs text-slate-500 hover:text-slate-700 gap-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2"
         >
           <Eraser className="w-3 h-3" />
           Clear signature
@@ -270,7 +271,7 @@ export default function PortalContract() {
                   onClick={() => setSignatureMode('draw')}
                   aria-pressed={signatureMode === 'draw'}
                   className={cn(
-                    'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors',
+                    'min-h-11 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-800 focus-visible:ring-offset-2',
                     signatureMode === 'draw'
                       ? 'bg-slate-800 text-white border-slate-800'
                       : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
@@ -284,7 +285,7 @@ export default function PortalContract() {
                   onClick={() => setSignatureMode('type')}
                   aria-pressed={signatureMode === 'type'}
                   className={cn(
-                    'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors',
+                    'min-h-11 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-800 focus-visible:ring-offset-2',
                     signatureMode === 'type'
                       ? 'bg-slate-800 text-white border-slate-800'
                       : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
@@ -314,9 +315,11 @@ export default function PortalContract() {
 
             {/* Sign button */}
             <button
+              type="button"
               onClick={handleSign}
               disabled={signMutation.isPending}
-              className="w-full px-6 py-3 bg-slate-800 text-white text-sm font-semibold rounded-lg hover:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 shadow-sm"
+              aria-busy={signMutation.isPending}
+              className="min-h-11 w-full px-6 py-3 bg-slate-800 text-white text-sm font-semibold rounded-lg hover:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-800 focus-visible:ring-offset-2"
             >
               {signMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
               <FileSignature className="w-4 h-4" />
