@@ -548,11 +548,11 @@ export default function Layout({ children }) {
               <Bell className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
               <div>
                 <p id="push-consent-title" className="text-sm font-medium text-foreground">Get important work updates</p>
-                <p className="text-xs text-muted-foreground">Ashbi can send browser notifications for assigned work and client activity. You can disable them anytime in Settings.</p>
+                <p id="push-consent-description" className="text-xs text-muted-foreground">Ashbi can send browser notifications for assigned work and client activity. You can disable them anytime in Settings.</p>
               </div>
             </div>
             <div className="flex min-h-11 shrink-0 items-center gap-2">
-              <Button size="sm" onClick={subscribe} disabled={pushOffline || pushStatus === 'subscribing'}>
+              <Button size="sm" onClick={subscribe} isLoading={pushStatus === 'subscribing'} disabled={pushOffline} aria-describedby="push-consent-description">
                 {pushStatus === 'subscribing' ? 'Enabling...' : 'Enable notifications'}
               </Button>
               <Button size="sm" variant="ghost" onClick={snoozeNotificationPrompt}>Not now</Button>

@@ -82,7 +82,7 @@ function NotificationPreferences() {
             {status === 'unsubscribing' ? 'Disabling...' : 'Disable notifications'}
           </Button>
         ) : (
-          <Button type="button" onClick={subscribe} disabled={busy || offline || !supported}>
+          <Button type="button" onClick={subscribe} isLoading={status === 'subscribing'} disabled={busy || offline || !supported}>
             {status === 'subscribing' ? 'Enabling...' : permission === 'denied' ? 'Try again' : 'Enable notifications'}
           </Button>
         )}
