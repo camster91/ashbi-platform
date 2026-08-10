@@ -277,8 +277,10 @@ export default function Estimates() {
           {FILTERS.map((s) => (
             <button
               key={s}
+              type="button"
               onClick={() => setFilterStatus(s)}
-              className={`px-3 py-1.5 text-xs rounded-lg transition-colors font-medium ${
+              aria-pressed={filterStatus === s}
+              className={`min-h-11 px-3 py-1.5 text-xs rounded-lg transition-colors font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                 filterStatus === s
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -620,7 +622,8 @@ function EstimateForm({
                   <button
                     type="button"
                     onClick={() => onLineItemRemove(idx)}
-                    className="col-span-1 text-muted-foreground hover:text-destructive text-center text-lg leading-none"
+                    aria-label={`Remove estimate line item ${idx + 1}`}
+                    className="col-span-1 min-h-11 min-w-11 text-muted-foreground hover:text-destructive text-center text-lg leading-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     disabled={form.lineItems.length === 1}
                   >
                     &times;
@@ -639,7 +642,8 @@ function EstimateForm({
                       required
                     />
                     <button type="button" onClick={() => onLineItemRemove(idx)}
-                      className="p-2 text-muted-foreground hover:text-destructive rounded hover:bg-muted"
+                      aria-label={`Remove estimate line item ${idx + 1}`}
+                      className="min-h-11 min-w-11 inline-flex items-center justify-center p-2 text-muted-foreground hover:text-destructive rounded hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       disabled={form.lineItems.length === 1}>
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -680,7 +684,8 @@ function EstimateForm({
           </div>
 
           <button type="button" onClick={onLineItemAdd}
-            className="text-sm text-primary hover:underline mt-2">
+            aria-label="Add estimate line item"
+            className="min-h-11 text-sm text-primary hover:underline mt-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             + Add line item
           </button>
         </div>
