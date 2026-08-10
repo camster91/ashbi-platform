@@ -150,10 +150,11 @@ export default function Login() {
                     className={cn(
                       'w-full pl-11 pr-4 py-3 bg-card border border-border rounded-xl',
                       'text-card-foreground placeholder:text-muted-foreground',
-                      'focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-transparent',
                       'transition-all duration-200'
                     )}
                     required
+                    autoComplete="email"
                     aria-describedby={error ? 'login-error' : undefined}
                   />
                 </div>
@@ -175,10 +176,11 @@ export default function Login() {
                     className={cn(
                       'w-full pl-11 pr-12 py-3 bg-card border border-border rounded-xl',
                       'text-card-foreground placeholder:text-muted-foreground',
-                      'focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-transparent',
                       'transition-all duration-200'
                     )}
                     required
+                    autoComplete="current-password"
                     aria-describedby={error ? 'login-error' : undefined}
                   />
                   <button
@@ -214,14 +216,15 @@ export default function Login() {
             <button
               type="submit"
               disabled={isLoading}
+              aria-busy={isLoading}
               aria-describedby={error ? 'login-error' : undefined}
               className={cn(
-                'w-full flex items-center justify-center gap-2 py-3 px-6',
+                'w-full min-h-11 flex items-center justify-center gap-2 py-3 px-6',
                 'bg-primary text-primary-foreground rounded-full',
                 'hover:bg-primary/90',
                 'shadow-md hover:shadow-lg',
                 'motion-safe:hover:scale-[1.02] motion-safe:active:scale-[0.98]',
-                'transition-all duration-200',
+                'transition-all duration-200 focus:ring-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                 'font-semibold text-base',
                 'disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100'
               )}
