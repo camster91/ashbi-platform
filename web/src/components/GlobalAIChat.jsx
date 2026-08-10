@@ -131,9 +131,12 @@ export default function GlobalAIChat() {
     <>
       {/* Floating Button */}
       <button
+        type="button"
         data-ai-chat-btn
         onClick={() => setIsOpen(prev => !prev)}
-        className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center group"
+        aria-expanded={isOpen}
+        aria-controls="global-ai-chat-drawer"
+        className="fixed bottom-6 right-6 z-50 min-h-14 min-w-14 w-14 h-14 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl transition-all duration-200 motion-reduce:transition-none flex items-center justify-center group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         aria-label="Open AI Chat"
       >
         <Bot className="w-6 h-6 group-hover:scale-110 transition-transform" />
@@ -145,7 +148,11 @@ export default function GlobalAIChat() {
       {/* Drawer */}
       {isOpen && (
         <div
+          id="global-ai-chat-drawer"
           ref={drawerRef}
+          role="dialog"
+          aria-modal="false"
+          aria-labelledby="global-ai-chat-title"
           className="fixed bottom-24 right-4 sm:right-6 z-50 w-[calc(100vw-32px)] sm:w-[400px] max-h-[560px] rounded-xl shadow-2xl bg-card border border-border flex flex-col overflow-hidden"
         >
           {/* Header */}
@@ -154,11 +161,12 @@ export default function GlobalAIChat() {
               <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                 <Bot className="w-5 h-5 text-primary" />
               </div>
-              <h3 className="font-semibold text-foreground">Ask Ash</h3>
+              <h3 id="global-ai-chat-title" className="font-semibold text-foreground">Ask Ash</h3>
             </div>
             <button
+              type="button"
               onClick={() => setIsOpen(false)}
-              className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+              className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-lg hover:bg-muted transition-colors motion-reduce:transition-none text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               aria-label="Close chat"
             >
               <X className="w-4 h-4" />
@@ -216,19 +224,23 @@ export default function GlobalAIChat() {
             <div className="flex items-end gap-2">
               <textarea
                 ref={inputRef}
+                id="global-ai-chat-input"
+                aria-label="Ask Ash about your work"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Ask about your projects..."
                 rows={1}
-                className="flex-1 px-4 py-2.5 border border-input rounded-xl bg-background text-sm text-foreground placeholder:text-muted-foreground resize-none focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-colors"
+                className="flex-1 min-h-11 px-4 py-2.5 border border-input rounded-xl bg-background text-sm text-foreground placeholder:text-muted-foreground resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:border-primary transition-colors motion-reduce:transition-none"
                 style={{ maxHeight: '120px' }}
               />
               <button
+                type="button"
                 onClick={handleSend}
                 disabled={!input.trim() || isLoading}
+                aria-busy={isLoading}
                 className={cn(
-                  'w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all',
+                  'min-h-11 min-w-11 rounded-xl flex items-center justify-center shrink-0 transition-all motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                   input.trim() && !isLoading
                     ? 'bg-primary text-primary-foreground hover:bg-primary/90'
                     : 'bg-muted text-muted-foreground cursor-not-allowed'
