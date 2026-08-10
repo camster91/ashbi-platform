@@ -268,7 +268,7 @@ export default function Docs() {
             className="w-full pl-9 pr-4 py-2 text-sm rounded-lg border border-border bg-background focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
           {search && (
-            <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2" aria-label="Clear note search">
+            <button type="button" onClick={() => setSearch('')} className="min-h-11 min-w-11 inline-flex items-center justify-center absolute right-1 top-1/2 -translate-y-1/2 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Clear note search">
               <X className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
             </button>
           )}
@@ -277,9 +277,11 @@ export default function Docs() {
           {NOTE_TYPES.map(({ value, label, icon: Icon }) => (
             <button
               key={value}
+              type="button"
               onClick={() => setFilterType(value)}
+              aria-pressed={filterType === value}
               className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
+                'min-h-11 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                 filterType === value
                   ? 'bg-primary text-primary-foreground'
                   : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -297,7 +299,7 @@ export default function Docs() {
         <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">New Note</h2>
-            <button onClick={() => setShowNewNote(false)} className="text-muted-foreground hover:text-foreground" aria-label="Close new document form">
+            <button type="button" onClick={() => setShowNewNote(false)} className="min-h-11 min-w-11 inline-flex items-center justify-center text-muted-foreground hover:text-foreground rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Close new document form">
               <X className="w-5 h-5" />
             </button>
           </div>
@@ -498,9 +500,11 @@ function ProjectGroup({
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-sm font-medium text-foreground flex-wrap">
-      <button
-        onClick={() => setCollapsed(!collapsed)}
-        className="flex items-center gap-2 hover:text-primary transition-colors"
+       <button
+         type="button"
+         onClick={() => setCollapsed(!collapsed)}
+         aria-label={`Toggle project ${project?.name || 'Unlinked'}`}
+         className="min-h-11 flex items-center gap-2 hover:text-primary transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-expanded={!collapsed}
       >
         {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -575,9 +579,11 @@ function NoteCard({
   return (
     <Card className={cn('p-4 transition-shadow', expanded && 'shadow-md')}>
       <div className="flex items-start justify-between gap-2 mb-2">
-        <button
+         <button
+          type="button"
           onClick={onToggle}
-          className="text-sm font-medium text-foreground hover:text-primary transition-colors text-left flex-1"
+          aria-label={`Toggle note ${note.title}`}
+          className="min-h-11 text-sm font-medium text-foreground hover:text-primary transition-colors text-left flex-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {note.isPinned && <Pin className="w-3 h-3 text-primary inline mr-1" />}
           {note.title}
