@@ -86,7 +86,7 @@ export default function PortalInvoice() {
       <main className="max-w-3xl mx-auto px-6 py-8 space-y-6">
         {/* Paid confirmation */}
         {isPaid && (
-          <div className="rounded-xl border border-green-200 bg-green-50 p-6 text-center">
+          <div role="status" aria-live="polite" className="rounded-xl border border-green-200 bg-green-50 p-6 text-center">
             <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
             <h2 className="text-xl font-bold text-green-800 mb-1">Payment Received</h2>
             <p className="text-green-600">
@@ -202,9 +202,11 @@ export default function PortalInvoice() {
               </div>
             )}
             <button
+              type="button"
               onClick={() => payMutation.mutate()}
               disabled={payMutation.isPending}
-              className="w-full px-6 py-3.5 bg-slate-800 text-white text-sm font-semibold rounded-lg hover:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 shadow-sm"
+              aria-busy={payMutation.isPending}
+              className="min-h-11 w-full px-6 py-3.5 bg-slate-800 text-white text-sm font-semibold rounded-lg hover:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-800 focus-visible:ring-offset-2"
             >
               {payMutation.isPending ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -214,7 +216,7 @@ export default function PortalInvoice() {
               Pay Now - ${total.toLocaleString('en-US', { minimumFractionDigits: 2 })}
             </button>
             {payMutation.isError && (
-              <p className="text-sm text-red-600 text-center mt-3">Payment initiation failed. Please try again.</p>
+              <p role="alert" className="text-sm text-red-600 text-center mt-3">Payment initiation failed. Please try again.</p>
             )}
             <p className="text-xs text-slate-400 text-center mt-3">
               Secure payment powered by Stripe
