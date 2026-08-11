@@ -777,8 +777,8 @@ function ProjectDetail({ projectId, token, onBack }) {
                     <label htmlFor={`revision-feedback-${revision.id}`} className="cp-label">Feedback for round {revision.roundNumber}</label>
                     <textarea id={`revision-feedback-${revision.id}`} className="cp-input" rows={3} value={revisionFeedback[revision.id] || ''} onChange={event => setRevisionFeedback(current => ({ ...current, [revision.id]: event.target.value }))} placeholder="Describe requested changes, or approve when everything looks right." />
                     <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
-                      <button type="button" className="cp-btn-primary" disabled={submittingWorkflow} onClick={() => handleRevisionResponse(revision, 'APPROVE')}>Approve round</button>
-                      <button type="button" className="cp-btn-secondary" disabled={submittingWorkflow} onClick={() => handleRevisionResponse(revision, 'REQUEST_CHANGES')}>Request changes</button>
+                      <button type="button" className="cp-btn-primary" disabled={submittingWorkflow} aria-busy={submittingWorkflow || undefined} onClick={() => handleRevisionResponse(revision, 'APPROVE')}>Approve round</button>
+                      <button type="button" className="cp-btn-secondary" disabled={submittingWorkflow} aria-busy={submittingWorkflow || undefined} onClick={() => handleRevisionResponse(revision, 'REQUEST_CHANGES')}>Request changes</button>
                     </div>
                   </div>
                 )}
@@ -793,7 +793,7 @@ function ProjectDetail({ projectId, token, onBack }) {
         <form onSubmit={handleGeneralFeedback}>
           <label htmlFor="portal-project-feedback" className="cp-label">Message to the project team</label>
           <textarea id="portal-project-feedback" className="cp-input" rows={3} value={generalFeedback} onChange={event => setGeneralFeedback(event.target.value)} required />
-          <button type="submit" className="cp-btn-primary" style={{ marginTop: '0.5rem' }} disabled={submittingWorkflow || !generalFeedback.trim()}>Send feedback</button>
+          <button type="submit" className="cp-btn-primary" style={{ marginTop: '0.5rem' }} disabled={submittingWorkflow || !generalFeedback.trim()} aria-busy={submittingWorkflow || undefined}>Send feedback</button>
         </form>
       </section>
 

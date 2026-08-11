@@ -20,4 +20,9 @@ describe('client portal action accessibility contract', () => {
     expect(source).toContain('.cp-btn-danger:focus-visible');
     expect(source).toContain('min-height: 44px');
   });
+
+  it('announces workflow action progress while requests are pending', () => {
+    expect(source).toContain('aria-busy={submittingWorkflow || undefined}');
+    expect(source).toContain('disabled={submittingWorkflow || !generalFeedback.trim()}');
+  });
 });
