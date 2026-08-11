@@ -4,6 +4,7 @@ import { generateInvoicePdf } from '../utils/generate-invoice-pdf.js';
 import { generateInvoiceNumber } from '../utils/invoice.js';
 import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
 import { validateBody, createInvoiceSchema, updateInvoiceSchema, markInvoicePaidSchema, sendInvoiceSchema, lineItemTemplateCreateSchema, invoiceBulkIdsSchema, invoiceBulkArchiveSchema, bulkMarkPaidSchema } from '../validators/schemas.js';
+import { sendInvoiceDeliveryEmail } from '../services/email.service.js';
 
 const HST_RATE = 13; // Ontario HST
 const VOID_UNDO_WINDOW_MS = 10_000;
@@ -383,14 +384,18 @@ export default async function invoiceRoutes(fastify) {
     if (primaryContact?.email) {
       try {
         const viewUrl = `${process.env.APP_URL || 'https://hub.ashbi.ca'}/portal/invoice/${access.token}`;
-        emailSent = await sendInvoiceEmail({
+        const delivery = await sendInvoiceDeliveryEmail({
           to: primaryContact.email,
-          name: primaryContact.name,
-          invoice,
+          clientName: primaryContact.name || invoice.client.name,
+          invoiceNumber: invoice.invoiceNumber,
+          total: invoice.total,
+          dueDate: invoice.dueDate,
           viewUrl,
           paymentLink: updateData.stripePaymentLink,
         });
-        fastify.log.info(`Invoice email sent to ${primaryContact.email}`);
+        emailSent = delivery.ok;
+        if (emailSent) fastify.log.info('Invoice email accepted by delivery provider');
+        else fastify.log.warn({ emailError: delivery.error }, 'Invoice email delivery unavailable');
       } catch (emailErr) {
         fastify.log.warn({ emailErr }, 'Email send failed — invoice still marked sent');
       }
@@ -640,14 +645,16 @@ export default async function invoiceRoutes(fastify) {
     const contact = invoice.client?.contacts?.[0];
     if (!contact?.email) return reply.status(409).send({ error: 'Primary client email is missing' });
     const viewUrl = `${process.env.APP_URL || 'https://hub.ashbi.ca'}/portal/invoice/${invoice.viewToken}`;
-    const emailSent = await sendInvoiceEmail({
+    const delivery = await sendInvoiceDeliveryEmail({
       to: contact.email,
-      name: contact.name || invoice.client.name,
-      invoice,
+      clientName: contact.name || invoice.client.name,
+      invoiceNumber: invoice.invoiceNumber,
+      total: invoice.total,
+      dueDate: invoice.dueDate,
       viewUrl,
       paymentLink: invoice.stripePaymentLink,
     });
-    if (!emailSent) return reply.status(503).send({ error: 'Invoice email delivery is unavailable', retryable: true });
+    if (!delivery.ok) return reply.status(503).send({ error: 'Invoice email delivery is unavailable', retryable: true });
     return { emailSent: true };
   });
 
@@ -766,43 +773,6 @@ export default async function invoiceRoutes(fastify) {
 
     return { archived };
   });
-}
-
-// ─── Email stub (Mailgun) ─────────────────────────────────────────────────────
-async function sendInvoiceEmail({ to, name, invoice, viewUrl, paymentLink }) {
-  if (process.env.NODE_ENV === 'test' && process.env.ASHBI_RUN_EMAIL_TESTS !== '1') return false;
-  const MAILGUN_API_KEY = process.env.MAILGUN_API_KEY;
-  const MAILGUN_DOMAIN = process.env.MAILGUN_DOMAIN;
-  if (!MAILGUN_API_KEY || !MAILGUN_DOMAIN) return false; // No-op if not configured
-
-  const dueDate = invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString('en-CA', { dateStyle: 'long' }) : 'upon receipt';
-  const formData = new FormData();
-  formData.append('from', `Cameron Ashley <noreply@${MAILGUN_DOMAIN}>`);
-  formData.append('to', `${name} <${to}>`);
-  formData.append('subject', `Invoice ${invoice.invoiceNumber} from Ashbi Design — $${invoice.total.toLocaleString('en-CA', { minimumFractionDigits: 2 })}`);
-  formData.append('html', `
-    <p>Hi ${name},</p>
-    <p>Please find your invoice ${invoice.invoiceNumber} attached below.</p>
-    <p><strong>Amount due: $${invoice.total.toLocaleString('en-CA', { minimumFractionDigits: 2 })} CAD</strong><br>
-    Due: ${dueDate}</p>
-    ${paymentLink ? `<p><a href="${paymentLink}" style="background:#2563eb;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;display:inline-block;">Pay Now</a></p>` : ''}
-    <p><a href="${viewUrl}">View invoice online</a></p>
-    ${invoice.notes ? `<p>${invoice.notes}</p>` : ''}
-    <p>Thank you for your business!<br>Cameron Ashley<br>Ashbi Design</p>
-  `);
-
-  const auth = Buffer.from(`api:${MAILGUN_API_KEY}`).toString('base64');
-  const response = await fetch(`https://api.mailgun.net/v3/${MAILGUN_DOMAIN}/messages`, {
-    method: 'POST',
-    headers: { Authorization: `Basic ${auth}` },
-    body: formData,
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Mailgun error: ${text}`);
-  }
-  return true;
 }
 
 // ─── Invoice HTML/PDF generator ──────────────────────────────────────────────

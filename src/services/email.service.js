@@ -129,6 +129,39 @@ export async function sendInvoiceCreatedEmail({ to, clientName, invoiceNumber, a
   });
 }
 
+export function buildInvoiceDeliveryEmail({ to, clientName, invoiceNumber, total, dueDate, viewUrl, paymentLink }) {
+  const amount = `${Number(total || 0).toLocaleString('en-CA', {
+    style: 'currency',
+    currency: 'CAD',
+    minimumFractionDigits: 2,
+  })} CAD`;
+  const formattedDueDate = dueDate
+    ? new Date(dueDate).toLocaleDateString('en-CA', { dateStyle: 'long', timeZone: 'UTC' })
+    : 'upon receipt';
+
+  return {
+    to,
+    subject: `Invoice ${invoiceNumber} from Ashbi`,
+    template: 'invoice-created.html',
+    variables: {
+      clientName: clientName || 'there',
+      invoiceNumber,
+      amount,
+      dueDate: formattedDueDate,
+      payLink: paymentLink || viewUrl,
+    },
+  };
+}
+
+export async function sendInvoiceDeliveryEmail(options) {
+  try {
+    return await sendEmail(buildInvoiceDeliveryEmail(options));
+  } catch (error) {
+    console.error('[email] Invoice delivery preparation failed:', error.message);
+    return { ok: false, error: error.message };
+  }
+}
+
 export async function sendInvoiceOverdueEmail({ to, clientName, invoiceNumber, amount, daysOverdue, payLink, from, replyTo }) {
   return sendEmail({
     to,
