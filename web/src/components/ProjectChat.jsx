@@ -5,6 +5,7 @@ import { useSocket } from '../hooks/useSocket';
 import { useAuth } from '../hooks/useAuth';
 import { preferredScrollBehavior } from '../lib/motion';
 import LoadingState from './ui/LoadingState';
+import { Edit2, Trash2 } from 'lucide-react';
 
 export default function ProjectChat({ projectId }) {
   const { user } = useAuth();
@@ -13,6 +14,8 @@ export default function ProjectChat({ projectId }) {
   const [message, setMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [typingUsers, setTypingUsers] = useState([]);
+  const [editingId, setEditingId] = useState(null);
+  const [editingContent, setEditingContent] = useState('');
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
 
@@ -85,6 +88,8 @@ export default function ProjectChat({ projectId }) {
       setMessage('');
     }
   });
+  const editMutation = useMutation({ mutationFn: ({ id, content }) => api.editChatMessage(projectId, id, content), onSuccess: () => { setEditingId(null); queryClient.invalidateQueries({ queryKey: ['chat', projectId] }); } });
+  const deleteMutation = useMutation({ mutationFn: (id) => api.deleteChatMessage(projectId, id), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['chat', projectId] }) });
 
   // Handle typing indicator
   const handleTyping = () => {
@@ -152,7 +157,7 @@ export default function ProjectChat({ projectId }) {
             {msgs.map((msg) => (
               <div
                 key={msg.id}
-                className={`flex mb-3 ${msg.authorId === user?.id ? 'justify-end' : 'justify-start'}`}
+                className={`flex mb-3 group ${msg.authorId === user?.id ? 'justify-end' : 'justify-start'}`}
               >
                 <div className={`max-w-[70%] ${msg.authorId === user?.id ? 'order-2' : ''}`}>
                   {msg.authorId !== user?.id && (
@@ -165,7 +170,7 @@ export default function ProjectChat({ projectId }) {
                         : 'bg-gray-100 text-gray-900'
                     }`}
                   >
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                    {editingId === msg.id ? <form onSubmit={(event) => { event.preventDefault(); if (editingContent.trim()) editMutation.mutate({ id: msg.id, content: editingContent.trim() }); }}><input autoFocus value={editingContent} onChange={(event) => setEditingContent(event.target.value)} className="w-full rounded px-2 py-1 text-gray-900" /><div className="mt-2 flex gap-2"><button type="submit" className="text-xs underline">Save</button><button type="button" onClick={() => setEditingId(null)} className="text-xs underline">Cancel</button></div></form> : <p className="whitespace-pre-wrap">{msg.content}</p>}
                     <div className="flex items-center justify-between mt-1">
                       <span className={`text-xs ${msg.authorId === user?.id ? 'text-blue-200' : 'text-gray-400'}`}>
                         {formatTime(msg.createdAt)}
@@ -173,6 +178,7 @@ export default function ProjectChat({ projectId }) {
                       </span>
                     </div>
                   </div>
+                  {msg.authorId === user?.id && editingId !== msg.id && <div className="mt-1 flex justify-end gap-1"><button type="button" onClick={() => { setEditingId(msg.id); setEditingContent(msg.content); }} aria-label="Edit your message" className="min-h-11 min-w-11 p-2 text-gray-500 hover:text-blue-600"><Edit2 className="w-3.5 h-3.5" /></button><button type="button" onClick={() => window.confirm('Delete this message?') && deleteMutation.mutate(msg.id)} aria-label="Delete your message" className="min-h-11 min-w-11 p-2 text-gray-500 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button></div>}
                   {/* Reactions */}
                   {msg.reactions?.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-1">
