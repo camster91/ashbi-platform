@@ -363,6 +363,45 @@ io.on('connection', (socket) => {
       logger.error({ err, projectId }, '[socket] join-project authorization failed');
     }
   });
+
+  socket.on('leave-project', (projectId) => {
+    if (projectId) socket.leave(`project:${projectId}`);
+  });
+
+  // WebRTC media never traverses this server. Socket.IO only relays bounded
+  // offer/answer/ICE messages inside an already-authorized project room.
+  // This keeps calls tenant-scoped and avoids making a signalling endpoint a
+  // cross-project message relay.
+  socket.on('call:signal', ({ projectId, callId, signal } = {}) => {
+    if (
+      typeof projectId !== 'string' || typeof callId !== 'string' ||
+      !signal || typeof signal !== 'object' ||
+      !socket.rooms.has(`project:${projectId}`)
+    ) return;
+    const serialized = JSON.stringify(signal);
+    if (serialized.length > 16_000) return;
+    const allowedTypes = new Set(['offer', 'answer', 'ice', 'hangup']);
+    if (!allowedTypes.has(signal.type)) return;
+    socket.to(`project:${projectId}`).emit('call:signal', {
+      projectId,
+      callId: callId.slice(0, 128),
+      from: socket.userId,
+      signal,
+    });
+  });
+
+  socket.on('call:presence', ({ projectId, callId, state } = {}) => {
+    if (
+      typeof projectId !== 'string' || typeof callId !== 'string' ||
+      !['joined', 'left'].includes(state) || !socket.rooms.has(`project:${projectId}`)
+    ) return;
+    socket.to(`project:${projectId}`).emit('call:presence', {
+      projectId,
+      callId: callId.slice(0, 128),
+      userId: socket.userId,
+      state,
+    });
+  });
 });
 
 fastify.decorate('io', io);

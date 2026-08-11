@@ -45,6 +45,8 @@ export function buildHelmetOptions({ isProduction, corsOrigins = [], sentryDsn }
 }
 
 export const permissionsPolicy = [
-  'camera=()', 'microphone=()', 'geolocation=()', 'payment=()',
+  // Project calls and screen recordings use browser permission prompts. Keep
+  // the capability first-party only; embedded third-party frames remain denied.
+  'camera=(self)', 'microphone=(self)', 'display-capture=(self)', 'geolocation=()', 'payment=()',
   'usb=()', 'interest-cohort=()'
 ].join(', ');

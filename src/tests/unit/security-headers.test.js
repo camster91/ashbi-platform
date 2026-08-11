@@ -31,7 +31,8 @@ test('production responses enforce the approved security headers', async () => {
   assert.match(response.headers['strict-transport-security'], /includeSubDomains/);
   assert.equal(response.headers['cross-origin-opener-policy'], 'same-origin');
   assert.equal(response.headers['cross-origin-resource-policy'], 'same-origin');
-  assert.match(response.headers['permissions-policy'], /camera=\(\)/);
+  assert.match(response.headers['permissions-policy'], /camera=\(self\)/);
+  assert.match(response.headers['permissions-policy'], /microphone=\(self\)/);
 });
 
 test('CSP permits required assets while denying active third-party content', async () => {

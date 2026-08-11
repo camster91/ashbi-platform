@@ -8,7 +8,7 @@ const FILE_TYPES = new Map([
   ['.xlsx', ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']],
   ['.pptx', ['application/vnd.openxmlformats-officedocument.presentationml.presentation']],
   ['.txt', ['text/plain']], ['.csv', ['text/csv', 'text/plain']],
-  ['.zip', ['application/zip', 'application/x-zip-compressed']], ['.mp4', ['video/mp4']],
+  ['.zip', ['application/zip', 'application/x-zip-compressed']], ['.mp4', ['video/mp4']], ['.webm', ['video/webm', 'audio/webm']],
   ['.mp3', ['audio/mpeg']], ['.wav', ['audio/wav', 'audio/x-wav']],
 ]);
 
@@ -42,6 +42,10 @@ export function validateUploadBuffer(buffer, { ext }) {
   else if (zipExtensions.has(ext)) valid = startsWith(buffer, [0x50, 0x4b, 0x03, 0x04]) || startsWith(buffer, [0x50, 0x4b, 0x05, 0x06]);
   else if (oleExtensions.has(ext)) valid = startsWith(buffer, [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
   else if (ext === '.mp4') valid = buffer.subarray(4, 8).toString('ascii') === 'ftyp';
+  // WebM is an EBML container. Browser MediaRecorder output starts with the
+  // EBML header; accepting it allows screen recordings without accepting an
+  // arbitrary file renamed to .webm.
+  else if (ext === '.webm') valid = startsWith(buffer, [0x1a, 0x45, 0xdf, 0xa3]);
   else if (ext === '.mp3') valid = buffer.subarray(0, 3).toString('ascii') === 'ID3' || (buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0);
   else if (ext === '.wav') valid = buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WAVE';
   else if (ext === '.txt' || ext === '.csv') {

@@ -19,6 +19,7 @@ The supported milestone is a controlled Ashbi agency-operations deployment: auth
 | Undo/recovery and workflow states | Partially migrated | [#108](https://github.com/camster91/ashbi-platform/issues/108), [#320](https://github.com/camster91/ashbi-platform/issues/320) |
 | PWA and push preferences | Code-present; live browser/OS permission delivery pending | [#321](https://github.com/camster91/ashbi-platform/issues/321) |
 | WordPress bridge/fleet | Code-present and tenancy-hardened | Continue target workflow evidence under release/backlog tracking |
+| Project screen recordings and calls | Code-present; target network and retention evidence pending | Project-scoped browser WebM recording and one-to-one WebRTC audio/video UI; managed TURN, retention/processing policy, and authenticated browser evidence remain required before Loom/Slack-call replacement claims |
 | Slack inbound/notifications | Deferred, not supported | [#288](https://github.com/camster91/ashbi-platform/issues/288) |
 | Notion migration | Deferred, not supported | [#289](https://github.com/camster91/ashbi-platform/issues/289) |
 | Google Calendar sync | Validation/provider access pending | [#287](https://github.com/camster91/ashbi-platform/issues/287) |

@@ -42,6 +42,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import ProjectCommunications from '../components/project/ProjectCommunications';
 import ProjectContextCard from '../components/project/ProjectContext';
+import ProjectMedia from '../components/project/ProjectMedia';
 import QueryErrorState from '../components/QueryErrorState';
 import Modal from '../components/Modal';
 import { Button, LoadingState } from '../components/ui';
@@ -368,6 +369,8 @@ export default function Project() {
           <ProjectContextCard projectId={id} />
         </div>
       </div>
+
+      <ProjectMedia projectId={id} />
 
       {/* Budget Tracking */}
       <ProjectBudget projectId={id} budget={project.budget} hourlyBudget={project.hourlyBudget} />

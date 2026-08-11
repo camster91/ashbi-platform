@@ -27,7 +27,7 @@ export default async function attachmentRoutes(fastify) {
   await ensureUploadDir();
 
   // Get attachments for an entity
-  fastify.get('/attachments', {
+  fastify.get('/', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const { entityType, entityId } = request.query;
@@ -51,7 +51,7 @@ export default async function attachmentRoutes(fastify) {
   });
 
   // Upload attachment
-  fastify.post('/attachments', {
+  fastify.post('/', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const data = await request.file();
@@ -170,7 +170,11 @@ export default async function attachmentRoutes(fastify) {
 
       reply.header('Content-Type', attachment.mimeType || 'application/octet-stream');
       reply.header('Content-Length', stat.size);
-      reply.header('Content-Disposition', `attachment; filename="${path.basename(attachment.originalName).replace(/["\\\r\n]/g, '_')}"`);
+      const safeOriginalName = path.basename(attachment.originalName).replace(/["\\\r\n]/g, '_');
+      const disposition = attachment.mimeType.startsWith('video/') || attachment.mimeType.startsWith('audio/')
+        ? 'inline'
+        : 'attachment';
+      reply.header('Content-Disposition', `${disposition}; filename="${safeOriginalName}"`);
       reply.header('X-Content-Type-Options', 'nosniff');
       reply.header('Content-Security-Policy', "default-src 'none'; sandbox");
 

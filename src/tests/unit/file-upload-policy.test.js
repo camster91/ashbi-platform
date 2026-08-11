@@ -10,6 +10,11 @@ test('accepts a file whose extension, MIME, and signature agree', () => {
   });
 });
 
+test('accepts a browser-recorded WebM only with its EBML signature', () => {
+  assert.deepEqual(validateUploadedFile('screen.webm', 'video/webm', Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0x93])), { valid: true, ext: '.webm', mimetype: 'video/webm' });
+  assert.equal(validateUploadedFile('screen.webm', 'video/webm', Buffer.from('not a recording')).valid, false);
+});
+
 test('rejects MIME and extension mismatches', () => {
   assert.equal(validateUploadedFile('proof.png', 'text/html', png).valid, false);
 });

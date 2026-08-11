@@ -550,6 +550,18 @@ export const api = {
   // Attachments
   getAttachments: (entityType, entityId) =>
     request(`/attachments?entityType=${entityType}&entityId=${entityId}`),
+  uploadAttachment: async (file, entityType, entityId) => {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    form.append('entityType', entityType);
+    form.append('entityId', entityId);
+    const response = await fetch(`${API_BASE}/attachments`, {
+      method: 'POST', body: form, credentials: 'include',
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new ApiError(data.error || 'Upload failed', response.status, data);
+    return data;
+  },
   deleteAttachment: (id) =>
     request(`/attachments/${id}`, { method: 'DELETE' }),
   // Note: File upload uses FormData, handled separately in components
