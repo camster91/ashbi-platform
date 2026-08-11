@@ -537,6 +537,14 @@ export const aiQuerySchema = z.object({
   clientId: cuidId.optional(),
 });
 
+export const aiBridgeChatSchema = z.object({
+  model: z.string().min(1).max(100).optional(),
+  messages: z.array(z.object({
+    role: z.enum(['system', 'user', 'assistant']),
+    content: z.string().trim().min(1).max(12000),
+  })).min(1).max(20),
+}).strict();
+
 // ── Settings: assignment rules + templates + AI provider ───────────────────
 export const assignmentRuleCreateSchema = z.object({
   name: z.string().min(1).max(200),

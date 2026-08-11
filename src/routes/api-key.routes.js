@@ -136,6 +136,8 @@ export async function authenticateApiKey(request, reply) {
     id: key.user.id,
     email: key.user.email,
     name: key.user.name,
-    role: key.user.role
+    role: key.user.role,
+    organizationId: key.user.organizationId,
+    clientId: key.user.clientId,
   };
 }

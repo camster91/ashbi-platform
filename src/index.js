@@ -55,6 +55,7 @@ import creativeBriefRoutes from './routes/creative-brief.routes.js';
 import assetLibraryRoutes from './routes/asset-library.routes.js';
 import wpBridgeRoutes from './routes/wp-bridge.routes.js';
 import apiKeyRoutes, { authenticateApiKey } from './routes/api-key.routes.js';
+import aiBridgeRoutes from './routes/ai-bridge.routes.js';
 import estimateRoutes from './routes/estimate.routes.js';
 import rateCardRoutes from './routes/rate-card.routes.js';
 import integrationRoutes from './routes/integration.routes.js';
@@ -223,6 +224,7 @@ await fastify.register(settingsRoutes, { prefix: '/api/settings' });
 await fastify.register(proposalBuilderRoutes, { prefix: '/api/proposal-builder' });
 // Route registrations continued
 await fastify.register(apiKeyRoutes, { prefix: '/api/api-keys' });
+await fastify.register(aiBridgeRoutes, { prefix: '/api/ai-bridge' });
 await fastify.register(estimateRoutes, { prefix: '/api/estimates' });
 await fastify.register(rateCardRoutes, { prefix: '/api/rate-cards' });
 await fastify.register(integrationRoutes, { prefix: '/api/integrations' });
