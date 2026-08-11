@@ -56,6 +56,8 @@ export default async function chatRoutes(fastify) {
     if (!content?.trim()) {
       return reply.status(400).send({ error: 'Message content is required' });
     }
+    const project = await request.prisma.project.findFirst({ where: { id: projectId }, select: { id: true } });
+    if (!project) return reply.status(404).send({ error: 'Project not found' });
 
     // Extract mentions from content (@username)
     const mentionRegex = /@(\w+)/g;
@@ -136,9 +138,7 @@ export default async function chatRoutes(fastify) {
     const { projectId, messageId } = request.params;
     const { content } = request.body;
 
-    const existing = await request.prisma.chatMessage.findUnique({
-      where: { id: messageId }
-    });
+    const existing = await request.prisma.chatMessage.findFirst({ where: { id: messageId, projectId } });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Message not found' });
@@ -173,9 +173,7 @@ export default async function chatRoutes(fastify) {
   }, async (request, reply) => {
     const { projectId, messageId } = request.params;
 
-    const existing = await request.prisma.chatMessage.findUnique({
-      where: { id: messageId }
-    });
+    const existing = await request.prisma.chatMessage.findFirst({ where: { id: messageId, projectId } });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Message not found' });
@@ -205,6 +203,9 @@ export default async function chatRoutes(fastify) {
     if (!emoji) {
       return reply.status(400).send({ error: 'Emoji is required' });
     }
+
+    const message = await request.prisma.chatMessage.findFirst({ where: { id: messageId, projectId }, select: { id: true } });
+    if (!message) return reply.status(404).send({ error: 'Message not found' });
 
     // Check if reaction already exists
     const existing = await request.prisma.chatReaction.findUnique({
@@ -247,6 +248,8 @@ export default async function chatRoutes(fastify) {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const { projectId, messageId, emoji } = request.params;
+    const message = await request.prisma.chatMessage.findFirst({ where: { id: messageId, projectId }, select: { id: true } });
+    if (!message) return reply.status(404).send({ error: 'Message not found' });
 
     await request.prisma.chatReaction.deleteMany({
       where: {
