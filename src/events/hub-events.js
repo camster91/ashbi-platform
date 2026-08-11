@@ -4,6 +4,7 @@
 import { EventEmitter } from 'events';
 import { discordNotifications } from '../webhooks/discord.js';
 import { openclawNotifications } from '../webhooks/openclaw.js';
+import { slackNotifications } from '../webhooks/slack.js';
 
 // Create a singleton event emitter for the entire Hub
 export const hubEvents = new EventEmitter();
@@ -51,6 +52,7 @@ export function setupEventListeners() {
     } catch (error) {
       console.error('Discord notification failed (project_created):', error);
     }
+    await slackNotifications.projectCreated(data.project, data.client);
 
     // Send to OpenClaw
     try {
@@ -93,6 +95,7 @@ export function setupEventListeners() {
     } catch (error) {
       console.error('Discord notification failed (task_assigned):', error);
     }
+    await slackNotifications.taskAssigned(data.task, data.user, data.project, data.client);
 
     // Send to OpenClaw
     try {
@@ -133,6 +136,7 @@ export function setupEventListeners() {
     } catch (error) {
       console.error('Discord notification failed (client_message):', error);
     }
+    await slackNotifications.clientMessage(data.thread, data.client, data.summary);
 
     // Send to OpenClaw
     try {
@@ -160,6 +164,7 @@ export function setupEventListeners() {
     } catch (error) {
       console.error('Discord notification failed (approval_needed):', error);
     }
+    await slackNotifications.approvalNeeded(data.response, data.thread, data.client);
 
     // Send to OpenClaw
     try {
@@ -201,6 +206,7 @@ export function setupEventListeners() {
     } catch (error) {
       console.error('Discord notification failed (deployment):', error);
     }
+    await slackNotifications.deployment('success', data.environment, data.commitHash);
 
     // Send to OpenClaw
     try {
@@ -219,6 +225,7 @@ export function setupEventListeners() {
     } catch (error) {
       console.error('Discord notification failed (deployment_failed):', error);
     }
+    await slackNotifications.deployment('failed', data.environment, data.commitHash);
 
     // Send to OpenClaw
     try {
@@ -237,6 +244,7 @@ export function setupEventListeners() {
     } catch (error) {
       console.error('Discord notification failed (alert):', error);
     }
+    await slackNotifications.alert(data.type, data.message, data.severity);
 
     // Send to OpenClaw
     try {

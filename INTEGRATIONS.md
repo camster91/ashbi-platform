@@ -49,6 +49,14 @@ Agency Hub now pushes real-time events and notifications to Discord channels and
 
 ## Webhook Endpoints
 
+### Slack-compatible outbound notifications
+
+Set `SLACK_AGENCY_HUB_WEBHOOK_URL` in the deployment secret store to receive
+project, task, client-message, approval, deployment, and alert events through a
+Slack incoming webhook. Delivery is optional and fail-closed: missing or failed
+Slack delivery never blocks the Hub event or database workflow. Inbound Slack
+channel sync remains a separate, unverified integration gate.
+
 ### GitHub Deployment Webhook
 ```
 POST /api/webhooks/github/deployment
