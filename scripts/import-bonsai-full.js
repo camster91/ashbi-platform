@@ -7,8 +7,8 @@
  * from Bonsai CSV exports into the Agency Hub database.
  *
  * Usage:
- *   node scripts/import-bonsai-full.js --dry-run   # Preview only
- *   node scripts/import-bonsai-full.js              # Live import
+ *   node scripts/import-bonsai-full.js --dry-run --csv-dir ./bonsai-export --summary-file ./reconciliation.json
+ *   node scripts/import-bonsai-full.js --confirm --csv-dir ./bonsai-export # Live import after review
  *
  * Idempotent — safe to run multiple times. Uses upsert/dedup on:
  *   - Clients: by email or name
@@ -32,9 +32,23 @@ const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
 });
 const DRY_RUN = process.argv.includes('--dry-run');
+const CONFIRM_LIVE = process.argv.includes('--confirm');
+
+function readOption(name, fallback = null) {
+  const index = process.argv.indexOf(name);
+  return index >= 0 ? process.argv[index + 1] || fallback : fallback;
+}
+
+const CSV_DIR = path.resolve(readOption('--csv-dir', process.env.BONSAI_CSV_DIR || path.join(__dirname, '..', 'data', 'bonsai-export')));
+const SUMMARY_FILE = readOption('--summary-file');
+
+if (!DRY_RUN && !CONFIRM_LIVE) {
+  console.error('Refusing live import without --confirm. Use --dry-run first and review the reconciliation summary.');
+  process.exit(2);
+}
 
 // === CSV Directory ===
-const CSV_DIR = '/Users/biancabienaime/.openclaw/workspace/bonsai-export';
+// Override with --csv-dir or BONSAI_CSV_DIR; never depend on a developer machine path.
 
 // === Skip list for test/dummy clients ===
 const SKIP_CLIENTS = new Set([
@@ -55,6 +69,7 @@ function readCSV(filename) {
     const results = [];
     const filePath = path.join(CSV_DIR, filename);
     if (!fs.existsSync(filePath)) {
+      inputInventory.push({ filename, path: filePath, present: false, rows: 0 });
       console.log(`  ⚠ File not found: ${filePath}`);
       resolve([]);
       return;
@@ -62,7 +77,10 @@ function readCSV(filename) {
     fs.createReadStream(filePath)
       .pipe(csvParser())
       .on('data', (row) => results.push(row))
-      .on('end', () => resolve(results))
+      .on('end', () => {
+        inputInventory.push({ filename, path: filePath, present: true, rows: results.length });
+        resolve(results);
+      })
       .on('error', reject);
   });
 }
@@ -157,6 +175,7 @@ const stats = {
   expenses: { created: 0, skipped: 0 },
   errors: []
 };
+const inputInventory = [];
 
 // ======================================================================
 // MAIN
@@ -829,6 +848,19 @@ async function main() {
     if (stats.errors.length > 20) {
       console.log(`    ... and ${stats.errors.length - 20} more`);
     }
+  }
+
+  const reconciliation = {
+    generatedAt: new Date().toISOString(),
+    mode: DRY_RUN ? 'dry-run' : 'live',
+    csvDir: CSV_DIR,
+    inputInventory,
+    stats,
+    complete: inputInventory.every(file => file.present),
+  };
+  if (SUMMARY_FILE) {
+    fs.writeFileSync(path.resolve(SUMMARY_FILE), `${JSON.stringify(reconciliation, null, 2)}\n`, 'utf8');
+    console.log(`  Reconciliation summary: ${path.resolve(SUMMARY_FILE)}`);
   }
 
   console.log('');
