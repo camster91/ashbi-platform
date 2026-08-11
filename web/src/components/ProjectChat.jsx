@@ -7,6 +7,12 @@ import { preferredScrollBehavior } from '../lib/motion';
 import LoadingState from './ui/LoadingState';
 import { Edit2, Trash2 } from 'lucide-react';
 
+function ChatAttachments({ messageId }) {
+  const { data: attachments = [] } = useQuery({ queryKey: ['chat-attachments', messageId], queryFn: () => api.getAttachments('CHAT', messageId), staleTime: 30000 });
+  if (!attachments.length) return null;
+  return <ul className="mt-2 space-y-1">{attachments.map((file) => <li key={file.id}><a href={`/api/attachments/uploads/${encodeURIComponent(file.filename)}`} target="_blank" rel="noreferrer" className="text-xs underline">{file.originalName}</a></li>)}</ul>;
+}
+
 export default function ProjectChat({ projectId }) {
   const { user } = useAuth();
   const { socket } = useSocket();
@@ -16,6 +22,7 @@ export default function ProjectChat({ projectId }) {
   const [typingUsers, setTypingUsers] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [editingContent, setEditingContent] = useState('');
+  const [attachment, setAttachment] = useState(null);
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
 
@@ -83,9 +90,14 @@ export default function ProjectChat({ projectId }) {
 
   // Send message mutation
   const sendMutation = useMutation({
-    mutationFn: (content) => api.sendChatMessage(projectId, { content }),
+    mutationFn: async (content) => {
+      const created = await api.sendChatMessage(projectId, { content });
+      if (attachment) await api.uploadAttachment(attachment, 'CHAT', created.id);
+      return created;
+    },
     onSuccess: () => {
       setMessage('');
+      setAttachment(null);
     }
   });
   const editMutation = useMutation({ mutationFn: ({ id, content }) => api.editChatMessage(projectId, id, content), onSuccess: () => { setEditingId(null); queryClient.invalidateQueries({ queryKey: ['chat', projectId] }); } });
@@ -178,6 +190,7 @@ export default function ProjectChat({ projectId }) {
                       </span>
                     </div>
                   </div>
+                  <ChatAttachments messageId={msg.id} />
                   {msg.authorId === user?.id && editingId !== msg.id && <div className="mt-1 flex justify-end gap-1"><button type="button" onClick={() => { setEditingId(msg.id); setEditingContent(msg.content); }} aria-label="Edit your message" className="min-h-11 min-w-11 p-2 text-gray-500 hover:text-blue-600"><Edit2 className="w-3.5 h-3.5" /></button><button type="button" onClick={() => window.confirm('Delete this message?') && deleteMutation.mutate(msg.id)} aria-label="Delete your message" className="min-h-11 min-w-11 p-2 text-gray-500 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button></div>}
                   {/* Reactions */}
                   {msg.reactions?.length > 0 && (
@@ -233,6 +246,7 @@ export default function ProjectChat({ projectId }) {
       {/* Input */}
       <form onSubmit={handleSend} className="border-t p-3">
         <div className="flex gap-2">
+          <input type="file" onChange={(event) => setAttachment(event.target.files?.[0] || null)} aria-label="Attach a file to this message" className="max-w-32 text-xs" />
           <input
             type="text"
             value={message}
@@ -251,6 +265,7 @@ export default function ProjectChat({ projectId }) {
             {sendMutation.isPending ? '...' : 'Send'}
           </button>
         </div>
+        {attachment && <p className="mt-1 text-xs text-gray-500">Attaching {attachment.name}</p>}
       </form>
     </div>
   );
