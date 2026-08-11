@@ -92,7 +92,10 @@ export default function ProjectChat({ projectId }) {
   const sendMutation = useMutation({
     mutationFn: async (content) => {
       const created = await api.sendChatMessage(projectId, { content });
-      if (attachment) await api.uploadAttachment(attachment, 'CHAT', created.id);
+      if (attachment) {
+        await api.uploadAttachment(attachment, 'CHAT', created.id);
+        await queryClient.invalidateQueries({ queryKey: ['chat-attachments', created.id] });
+      }
       return created;
     },
     onSuccess: () => {
@@ -212,7 +215,7 @@ export default function ProjectChat({ projectId }) {
                     </div>
                   )}
                   {/* Quick reactions */}
-                  <div className="flex gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex gap-1 mt-1">
                     {['👍', '❤️', '😊', '🎉'].map((emoji) => (
                       <button
                         key={emoji}

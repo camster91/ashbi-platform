@@ -18,6 +18,9 @@ describe('project media collaboration contract', () => {
     expect(media).toContain("socket.emit('call:signal'");
     expect(media).toContain('new RTCPeerConnection');
     expect(media).toContain('navigator.mediaDevices.getUserMedia');
+    expect(media).toContain("getUserMedia({ video: false, audio: true })");
+    expect(media).toContain('toggleMicrophone');
+    expect(media).toContain('toggleCamera');
   });
 
   it('places the controls in the real project workspace', () => {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Mic, MonitorUp, Phone, PhoneOff, Radio, Video } from 'lucide-react';
+import { Mic, MicOff, MonitorUp, Phone, PhoneOff, Radio, Video, VideoOff } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useSocket } from '../../hooks/useSocket';
 
@@ -19,6 +19,8 @@ export default function ProjectMedia({ projectId }) {
   const [callState, setCallState] = useState('idle');
   const [callError, setCallError] = useState('');
   const [remoteParticipant, setRemoteParticipant] = useState(false);
+  const [microphoneEnabled, setMicrophoneEnabled] = useState(true);
+  const [cameraEnabled, setCameraEnabled] = useState(true);
   const recorderRef = useRef(null);
   const recordingStreamRef = useRef(null);
   const callIdRef = useRef(null);
@@ -87,9 +89,18 @@ export default function ProjectMedia({ projectId }) {
       return setCallError('This browser does not support secure audio/video calls.');
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      } catch (error) {
+        if (!['NotAllowedError', 'NotFoundError', 'OverconstrainedError'].includes(error.name)) throw error;
+        stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+        setCallError('Camera is unavailable, so you joined with audio only. You can continue the call or enable a camera in your browser settings.');
+      }
       localStreamRef.current = stream;
       if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+      setMicrophoneEnabled(stream.getAudioTracks().some((track) => track.enabled));
+      setCameraEnabled(stream.getVideoTracks().some((track) => track.enabled));
       const callId = makeCallId();
       callIdRef.current = callId;
       socket.emit('join-project', projectId);
@@ -100,6 +111,18 @@ export default function ProjectMedia({ projectId }) {
       stopLocalTracks();
     }
   }, [projectId, socket, stopLocalTracks]);
+
+  const toggleMicrophone = () => {
+    const nextEnabled = !microphoneEnabled;
+    localStreamRef.current?.getAudioTracks().forEach((track) => { track.enabled = nextEnabled; });
+    setMicrophoneEnabled(nextEnabled);
+  };
+
+  const toggleCamera = () => {
+    const nextEnabled = !cameraEnabled;
+    localStreamRef.current?.getVideoTracks().forEach((track) => { track.enabled = nextEnabled; });
+    setCameraEnabled(nextEnabled);
+  };
 
   useEffect(() => {
     if (!socket || !projectId) return undefined;
@@ -203,8 +226,8 @@ export default function ProjectMedia({ projectId }) {
     </div>
     <div className="p-5 space-y-4">
       {(recordingError || callError) && <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{recordingError || callError}</p>}
-      {callState !== 'idle' && <div className="rounded-lg border border-border bg-muted/30 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-medium">{callState === 'connected' ? 'Call connected' : 'Waiting for another project member to join…'}</p>{callState === 'connected' && <button type="button" onClick={shareCallScreen} className="min-h-11 rounded-lg border border-border px-3 text-sm hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Share screen in call</button>}</div><div className="mt-3 grid gap-3 sm:grid-cols-2"><video ref={localVideoRef} muted autoPlay playsInline className="aspect-video w-full rounded-md bg-black object-cover" aria-label="Your camera preview" /><video ref={remoteVideoRef} autoPlay playsInline className="aspect-video w-full rounded-md bg-black object-cover" aria-label={remoteParticipant ? 'Call participant video' : 'Waiting for call participant video'} /></div></div>}
-      <div><h3 className="text-sm font-medium text-foreground">Screen recordings</h3><p className="mt-1 text-xs text-muted-foreground">Recorded clips are uploaded to this project and require an authenticated project session to access.</p>{recordings.length ? <ul className="mt-3 space-y-2">{recordings.map((item) => <li key={item.id} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 text-sm"><span className="min-w-0 truncate">{item.originalName}</span><a className="min-h-11 inline-flex items-center rounded-lg px-3 text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href={`/api/attachments/uploads/${encodeURIComponent(item.filename)}`} target="_blank" rel="noreferrer">Watch</a></li>)}</ul> : <p className="mt-3 text-sm text-muted-foreground">No screen recordings yet.</p>}</div>
+      {callState !== 'idle' && <div className="rounded-lg border border-border bg-muted/30 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-medium">{callState === 'connected' ? 'Call connected' : 'Waiting for another project member to join…'}</p><div className="flex flex-wrap gap-2"><button type="button" onClick={toggleMicrophone} aria-pressed={microphoneEnabled} className="min-h-11 inline-flex items-center gap-2 rounded-lg border border-border px-3 text-sm hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{microphoneEnabled ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}{microphoneEnabled ? 'Mute mic' : 'Unmute mic'}</button><button type="button" onClick={toggleCamera} aria-pressed={cameraEnabled} className="min-h-11 inline-flex items-center gap-2 rounded-lg border border-border px-3 text-sm hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{cameraEnabled ? <Video className="w-4 h-4" /> : <VideoOff className="w-4 h-4" />}{cameraEnabled ? 'Camera on' : 'Camera off'}</button>{callState === 'connected' && <button type="button" onClick={shareCallScreen} className="min-h-11 rounded-lg border border-border px-3 text-sm hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Share screen in call</button>}</div></div><p className="mt-2 text-xs text-muted-foreground">Turn camera off for an audio-only call. Your microphone and camera remain under your control throughout the call.</p><div className="mt-3 grid gap-3 sm:grid-cols-2"><video ref={localVideoRef} muted autoPlay playsInline className="aspect-video w-full rounded-md bg-black object-cover" aria-label="Your camera preview" /><video ref={remoteVideoRef} autoPlay playsInline className="aspect-video w-full rounded-md bg-black object-cover" aria-label={remoteParticipant ? 'Call participant video' : 'Waiting for call participant video'} /></div></div>}
+      <div><h3 className="text-sm font-medium text-foreground">Screen recordings</h3><p className="mt-1 text-xs text-muted-foreground">Record a browser tab, window, or screen with the audio your browser makes available. Recorded clips are uploaded to this project and require an authenticated project session to access.</p>{recordings.length ? <ul className="mt-3 space-y-2">{recordings.map((item) => <li key={item.id} className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 text-sm"><span className="min-w-0 truncate">{item.originalName}</span><a className="min-h-11 inline-flex items-center rounded-lg px-3 text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href={`/api/attachments/uploads/${encodeURIComponent(item.filename)}`} target="_blank" rel="noreferrer">Watch</a></li>)}</ul> : <p className="mt-3 text-sm text-muted-foreground">No screen recordings yet.</p>}</div>
       <p className="text-xs text-muted-foreground"><Mic className="mr-1 inline w-3.5 h-3.5" /><Video className="mr-1 inline w-3.5 h-3.5" />Calls use encrypted WebRTC media. This first release uses public STUN for discovery; add a managed TURN service before relying on calls across restrictive corporate networks.</p>
     </div>
   </section>;
