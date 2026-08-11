@@ -43,6 +43,7 @@ import { useToast } from '../hooks/useToast';
 import ProjectCommunications from '../components/project/ProjectCommunications';
 import ProjectContextCard from '../components/project/ProjectContext';
 import ProjectMedia from '../components/project/ProjectMedia';
+import ProjectChat from '../components/ProjectChat';
 import QueryErrorState from '../components/QueryErrorState';
 import Modal from '../components/Modal';
 import { Button, LoadingState } from '../components/ui';
@@ -371,6 +372,16 @@ export default function Project() {
       </div>
 
       <ProjectMedia projectId={id} />
+
+      <section className="bg-card rounded-xl border border-border">
+        <div className="border-b border-border px-5 py-4">
+          <h2 className="font-semibold text-foreground">Project conversation</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Keep client and team decisions with the project, alongside its work and files.</p>
+        </div>
+        <div className="p-4">
+          <ProjectChat projectId={id} />
+        </div>
+      </section>
 
       {/* Budget Tracking */}
       <ProjectBudget projectId={id} budget={project.budget} hourlyBudget={project.hourlyBudget} />
