@@ -575,9 +575,9 @@ export default function CommandCenter() {
           <div className="space-y-2">
             <ActionButton
               icon={Database}
-              label="Sync Notion → Hub"
-              description="Pull latest tasks from Notion"
-              onClick={() => window.location.href = '/admin/settings/ai-context'}
+              label="Open project docs"
+              description="Create and organize working documents in Ashbi"
+              onClick={() => window.location.href = '/docs'}
             />
             <ActionButton
               icon={Github}
