@@ -16,4 +16,8 @@ describe('notification consent action contract', () => {
     expect(layout).toContain("isLoading={pushStatus === 'subscribing'}");
     expect(settings).toContain("isLoading={status === 'subscribing'}");
   });
+
+  it('uses shared pending semantics for disable actions', () => {
+    expect(settings).toContain("isLoading={status === 'unsubscribing'}");
+  });
 });

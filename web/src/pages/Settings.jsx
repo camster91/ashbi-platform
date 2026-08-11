@@ -78,7 +78,7 @@ function NotificationPreferences() {
 
       <div className="flex flex-wrap gap-2">
         {subscribed ? (
-          <Button type="button" variant="outline" onClick={unsubscribe} disabled={busy || offline}>
+          <Button type="button" variant="outline" onClick={unsubscribe} isLoading={status === 'unsubscribing'} disabled={busy || offline}>
             {status === 'unsubscribing' ? 'Disabling...' : 'Disable notifications'}
           </Button>
         ) : (
