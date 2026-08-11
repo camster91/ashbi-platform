@@ -16,7 +16,7 @@ This is the working acceptance map for making Ashbi the agency's primary operati
 | ChatGPT/AI control plane | Tenant-scoped OpenAI-compatible context bridge | Read-only bridge code-present; action bridge not yet enabled | Connector/authentication test, provider health, prompt-injection review, allowlisted write tools with confirmation/idempotency/audit, and authenticated dogfood |
 | Operational confidence | Health endpoints, worker health, release rollback | Deployed; telemetry degraded | Alert destination/owner, embedding failures cleared, rollback drill, incident escalation evidence |
 | Accessible daily use | Shared UI, reduced motion, contrast, keyboard affordances | Automated slices deployed | Screen-reader, forced-colour, 200%/400% reflow, mobile/desktop manual evidence |
-| Migration off existing tools | Import/export and data mapping | Bonsai CSV importer hardened; migration not yet proven | Run `scripts/import-bonsai-full.js --dry-run --csv-dir <export> --summary-file <report>`, review complete input inventory/counts, then use explicit `--confirm` only after backup and reconciliation approval; sample ClickUp/Notion/Slack/Bonsai exports still required |
+| Migration off existing tools | Import/export and data mapping | Tenant-scoped Bonsai CSV importer hardened; migration not yet proven | Run `scripts/import-bonsai-full.js --dry-run --organization-id <id> --csv-dir <export> --summary-file <report>`, review complete input inventory/counts, then use explicit `--confirm` only after backup and reconciliation approval; sample ClickUp/Notion/Slack/Bonsai exports still required |
 
 ## Replacement gate
 

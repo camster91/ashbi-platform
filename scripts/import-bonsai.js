@@ -120,6 +120,9 @@ function mapInvoiceStatus(bonsaiStatus) {
 
 // === MAIN IMPORT ===
 async function main() {
+  console.error('This legacy importer is disabled because it predates organization-scoped data. Use import-bonsai-full.js with --dry-run --organization-id <id>, review reconciliation, then --confirm.');
+  process.exitCode = 2;
+  return;
   console.log('=== Bonsai Import Script ===\n');
 
   // Read CSVs

@@ -7,8 +7,8 @@
  * from Bonsai CSV exports into the Agency Hub database.
  *
  * Usage:
- *   node scripts/import-bonsai-full.js --dry-run --csv-dir ./bonsai-export --summary-file ./reconciliation.json
- *   node scripts/import-bonsai-full.js --confirm --csv-dir ./bonsai-export # Live import after review
+ *   node scripts/import-bonsai-full.js --dry-run --organization-id <id> --csv-dir ./bonsai-export --summary-file ./reconciliation.json
+ *   node scripts/import-bonsai-full.js --confirm --organization-id <id> --csv-dir ./bonsai-export # Live import after review
  *
  * Idempotent — safe to run multiple times. Uses upsert/dedup on:
  *   - Clients: by email or name
@@ -41,9 +41,14 @@ function readOption(name, fallback = null) {
 
 const CSV_DIR = path.resolve(readOption('--csv-dir', process.env.BONSAI_CSV_DIR || path.join(__dirname, '..', 'data', 'bonsai-export')));
 const SUMMARY_FILE = readOption('--summary-file');
+const ORGANIZATION_ID = readOption('--organization-id', process.env.IMPORT_ORGANIZATION_ID);
 
 if (!DRY_RUN && !CONFIRM_LIVE) {
   console.error('Refusing live import without --confirm. Use --dry-run first and review the reconciliation summary.');
+  process.exit(2);
+}
+if (!ORGANIZATION_ID) {
+  console.error('Refusing import without --organization-id (or IMPORT_ORGANIZATION_ID). Imports must be explicitly tenant-scoped.');
   process.exit(2);
 }
 
@@ -173,6 +178,7 @@ const stats = {
   lineItems: { created: 0 },
   timeEntries: { created: 0, existing: 0, skipped: 0 },
   expenses: { created: 0, skipped: 0 },
+  owners: { mappedToImporter: 0 },
   errors: []
 };
 const inputInventory = [];
@@ -181,9 +187,12 @@ const inputInventory = [];
 // MAIN
 // ======================================================================
 async function main() {
+  const organization = await prisma.organization.findUnique({ where: { id: ORGANIZATION_ID }, select: { id: true, name: true } });
+  if (!organization) throw new Error(`Organization not found: ${ORGANIZATION_ID}`);
   console.log(`\n${'='.repeat(60)}`);
   console.log(`  Bonsai → Hub Full Import ${DRY_RUN ? '(DRY RUN)' : '(LIVE)'}`);
   console.log(`${'='.repeat(60)}\n`);
+  console.log(`  Organization: ${organization.name} (${organization.id})`);
 
   // Load all CSVs
   console.log('📂 Loading CSVs...');
@@ -302,10 +311,12 @@ async function main() {
   const clientIdMap = new Map(); // normalized name → DB id
   const emailToClientId = new Map(); // email → DB client id
 
-  // Get or create admin user for invoice createdById
-  let adminUser = await prisma.user.findFirst({ where: { role: 'ADMIN' } });
+  // Every imported invoice needs an accountable agency user. Never create a
+  // synthetic login from an external CSV; unknown historical owners are
+  // attributed to this importer and included in reconciliation.
+  let adminUser = await prisma.user.findFirst({ where: { organizationId: ORGANIZATION_ID, role: 'ADMIN' } });
   if (!adminUser) {
-    adminUser = await prisma.user.findFirst();
+    adminUser = await prisma.user.findFirst({ where: { organizationId: ORGANIZATION_ID } });
   }
   if (!adminUser) {
     console.log('  ❌ No users found in DB. Cannot create invoices without createdById.');
@@ -319,14 +330,14 @@ async function main() {
       let existing = null;
       if (data.contactEmail) {
         const contact = await prisma.contact.findFirst({
-          where: { email: data.contactEmail },
+          where: { email: data.contactEmail, client: { organizationId: ORGANIZATION_ID } },
           include: { client: true },
         });
         if (contact) existing = contact.client;
       }
       if (!existing) {
         existing = await prisma.client.findFirst({
-          where: { name: { equals: data.name, mode: 'insensitive' } },
+          where: { organizationId: ORGANIZATION_ID, name: { equals: data.name, mode: 'insensitive' } },
         });
       }
 
@@ -366,15 +377,20 @@ async function main() {
         if (!DRY_RUN) {
           // Remove domain if it would conflict
           if (clientData.domain) {
-            const domainConflict = await prisma.client.findFirst({ where: { domain: clientData.domain } });
+            const domainConflict = await prisma.client.findFirst({ where: { organizationId: ORGANIZATION_ID, domain: clientData.domain } });
             if (domainConflict) clientData.domain = null;
           }
-          const created = await prisma.client.create({ data: clientData });
+          const created = await prisma.client.create({ data: { ...clientData, organizationId: ORGANIZATION_ID } });
           clientIdMap.set(key, created.id);
           if (data.contactEmail) emailToClientId.set(data.contactEmail, created.id);
         }
         stats.clients.created++;
-        if (DRY_RUN) console.log(`  [would create] ${data.name} (${tier})`);
+        if (DRY_RUN) {
+          const dryClientId = `dry-client-${key}`;
+          clientIdMap.set(key, dryClientId);
+          if (data.contactEmail) emailToClientId.set(data.contactEmail, dryClientId);
+          console.log(`  [would create] ${data.name} (${tier})`);
+        }
       }
 
       // Upsert contact
@@ -443,11 +459,11 @@ async function main() {
       // Dedup by bonsaiProjectId or name+client
       let existing = null;
       if (bonsaiId) {
-        existing = await prisma.project.findFirst({ where: { bonsaiProjectId: bonsaiId } });
+        existing = await prisma.project.findFirst({ where: { organizationId: ORGANIZATION_ID, bonsaiProjectId: bonsaiId } });
       }
       if (!existing) {
         existing = await prisma.project.findFirst({
-          where: { name: { equals: title, mode: 'insensitive' }, clientId },
+          where: { organizationId: ORGANIZATION_ID, name: { equals: title, mode: 'insensitive' }, clientId },
         });
       }
 
@@ -476,11 +492,16 @@ async function main() {
         stats.projects.existing++;
       } else {
         if (!DRY_RUN) {
-          const created = await prisma.project.create({ data: projectData });
+          const created = await prisma.project.create({ data: { ...projectData, organizationId: ORGANIZATION_ID } });
           projectIdMap.set(bonsaiId, created.id);
           projectLookup.set(`${clientName.toLowerCase()}|${title.toLowerCase()}`, created.id);
         }
         stats.projects.created++;
+        if (DRY_RUN) {
+          const dryProjectId = `dry-project-${bonsaiId || `${clientName}-${title}`}`;
+          projectIdMap.set(bonsaiId, dryProjectId);
+          projectLookup.set(`${clientName.toLowerCase()}|${title.toLowerCase()}`, dryProjectId);
+        }
         if (DRY_RUN) console.log(`  [would create] ${title} → ${clientName} (${status})`);
       }
     } catch (err) {
@@ -521,7 +542,7 @@ async function main() {
     try {
       // Dedup by invoiceNumber
       const existing = await prisma.invoice.findFirst({
-        where: { invoiceNumber },
+        where: { invoiceNumber, client: { organizationId: ORGANIZATION_ID } },
       });
 
       if (existing) {
@@ -604,7 +625,9 @@ async function main() {
   // ============================================================
   console.log('\n⏱️  Importing Time Entries...');
 
-  // Find or create users for Cameron and Bianca
+  // Resolve historical owners only within this organization. External exports
+  // must not create login-capable accounts; unmatched owners remain attributed
+  // to the importer and are visible in the reconciliation summary.
   const userCache = new Map(); // owner_name(lower) → userId
 
   async function resolveUserId(ownerName) {
@@ -614,35 +637,25 @@ async function main() {
     let user = null;
     if (key.includes('cameron')) {
       user = await prisma.user.findFirst({
-        where: { OR: [{ name: { contains: 'Cameron', mode: 'insensitive' } }, { email: { contains: 'cameron' } }] },
+        where: { organizationId: ORGANIZATION_ID, OR: [{ name: { contains: 'Cameron', mode: 'insensitive' } }, { email: { contains: 'cameron' } }] },
       });
     } else if (key.includes('bianca')) {
       user = await prisma.user.findFirst({
-        where: { OR: [{ name: { contains: 'Bianca', mode: 'insensitive' } }, { email: { contains: 'bianca' } }] },
+        where: { organizationId: ORGANIZATION_ID, OR: [{ name: { contains: 'Bianca', mode: 'insensitive' } }, { email: { contains: 'bianca' } }] },
       });
     }
 
     if (!user) {
       // Try generic match
       user = await prisma.user.findFirst({
-        where: { name: { contains: ownerName.split(' ')[0], mode: 'insensitive' } },
+        where: { organizationId: ORGANIZATION_ID, name: { contains: ownerName.split(' ')[0], mode: 'insensitive' } },
       });
     }
 
-    if (!user && !DRY_RUN) {
-      // Create user
-      const email = key.includes('bianca') ? 'bianca@ashbi.ca' : key.includes('cameron') ? 'cameron@ashbi.ca' : `${key.replace(/\s+/g, '.')}@ashbi.ca`;
-      user = await prisma.user.create({
-        data: {
-          name: ownerName.trim(),
-          email,
-          password: 'imported-no-login',
-          role: 'TEAM',
-        },
-      });
-      console.log(`  [created user] ${user.name} (${user.email})`);
+    if (!user && key) {
+      stats.owners.mappedToImporter++;
+      console.log(`  [owner mapped to importer] ${ownerName}`);
     }
-
     const id = user?.id || adminUser.id;
     userCache.set(key, id);
     return id;
@@ -664,7 +677,7 @@ async function main() {
     if (!projectId) {
       // Try to find any project with this title
       const fallback = await prisma.project.findFirst({
-        where: { name: { equals: projectTitle, mode: 'insensitive' } },
+        where: { organizationId: ORGANIZATION_ID, name: { equals: projectTitle, mode: 'insensitive' } },
       });
       if (!fallback) {
         stats.timeEntries.skipped++;
@@ -674,7 +687,7 @@ async function main() {
     }
 
     const resolvedProjectId = projectId || (await prisma.project.findFirst({
-      where: { name: { equals: projectTitle, mode: 'insensitive' } },
+      where: { organizationId: ORGANIZATION_ID, name: { equals: projectTitle, mode: 'insensitive' } },
     }))?.id;
 
     if (!resolvedProjectId) {
@@ -788,6 +801,7 @@ async function main() {
           description,
           date,
           amount,
+          clientId: clientId || undefined,
         },
       });
 
@@ -853,6 +867,7 @@ async function main() {
   const reconciliation = {
     generatedAt: new Date().toISOString(),
     mode: DRY_RUN ? 'dry-run' : 'live',
+    organization: { id: organization.id, name: organization.name },
     csvDir: CSV_DIR,
     inputInventory,
     stats,
