@@ -2,6 +2,8 @@
 
 This is the repository's authoritative status map as of 2026-08-09. A feature is **code-present** when routes/UI/tests exist, **target-verified** only when target-environment evidence exists, **blocked** when an external decision/provider/human gate remains, and **deferred** when it is explicitly outside the current supported milestone. Code presence is never sufficient evidence for production, accessibility, legal, provider, or market-readiness claims.
 
+The active agency-replacement acceptance map is [replacement-readiness-matrix.md](replacement-readiness-matrix.md).
+
 ## Current supported milestone
 
 The supported milestone is a controlled Ashbi agency-operations deployment: authenticated staff/client workflows, project and task management, finance document preparation, collaboration/docs, client portal, and WordPress operations on `hub.ashbi.ca`. It is not yet proven as a general-market replacement for ClickUp, Notion, Slack, or Bonsai. The milestone/deferral decision remains tracked in [#277](https://github.com/camster91/ashbi-platform/issues/277); the complete backlog and release plan are [#290](https://github.com/camster91/ashbi-platform/issues/290) and [#291](https://github.com/camster91/ashbi-platform/issues/291).
