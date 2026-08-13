@@ -52,7 +52,7 @@ reveal provider credentials.
 | Slack | Mapped-channel inbound events to project chat; installation and mapping administration | Thread/channel parity, outbound delivery/retry, broad history search, retention policy, and sandbox approval |
 | Notion | Controlled Markdown export import into an explicitly selected project | Live workspace sync, full-page search, templates/mentions parity, and a connection/webhook policy |
 | Google Calendar | Ashbi-authoritative outbound creation/update for the connecting user's primary calendar | Calendar selection, inbound or two-way reconciliation, recurring-event conflict policy, deletes, and sandbox approval |
-| ChatGPT/Codex | Read-only, tenant-scoped Ashbi context and declared reusable workflow instructions | Allowlisted write tools once confirmation, auditing, provider credentials, and dogfood evidence exist |
+| ChatGPT/Codex | Read-only tenant context plus confirmed internal task creation | Other write tools, provider credentials, prompt-injection review, and authenticated dogfood evidence |
 
 ## Required proof before enabling a write capability
 

@@ -19,8 +19,20 @@ credentials are never returned.
 
 This first bridge is read-only context chat. It must not claim that a write,
 email, payment, signature, deletion, or external integration occurred. A
-future action bridge will expose allowlisted operations with explicit user
-confirmation, idempotency keys, durable audit records, and role/tenant checks.
-That boundary is required before ChatGPT can operate all Ashbi features. The
-connection and action requirements are defined in
+separate action bridge exposes one internal, allowlisted operation:
+`create_task`.
+
+1. Send a task request to `POST /api/ai-bridge/v1/actions/prepare` with an
+   idempotency key.
+2. Review the returned project/task preview and expiry time.
+3. Send `{ "confirm": true }` to
+   `POST /api/ai-bridge/v1/actions/<action-id>/confirm`.
+
+Only the API-key owner may provide explicit user confirmation for the action.
+Ashbi records the input hash, preview, confirmation, result, and final status
+before returning success. The
+chat-completions endpoint itself remains read-only. Email, payment, signature,
+deletion, provider actions, and every other workflow action remain unavailable
+until separately allowlisted and verified. The connection and action
+requirements are defined in
 [connected-workflow-contract.md](connected-workflow-contract.md).
