@@ -31,6 +31,7 @@ The supported milestone is a controlled Ashbi agency-operations deployment: auth
 | Privacy/retention | Decision-dependent | [#310](https://github.com/camster91/ashbi-platform/issues/310) |
 | Credential key custody/rotation | External approval required | [#381](https://github.com/camster91/ashbi-platform/issues/381) |
 | GitHub CI browser/integration execution | Deferred while direct local/VPS verification is the requested path | [#283](https://github.com/camster91/ashbi-platform/issues/283) |
+| Development dependency vulnerability | Upstream remediation pending | Dependabot [alert #127](https://github.com/camster91/ashbi-platform/security/dependabot/127) traces the high-severity `extract-zip` advisory through Lighthouse CI; no patched `extract-zip` version is published and the suggested downgrade would regress the release toolchain |
 | Application composition modularization | Deferred P2 maintainability work | [#308](https://github.com/camster91/ashbi-platform/issues/308) |
 | Cross-repository issue/release operating system | Planning/tracking, not a product capability | [#292](https://github.com/camster91/ashbi-platform/issues/292) |
 | UX tracking and polished-release roadmap | Meta tracking; child evidence remains authoritative | [#323](https://github.com/camster91/ashbi-platform/issues/323), [#324](https://github.com/camster91/ashbi-platform/issues/324) |
