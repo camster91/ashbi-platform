@@ -176,7 +176,7 @@ export default function ProjectChat({ projectId }) {
               >
                 <div className={`max-w-[70%] ${msg.authorId === user?.id ? 'order-2' : ''}`}>
                   {msg.authorId !== user?.id && (
-                    <span className="text-xs text-gray-500 ml-1">{msg.author?.name}</span>
+                    <span className="text-xs text-gray-500 ml-1">{msg.author?.name || msg.externalAuthorName || 'Unknown sender'}</span>
                   )}
                   <div
                     className={`rounded-lg px-4 py-2 ${

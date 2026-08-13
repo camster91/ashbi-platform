@@ -43,20 +43,37 @@ export default async function slackEventRoutes(fastify, options = {}) {
 
     const mapping = await fastify.prisma.slackChannelMapping.findFirst({
       where: { installationId: installation.id, channelId, inboundEnabled: true },
-      select: { id: true },
+      select: { id: true, projectId: true },
     });
     if (!mapping) return reply.status(202).send({ ok: true, ignored: true });
 
     try {
-      await fastify.prisma.slackEventReceipt.create({
-        data: {
-          organizationId: installation.organizationId,
-          installationId: installation.id,
-          eventId: body.event_id,
-          eventType: typeof event.type === 'string' ? event.type : 'unknown',
-          channelId,
-          status: 'RECEIVED',
-        },
+      await fastify.prisma.$transaction(async (transaction) => {
+        await transaction.slackEventReceipt.create({
+          data: {
+            organizationId: installation.organizationId,
+            installationId: installation.id,
+            eventId: body.event_id,
+            eventType: typeof event.type === 'string' ? event.type : 'unknown',
+            channelId,
+            status: 'RECEIVED',
+          },
+        });
+        if (event.type === 'message' && typeof event.text === 'string' && event.text.trim()) {
+          await transaction.chatMessage.create({
+            data: {
+              projectId: mapping.projectId,
+              content: event.text.trim(),
+              type: 'TEXT',
+              externalSource: 'SLACK',
+              externalAuthorName: typeof event.username === 'string' ? event.username : 'Slack user',
+              metadata: JSON.stringify({
+                source: 'SLACK', teamId: body.team_id, channelId, eventId: body.event_id,
+                externalUserId: typeof event.user === 'string' ? event.user : null,
+              }),
+            },
+          });
+        }
       });
     } catch (error) {
       if (error?.code === 'P2002') return reply.status(200).send({ ok: true, duplicate: true });

@@ -542,17 +542,19 @@ model ChatMessage {
   content   String
   type      String    @default("TEXT") // TEXT, FILE, SYSTEM
   metadata  String? // JSON: file info, mentions, etc.
+  externalSource     String? // e.g. SLACK; never treated as an Ashbi user
+  externalAuthorName String?
   isEdited  Boolean   @default(false)
   editedAt  DateTime?
   parentId  String? // For thread replies
   projectId String
-  authorId  String
+  authorId  String?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
   // Relations
   project   Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  author    User           @relation("ChatAuthor", fields: [authorId], references: [id])
+  author    User?          @relation("ChatAuthor", fields: [authorId], references: [id])
   parent    ChatMessage?   @relation("ChatReplies", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
   replies   ChatMessage[]  @relation("ChatReplies")
   reactions ChatReaction[]
