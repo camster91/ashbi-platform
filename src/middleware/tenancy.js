@@ -62,6 +62,7 @@ export async function tenancyMiddleware(request, reply) {
     request.url.startsWith('/api/invoices/client') ||
     request.url.startsWith('/api/invoices/stripe-webhook') ||
     request.url.startsWith('/api/mailgun') ||
+    request.url.startsWith('/api/slack/events') ||
     request.url.startsWith('/api/leads/leads/intake') ||
     // Plugin-originated writes have no JWT organization. Their route-level
     // HMAC derives ownership from the provisioned site. Human bridge requests

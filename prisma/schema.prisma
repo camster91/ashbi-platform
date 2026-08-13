@@ -54,6 +54,9 @@ model Organization {
   credentials        Credential[]
   credentialAudits   CredentialAccessAudit[]
   onboardingProgress OnboardingProgress[]
+  slackInstallations SlackInstallation[]
+  slackChannelMappings SlackChannelMapping[]
+  slackEventReceipts SlackEventReceipt[]
 
   @@map("organizations")
 }
@@ -284,6 +287,7 @@ model Project {
   creativeBriefs CreativeBrief[]
   timeSessions   TimeSession[]
   wpSite         WPSite?
+  slackChannelMappings SlackChannelMapping[]
 
   @@index([clientId])
   @@index([status])
@@ -1735,6 +1739,74 @@ model Integration {
 
   @@index([organizationId])
   @@map("integrations")
+}
+
+// Slack collaboration integration. Secrets are encrypted at rest; raw Slack
+// event bodies are intentionally never persisted in order to minimize
+// customer-message retention.
+model SlackInstallation {
+  id                String    @id @default(cuid())
+  organizationId    String
+  teamId            String    @unique
+  teamName          String?
+  botUserId         String?
+  botTokenEncrypted String?
+  scopes            String    @default("[]")
+  status            String    @default("ACTIVE") // ACTIVE, DISCONNECTED, ERROR
+  installedAt       DateTime  @default(now())
+  disconnectedAt    DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  channelMappings SlackChannelMapping[]
+  eventReceipts   SlackEventReceipt[]
+
+  @@index([organizationId, status])
+  @@map("slack_installations")
+}
+
+model SlackChannelMapping {
+  id             String    @id @default(cuid())
+  organizationId String
+  installationId String
+  projectId      String
+  channelId      String
+  channelName    String?
+  inboundEnabled Boolean   @default(true)
+  outboundEnabled Boolean  @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  installation SlackInstallation @relation(fields: [installationId], references: [id], onDelete: Cascade)
+  project      Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([installationId, channelId])
+  @@index([organizationId, projectId])
+  @@map("slack_channel_mappings")
+}
+
+model SlackEventReceipt {
+  id             String    @id @default(cuid())
+  organizationId String
+  installationId String
+  eventId        String    @unique
+  eventType      String
+  channelId      String?
+  status         String    @default("RECEIVED") // RECEIVED, IGNORED, PROCESSED, FAILED
+  errorCode      String?
+  receivedAt     DateTime  @default(now())
+  processedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  installation SlackInstallation @relation(fields: [installationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, receivedAt])
+  @@index([installationId, channelId])
+  @@map("slack_event_receipts")
 }
 
 model TrashedItem {

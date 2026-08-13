@@ -97,6 +97,9 @@ const env = {
   // Empty / unset disables the digest (the manual POST endpoint will
   // return 503 with code SLACK_WEBHOOK_MISSING).
   slackWebhookUrl: process.env.SLACK_WEBHOOK_URL,
+  // Slack Events API signing secret. The event route fails closed while this
+  // is absent; it is intentionally distinct from an outgoing webhook URL.
+  slackSigningSecret: process.env.SLACK_SIGNING_SECRET,
 
   // Notion
   // notionToken: process.env.NOTION_TOKEN,
