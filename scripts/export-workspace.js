@@ -10,6 +10,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { buildWorkspaceExportManifest } from '../src/services/workspace-export-integrity.service.js';
 
 const { PrismaClient } = prismaPkg;
 const option = (name) => { const index = process.argv.indexOf(name); return index >= 0 ? process.argv[index + 1] : null; };
@@ -45,8 +46,8 @@ async function main() {
     prisma.note.findMany({ where: { projectId: { in: projectIds }, deletedAt: null }, select: { id: true, projectId: true, parentId: true, title: true, content: true, type: true, isPinned: true, tags: true, isTemplate: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'asc' } }),
     prisma.milestone.findMany({ where: { projectId: { in: projectIds } }, select: { id: true, projectId: true, name: true, description: true, dueDate: true, status: true, completedAt: true, color: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'asc' } }),
   ]);
-  const payload = { format: 'ashbi-workspace-export', version: 1, exportedAt: new Date().toISOString(), organization, records: { clients, contacts, projects, tasks, notes, milestones } };
-  payload.manifest = Object.fromEntries(Object.entries(payload.records).map(([key, records]) => [key, records.length]));
+  const payload = { format: 'ashbi-workspace-export', version: 2, exportedAt: new Date().toISOString(), organization, records: { clients, contacts, projects, tasks, notes, milestones } };
+  payload.manifest = buildWorkspaceExportManifest(payload.records);
   const serialized = `${JSON.stringify(payload, null, 2)}\n`;
   await fs.writeFile(target, serialized, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
   await fs.chmod(target, 0o600);

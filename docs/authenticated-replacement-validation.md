@@ -145,6 +145,11 @@ are approved.
    reviewer acceptance. Keep the prior system read-only until the accepted
    sample and recovery checks are complete.
 
+For an Ashbi workspace export, run the offline verifier before retaining the
+artifact: `node scripts/verify-workspace-export.js --input <workspace-export.json>`.
+It verifies the deterministic per-collection manifest and exported relationship
+references without connecting to the database.
+
 ## Closure decision
 
 A capability is **target-verified** only when its required cases pass and the

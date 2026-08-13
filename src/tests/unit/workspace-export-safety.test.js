@@ -10,6 +10,8 @@ test('workspace export is tenant-scoped, explicit, and excludes secret-bearing m
   assert.match(source, /mode: 0o600/);
   assert.match(source, /organizationId/);
   assert.match(source, /sha256/);
+  assert.match(source, /buildWorkspaceExportManifest/);
+  assert.match(source, /version: 2/);
   assert.doesNotMatch(source, /prisma\.credential/);
   assert.doesNotMatch(source, /prisma\.message/);
   assert.doesNotMatch(source, /prisma\.invoice/);

@@ -24,7 +24,7 @@ Ashbi should not become the sole system of record until every **Bonsai/revenue**
 
 ## Next implementation slices
 
-1. Add a deterministic export/import inventory and reconciliation contract for the supported client/project/document records.
+1. Run the deterministic export inventory/reconciliation verifier against a representative tenant export and retain the reviewed output with the migration sample.
 2. Close workflow-state gaps in the highest-value revenue and portal actions.
 3. Add managed TURN credentials and a media retention/transcription decision before treating recordings or calls as a replacement capability.
 4. Execute the [repeatable authenticated dogfood checklist](authenticated-replacement-validation.md) and attach target evidence per row.

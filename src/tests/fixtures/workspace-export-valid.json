@@ -1,0 +1,25 @@
+{
+  "format": "ashbi-workspace-export",
+  "version": 2,
+  "organization": { "id": "org-1", "name": "Migration Test" },
+  "records": {
+    "clients": [{ "id": "client-1" }],
+    "contacts": [],
+    "projects": [],
+    "tasks": [],
+    "notes": [],
+    "milestones": []
+  },
+  "manifest": {
+    "version": 1,
+    "collections": {
+      "clients": { "count": 1, "sha256": "141e346cd2835774c81a65ae770374836ae0ecc64c25d07a8d0d6aa48926c61d" },
+      "contacts": { "count": 0, "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945" },
+      "projects": { "count": 0, "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945" },
+      "tasks": { "count": 0, "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945" },
+      "notes": { "count": 0, "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945" },
+      "milestones": { "count": 0, "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945" }
+    },
+    "recordsSha256": "dcc3a4534c69bbc3f36d80b57967233e3edb90c6b112ba431f3bc7df4d10db8b"
+  }
+}
