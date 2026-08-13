@@ -15,6 +15,22 @@ the authenticated organization's bounded project, task, and client context.
 API keys are hashed at rest, tenant scope comes from the key owner, and provider
 credentials are never returned.
 
+## ChatGPT Action setup
+
+For a private custom GPT, import
+[chatgpt-actions.openapi.yaml](chatgpt-actions.openapi.yaml) into the Actions
+editor and configure API-key authentication with the `x-api-key` header. This
+schema intentionally exposes only the capability manifest and the existing
+prepare/confirm action protocol. It does not grant search access to Notion or
+Slack, and it cannot bypass Ashbi's tenant, role, mapping, confirmation, audit,
+or idempotency checks.
+
+The assistant must call `getAshbiCapabilities` first. For a write, it calls
+`prepareAshbiAction`, presents the returned preview, and calls
+`confirmAshbiAction` only after the same user explicitly approves that exact
+preview. ChatGPT Actions require an OpenAPI schema and workspace/domain policy
+approval; see [OpenAI's Actions configuration guide](https://help.openai.com/en/articles/9442513).
+
 ## Current boundary
 
 This first bridge is read-only context chat. It must not claim that a write,

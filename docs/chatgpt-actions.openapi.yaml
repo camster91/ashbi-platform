@@ -1,0 +1,194 @@
+openapi: 3.1.0
+info:
+  title: Ashbi Agency Hub Actions
+  version: '1'
+  description: |
+    A tenant-scoped action surface for an Ashbi user. Configure API-key
+    authentication as the custom x-api-key header in a private ChatGPT Action.
+    Read the capability manifest before preparing an action. Every write is
+    previewed and must be confirmed through the separate confirmation endpoint.
+servers:
+  - url: https://hub.ashbi.ca/api/ai-bridge
+security:
+  - AshbiApiKey: []
+paths:
+  /capabilities:
+    get:
+      operationId: getAshbiCapabilities
+      summary: Get the authenticated tenant's supported Ashbi capabilities.
+      responses:
+        '200':
+          description: Capability manifest.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Capabilities'
+  /v1/actions/prepare:
+    post:
+      operationId: prepareAshbiAction
+      summary: Preview an allowlisted Ashbi action without executing it.
+      description: Use a unique idempotencyKey. The response must be shown to the user before confirmation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActionPrepareRequest'
+      responses:
+        '201':
+          description: Action preview awaiting confirmation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreparedActionResponse'
+        '409':
+          description: The idempotency key conflicts or the target is unavailable.
+  /v1/actions/{actionId}/confirm:
+    post:
+      operationId: confirmAshbiAction
+      summary: Execute one previously previewed Ashbi action.
+      description: Call only after the user has reviewed and explicitly approved the matching preview.
+      parameters:
+        - name: actionId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirm]
+              properties:
+                confirm:
+                  type: boolean
+                  const: true
+      responses:
+        '200':
+          description: The action result or an idempotent replay result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreparedActionResponse'
+        '409':
+          description: The preview expired, is processing, or its target is unavailable.
+components:
+  securitySchemes:
+    AshbiApiKey:
+      type: apiKey
+      in: header
+      name: x-api-key
+  schemas:
+    Capabilities:
+      type: object
+      required: [name, version, capabilities, safety]
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+        organizationId:
+          type: string
+          nullable: true
+        capabilities:
+          type: array
+          items:
+            type: object
+        safety:
+          type: object
+          required: [tenantScoped, writesRequireConfirmation, credentialsNeverReturned]
+          properties:
+            tenantScoped:
+              type: boolean
+            writesRequireConfirmation:
+              type: boolean
+            credentialsNeverReturned:
+              type: boolean
+    ActionPrepareRequest:
+      oneOf:
+        - type: object
+          required: [action, idempotencyKey, input]
+          properties:
+            action:
+              type: string
+              const: create_task
+            idempotencyKey:
+              type: string
+              pattern: '^[A-Za-z0-9._:-]{8,128}$'
+            input:
+              type: object
+              required: [projectId, title]
+              properties:
+                projectId:
+                  type: string
+                title:
+                  type: string
+                  maxLength: 500
+                description:
+                  type: string
+                  maxLength: 10000
+                priority:
+                  type: string
+                  enum: [CRITICAL, HIGH, NORMAL, LOW]
+                dueDate:
+                  type: string
+                  format: date-time
+        - type: object
+          required: [action, idempotencyKey, input]
+          properties:
+            action:
+              type: string
+              const: send_slack_message
+            idempotencyKey:
+              type: string
+              pattern: '^[A-Za-z0-9._:-]{8,128}$'
+            input:
+              type: object
+              required: [projectId, text]
+              properties:
+                projectId:
+                  type: string
+                text:
+                  type: string
+                  maxLength: 4000
+    PreparedActionResponse:
+      type: object
+      required: [action]
+      properties:
+        confirmationRequired:
+          type: boolean
+        idempotent:
+          type: boolean
+        action:
+          type: object
+          required: [id, action, status, preview, expiresAt]
+          properties:
+            id:
+              type: string
+            action:
+              type: string
+              enum: [create_task, send_slack_message]
+            status:
+              type: string
+              enum: [PENDING_CONFIRMATION, EXECUTING, EXECUTED, FAILED, EXPIRED]
+            preview:
+              type: object
+            result:
+              type: object
+              nullable: true
+            expiresAt:
+              type: string
+              format: date-time
+            confirmedAt:
+              type: string
+              format: date-time
+              nullable: true
+            executedAt:
+              type: string
+              format: date-time
+              nullable: true
+            errorCode:
+              type: string
+              nullable: true
