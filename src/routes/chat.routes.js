@@ -58,6 +58,13 @@ export default async function chatRoutes(fastify) {
     }
     const project = await request.prisma.project.findFirst({ where: { id: projectId }, select: { id: true } });
     if (!project) return reply.status(404).send({ error: 'Project not found' });
+    if (parentId) {
+      const parent = await request.prisma.chatMessage.findFirst({
+        where: { id: parentId, projectId },
+        select: { id: true },
+      });
+      if (!parent) return reply.status(409).send({ error: 'Reply parent must belong to the same project' });
+    }
 
     // Extract mentions from content (@username)
     const mentionRegex = /@(\w+)/g;
