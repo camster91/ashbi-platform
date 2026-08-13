@@ -157,9 +157,9 @@ const TENANT_PATHS = {
   snippet:          ['createdBy'],
   apikey:           ['user'],
 
-  // Calendar events — assume projectId FK (verify schema on first miss)
-  calendarevent:    ['project', 'client'],
-  eventattendee:    ['event', 'project', 'client'],
+  // Calendar events may be personal, so scope through their required creator.
+  calendarevent:    ['createdBy'],
+  eventattendee:    ['event', 'createdBy'],
   chatreaction:     ['message', 'project', 'client'],
   emailtriagedraft: ['item'],
   ashchatmessage:   ['conversation'],

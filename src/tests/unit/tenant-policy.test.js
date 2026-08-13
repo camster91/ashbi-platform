@@ -64,6 +64,21 @@ test('relationship-scoped findUniqueOrThrow preserves throwing semantics', async
   });
 });
 
+test('personal calendar events are scoped through their required creator', async () => {
+  const calls = [];
+  const scoped = createScopedPrisma({
+    calendarEvent: {
+      findFirst: async (args) => { calls.push(args); return null; },
+    },
+  }, 'org-a');
+
+  await scoped.calendarEvent.findFirst({ where: { id: 'event-a' } });
+
+  assert.deepEqual(calls[0].where, {
+    AND: [{ id: 'event-a' }, { createdBy: { organizationId: 'org-a' } }],
+  });
+});
+
 test('relationship-scoped create rejects a foreign key owned by another organization', async () => {
   let created = false;
   const scoped = createScopedPrisma({
