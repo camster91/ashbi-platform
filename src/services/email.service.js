@@ -18,9 +18,18 @@ const FROM_DEFAULT = `Ashbi <hub@${MAILGUN_DOMAIN}>`;
 /**
  * Replace {{variable}} placeholders in an HTML string with actual values.
  */
-function replaceVariables(html, variables = {}) {
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+export function replaceVariables(html, variables = {}) {
   return html.replace(/\{\{(\w+)\}\}/g, (match, key) => {
-    return variables[key] !== undefined ? String(variables[key]) : match;
+    return variables[key] !== undefined ? escapeHtml(variables[key]) : match;
   });
 }
 
