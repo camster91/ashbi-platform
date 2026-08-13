@@ -1,6 +1,6 @@
 # Canonical product and release status
 
-This is the repository's authoritative status map as of 2026-08-09. A feature is **code-present** when routes/UI/tests exist, **target-verified** only when target-environment evidence exists, **blocked** when an external decision/provider/human gate remains, and **deferred** when it is explicitly outside the current supported milestone. Code presence is never sufficient evidence for production, accessibility, legal, provider, or market-readiness claims.
+This is the repository's authoritative status map as of 2026-08-13. A feature is **code-present** when routes/UI/tests exist, **target-verified** only when target-environment evidence exists, **blocked** when an external decision/provider/human gate remains, and **deferred** when it is explicitly outside the current supported milestone. Code presence is never sufficient evidence for production, accessibility, legal, provider, or market-readiness claims.
 
 The active agency-replacement acceptance map is [replacement-readiness-matrix.md](replacement-readiness-matrix.md).
 
@@ -20,7 +20,7 @@ The supported milestone is a controlled Ashbi agency-operations deployment: auth
 | PWA and push preferences | Code-present; live browser/OS permission delivery pending | [#321](https://github.com/camster91/ashbi-platform/issues/321) |
 | WordPress bridge/fleet | Code-present and tenancy-hardened | Continue target workflow evidence under release/backlog tracking |
 | Project screen recordings and calls | Code-present; target network and retention evidence pending | Project-scoped browser WebM recording and one-to-one WebRTC audio/video UI; managed TURN, retention/processing policy, and authenticated browser evidence remain required before Loom/Slack-call replacement claims |
-| Slack inbound/notifications | Deferred, not supported | [#288](https://github.com/camster91/ashbi-platform/issues/288) |
+| Slack inbound/notifications | Code-present; not production or provider verified | Signed/replay-safe events, encrypted workspace setup, tenant project/channel mapping, idempotent receipts, and mapped inbound project-chat delivery are committed; deployment, Slack app approval, sandbox verification, retention, thread/channel parity, and outbound delivery/retry remain under [#288](https://github.com/camster91/ashbi-platform/issues/288) |
 | Notion migration | Controlled Markdown-export importer code-present; target migration evidence pending | Run the dry-run-first `scripts/import-notion-markdown.js` flow documented in [replacement-readiness-matrix.md](replacement-readiness-matrix.md); retain backup/reconciliation evidence and validate a real project import before replacement claims ([#289](https://github.com/camster91/ashbi-platform/issues/289)) |
 | Google Calendar sync | Validation/provider access pending | [#287](https://github.com/camster91/ashbi-platform/issues/287) |
 | Design system/dark mode/visual baselines | In progress | [#118](https://github.com/camster91/ashbi-platform/issues/118), [#315](https://github.com/camster91/ashbi-platform/issues/315), [#316](https://github.com/camster91/ashbi-platform/issues/316), [#322](https://github.com/camster91/ashbi-platform/issues/322) |
