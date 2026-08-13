@@ -51,7 +51,7 @@ reveal provider credentials.
 | --- | --- | --- |
 | Slack | Mapped-channel inbound events to project chat; installation/mapping administration; confirmed mapped outbound post | Thread/channel parity, outbound retry/recovery policy, broad history search, retention policy, and sandbox approval |
 | Notion | Controlled Markdown export import into an explicitly selected project | Live workspace sync, full-page search, templates/mentions parity, and a connection/webhook policy |
-| Google Calendar | Ashbi-authoritative outbound creation/update for the connecting user's primary calendar | Calendar selection, inbound or two-way reconciliation, recurring-event conflict policy, deletes, and sandbox approval |
+| Google Calendar | Ashbi-authoritative outbound creation/update for the connecting user's primary calendar; an event has one in-progress sync claim to prevent concurrent duplicate creation | Calendar selection, inbound or two-way reconciliation, recurring-event conflict policy, deletes, provider-failure recovery policy, and sandbox approval |
 | ChatGPT/Codex | Read-only tenant context plus confirmed internal task creation and mapped Slack post | Other write tools, provider credentials, prompt-injection review, and authenticated dogfood evidence |
 
 ## Required proof before enabling a write capability

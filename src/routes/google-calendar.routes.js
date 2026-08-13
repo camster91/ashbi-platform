@@ -110,6 +110,13 @@ export default async function googleCalendarRoutes(fastify, options = {}) {
     if (!connection?.refreshTokenEncrypted) {
       return reply.status(409).send({ error: 'Connect Google Calendar before syncing an event', code: 'GOOGLE_CALENDAR_NOT_CONNECTED' });
     }
+    const claimed = await request.prisma.calendarEvent.updateMany({
+      where: { id: event.id, createdById: request.user.id, googleSyncStatus: { not: 'SYNCING' } },
+      data: { googleSyncStatus: 'SYNCING', googleSyncError: null },
+    });
+    if (claimed.count !== 1) {
+      return reply.status(409).send({ error: 'Google Calendar sync is already in progress', code: 'GOOGLE_CALENDAR_SYNC_IN_PROGRESS' });
+    }
     try {
       const external = await syncCalendarEvent({
         client: createCalendarClient({ refreshToken: decryptSecret(connection.refreshTokenEncrypted) }),

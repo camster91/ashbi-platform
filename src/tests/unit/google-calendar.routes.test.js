@@ -89,6 +89,7 @@ test('explicitly syncs an event to the creator Google calendar and records the e
     },
     calendarEvent: {
       findFirst: async () => ({ id: 'event-1', createdById: 'user-1', title: 'Kickoff', startTime: new Date('2026-08-13T14:00:00.000Z'), endTime: new Date('2026-08-13T15:00:00.000Z'), isAllDay: false }),
+      updateMany: async () => ({ count: 1 }),
       update: async ({ data }) => { eventUpdate = data; return { id: 'event-1', ...data }; },
     },
   }, {
@@ -109,4 +110,27 @@ test('explicitly syncs an event to the creator Google calendar and records the e
   });
   assert.ok(eventUpdate.googleSyncedAt instanceof Date);
   assert.equal(response.json().event.googleEventId, 'google-event-1');
+});
+
+test('refuses a second Google sync while the event is already being synchronized', async (t) => {
+  let providerCalled = false;
+  const app = await buildApp({
+    googleCalendarConnection: {
+      findFirst: async () => ({ id: 'connection-1', userId: 'user-1', calendarId: 'primary', refreshTokenEncrypted: 'ciphertext', status: 'ACTIVE' }),
+    },
+    calendarEvent: {
+      findFirst: async () => ({ id: 'event-1', createdById: 'user-1', googleSyncStatus: 'SYNCING' }),
+      updateMany: async () => ({ count: 0 }),
+    },
+  }, {
+    decryptSecret: () => 'refresh-token',
+    createCalendarClient: () => ({ events: { insert: async () => { providerCalled = true; return { data: { id: 'google-event-1' } }; } } }),
+  });
+  t.after(() => app.close());
+
+  const response = await app.inject({ method: 'POST', url: '/events/event-1/sync' });
+
+  assert.equal(response.statusCode, 409);
+  assert.equal(response.json().code, 'GOOGLE_CALENDAR_SYNC_IN_PROGRESS');
+  assert.equal(providerCalled, false);
 });
