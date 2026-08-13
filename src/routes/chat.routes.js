@@ -28,6 +28,7 @@ export default async function chatRoutes(fastify) {
           include: { user: { select: { id: true, name: true } } }
         },
         replies: {
+          where: { projectId },
           include: {
             author: { select: { id: true, name: true } }
           },

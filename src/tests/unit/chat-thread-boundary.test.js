@@ -36,3 +36,27 @@ test('chat reply creation rejects a parent message from another project', async 
     await app.close();
   }
 });
+
+test('chat message reads scope included replies to the requested project', async () => {
+  const calls = [];
+  const app = Fastify();
+  app.decorate('authenticate', async (request) => {
+    request.user = { id: 'c123456789012345678901234', name: 'Avery', organizationId: 'org-a', role: 'TEAM' };
+  });
+  app.decorate('prisma', {
+    chatMessage: {
+      findMany: async (args) => { calls.push(args); return []; },
+    },
+  });
+  app.addHook('onRequest', async (request) => { request.prisma = app.prisma; });
+  await app.register(chatRoutes, { prefix: '/api' });
+
+  try {
+    const projectId = 'c123456789012345678901235';
+    const response = await app.inject({ method: 'GET', url: `/api/projects/${projectId}/messages` });
+    assert.equal(response.statusCode, 200, response.body);
+    assert.deepEqual(calls[0].include.replies.where, { projectId });
+  } finally {
+    await app.close();
+  }
+});
