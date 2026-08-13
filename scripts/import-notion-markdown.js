@@ -151,8 +151,16 @@ async function main() {
     }
   };
 
-  if (dryRun) await processPayloads(prisma, false);
-  else await prisma.$transaction(async (transaction) => processPayloads(transaction, true));
+  if (dryRun) {
+    await processPayloads(prisma, false);
+  } else {
+    await prisma.$transaction(async (transaction) => {
+      await processPayloads(transaction, true);
+      if (report.errors.length > 0 || unsupportedFiles.length > 0) {
+        throw new Error('Live import cannot complete with unresolved reconciliation findings');
+      }
+    });
+  }
 
   report.complete = report.errors.length === 0 && unsupportedFiles.length === 0;
   const serialized = `${JSON.stringify(report, null, 2)}\n`;

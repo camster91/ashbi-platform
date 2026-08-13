@@ -7,8 +7,9 @@ test('Notion Markdown importer is tenant-scoped and dry-run-first', async () => 
   assert.match(source, /const dryRun = !process\.argv\.includes\('--confirm'\)/);
   assert.match(source, /where: \{ id: projectId, organizationId \}/);
   assert.match(source, /where: \{ organizationId \}/);
-  assert.match(source, /if \(dryRun\) await processPayloads\(prisma, false\)/);
+  assert.match(source, /if \(dryRun\) \{\s+await processPayloads\(prisma, false\)/);
   assert.match(source, /prisma\.\$transaction/);
+  assert.match(source, /Live import cannot complete with unresolved reconciliation findings/);
   assert.match(source, /flag: 'wx', mode: 0o600/);
   assert.match(source, /type: 'DOC'/);
   assert.match(source, /buildNotionMarkdownImportPlan/);
