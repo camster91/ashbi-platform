@@ -1,5 +1,8 @@
 import { encrypt } from '../utils/crypto.js';
 import { validateBody, slackInstallationSchema, slackChannelMappingSchema } from '../validators/schemas.js';
+import env from '../config/env.js';
+
+const SLACK_BOT_SCOPES = ['channels:history', 'chat:write'];
 
 function installationResponse(installation) {
   const { botTokenEncrypted: _botTokenEncrypted, ...safeInstallation } = installation;
@@ -12,7 +15,72 @@ function validSlackId(value) {
 
 export default async function slackAdminRoutes(fastify, options = {}) {
   const encryptSecret = options.encryptSecret ?? encrypt;
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const slackClientId = options.slackClientId ?? env.slackClientId;
+  const slackClientSecret = options.slackClientSecret ?? env.slackClientSecret;
+  const slackRedirectUri = options.slackRedirectUri ?? env.slackRedirectUri;
   const adminOnly = { onRequest: [fastify.authenticate, fastify.adminOnly] };
+
+  fastify.get('/oauth/start', adminOnly, async (request, reply) => {
+    if (!slackClientId || !slackClientSecret || !slackRedirectUri) {
+      return reply.status(503).send({ error: 'Slack OAuth is not configured', code: 'SLACK_OAUTH_UNAVAILABLE' });
+    }
+    const state = fastify.jwt.sign({
+      type: 'slack_oauth', organizationId: request.user.organizationId, userId: request.user.id,
+    }, { expiresIn: '10m' });
+    const authorizeUrl = new URL('https://slack.com/oauth/v2/authorize');
+    authorizeUrl.searchParams.set('client_id', slackClientId);
+    authorizeUrl.searchParams.set('redirect_uri', slackRedirectUri);
+    authorizeUrl.searchParams.set('scope', SLACK_BOT_SCOPES.join(','));
+    authorizeUrl.searchParams.set('state', state);
+    return reply.redirect(authorizeUrl.toString());
+  });
+
+  fastify.get('/oauth/callback', { config: { public: true } }, async (request, reply) => {
+    if (!slackClientId || !slackClientSecret || !slackRedirectUri) {
+      return reply.status(503).send({ error: 'Slack OAuth is not configured', code: 'SLACK_OAUTH_UNAVAILABLE' });
+    }
+    const { code, state } = request.query ?? {};
+    if (typeof code !== 'string' || typeof state !== 'string') {
+      return reply.status(400).send({ error: 'Missing Slack OAuth callback data', code: 'SLACK_OAUTH_INVALID' });
+    }
+    let oauthState;
+    try {
+      oauthState = fastify.jwt.verify(state);
+    } catch {
+      return reply.status(401).send({ error: 'Invalid Slack OAuth state', code: 'SLACK_OAUTH_STATE_INVALID' });
+    }
+    if (oauthState.type !== 'slack_oauth' || typeof oauthState.organizationId !== 'string') {
+      return reply.status(401).send({ error: 'Invalid Slack OAuth state', code: 'SLACK_OAUTH_STATE_INVALID' });
+    }
+
+    const credentials = Buffer.from(`${slackClientId}:${slackClientSecret}`).toString('base64');
+    const tokenResponse = await fetchImpl('https://slack.com/api/oauth.v2.access', {
+      method: 'POST',
+      headers: { Authorization: `Basic ${credentials}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ code, redirect_uri: slackRedirectUri }),
+    });
+    const tokenBody = await tokenResponse.json();
+    if (!tokenResponse.ok || !tokenBody?.ok || !validSlackId(tokenBody.team?.id) || typeof tokenBody.access_token !== 'string') {
+      return reply.status(502).send({ error: 'Slack OAuth exchange failed', code: 'SLACK_OAUTH_EXCHANGE_FAILED' });
+    }
+
+    const data = {
+      teamName: typeof tokenBody.team.name === 'string' ? tokenBody.team.name : null,
+      botUserId: validSlackId(tokenBody.bot_user_id) ? tokenBody.bot_user_id : null,
+      botTokenEncrypted: encryptSecret(tokenBody.access_token),
+      scopes: JSON.stringify(typeof tokenBody.scope === 'string' ? tokenBody.scope.split(',').filter(Boolean) : []),
+      status: 'ACTIVE', disconnectedAt: null,
+    };
+    const existing = await fastify.prisma.slackInstallation.findFirst({ where: { teamId: tokenBody.team.id } });
+    if (existing && existing.organizationId !== oauthState.organizationId) {
+      return reply.status(409).send({ error: 'Slack workspace is already connected', code: 'SLACK_WORKSPACE_CONFLICT' });
+    }
+    const installation = existing
+      ? await fastify.prisma.slackInstallation.update({ where: { id: existing.id }, data })
+      : await fastify.prisma.slackInstallation.create({ data: { organizationId: oauthState.organizationId, teamId: tokenBody.team.id, ...data } });
+    return { installation: installationResponse(installation) };
+  });
 
   fastify.get('/', adminOnly, async (request) => {
     const installations = await request.prisma.slackInstallation.findMany({

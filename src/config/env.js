@@ -100,6 +100,9 @@ const env = {
   // Slack Events API signing secret. The event route fails closed while this
   // is absent; it is intentionally distinct from an outgoing webhook URL.
   slackSigningSecret: process.env.SLACK_SIGNING_SECRET,
+  slackClientId: process.env.SLACK_CLIENT_ID,
+  slackClientSecret: process.env.SLACK_CLIENT_SECRET,
+  slackRedirectUri: process.env.SLACK_REDIRECT_URI || `${process.env.HUB_URL || 'https://hub.ashbi.ca'}/api/slack/oauth/callback`,
 
   // Notion
   // notionToken: process.env.NOTION_TOKEN,

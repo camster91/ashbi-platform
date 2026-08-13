@@ -1,11 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import Fastify from 'fastify';
+import jwt from '@fastify/jwt';
 import slackAdminRoutes from '../../routes/slack.routes.js';
 
 async function buildApp(prisma, options = {}) {
   const app = Fastify();
-  app.decorate('authenticate', async (request) => { request.user = { id: 'admin-1', role: 'ADMIN' }; });
+  await app.register(jwt, { secret: 'test-jwt-secret' });
+  app.decorate('prisma', prisma);
+  app.decorate('authenticate', async (request) => { request.user = { id: 'admin-1', role: 'ADMIN', organizationId: 'org-1' }; });
   app.decorate('adminOnly', async (request, reply) => {
     if (request.user?.role !== 'ADMIN') return reply.status(403).send({ error: 'Admin access required' });
   });
@@ -57,4 +60,45 @@ test('an administrator can map only an in-tenant project to a Slack channel', as
 
   assert.equal(response.statusCode, 201);
   assert.deepEqual(mapping, { installationId: 'installation-1', projectId: 'project-1', channelId: 'C123', channelName: 'project-acme', inboundEnabled: true, outboundEnabled: false });
+});
+
+test('starts OAuth with signed short-lived tenant state and least-privilege bot scopes', async (t) => {
+  const app = await buildApp({}, {
+    slackClientId: 'client-1', slackClientSecret: 'client-secret', slackRedirectUri: 'https://hub.example/api/slack/oauth/callback',
+  });
+  t.after(() => app.close());
+
+  const response = await app.inject({ method: 'GET', url: '/oauth/start' });
+  const url = new URL(response.headers.location);
+
+  assert.equal(response.statusCode, 302);
+  assert.equal(url.origin, 'https://slack.com');
+  assert.equal(url.searchParams.get('scope'), 'channels:history,chat:write');
+  const state = app.jwt.verify(url.searchParams.get('state'));
+  assert.equal(state.type, 'slack_oauth');
+  assert.equal(state.organizationId, 'org-1');
+  assert.equal(state.userId, 'admin-1');
+  assert.equal(typeof state.iat, 'number');
+  assert.equal(typeof state.exp, 'number');
+});
+
+test('exchanges a valid OAuth callback code and stores only an encrypted bot token', async (t) => {
+  let stored;
+  const app = await buildApp({
+    slackInstallation: { findFirst: async () => null, create: async ({ data }) => { stored = data; return { id: 'installation-1', ...data }; } },
+  }, {
+    slackClientId: 'client-1', slackClientSecret: 'client-secret', slackRedirectUri: 'https://hub.example/api/slack/oauth/callback',
+    encryptSecret: (value) => `encrypted:${value}`,
+    fetchImpl: async () => ({ ok: true, json: async () => ({ ok: true, access_token: 'xoxb-sensitive', bot_user_id: 'U1', scope: 'channels:history,chat:write', team: { id: 'T1', name: 'Acme' } }) }),
+  });
+  t.after(() => app.close());
+  const state = app.jwt.sign({ type: 'slack_oauth', organizationId: 'org-1', userId: 'admin-1' }, { expiresIn: '10m' });
+
+  const response = await app.inject({ method: 'GET', url: `/oauth/callback?code=code-1&state=${encodeURIComponent(state)}` });
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(stored.organizationId, 'org-1');
+  assert.equal(stored.botTokenEncrypted, 'encrypted:xoxb-sensitive');
+  assert.deepEqual(JSON.parse(stored.scopes), ['channels:history', 'chat:write']);
+  assert.equal(response.json().installation.botTokenEncrypted, undefined);
 });
