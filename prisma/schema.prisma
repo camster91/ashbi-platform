@@ -58,6 +58,7 @@ model Organization {
   slackChannelMappings SlackChannelMapping[]
   slackEventReceipts SlackEventReceipt[]
   googleCalendarConnections GoogleCalendarConnection[]
+  notionImportRecords NotionImportRecord[]
 
   @@map("organizations")
 }
@@ -290,6 +291,7 @@ model Project {
   timeSessions   TimeSession[]
   wpSite         WPSite?
   slackChannelMappings SlackChannelMapping[]
+  notionImportRecords NotionImportRecord[]
 
   @@index([clientId])
   @@index([status])
@@ -1771,6 +1773,32 @@ model GoogleCalendarConnection {
 
   @@index([organizationId, status])
   @@map("google_calendar_connections")
+}
+
+// Durable reconciliation record for controlled Notion Markdown imports. The
+// unique source key lets a rerun prove it is referring to the same export
+// page, rather than guessing based on its title or current parent folder.
+model NotionImportRecord {
+  id            String   @id @default(cuid())
+  organizationId String
+  projectId     String
+  noteId        String?
+  sourceKey     String
+  sourcePath    String
+  contentSha256 String
+  outcome       String   @default("IMPORTED") // IMPORTED, UNCHANGED, CONFLICT, SKIPPED
+  lastError     String?
+  importedAt    DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, sourceKey])
+  @@index([organizationId, projectId])
+  @@index([noteId])
+  @@map("notion_import_records")
 }
 
 // Slack collaboration integration. Secrets are encrypted at rest; raw Slack
