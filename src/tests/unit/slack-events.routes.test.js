@@ -97,9 +97,73 @@ test('writes an eligible Slack message into the mapped project conversation', as
 
   assert.equal(response.statusCode, 202);
   assert.deepEqual(chatData, {
-    projectId: 'project-1', content: 'Please review the draft.', type: 'TEXT',
+    projectId: 'project-1', content: 'Please review the draft.', type: 'TEXT', parentId: null,
     externalSource: 'SLACK', externalAuthorName: 'Avery',
+    externalMessageId: null, externalThreadId: null,
     metadata: JSON.stringify({ source: 'SLACK', teamId: 'T1', channelId: 'C1', eventId: 'Ev2', externalUserId: 'U1' }),
+  });
+});
+
+test('attaches an inbound Slack reply to its existing mapped thread root', async (t) => {
+  let chatData;
+  const app = await buildApp({
+    slackInstallation: { findFirst: async () => ({ id: 'installation-1', organizationId: 'org-1' }) },
+    slackChannelMapping: { findFirst: async () => ({ id: 'mapping-1', projectId: 'project-1' }) },
+    slackEventReceipt: { create: async () => ({ id: 'receipt-1' }) },
+    chatMessage: {
+      findFirst: async () => ({ id: 'chat-root-1' }),
+      create: async ({ data }) => { chatData = data; return { id: 'chat-2', ...data }; },
+    },
+  });
+  t.after(() => app.close());
+  const signed = signedPayload({
+    type: 'event_callback', team_id: 'T1', event_id: 'Ev-thread-reply',
+    event: {
+      type: 'message', channel: 'C1', user: 'U1', text: 'Replying to the draft.',
+      ts: '1710000000.000200', thread_ts: '1710000000.000100',
+    },
+  });
+
+  const response = await app.inject({
+    method: 'POST', url: '/', payload: signed.rawBody,
+    headers: { 'content-type': 'application/json', 'x-slack-request-timestamp': signed.timestamp, 'x-slack-signature': signed.signature },
+  });
+
+  assert.equal(response.statusCode, 202);
+  assert.equal(chatData.parentId, 'chat-root-1');
+  assert.equal(chatData.externalMessageId, '1710000000.000200');
+  assert.equal(chatData.externalThreadId, '1710000000.000100');
+});
+
+test('reconciles earlier inbound Slack replies when their thread root arrives', async (t) => {
+  let reconciliation;
+  const app = await buildApp({
+    slackInstallation: { findFirst: async () => ({ id: 'installation-1', organizationId: 'org-1' }) },
+    slackChannelMapping: { findFirst: async () => ({ id: 'mapping-1', projectId: 'project-1' }) },
+    slackEventReceipt: { create: async () => ({ id: 'receipt-1' }) },
+    chatMessage: {
+      create: async ({ data }) => ({ id: 'chat-root-1', ...data }),
+      updateMany: async (args) => { reconciliation = args; return { count: 1 }; },
+    },
+  });
+  t.after(() => app.close());
+  const signed = signedPayload({
+    type: 'event_callback', team_id: 'T1', event_id: 'Ev-thread-root',
+    event: { type: 'message', channel: 'C1', text: 'Original draft.', ts: '1710000000.000100' },
+  });
+
+  const response = await app.inject({
+    method: 'POST', url: '/', payload: signed.rawBody,
+    headers: { 'content-type': 'application/json', 'x-slack-request-timestamp': signed.timestamp, 'x-slack-signature': signed.signature },
+  });
+
+  assert.equal(response.statusCode, 202);
+  assert.deepEqual(reconciliation, {
+    where: {
+      projectId: 'project-1', externalSource: 'SLACK', externalThreadId: '1710000000.000100',
+      parentId: null, id: { not: 'chat-root-1' },
+    },
+    data: { parentId: 'chat-root-1' },
   });
 });
 

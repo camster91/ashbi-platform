@@ -60,19 +60,44 @@ export default async function slackEventRoutes(fastify, options = {}) {
           },
         });
         if (event.type === 'message' && typeof event.text === 'string' && event.text.trim()) {
-          await transaction.chatMessage.create({
+          const externalMessageId = typeof event.ts === 'string' ? event.ts : null;
+          const externalThreadId = typeof event.thread_ts === 'string' ? event.thread_ts : externalMessageId;
+          let parentId = null;
+          if (externalThreadId && externalThreadId !== externalMessageId) {
+            const parent = await transaction.chatMessage.findFirst({
+              where: { projectId: mapping.projectId, externalSource: 'SLACK', externalMessageId: externalThreadId },
+              select: { id: true },
+            });
+            parentId = parent?.id ?? null;
+          }
+          const message = await transaction.chatMessage.create({
             data: {
               projectId: mapping.projectId,
               content: event.text.trim(),
               type: 'TEXT',
+              parentId,
               externalSource: 'SLACK',
               externalAuthorName: typeof event.username === 'string' ? event.username : 'Slack user',
+              externalMessageId,
+              externalThreadId,
               metadata: JSON.stringify({
                 source: 'SLACK', teamId: body.team_id, channelId, eventId: body.event_id,
                 externalUserId: typeof event.user === 'string' ? event.user : null,
               }),
             },
           });
+          if (externalMessageId && externalThreadId === externalMessageId) {
+            await transaction.chatMessage.updateMany({
+              where: {
+                projectId: mapping.projectId,
+                externalSource: 'SLACK',
+                externalThreadId: externalMessageId,
+                parentId: null,
+                id: { not: message.id },
+              },
+              data: { parentId: message.id },
+            });
+          }
         }
       });
     } catch (error) {

@@ -550,6 +550,8 @@ model ChatMessage {
   metadata  String? // JSON: file info, mentions, etc.
   externalSource     String? // e.g. SLACK; never treated as an Ashbi user
   externalAuthorName String?
+  externalMessageId  String? // Provider-native message identifier for durable reconciliation
+  externalThreadId   String? // Provider-native root-thread identifier
   isEdited  Boolean   @default(false)
   editedAt  DateTime?
   parentId  String? // For thread replies
@@ -567,6 +569,8 @@ model ChatMessage {
 
   @@index([projectId])
   @@index([projectId, createdAt])
+  @@index([projectId, externalSource, externalMessageId])
+  @@index([projectId, externalSource, externalThreadId])
   @@map("chat_messages")
 }
 
