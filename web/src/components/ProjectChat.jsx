@@ -18,6 +18,7 @@ export default function ProjectChat({ projectId }) {
   const { socket } = useSocket();
   const queryClient = useQueryClient();
   const [message, setMessage] = useState('');
+  const [sendError, setSendError] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [typingUsers, setTypingUsers] = useState([]);
   const [editingId, setEditingId] = useState(null);
@@ -101,6 +102,10 @@ export default function ProjectChat({ projectId }) {
     onSuccess: () => {
       setMessage('');
       setAttachment(null);
+      setSendError('');
+    },
+    onError: () => {
+      setSendError('Message not sent. Try again.');
     }
   });
   const editMutation = useMutation({ mutationFn: ({ id, content }) => api.editChatMessage(projectId, id, content), onSuccess: () => { setEditingId(null); queryClient.invalidateQueries({ queryKey: ['chat', projectId] }); } });
@@ -126,6 +131,7 @@ export default function ProjectChat({ projectId }) {
     if (!message.trim()) return;
 
     sendMutation.mutate(message.trim());
+    setSendError('');
     setIsTyping(false);
     socket?.emit('typing', { projectId, isTyping: false });
   };
@@ -269,6 +275,7 @@ export default function ProjectChat({ projectId }) {
           </button>
         </div>
         {attachment && <p className="mt-1 text-xs text-gray-500">Attaching {attachment.name}</p>}
+        {sendError && <div role="alert" className="mt-2 flex items-center justify-between gap-2 text-sm text-red-600"><span>{sendError}</span><button type="button" onClick={() => sendMutation.mutate(message.trim())} disabled={!message.trim() || sendMutation.isPending} className="underline">Try again</button></div>}
       </form>
     </div>
   );
