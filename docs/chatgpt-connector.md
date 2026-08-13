@@ -11,9 +11,10 @@ want ChatGPT (or another compatible client) to work with Ashbi context.
    `POST /api/ai-bridge/v1/chat/completions`.
 
 The response uses the standard `chat.completion` shape. The bridge injects only
-the authenticated organization's bounded project, task, and client context.
-API keys are hashed at rest, tenant scope comes from the key owner, and provider
-credentials are never returned.
+the authenticated organization's bounded project, task, client, recent project
+conversation, and retainer-utilization context. It does not search Slack or
+Notion, return provider credentials, or expose unbounded message history. API
+keys are hashed at rest and tenant scope comes from the key owner.
 
 ## ChatGPT Action setup
 

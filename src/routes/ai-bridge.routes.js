@@ -72,6 +72,7 @@ function openAiResponse(content, model) {
 export default async function aiBridgeRoutes(fastify, options = {}) {
   const decryptSecret = options.decryptSecret ?? decrypt;
   const sendSlackMessage = options.postSlackMessage ?? postSlackMessage;
+  const chatClient = options.chatClient ?? aiClient;
   fastify.get('/capabilities', { onRequest: [fastify.authenticateWithApiKey] }, async (request) => ({
     name: 'Ashbi Agency Hub',
     version: '1',
@@ -93,16 +94,33 @@ export default async function aiBridgeRoutes(fastify, options = {}) {
       return reply.status(400).send({ error: { message: 'messages must include at least one user message', type: 'invalid_request_error' } });
     }
 
-    const [projects, tasks, clients] = await Promise.all([
+    const [projects, tasks, clients, conversationMessages, retainers] = await Promise.all([
       request.prisma.project.findMany({ select: { id: true, name: true, status: true, health: true }, take: 25, orderBy: { updatedAt: 'desc' } }),
       request.prisma.task.findMany({ where: { status: { not: 'COMPLETED' } }, select: { id: true, title: true, status: true, priority: true, dueDate: true, project: { select: { name: true } } }, take: 50, orderBy: { updatedAt: 'desc' } }),
       request.prisma.client.findMany({ select: { id: true, name: true, status: true, domain: true }, take: 50, orderBy: { updatedAt: 'desc' } }),
+      request.prisma.chatMessage.findMany({
+        select: { id: true, content: true, type: true, externalSource: true, externalAuthorName: true, createdAt: true, project: { select: { name: true } }, author: { select: { name: true } } },
+        take: 30, orderBy: { createdAt: 'desc' },
+      }),
+      request.prisma.retainerPlan.findMany({
+        select: { id: true, tier: true, hoursPerMonth: true, hoursUsed: true, currency: true, retainerStatus: true, nextBillingDate: true, client: { select: { name: true } } },
+        take: 50, orderBy: { updatedAt: 'desc' },
+      }),
     ]);
-    const system = `You are Ashbi's agency operations assistant. You may discuss only the authenticated organization's data. Never invent records, expose credentials, or claim a write occurred. Writes are not available through this endpoint yet; direct the user to confirm in Ashbi.\n\nOrganization context:\n${JSON.stringify({ projects, tasks, clients })}`;
+    const recentConversations = conversationMessages.map((message) => ({
+      id: message.id, content: message.content.slice(0, 2_000), type: message.type,
+      source: message.externalSource ?? 'ASHBI', author: message.author?.name ?? message.externalAuthorName ?? 'Unknown',
+      createdAt: message.createdAt, project: message.project.name,
+    }));
+    const retainerContext = retainers.map((retainer) => ({
+      id: retainer.id, client: retainer.client.name, tier: retainer.tier, hoursPerMonth: retainer.hoursPerMonth,
+      hoursUsed: retainer.hoursUsed, currency: retainer.currency, status: retainer.retainerStatus, nextBillingDate: retainer.nextBillingDate,
+    }));
+    const system = `You are Ashbi's agency operations assistant. You may discuss only the authenticated organization's data. Never invent records, expose credentials, or claim a write occurred. Writes are not available through this endpoint yet; direct the user to confirm in Ashbi.\n\nOrganization context:\n${JSON.stringify({ projects, tasks, clients, recentConversations, retainers: retainerContext })}`;
     const prompt = messages.map(message => `${message.role.toUpperCase()}: ${message.content}`).join('\n\n');
 
     try {
-      const result = await aiClient.chat({ system, prompt, temperature: 0.2, maxTokens: 1200 });
+      const result = await chatClient.chat({ system, prompt, temperature: 0.2, maxTokens: 1200 });
       const content = typeof result === 'string' ? result : result?.content || result?.text || JSON.stringify(result);
       return openAiResponse(content, body.model);
     } catch (error) {
