@@ -386,6 +386,25 @@ export const generateRetainerInvoiceSchema = z.object({
   resetHours: z.boolean().optional().default(false),
 });
 
+// ── Slack collaboration schemas ────────────────────────────────────────────
+const slackId = z.string().regex(/^[A-Z][A-Z0-9]+$/).max(64);
+
+export const slackInstallationSchema = z.object({
+  teamId: slackId,
+  teamName: z.string().trim().min(1).max(200).optional(),
+  botUserId: slackId.optional(),
+  botToken: z.string().trim().min(1).max(4096),
+  scopes: z.array(z.string().trim().min(1).max(120)).max(50).optional().default([]),
+}).strict();
+
+export const slackChannelMappingSchema = z.object({
+  projectId: cuidId,
+  channelId: slackId,
+  channelName: z.string().trim().min(1).max(200).optional(),
+  inboundEnabled: z.boolean().optional().default(true),
+  outboundEnabled: z.boolean().optional().default(false),
+}).strict();
+
 // ── Helper: Fastify preValidation hook from Zod schema ─────────────────────
 // Usage: { preHandler: [fastify.authenticate, validateBody(createProjectSchema)] }
 export function validateBody(schema) {
