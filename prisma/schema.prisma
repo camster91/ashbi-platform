@@ -57,6 +57,7 @@ model Organization {
   slackInstallations SlackInstallation[]
   slackChannelMappings SlackChannelMapping[]
   slackEventReceipts SlackEventReceipt[]
+  googleCalendarConnections GoogleCalendarConnection[]
 
   @@map("organizations")
 }
@@ -106,6 +107,7 @@ model User {
   apiKeys            ApiKey[]
   formDrafts         FormDraft[]
   onboardingProgress OnboardingProgress?
+  googleCalendarConnection GoogleCalendarConnection?
 
   @@index([organizationId])
   @@map("users")
@@ -733,6 +735,11 @@ model CalendarEvent {
   isAllDay    Boolean  @default(false)
   color       String   @default("#3B82F6")
   recurrence  String? // JSON: recurrence rules
+  googleEventId  String?  @unique
+  googleEventUrl String?
+  googleSyncStatus String @default("NOT_CONNECTED") // NOT_CONNECTED, SYNCED, FAILED
+  googleSyncError String?
+  googleSyncedAt DateTime?
   projectId   String?
   createdById String
   createdAt   DateTime @default(now())
@@ -1741,6 +1748,29 @@ model Integration {
 
   @@index([organizationId])
   @@map("integrations")
+}
+
+// One outbound, Ashbi-authoritative Google Calendar connection per user. OAuth
+// tokens are encrypted; only a refresh token is retained after the exchange.
+model GoogleCalendarConnection {
+  id                    String   @id @default(cuid())
+  organizationId        String
+  userId                String   @unique
+  calendarId            String   @default("primary")
+  refreshTokenEncrypted String
+  scopes                String   @default("[]")
+  status                String   @default("ACTIVE") // ACTIVE, DISCONNECTED, ERROR
+  lastError             String?
+  lastSyncedAt          DateTime?
+  disconnectedAt        DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
+  @@map("google_calendar_connections")
 }
 
 // Slack collaboration integration. Secrets are encrypted at rest; raw Slack

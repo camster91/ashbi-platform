@@ -35,7 +35,7 @@ const DIRECT_SCOPED_MODELS = new Set([
   'weeklydigest', 'tasktemplate', 'outreachsequence', 'emailtriageitem',
   'aicontext', 'ashconversation', 'projecttemplate', 'brandsettings',
   'pipelinestage', 'promptversion', 'credential', 'credentialaccessaudit',
-  'onboardingprogress', 'slackinstallation', 'slackchannelmapping', 'slackeventreceipt'
+  'onboardingprogress', 'slackinstallation', 'slackchannelmapping', 'slackeventreceipt', 'googlecalendarconnection'
 ]);
 
 // Models that are intentionally shared across organizations. Every Prisma
@@ -72,6 +72,7 @@ const DIRECT_PARENT_RELATIONS = {
   slackeventreceipt: [
     { relation: 'installation', field: 'installationId', model: 'slackinstallation', delegate: 'slackInstallation', required: true },
   ],
+  googlecalendarconnection: [{ relation: 'user', field: 'userId', model: 'user', delegate: 'user', required: true }],
   onboardingprogress: [{ relation: 'user', field: 'userId', model: 'user', delegate: 'user', required: true }],
 };
 
