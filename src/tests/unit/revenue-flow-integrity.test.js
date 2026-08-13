@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { publicAccessFailure, createPublicAccessWindow } from '../../utils/public-document-access.js';
-import { recordCompletedCheckout } from '../../services/stripe.service.js';
+import { createPaymentLinkWithClient, recordCompletedCheckout } from '../../services/stripe.service.js';
 
 function checkoutEvent(overrides = {}) {
   return {
@@ -63,6 +63,32 @@ test('Stripe checkout completion transitions an invoice and records payment exac
   assert.equal(state.invoice.status, 'PAID');
   assert.equal(state.payments.length, 1);
   assert.equal(state.payments[0].transactionId, 'pi_123');
+});
+
+test('Stripe checkout creation uses one stable idempotency key per invoice', async () => {
+  let request;
+  let options;
+  const stripeClient = {
+    checkout: {
+      sessions: {
+        create: async (input, inputOptions) => {
+          request = input;
+          options = inputOptions;
+          return { id: 'cs_123', url: 'https://checkout.stripe.example/session', payment_intent: 'pi_123' };
+        },
+      },
+    },
+  };
+
+  const result = await createPaymentLinkWithClient({
+    id: 'invoice-123', invoiceNumber: 'INV-0001', total: 125.5, currency: 'CAD', viewToken: 'view-token', notes: null,
+  }, stripeClient);
+
+  assert.equal(options.idempotencyKey, 'ashbi:invoice:invoice-123:checkout');
+  assert.equal(request.metadata.invoiceId, 'invoice-123');
+  assert.deepEqual(result, {
+    paymentLink: 'https://checkout.stripe.example/session', checkoutSessionId: 'cs_123', paymentIntentId: 'pi_123',
+  });
 });
 
 for (const [name, override, message] of [

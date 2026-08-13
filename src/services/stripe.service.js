@@ -14,6 +14,10 @@ export async function createPaymentLink(invoice) {
   const stripeClient = getStripe();
   if (!stripeClient) return null;
 
+  return createPaymentLinkWithClient(invoice, stripeClient);
+}
+
+export async function createPaymentLinkWithClient(invoice, stripeClient) {
   const currency = (invoice.currency || 'CAD').toLowerCase();
   const session = await stripeClient.checkout.sessions.create({
     payment_method_types: ['card'],
@@ -38,7 +42,7 @@ export async function createPaymentLink(invoice) {
       currency: currency.toUpperCase(),
       amountMinor: String(Math.round(invoice.total * 100)),
     },
-  });
+  }, { idempotencyKey: `ashbi:invoice:${invoice.id}:checkout` });
 
   return {
     paymentLink: session.url,
