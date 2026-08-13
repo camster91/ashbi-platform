@@ -36,6 +36,20 @@ function ids(records, collection) {
   return new Set(collectionRecords(records, collection).map((record) => record?.id).filter((id) => typeof id === 'string'));
 }
 
+function verifyUniqueIds(findings, records) {
+  for (const collection of WORKSPACE_EXPORT_COLLECTIONS) {
+    const seen = new Set();
+    for (const record of collectionRecords(records, collection)) {
+      if (typeof record?.id !== 'string') continue;
+      if (seen.has(record.id)) {
+        findings.push({ code: 'DUPLICATE_RECORD_ID', collection, id: record.id });
+      } else {
+        seen.add(record.id);
+      }
+    }
+  }
+}
+
 function verifyReference(findings, records, collection, field, ownerCode, parentCollection) {
   const allowed = ids(records, parentCollection);
   for (const record of collectionRecords(records, collection)) {
@@ -65,6 +79,7 @@ export function verifyWorkspaceExport(exportPayload) {
     findings.push({ code: 'RECORDS_CHECKSUM_MISMATCH' });
   }
 
+  verifyUniqueIds(findings, records);
   verifyReference(findings, records, 'contacts', 'clientId', 'CONTACT_CLIENT_MISSING', 'clients');
   verifyReference(findings, records, 'projects', 'clientId', 'PROJECT_CLIENT_MISSING', 'clients');
   verifyReference(findings, records, 'tasks', 'projectId', 'TASK_PROJECT_MISSING', 'projects');

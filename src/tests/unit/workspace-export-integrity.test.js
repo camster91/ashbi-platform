@@ -35,3 +35,20 @@ test('workspace export verification rejects an invalid project client reference'
     { code: 'PROJECT_CLIENT_MISSING', id: 'project-1', clientId: 'missing-client' },
   ]);
 });
+
+test('workspace export verification rejects duplicate record identifiers', () => {
+  const duplicateRecords = {
+    ...records,
+    projects: [
+      { id: 'project-1', clientId: 'client-1' },
+      { id: 'project-1', clientId: 'client-1' },
+    ],
+  };
+  const result = verifyWorkspaceExport({
+    format: 'ashbi-workspace-export', version: 2, records: duplicateRecords,
+    manifest: buildWorkspaceExportManifest(duplicateRecords),
+  });
+
+  assert.equal(result.valid, false);
+  assert.deepEqual(result.findings, [{ code: 'DUPLICATE_RECORD_ID', collection: 'projects', id: 'project-1' }]);
+});
