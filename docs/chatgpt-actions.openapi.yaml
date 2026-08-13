@@ -153,6 +153,9 @@ components:
                 text:
                   type: string
                   maxLength: 4000
+                threadMessageId:
+                  type: string
+                  description: Optional Ashbi root-message ID for a reply. Ashbi verifies it is a mapped-project Slack root before confirmation; never send a Slack timestamp here.
     PreparedActionResponse:
       type: object
       required: [action]

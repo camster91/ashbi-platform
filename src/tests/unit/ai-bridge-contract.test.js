@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 const route = readFileSync(new URL('../../routes/ai-bridge.routes.js', import.meta.url), 'utf8');
 const apiKeys = readFileSync(new URL('../../routes/api-key.routes.js', import.meta.url), 'utf8');
 const docs = readFileSync(new URL('../../../docs/chatgpt-connector.md', import.meta.url), 'utf8');
+const actionSchema = readFileSync(new URL('../../../docs/chatgpt-actions.openapi.yaml', import.meta.url), 'utf8');
 
 test('AI bridge is API-key authenticated and tenant scoped', () => {
   assert.match(route, /authenticateWithApiKey/);
@@ -18,4 +19,9 @@ test('AI bridge exposes OpenAI-compatible chat completions without write claims'
   assert.match(route, /object: 'chat\.completion'/);
   assert.match(route, /Writes are not available through this endpoint yet/);
   assert.match(docs, /explicit\s+user\s+confirmation/);
+});
+
+test('the ChatGPT action schema documents safe mapped-project Slack thread replies', () => {
+  assert.match(actionSchema, /threadMessageId/);
+  assert.match(docs, /mapped-project Slack thread/);
 });

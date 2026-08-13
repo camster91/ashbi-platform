@@ -38,7 +38,9 @@ email, payment, signature, deletion, or external integration occurred. A
 separate action bridge exposes two allowlisted operations: `create_task` and
 `send_slack_message`. The Slack action can post only to an active,
 outbound-enabled channel that an Ashbi administrator mapped to the selected
-project.
+project. To reply, it may include an Ashbi root `threadMessageId`; Ashbi
+verifies that it is a mapped-project Slack thread before preview and again at
+confirmation. The connector never accepts a raw Slack timestamp as a target.
 
 1. Send a task request to `POST /api/ai-bridge/v1/actions/prepare` with an
    idempotency key.
@@ -52,7 +54,7 @@ before returning success. The
 chat-completions endpoint itself remains read-only. Email, payment, signature,
 deletion, provider actions, and every other workflow action remain unavailable
 until separately allowlisted and verified. Slack installation, provider
-approval, sandbox verification, retention, and thread/channel parity remain
+approval, sandbox verification, retention, and outbound retry/recovery remain
 separate gates. If a Slack post has an uncertain provider outcome, Ashbi marks
 the action failed and retains only its attempted mapping and channel with
 `deliveryState: "UNKNOWN"`; a person must reconcile it before creating a new
