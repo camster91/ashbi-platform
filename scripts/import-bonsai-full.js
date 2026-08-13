@@ -183,12 +183,26 @@ const stats = {
 };
 const inputInventory = [];
 
+function writeSummary(reconciliation) {
+  if (!SUMMARY_FILE) return;
+  const destination = path.resolve(SUMMARY_FILE);
+  const descriptor = fs.openSync(destination, 'wx', 0o600);
+  try {
+    fs.writeFileSync(descriptor, `${JSON.stringify(reconciliation, null, 2)}\n`, 'utf8');
+  } finally {
+    fs.closeSync(descriptor);
+  }
+  console.log(`  Reconciliation summary: ${destination}`);
+}
+
 // ======================================================================
 // MAIN
 // ======================================================================
 async function main() {
-  if (DRY_RUN) return runImport(prisma);
-  return prisma.$transaction((transaction) => runImport(transaction), { timeout: 300_000 });
+  const reconciliation = DRY_RUN
+    ? await runImport(prisma)
+    : await prisma.$transaction((transaction) => runImport(transaction), { timeout: 300_000 });
+  writeSummary(reconciliation);
 }
 
 async function runImport(prisma) {
@@ -885,12 +899,8 @@ async function runImport(prisma) {
     stats,
     complete: inputInventory.every(file => file.present),
   };
-  if (SUMMARY_FILE) {
-    fs.writeFileSync(path.resolve(SUMMARY_FILE), `${JSON.stringify(reconciliation, null, 2)}\n`, 'utf8');
-    console.log(`  Reconciliation summary: ${path.resolve(SUMMARY_FILE)}`);
-  }
-
   console.log('');
+  return reconciliation;
 }
 
 main()

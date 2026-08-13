@@ -146,7 +146,8 @@ are approved.
    sample and recovery checks are complete.
    A confirmed Bonsai import is atomic: if any reconciliation error or required
    CSV input remains, Ashbi rolls back the full import rather than retaining a
-   partial financial dataset.
+   partial financial dataset. Give each `--summary-file` a new path; Ashbi
+   creates it owner-only and refuses to overwrite prior migration evidence.
 
 For an Ashbi workspace export, run the offline verifier before retaining the
 artifact: `node scripts/verify-workspace-export.js --input <workspace-export.json>`.

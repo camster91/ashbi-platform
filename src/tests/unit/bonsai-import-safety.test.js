@@ -22,6 +22,14 @@ test('confirmed Bonsai imports are atomic and reject unresolved reconciliation e
   assert.match(source, /if \(!DRY_RUN && stats\.errors\.length > 0\)/);
 });
 
+test('Bonsai reconciliation reports are owner-only, never overwrite evidence, and follow a committed import', async () => {
+  const source = await readFile(fullImporter, 'utf8');
+  assert.match(source, /fs\.openSync\(destination, 'wx', 0o600\)/);
+  assert.match(source, /const reconciliation = DRY_RUN\s*\? await runImport\(prisma\)\s*:\s*await prisma\.\$transaction/);
+  assert.match(source, /writeSummary\(reconciliation\)/);
+  assert.match(source, /return reconciliation;/);
+});
+
 test('legacy Bonsai importer fails closed instead of writing unscoped records', async () => {
   const source = await readFile(legacyImporter, 'utf8');
   assert.match(source, /legacy importer is disabled/);
