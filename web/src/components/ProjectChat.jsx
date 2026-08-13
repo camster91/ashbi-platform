@@ -19,6 +19,7 @@ export default function ProjectChat({ projectId }) {
   const queryClient = useQueryClient();
   const [message, setMessage] = useState('');
   const [sendError, setSendError] = useState('');
+  const [attachmentRetry, setAttachmentRetry] = useState(null);
   const [isTyping, setIsTyping] = useState(false);
   const [typingUsers, setTypingUsers] = useState([]);
   const [editingId, setEditingId] = useState(null);
@@ -89,20 +90,28 @@ export default function ProjectChat({ projectId }) {
     messagesEndRef.current?.scrollIntoView({ behavior: preferredScrollBehavior() });
   }, [messages]);
 
+  const uploadMutation = useMutation({
+    mutationFn: ({ attachment: retryAttachment, messageId }) => api.uploadAttachment(retryAttachment, 'CHAT', messageId),
+    onSuccess: async (_, { messageId }) => {
+      await queryClient.invalidateQueries({ queryKey: ['chat-attachments', messageId] });
+      setAttachment(null);
+      setAttachmentRetry(null);
+      setSendError('');
+    },
+    onError: (_, retry) => {
+      setAttachmentRetry(retry);
+      setSendError('Message sent, but its attachment was not uploaded. Try again.');
+    },
+  });
+
   // Send message mutation
   const sendMutation = useMutation({
-    mutationFn: async (content) => {
-      const created = await api.sendChatMessage(projectId, { content });
-      if (attachment) {
-        await api.uploadAttachment(attachment, 'CHAT', created.id);
-        await queryClient.invalidateQueries({ queryKey: ['chat-attachments', created.id] });
-      }
-      return created;
-    },
-    onSuccess: () => {
+    mutationFn: (content) => api.sendChatMessage(projectId, { content }),
+    onSuccess: (created) => {
       setMessage('');
-      setAttachment(null);
       setSendError('');
+      if (attachment) uploadMutation.mutate({ attachment, messageId: created.id });
+      else setAttachment(null);
     },
     onError: () => {
       setSendError('Message not sent. Try again.');
@@ -275,7 +284,7 @@ export default function ProjectChat({ projectId }) {
           </button>
         </div>
         {attachment && <p className="mt-1 text-xs text-gray-500">Attaching {attachment.name}</p>}
-        {sendError && <div role="alert" className="mt-2 flex items-center justify-between gap-2 text-sm text-red-600"><span>{sendError}</span><button type="button" onClick={() => sendMutation.mutate(message.trim())} disabled={!message.trim() || sendMutation.isPending} className="underline">Try again</button></div>}
+        {sendError && <div role="alert" className="mt-2 flex items-center justify-between gap-2 text-sm text-red-600"><span>{sendError}</span><button type="button" onClick={() => attachmentRetry ? uploadMutation.mutate(attachmentRetry) : sendMutation.mutate(message.trim())} disabled={sendMutation.isPending || uploadMutation.isPending || (!attachmentRetry && !message.trim())} className="underline">Try again</button></div>}
       </form>
     </div>
   );
