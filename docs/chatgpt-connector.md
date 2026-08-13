@@ -21,4 +21,6 @@ This first bridge is read-only context chat. It must not claim that a write,
 email, payment, signature, deletion, or external integration occurred. A
 future action bridge will expose allowlisted operations with explicit user
 confirmation, idempotency keys, durable audit records, and role/tenant checks.
-That boundary is required before ChatGPT can operate all Ashbi features.
+That boundary is required before ChatGPT can operate all Ashbi features. The
+connection and action requirements are defined in
+[connected-workflow-contract.md](connected-workflow-contract.md).
