@@ -387,6 +387,7 @@ function SubpagesList({ subpages, taskId, onCreateSubpage }) {
 // Comments section
 function CommentsSection({ comments, taskId }) {
   const [newComment, setNewComment] = useState('');
+  const [commentError, setCommentError] = useState(null);
   const queryClient = useQueryClient();
 
   const addCommentMutation = useMutation({
@@ -394,7 +395,9 @@ function CommentsSection({ comments, taskId }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['task', taskId] });
       setNewComment('');
-    }
+      setCommentError(null);
+    },
+    onError: (_, comment) => setCommentError(comment),
   });
 
   const handleSubmit = (e) => {
@@ -415,7 +418,10 @@ function CommentsSection({ comments, taskId }) {
       <form onSubmit={handleSubmit} className="mb-6">
         <textarea
           value={newComment}
-          onChange={(e) => setNewComment(e.target.value)}
+          onChange={(e) => {
+            setNewComment(e.target.value);
+            setCommentError(null);
+          }}
           placeholder="Add a comment... Use @ to mention someone"
           className="w-full p-3 bg-muted border-0 rounded-lg resize-none focus:ring-2 focus:ring-primary/20"
           rows={3}
@@ -430,6 +436,12 @@ function CommentsSection({ comments, taskId }) {
             Comment
           </Button>
         </div>
+        {commentError && (
+          <div role="alert" className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <span>Comment was not posted. Try again.</span>
+            <button type="button" onClick={() => addCommentMutation.mutate(commentError)} disabled={addCommentMutation.isPending} className="underline">Try again</button>
+          </div>
+        )}
       </form>
 
       {/* Comments list */}
