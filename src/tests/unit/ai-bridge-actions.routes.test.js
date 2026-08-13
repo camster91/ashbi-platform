@@ -88,6 +88,46 @@ test('confirms a prepared task exactly once and stores its result', async (t) =>
   assert.equal(response.json().action.result.taskId, 'task-1');
 });
 
+test('prepares and confirms a project-scoped Ashbi calendar event without provider sync', async (t) => {
+  let eventCreated;
+  let actionUpdated;
+  const pendingAction = {
+    id: 'action-calendar-1', userId: 'user-1', status: 'PENDING_CONFIRMATION', action: 'create_calendar_event',
+    input: { projectId: 'project-1', title: 'Client kickoff', startTime: '2026-09-01T14:00:00.000Z', endTime: '2026-09-01T15:00:00.000Z', type: 'MEETING' }, expiresAt: new Date(Date.now() + 60_000),
+  };
+  const prisma = {
+    $transaction: async (work) => work(prisma),
+    aiBridgeAction: {
+      findFirst: async ({ where }) => where.id ? pendingAction : null,
+      create: async ({ data }) => ({ id: 'action-calendar-1', ...data }),
+      updateMany: async () => ({ count: 1 }),
+      update: async ({ data }) => { actionUpdated = data; return { ...pendingAction, ...data }; },
+    },
+    project: { findFirst: async () => ({ id: 'project-1', name: 'Website' }) },
+    calendarEvent: { create: async ({ data }) => { eventCreated = data; return { id: 'event-1', ...data }; } },
+  };
+  const app = await buildApp(prisma);
+  t.after(() => app.close());
+
+  const prepared = await app.inject({
+    method: 'POST', url: '/v1/actions/prepare',
+    payload: { action: 'create_calendar_event', idempotencyKey: 'calendar-client-kickoff-1', input: pendingAction.input },
+  });
+  assert.equal(prepared.statusCode, 201);
+  assert.deepEqual(prepared.json().action.preview, {
+    kind: 'create_calendar_event', project: { id: 'project-1', name: 'Website' }, title: 'Client kickoff',
+    startTime: '2026-09-01T14:00:00.000Z', endTime: '2026-09-01T15:00:00.000Z', type: 'MEETING',
+  });
+
+  const confirmed = await app.inject({ method: 'POST', url: '/v1/actions/action-calendar-1/confirm', payload: { confirm: true } });
+  assert.equal(confirmed.statusCode, 200);
+  assert.equal(eventCreated.projectId, 'project-1');
+  assert.equal(eventCreated.createdById, 'user-1');
+  assert.equal(eventCreated.googleSyncStatus, 'NOT_CONNECTED');
+  assert.equal(eventCreated.title, 'Client kickoff');
+  assert.deepEqual(actionUpdated.result, { eventId: 'event-1', projectId: 'project-1' });
+});
+
 test('records a failed action when its confirmed target is unavailable', async (t) => {
   let failure;
   const pendingAction = {

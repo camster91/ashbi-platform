@@ -24,4 +24,6 @@ test('AI bridge exposes OpenAI-compatible chat completions without write claims'
 test('the ChatGPT action schema documents safe mapped-project Slack thread replies', () => {
   assert.match(actionSchema, /threadMessageId/);
   assert.match(docs, /mapped-project Slack thread/);
+  assert.match(actionSchema, /create_calendar_event/);
+  assert.match(docs, /Ashbi calendar event/);
 });

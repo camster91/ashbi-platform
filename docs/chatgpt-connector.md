@@ -36,8 +36,10 @@ approval; see [OpenAI's Actions configuration guide](https://help.openai.com/en/
 
 This first bridge is read-only context chat. It must not claim that a write,
 email, payment, signature, deletion, or external integration occurred. A
-separate action bridge exposes two allowlisted operations: `create_task` and
-`send_slack_message`. The Slack action can post only to an active,
+separate action bridge exposes three allowlisted operations: `create_task`,
+`create_calendar_event`, and `send_slack_message`. An Ashbi calendar event is
+always project-scoped, appears in the confirmation preview, and is not synced
+to Google Calendar automatically. The Slack action can post only to an active,
 outbound-enabled channel that an Ashbi administrator mapped to the selected
 project. To reply, it may include an Ashbi root `threadMessageId`; Ashbi
 verifies that it is a mapped-project Slack thread before preview and again at

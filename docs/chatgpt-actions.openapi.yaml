@@ -140,6 +140,39 @@ components:
           properties:
             action:
               type: string
+              const: create_calendar_event
+            idempotencyKey:
+              type: string
+              pattern: '^[A-Za-z0-9._:-]{8,128}$'
+            input:
+              type: object
+              required: [projectId, title, startTime, endTime]
+              properties:
+                projectId:
+                  type: string
+                title:
+                  type: string
+                  maxLength: 500
+                description:
+                  type: string
+                  maxLength: 10000
+                startTime:
+                  type: string
+                  format: date-time
+                endTime:
+                  type: string
+                  format: date-time
+                type:
+                  type: string
+                  enum: [MEETING, DEADLINE, REMINDER, MILESTONE]
+                location:
+                  type: string
+                  maxLength: 500
+        - type: object
+          required: [action, idempotencyKey, input]
+          properties:
+            action:
+              type: string
               const: send_slack_message
             idempotencyKey:
               type: string
@@ -172,7 +205,7 @@ components:
               type: string
             action:
               type: string
-              enum: [create_task, send_slack_message]
+              enum: [create_task, create_calendar_event, send_slack_message]
             status:
               type: string
               enum: [PENDING_CONFIRMATION, EXECUTING, EXECUTED, FAILED, EXPIRED]

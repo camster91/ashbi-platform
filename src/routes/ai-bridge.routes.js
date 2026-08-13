@@ -45,6 +45,18 @@ function slackMessageInput(value) {
   return { projectId: value.projectId, text, ...(value.threadMessageId ? { threadMessageId: value.threadMessageId } : {}) };
 }
 
+function calendarEventInput(value) {
+  if (!value || typeof value !== 'object' || typeof value.projectId !== 'string' || typeof value.title !== 'string') return null;
+  const title = value.title.trim();
+  const startTime = typeof value.startTime === 'string' ? new Date(value.startTime) : null;
+  const endTime = typeof value.endTime === 'string' ? new Date(value.endTime) : null;
+  if (!title || title.length > 500 || !startTime || Number.isNaN(startTime.getTime()) || !endTime || Number.isNaN(endTime.getTime()) || endTime <= startTime) return null;
+  if (value.description !== undefined && (typeof value.description !== 'string' || value.description.length > 10000)) return null;
+  if (value.location !== undefined && (typeof value.location !== 'string' || value.location.trim().length > 500)) return null;
+  if (value.type !== undefined && !['MEETING', 'DEADLINE', 'REMINDER', 'MILESTONE'].includes(value.type)) return null;
+  return { projectId: value.projectId, title, description: value.description, startTime: startTime.toISOString(), endTime: endTime.toISOString(), type: value.type ?? 'MEETING', location: value.location?.trim() || undefined };
+}
+
 function requireActionRole(request, reply) {
   if (!['ADMIN', 'TEAM'].includes(request.user?.role)) {
     reply.status(403).send({ error: { message: 'This API key is not authorized for workflow actions', type: 'insufficient_permissions' } });
@@ -82,7 +94,7 @@ export default async function aiBridgeRoutes(fastify, options = {}) {
     authentication: 'x-api-key or Authorization: Bearer ashbi_…',
     capabilities: [
       { name: 'agency_context_chat', mode: 'read', description: 'Ask about the authenticated organization\'s projects, tasks, clients, threads, and retainers.' },
-      { name: 'workflow_actions', mode: 'write', description: 'Prepare and separately confirm allowlisted actions with idempotency and audit records.', actions: ['create_task', 'send_slack_message'] },
+      { name: 'workflow_actions', mode: 'write', description: 'Prepare and separately confirm allowlisted actions with idempotency and audit records.', actions: ['create_task', 'create_calendar_event', 'send_slack_message'] },
     ],
     safety: { tenantScoped: true, writesRequireConfirmation: true, credentialsNeverReturned: true },
   }));
@@ -132,10 +144,10 @@ export default async function aiBridgeRoutes(fastify, options = {}) {
   fastify.post('/v1/actions/prepare', { onRequest: [fastify.authenticateWithApiKey], preHandler: validateBody(aiBridgeActionPrepareSchema) }, async (request, reply) => {
     if (!requireActionRole(request, reply)) return;
     const { action, input, idempotencyKey } = request.body ?? {};
-    if (!['create_task', 'send_slack_message'].includes(action) || typeof idempotencyKey !== 'string' || !/^[A-Za-z0-9._:-]{8,128}$/.test(idempotencyKey)) {
+    if (!['create_task', 'create_calendar_event', 'send_slack_message'].includes(action) || typeof idempotencyKey !== 'string' || !/^[A-Za-z0-9._:-]{8,128}$/.test(idempotencyKey)) {
       return reply.status(400).send({ error: { message: 'Invalid action request', type: 'invalid_request_error' } });
     }
-    const normalizedInput = action === 'create_task' ? taskInput(input) : slackMessageInput(input);
+    const normalizedInput = action === 'create_task' ? taskInput(input) : action === 'create_calendar_event' ? calendarEventInput(input) : slackMessageInput(input);
     if (!normalizedInput) return reply.status(400).send({ error: { message: `Invalid ${action} input`, type: 'invalid_request_error' } });
     const hash = inputHash({ action, input: normalizedInput });
     const existing = await request.prisma.aiBridgeAction.findFirst({ where: { userId: request.user.id, idempotencyKey } });
@@ -145,7 +157,9 @@ export default async function aiBridgeRoutes(fastify, options = {}) {
     }
     const project = await request.prisma.project.findFirst({ where: { id: normalizedInput.projectId }, select: { id: true, name: true } });
     if (!project) return reply.status(404).send({ error: { message: 'Project not found', type: 'not_found_error' } });
-    let preview = { kind: 'create_task', project: { id: project.id, name: project.name }, title: normalizedInput.title, priority: normalizedInput.priority, dueDate: normalizedInput.dueDate ?? null };
+    let preview = action === 'create_task'
+      ? { kind: 'create_task', project: { id: project.id, name: project.name }, title: normalizedInput.title, priority: normalizedInput.priority, dueDate: normalizedInput.dueDate ?? null }
+      : { kind: 'create_calendar_event', project: { id: project.id, name: project.name }, title: normalizedInput.title, startTime: normalizedInput.startTime, endTime: normalizedInput.endTime, type: normalizedInput.type };
     if (action === 'send_slack_message') {
       const mapping = await request.prisma.slackChannelMapping.findFirst({
         where: { projectId: project.id, outboundEnabled: true, installation: { status: 'ACTIVE' } },
@@ -223,6 +237,23 @@ export default async function aiBridgeRoutes(fastify, options = {}) {
         const posted = await sendSlackMessage(slackInput);
         completed = await request.prisma.aiBridgeAction.update({
           where: { id: initial.id }, data: { status: 'EXECUTED', executedAt: new Date(), result: { mappingId: mapping.id, ...posted, ...(mapping.threadMessageId ? { threadMessageId: mapping.threadMessageId } : {}) } },
+        });
+      } else if (initial.action === 'create_calendar_event') {
+        completed = await request.prisma.$transaction(async (transaction) => {
+          const claimed = await transaction.aiBridgeAction.updateMany({
+            where: { id: initial.id, userId: request.user.id, status: 'PENDING_CONFIRMATION' },
+            data: { status: 'EXECUTING', confirmedAt: new Date() },
+          });
+          if (claimed.count !== 1) return transaction.aiBridgeAction.findFirst({ where: { id: initial.id, userId: request.user.id } });
+          const input = calendarEventInput(initial.input);
+          const project = input && await transaction.project.findFirst({ where: { id: input.projectId }, select: { id: true } });
+          if (!input || !project) throw new Error('ACTION_TARGET_UNAVAILABLE');
+          const event = await transaction.calendarEvent.create({
+            data: { title: input.title, description: input.description, startTime: new Date(input.startTime), endTime: new Date(input.endTime), type: input.type, location: input.location, projectId: project.id, createdById: request.user.id, googleSyncStatus: 'NOT_CONNECTED' },
+          });
+          return transaction.aiBridgeAction.update({
+            where: { id: initial.id }, data: { status: 'EXECUTED', executedAt: new Date(), result: { eventId: event.id, projectId: project.id } },
+          });
         });
       } else {
       completed = await request.prisma.$transaction(async (transaction) => {

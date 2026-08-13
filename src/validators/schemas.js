@@ -578,10 +578,20 @@ const aiBridgeSlackActionInputSchema = z.object({
   threadMessageId: cuidId.optional(),
 }).strict();
 
+const aiBridgeCalendarEventActionInputSchema = z.object({
+  projectId: cuidId,
+  title: z.string().trim().min(1).max(500),
+  description: z.string().max(10_000).optional(),
+  startTime: z.string().datetime(),
+  endTime: z.string().datetime(),
+  type: z.enum(['MEETING', 'DEADLINE', 'REMINDER', 'MILESTONE']).optional(),
+  location: z.string().trim().max(500).optional(),
+}).strict();
+
 export const aiBridgeActionPrepareSchema = z.object({
-  action: z.enum(['create_task', 'send_slack_message']),
+  action: z.enum(['create_task', 'create_calendar_event', 'send_slack_message']),
   idempotencyKey: z.string().regex(/^[A-Za-z0-9._:-]{8,128}$/),
-  input: z.union([aiBridgeTaskActionInputSchema, aiBridgeSlackActionInputSchema]),
+  input: z.union([aiBridgeTaskActionInputSchema, aiBridgeCalendarEventActionInputSchema, aiBridgeSlackActionInputSchema]),
 }).strict();
 
 export const aiBridgeActionConfirmSchema = z.object({
