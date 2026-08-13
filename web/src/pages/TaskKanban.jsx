@@ -24,6 +24,7 @@ export default function TaskKanban() {
   const { projectId } = useParams();
   const queryClient = useQueryClient();
   const [draggedTask, setDraggedTask] = useState(null);
+  const [moveError, setMoveError] = useState(null);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [showNewTask, setShowNewTask] = useState(null);
 
@@ -39,7 +40,11 @@ export default function TaskKanban() {
 
   const moveMutation = useMutation({
     mutationFn: ({ taskId, status }) => api.moveTask(taskId, status),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['kanban', projectId] }),
+    onSuccess: () => {
+      setMoveError(null);
+      queryClient.invalidateQueries({ queryKey: ['kanban', projectId] });
+    },
+    onError: (_, variables) => setMoveError(variables),
   });
 
   const createMutation = useMutation({
@@ -53,6 +58,7 @@ export default function TaskKanban() {
 
   const handleDrop = (toStatus) => {
     if (draggedTask && draggedTask.fromStatus !== toStatus) {
+      setMoveError(null);
       moveMutation.mutate({ taskId: draggedTask.id, status: toStatus });
     }
     setDraggedTask(null);
@@ -87,6 +93,7 @@ export default function TaskKanban() {
         )}
         <h1 className="text-2xl font-heading font-bold text-foreground">Kanban Board</h1>
       </div>
+      {moveError && <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"><span>Task move was not saved. Try again.</span><button type="button" onClick={() => moveMutation.mutate(moveError)} disabled={moveMutation.isPending} className="underline">Try again</button></div>}
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 overflow-x-auto">
         {STATUS_COLUMNS.map(({ key, label, headerColor }) => {
