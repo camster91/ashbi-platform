@@ -60,3 +60,25 @@ test('chat message reads scope included replies to the requested project', async
     await app.close();
   }
 });
+
+test('chat message reads tolerate malformed legacy metadata', async () => {
+  const app = Fastify();
+  app.decorate('authenticate', async (request) => {
+    request.user = { id: 'c123456789012345678901234', name: 'Avery', organizationId: 'org-a', role: 'TEAM' };
+  });
+  app.decorate('prisma', {
+    chatMessage: {
+      findMany: async () => [{ id: 'c123456789012345678901236', content: 'Legacy message', metadata: '{not-json}' }],
+    },
+  });
+  app.addHook('onRequest', async (request) => { request.prisma = app.prisma; });
+  await app.register(chatRoutes, { prefix: '/api' });
+
+  try {
+    const response = await app.inject({ method: 'GET', url: '/api/projects/c123456789012345678901235/messages' });
+    assert.equal(response.statusCode, 200, response.body);
+    assert.equal(response.json()[0].metadata, null);
+  } finally {
+    await app.close();
+  }
+});

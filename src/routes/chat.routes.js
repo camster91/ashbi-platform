@@ -1,6 +1,7 @@
 // Project Chat routes - Real-time team messaging
 
 import { validateBody, chatMessageCreateSchema, chatMessageUpdateSchema, chatReactionCreateSchema } from '../validators/schemas.js';
+import { safeParse } from '../utils/safeParse.js';
 
 export default async function chatRoutes(fastify) {
   // Get chat messages for a project (paginated)
@@ -42,7 +43,7 @@ export default async function chatRoutes(fastify) {
     // Parse metadata JSON
     return messages.reverse().map(m => ({
       ...m,
-      metadata: m.metadata ? JSON.parse(m.metadata) : null
+      metadata: safeParse(m.metadata)
     }));
   });
 
@@ -129,12 +130,12 @@ export default async function chatRoutes(fastify) {
     // Broadcast to project room
     fastify.io.to(`project:${projectId}`).emit('chat:message', {
       ...message,
-      metadata: message.metadata ? JSON.parse(message.metadata) : null
+      metadata: safeParse(message.metadata)
     });
 
     return reply.status(201).send({
       ...message,
-      metadata: message.metadata ? JSON.parse(message.metadata) : null
+      metadata: safeParse(message.metadata)
     });
   });
 
