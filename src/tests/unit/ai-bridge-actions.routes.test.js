@@ -148,6 +148,60 @@ test('prepares and confirms a Slack post only for an enabled mapped project chan
   assert.deepEqual(actionUpdate.result, { mappingId: 'mapping-1', channelId: 'C123', slackTs: '1710000000.000001' });
 });
 
+test('posts a confirmed AI action as a reply only to its mapped project Slack thread', async (t) => {
+  let posted;
+  let threadLookup;
+  let actionUpdate;
+  const pendingAction = {
+    id: 'action-slack-thread-1', userId: 'user-1', status: 'PENDING_CONFIRMATION', action: 'send_slack_message',
+    input: { projectId: 'project-1', text: 'I will prepare the revised draft.', threadMessageId: 'chat-root-1' }, expiresAt: new Date(Date.now() + 60_000),
+  };
+  const prisma = {
+    project: { findFirst: async () => ({ id: 'project-1', name: 'Website' }) },
+    slackChannelMapping: { findFirst: async () => ({ id: 'mapping-1', channelId: 'C123', channelName: 'website', installation: { id: 'installation-1', botTokenEncrypted: 'ciphertext' } }) },
+    chatMessage: {
+      findFirst: async ({ where }) => {
+        threadLookup = where;
+        return { id: 'chat-root-1', externalThreadId: '1710000000.000001' };
+      },
+    },
+    aiBridgeAction: {
+      findFirst: async ({ where }) => where.id ? pendingAction : null,
+      create: async ({ data }) => ({ id: 'action-slack-thread-1', ...data }),
+      updateMany: async () => ({ count: 1 }),
+      update: async ({ data }) => { actionUpdate = data; return { ...pendingAction, ...data }; },
+    },
+    $transaction: async (work) => work(prisma),
+  };
+  const app = await buildApp(prisma, {
+    decryptSecret: () => 'xoxb-sensitive',
+    postSlackMessage: async (input) => { posted = input; return { channelId: 'C123', slackTs: '1710000000.000002' }; },
+  });
+  t.after(() => app.close());
+
+  const prepared = await app.inject({
+    method: 'POST', url: '/v1/actions/prepare',
+    payload: {
+      action: 'send_slack_message', idempotencyKey: 'slack-website-thread-reply-1',
+      input: { projectId: 'project-1', text: 'I will prepare the revised draft.', threadMessageId: 'chat-root-1' },
+    },
+  });
+  assert.equal(prepared.statusCode, 201);
+  assert.deepEqual(prepared.json().action.preview.replyTo, { messageId: 'chat-root-1' });
+
+  const confirmed = await app.inject({ method: 'POST', url: '/v1/actions/action-slack-thread-1/confirm', payload: { confirm: true } });
+  assert.equal(confirmed.statusCode, 200);
+  assert.deepEqual(threadLookup, {
+    id: 'chat-root-1', projectId: 'project-1', externalSource: 'SLACK', parentId: null,
+  });
+  assert.deepEqual(posted, {
+    botToken: 'xoxb-sensitive', channelId: 'C123', text: 'I will prepare the revised draft.', threadTs: '1710000000.000001',
+  });
+  assert.deepEqual(actionUpdate.result, {
+    mappingId: 'mapping-1', channelId: 'C123', slackTs: '1710000000.000002', threadMessageId: 'chat-root-1',
+  });
+});
+
 test('retains an unknown Slack delivery target for reconciliation after a provider failure', async (t) => {
   let failure;
   const pendingAction = {

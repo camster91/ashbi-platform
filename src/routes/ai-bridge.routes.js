@@ -41,7 +41,8 @@ function slackMessageInput(value) {
   if (!value || typeof value !== 'object' || typeof value.projectId !== 'string' || typeof value.text !== 'string') return null;
   const text = value.text.trim();
   if (!text || text.length > 4000) return null;
-  return { projectId: value.projectId, text };
+  if (value.threadMessageId !== undefined && (typeof value.threadMessageId !== 'string' || !value.threadMessageId.trim() || value.threadMessageId.length > 50)) return null;
+  return { projectId: value.projectId, text, ...(value.threadMessageId ? { threadMessageId: value.threadMessageId } : {}) };
 }
 
 function requireActionRole(request, reply) {
@@ -133,7 +134,16 @@ export default async function aiBridgeRoutes(fastify, options = {}) {
         select: { id: true, channelId: true, channelName: true },
       });
       if (!mapping) return reply.status(409).send({ error: { message: 'No active outbound Slack channel is mapped to this project', type: 'action_unavailable' } });
-      preview = { kind: 'send_slack_message', project: { id: project.id, name: project.name }, mapping: { id: mapping.id, channelId: mapping.channelId, name: mapping.channelName ?? mapping.channelId }, text: normalizedInput.text };
+      let replyTo = null;
+      if (normalizedInput.threadMessageId) {
+        const root = await request.prisma.chatMessage.findFirst({
+          where: { id: normalizedInput.threadMessageId, projectId: project.id, externalSource: 'SLACK', parentId: null },
+          select: { id: true, externalThreadId: true },
+        });
+        if (!root?.externalThreadId) return reply.status(409).send({ error: { message: 'Slack thread is unavailable for this project', type: 'action_unavailable' } });
+        replyTo = { messageId: root.id };
+      }
+      preview = { kind: 'send_slack_message', project: { id: project.id, name: project.name }, mapping: { id: mapping.id, channelId: mapping.channelId, name: mapping.channelName ?? mapping.channelId }, text: normalizedInput.text, ...(replyTo ? { replyTo } : {}) };
     }
     const actionRecord = await request.prisma.aiBridgeAction.create({
       data: {
@@ -174,16 +184,27 @@ export default async function aiBridgeRoutes(fastify, options = {}) {
             select: { id: true, channelId: true, installation: { select: { botTokenEncrypted: true } } },
           });
           if (!found?.installation?.botTokenEncrypted) throw new Error('ACTION_TARGET_UNAVAILABLE');
-          return { ...found, text: input.text };
+          let threadTs = null;
+          if (input.threadMessageId) {
+            const root = await transaction.chatMessage.findFirst({
+              where: { id: input.threadMessageId, projectId: input.projectId, externalSource: 'SLACK', parentId: null },
+              select: { id: true, externalThreadId: true },
+            });
+            if (!root?.externalThreadId) throw new Error('ACTION_TARGET_UNAVAILABLE');
+            threadTs = root.externalThreadId;
+          }
+          return { ...found, text: input.text, threadTs, threadMessageId: input.threadMessageId ?? null };
         });
         if (!mapping) {
           const current = await request.prisma.aiBridgeAction.findFirst({ where: { id: initial.id, userId: request.user.id } });
           return reply.status(409).send({ error: { message: 'Action is already being processed', type: 'action_unavailable' }, action: actionResponse(current) });
         }
-        attemptedSlackDelivery = { deliveryState: 'UNKNOWN', mappingId: mapping.id, channelId: mapping.channelId };
-        const posted = await sendSlackMessage({ botToken: decryptSecret(mapping.installation.botTokenEncrypted), channelId: mapping.channelId, text: mapping.text });
+        attemptedSlackDelivery = { deliveryState: 'UNKNOWN', mappingId: mapping.id, channelId: mapping.channelId, ...(mapping.threadMessageId ? { threadMessageId: mapping.threadMessageId } : {}) };
+        const slackInput = { botToken: decryptSecret(mapping.installation.botTokenEncrypted), channelId: mapping.channelId, text: mapping.text };
+        if (mapping.threadTs) slackInput.threadTs = mapping.threadTs;
+        const posted = await sendSlackMessage(slackInput);
         completed = await request.prisma.aiBridgeAction.update({
-          where: { id: initial.id }, data: { status: 'EXECUTED', executedAt: new Date(), result: { mappingId: mapping.id, ...posted } },
+          where: { id: initial.id }, data: { status: 'EXECUTED', executedAt: new Date(), result: { mappingId: mapping.id, ...posted, ...(mapping.threadMessageId ? { threadMessageId: mapping.threadMessageId } : {}) } },
         });
       } else {
       completed = await request.prisma.$transaction(async (transaction) => {

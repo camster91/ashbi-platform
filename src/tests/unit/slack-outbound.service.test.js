@@ -18,6 +18,22 @@ test('posts only the approved message to the mapped Slack channel', async () => 
   assert.deepEqual(result, { channelId: 'C123', slackTs: '1710000000.000001' });
 });
 
+test('posts a confirmed reply into the approved Slack thread', async () => {
+  let request;
+  await postSlackMessage({
+    botToken: 'xoxb-sensitive', channelId: 'C123', text: 'I will take this.', threadTs: '1710000000.000001',
+    fetchImpl: async (url, input) => {
+      request = { url, input };
+      return { ok: true, json: async () => ({ ok: true, channel: 'C123', ts: '1710000000.000002' }) };
+    },
+  });
+
+  assert.equal(request.url, 'https://slack.com/api/chat.postMessage');
+  assert.deepEqual(JSON.parse(request.input.body), {
+    channel: 'C123', text: 'I will take this.', thread_ts: '1710000000.000001',
+  });
+});
+
 test('fails closed when Slack rejects the post', async () => {
   await assert.rejects(() => postSlackMessage({
     botToken: 'xoxb-sensitive', channelId: 'C123', text: 'Hello',

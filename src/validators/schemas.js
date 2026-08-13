@@ -575,6 +575,7 @@ const aiBridgeTaskActionInputSchema = z.object({
 const aiBridgeSlackActionInputSchema = z.object({
   projectId: cuidId,
   text: z.string().trim().min(1).max(4_000),
+  threadMessageId: cuidId.optional(),
 }).strict();
 
 export const aiBridgeActionPrepareSchema = z.object({
