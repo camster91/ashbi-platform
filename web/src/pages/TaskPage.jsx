@@ -1,6 +1,6 @@
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   ArrowLeft,
   MoreHorizontal,
@@ -461,6 +461,8 @@ export default function TaskPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [content, setContent] = useState([]);
+  const [contentSaveError, setContentSaveError] = useState(null);
+  const contentSaveTimerRef = useRef(null);
 
   const {
     data: task,
@@ -481,14 +483,20 @@ export default function TaskPage() {
     }
   }, [task]);
 
+  useEffect(() => () => clearTimeout(contentSaveTimerRef.current), []);
+
   const updateMutation = useMutation({
     mutationFn: (updates) => api.updateTaskContent(id, { 
       ...updates, 
       content: updates.content || content 
     }),
-    onSuccess: () => {
+    onSuccess: (_, updates) => {
+      if (Object.hasOwn(updates, 'content')) setContentSaveError(null);
       queryClient.invalidateQueries({ queryKey: ['task', id] });
-    }
+    },
+    onError: (_, updates) => {
+      if (Object.hasOwn(updates, 'content')) setContentSaveError(updates.content);
+    },
   });
 
   const createSubpageMutation = useMutation({
@@ -504,8 +512,9 @@ export default function TaskPage() {
 
   const handleContentChange = (newContent) => {
     setContent(newContent);
-    // Debounce save
-    updateMutation.mutate({ content: newContent });
+    setContentSaveError(null);
+    clearTimeout(contentSaveTimerRef.current);
+    contentSaveTimerRef.current = setTimeout(() => updateMutation.mutate({ content: newContent }), 500);
   };
 
   const handleCreateSubpage = () => {
@@ -576,6 +585,7 @@ export default function TaskPage() {
           projectId={task.project?.id}
         />
       </div>
+      {contentSaveError && <div role="alert" className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"><span>Content was not saved. Try again.</span><button type="button" onClick={() => updateMutation.mutate({ content: contentSaveError })} disabled={updateMutation.isPending} className="underline">Try again</button></div>}
 
       {/* Subpages */}
       <SubpagesList 
