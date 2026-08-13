@@ -26,7 +26,7 @@ The supported milestone is a controlled Ashbi agency-operations deployment: auth
 | Design system/dark mode/visual baselines | In progress | [#118](https://github.com/camster91/ashbi-platform/issues/118), [#315](https://github.com/camster91/ashbi-platform/issues/315), [#316](https://github.com/camster91/ashbi-platform/issues/316), [#322](https://github.com/camster91/ashbi-platform/issues/322) |
 | Accessibility | Automated slices deployed; human AT/forced-colour evidence pending | [#305](https://github.com/camster91/ashbi-platform/issues/305), [#317](https://github.com/camster91/ashbi-platform/issues/317), [#318](https://github.com/camster91/ashbi-platform/issues/318) |
 | Telemetry/alerts | Runtime health deployed; external destination/owner blocked | [#303](https://github.com/camster91/ashbi-platform/issues/303) |
-| ChatGPT-compatible AI bridge | Read-only tenant-scoped context bridge plus a confirmed internal task-creation action code-present; target validation pending | [chatgpt-connector.md](chatgpt-connector.md); task actions require separate confirmation, idempotency, tenant ownership, and an audit record. Other actions and provider effects remain gated |
+| ChatGPT-compatible AI bridge | Read-only tenant-scoped context bridge plus confirmed task creation and mapped Slack post code-present; target validation pending | [chatgpt-connector.md](chatgpt-connector.md) and the [authenticated replacement validation runbook](authenticated-replacement-validation.md); actions require separate confirmation, idempotency, tenant ownership, and an audit record. Other actions and provider effects remain gated |
 | Backups/restores | Daily encrypted same-host backup and isolated restore proven; disaster recovery blocked | [#282](https://github.com/camster91/ashbi-platform/issues/282) |
 | Privacy/retention | Decision-dependent | [#310](https://github.com/camster91/ashbi-platform/issues/310) |
 | Credential key custody/rotation | External approval required | [#381](https://github.com/camster91/ashbi-platform/issues/381) |
@@ -46,6 +46,7 @@ The supported milestone is a controlled Ashbi agency-operations deployment: auth
 - Runtime objectives, telemetry privacy, escalation, and drills: [observability-and-slos.md](observability-and-slos.md).
 - Security headers, upload policy, soft deletion, credential vault, and session revocation: the corresponding files under `docs/` and `docs/security/`.
 - Connected provider/AI permissions, approval, and audit boundaries: [connected-workflow-contract.md](connected-workflow-contract.md).
+- Target-environment dogfood, provider, migration, revenue, media, and recovery evidence: [authenticated-replacement-validation.md](authenticated-replacement-validation.md).
 
 ## Required verification matrix
 
