@@ -25,6 +25,7 @@ export default function TaskKanban() {
   const queryClient = useQueryClient();
   const [draggedTask, setDraggedTask] = useState(null);
   const [moveError, setMoveError] = useState(null);
+  const [createError, setCreateError] = useState(null);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [showNewTask, setShowNewTask] = useState(null);
 
@@ -53,7 +54,9 @@ export default function TaskKanban() {
       queryClient.invalidateQueries({ queryKey: ['kanban', projectId] });
       setNewTaskTitle('');
       setShowNewTask(null);
+      setCreateError(null);
     },
+    onError: (_, variables) => setCreateError(variables),
   });
 
   const handleDrop = (toStatus) => {
@@ -150,7 +153,7 @@ export default function TaskKanban() {
                   <input
                     type="text"
                     value={newTaskTitle}
-                    onChange={e => setNewTaskTitle(e.target.value)}
+                    onChange={e => { setNewTaskTitle(e.target.value); setCreateError(null); }}
                     placeholder="Task title..."
                     className="w-full px-2 py-1.5 border border-border rounded-lg bg-background text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                     onKeyDown={e => e.key === 'Enter' && createMutation.mutate({ title: newTaskTitle, status: key })}
@@ -171,6 +174,7 @@ export default function TaskKanban() {
                       Cancel
                     </button>
                   </div>
+                  {createError && createError.status === key && <div role="alert" className="flex items-center justify-between gap-2 text-xs text-red-600"><span>Task was not created. Try again.</span><button type="button" onClick={() => createMutation.mutate(createError)} disabled={createMutation.isPending} className="underline">Try again</button></div>}
                 </div>
               ) : (
                 <button
