@@ -15,6 +15,13 @@ test('Bonsai full importer requires an explicit tenant and scopes imported recor
   assert.match(source, /mappedToImporter/);
 });
 
+test('confirmed Bonsai imports are atomic and reject unresolved reconciliation errors', async () => {
+  const source = await readFile(fullImporter, 'utf8');
+  assert.match(source, /prisma\.\$transaction\(/);
+  assert.match(source, /Live import cannot complete with unresolved reconciliation findings/);
+  assert.match(source, /if \(!DRY_RUN && stats\.errors\.length > 0\)/);
+});
+
 test('legacy Bonsai importer fails closed instead of writing unscoped records', async () => {
   const source = await readFile(legacyImporter, 'utf8');
   assert.match(source, /legacy importer is disabled/);

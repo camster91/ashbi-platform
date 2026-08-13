@@ -187,6 +187,11 @@ const inputInventory = [];
 // MAIN
 // ======================================================================
 async function main() {
+  if (DRY_RUN) return runImport(prisma);
+  return prisma.$transaction((transaction) => runImport(transaction), { timeout: 300_000 });
+}
+
+async function runImport(prisma) {
   const organization = await prisma.organization.findUnique({ where: { id: ORGANIZATION_ID }, select: { id: true, name: true } });
   if (!organization) throw new Error(`Organization not found: ${ORGANIZATION_ID}`);
   console.log(`\n${'='.repeat(60)}`);
@@ -838,6 +843,13 @@ async function main() {
     console.log(`  ... and ${stats.expenses.created - 5} more`);
   }
   console.log(`  ✅ Expenses: ${stats.expenses.created} created, ${stats.expenses.skipped} skipped`);
+
+  if (!DRY_RUN && stats.errors.length > 0) {
+    throw new Error('Live import cannot complete with unresolved reconciliation findings');
+  }
+  if (!DRY_RUN && !inputInventory.every(file => file.present)) {
+    throw new Error('Live import cannot complete with an incomplete input inventory');
+  }
 
   // ============================================================
   // SUMMARY

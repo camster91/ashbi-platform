@@ -144,6 +144,9 @@ are approved.
    mapping/reconciliation report, export checksum, exception list, and
    reviewer acceptance. Keep the prior system read-only until the accepted
    sample and recovery checks are complete.
+   A confirmed Bonsai import is atomic: if any reconciliation error or required
+   CSV input remains, Ashbi rolls back the full import rather than retaining a
+   partial financial dataset.
 
 For an Ashbi workspace export, run the offline verifier before retaining the
 artifact: `node scripts/verify-workspace-export.js --input <workspace-export.json>`.
