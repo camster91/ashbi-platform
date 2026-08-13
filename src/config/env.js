@@ -104,6 +104,12 @@ const env = {
   slackClientSecret: process.env.SLACK_CLIENT_SECRET,
   slackRedirectUri: process.env.SLACK_REDIRECT_URI || `${process.env.HUB_URL || 'https://hub.ashbi.ca'}/api/slack/oauth/callback`,
 
+  // Google Calendar OAuth. Per-user refresh tokens are encrypted in the
+  // database rather than configured in the environment.
+  googleCalendarClientId: process.env.GOOGLE_CALENDAR_CLIENT_ID,
+  googleCalendarClientSecret: process.env.GOOGLE_CALENDAR_CLIENT_SECRET,
+  googleCalendarRedirectUri: process.env.GOOGLE_CALENDAR_REDIRECT_URI || `${process.env.HUB_URL || 'https://hub.ashbi.ca'}/api/google-calendar/oauth/callback`,
+
   // Notion
   // notionToken: process.env.NOTION_TOKEN,
 
