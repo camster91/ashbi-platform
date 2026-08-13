@@ -1,5 +1,7 @@
 import aiClient from '../ai/client.js';
 import crypto from 'node:crypto';
+import { decrypt } from '../utils/crypto.js';
+import { postSlackMessage } from '../services/slack-outbound.service.js';
 import { validateBody, aiBridgeChatSchema } from '../validators/schemas.js';
 
 const MAX_MESSAGES = 20;
@@ -35,6 +37,13 @@ function taskInput(value) {
   return { projectId: value.projectId, title, description: value.description, priority: value.priority ?? 'NORMAL', dueDate: value.dueDate };
 }
 
+function slackMessageInput(value) {
+  if (!value || typeof value !== 'object' || typeof value.projectId !== 'string' || typeof value.text !== 'string') return null;
+  const text = value.text.trim();
+  if (!text || text.length > 4000) return null;
+  return { projectId: value.projectId, text };
+}
+
 function requireActionRole(request, reply) {
   if (!['ADMIN', 'TEAM'].includes(request.user?.role)) {
     reply.status(403).send({ error: { message: 'This API key is not authorized for workflow actions', type: 'insufficient_permissions' } });
@@ -59,7 +68,9 @@ function openAiResponse(content, model) {
   };
 }
 
-export default async function aiBridgeRoutes(fastify) {
+export default async function aiBridgeRoutes(fastify, options = {}) {
+  const decryptSecret = options.decryptSecret ?? decrypt;
+  const sendSlackMessage = options.postSlackMessage ?? postSlackMessage;
   fastify.get('/capabilities', { onRequest: [fastify.authenticateWithApiKey] }, async (request) => ({
     name: 'Ashbi Agency Hub',
     version: '1',
@@ -69,7 +80,7 @@ export default async function aiBridgeRoutes(fastify) {
     authentication: 'x-api-key or Authorization: Bearer ashbi_…',
     capabilities: [
       { name: 'agency_context_chat', mode: 'read', description: 'Ask about the authenticated organization\'s projects, tasks, clients, threads, and retainers.' },
-      { name: 'workflow_actions', mode: 'write', description: 'Prepare and separately confirm allowlisted actions with idempotency and audit records.', actions: ['create_task'] },
+      { name: 'workflow_actions', mode: 'write', description: 'Prepare and separately confirm allowlisted actions with idempotency and audit records.', actions: ['create_task', 'send_slack_message'] },
     ],
     safety: { tenantScoped: true, writesRequireConfirmation: true, credentialsNeverReturned: true },
   }));
@@ -102,11 +113,11 @@ export default async function aiBridgeRoutes(fastify) {
   fastify.post('/v1/actions/prepare', { onRequest: [fastify.authenticateWithApiKey] }, async (request, reply) => {
     if (!requireActionRole(request, reply)) return;
     const { action, input, idempotencyKey } = request.body ?? {};
-    if (action !== 'create_task' || typeof idempotencyKey !== 'string' || !/^[A-Za-z0-9._:-]{8,128}$/.test(idempotencyKey)) {
+    if (!['create_task', 'send_slack_message'].includes(action) || typeof idempotencyKey !== 'string' || !/^[A-Za-z0-9._:-]{8,128}$/.test(idempotencyKey)) {
       return reply.status(400).send({ error: { message: 'Invalid action request', type: 'invalid_request_error' } });
     }
-    const normalizedInput = taskInput(input);
-    if (!normalizedInput) return reply.status(400).send({ error: { message: 'Invalid create_task input', type: 'invalid_request_error' } });
+    const normalizedInput = action === 'create_task' ? taskInput(input) : slackMessageInput(input);
+    if (!normalizedInput) return reply.status(400).send({ error: { message: `Invalid ${action} input`, type: 'invalid_request_error' } });
     const hash = inputHash({ action, input: normalizedInput });
     const existing = await request.prisma.aiBridgeAction.findFirst({ where: { userId: request.user.id, idempotencyKey } });
     if (existing) {
@@ -115,10 +126,19 @@ export default async function aiBridgeRoutes(fastify) {
     }
     const project = await request.prisma.project.findFirst({ where: { id: normalizedInput.projectId }, select: { id: true, name: true } });
     if (!project) return reply.status(404).send({ error: { message: 'Project not found', type: 'not_found_error' } });
+    let preview = { kind: 'create_task', project: { id: project.id, name: project.name }, title: normalizedInput.title, priority: normalizedInput.priority, dueDate: normalizedInput.dueDate ?? null };
+    if (action === 'send_slack_message') {
+      const mapping = await request.prisma.slackChannelMapping.findFirst({
+        where: { projectId: project.id, outboundEnabled: true, installation: { status: 'ACTIVE' } },
+        select: { id: true, channelId: true, channelName: true },
+      });
+      if (!mapping) return reply.status(409).send({ error: { message: 'No active outbound Slack channel is mapped to this project', type: 'action_unavailable' } });
+      preview = { kind: 'send_slack_message', project: { id: project.id, name: project.name }, mapping: { id: mapping.id, channelId: mapping.channelId, name: mapping.channelName ?? mapping.channelId }, text: normalizedInput.text };
+    }
     const actionRecord = await request.prisma.aiBridgeAction.create({
       data: {
         organizationId: request.user.organizationId, userId: request.user.id, action, idempotencyKey, input: normalizedInput, inputHash: hash,
-        preview: { kind: 'create_task', project: { id: project.id, name: project.name }, title: normalizedInput.title, priority: normalizedInput.priority, dueDate: normalizedInput.dueDate ?? null },
+        preview,
         status: 'PENDING_CONFIRMATION', expiresAt: new Date(Date.now() + ACTION_TTL_MS),
       },
     });
@@ -139,6 +159,31 @@ export default async function aiBridgeRoutes(fastify) {
     }
     let completed;
     try {
+      if (initial.action === 'send_slack_message') {
+        const mapping = await request.prisma.$transaction(async (transaction) => {
+          const claimed = await transaction.aiBridgeAction.updateMany({
+            where: { id: initial.id, userId: request.user.id, status: 'PENDING_CONFIRMATION' },
+            data: { status: 'EXECUTING', confirmedAt: new Date() },
+          });
+          if (claimed.count !== 1) return null;
+          const input = slackMessageInput(initial.input);
+          if (!input) throw new Error('ACTION_TARGET_UNAVAILABLE');
+          const found = await transaction.slackChannelMapping.findFirst({
+            where: { projectId: input.projectId, outboundEnabled: true, installation: { status: 'ACTIVE' } },
+            select: { id: true, channelId: true, installation: { select: { botTokenEncrypted: true } } },
+          });
+          if (!found?.installation?.botTokenEncrypted) throw new Error('ACTION_TARGET_UNAVAILABLE');
+          return { ...found, text: input.text };
+        });
+        if (!mapping) {
+          const current = await request.prisma.aiBridgeAction.findFirst({ where: { id: initial.id, userId: request.user.id } });
+          return reply.status(409).send({ error: { message: 'Action is already being processed', type: 'action_unavailable' }, action: actionResponse(current) });
+        }
+        const posted = await sendSlackMessage({ botToken: decryptSecret(mapping.installation.botTokenEncrypted), channelId: mapping.channelId, text: mapping.text });
+        completed = await request.prisma.aiBridgeAction.update({
+          where: { id: initial.id }, data: { status: 'EXECUTED', executedAt: new Date(), result: { mappingId: mapping.id, ...posted } },
+        });
+      } else {
       completed = await request.prisma.$transaction(async (transaction) => {
         const claimed = await transaction.aiBridgeAction.updateMany({
           where: { id: initial.id, userId: request.user.id, status: 'PENDING_CONFIRMATION' },
@@ -155,6 +200,7 @@ export default async function aiBridgeRoutes(fastify) {
           where: { id: initial.id }, data: { status: 'EXECUTED', executedAt: new Date(), result: { taskId: task.id, projectId: project.id } },
         });
       });
+      }
     } catch (error) {
       const errorCode = error?.message === 'ACTION_TARGET_UNAVAILABLE' ? 'ACTION_TARGET_UNAVAILABLE' : 'ACTION_EXECUTION_FAILED';
       const failed = await request.prisma.aiBridgeAction.update({ where: { id: initial.id }, data: { status: 'FAILED', errorCode } });
