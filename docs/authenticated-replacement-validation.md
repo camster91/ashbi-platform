@@ -104,7 +104,10 @@ With two different sandbox Google identities, verify:
 5. Disconnect prevents any later sync.
 
 Calendar selection, inbound/two-way reconciliation, recurring-event conflict
-policy, and deletes remain deferred even if this pilot passes.
+policy, deletes, and first-create failure reconciliation remain deferred even if
+this pilot passes. A failed update with an already-recorded Google event ID may
+be retried explicitly; a failed first create must be reconciled before another
+create is attempted.
 
 ## 5. Bonsai revenue and client portal journey
 

@@ -105,7 +105,10 @@ export default async function googleCalendarRoutes(fastify, options = {}) {
       return reply.status(403).send({ error: 'Only the event creator can sync this event to Google Calendar' });
     }
     const connection = await request.prisma.googleCalendarConnection.findFirst({
-      where: { userId: request.user.id, status: 'ACTIVE' },
+      where: {
+        userId: request.user.id,
+        status: event.googleEventId ? { in: ['ACTIVE', 'ERROR'] } : 'ACTIVE',
+      },
     });
     if (!connection?.refreshTokenEncrypted) {
       return reply.status(409).send({ error: 'Connect Google Calendar before syncing an event', code: 'GOOGLE_CALENDAR_NOT_CONNECTED' });

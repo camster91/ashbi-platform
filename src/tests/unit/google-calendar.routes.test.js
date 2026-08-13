@@ -134,3 +134,32 @@ test('refuses a second Google sync while the event is already being synchronized
   assert.equal(response.json().code, 'GOOGLE_CALENDAR_SYNC_IN_PROGRESS');
   assert.equal(providerCalled, false);
 });
+
+test('allows the event creator to explicitly retry a failed Google update with a known external event ID', async (t) => {
+  let connectionLookup;
+  let providerCalled = false;
+  const app = await buildApp({
+    googleCalendarConnection: {
+      findFirst: async ({ where }) => {
+        connectionLookup = where;
+        return { id: 'connection-1', userId: 'user-1', calendarId: 'primary', refreshTokenEncrypted: 'ciphertext', status: 'ERROR' };
+      },
+      update: async () => ({ id: 'connection-1' }),
+    },
+    calendarEvent: {
+      findFirst: async () => ({ id: 'event-1', createdById: 'user-1', title: 'Kickoff', startTime: new Date('2026-08-13T14:00:00.000Z'), endTime: new Date('2026-08-13T15:00:00.000Z'), isAllDay: false, googleEventId: 'google-event-1', googleSyncStatus: 'ERROR' }),
+      updateMany: async () => ({ count: 1 }),
+      update: async ({ data }) => ({ id: 'event-1', ...data }),
+    },
+  }, {
+    decryptSecret: () => 'refresh-token',
+    createCalendarClient: () => ({ events: { update: async () => { providerCalled = true; return { data: { id: 'google-event-1', htmlLink: 'https://calendar.example/events/1' } }; } } }),
+  });
+  t.after(() => app.close());
+
+  const response = await app.inject({ method: 'POST', url: '/events/event-1/sync' });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(connectionLookup, { userId: 'user-1', status: { in: ['ACTIVE', 'ERROR'] } });
+  assert.equal(providerCalled, true);
+});
