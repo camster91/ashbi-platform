@@ -564,6 +564,29 @@ export const aiBridgeChatSchema = z.object({
   })).min(1).max(20),
 }).strict();
 
+const aiBridgeTaskActionInputSchema = z.object({
+  projectId: cuidId,
+  title: z.string().trim().min(1).max(500),
+  description: z.string().max(10_000).optional(),
+  priority: z.enum(['CRITICAL', 'HIGH', 'NORMAL', 'LOW']).optional(),
+  dueDate: z.string().max(64).optional(),
+}).strict();
+
+const aiBridgeSlackActionInputSchema = z.object({
+  projectId: cuidId,
+  text: z.string().trim().min(1).max(4_000),
+}).strict();
+
+export const aiBridgeActionPrepareSchema = z.object({
+  action: z.enum(['create_task', 'send_slack_message']),
+  idempotencyKey: z.string().regex(/^[A-Za-z0-9._:-]{8,128}$/),
+  input: z.union([aiBridgeTaskActionInputSchema, aiBridgeSlackActionInputSchema]),
+}).strict();
+
+export const aiBridgeActionConfirmSchema = z.object({
+  confirm: z.literal(true),
+}).strict();
+
 // ── Settings: assignment rules + templates + AI provider ───────────────────
 export const assignmentRuleCreateSchema = z.object({
   name: z.string().min(1).max(200),

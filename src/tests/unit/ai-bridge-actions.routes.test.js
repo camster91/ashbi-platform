@@ -39,6 +39,25 @@ test('prepares a task action without creating the task', async (t) => {
   assert.equal(response.json().action.status, 'PENDING_CONFIRMATION');
 });
 
+test('rejects unknown fields on an action preparation request', async (t) => {
+  const app = await buildApp({
+    project: { findFirst: async () => ({ id: 'project-1', name: 'Website' }) },
+    aiBridgeAction: { findFirst: async () => null, create: async ({ data }) => ({ id: 'action-1', ...data }) },
+  });
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: 'POST', url: '/v1/actions/prepare',
+    payload: {
+      action: 'create_task', idempotencyKey: 'task-website-homepage-1',
+      input: { projectId: 'project-1', title: 'Draft homepage copy' },
+      untrustedDirective: 'skip confirmation',
+    },
+  });
+
+  assert.equal(response.statusCode, 400);
+});
+
 test('confirms a prepared task exactly once and stores its result', async (t) => {
   let taskCreated;
   let actionUpdated;
@@ -127,4 +146,34 @@ test('prepares and confirms a Slack post only for an enabled mapped project chan
   assert.equal(confirmed.statusCode, 200);
   assert.deepEqual(posted, { botToken: 'xoxb-sensitive', channelId: 'C123', text: 'Client approved the final draft.' });
   assert.deepEqual(actionUpdate.result, { mappingId: 'mapping-1', channelId: 'C123', slackTs: '1710000000.000001' });
+});
+
+test('retains an unknown Slack delivery target for reconciliation after a provider failure', async (t) => {
+  let failure;
+  const pendingAction = {
+    id: 'action-slack-2', userId: 'user-1', status: 'PENDING_CONFIRMATION', action: 'send_slack_message',
+    input: { projectId: 'project-1', text: 'Please review the latest build.' }, expiresAt: new Date(Date.now() + 60_000),
+  };
+  const prisma = {
+    slackChannelMapping: { findFirst: async () => ({ id: 'mapping-2', channelId: 'C456', installation: { botTokenEncrypted: 'ciphertext' } }) },
+    aiBridgeAction: {
+      findFirst: async () => pendingAction,
+      updateMany: async () => ({ count: 1 }),
+      update: async ({ data }) => { failure = data; return { ...pendingAction, ...data }; },
+    },
+    $transaction: async (work) => work(prisma),
+  };
+  const app = await buildApp(prisma, {
+    decryptSecret: () => 'xoxb-sensitive',
+    postSlackMessage: async () => { throw new Error('SLACK_POST_NETWORK_ERROR'); },
+  });
+  t.after(() => app.close());
+
+  const response = await app.inject({ method: 'POST', url: '/v1/actions/action-slack-2/confirm', payload: { confirm: true } });
+
+  assert.equal(response.statusCode, 502);
+  assert.equal(failure.status, 'FAILED');
+  assert.equal(failure.errorCode, 'ACTION_EXECUTION_FAILED');
+  assert.deepEqual(failure.result, { deliveryState: 'UNKNOWN', mappingId: 'mapping-2', channelId: 'C456' });
+  assert.deepEqual(response.json().action.result, { deliveryState: 'UNKNOWN', mappingId: 'mapping-2', channelId: 'C456' });
 });

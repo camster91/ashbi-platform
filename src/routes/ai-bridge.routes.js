@@ -2,7 +2,7 @@ import aiClient from '../ai/client.js';
 import crypto from 'node:crypto';
 import { decrypt } from '../utils/crypto.js';
 import { postSlackMessage } from '../services/slack-outbound.service.js';
-import { validateBody, aiBridgeChatSchema } from '../validators/schemas.js';
+import { validateBody, aiBridgeActionConfirmSchema, aiBridgeActionPrepareSchema, aiBridgeChatSchema } from '../validators/schemas.js';
 
 const MAX_MESSAGES = 20;
 const MAX_MESSAGE_CHARS = 12000;
@@ -110,7 +110,7 @@ export default async function aiBridgeRoutes(fastify, options = {}) {
     }
   });
 
-  fastify.post('/v1/actions/prepare', { onRequest: [fastify.authenticateWithApiKey] }, async (request, reply) => {
+  fastify.post('/v1/actions/prepare', { onRequest: [fastify.authenticateWithApiKey], preHandler: validateBody(aiBridgeActionPrepareSchema) }, async (request, reply) => {
     if (!requireActionRole(request, reply)) return;
     const { action, input, idempotencyKey } = request.body ?? {};
     if (!['create_task', 'send_slack_message'].includes(action) || typeof idempotencyKey !== 'string' || !/^[A-Za-z0-9._:-]{8,128}$/.test(idempotencyKey)) {
@@ -145,7 +145,7 @@ export default async function aiBridgeRoutes(fastify, options = {}) {
     return reply.status(201).send({ action: actionResponse(actionRecord), confirmationRequired: true });
   });
 
-  fastify.post('/v1/actions/:actionId/confirm', { onRequest: [fastify.authenticateWithApiKey] }, async (request, reply) => {
+  fastify.post('/v1/actions/:actionId/confirm', { onRequest: [fastify.authenticateWithApiKey], preHandler: validateBody(aiBridgeActionConfirmSchema) }, async (request, reply) => {
     if (!requireActionRole(request, reply)) return;
     if (request.body?.confirm !== true) return reply.status(400).send({ error: { message: 'Set confirm to true to execute this action', type: 'confirmation_required' } });
     const actionId = request.params.actionId;
@@ -158,6 +158,7 @@ export default async function aiBridgeRoutes(fastify, options = {}) {
       return reply.status(409).send({ error: { message: 'Action confirmation expired', type: 'action_expired' }, action: actionResponse(expired) });
     }
     let completed;
+    let attemptedSlackDelivery;
     try {
       if (initial.action === 'send_slack_message') {
         const mapping = await request.prisma.$transaction(async (transaction) => {
@@ -179,6 +180,7 @@ export default async function aiBridgeRoutes(fastify, options = {}) {
           const current = await request.prisma.aiBridgeAction.findFirst({ where: { id: initial.id, userId: request.user.id } });
           return reply.status(409).send({ error: { message: 'Action is already being processed', type: 'action_unavailable' }, action: actionResponse(current) });
         }
+        attemptedSlackDelivery = { deliveryState: 'UNKNOWN', mappingId: mapping.id, channelId: mapping.channelId };
         const posted = await sendSlackMessage({ botToken: decryptSecret(mapping.installation.botTokenEncrypted), channelId: mapping.channelId, text: mapping.text });
         completed = await request.prisma.aiBridgeAction.update({
           where: { id: initial.id }, data: { status: 'EXECUTED', executedAt: new Date(), result: { mappingId: mapping.id, ...posted } },
@@ -203,7 +205,10 @@ export default async function aiBridgeRoutes(fastify, options = {}) {
       }
     } catch (error) {
       const errorCode = error?.message === 'ACTION_TARGET_UNAVAILABLE' ? 'ACTION_TARGET_UNAVAILABLE' : 'ACTION_EXECUTION_FAILED';
-      const failed = await request.prisma.aiBridgeAction.update({ where: { id: initial.id }, data: { status: 'FAILED', errorCode } });
+      const failed = await request.prisma.aiBridgeAction.update({
+        where: { id: initial.id },
+        data: { status: 'FAILED', errorCode, ...(attemptedSlackDelivery ? { result: attemptedSlackDelivery } : {}) },
+      });
       return reply.status(errorCode === 'ACTION_TARGET_UNAVAILABLE' ? 409 : 502).send({
         error: { message: errorCode === 'ACTION_TARGET_UNAVAILABLE' ? 'Action target is unavailable' : 'Action execution failed', type: 'action_failed' },
         action: actionResponse(failed),

@@ -61,3 +61,9 @@ execution, denied permission, unmapped resource, expired/revoked connection,
 duplicate delivery, retry-safe provider failure, disconnect, and tenant
 isolation. Attach the evidence to the corresponding issue before describing
 the capability as provider-verified or replacement-ready.
+
+For the current Slack action, an uncertain post response is recorded as a
+failed action with its mapped target and `deliveryState: "UNKNOWN"`. It is a
+reconciliation signal, never permission to automatically resend. A durable
+retry/recovery policy remains deferred until it can prove duplicate-safe
+provider behavior.

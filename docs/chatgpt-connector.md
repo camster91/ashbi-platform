@@ -37,6 +37,9 @@ chat-completions endpoint itself remains read-only. Email, payment, signature,
 deletion, provider actions, and every other workflow action remain unavailable
 until separately allowlisted and verified. Slack installation, provider
 approval, sandbox verification, retention, and thread/channel parity remain
-separate gates. The connection and action
+separate gates. If a Slack post has an uncertain provider outcome, Ashbi marks
+the action failed and retains only its attempted mapping and channel with
+`deliveryState: "UNKNOWN"`; a person must reconcile it before creating a new
+message action. The connection and action
 requirements are defined in
 [connected-workflow-contract.md](connected-workflow-contract.md).
