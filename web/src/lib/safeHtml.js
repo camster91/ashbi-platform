@@ -32,7 +32,7 @@ const STRICT_CONFIG = {
     'p', 'br', 'hr',
     'ul', 'ol', 'li',
     'strong', 'em', 'u',
-    'a', 'blockquote',
+    'a', 'blockquote', 'code',
     'table', 'thead', 'tbody', 'tr', 'th', 'td',
     'div', 'span',
   ],

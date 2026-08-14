@@ -20,6 +20,7 @@ import {
   StickyNote,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { renderMarkdown } from '../lib/markdown';
 import { useToast } from '../hooks/useToast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { cn } from '../lib/utils';
@@ -690,9 +691,13 @@ function NoteCard({
           </form>
         ) : (
           note.content ? (
-            <pre tabIndex={0} aria-label={`${note.title} content`} className="mt-3 text-sm text-foreground bg-muted/30 rounded-lg p-3 whitespace-pre-wrap font-sans leading-relaxed border border-border/50 max-h-64 overflow-y-auto">
-              {note.content}
-            </pre>
+            <div
+              tabIndex={0}
+              role="region"
+              aria-label={`${note.title} content`}
+              className="mt-3 max-h-64 overflow-y-auto rounded-lg border border-border/50 bg-muted/30 p-3 text-sm leading-relaxed text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(note.content) }}
+            />
           ) : (
             <p className="mt-3 text-sm text-muted-foreground italic">No content. Click edit to add.</p>
           )
