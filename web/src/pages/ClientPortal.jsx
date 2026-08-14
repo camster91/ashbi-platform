@@ -273,7 +273,10 @@ function LoginScreen() {
 function useProjectChat(projectId, token) {
   const [messages, setMessages] = useState([]);
   const [connected, setConnected] = useState(false);
+  const [sendError, setSendError] = useState('');
+  const [sending, setSending] = useState(false);
   const socketRef = useRef(null);
+  const sendInFlightRef = useRef(false);
 
   useEffect(() => {
     if (!projectId) return;
@@ -314,21 +317,38 @@ function useProjectChat(projectId, token) {
 
   const sendMessage = useCallback(async (content) => {
     if (!content.trim()) return;
-    const res = await portalFetch(`/api/client-portal/projects/${projectId}/messages`, token, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content })
-    });
-    if (res.ok) {
+    if (sendInFlightRef.current) {
+      throw new Error('A message is already sending. Wait for it to finish before retrying.');
+    }
+    sendInFlightRef.current = true;
+    setSending(true);
+    setSendError('');
+    try {
+      const res = await portalFetch(`/api/client-portal/projects/${projectId}/messages`, token, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content })
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Message could not be sent (${res.status}).`);
+      }
       const msg = await res.json();
       setMessages(prev => {
         if (prev.some(m => m.id === msg.id)) return prev;
         return [...prev, msg];
       });
+      return msg;
+    } catch (error) {
+      setSendError(error?.message || 'Message could not be sent. Your text is still in the composer.');
+      throw error;
+    } finally {
+      sendInFlightRef.current = false;
+      setSending(false);
     }
   }, [projectId, token]);
 
-  return { messages, connected, sendMessage };
+  return { messages, connected, sendMessage, sendError, sending };
 }
 
 // ── Overview Tab ──────────────────────────────────────────────────────────────
@@ -542,7 +562,7 @@ function ProjectDetail({ projectId, token, onBack }) {
   const [submittingWorkflow, setSubmittingWorkflow] = useState(false);
   const chatEndRef = useRef(null);
   const fileInputRef = useRef(null);
-  const { messages, connected, sendMessage } = useProjectChat(projectId, token);
+  const { messages, connected, sendMessage, sendError, sending } = useProjectChat(projectId, token);
 
   useEffect(() => {
     async function load() {
@@ -576,9 +596,13 @@ function ProjectDetail({ projectId, token, onBack }) {
   async function handleSendMessage(e) {
     e.preventDefault();
     if (!chatInput.trim()) return;
-    const msg = chatInput;
-    setChatInput('');
-    await sendMessage(msg);
+    try {
+      await sendMessage(chatInput);
+      setChatInput('');
+    } catch {
+      // The composer preserves the entered text and the shared hook announces
+      // the retry-safe error below.
+    }
   }
 
   async function handleFileUpload(files) {
@@ -909,10 +933,11 @@ function ProjectDetail({ projectId, token, onBack }) {
                 className="cp-input"
                 style={{ flex: 1 }}
               />
-              <button type="submit" className="cp-btn-primary" style={{ padding: '0.5rem 1rem' }} disabled={!chatInput.trim()} aria-label="Send message">
-                {Icons.send}
+              <button type="submit" className="cp-btn-primary" style={{ padding: '0.5rem 1rem' }} disabled={!chatInput.trim() || sending} aria-busy={sending || undefined} aria-label="Send message">
+                {sending ? 'Sending…' : Icons.send}
               </button>
             </div>
+            {sendError && <p role="alert" className="cp-error" style={{ fontSize: '0.8rem' }}>{sendError} Your text is still in the composer.</p>}
           </form>
         </div>
       )}
@@ -1296,7 +1321,7 @@ function DocumentsTab({ projects, token }) {
 // ── Chat Tab (Global) ─────────────────────────────────────────────────────────
 function ChatTab({ projects, token }) {
   const [selectedProjectId, setSelectedProjectId] = useState(projects[0]?.id || '');
-  const { messages, connected, sendMessage } = useProjectChat(selectedProjectId, token);
+  const { messages, connected, sendMessage, sendError, sending } = useProjectChat(selectedProjectId, token);
   const [input, setInput] = useState('');
   const chatEndRef = useRef(null);
 
@@ -1307,9 +1332,13 @@ function ChatTab({ projects, token }) {
   async function handleSend(e) {
     e.preventDefault();
     if (!input.trim()) return;
-    const msg = input;
-    setInput('');
-    await sendMessage(msg);
+    try {
+      await sendMessage(input);
+      setInput('');
+    } catch {
+      // The composer preserves the entered text and the shared hook announces
+      // the retry-safe error below.
+    }
   }
 
   return (
@@ -1359,10 +1388,11 @@ function ChatTab({ projects, token }) {
               className="cp-input"
               style={{ flex: 1 }}
             />
-            <button type="submit" className="cp-btn-primary" style={{ padding: '0.5rem 1rem' }} disabled={!input.trim()} aria-label="Send message">
-              {Icons.send}
+            <button type="submit" className="cp-btn-primary" style={{ padding: '0.5rem 1rem' }} disabled={!input.trim() || sending} aria-busy={sending || undefined} aria-label="Send message">
+              {sending ? 'Sending…' : Icons.send}
             </button>
           </div>
+          {sendError && <p role="alert" className="cp-error" style={{ fontSize: '0.8rem' }}>{sendError} Your text is still in the composer.</p>}
         </form>
       </div>
     </div>
