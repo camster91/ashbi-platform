@@ -16,7 +16,7 @@ describe('entity-map Utility', () => {
   test('TRASHABLE_ENTITIES is frozen and uppercase mirror', () => {
     assert.equal(Object.isFrozen(TRASHABLE_ENTITIES), true);
     const expected = ['client', 'project', 'invoice', 'proposal', 'contract',
-                      'expense', 'task', 'estimate', 'note', 'retainerPlan'];
+                      'expense', 'task', 'estimate', 'note', 'milestone', 'retainerPlan'];
     assert.deepEqual(
       TRASHABLE_ENTITIES,
       expected.map((m) => m.toUpperCase())
@@ -33,11 +33,12 @@ describe('entity-map Utility', () => {
     assert.equal(ENTITY_MAP.TASK, 'task');
     assert.equal(ENTITY_MAP.ESTIMATE, 'estimate');
     assert.equal(ENTITY_MAP.NOTE, 'note');
+    assert.equal(ENTITY_MAP.MILESTONE, 'milestone');
     assert.equal(ENTITY_MAP.RETAINER_PLAN, 'retainerPlan');
   });
 
   test('no stray keys (whitelist locked)', () => {
-    assert.equal(Object.keys(ENTITY_MAP).length, 10);
+    assert.equal(Object.keys(ENTITY_MAP).length, 11);
   });
 
   test('model names are valid JS identifiers on Prisma client shape', () => {
