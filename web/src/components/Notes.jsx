@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import Modal from './Modal';
+import ConfirmDialog from './ConfirmDialog';
 import { useToast } from '../hooks/useToast';
 import Skeleton from './ui/Skeleton';
 
@@ -199,13 +200,14 @@ export default function Notes({ projectId }) {
           onClose={() => setSelectedNote(null)}
           isLoading={updateMutation.isPending}
           isDeleting={deleteMutation.isPending}
+          deleteError={deleteMutation.error?.message}
         />
       )}
     </div>
   );
 }
 
-function NoteEditor({ note, onSave, onDelete, onPin, onClose, isLoading, isDeleting = false }) {
+function NoteEditor({ note, onSave, onDelete, onPin, onClose, isLoading, isDeleting = false, deleteError }) {
   const [formData, setFormData] = useState({
     title: note?.title || '',
     content: note?.content || '',
@@ -213,6 +215,7 @@ function NoteEditor({ note, onSave, onDelete, onPin, onClose, isLoading, isDelet
     tags: note?.tags || []
   });
   const [tagInput, setTagInput] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -231,7 +234,8 @@ function NoteEditor({ note, onSave, onDelete, onPin, onClose, isLoading, isDelet
   };
 
   return (
-    <Modal isOpen={true} onClose={onClose} title={note ? 'Edit Note' : 'Create Note'} size="lg">
+    <>
+    <Modal isOpen={!showDeleteConfirm} onClose={onClose} title={note ? 'Edit Note' : 'Create Note'} size="lg">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="flex gap-4">
           <div className="flex-1">
@@ -326,7 +330,7 @@ function NoteEditor({ note, onSave, onDelete, onPin, onClose, isLoading, isDelet
                 </button>
                 <button
                   type="button"
-                  onClick={onDelete}
+                  onClick={() => setShowDeleteConfirm(true)}
                   disabled={isDeleting}
                   className="text-red-600 hover:text-red-700"
                 >
@@ -354,5 +358,16 @@ function NoteEditor({ note, onSave, onDelete, onPin, onClose, isLoading, isDelet
         </div>
       </form>
     </Modal>
+    <ConfirmDialog
+      isOpen={showDeleteConfirm}
+      title="Delete note"
+      description={note ? `Delete “${note.title || 'Note'}”? You can undo this action for 10 seconds.` : ''}
+      confirmLabel="Delete note"
+      onConfirm={onDelete}
+      onCancel={() => setShowDeleteConfirm(false)}
+      pending={isDeleting}
+      error={deleteError}
+    />
+    </>
   );
 }
