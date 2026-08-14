@@ -40,9 +40,12 @@ describe('destructive action recovery contract', () => {
     expect(source).toContain('duration: 0');
   });
 
-  it('requires explicit consequence confirmation for permanent milestone deletion', () => {
-    expect(milestones).toContain('Permanently delete “${milestoneToDelete.name}”?');
-    expect(milestones).toContain('This cannot be undone. Associated tasks will be kept but unlinked');
+  it('requires confirmation and gives milestone deletion a bounded, safe Undo path', () => {
+    expect(milestones).toContain('Delete “${milestoneToDelete.name}”? You can undo this action for 10 seconds.');
+    expect(milestones).toContain('Former tasks will be restored only if they remain unassigned.');
+    expect(milestones).toContain('label: `Undo delete ${name}`');
+    expect(milestones).toContain('restoreMutation.mutate(result.trashId)');
+    expect(milestones).toContain("title: 'Could not restore milestone'");
     expect(milestones).toContain('disabled={isDeleting}');
   });
 

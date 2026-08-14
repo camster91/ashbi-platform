@@ -34,8 +34,11 @@ export async function permanentlyDeleteTrashedItem({ scopedPrisma, rawPrisma, tr
     const model = modelName ? transaction[modelName] : null;
     if (!model) throw new Error(`Unknown trash entity: ${ledger.entity}`);
 
+    const originalWhere = ledger.entity === 'MILESTONE'
+      ? { id: ledger.recordId, deletedAt: { not: null }, project: { client: { organizationId: ledger.organizationId } } }
+      : { id: ledger.recordId, deletedAt: { not: null } };
     const original = await model.findFirst({
-      where: { id: ledger.recordId, deletedAt: { not: null } },
+      where: originalWhere,
       select: { id: true },
     });
 
@@ -71,9 +74,12 @@ export async function restoreTrashedItem({ scopedPrisma, rawPrisma, trashId }) {
     const model = modelName ? transaction[modelName] : null;
     if (!model) throw new Error(`Unknown trash entity: ${ledger.entity}`);
 
+    const originalWhere = ledger.entity === 'MILESTONE'
+      ? { id: ledger.recordId, deletedAt: { not: null }, project: { client: { organizationId: ledger.organizationId } } }
+      : { id: ledger.recordId, deletedAt: { not: null } };
     const original = await model.findFirst({
-      where: { id: ledger.recordId, deletedAt: { not: null } },
-      select: { id: true },
+      where: originalWhere,
+      select: ledger.entity === 'MILESTONE' ? { id: true, projectId: true } : { id: true },
     });
     if (!original) throw httpError('Original record no longer exists', 404);
 
@@ -90,6 +96,17 @@ export async function restoreTrashedItem({ scopedPrisma, rawPrisma, trashId }) {
       restoreData.parentId = activeParent?.id || null;
     }
     await model.update({ where: { id: ledger.recordId }, data: restoreData });
+    if (ledger.entity === 'MILESTONE' && Array.isArray(ledger.data?.taskIds) && ledger.data.taskIds.length > 0) {
+      await transaction.task.updateMany({
+        where: {
+          id: { in: ledger.data.taskIds },
+          projectId: original.projectId,
+          milestoneId: null,
+          project: { client: { organizationId: ledger.organizationId } },
+        },
+        data: { milestoneId: ledger.recordId },
+      });
+    }
     await transaction.trashedItem.update({
       where: { id: ledger.id },
       data: { restoredAt: new Date() },

@@ -1,7 +1,7 @@
 import ENTITY_MAP from '../utils/entity-map.js';
 
 /** Soft-delete one tenant-owned record and create its recovery ledger atomically. */
-export async function softDelete({ scopedPrisma, entity, recordId, organizationId, beforeDelete }) {
+export async function softDelete({ scopedPrisma, entity, recordId, organizationId, beforeDelete, snapshot }) {
   const modelName = ENTITY_MAP[entity];
   if (!modelName) throw new Error(`Unknown entity type: ${entity}`);
   if (!organizationId) throw new Error('Organization context is required');
@@ -14,6 +14,7 @@ export async function softDelete({ scopedPrisma, entity, recordId, organizationI
       throw new Error('Trash organization mismatch');
     }
 
+    const snapshotData = snapshot ? await snapshot(transaction, record) : undefined;
     if (beforeDelete) await beforeDelete(transaction, record);
 
     const deletedAt = new Date();
@@ -24,7 +25,7 @@ export async function softDelete({ scopedPrisma, entity, recordId, organizationI
         entity,
         recordId,
         organizationId,
-        data: JSON.parse(JSON.stringify(record)),
+        data: JSON.parse(JSON.stringify({ ...record, ...(snapshotData || {}) })),
         deletedAt,
         expiresAt,
       },

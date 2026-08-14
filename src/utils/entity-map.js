@@ -17,6 +17,7 @@ const ENTITY_MAP = Object.freeze({
   TASK: 'task',
   ESTIMATE: 'estimate',
   NOTE: 'note',
+  MILESTONE: 'milestone',
   RETAINER_PLAN: 'retainerPlan',
 });
 

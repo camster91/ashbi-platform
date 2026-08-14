@@ -1,6 +1,7 @@
 // Milestone routes
 
 import { validateBody, milestoneCreateSchema, milestoneUpdateSchema } from '../validators/schemas.js';
+import { softDelete } from '../services/trash.service.js';
 
 export default async function milestoneRoutes(fastify) {
   // List milestones for a project
@@ -221,15 +222,25 @@ export default async function milestoneRoutes(fastify) {
       return reply.status(404).send({ error: 'Milestone not found' });
     }
 
-    // Unlink tasks from milestone before deleting
-    await request.prisma.task.updateMany({
-      where: { milestoneId: id },
-      data: { milestoneId: null }
+    const { trashedItem } = await softDelete({
+      scopedPrisma: request.prisma,
+      entity: 'MILESTONE',
+      recordId: id,
+      organizationId: request.user.organizationId,
+      snapshot: async (transaction) => {
+        const tasks = await transaction.task.findMany({
+          where: { milestoneId: id },
+          select: { id: true },
+        });
+        await transaction.task.updateMany({
+          where: { milestoneId: id },
+          data: { milestoneId: null },
+        });
+        return { taskIds: tasks.map((task) => task.id) };
+      },
     });
 
-    await request.prisma.milestone.delete({ where: { id } });
-
-    return { success: true };
+    return { success: true, trashId: trashedItem.id };
   });
 
   // Add task to milestone

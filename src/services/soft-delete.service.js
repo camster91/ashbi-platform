@@ -1,6 +1,6 @@
 /** Single source of truth for application soft deletion. */
 export const SOFT_DELETE_MODELS = Object.freeze([
-  'client', 'project', 'task', 'note', 'timeEntry', 'retainerPlan',
+  'client', 'project', 'task', 'note', 'milestone', 'timeEntry', 'retainerPlan',
   'proposal', 'contract', 'invoice', 'expense', 'estimate',
 ]);
 const SOFT_DELETE_MODEL_SET = new Set(SOFT_DELETE_MODELS);

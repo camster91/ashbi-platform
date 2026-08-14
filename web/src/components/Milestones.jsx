@@ -40,11 +40,34 @@ export default function Milestones({ projectId }) {
   // Delete milestone
   const deleteMutation = useMutation({
     mutationFn: ({ id }) => api.deleteMilestone(id),
-    onSuccess: (_, { name }) => {
+    onSuccess: (result, { name }) => {
       setMilestoneToDelete(null);
       queryClient.invalidateQueries({ queryKey: ['milestones', projectId] });
       setSelectedMilestone(null);
-      toast.success(`Deleted “${name}”`, 'This permanent deletion cannot be undone. Associated tasks were kept and unlinked.');
+      toast.success({
+        title: `Deleted “${name}”`,
+        message: 'You can undo this deletion for the next 10 seconds. Former tasks will be restored only if they remain unassigned.',
+        duration: 10000,
+        action: {
+          label: `Undo delete ${name}`,
+          onClick: () => restoreMutation.mutate(result.trashId),
+        },
+      });
+    },
+  });
+
+  const restoreMutation = useMutation({
+    mutationFn: api.restoreTrashItem,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['milestones', projectId] });
+      toast.success('Milestone restored', 'The milestone is back. Former tasks were restored when they remained unassigned.');
+    },
+    onError: (error) => {
+      toast.error({
+        title: 'Could not restore milestone',
+        message: error.message || 'Open Trash or refresh before trying again.',
+        duration: 0,
+      });
     },
   });
 
@@ -211,7 +234,7 @@ export default function Milestones({ projectId }) {
       <ConfirmDialog
         isOpen={Boolean(milestoneToDelete)}
         title="Delete milestone"
-        description={milestoneToDelete ? `Permanently delete “${milestoneToDelete.name}”? This cannot be undone. Associated tasks will be kept but unlinked from the milestone.` : ''}
+        description={milestoneToDelete ? `Delete “${milestoneToDelete.name}”? You can undo this action for 10 seconds. Former tasks will be restored only if they remain unassigned.` : ''}
         confirmLabel="Delete milestone"
         onConfirm={() => milestoneToDelete && deleteMutation.mutate({ id: milestoneToDelete.id, name: milestoneToDelete.name })}
         onCancel={() => { deleteMutation.reset(); setMilestoneToDelete(null); }}
@@ -339,7 +362,7 @@ function MilestoneModal({ milestone, onSave, onDelete, onClose, isLoading, isDel
                 disabled={isDeleting}
                 className="text-red-600 hover:text-red-700"
               >
-                {isDeleting ? 'Deleting…' : 'Delete permanently'}
+                {isDeleting ? 'Deleting…' : 'Delete'}
               </button>
             )}
           </div>
