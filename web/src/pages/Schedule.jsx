@@ -432,6 +432,7 @@ function EventDetailModal({ event, isOpen, onClose, onEdit }) {
   const queryClient = useQueryClient();
   const [rsvpStatus, setRsvpStatus] = useState(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [syncedEvent, setSyncedEvent] = useState(null);
 
   const style = typeStyle(event?.type);
 
@@ -453,6 +454,15 @@ function EventDetailModal({ event, isOpen, onClose, onEdit }) {
     },
   });
 
+  const googleSyncMutation = useMutation({
+    mutationFn: () => api.syncGoogleCalendarEvent(event.id),
+    onSuccess: (data) => {
+      setSyncedEvent(data.event);
+      queryClient.invalidateQueries({ queryKey: ['calendar'] });
+      queryClient.invalidateQueries({ queryKey: ['upcoming-events'] });
+    },
+  });
+
   const requestDelete = () => {
     if (deleteMutation.isPending) return;
     deleteMutation.reset();
@@ -468,6 +478,7 @@ function EventDetailModal({ event, isOpen, onClose, onEdit }) {
   if (!event) return null;
 
   const Icon = TYPE_ICONS[event.type] || CalendarDays;
+  const googleEvent = syncedEvent || event;
 
   return (
     <>
@@ -511,7 +522,7 @@ function EventDetailModal({ event, isOpen, onClose, onEdit }) {
             </div>
           )}
 
-          {event.description && (
+        {event.description && (
             <p className="text-muted-foreground mt-2 whitespace-pre-wrap">{event.description}</p>
           )}
 
@@ -629,6 +640,22 @@ function UpcomingSidebar({ onEventClick }) {
             />
           </div>
         )}
+
+        <div className="rounded-lg border border-border bg-muted/30 p-3">
+          <p className="text-sm font-medium text-foreground">Google Calendar</p>
+          <p className="mt-1 text-xs text-muted-foreground">Only the event creator can explicitly sync this event. Ashbi does not import or automatically delete external events.</p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" isLoading={googleSyncMutation.isPending} disabled={googleSyncMutation.isPending} onClick={() => googleSyncMutation.mutate()}>
+              {googleSyncMutation.isPending ? 'Syncing…' : googleEvent.googleEventId ? 'Update Google Calendar' : 'Sync to Google Calendar'}
+            </Button>
+            {googleEvent.googleEventUrl && (
+              <a href={googleEvent.googleEventUrl} target="_blank" rel="noopener noreferrer" className="min-h-11 inline-flex items-center text-sm text-primary underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                Open in Google Calendar
+              </a>
+            )}
+          </div>
+          {googleSyncMutation.error && <p role="alert" className="mt-2 text-sm text-destructive">{googleSyncMutation.error.message || 'Google Calendar sync failed. Check your connection and retry only after confirming the external event state.'}</p>}
+        </div>
         {!isLoading && !upcomingError && upcoming.length === 0 && (
           <div className="px-4 py-8 text-center text-muted-foreground text-sm">
             No upcoming events

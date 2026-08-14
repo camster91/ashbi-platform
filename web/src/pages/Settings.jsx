@@ -17,6 +17,7 @@ import {
   Link2,
   Bell,
   ListChecks,
+  CalendarDays,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
@@ -85,6 +86,53 @@ function NotificationPreferences() {
           <Button type="button" onClick={subscribe} isLoading={status === 'subscribing'} disabled={busy || offline || !supported}>
             {status === 'subscribing' ? 'Enabling...' : permission === 'denied' ? 'Try again' : 'Enable notifications'}
           </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function GoogleCalendarPreferences() {
+  const queryClient = useQueryClient();
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
+    queryKey: ['google-calendar-connection'],
+    queryFn: api.getGoogleCalendarConnection,
+    retry: false,
+  });
+  const disconnect = useMutation({
+    mutationFn: api.disconnectGoogleCalendar,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['google-calendar-connection'] }),
+  });
+  const connection = data?.connection;
+  const busy = disconnect.isPending;
+
+  if (isLoading) return <LoadingState label="Checking Google Calendar connection…" compact className="justify-start" size="sm" />;
+  if (error) {
+    return <QueryErrorState error={error} message="Google Calendar connection could not be loaded" onRetry={refetch} isRetrying={isFetching} />;
+  }
+
+  const connected = connection?.status === 'ACTIVE';
+  const connect = () => window.location.assign(api.googleCalendarOAuthStartUrl());
+
+  return (
+    <div className="space-y-4">
+      <div aria-live="polite" aria-atomic="true">
+        <p className="text-sm font-medium text-foreground">
+          {connected ? 'Google Calendar is connected for this account.' : 'Google Calendar is not connected.'}
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Ashbi only syncs an event when its creator explicitly selects Sync to Google Calendar. Ashbi remains the source of truth; no calendar events are imported.
+        </p>
+      </div>
+      {connection?.lastError && <p role="alert" className="text-sm text-destructive">Last connection error: {connection.lastError}</p>}
+      {disconnect.error && <p role="alert" className="text-sm text-destructive">{disconnect.error.message || 'Google Calendar could not be disconnected.'}</p>}
+      <div className="flex flex-wrap gap-2">
+        {connected ? (
+          <Button type="button" variant="outline" isLoading={busy} disabled={busy} onClick={() => disconnect.mutate()}>
+            {busy ? 'Disconnecting…' : 'Disconnect Google Calendar'}
+          </Button>
+        ) : (
+          <Button type="button" onClick={connect}>Connect Google Calendar</Button>
         )}
       </div>
     </div>
@@ -651,6 +699,10 @@ export default function Settings() {
 
       <Section icon={Bell} title="Browser notifications" description="Inspect or change notifications for this browser">
         <NotificationPreferences />
+      </Section>
+
+      <Section icon={CalendarDays} title="Google Calendar" description="Connect your own calendar and explicitly sync events you create">
+        <GoogleCalendarPreferences />
       </Section>
 
       <Section icon={ListChecks} title="Getting started" description="Resume or restart your role-specific first-success checklist">

@@ -547,6 +547,16 @@ export const api = {
   getUpcomingEvents: (limit = 5) =>
     request(`/calendar/upcoming?limit=${limit}`),
 
+  // Google Calendar — the OAuth start endpoint deliberately navigates the
+  // browser so the provider can set its own consent/session state.
+  googleCalendarOAuthStartUrl: () => `${API_BASE}/google-calendar/oauth/start`,
+  getGoogleCalendarConnection: () =>
+    request('/google-calendar/connection'),
+  disconnectGoogleCalendar: () =>
+    request('/google-calendar/connection/disconnect', { method: 'POST' }),
+  syncGoogleCalendarEvent: (eventId) =>
+    request(`/google-calendar/events/${eventId}/sync`, { method: 'POST' }),
+
   // Attachments
   getAttachments: (entityType, entityId) =>
     request(`/attachments?entityType=${entityType}&entityId=${entityId}`),

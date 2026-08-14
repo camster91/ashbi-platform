@@ -43,7 +43,7 @@ test('starts user-scoped Google OAuth with calendar-events scope and signed stat
   assert.equal(state.organizationId, 'org-1');
 });
 
-test('exchanges OAuth code and stores an encrypted refresh token for the connecting user', async (t) => {
+test('exchanges OAuth code, stores an encrypted refresh token, and returns to Settings', async (t) => {
   let stored;
   const app = await buildApp({
     googleCalendarConnection: {
@@ -60,12 +60,12 @@ test('exchanges OAuth code and stores an encrypted refresh token for the connect
   const state = app.jwt.sign({ type: 'google_calendar_oauth', organizationId: 'org-1', userId: 'user-1' }, { expiresIn: '10m' });
 
   const response = await app.inject({ method: 'GET', url: `/oauth/callback?code=code-1&state=${encodeURIComponent(state)}` });
-  assert.equal(response.statusCode, 200);
+  assert.equal(response.statusCode, 302);
+  assert.equal(response.headers.location, '/settings?googleCalendar=connected');
   assert.equal(stored.organizationId, 'org-1');
   assert.equal(stored.userId, 'user-1');
   assert.equal(stored.refreshTokenEncrypted, 'encrypted:sensitive-refresh-token');
   assert.deepEqual(JSON.parse(stored.scopes), ['https://www.googleapis.com/auth/calendar.events']);
-  assert.equal(response.json().connection.refreshTokenEncrypted, undefined);
 });
 
 test('returns the current user connection without its provider token', async (t) => {

@@ -79,7 +79,10 @@ export default async function googleCalendarRoutes(fastify, options = {}) {
       : await fastify.prisma.googleCalendarConnection.create({
         data: { organizationId: oauthState.organizationId, userId: oauthState.userId, ...data },
       });
-    return { connection: connectionResponse(connection) };
+    // OAuth callbacks are browser navigations. Return the user to the
+    // authenticated settings surface rather than rendering token-connection
+    // JSON at a provider callback URL.
+    return reply.redirect('/settings?googleCalendar=connected');
   });
 
   fastify.get('/connection', { onRequest: [fastify.authenticate] }, async (request) => ({
