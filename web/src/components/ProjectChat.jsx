@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { useSocket } from '../hooks/useSocket';
 import { useAuth } from '../hooks/useAuth';
 import { preferredScrollBehavior } from '../lib/motion';
+import ConfirmDialog from './ConfirmDialog';
 import LoadingState from './ui/LoadingState';
 import { Edit2, Trash2 } from 'lucide-react';
 
@@ -24,6 +25,7 @@ export default function ProjectChat({ projectId }) {
   const [typingUsers, setTypingUsers] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [editingContent, setEditingContent] = useState('');
+  const [messageToDelete, setMessageToDelete] = useState(null);
   const [attachment, setAttachment] = useState(null);
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
@@ -118,7 +120,25 @@ export default function ProjectChat({ projectId }) {
     }
   });
   const editMutation = useMutation({ mutationFn: ({ id, content }) => api.editChatMessage(projectId, id, content), onSuccess: () => { setEditingId(null); queryClient.invalidateQueries({ queryKey: ['chat', projectId] }); } });
-  const deleteMutation = useMutation({ mutationFn: (id) => api.deleteChatMessage(projectId, id), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['chat', projectId] }) });
+  const deleteMutation = useMutation({
+    mutationFn: (id) => api.deleteChatMessage(projectId, id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['chat', projectId] });
+      setMessageToDelete(null);
+    },
+  });
+
+  const requestMessageDeletion = (chatMessage) => {
+    if (deleteMutation.isPending) return;
+    deleteMutation.reset();
+    setMessageToDelete(chatMessage);
+  };
+
+  const cancelMessageDeletion = () => {
+    if (deleteMutation.isPending) return;
+    deleteMutation.reset();
+    setMessageToDelete(null);
+  };
 
   // Handle typing indicator
   const handleTyping = () => {
@@ -209,7 +229,7 @@ export default function ProjectChat({ projectId }) {
                     </div>
                   </div>
                   <ChatAttachments messageId={msg.id} />
-                  {msg.authorId === user?.id && editingId !== msg.id && <div className="mt-1 flex justify-end gap-1"><button type="button" onClick={() => { setEditingId(msg.id); setEditingContent(msg.content); }} aria-label="Edit your message" className="min-h-11 min-w-11 p-2 text-gray-500 hover:text-blue-600"><Edit2 className="w-3.5 h-3.5" /></button><button type="button" onClick={() => window.confirm('Delete this message?') && deleteMutation.mutate(msg.id)} aria-label="Delete your message" className="min-h-11 min-w-11 p-2 text-gray-500 hover:text-red-600"><Trash2 className="w-3.5 h-3.5" /></button></div>}
+                  {msg.authorId === user?.id && editingId !== msg.id && <div className="mt-1 flex justify-end gap-1"><button type="button" onClick={() => { setEditingId(msg.id); setEditingContent(msg.content); }} aria-label="Edit your message" className="min-h-11 min-w-11 p-2 text-gray-500 hover:text-blue-600"><Edit2 className="w-3.5 h-3.5" /></button><button type="button" onClick={() => requestMessageDeletion(msg)} disabled={deleteMutation.isPending} aria-label="Delete your message" className="min-h-11 min-w-11 p-2 text-gray-500 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"><Trash2 className="w-3.5 h-3.5" /></button></div>}
                   {/* Reactions */}
                   {msg.reactions?.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-1">
@@ -286,6 +306,16 @@ export default function ProjectChat({ projectId }) {
         {attachment && <p className="mt-1 text-xs text-gray-500">Attaching {attachment.name}</p>}
         {sendError && <div role="alert" className="mt-2 flex items-center justify-between gap-2 text-sm text-red-600"><span>{sendError}</span><button type="button" onClick={() => attachmentRetry ? uploadMutation.mutate(attachmentRetry) : sendMutation.mutate(message.trim())} disabled={sendMutation.isPending || uploadMutation.isPending || (!attachmentRetry && !message.trim())} className="underline">Try again</button></div>}
       </form>
+      <ConfirmDialog
+        isOpen={Boolean(messageToDelete)}
+        title="Permanently delete this message?"
+        description={messageToDelete ? `\u201c${messageToDelete.content}\u201d This permanently removes the message from the project conversation and cannot be undone.` : ''}
+        confirmLabel="Delete message permanently"
+        onConfirm={() => messageToDelete && deleteMutation.mutate(messageToDelete.id)}
+        onCancel={cancelMessageDeletion}
+        pending={deleteMutation.isPending}
+        error={deleteMutation.error?.message}
+      />
     </div>
   );
 }
