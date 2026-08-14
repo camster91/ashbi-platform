@@ -6,6 +6,7 @@ import { useAuth } from '../hooks/useAuth';
 import { preferredScrollBehavior } from '../lib/motion';
 import ConfirmDialog from './ConfirmDialog';
 import LoadingState from './ui/LoadingState';
+import QueryErrorState from './QueryErrorState';
 import { Edit2, Trash2 } from 'lucide-react';
 
 function ChatAttachments({ messageId }) {
@@ -31,7 +32,14 @@ export default function ProjectChat({ projectId }) {
   const typingTimeoutRef = useRef(null);
 
   // Fetch messages
-  const { data: messages = [], isLoading } = useQuery({
+  const {
+    data: messages = [],
+    isLoading,
+    isError: messagesError,
+    error: messagesRequestError,
+    refetch: refetchMessages,
+    isFetching: messagesFetching,
+  } = useQuery({
     queryKey: ['chat', projectId],
     queryFn: () => api.getChatMessages(projectId),
     refetchInterval: 30000
@@ -197,6 +205,14 @@ export default function ProjectChat({ projectId }) {
     <div className="flex flex-col h-[500px] bg-white rounded-lg border">
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {messagesError && (
+          <QueryErrorState
+            error={messagesRequestError}
+            message="Project conversation could not be loaded"
+            onRetry={refetchMessages}
+            isRetrying={messagesFetching}
+          />
+        )}
         {Object.entries(groupedMessages).map(([date, msgs]) => (
           <div key={date}>
             <div className="flex items-center justify-center my-4">
@@ -266,7 +282,7 @@ export default function ProjectChat({ projectId }) {
             ))}
           </div>
         ))}
-        {messages.length === 0 && (
+        {!messagesError && messages.length === 0 && (
           <div className="text-center text-gray-500 py-8">
             No messages yet. Start the conversation!
           </div>

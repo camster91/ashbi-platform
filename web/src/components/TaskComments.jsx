@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import ConfirmDialog from './ConfirmDialog';
 import Skeleton from './ui/Skeleton';
+import QueryErrorState from './QueryErrorState';
 
 export default function TaskComments({ taskId }) {
   const queryClient = useQueryClient();
@@ -14,7 +15,14 @@ export default function TaskComments({ taskId }) {
   const inputRef = useRef(null);
 
   // Fetch comments
-  const { data: comments = [], isLoading } = useQuery({
+  const {
+    data: comments = [],
+    isLoading,
+    isError: commentsError,
+    error: commentsRequestError,
+    refetch: refetchComments,
+    isFetching: commentsFetching,
+  } = useQuery({
     queryKey: ['task-comments', taskId],
     queryFn: () => api.getTaskComments(taskId)
   });
@@ -141,6 +149,14 @@ export default function TaskComments({ taskId }) {
 
       {/* Comments List */}
       <div className="space-y-3">
+        {commentsError && (
+          <QueryErrorState
+            error={commentsRequestError}
+            message="Task comments could not be loaded"
+            onRetry={refetchComments}
+            isRetrying={commentsFetching}
+          />
+        )}
         {comments.map((comment) => (
           <div key={comment.id} className="flex gap-3">
             {/* Avatar */}
@@ -180,7 +196,7 @@ export default function TaskComments({ taskId }) {
           </div>
         ))}
 
-        {comments.length === 0 && (
+        {!commentsError && comments.length === 0 && (
           <p className="text-sm text-muted-foreground text-center py-4">
             No comments yet. Be the first to comment!
           </p>
