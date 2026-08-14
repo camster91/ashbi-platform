@@ -275,11 +275,31 @@ function useProjectChat(projectId, token) {
   const [connected, setConnected] = useState(false);
   const [sendError, setSendError] = useState('');
   const [sending, setSending] = useState(false);
+  const [messagesError, setMessagesError] = useState('');
+  const [loadingMessages, setLoadingMessages] = useState(false);
   const socketRef = useRef(null);
   const sendInFlightRef = useRef(false);
 
+  const reloadMessages = useCallback(async () => {
+    if (!projectId) return;
+    setLoadingMessages(true);
+    setMessagesError('');
+    try {
+      const response = await portalFetch(`/api/client-portal/projects/${projectId}/messages`, token);
+      if (!response.ok) throw new Error(`Chat messages could not be loaded (${response.status}).`);
+      const data = await response.json();
+      setMessages(Array.isArray(data) ? data : []);
+    } catch (error) {
+      setMessagesError(error?.message || 'Chat messages could not be loaded. Try again.');
+    } finally {
+      setLoadingMessages(false);
+    }
+  }, [projectId, token]);
+
   useEffect(() => {
     if (!projectId) return;
+    setMessages([]);
+    setMessagesError('');
 
     const socket = io(SOCKET_URL, {
       auth: token ? { token } : {},
@@ -302,11 +322,7 @@ function useProjectChat(projectId, token) {
       });
     });
 
-    // Load initial messages
-    portalFetch(`/api/client-portal/projects/${projectId}/messages`, token)
-      .then(r => r.json())
-      .then(data => setMessages(Array.isArray(data) ? data : []))
-      .catch(() => {});
+    void reloadMessages();
 
     return () => {
       socket.emit('leave-project', projectId);
@@ -346,9 +362,27 @@ function useProjectChat(projectId, token) {
       sendInFlightRef.current = false;
       setSending(false);
     }
-  }, [projectId, token]);
+  }, [projectId, reloadMessages, token]);
 
-  return { messages, connected, sendMessage, sendError, sending };
+  return { messages, connected, sendMessage, sendError, sending, messagesError, loadingMessages, reloadMessages };
+}
+
+function PortalChatComposer({ value, onChange, onSubmit, connected, sending, sendError }) {
+  return (
+    <form onSubmit={onSubmit} className="cp-chat-input-bar">
+      <div role="status" aria-live="polite" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.7rem', color: connected ? '#15803d' : '#b91c1c' }}>
+        <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: '50%', background: connected ? '#15803d' : '#b91c1c', display: 'inline-block' }} />
+        {connected ? 'Connected' : 'Reconnecting...'}
+      </div>
+      <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <input type="text" value={value} onChange={onChange} placeholder="Type a message..." aria-label="Message to project team" className="cp-input" style={{ flex: 1 }} />
+        <button type="submit" className="cp-btn-primary" style={{ padding: '0.5rem 1rem' }} disabled={!value.trim() || sending} aria-busy={sending || undefined} aria-label="Send message">
+          {sending ? 'Sending…' : Icons.send}
+        </button>
+      </div>
+      {sendError && <p role="alert" className="cp-error" style={{ fontSize: '0.8rem' }}>{sendError} Your text is still in the composer.</p>}
+    </form>
+  );
 }
 
 // ── Overview Tab ──────────────────────────────────────────────────────────────
@@ -562,7 +596,7 @@ function ProjectDetail({ projectId, token, onBack }) {
   const [submittingWorkflow, setSubmittingWorkflow] = useState(false);
   const chatEndRef = useRef(null);
   const fileInputRef = useRef(null);
-  const { messages, connected, sendMessage, sendError, sending } = useProjectChat(projectId, token);
+  const { messages, connected, sendMessage, sendError, sending, messagesError, loadingMessages, reloadMessages } = useProjectChat(projectId, token);
 
   useEffect(() => {
     async function load() {
@@ -897,7 +931,10 @@ function ProjectDetail({ projectId, token, onBack }) {
       {activeView === 'chat' && (
         <div className="cp-chat-container">
           <div className="cp-chat-messages">
-            {messages.length === 0 ? (
+            {messagesError && <div role="alert" className="cp-alert cp-alert--red"><p>Chat messages could not be loaded. Try again.</p><button type="button" className="cp-link" onClick={reloadMessages}>Try again</button></div>}
+            {loadingMessages && messages.length === 0 ? (
+              <p role="status" className="cp-text-muted">Loading messages…</p>
+            ) : messages.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '2rem 0' }}>
                 <p className="cp-text-muted">No messages yet. Start the conversation!</p>
               </div>
@@ -918,27 +955,7 @@ function ProjectDetail({ projectId, token, onBack }) {
             )}
             <div ref={chatEndRef} />
           </div>
-          <form onSubmit={handleSendMessage} className="cp-chat-input-bar">
-            <div role="status" aria-live="polite" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.7rem', color: connected ? '#15803d' : '#b91c1c' }}>
-              <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: '50%', background: connected ? '#15803d' : '#b91c1c', display: 'inline-block' }} />
-              {connected ? 'Connected' : 'Reconnecting...'}
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <input
-                type="text"
-                value={chatInput}
-                onChange={e => setChatInput(e.target.value)}
-                placeholder="Type a message..."
-                aria-label="Message to project team"
-                className="cp-input"
-                style={{ flex: 1 }}
-              />
-              <button type="submit" className="cp-btn-primary" style={{ padding: '0.5rem 1rem' }} disabled={!chatInput.trim() || sending} aria-busy={sending || undefined} aria-label="Send message">
-                {sending ? 'Sending…' : Icons.send}
-              </button>
-            </div>
-            {sendError && <p role="alert" className="cp-error" style={{ fontSize: '0.8rem' }}>{sendError} Your text is still in the composer.</p>}
-          </form>
+          <PortalChatComposer value={chatInput} onChange={e => setChatInput(e.target.value)} onSubmit={handleSendMessage} connected={connected} sending={sending} sendError={sendError} />
         </div>
       )}
 
@@ -1321,7 +1338,7 @@ function DocumentsTab({ projects, token }) {
 // ── Chat Tab (Global) ─────────────────────────────────────────────────────────
 function ChatTab({ projects, token }) {
   const [selectedProjectId, setSelectedProjectId] = useState(projects[0]?.id || '');
-  const { messages, connected, sendMessage, sendError, sending } = useProjectChat(selectedProjectId, token);
+  const { messages, connected, sendMessage, sendError, sending, messagesError, loadingMessages, reloadMessages } = useProjectChat(selectedProjectId, token);
   const [input, setInput] = useState('');
   const chatEndRef = useRef(null);
 
@@ -1354,7 +1371,10 @@ function ChatTab({ projects, token }) {
 
       <div className="cp-chat-container">
         <div className="cp-chat-messages">
-          {messages.length === 0 ? (
+          {messagesError && <div role="alert" className="cp-alert cp-alert--red"><p>Chat messages could not be loaded. Try again.</p><button type="button" className="cp-link" onClick={reloadMessages}>Try again</button></div>}
+          {loadingMessages && messages.length === 0 ? (
+            <p role="status" className="cp-text-muted">Loading messages…</p>
+          ) : messages.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '3rem 0' }}>
               <p className="cp-text-muted">No messages yet. Start the conversation!</p>
             </div>
@@ -1373,27 +1393,7 @@ function ChatTab({ projects, token }) {
           )}
           <div ref={chatEndRef} />
         </div>
-        <form onSubmit={handleSend} className="cp-chat-input-bar">
-          <div role="status" aria-live="polite" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.7rem', color: connected ? '#15803d' : '#b91c1c' }}>
-            <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: '50%', background: connected ? '#15803d' : '#b91c1c', display: 'inline-block' }} />
-            {connected ? 'Connected' : 'Reconnecting...'}
-          </div>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <input
-              type="text"
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              placeholder="Type a message..."
-              aria-label="Message to project team"
-              className="cp-input"
-              style={{ flex: 1 }}
-            />
-            <button type="submit" className="cp-btn-primary" style={{ padding: '0.5rem 1rem' }} disabled={!input.trim() || sending} aria-busy={sending || undefined} aria-label="Send message">
-              {sending ? 'Sending…' : Icons.send}
-            </button>
-          </div>
-          {sendError && <p role="alert" className="cp-error" style={{ fontSize: '0.8rem' }}>{sendError} Your text is still in the composer.</p>}
-        </form>
+        <PortalChatComposer value={input} onChange={e => setInput(e.target.value)} onSubmit={handleSend} connected={connected} sending={sending} sendError={sendError} />
       </div>
     </div>
   );

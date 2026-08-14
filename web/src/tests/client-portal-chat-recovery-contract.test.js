@@ -12,7 +12,13 @@ describe('client portal chat recovery', () => {
     expect(source).toContain('setChatInput(\'\');');
     expect(source).toContain('setInput(\'\');');
     expect(source).toContain("role=\"alert\"");
-    expect(source).toContain('disabled={!chatInput.trim() || sending}');
-    expect(source).toContain('disabled={!input.trim() || sending}');
+    expect(source).toContain('disabled={!value.trim() || sending}');
+  });
+
+  it('does not present a failed chat history request as an empty conversation', () => {
+    expect(source).toContain('const [messagesError, setMessagesError] = useState(\'\');');
+    expect(source).toContain('const [loadingMessages, setLoadingMessages] = useState(false);');
+    expect(source).toContain('Chat messages could not be loaded. Try again.');
+    expect(source).toContain('onClick={reloadMessages}');
   });
 });
