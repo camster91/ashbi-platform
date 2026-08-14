@@ -6,7 +6,14 @@ const SLACK_BOT_SCOPES = ['channels:history', 'chat:write'];
 
 function installationResponse(installation) {
   const { botTokenEncrypted: _botTokenEncrypted, ...safeInstallation } = installation;
-  return safeInstallation;
+  let scopes = [];
+  try {
+    const parsed = JSON.parse(installation.scopes || '[]');
+    scopes = Array.isArray(parsed) ? parsed.filter((scope) => typeof scope === 'string') : [];
+  } catch {
+    // A malformed legacy value must not break the administrative lifecycle UI.
+  }
+  return { ...safeInstallation, scopes };
 }
 
 function validSlackId(value) {
@@ -79,7 +86,10 @@ export default async function slackAdminRoutes(fastify, options = {}) {
     const installation = existing
       ? await fastify.prisma.slackInstallation.update({ where: { id: existing.id }, data })
       : await fastify.prisma.slackInstallation.create({ data: { organizationId: oauthState.organizationId, teamId: tokenBody.team.id, ...data } });
-    return { installation: installationResponse(installation) };
+    // Slack redirects the administrator's browser here. Return to the
+    // authenticated settings surface instead of rendering installation JSON
+    // at the OAuth callback URL.
+    return reply.redirect('/settings?slack=connected');
   });
 
   fastify.get('/', adminOnly, async (request) => {

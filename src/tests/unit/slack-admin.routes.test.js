@@ -82,7 +82,7 @@ test('starts OAuth with signed short-lived tenant state and least-privilege bot 
   assert.equal(typeof state.exp, 'number');
 });
 
-test('exchanges a valid OAuth callback code and stores only an encrypted bot token', async (t) => {
+test('exchanges a valid OAuth callback code, stores an encrypted bot token, and returns to Settings', async (t) => {
   let stored;
   const app = await buildApp({
     slackInstallation: { findFirst: async () => null, create: async ({ data }) => { stored = data; return { id: 'installation-1', ...data }; } },
@@ -96,9 +96,24 @@ test('exchanges a valid OAuth callback code and stores only an encrypted bot tok
 
   const response = await app.inject({ method: 'GET', url: `/oauth/callback?code=code-1&state=${encodeURIComponent(state)}` });
 
-  assert.equal(response.statusCode, 200);
+  assert.equal(response.statusCode, 302);
+  assert.equal(response.headers.location, '/settings?slack=connected');
   assert.equal(stored.organizationId, 'org-1');
   assert.equal(stored.botTokenEncrypted, 'encrypted:xoxb-sensitive');
   assert.deepEqual(JSON.parse(stored.scopes), ['channels:history', 'chat:write']);
-  assert.equal(response.json().installation.botTokenEncrypted, undefined);
+});
+
+test('lists safe parsed scope names without returning the encrypted Slack token', async (t) => {
+  const app = await buildApp({
+    slackInstallation: {
+      findMany: async () => [{ id: 'installation-1', teamId: 'T1', scopes: '["channels:history","chat:write"]', botTokenEncrypted: 'ciphertext', channelMappings: [] }],
+    },
+  });
+  t.after(() => app.close());
+
+  const response = await app.inject({ method: 'GET', url: '/' });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json().installations[0].scopes, ['channels:history', 'chat:write']);
+  assert.equal(response.json().installations[0].botTokenEncrypted, undefined);
 });

@@ -500,6 +500,85 @@ export function IntegrationsSection() {
   );
 }
 
+function SlackIntegrationPreferences() {
+  const queryClient = useQueryClient();
+  const [mappingForm, setMappingForm] = useState({ installationId: '', projectId: '', channelId: '', channelName: '', inboundEnabled: true, outboundEnabled: false });
+  const { data: installationData, isLoading, isFetching, error, refetch } = useQuery({
+    queryKey: ['slack-installations'], queryFn: api.getSlackInstallations, retry: false,
+  });
+  const { data: projectsData } = useQuery({
+    queryKey: ['projects', 'slack-mapping'], queryFn: () => api.getProjects(), retry: false,
+  });
+  const disconnect = useMutation({
+    mutationFn: api.disconnectSlackInstallation,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['slack-installations'] }),
+  });
+  const mapChannel = useMutation({
+    mutationFn: ({ installationId, ...data }) => api.createSlackChannelMapping(installationId, data),
+    onSuccess: () => {
+      setMappingForm((current) => ({ ...current, channelId: '', channelName: '' }));
+      queryClient.invalidateQueries({ queryKey: ['slack-installations'] });
+    },
+  });
+  const installations = installationData?.installations || [];
+  const activeInstallations = installations.filter((installation) => installation.status === 'ACTIVE');
+  const projects = projectsData?.projects || [];
+
+  if (isLoading) return <LoadingState label="Checking Slack installations…" compact className="justify-start" size="sm" />;
+  if (error) return <QueryErrorState error={error} message="Slack installations could not be loaded" onRetry={refetch} isRetrying={isFetching} />;
+
+  const submitMapping = (event) => {
+    event.preventDefault();
+    mapChannel.mutate({ ...mappingForm, channelId: mappingForm.channelId.trim(), channelName: mappingForm.channelName.trim() || undefined });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div aria-live="polite" aria-atomic="true">
+        <p className="text-sm font-medium text-foreground">{activeInstallations.length ? `${activeInstallations.length} active Slack workspace${activeInstallations.length === 1 ? '' : 's'}` : 'No Slack workspace is connected.'}</p>
+        <p className="mt-1 text-xs text-muted-foreground">Only explicitly mapped project channels can receive inbound messages or confirmed outbound posts. Disconnect immediately stops processing and clears the stored token.</p>
+      </div>
+      {disconnect.error && <p role="alert" className="text-sm text-destructive">{disconnect.error.message || 'Slack could not be disconnected.'}</p>}
+      <Button type="button" onClick={() => window.location.assign(api.slackOAuthStartUrl())}>Connect Slack workspace</Button>
+
+      {installations.map((installation) => (
+        <div key={installation.id} className="rounded-lg border border-border p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-medium text-foreground">{installation.teamName || installation.teamId}</p>
+              <p className="text-xs text-muted-foreground">{installation.status} · {Array.isArray(installation.scopes) ? installation.scopes.join(', ') : 'scopes unavailable'}</p>
+            </div>
+            {installation.status === 'ACTIVE' && <Button type="button" variant="outline" isLoading={disconnect.isPending} disabled={disconnect.isPending} onClick={() => disconnect.mutate(installation.id)}>Disconnect</Button>}
+          </div>
+          {installation.channelMappings?.length > 0 && <ul className="mt-3 space-y-1 text-xs text-muted-foreground">{installation.channelMappings.map((mapping) => <li key={mapping.id}>#{mapping.channelName || mapping.channelId} → project {mapping.projectId} ({mapping.inboundEnabled ? 'inbound' : 'no inbound'}; {mapping.outboundEnabled ? 'outbound' : 'no outbound'})</li>)}</ul>}
+        </div>
+      ))}
+
+      {activeInstallations.length > 0 && (
+        <form onSubmit={submitMapping} className="space-y-3 rounded-lg border border-border bg-muted/30 p-3">
+          <p className="text-sm font-medium text-foreground">Map a project channel</p>
+          <select aria-label="Slack workspace" required value={mappingForm.installationId} onChange={(event) => setMappingForm({ ...mappingForm, installationId: event.target.value })} className="w-full rounded border border-border bg-background px-2 py-2 text-sm">
+            <option value="">Choose workspace</option>
+            {activeInstallations.map((installation) => <option key={installation.id} value={installation.id}>{installation.teamName || installation.teamId}</option>)}
+          </select>
+          <select aria-label="Ashbi project" required value={mappingForm.projectId} onChange={(event) => setMappingForm({ ...mappingForm, projectId: event.target.value })} className="w-full rounded border border-border bg-background px-2 py-2 text-sm">
+            <option value="">Choose project</option>
+            {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+          </select>
+          <input aria-label="Slack channel ID" required value={mappingForm.channelId} onChange={(event) => setMappingForm({ ...mappingForm, channelId: event.target.value })} className="w-full rounded border border-border bg-background px-2 py-2 text-sm" placeholder="Channel ID, for example C0123ABC" />
+          <input aria-label="Slack channel name" value={mappingForm.channelName} onChange={(event) => setMappingForm({ ...mappingForm, channelName: event.target.value })} className="w-full rounded border border-border bg-background px-2 py-2 text-sm" placeholder="Channel name (optional)" />
+          <div className="flex flex-wrap gap-4 text-sm text-foreground">
+            <label className="flex items-center gap-2"><input type="checkbox" checked={mappingForm.inboundEnabled} onChange={(event) => setMappingForm({ ...mappingForm, inboundEnabled: event.target.checked })} /> Receive inbound messages</label>
+            <label className="flex items-center gap-2"><input type="checkbox" checked={mappingForm.outboundEnabled} onChange={(event) => setMappingForm({ ...mappingForm, outboundEnabled: event.target.checked })} /> Allow confirmed outbound posts</label>
+          </div>
+          <Button type="submit" isLoading={mapChannel.isPending} disabled={mapChannel.isPending || !mappingForm.installationId || !mappingForm.projectId || !mappingForm.channelId.trim()}>{mapChannel.isPending ? 'Saving mapping…' : 'Save channel mapping'}</Button>
+          {mapChannel.error && <p role="alert" className="text-sm text-destructive">{mapChannel.error.message || 'Slack channel mapping could not be saved.'}</p>}
+        </form>
+      )}
+    </div>
+  );
+}
+
 export default function Settings() {
   const { user, checkAuth } = useAuth();
   const queryClient = useQueryClient();
@@ -716,6 +795,8 @@ export default function Settings() {
 
       {/* Integrations — admin only */}
       {isAdmin && <IntegrationsSection />}
+
+      {isAdmin && <Section icon={Link2} title="Slack workspace" description="Install Slack and explicitly map project channels"><SlackIntegrationPreferences /></Section>}
 
       {/* AI Model Picker — admin only */}
       {isAdmin && <AIModelSection />}

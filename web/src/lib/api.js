@@ -557,6 +557,16 @@ export const api = {
   syncGoogleCalendarEvent: (eventId) =>
     request(`/google-calendar/events/${eventId}/sync`, { method: 'POST' }),
 
+  // Slack installation/mapping administration is restricted by the server to
+  // organization administrators. OAuth starts as a browser navigation.
+  slackOAuthStartUrl: () => `${API_BASE}/slack/oauth/start`,
+  getSlackInstallations: () =>
+    request('/slack'),
+  disconnectSlackInstallation: (installationId) =>
+    request(`/slack/installations/${installationId}/disconnect`, { method: 'POST' }),
+  createSlackChannelMapping: (installationId, data) =>
+    request(`/slack/installations/${installationId}/mappings`, { method: 'POST', body: data }),
+
   // Attachments
   getAttachments: (entityType, entityId) =>
     request(`/attachments?entityType=${entityType}&entityId=${entityId}`),
