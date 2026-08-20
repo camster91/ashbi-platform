@@ -11,6 +11,11 @@ const KEY_VERSION_PATTERN = /^[a-zA-Z0-9._-]{1,40}$/;
 
 function readKeyring() {
   let configured = {};
+  // process.env is read at call time (not at module load) so that test
+  // harnesses can set CREDENTIALS_KEY / CREDENTIALS_KEYRING after import.
+  // env.credentialsKey captures the value at env.js load and would miss
+  // any later assignment. Other call sites that need the value at request
+  // time should use env.credentialsKey directly.
   if (process.env.CREDENTIALS_KEYRING) {
     try {
       configured = JSON.parse(process.env.CREDENTIALS_KEYRING);
@@ -26,6 +31,9 @@ function readKeyring() {
 }
 
 function activeKeyVersion() {
+  // Same rationale as readKeyring: read at call time so test harnesses can
+  // set CREDENTIALS_ACTIVE_KEY_VERSION after import. env.credentialsActiveKeyVersion
+  // captures the value at env.js load and would miss later assignments.
   return process.env.CREDENTIALS_ACTIVE_KEY_VERSION || 'legacy';
 }
 

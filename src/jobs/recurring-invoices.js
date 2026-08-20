@@ -1,6 +1,7 @@
 // Recurring invoice processor. Scheduling is owned by BullMQ in queue.js.
 
 import { prisma } from '../config/db.js';
+import logger from '../utils/logger.js';
 import { generateInvoiceNumber } from '../utils/invoice.js';
 import { resolveTenantOrganizationIds, runTenantJob } from './tenant-iteration.js';
 
@@ -31,7 +32,7 @@ export function getNextRecurringDate(currentDate, interval) {
 
 export async function processRecurringInvoices(tenantPrisma, invoiceNumberGenerator = generateInvoiceNumber) {
   const now = new Date();
-  console.log(`[recurring-invoices] Checking for due recurring invoices at ${now.toISOString()}`);
+  logger.debug({ now: now.toISOString() }, '[recurring-invoices] checking for due invoices');
 
   try {
     const dueInvoices = await tenantPrisma.invoice.findMany({
@@ -47,11 +48,11 @@ export async function processRecurringInvoices(tenantPrisma, invoiceNumberGenera
     });
 
     if (dueInvoices.length === 0) {
-      console.log('[recurring-invoices] No recurring invoices due');
+      logger.debug('[recurring-invoices] no recurring invoices due');
       return { examined: 0, generated: 0, failed: 0 };
     }
 
-    console.log(`[recurring-invoices] Found ${dueInvoices.length} recurring invoice(s) due`);
+    logger.info({ count: dueInvoices.length }, '[recurring-invoices] found due invoices');
 
     let generated = 0;
     const failures = [];
@@ -119,12 +120,21 @@ export async function processRecurringInvoices(tenantPrisma, invoiceNumberGenera
         if (!result) continue;
         generated += 1;
 
-        console.log(
-          `[recurring-invoices] Generated ${result.invoiceNumber} from recurring invoice ${invoice.invoiceNumber} ` +
-          `for client "${invoice.client?.name || invoice.clientId}". Next due: ${nextDate.toISOString()}`
+        logger.info(
+          {
+            generated: result.invoiceNumber,
+            fromRecurring: invoice.invoiceNumber,
+            clientId: invoice.clientId,
+            clientName: invoice.client?.name,
+            nextDue: nextDate.toISOString(),
+          },
+          '[recurring-invoices] generated invoice'
         );
       } catch (err) {
-        console.error(`[recurring-invoices] Error processing invoice ${invoice.invoiceNumber}:`, err);
+        logger.error(
+          { err, recurringInvoiceId: invoice.id, recurringInvoiceNumber: invoice.invoiceNumber },
+          '[recurring-invoices] failed to process invoice'
+        );
         failures.push({ invoiceId: invoice.id, error: err.message });
       }
     }
@@ -135,7 +145,7 @@ export async function processRecurringInvoices(tenantPrisma, invoiceNumberGenera
     }
     return { examined: dueInvoices.length, generated, failed: 0 };
   } catch (err) {
-    console.error('[recurring-invoices] Error querying recurring invoices:', err);
+    logger.error({ err }, '[recurring-invoices] failed to query recurring invoices');
     throw err;
   }
 }

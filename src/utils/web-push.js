@@ -14,21 +14,23 @@
 // .env.example already documented.
 import webpush from 'web-push';
 import prisma from '../config/db.js';
+import env from '../config/env.js';
+import logger from '../utils/logger.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const VAPID_KEYS_PATH = process.env.VAPID_KEYS_PATH
-  || (process.env.NODE_ENV === 'production'
+const VAPID_KEYS_PATH = env.vapidKeysPath
+  || (env.isProduction
     ? '/app/config/.vapid-keys.json'
     : path.join(__dirname, '../../.vapid-keys.json'));
 
 let vapidKeys = null;
 
 function tryLoadFromEnv() {
-  const pub = process.env.VAPID_PUBLIC_KEY;
-  const priv = process.env.VAPID_PRIVATE_KEY;
+  const pub = env.vapidPublicKey;
+  const priv = env.vapidPrivateKey;
   if (pub && priv) return { publicKey: pub, privateKey: priv, source: 'env' };
   return null;
 }
@@ -40,7 +42,7 @@ function tryLoadFromFile() {
       if (parsed?.publicKey && parsed?.privateKey) return { ...parsed, source: 'file' };
     }
   } catch (e) {
-    console.warn('VAPID: could not read', VAPID_KEYS_PATH, '-', e.message);
+    logger.warn({ path: VAPID_KEYS_PATH, err: e }, 'VAPID: could not read key file');
   }
   return null;
 }
@@ -62,12 +64,12 @@ export function initVapid() {
         JSON.stringify({ publicKey: generated.publicKey, privateKey: generated.privateKey }, null, 2),
         { mode: 0o600 }
       );
-      console.log('VAPID: generated new keys and persisted to', VAPID_KEYS_PATH);
+      logger.info({ path: VAPID_KEYS_PATH }, 'VAPID: generated new keys and persisted');
     } catch (e) {
-      console.warn('VAPID: could not persist generated keys:', e.message, '- subscription IDs will rotate on every restart');
+      logger.warn({ err: e }, 'VAPID: could not persist generated keys — subscription IDs will rotate on every restart');
     }
   } else {
-    console.log(`VAPID: loaded existing keys from ${vapidKeys.source === 'env' ? 'env vars' : 'file ' + VAPID_KEYS_PATH}`);
+    logger.info({ source: vapidKeys.source, path: VAPID_KEYS_PATH }, 'VAPID: loaded existing keys');
   }
 
   webpush.setVapidDetails(
@@ -76,7 +78,7 @@ export function initVapid() {
     vapidKeys.privateKey
   );
 
-  console.log('Web Push initialized with VAPID public key:', vapidKeys.publicKey.slice(0, 20) + '...');
+  logger.info({ publicKeyPrefix: vapidKeys.publicKey.slice(0, 20) }, 'Web Push initialized');
   return vapidKeys;
 }
 

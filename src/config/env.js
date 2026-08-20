@@ -39,6 +39,13 @@ const env = {
   webhookSecret: process.env.WEBHOOK_SECRET,
   notificationWebhookUrl: process.env.NOTIFICATION_WEBHOOK_URL,
 
+  // VAPID keys for Web Push notifications. The env-var pair is the primary
+  // production path; the path is the fallback for file-based persistence.
+  // (See utils/web-push.js for the priority order.)
+  vapidPublicKey: process.env.VAPID_PUBLIC_KEY,
+  vapidPrivateKey: process.env.VAPID_PRIVATE_KEY,
+  vapidKeysPath: process.env.VAPID_KEYS_PATH,
+
   // Contract signing secret. Falls back to JWT_SECRET so a single env var
   // covers both, but a dedicated value is recommended in production so the
   // contract signing material can be rotated independently of session JWTs.
