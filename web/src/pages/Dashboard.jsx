@@ -214,9 +214,11 @@ export default function Dashboard() {
               <Activity className="w-4 h-4 text-primary" />
               <h2 className="font-semibold text-foreground">Activity Feed</h2>
             </div>
-            <Link to="/activity" className="text-xs text-primary hover:underline flex items-center gap-1">
-              View all <ArrowRight className="w-3 h-3" />
-            </Link>
+            {/* The list below is already scrollable in place (max-h-400px).
+                A "View all" link was removed because /activity is not a
+                registered route; clicking it would 404. The full activity
+                page can be reintroduced when the feature ships — issue #293
+                tracks the "valid destinations" requirement. */}
           </div>
           {stats?.recentActivity?.length > 0 ? (
             <ul className="divide-y divide-border max-h-[400px] overflow-y-auto">

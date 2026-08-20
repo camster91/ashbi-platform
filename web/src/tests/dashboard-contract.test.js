@@ -33,6 +33,8 @@ describe('dashboard production contract', () => {
     expect(dashboard).toContain('navigate(`/project/${project.id}`)');
     expect(dashboard).toContain("navigate('/retainers')");
     expect(dashboard).not.toContain("navigate('/revenue')");
+    expect(dashboard).not.toContain('to="/activity"');
+    expect(dashboard).not.toMatch(/to=["']\/(activity|revenue|reports)["']/);
     expect(layout).toContain("name: 'Dashboard', href: '/dashboard'");
     expect(layout).toContain("href: '/dashboard', icon: LayoutDashboard, label: 'Home'");
   });
