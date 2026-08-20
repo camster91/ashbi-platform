@@ -59,15 +59,20 @@ Commands are in `package.json` / `web/package.json`. All pass as of setup:
 - Unit/integration tests set `NODE_ENV=test`, which mocks Redis/BullMQ, so
   they do not need live Redis.
 
-### Known pre-existing bugs (NOT environment issues; unrelated to setup)
-- `npx prisma db seed` / `node prisma/seed.js` fail: `prisma/seed.js` imports
-  `bcryptjs`, which is not a dependency (the app uses `bcrypt`). Seeding is
-  optional — bootstrap the admin via `/api/auth/register` instead.
-- Dashboard stats endpoint returns 500: `src/routes/dashboard.routes.js` runs a
-  `$queryRaw` against `FROM "Invoice"`, but the table is `invoices` (Prisma
-  `@@map`). The SPA dashboard shows "Failed to load dashboard stats".
-- The Clients page always shows 6 hardcoded fallback clients and does not show
-  real ones: `web/src/pages/Clients.jsx` treats the `{ clients: [...] }` API
-  response as an array, so `.length` is undefined and it falls back to
-  `ASHBI_DESIGN_CLIENTS`. Client creation still persists correctly to the DB
-  (verify via `GET /api/clients` or `psql`).
+### Verified historical fixes (no longer pre-existing)
+
+The three items previously listed in this section were closed in earlier
+PRs and are documented here so future agents do not re-investigate the same
+code paths. If you believe one has regressed, verify against the closing
+PRs and open a fresh issue — do not edit this section to recreate the
+stale note.
+
+| Symptom | Closed in | How to verify today |
+|---|---|---|
+| `prisma/seed.js` imported the missing `bcryptjs` dep | `0ae6678` (test refactor), originally `97eda8e` | `prisma/seed.js:3` imports `bcrypt`; `package.json` lists `bcrypt ^6.0.0` and no `bcryptjs` |
+| Dashboard `/api/dashboard/stats` returned 500 (table casing) | `31c72df` (PR #251), broader hardening in `10bd6e0` (PR #238) | `src/routes/dashboard.routes.js:250` uses `FROM "invoices" i`; covered by `src/tests/integration/invoice.test.js` |
+| Clients page always showed 6 hardcoded `ASHBI_DESIGN_CLIENTS` | `409764a` (PR #267), client-CRM work in `8701d37` (PR #246) | `web/src/pages/Clients.jsx:193` returns `Array.isArray(clients) ? clients : []`; no fallback constant is referenced by the render path |
+
+For the current backlog and known defects, see issue **#290** (tracking)
+and **#291** (shipping plan). Do not add new bug notes to this file —
+file an issue on GitHub instead so the backlog stays the source of truth.
