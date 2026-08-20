@@ -19,7 +19,7 @@ describe('reduced-motion policy', () => {
       css.indexOf('/* Scrollbar styling */')
     );
 
-    expect(reducedMotion).toContain('*,\n  *::before,\n  *::after');
+    expect(reducedMotion).toMatch(/^\s*\*,\s*\n\s*\*::before,\s*\n\s*\*::after\s*\{/m);
     expect(reducedMotion).toContain('animation: none !important;');
     expect(reducedMotion).not.toContain('animation-iteration-count');
     expect(reducedMotion).not.toContain('animation-duration');
