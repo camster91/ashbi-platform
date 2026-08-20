@@ -2,6 +2,8 @@
 
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
+import env from '../config/env.js';
+import logger from '../utils/logger.js';
 import { softDelete } from '../services/trash.service.js';
 import { queueEmbedding } from '../jobs/queue.js';
 import {
@@ -14,13 +16,18 @@ import { clampTake } from '../utils/query-limits.js';
 import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
 
 async function sendProposalEmail(to, clientName, proposalTitle, portalUrl) {
+  // ASHI_RUN_EMAIL_TESTS is intentionally read directly from process.env
+  // (not env.*) because it is a developer-only test toggle and is never
+  // wired into env.js. NODE_ENV === 'test' is also read directly because
+  // env.isTest is not part of the public config surface; the explicit
+  // test gate lives here.
   if (process.env.NODE_ENV === 'test' && process.env.ASHBI_RUN_EMAIL_TESTS !== '1') return false;
-  if (!process.env.MAILGUN_API_KEY || !process.env.MAILGUN_DOMAIN) return false;
+  if (!env.mailgunApiKey || !env.mailgunDomain) return false;
   try {
     const mg = new Mailgun(FormData);
-    const client = mg.client({ username: 'api', key: process.env.MAILGUN_API_KEY });
-    await client.messages.create(process.env.MAILGUN_DOMAIN, {
-      from: `Ashbi Design <noreply@${process.env.MAILGUN_DOMAIN}>`,
+    const client = mg.client({ username: 'api', key: env.mailgunApiKey });
+    await client.messages.create(env.mailgunDomain, {
+      from: `Ashbi Design <noreply@${env.mailgunDomain}>`,
       to,
       subject: `Your Proposal is Ready — ${proposalTitle}`,
       html: `
@@ -45,7 +52,7 @@ async function sendProposalEmail(to, clientName, proposalTitle, portalUrl) {
     });
     return true;
   } catch (err) {
-    console.error('[Proposal] Email send error:', err.message);
+    logger.error({ err, to, proposalTitle }, '[Proposal] Email send error');
     return false;
   }
 }
@@ -149,7 +156,7 @@ export default async function proposalRoutes(fastify) {
 
     // Auto-embed proposal for Client Brain
     queueEmbedding(clientId, `Proposal: ${title} - ${notes || ''}`, 'PROPOSAL', proposal.id, { status: proposal.status, total }).catch(err =>
-      console.error('Failed to queue proposal embedding:', err.message)
+      logger.error({ err, proposalId: proposal.id }, 'Failed to queue proposal embedding')
     );
 
     return reply.status(201).send(proposal);
@@ -307,7 +314,7 @@ export default async function proposalRoutes(fastify) {
     const primaryName = proposal.client?.contacts?.[0]?.name || proposal.client?.name;
     let emailSent = false;
     if (primaryEmail && proposal.viewToken) {
-      const portalUrl = `${process.env.PORTAL_BASE_URL || 'https://hub.ashbi.ca'}/portal/proposal/${proposal.viewToken}`;
+      const portalUrl = `${env.portalBaseUrl}/portal/proposal/${proposal.viewToken}`;
       emailSent = await sendProposalEmail(primaryEmail, primaryName, proposal.title, portalUrl);
     }
 
@@ -325,7 +332,7 @@ export default async function proposalRoutes(fastify) {
     if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
     const contact = proposal.client?.contacts?.[0];
     if (!contact?.email) return reply.status(409).send({ error: 'Primary client email is missing' });
-    const portalUrl = `${process.env.PORTAL_BASE_URL || 'https://hub.ashbi.ca'}/portal/proposal/${proposal.viewToken}`;
+    const portalUrl = `${env.portalBaseUrl}/portal/proposal/${proposal.viewToken}`;
     const emailSent = await sendProposalEmail(contact.email, contact.name || proposal.client.name, proposal.title, portalUrl);
     if (!emailSent) return reply.status(503).send({ error: 'Proposal email delivery is unavailable', retryable: true });
     return { emailSent: true };
