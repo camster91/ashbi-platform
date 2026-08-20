@@ -39,6 +39,17 @@ const env = {
   webhookSecret: process.env.WEBHOOK_SECRET,
   notificationWebhookUrl: process.env.NOTIFICATION_WEBHOOK_URL,
 
+  // Contract signing secret. Falls back to JWT_SECRET so a single env var
+  // covers both, but a dedicated value is recommended in production so the
+  // contract signing material can be rotated independently of session JWTs.
+  contractSignatureSecret: process.env.CONTRACT_SIGNATURE_SECRET || process.env.JWT_SECRET,
+
+  // Gmail OAuth token storage. GMAIL_TOKENS_JSON (inline JSON) wins over
+  // GMAIL_TOKENS_PATH (filesystem path) so the secrets can be injected via
+  // the orchestrator without a volume mount.
+  gmailTokensPath: process.env.GMAIL_TOKENS_PATH,
+  gmailTokensJson: process.env.GMAIL_TOKENS_JSON,
+
   // Credentials vault encryption key
   credentialsKey: process.env.CREDENTIALS_KEY,
   credentialsKeyring: process.env.CREDENTIALS_KEYRING,
