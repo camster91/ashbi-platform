@@ -1531,10 +1531,10 @@ export const api = {
   // ===== TIMESHEETS =====
   getWeeklyTimesheet: (weekStart) => {
     const query = weekStart ? `?weekStart=${weekStart}` : '';
-    return request(`/time-entries/timesheets/weekly${query}`);
+    return request(`/time/timesheets/weekly${query}`);
   },
-  approveTimesheetEntry: (id) => request(`/time-entries/timesheets/${id}/approve`, { method: 'PATCH' }),
-  rejectTimesheetEntry: (id, reason) => request(`/time-entries/timesheets/${id}/reject`, { method: 'PATCH', body: { reason } }),
+  approveTimesheetEntry: (id) => request(`/time/timesheets/${id}/approve`, { method: 'PATCH' }),
+  rejectTimesheetEntry: (id, reason) => request(`/time/timesheets/${id}/reject`, { method: 'PATCH', body: { reason } }),
 
   // ===== AUTOSAVE DRAFT =====
   saveDraft: (entity, id, data, expectedRevision, baseUpdatedAt) =>

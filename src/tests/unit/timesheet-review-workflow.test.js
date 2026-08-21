@@ -14,6 +14,7 @@ async function createApp(role = 'ADMIN') {
   app.addHook('onRequest', async (request) => {
     request.prisma = {
       timeEntry: {
+        findMany: async () => [],
         findUnique: async ({ where }) => ({ id: where.id, reviewStatus: 'PENDING' }),
         update: async (args) => {
           updates.push(args);
@@ -25,6 +26,19 @@ async function createApp(role = 'ADMIN') {
   await app.register(timeRoutes, { prefix: '/api/time' });
   return { app, updates };
 }
+
+test('weekly timesheets are registered under the collaboration time prefix', async (t) => {
+  const { app } = await createApp();
+  t.after(() => app.close());
+
+  const response = await app.inject({
+    method: 'GET',
+    url: '/api/time/timesheets/weekly?weekStart=2026-08-17T04:00:00.000Z',
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.json().timesheets, []);
+});
 
 test('admin approval records durable approval state and reviewer', async (t) => {
   const { app, updates } = await createApp();

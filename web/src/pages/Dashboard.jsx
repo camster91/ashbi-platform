@@ -32,6 +32,7 @@ import OutreachFunnelWidget from '../components/widgets/OutreachFunnelWidget';
 import RevenueSparklineWidget from '../components/widgets/RevenueSparklineWidget';
 import WPSiteHealthWidget from '../components/widgets/WPSiteHealthWidget';
 import QueryErrorState from '../components/QueryErrorState';
+import { resolveNotificationContent } from '../lib/notification-content';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -272,13 +273,15 @@ export default function Dashboard() {
           </div>
           {allNotifications.length > 0 ? (
             <ul className="divide-y divide-border max-h-[400px] overflow-y-auto">
-              {allNotifications.map(notif => (
+              {allNotifications.map(notif => {
+                const content = resolveNotificationContent(notif);
+                return (
                 <li key={notif.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
                   <div className="flex items-start gap-3">
                     <NotificationIcon type={notif.type} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground">{notif.title}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{notif.message}</p>
+                      <p className="text-sm font-medium text-foreground">{content.title}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{content.message}</p>
                       <p className="text-xs text-muted-foreground mt-1">
                         {formatRelativeTime(notif.createdAt)}
                       </p>
@@ -288,7 +291,8 @@ export default function Dashboard() {
                     )}
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           ) : (
             <div className="p-8 text-center text-muted-foreground text-sm">

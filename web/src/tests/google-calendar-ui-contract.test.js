@@ -22,5 +22,7 @@ describe('Google Calendar user workflow contract', () => {
     expect(schedule).toContain('Update Google Calendar');
     expect(schedule).toContain('Open in Google Calendar');
     expect(schedule).toContain('Only the event creator can explicitly sync this event.');
+    expect(schedule).toMatch(/function EventDetailModal[\s\S]*googleSyncMutation[\s\S]*Sync to Google Calendar/);
+    expect(schedule).not.toMatch(/function UpcomingSidebar\([^]*?googleSyncMutation/);
   });
 });

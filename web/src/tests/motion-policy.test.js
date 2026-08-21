@@ -13,7 +13,7 @@ describe('reduced-motion policy', () => {
   });
 
   it('globally disables nonessential animation, transforms, transitions, and smooth scrolling', () => {
-    const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');
+    const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8').replace(/\r\n/g, '\n');
     const reducedMotion = css.slice(
       css.indexOf('@media (prefers-reduced-motion: reduce)'),
       css.indexOf('/* Scrollbar styling */')

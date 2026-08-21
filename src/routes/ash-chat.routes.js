@@ -141,7 +141,7 @@ export default async function ashChatRoutes(fastify) {
   // GET /api/ash-chat/conversations
   fastify.get('/conversations', {
     onRequest: [fastify.authenticate]
-  }, async () => {
+  }, async (request) => {
     const conversations = await request.prisma.ashConversation.findMany({
       orderBy: { updatedAt: 'desc' },
       include: {
