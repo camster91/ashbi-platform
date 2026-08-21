@@ -485,29 +485,29 @@ function SitesTab({ queryClient }) {
           <div className="flex gap-3">
             <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm shrink-0">1</div>
             <div>
-              <p className="font-medium text-foreground">Install the Ashbi WP Bridge Plugin</p>
-              <p className="text-sm text-muted-foreground mt-0.5">Download and install the plugin on your WordPress site</p>
+              <p className="font-medium text-foreground">Add the site in Ashbi Hub</p>
+              <p className="text-sm text-muted-foreground mt-0.5">Click “Add Site” and enter the exact HTTPS URL used by WordPress</p>
             </div>
           </div>
           <div className="flex gap-3">
             <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm shrink-0">2</div>
             <div>
-              <p className="font-medium text-foreground">Configure the Plugin</p>
-              <p className="text-sm text-muted-foreground mt-0.5">Enter your Ashbi Hub URL and the per-site key generated here</p>
+              <p className="font-medium text-foreground">Copy the one-time connection key</p>
+              <p className="text-sm text-muted-foreground mt-0.5">Copy the key now; it is shown once and is only for this WordPress site</p>
             </div>
           </div>
           <div className="flex gap-3">
             <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm shrink-0">3</div>
             <div>
-              <p className="font-medium text-foreground">Register Your Site</p>
-              <p className="text-sm text-muted-foreground mt-0.5">Click "Add Site" above, provision the URL, then copy its one-time key into the plugin</p>
+              <p className="font-medium text-foreground">Install and connect the plugin</p>
+              <p className="text-sm text-muted-foreground mt-0.5">In WordPress, paste the Hub URL and this connection key, then select “Connect to Hub”</p>
             </div>
           </div>
           <div className="flex gap-3">
             <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm shrink-0">4</div>
             <div>
-              <p className="font-medium text-foreground">Monitor & Manage</p>
-              <p className="text-sm text-muted-foreground mt-0.5">View site health, generate magic login links, and receive alerts</p>
+              <p className="font-medium text-foreground">Confirm the connection</p>
+              <p className="text-sm text-muted-foreground mt-0.5">Return here to see the first health ping, then manage the site from the Hub</p>
             </div>
           </div>
         </div>
@@ -516,16 +516,16 @@ function SitesTab({ queryClient }) {
       <Modal
         isOpen={showAdd}
         onClose={closeAddDialog}
-        title={provisionedSecret ? 'Save WordPress bridge key' : 'Add WordPress site'}
+        title={provisionedSecret ? 'Save WordPress connection key' : 'Add WordPress site'}
         size="sm"
         showCloseButton={!registerMutation.isPending && !provisionedSecret}
       >
         {provisionedSecret ? (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Copy this key into the plugin now. For security, it will not be shown again. This dialog stays open until you confirm that the key is saved.
+              Copy this key into the plugin now. For security, it will not be shown again. This dialog stays open until you confirm that the key is saved. It replaces the old API-key setup entirely.
             </p>
-            <label className="block text-sm font-medium" htmlFor="wp-bridge-secret">Per-site secret</label>
+            <label className="block text-sm font-medium" htmlFor="wp-bridge-secret">Per-site connection key</label>
             <textarea id="wp-bridge-secret" readOnly value={provisionedSecret} className="w-full min-h-24 px-3 py-2 rounded-lg border border-border bg-background text-base font-mono break-all" />
             {copyError && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">{copyError}</p>}
             {secretCopied && <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">Key copied. Store it in the plugin before continuing.</p>}
