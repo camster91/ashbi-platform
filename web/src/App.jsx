@@ -233,7 +233,8 @@ function AppRoutes() {
                                                       <Route path="/retainers" element={<AdminRoute><Retainers /></AdminRoute>} />
                   <Route path="/invoice-chaser" element={<AdminRoute><InvoiceChaser /></AdminRoute>} />
                   <Route path="/settings" element={<Settings />} />
-                                                                                          <Route path="/notifications" element={<Notifications />} />
+                  <Route path="/api-keys" element={<Navigate to="/wp-sites" replace />} />
+                  <Route path="/notifications" element={<Notifications />} />
                   {/* Advanced Features */}
                   <Route path="/assets" element={<AssetLibrary />} />
                   <Route path="/wp-sites" element={<AdminRoute><WPSites /></AdminRoute>} />
