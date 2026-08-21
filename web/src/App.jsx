@@ -70,6 +70,7 @@ const Notifications = lazy(() => import('./pages/Notifications'));
 // Advanced Features
 const AssetLibrary = lazy(() => import('./pages/AssetLibrary'));
 const WPSites = lazy(() => import('./pages/WPSites'));
+const ManagedSites = lazy(() => import('./pages/ManagedSites'));
 const SemanticSearch = lazy(() => import('./pages/SemanticSearch'));
 // New Features
 const Estimates = lazy(() => import('./pages/Estimates'));
@@ -237,6 +238,7 @@ function AppRoutes() {
                   {/* Advanced Features */}
                   <Route path="/assets" element={<AssetLibrary />} />
                   <Route path="/wp-sites" element={<AdminRoute><WPSites /></AdminRoute>} />
+                  <Route path="/sites" element={<AdminRoute><ManagedSites /></AdminRoute>} />
                   <Route path="/semantic-search" element={<SemanticSearch />} />
                   <Route path="*" element={<NotFound />} />
                   </Routes>

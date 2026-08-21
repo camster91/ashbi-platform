@@ -44,6 +44,7 @@ import {
   Phone,
   Bell,
   MessageSquare,
+  Globe2,
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { Download, Sun, Moon, Command } from 'lucide-react';
@@ -178,6 +179,7 @@ export default function Layout({ children }) {
     { name: 'Timesheets', href: '/timesheets', icon: Clock },
     { name: 'Rate Cards', href: '/rate-cards', icon: CreditCard },
     { name: 'Credentials', href: '/credentials', icon: Key },
+    { name: 'Sites', href: '/sites', icon: Globe2 },
     { name: 'Settings', href: '/settings', icon: Settings },
     { name: 'Trash', href: '/trash', icon: X },
   ] : [];

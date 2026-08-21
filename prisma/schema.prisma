@@ -28,6 +28,7 @@ model Organization {
   formDrafts         FormDraft[]
   attachments        Attachment[]
   wpSites            WPSite[]
+  managedSites       ManagedSite[]
   wpBackups          WPBackup[]
   wpReports          WPReport[]
   wpAlerts           WPAlert[]
@@ -214,6 +215,7 @@ model Client {
   clientEmbeddings ClientEmbedding[]
   invitations      ClientInvitation[]
   wpSites          WPSite[]             @relation("WPSiteClient")
+  managedSites     ManagedSite[]         @relation("ManagedSiteClient")
   estimates        Estimate[]
   rateCards        RateCard[]
 
@@ -1981,6 +1983,33 @@ model WPSite {
   @@index([organizationId])
   @@index([status])
   @@map("wp_sites")
+}
+
+// Cross-platform inventory for every site Ashbi operates or maintains.
+// WPSite remains the WordPress telemetry/bridge record; this model includes
+// Shopify, static, Node, Builder, and internal applications without forcing
+// them into WordPress-only monitoring semantics.
+model ManagedSite {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId       String?
+  client         Client?      @relation("ManagedSiteClient", fields: [clientId], references: [id], onDelete: SetNull)
+  name           String
+  url            String
+  platform       String       // WORDPRESS | SHOPIFY | STATIC | NODE | HOSTINGER_BUILDER | INTERNAL_APP | OTHER
+  host           String       // HOSTINGER | ASHBI_VPS | SHOPIFY | OTHER
+  lifecycle      String       @default("INVENTORIED") // INVENTORIED | ACTIVE | MAINTENANCE | ARCHIVED
+  source         String?      // evidence source, e.g. HOSTINGER_DIRECTORY
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, url])
+  @@index([organizationId])
+  @@index([clientId])
+  @@index([platform])
+  @@map("managed_sites")
 }
 
 // Per-site backup records from the bridge plugin (v1.7.0+)

@@ -57,6 +57,7 @@ import semanticSearchRoutes from './routes/semantic-search.routes.js';
 import creativeBriefRoutes from './routes/creative-brief.routes.js';
 import assetLibraryRoutes from './routes/asset-library.routes.js';
 import wpBridgeRoutes from './routes/wp-bridge.routes.js';
+import managedSiteRoutes from './routes/managed-sites.routes.js';
 import uptimeMonitoringRoutes from './routes/uptime-monitoring.routes.js';
 import apiKeyRoutes, { authenticateApiKey } from './routes/api-key.routes.js';
 import aiBridgeRoutes from './routes/ai-bridge.routes.js';
@@ -240,6 +241,7 @@ await fastify.register(semanticSearchRoutes, { prefix: '/api/semantic-search' })
 await fastify.register(creativeBriefRoutes, { prefix: '/api/creative-brief' });
 await fastify.register(assetLibraryRoutes, { prefix: '/api/asset-library' });
 await fastify.register(wpBridgeRoutes, { prefix: '/api/wp-bridge' });
+await fastify.register(managedSiteRoutes, { prefix: '/api/managed-sites' });
 await fastify.register(uptimeMonitoringRoutes, { prefix: '/api/webhooks/uptime-kuma' });
 await fastify.register(automationRoutes, { prefix: '/api/automations' });
 await fastify.register(expenseRoutes, { prefix: '/api/expenses' });
@@ -255,7 +257,10 @@ await fastify.register(templateRoutes, { prefix: '/api/templates' });
 await fastify.register(portalRoutes, { prefix: '/api/portal' });
 await fastify.register(credentialRoutes, { prefix: '/api/credentials' });
 await fastify.register(leadRoutes, { prefix: '/api/leads' });
-await fastify.register(retainerRoutes, { prefix: '/api/retainers' });
+// Retainer routes declare their own singular `/retainer` path. Mounting them
+// directly below `/api` keeps the deployed route contract aligned with the UI
+// (`/api/retainer`) instead of accidentally creating `/api/retainers/retainer`.
+await fastify.register(retainerRoutes, { prefix: '/api' });
 await fastify.register(onboardingRoutes, { prefix: '/api/onboarding' });
 await fastify.register(botRoutes, { prefix: '/api/bot' });
 await fastify.register(approvalRoutes, { prefix: '/api/approvals' });

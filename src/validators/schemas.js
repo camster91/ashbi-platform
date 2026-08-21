@@ -1396,6 +1396,31 @@ export const assignmentRuleBulkSchema = z.object({
   })).min(1).max(50),
 });
 
+// ── Managed site inventory ─────────────────────────────────────────────────
+const managedSiteUrl = z.string().url().max(2048).refine((value) => {
+  const parsed = new URL(value);
+  return ['http:', 'https:'].includes(parsed.protocol) && !parsed.username && !parsed.password;
+}, 'Site URL must be an HTTP(S) URL without embedded credentials');
+
+const managedSitePlatform = z.enum(['WORDPRESS', 'SHOPIFY', 'STATIC', 'NODE', 'HOSTINGER_BUILDER', 'INTERNAL_APP', 'OTHER']);
+const managedSiteHost = z.enum(['HOSTINGER', 'ASHBI_VPS', 'SHOPIFY', 'OTHER']);
+const managedSiteLifecycle = z.enum(['INVENTORIED', 'ACTIVE', 'MAINTENANCE', 'ARCHIVED']);
+
+export const createManagedSiteSchema = z.object({
+  name: z.string().trim().min(1).max(255),
+  url: managedSiteUrl,
+  platform: managedSitePlatform,
+  host: managedSiteHost,
+  lifecycle: managedSiteLifecycle.optional().default('INVENTORIED'),
+  clientId: cuidId.nullable().optional(),
+  source: z.string().trim().max(255).optional(),
+  notes: z.string().trim().max(5000).optional(),
+});
+
+export const importManagedSitesSchema = z.object({
+  sites: z.array(createManagedSiteSchema).min(1).max(100),
+});
+
 export const monitoringAiSettingsSchema = z.object({
   minimaxApiKey: z.string().trim().min(1).max(500),
   minimaxModel: z.string().trim().min(1).max(100).optional(),

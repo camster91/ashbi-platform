@@ -1454,6 +1454,14 @@ export const api = {
   postWPMagicLoginRevoke: (data) =>
     request('/wp-bridge/magic-login/revoke', { method: 'POST', body: data }),
 
+  // ===== MANAGED SITE INVENTORY =====
+  listManagedSites: () =>
+    request('/managed-sites'),
+  createManagedSite: (data) =>
+    request('/managed-sites', { method: 'POST', body: data }),
+  importManagedSites: (sites) =>
+    request('/managed-sites/import', { method: 'POST', body: { sites } }),
+
   // ===== SURVEYS / NPS =====
   submitSurvey: (data) =>
     request('/surveys/submit', { method: 'POST', body: data }),
