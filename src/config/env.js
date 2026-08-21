@@ -26,6 +26,11 @@ const env = {
   ollamaModel: process.env.OLLAMA_MODEL || 'gemma4:31b',
   aiProvider: process.env.AI_PROVIDER || 'ollama', // 'claude', 'gemini', or 'ollama'
   aiModel: 'gemma4:31b',
+  // Dedicated provider for inbound monitoring triage. It is deliberately
+  // separate from AI_PROVIDER so monitoring cannot alter Hub-wide AI behavior.
+  minimaxMonitoringApiKey: process.env.MINIMAX_MONITORING_API_KEY,
+  minimaxApiBase: process.env.MINIMAX_API_BASE || 'https://api.minimax.io/v1',
+  minimaxMonitoringModel: process.env.MINIMAX_MONITORING_MODEL || 'MiniMax-M2.5',
 
   // Kilo AI (alternative AI gateway)
   kiloApiKey: process.env.KILO_API_KEY,
@@ -37,6 +42,7 @@ const env = {
 
   // Webhook
   webhookSecret: process.env.WEBHOOK_SECRET,
+  uptimeKumaWebhookSecret: process.env.UPTIME_KUMA_WEBHOOK_SECRET,
   notificationWebhookUrl: process.env.NOTIFICATION_WEBHOOK_URL,
 
   // Credentials vault encryption key
@@ -172,6 +178,8 @@ if (!env.isDev) {
     ANTHROPIC_API_KEY: 'your-anthropic-api-key',
     GEMINI_API_KEY: 'your-gemini-api-key',
     OLLAMA_API_KEY: 'your-ollama-cloud-api-key',
+    MINIMAX_MONITORING_API_KEY: 'your-minimax-monitoring-api-key',
+    UPTIME_KUMA_WEBHOOK_SECRET: 'your-uptime-kuma-webhook-secret',
     OPENCLAW_API_KEY: 'your-openclaw-api-key',
     HUNTER_API_KEY: 'your-hunter-api-key',
     ASHBI_WP_APP_PASSWORD: 'your-wordpress-app-password',

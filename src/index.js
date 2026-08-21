@@ -57,6 +57,7 @@ import semanticSearchRoutes from './routes/semantic-search.routes.js';
 import creativeBriefRoutes from './routes/creative-brief.routes.js';
 import assetLibraryRoutes from './routes/asset-library.routes.js';
 import wpBridgeRoutes from './routes/wp-bridge.routes.js';
+import uptimeMonitoringRoutes from './routes/uptime-monitoring.routes.js';
 import apiKeyRoutes, { authenticateApiKey } from './routes/api-key.routes.js';
 import aiBridgeRoutes from './routes/ai-bridge.routes.js';
 import estimateRoutes from './routes/estimate.routes.js';
@@ -239,6 +240,7 @@ await fastify.register(semanticSearchRoutes, { prefix: '/api/semantic-search' })
 await fastify.register(creativeBriefRoutes, { prefix: '/api/creative-brief' });
 await fastify.register(assetLibraryRoutes, { prefix: '/api/asset-library' });
 await fastify.register(wpBridgeRoutes, { prefix: '/api/wp-bridge' });
+await fastify.register(uptimeMonitoringRoutes, { prefix: '/api/webhooks/uptime-kuma' });
 await fastify.register(automationRoutes, { prefix: '/api/automations' });
 await fastify.register(expenseRoutes, { prefix: '/api/expenses' });
 await fastify.register(commandCenterRoutes, { prefix: '/api/command-center' });

@@ -33,6 +33,7 @@ model Organization {
   wpAlerts           WPAlert[]
   wpFleetOps         WPFleetOp[]
   wpMagicLoginLogs   WPMagicLoginLog[]
+  monitoringIncidents MonitoringIncident[]
   wpBridgeNonces     WPBridgeNonce[]
   supportHourEntries SupportHourEntry[]
   integrations       Integration[]
@@ -1957,6 +1958,7 @@ model WPSite {
   reports      WPReport[]
   alertsLog    WPAlert[]
   nonces       WPBridgeNonce[]
+  monitoringIncidents MonitoringIncident[]
   organization Organization    @relation(fields: [organizationId], references: [id])
 
   @@index([organizationId])
@@ -2033,6 +2035,46 @@ model WPAlert {
   @@index([alertType])
   @@index([createdAt])
   @@map("wp_alerts")
+}
+
+// Uptime Kuma incident ledger. The raw event is retained for human review,
+// while only a bounded subset is ever sent to the AI triage provider.
+model MonitoringIncident {
+  id                      String    @id @default(cuid())
+  organizationId          String
+  siteId                  String?
+  source                  String    @default("UPTIME_KUMA")
+  externalEventId         String    @unique
+  monitorName             String
+  monitorUrl              String
+  status                  String
+  message                 String?
+  pingMs                  Int?
+  emittedAt               DateTime
+  rawPayload              Json
+  triageStatus            String    @default("PENDING") // PENDING | COMPLETED | FAILED | SKIPPED
+  triageReason            String?
+  aiProvider              String?
+  aiModel                 String?
+  aiSeverity              String?
+  aiConfidence            Float?
+  aiSummary               String?
+  recommendedAction       String?
+  humanActionRequired     Boolean   @default(true)
+  aiTriage                Json?
+  triagedAt               DateTime?
+  notificationDisposition String    @default("SHADOW") // SHADOW until human approval enables any routing change
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  site         WPSite?      @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@index([siteId, createdAt(sort: Desc)])
+  @@index([monitorUrl, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+  @@map("monitoring_incidents")
 }
 
 // Fleet ops audit log (Plan 7) — one row per hub-side fan-out call

@@ -29,7 +29,7 @@ import { withSoftDelete } from '../services/soft-delete.service.js';
 // `where.organizationId = <jwt.orgId>` auto-inject (same as before).
 const DIRECT_SCOPED_MODELS = new Set([
   'client', 'project', 'user', 'integration', 'trasheditem', 'attachment', 'formdraft',
-  'wpsite', 'wpbackup', 'wpreport', 'wpalert', 'wpfleetop',
+  'wpsite', 'wpbackup', 'wpreport', 'wpalert', 'wpfleetop', 'monitoringincident',
   'wpmagicloginlog', 'wpbridgenonce', 'supporthourentry',
   'assignmentrule', 'template', 'unmatchedemail', 'lineitemtemplate',
   'weeklydigest', 'tasktemplate', 'outreachsequence', 'emailtriageitem',
@@ -60,6 +60,7 @@ const DIRECT_PARENT_RELATIONS = {
   wpbackup: [{ relation: 'site', field: 'siteId', model: 'wpsite', delegate: 'wPSite', required: true }],
   wpreport: [{ relation: 'site', field: 'siteId', model: 'wpsite', delegate: 'wPSite', required: true }],
   wpalert: [{ relation: 'site', field: 'siteId', model: 'wpsite', delegate: 'wPSite' }],
+  monitoringincident: [{ relation: 'site', field: 'siteId', model: 'wpsite', delegate: 'wPSite' }],
   wpbridgenonce: [{ relation: 'site', field: 'siteId', model: 'wpsite', delegate: 'wPSite', required: true }],
   credential: [
     { relation: 'client', field: 'clientId', model: 'client', delegate: 'client' },
