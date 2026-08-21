@@ -65,6 +65,12 @@ export function buildVerifySiteHmac(prismaClient) {
   };
 }
 
+// Database metrics are stored as BigInt, which JSON cannot serialize directly.
+// Keep the conversion at the API boundary so every list and mutation response
+// can safely be sent by Fastify.
+export const serializeBigInt = (obj) =>
+  JSON.parse(JSON.stringify(obj, (_, value) => (typeof value === 'bigint' ? value.toString() : value)));
+
 export default async function wpBridgeRoutes(fastify) {
   const verifySiteHmac = buildVerifySiteHmac(prisma);
   const provisionSiteSchema = z.object({
@@ -76,14 +82,11 @@ export default async function wpBridgeRoutes(fastify) {
     clientId: z.string().min(1).max(255).optional(),
     projectId: z.string().min(1).max(255).optional()
   });
-  // Convert BigInt values (dbSize, filesSize) to strings for JSON serialization
-  const serializeBigInt = (obj) =>
-    JSON.parse(JSON.stringify(obj, (_, v) => (typeof v === 'bigint' ? v.toString() : v)));
-
   fastify.get('/', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
-    return listSites(request.user.id, { prismaClient: request.prisma });
+    const result = await listSites(request.user.id, { prismaClient: request.prisma });
+    return serializeBigInt(result);
   });
 
   fastify.post('/', {

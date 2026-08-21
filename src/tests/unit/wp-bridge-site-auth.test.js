@@ -2,11 +2,23 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { encrypt } from '../../utils/crypto.js';
 import { signSiteRequest, verifySiteRequest } from '../../security/wp-bridge-auth.js';
-import { buildVerifySiteHmac } from '../../routes/wp-bridge.routes.js';
+import { buildVerifySiteHmac, serializeBigInt } from '../../routes/wp-bridge.routes.js';
 import { registerSite, rotateSiteSecret } from '../../services/wpBridge.service.js';
 import { createScopedPrisma } from '../../utils/prisma-tenant-proxy.js';
 
 process.env.CREDENTIALS_KEY = 'wp-bridge-test-encryption-key';
+
+test('site list JSON serialization converts nested BigInt metrics to strings', () => {
+  const result = serializeBigInt({
+    sites: [{ id: 'site-1', dbSize: 123n, diskBytes: 456n }],
+    meta: { count: 1 }
+  });
+
+  assert.deepEqual(result, {
+    sites: [{ id: 'site-1', dbSize: '123', diskBytes: '456' }],
+    meta: { count: 1 }
+  });
+});
 
 function harness({ siteUrl = 'https://a.example', organizationId = 'org-a', secret = 'site-a-secret' } = {}) {
   const nonces = new Set();
