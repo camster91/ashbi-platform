@@ -1396,6 +1396,11 @@ export const assignmentRuleBulkSchema = z.object({
   })).min(1).max(50),
 });
 
+export const monitoringAiSettingsSchema = z.object({
+  minimaxApiKey: z.string().trim().min(1).max(500),
+  minimaxModel: z.string().trim().min(1).max(100).optional(),
+});
+
 // ── Final batch (43 endpoints) ────────────────────────────────────────────
 export const assetCreateSchema = z.object({
   name: z.string().min(1).max(200),

@@ -3,7 +3,7 @@ import test from 'node:test';
 import Fastify from 'fastify';
 import { MiniMaxMonitoringProvider } from '../../ai/providers/minimax-monitoring.js';
 import uptimeMonitoringRoutes from '../../routes/uptime-monitoring.routes.js';
-import { normalizeUptimeKumaEvent, triageMonitoringIncident } from '../../services/uptime-triage.service.js';
+import { normalizeUptimeKumaEvent, resolveMiniMaxMonitoringProvider, triageMonitoringIncident } from '../../services/uptime-triage.service.js';
 
 const payload = {
   eventId: 'valen-incident-20260821-001',
@@ -29,6 +29,21 @@ test('skips triage safely when MiniMax credentials are unavailable', async () =>
     provider: { isConfigured: () => false }
   });
   assert.deepEqual(result, { status: 'SKIPPED', reason: 'MINIMAX_MONITORING_UNAVAILABLE' });
+});
+
+test('loads an organization MiniMax key only inside the server-side provider', async () => {
+  const provider = await resolveMiniMaxMonitoringProvider({
+    prisma: {
+      monitoringIntegrationSettings: {
+        findUnique: async () => ({ minimaxApiKeyEncrypted: 'ciphertext', minimaxModel: 'MiniMax-M2.5' })
+      }
+    },
+    organizationId: 'org_1',
+    decryptSecret: (ciphertext) => ciphertext === 'ciphertext' ? 'decrypted-key' : null,
+  });
+  assert.equal(provider.isConfigured(), true);
+  assert.equal(provider.apiKey, 'decrypted-key');
+  assert.equal(provider.model, 'MiniMax-M2.5');
 });
 
 test('uses the documented server-side MiniMax chat-completions contract', async () => {

@@ -9,7 +9,10 @@ import {
   templateUpdateSchema,
   templateRenderSchema,
   aiProviderSwitchSchema,
+  monitoringAiSettingsSchema,
 } from '../validators/schemas.js';
+import env from '../config/env.js';
+import { encrypt, getActiveCredentialKeyVersion } from '../utils/crypto.js';
 
 export default async function settingsRoutes(fastify) {
   // ==================== ASSIGNMENT RULES ====================
@@ -295,6 +298,51 @@ export default async function settingsRoutes(fastify) {
     const env = (await import('../config/env.js')).default;
     const models = await OllamaProvider.listCloudModels(env.ollamaApiKey);
     return { models, known: OLLAMA_MODELS };
+  });
+
+  // ==================== MONITORING AI ====================
+
+  // The key is write-only. This endpoint never returns ciphertext or plaintext.
+  fastify.get('/monitoring-ai', {
+    onRequest: [fastify.adminOnly]
+  }, async (request) => {
+    const settings = await request.prisma.monitoringIntegrationSettings.findUnique({
+      where: { organizationId: request.user.organizationId },
+      select: { minimaxApiKeyEncrypted: true, minimaxModel: true, updatedAt: true }
+    });
+    const stored = Boolean(settings?.minimaxApiKeyEncrypted);
+    return {
+      configured: stored || Boolean(env.minimaxMonitoringApiKey),
+      source: stored ? 'settings' : (env.minimaxMonitoringApiKey ? 'environment' : 'none'),
+      model: settings?.minimaxModel || env.minimaxMonitoringModel,
+      updatedAt: settings?.updatedAt || null
+    };
+  });
+
+  fastify.post('/monitoring-ai', {
+    onRequest: [fastify.adminOnly],
+    preHandler: validateBody(monitoringAiSettingsSchema),
+  }, async (request) => {
+    const { minimaxApiKey, minimaxModel } = request.body;
+    const encryptedKey = encrypt(minimaxApiKey);
+    const settings = await request.prisma.monitoringIntegrationSettings.upsert({
+      where: { organizationId: request.user.organizationId },
+      create: {
+        minimaxApiKeyEncrypted: encryptedKey,
+        minimaxApiKeyKeyVersion: getActiveCredentialKeyVersion(),
+        minimaxModel: minimaxModel || env.minimaxMonitoringModel || 'MiniMax-M2.5',
+        updatedByUserId: request.user.id,
+      },
+      update: {
+        minimaxApiKeyEncrypted: encryptedKey,
+        minimaxApiKeyKeyVersion: getActiveCredentialKeyVersion(),
+        ...(minimaxModel ? { minimaxModel } : {}),
+        updatedByUserId: request.user.id,
+      },
+      select: { minimaxModel: true, updatedAt: true }
+    });
+
+    return { configured: true, source: 'settings', model: settings.minimaxModel, updatedAt: settings.updatedAt };
   });
 
   // ==================== ESCALATION RULES ====================

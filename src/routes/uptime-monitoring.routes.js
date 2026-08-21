@@ -33,7 +33,7 @@ export default async function uptimeMonitoringRoutes(fastify, options = {}) {
       return reply.status(404).send({ error: 'No provisioned WordPress site matches monitorUrl', code: 'MONITORED_SITE_NOT_FOUND' });
     }
 
-    const triageResult = await triage(event);
+    const triageResult = await triage({ ...event, prisma, organizationId: site.organizationId });
     const record = await prisma.monitoringIncident.upsert({
       where: { externalEventId: event.externalEventId },
       create: {

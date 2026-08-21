@@ -11,6 +11,7 @@ function fakePrisma({ failUpdate = false } = {}) {
   const state = {
     credentials: [{ id: 'cred-1', password: encryptWithVersion('credential-secret', 'legacy'), encryptionVersion: 'legacy' }],
     sites: [{ id: 'site-1', bridgeSecretEncrypted: encryptWithVersion('bridge-secret', 'legacy') }],
+    monitoringSettings: [],
   };
   const client = {
     credential: {
@@ -23,6 +24,10 @@ function fakePrisma({ failUpdate = false } = {}) {
     wPSite: {
       findMany: async () => structuredClone(state.sites),
       update: async ({ where, data }) => Object.assign(state.sites.find((row) => row.id === where.id), data),
+    },
+    monitoringIntegrationSettings: {
+      findMany: async () => structuredClone(state.monitoringSettings),
+      update: async ({ where, data }) => Object.assign(state.monitoringSettings.find((row) => row.id === where.id), data),
     },
   };
   client.$transaction = async (callback) => {

@@ -5,16 +5,21 @@ import {
 } from '../utils/crypto.js';
 
 export async function planCredentialKeyRotation(prisma, targetVersion) {
-  const [credentials, sites] = await Promise.all([
+  const [credentials, sites, monitoringSettings] = await Promise.all([
     prisma.credential.findMany({ select: { id: true, password: true, encryptionVersion: true } }),
     prisma.wPSite.findMany({
       where: { bridgeSecretEncrypted: { not: null } },
       select: { id: true, bridgeSecretEncrypted: true },
     }),
+    prisma.monitoringIntegrationSettings.findMany({
+      where: { minimaxApiKeyEncrypted: { not: null } },
+      select: { id: true, minimaxApiKeyEncrypted: true },
+    }),
   ]);
   const records = [
     ...credentials.map((record) => ({ model: 'credential', id: record.id, ciphertext: record.password })),
     ...sites.map((record) => ({ model: 'wPSite', id: record.id, ciphertext: record.bridgeSecretEncrypted })),
+    ...monitoringSettings.map((record) => ({ model: 'monitoringIntegrationSettings', id: record.id, ciphertext: record.minimaxApiKeyEncrypted })),
   ];
   const versions = {};
   const planned = [];
@@ -42,10 +47,15 @@ export async function rotateCredentialKeys(prisma, targetVersion, { apply = fals
           where: { id: record.id },
           data: { password: record.ciphertext, encryptionVersion: targetVersion },
         });
-      } else {
+      } else if (record.model === 'wPSite') {
         await tx.wPSite.update({
           where: { id: record.id },
           data: { bridgeSecretEncrypted: record.ciphertext },
+        });
+      } else {
+        await tx.monitoringIntegrationSettings.update({
+          where: { id: record.id },
+          data: { minimaxApiKeyEncrypted: record.ciphertext, minimaxApiKeyKeyVersion: targetVersion },
         });
       }
     }

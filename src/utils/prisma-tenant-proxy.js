@@ -29,7 +29,7 @@ import { withSoftDelete } from '../services/soft-delete.service.js';
 // `where.organizationId = <jwt.orgId>` auto-inject (same as before).
 const DIRECT_SCOPED_MODELS = new Set([
   'client', 'project', 'user', 'integration', 'trasheditem', 'attachment', 'formdraft',
-  'wpsite', 'wpbackup', 'wpreport', 'wpalert', 'wpfleetop', 'monitoringincident',
+  'wpsite', 'wpbackup', 'wpreport', 'wpalert', 'wpfleetop', 'monitoringincident', 'monitoringintegrationsettings',
   'wpmagicloginlog', 'wpbridgenonce', 'supporthourentry',
   'assignmentrule', 'template', 'unmatchedemail', 'lineitemtemplate',
   'weeklydigest', 'tasktemplate', 'outreachsequence', 'emailtriageitem',

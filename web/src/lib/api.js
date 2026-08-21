@@ -617,6 +617,10 @@ export const api = {
     request('/settings/ai-provider', { method: 'POST', body: { provider, model } }),
   getOllamaModels: () =>
     request('/settings/ai-provider/ollama-models'),
+  getMonitoringAISettings: () =>
+    request('/settings/monitoring-ai'),
+  saveMonitoringAISettings: (data) =>
+    request('/settings/monitoring-ai', { method: 'POST', body: data }),
 
   // ===== PROPOSALS =====
   getProposals: (params = {}) => {

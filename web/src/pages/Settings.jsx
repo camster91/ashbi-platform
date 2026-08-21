@@ -316,6 +316,62 @@ function AIModelSection() {
   );
 }
 
+function MonitoringAISection() {
+  const queryClient = useQueryClient();
+  const [apiKey, setApiKey] = useState('');
+  const [saved, setSaved] = useState(false);
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
+    queryKey: ['monitoring-ai-settings'],
+    queryFn: api.getMonitoringAISettings,
+    retry: false,
+  });
+  const mutation = useMutation({
+    mutationFn: (minimaxApiKey) => api.saveMonitoringAISettings({ minimaxApiKey }),
+    onSuccess: (updated) => {
+      setApiKey('');
+      setSaved(true);
+      queryClient.setQueryData(['monitoring-ai-settings'], updated);
+      setTimeout(() => setSaved(false), 3000);
+    },
+  });
+
+  return (
+    <Section icon={Bot} title="Monitoring AI" description="Securely enrich Uptime Kuma incidents before a human reviews them">
+      {isLoading ? <LoadingState label="Loading monitoring AI settings…" compact className="justify-start" size="sm" /> : error ? (
+        <QueryErrorState error={error} message="Monitoring AI settings could not be loaded" onRetry={refetch} isRetrying={isFetching} />
+      ) : (
+        <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); mutation.mutate(apiKey); }}>
+          <div aria-live="polite" className="rounded-lg border border-border bg-muted/30 p-3 text-sm">
+            <p className="font-medium text-foreground">{data?.configured ? 'MiniMax is configured.' : 'MiniMax is not configured.'}</p>
+            <p className="mt-1 text-xs text-muted-foreground">The key is encrypted at rest, used only for monitoring triage, and cannot be viewed or copied from Ashbi after saving.</p>
+          </div>
+          <div>
+            <label htmlFor="minimax-monitoring-api-key" className="block text-sm font-medium mb-1">MiniMax API key</label>
+            <input
+              id="minimax-monitoring-api-key"
+              type="password"
+              autoComplete="new-password"
+              value={apiKey}
+              onChange={(event) => setApiKey(event.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+              placeholder={data?.configured ? 'Paste a replacement key to rotate it' : 'Paste your MiniMax API key'}
+              required
+            />
+          </div>
+          {mutation.error && <p role="alert" className="text-sm text-destructive">{mutation.error.message || 'The MiniMax key could not be saved.'}</p>}
+          <div className="flex items-center gap-3">
+            <Button type="submit" loading={mutation.isPending} disabled={!apiKey.trim()} leftIcon={<Save className="w-4 h-4" />}>
+              Save MiniMax key
+            </Button>
+            {saved && <span className="text-sm text-green-600 flex items-center gap-1"><CheckCircle className="w-4 h-4" /> Saved securely</span>}
+          </div>
+          <p className="text-xs text-muted-foreground">AI triage stays in shadow mode: it records a suggested assessment but cannot change sites, suppress alerts, or contact clients.</p>
+        </form>
+      )}
+    </Section>
+  );
+}
+
 function ApiKeysSection() {
   const queryClient = useQueryClient();
   const [newKeyName, setNewKeyName] = useState('');
@@ -800,6 +856,8 @@ export default function Settings() {
 
       {/* AI Model Picker — admin only */}
       {isAdmin && <AIModelSection />}
+
+      {isAdmin && <MonitoringAISection />}
 
       {/* Admin links */}
       {isAdmin && (

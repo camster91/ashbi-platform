@@ -34,6 +34,7 @@ model Organization {
   wpFleetOps         WPFleetOp[]
   wpMagicLoginLogs   WPMagicLoginLog[]
   monitoringIncidents MonitoringIncident[]
+  monitoringIntegrationSettings MonitoringIntegrationSettings?
   wpBridgeNonces     WPBridgeNonce[]
   supportHourEntries SupportHourEntry[]
   integrations       Integration[]
@@ -1143,6 +1144,22 @@ model CredentialAccessAudit {
   @@index([credentialId, createdAt])
   @@index([actorUserId, createdAt])
   @@map("credential_access_audits")
+}
+
+// Per-organization monitoring AI configuration. The MiniMax key is encrypted
+// at rest and is intentionally never returned by an API response.
+model MonitoringIntegrationSettings {
+  id                       String       @id @default(cuid())
+  organizationId           String       @unique
+  organization             Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  minimaxApiKeyEncrypted   String?
+  minimaxApiKeyKeyVersion  String?
+  minimaxModel             String       @default("MiniMax-M2.5")
+  updatedByUserId          String?
+  createdAt                DateTime     @default(now())
+  updatedAt                DateTime     @updatedAt
+
+  @@map("monitoring_integration_settings")
 }
 
 model TaskTemplate {

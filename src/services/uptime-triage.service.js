@@ -2,6 +2,8 @@ import crypto from 'crypto';
 import { z } from 'zod';
 import { MiniMaxMonitoringProvider } from '../ai/providers/minimax-monitoring.js';
 import { canonicalSiteUrl } from '../security/wp-bridge-auth.js';
+import { decrypt } from '../utils/crypto.js';
+import env from '../config/env.js';
 
 const triageSchema = z.object({
   severity: z.enum(['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'INFO']),
@@ -97,22 +99,48 @@ function promptForIncident(incident) {
 }
 
 /**
+ * Resolves a per-organization MiniMax key without exposing it to the request
+ * or response layer. The environment variable remains a deployment fallback.
+ */
+export async function resolveMiniMaxMonitoringProvider({ prisma, organizationId, decryptSecret = decrypt } = {}) {
+  let stored = null;
+  if (prisma && organizationId) {
+    stored = await prisma.monitoringIntegrationSettings.findUnique({
+      where: { organizationId },
+      select: { minimaxApiKeyEncrypted: true, minimaxModel: true }
+    });
+  }
+
+  const apiKey = stored?.minimaxApiKeyEncrypted
+    ? decryptSecret(stored.minimaxApiKeyEncrypted)
+    : env.minimaxMonitoringApiKey;
+  return new MiniMaxMonitoringProvider({
+    apiKey,
+    model: stored?.minimaxModel || env.minimaxMonitoringModel
+  });
+}
+
+/**
  * Returns a narrow decision that can enrich an alert, never an operational command.
  */
-export async function triageMonitoringIncident(incident, { provider = new MiniMaxMonitoringProvider(), timeoutMs = 10_000 } = {}) {
-  if (!provider.isConfigured()) {
+export async function triageMonitoringIncident(incident, { provider = null, timeoutMs = 10_000 } = {}) {
+  const resolvedProvider = provider || await resolveMiniMaxMonitoringProvider({
+    prisma: incident?.prisma,
+    organizationId: incident?.organizationId
+  });
+  if (!resolvedProvider.isConfigured()) {
     return { status: 'SKIPPED', reason: 'MINIMAX_MONITORING_UNAVAILABLE' };
   }
 
   try {
-    const result = await provider.chatJSON({
+    const result = await resolvedProvider.chatJSON({
       system: `You triage website monitoring incidents for an agency. Return valid JSON only with: severity (CRITICAL|HIGH|MEDIUM|LOW|INFO), confidence (0..1), summary, recommendedAction (CHECK_SITE|CHECK_CERTIFICATE|CHECK_HOST|WAIT_FOR_RECOVERY|REVIEW_MANUALLY), humanActionRequired (boolean). You do not have authority to change systems, suppress alerts, contact clients, or issue commands. If evidence is incomplete, choose REVIEW_MANUALLY.`,
       prompt: promptForIncident(incident),
       temperature: 0.1,
       maxTokens: 350,
       signal: AbortSignal.timeout(timeoutMs)
     });
-    return { status: 'COMPLETED', triage: triageSchema.parse(result), provider: provider.name, model: provider.model || null };
+    return { status: 'COMPLETED', triage: triageSchema.parse(result), provider: resolvedProvider.name, model: resolvedProvider.model || null };
   } catch (error) {
     return { status: 'FAILED', reason: error.code || 'MINIMAX_MONITORING_TRIAGE_FAILED' };
   }
