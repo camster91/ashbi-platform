@@ -152,6 +152,27 @@ describe('magic-login fan-out wire format', () => {
     });
     assert.equal(ok, true);
   });
+
+  test('payloadForSite sends each client site its configured administrator', async () => {
+    const bodies = [];
+    const out = await executeFanOutPure({
+      targetSites: [
+        { url: 'https://a.com', bridgeSecret: HUB_SECRET, magicLoginUserId: 7 },
+        { url: 'https://b.com', bridgeSecret: HUB_SECRET, magicLoginUserId: 23 }
+      ],
+      endpoint: 'magic-login',
+      payload: { mode: 'per_site_magic_login_user' },
+      payloadForSite: (site) => ({ user_id: site.magicLoginUserId }),
+      fetchImpl: async (_url, init) => {
+        bodies.push(JSON.parse(init.body));
+        return { ok: true, status: 200, text: async () => '{"url":"https://example.com/wp-login.php"}' };
+      }
+    });
+
+    assert.equal(out.succeeded, 2);
+    assert.deepEqual(bodies.map((body) => body.user_id).sort((a, b) => a - b), [7, 23]);
+    assert.ok(bodies.every((body) => body.mode === undefined));
+  });
 });
 
 // ===========================================================================
@@ -668,6 +689,8 @@ describe('production route file contains the magic-login fleet endpoint (regress
     assert.match(src, /opType:\s*['"]magic_login['"]/, 'must persist op_type="magic_login"');
     assert.match(src, /endpoint:\s*['"]magic-login['"]/, 'must fan out to /wp-json/ashbi/v1/magic-login');
     assert.match(src, /reshapeMagicLoginResult/, 'must reshape per-site results into { siteUrl, url?, error? }');
+    assert.match(src, /magicLoginUserId/, 'must require a configured per-site WP administrator');
+    assert.match(src, /payloadForSite/, 'must construct the plugin payload from each target site');
 
     // The op_type filter enum must now include magic_login.
     assert.match(src, /['"]magic_login['"]/, 'op_type enum must include magic_login');

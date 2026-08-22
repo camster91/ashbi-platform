@@ -1390,6 +1390,8 @@ export const api = {
     request('/wp-bridge'),
   registerWPSite: (data) =>
     request('/wp-bridge', { method: 'POST', body: data }),
+  updateWPSiteMagicLoginUser: (id, data) =>
+    request(`/wp-bridge/${encodeURIComponent(id)}/magic-login-user`, { method: 'PATCH', body: data }),
   updateWPSiteHealth: (data) =>
     request('/wp-bridge', { method: 'PUT', body: data }),
   deleteWPSite: (id) =>

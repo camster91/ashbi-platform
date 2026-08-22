@@ -3,7 +3,7 @@
  *
  * Verifies that the WPSites UI:
  *   1. Magic Login row button POSTs /api/wp-bridge/fleet/magic-login with
- *      { user_id, targetSites: [siteId] } and opens the returned URL in a
+ *      { targetSites: [siteId] } and opens the returned URL in a
  *      new tab.
  *   2. Delete row button DELETEs /api/wp-bridge/<siteId> (path param, not
  *      query string).
@@ -45,6 +45,7 @@ const SAMPLE_SITE = {
   id: 'site-42',
   url: 'https://example.com',
   name: 'Example Site',
+  magicLoginUserId: 9,
 };
 
 const SAMPLE_FLEET = {
@@ -131,7 +132,7 @@ describe('WPSites row buttons (PR-E: hub-ui-buttons-wire)', () => {
     expect(screen.getByText(/will not be shown again/i)).toBeInTheDocument();
   });
 
-  it('Magic Login button POSTs /api/wp-bridge/fleet/magic-login with { user_id, targetSites: [siteId] } and opens returned URL in a new tab', async () => {
+  it('Magic Login button POSTs /api/wp-bridge/fleet/magic-login with the configured site target and opens returned URL in a new tab', async () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
       status: 200,
@@ -162,10 +163,7 @@ describe('WPSites row buttons (PR-E: hub-ui-buttons-wire)', () => {
     expect(init.method).toBe('POST');
     expect(init.credentials).toBe('include');
     expect(init.headers['Content-Type']).toBe('application/json');
-    expect(JSON.parse(init.body)).toEqual({
-      user_id: 1,
-      targetSites: ['site-42'],
-    });
+    expect(JSON.parse(init.body)).toEqual({ targetSites: ['site-42'] });
 
     // window.open should be called with the magic login URL in a new tab.
     await waitFor(() => expect(windowOpenMock).toHaveBeenCalled());

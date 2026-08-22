@@ -193,6 +193,7 @@ export async function executeFanOutPure({
   targetSites,
   endpoint,
   payload,
+  payloadForSite,
   secret,
   fetchImpl,
   timeoutMs = PER_SITE_TIMEOUT_MS,
@@ -212,7 +213,7 @@ export async function executeFanOutPure({
       fanOutOneSite({
         siteUrl: site.url,
         endpoint,
-        payload,
+        payload: typeof payloadForSite === 'function' ? payloadForSite(site) : payload,
         secret: site.bridgeSecret || secret,
         timestamp: ts,
         fetchImpl,
@@ -236,7 +237,7 @@ export async function executeFanOutPure({
  * - neither: returns [] (caller should reject before calling executeFleetOp)
  */
 export async function resolveTargetSites({ targetAll, targetSites } = {}) {
-  const select = { id: true, url: true, name: true, bridgeSecretEncrypted: true };
+  const select = { id: true, url: true, name: true, magicLoginUserId: true, bridgeSecretEncrypted: true };
   let sites;
   if (targetAll === true) {
     sites = await prisma.wPSite.findMany({
@@ -326,6 +327,7 @@ export async function listFleetOps({ limit = 50, opType } = {}) {
 export async function executeFleetOp({
   opType,
   payload,
+  payloadForSite,
   targetSites,
   endpoint,
   createdBy,
@@ -346,6 +348,7 @@ export async function executeFleetOp({
     targetSites: targetArr,
     endpoint,
     payload,
+    payloadForSite,
     fetchImpl,
     timeoutMs,
     dryRun

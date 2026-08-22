@@ -191,7 +191,7 @@ export async function listSites(userId, { prismaClient = prisma } = {}) {
  * Register a new WP site
  */
 export async function registerSite(data, { prismaClient = prisma, bridgeSecret } = {}) {
-  const { siteUrl, siteName, wordpressVersion, phpVersion, activePlugins, theme, clientId, projectId, bridgeVersion, ttfb, dbSize, diskBytes, diskUsagePct, pluginUpdates } = data;
+  const { siteUrl, siteName, wordpressVersion, phpVersion, activePlugins, theme, clientId, projectId, bridgeVersion, ttfb, dbSize, diskBytes, diskUsagePct, pluginUpdates, magicLoginUserId } = data;
   const normalizedSiteUrl = canonicalSiteUrl(siteUrl);
 
   return prismaClient.wPSite.create({
@@ -199,6 +199,7 @@ export async function registerSite(data, { prismaClient = prisma, bridgeSecret }
       name: siteName || new URL(normalizedSiteUrl).hostname,
       url: normalizedSiteUrl,
       adminUrl: `${normalizedSiteUrl}/wp-admin`,
+      magicLoginUserId: Number.isInteger(magicLoginUserId) ? magicLoginUserId : null,
       bridgeSecretEncrypted: encrypt(bridgeSecret),
       wpVersion: wordpressVersion,
       phpVersion,

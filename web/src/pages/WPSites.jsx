@@ -143,12 +143,15 @@ function TabButton({ id, activeTab, onSelect, icon, children, testId }) {
 function SitesTab({ queryClient }) {
   const [showAdd, setShowAdd] = useState(false);
   const [addUrl, setAddUrl] = useState('');
+  const [addMagicLoginUserId, setAddMagicLoginUserId] = useState('');
   const [provisionedSecret, setProvisionedSecret] = useState('');
   const [copyError, setCopyError] = useState('');
   const [secretCopied, setSecretCopied] = useState(false);
   const [alert, setAlert] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
   const [siteToDelete, setSiteToDelete] = useState(null);
+  const [siteToConfigure, setSiteToConfigure] = useState(null);
+  const [magicLoginUserId, setMagicLoginUserId] = useState('');
 
   const { data: sites = [], isLoading } = useQuery({
     queryKey: ['wp-sites'],
@@ -208,18 +211,6 @@ function SitesTab({ queryClient }) {
     },
   });
 
-  // PR-E (hub-ui-buttons-wire): the prior handler issued
-  //   GET /wp-bridge/magic-login?siteId=...
-  // which is not a route the server defines. The real entry point is
-  // POST /api/wp-bridge/fleet/magic-login (per-site fan-out endpoint,
-  // accepts { user_id, targetSites }). For a single-site click we hand it
-  // targetSites=[siteId] so the fan-out is bounded to that one site and we
-  // can open the only returned magic URL in a new tab.
-  //
-  // user_id defaults to 1 (Cameron). The hub has no hub-user -> wp-user
-  // mapping table yet; once that exists, wire it in here. Until then the
-  // payload intentionally targets WP user id 1 on the receiving site.
-  const WP_ADMIN_USER_ID = 1;
   const magicLoginMutation = useMutation({
     mutationFn: async (siteId) => {
       const res = await fetch('/api/wp-bridge/fleet/magic-login', {
@@ -227,7 +218,6 @@ function SitesTab({ queryClient }) {
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id: WP_ADMIN_USER_ID,
           targetSites: [siteId],
         }),
       });
@@ -265,6 +255,18 @@ function SitesTab({ queryClient }) {
     },
   });
 
+  const configureMagicLoginMutation = useMutation({
+    mutationFn: ({ siteId, userId }) => api.updateWPSiteMagicLoginUser(siteId, { magicLoginUserId: userId }),
+    onSuccess: () => {
+      setSiteToConfigure(null);
+      setMagicLoginUserId('');
+      queryClient.invalidateQueries({ queryKey: ['wp-sites'] });
+      setAlert({ type: 'success', msg: 'WordPress administrator configured. You can now issue a magic login.' });
+      setTimeout(() => setAlert(null), 4000);
+    },
+    onError: (err) => setAlert({ type: 'error', msg: err.message || 'Could not configure WordPress administrator' })
+  });
+
   const digestMutation = useMutation({
     mutationFn: () => api.postWPFleetDigest(),
     onSuccess: (data) => {
@@ -282,7 +284,11 @@ function SitesTab({ queryClient }) {
   const handleRegister = (e) => {
     e.preventDefault();
     if (!addUrl.trim()) return;
-    registerMutation.mutate({ siteUrl: addUrl });
+    const userId = Number(addMagicLoginUserId);
+    registerMutation.mutate({
+      siteUrl: addUrl,
+      ...(Number.isInteger(userId) && userId > 0 ? { magicLoginUserId: userId } : {})
+    });
   };
 
   const openAddDialog = () => {
@@ -297,6 +303,7 @@ function SitesTab({ queryClient }) {
     if (registerMutation.isPending || provisionedSecret) return;
     registerMutation.reset();
     setAddUrl('');
+    setAddMagicLoginUserId('');
     setShowAdd(false);
   };
 
@@ -456,7 +463,14 @@ function SitesTab({ queryClient }) {
                     site={site}
                     expanded={expandedId === site.id}
                     onToggle={() => setExpandedId(expandedId === site.id ? null : site.id)}
-                    onMagicLogin={() => magicLoginMutation.mutate(site.id)}
+                    onMagicLogin={() => {
+                      if (!site.magicLoginUserId) {
+                        setMagicLoginUserId('');
+                        setSiteToConfigure(site);
+                        return;
+                      }
+                      magicLoginMutation.mutate(site.id);
+                    }}
                     onDelete={() => { deleteMutation.reset(); setSiteToDelete(site); }}
                     magicPending={magicLoginMutation.isPending}
                     deletePending={deleteMutation.isPending}
@@ -478,6 +492,33 @@ function SitesTab({ queryClient }) {
         pending={deleteMutation.isPending}
         error={deleteMutation.error?.message}
       />
+
+      <Modal
+        isOpen={Boolean(siteToConfigure)}
+        onClose={() => { if (!configureMagicLoginMutation.isPending) setSiteToConfigure(null); }}
+        title="Configure WordPress administrator"
+        size="sm"
+      >
+        <form onSubmit={(event) => {
+          event.preventDefault();
+          const userId = Number(magicLoginUserId);
+          if (siteToConfigure && Number.isInteger(userId) && userId > 0) {
+            configureMagicLoginMutation.mutate({ siteId: siteToConfigure.id, userId });
+          }
+        }} className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Enter the WordPress administrator user ID for {siteToConfigure?.name || siteToConfigure?.url}. Ashbi Hub stores it only for this site and will never assume that user ID 1 is the agency administrator.
+          </p>
+          <div>
+            <label htmlFor="wp-magic-login-user-id" className="block text-sm font-medium mb-1">WordPress administrator user ID</label>
+            <input id="wp-magic-login-user-id" type="number" min="1" required value={magicLoginUserId} onChange={(event) => setMagicLoginUserId(event.target.value)} className="w-full px-3 py-2 rounded-lg border border-border bg-background text-base" />
+          </div>
+          <ModalFooter>
+            <Button variant="ghost" type="button" onClick={() => setSiteToConfigure(null)} disabled={configureMagicLoginMutation.isPending}>Cancel</Button>
+            <Button type="submit" loading={configureMagicLoginMutation.isPending}>Save administrator</Button>
+          </ModalFooter>
+        </form>
+      </Modal>
 
       <Card className="p-6">
         <h2 className="text-lg font-semibold mb-4">Setup Guide</h2>
@@ -539,6 +580,11 @@ function SitesTab({ queryClient }) {
             <div>
               <label htmlFor="wp-site-url" className="block text-sm font-medium mb-1">Site URL</label>
               <input id="wp-site-url" type="url" value={addUrl} onChange={(event) => setAddUrl(event.target.value)} disabled={registerMutation.isPending} placeholder="https://yoursite.com" className="w-full px-3 py-2 rounded-lg border border-border bg-background text-base" autoComplete="url" required />
+            </div>
+            <div>
+              <label htmlFor="wp-site-admin-user-id" className="block text-sm font-medium mb-1">WordPress administrator user ID (optional)</label>
+              <input id="wp-site-admin-user-id" type="number" min="1" value={addMagicLoginUserId} onChange={(event) => setAddMagicLoginUserId(event.target.value)} disabled={registerMutation.isPending} className="w-full px-3 py-2 rounded-lg border border-border bg-background text-base" />
+              <p className="text-xs text-muted-foreground mt-1">Needed before Ashbi Hub can issue a magic login for this site.</p>
             </div>
             {registerMutation.error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-300">{registerMutation.error.message || 'The site could not be registered. Your URL is still available; review it and try again.'}</p>}
             <ModalFooter>
@@ -907,7 +953,6 @@ function FleetOpHistoryRow({ op, expanded, onToggle, truncate }) {
 // =============================================================================
 
 function LoginTab() {
-  const [userId, setUserId] = useState(1); // Cameron as primary admin (per task spec)
   const [targetAll, setTargetAll] = useState(true);
   const [selected, setSelected] = useState([]);
   const [alert, setAlert] = useState(null);
@@ -920,7 +965,7 @@ function LoginTab() {
 
   const mutation = useMutation({
     mutationFn: () => {
-      const body = { user_id: userId };
+      const body = {};
       if (targetAll) body.targetAll = true;
       else body.targetSites = selected;
       return api.postWPFleetMagicLogin(body);
@@ -974,19 +1019,8 @@ function LoginTab() {
         </div>
         <form onSubmit={(e) => { e.preventDefault(); mutation.mutate(); }} className="space-y-3" data-testid="login-form">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium mb-1">Admin user ID</label>
-              <input
-                type="number"
-                min={1}
-                value={userId}
-                onChange={(e) => setUserId(Number(e.target.value))}
-                className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
-                required
-              />
-              <p className="text-[11px] text-muted-foreground mt-1">
-                Defaults to <code>1</code> (Cameron's primary admin).
-              </p>
+            <div className="text-sm text-muted-foreground">
+              Each site uses its separately configured WordPress administrator.
             </div>
             <Checkbox label="Apply to all sites" checked={targetAll} onChange={setTargetAll} />
           </div>

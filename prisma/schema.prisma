@@ -1931,6 +1931,7 @@ model WPSite {
   name                  String
   url                   String
   adminUrl              String?
+  magicLoginUserId      Int?      // Explicit WP administrator ID for Hub magic-login
   clientId              String?
   projectId             String?   @unique
   status                String    @default("ACTIVE") // ACTIVE | MAINTENANCE | OFFLINE | ERROR

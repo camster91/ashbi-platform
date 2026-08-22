@@ -73,6 +73,7 @@ export default async function wpBridgeRoutes(fastify) {
       return url.protocol === 'https:' && !url.username && !url.password;
     }, 'siteUrl must be an HTTPS URL without embedded credentials'),
     siteName: z.string().trim().min(1).max(255).optional(),
+    magicLoginUserId: z.coerce.number().int().positive().optional(),
     clientId: z.string().min(1).max(255).optional(),
     projectId: z.string().min(1).max(255).optional()
   });
@@ -213,6 +214,22 @@ export default async function wpBridgeRoutes(fastify) {
     return reply.status(204).send();
   });
 
+  // Set the exact WordPress administrator used by the Hub for this site.
+  // It deliberately lives per-site: user ID 1 is not guaranteed to be the
+  // agency administrator on a client install.
+  fastify.patch('/:id/magic-login-user', {
+    onRequest: [fastify.authenticate, fastify.adminOnly],
+    preHandler: validateBody(z.object({ magicLoginUserId: z.coerce.number().int().positive() }))
+  }, async (request, reply) => {
+    const site = await request.prisma.wPSite.update({
+      where: { id: request.params.id },
+      data: { magicLoginUserId: request.body.magicLoginUserId }
+    }).catch(() => null);
+    if (!site) return reply.status(404).send({ error: 'Site not found' });
+    const { bridgeSecretEncrypted: _encryptedSecret, ...safeSite } = site;
+    return { success: true, site: serializeBigInt(safeSite) };
+  });
+
   fastify.post('/:id/rotate-secret', {
     config: { skipValidation: true },
     onRequest: [fastify.authenticate, fastify.adminOnly]
@@ -334,7 +351,6 @@ export default async function wpBridgeRoutes(fastify) {
   });
 
   const fleetMagicLoginSchema = z.object({
-    user_id: z.coerce.number().int().positive(),
     targetSites: targetSitesField,
     targetAll: targetAllField
   }).superRefine((data, ctx) => {
@@ -498,7 +514,7 @@ export default async function wpBridgeRoutes(fastify) {
     preHandler: validateBody(fleetMagicLoginSchema)
   }, async (request, reply) => {
     if (!ensureAdminSecretConfigured(reply)) return;
-    const { user_id: userId, targetSites, targetAll } = request.body;
+    const { targetSites, targetAll } = request.body;
     let sites;
     try {
       sites = await resolveTargetSites({ targetAll, targetSites });
@@ -511,12 +527,21 @@ export default async function wpBridgeRoutes(fastify) {
     if (sites.length === 0) {
       return reply.status(404).send({ error: 'No matching sites found' });
     }
+    const unconfigured = sites.filter((site) => !Number.isInteger(site.magicLoginUserId) || site.magicLoginUserId < 1);
+    if (unconfigured.length > 0) {
+      return reply.status(409).send({
+        error: 'Set a WordPress administrator ID for every selected site before issuing magic login.',
+        sites: unconfigured.map((site) => ({ id: site.id, url: site.url, name: site.name }))
+      });
+    }
     try {
       const raw = await executeFleetOp({
         opType: 'magic_login',
-        // Only forward user_id to the plugin (hub-side routing metadata is
-        // stripped by buildPerSiteRequest).
-        payload: { user_id: userId },
+        // Each site explicitly configures its target WP administrator. The
+        // payload callback keeps differing client-site IDs out of the shared
+        // request body while retaining one audited fleet operation.
+        payload: { mode: 'per_site_magic_login_user' },
+        payloadForSite: (site) => ({ user_id: site.magicLoginUserId }),
         targetSites: sites,
         endpoint: 'magic-login',
         createdBy: request.user.id,
@@ -536,7 +561,7 @@ export default async function wpBridgeRoutes(fastify) {
         await recordMagicLoginEvent({
           siteId: site?.id || null,
           siteUrl: result.siteUrl,
-          userId,
+          userId: site?.magicLoginUserId || null,
           hubUserId: request.user.id,
           ip: request.ip || '0.0.0.0',
           status: issued ? 'issued' : 'rejected',
