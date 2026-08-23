@@ -37,6 +37,8 @@ test('tracing is opt-in and never exits ahead of application shutdown', () => {
   assert.doesNotMatch(tracing, /process\.exit\(/);
   assert.match(tracing, /process\.env\.APP_REVISION/);
   assert.match(tracing, /ATTR_DEPLOYMENT_ENVIRONMENT_NAME/);
+  assert.doesNotMatch(tracing, /import logger from '\.\/utils\/logger\.js';/);
+  assert.match(tracing, /await import\('\.\/utils\/logger\.js'\)/);
 });
 
 
