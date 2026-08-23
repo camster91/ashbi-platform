@@ -52,7 +52,7 @@ async function sendProposalEmail(to, clientName, proposalTitle, portalUrl) {
     });
     return true;
   } catch (err) {
-    logger.error({ err, to, proposalTitle }, '[Proposal] Email send error');
+    logger.error({ errorName: err?.name, errorCode: err?.code }, '[Proposal] Email send error');
     return false;
   }
 }
