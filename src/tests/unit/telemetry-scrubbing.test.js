@@ -52,3 +52,21 @@ test('authentication action links are never written to application logs', () => 
     );
   }
 });
+
+
+test('email delivery failures log only non-sensitive error metadata', () => {
+  for (const routePath of ['proposal.routes.js', 'contract.routes.js']) {
+    const route = fs.readFileSync(new URL(`../../routes/${routePath}`, import.meta.url), 'utf8');
+
+    assert.doesNotMatch(
+      route,
+      /logger\.error\(\{\s*err\s*,\s*to\s*,\s*(?:proposalTitle|contractTitle)\s*\}/,
+      `${routePath} must not include client metadata in a delivery-error log`
+    );
+    assert.match(
+      route,
+      /logger\.error\(\{\s*errorName:\s*err\?\.name,\s*errorCode:\s*err\?\.code\s*\},\s*'\[(?:Proposal|Contract)\] Email send error'\)/,
+      `${routePath} must retain only non-sensitive delivery-error metadata`
+    );
+  }
+});
