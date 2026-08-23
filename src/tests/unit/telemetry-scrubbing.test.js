@@ -41,13 +41,23 @@ test('tracing is opt-in and never exits ahead of application shutdown', () => {
 
 test('authentication action links are never written to application logs', () => {
   const authRoutes = fs.readFileSync(new URL('../../routes/auth.routes.js', import.meta.url), 'utf8');
-  const logCalls = authRoutes.match(/(?:(?:request|fastify)\.log|console|logger)\.(?:log|info|warn|error)\([\s\S]*?\);/g) || [];
+  const logCallPattern = /(?:(?:request|fastify)\.log|console|logger)\.(?:trace|debug|log|info|warn|error|fatal)\([\s\S]*?\);/g;
+  const credentialPattern = /\b(?:resetLink|inviteLink|resetToken|token)\b|\?token=/;
+  const logCalls = authRoutes.match(logCallPattern) || [];
 
+  assert.ok(logCalls.length > 0, 'Security contract must inspect at least one log call');
   for (const logCall of logCalls) {
     assert.doesNotMatch(
       logCall,
-      /\b(?:resetLink|inviteLink|resetToken|token)\b|\?token=/,
+      credentialPattern,
       `Authentication credential found in log call: ${logCall}`
     );
+  }
+
+  for (const method of ['trace', 'debug', 'info', 'warn', 'error', 'fatal']) {
+    const regression = `request.log.${method}({ inviteLink });`;
+    const matchedCalls = regression.match(logCallPattern) || [];
+    assert.equal(matchedCalls.length, 1, `Structured logger method was not inspected: ${method}`);
+    assert.match(matchedCalls[0], credentialPattern);
   }
 });
