@@ -21,6 +21,7 @@ Replacement-ready means the target workflow is proven with authenticated users, 
 - Screen recordings and audio/video calls: [#391](https://github.com/camster91/ashbi-platform/issues/391)
 - ClickUp, Notion, Slack, and Bonsai migration pilots: [#392](https://github.com/camster91/ashbi-platform/issues/392)
 - Canonical technical backlog and shipping plan: [#290](https://github.com/camster91/ashbi-platform/issues/290) and [#291](https://github.com/camster91/ashbi-platform/issues/291)
+- Credential-vault ownership and rotation clearance: [#381](https://github.com/camster91/ashbi-platform/issues/381)
 
 ## Execution order
 
@@ -47,7 +48,7 @@ Exit: Ashbi Design can complete a representative client project from intake thro
 1. Complete #378 using Stripe test mode, including success, failure, cancellation, duplicate/out-of-order webhooks, and reconciliation.
 2. Complete #379 using an approved Mailgun/test email environment for proposal, contract, and invoice delivery plus bounce/retry behavior.
 3. Complete #380 with approved e-signature evidence, immutable document, audit, retention, export, and dispute-response requirements.
-4. Complete #287 for Google Calendar OAuth, create/update/retry, disconnect, revocation, tenant isolation, and the explicitly deferred conflict/delete cases.
+4. Complete #287 for Google Calendar OAuth. Treat a failed first create without a recorded external event ID as an unknown outcome: reconcile before any retry. Retry only failed updates with a known external event ID. Validate disconnect, revocation, tenant isolation, and the explicitly deferred conflict/delete cases.
 5. Complete #288 for Slack OAuth, signed inbound events, mapped threads, confirmed outbound actions, unknown-outcome recovery, disconnect, retention, and notification preferences.
 
 Exit: all selected provider-backed journeys pass in safe test environments and every external side effect is observable, idempotent where required, recoverable, and auditable.
@@ -76,7 +77,8 @@ Exit: each migration has a signed reconciliation report, rollback/recovery evide
 1. Re-run the complete authenticated replacement checklist against the exact release artifact.
 2. Close or explicitly defer every linked issue with owner, reason, risk, and review trigger.
 3. Conduct a time-boxed Ashbi Design dogfood period and compare task completion, communication, billing, migration accuracy, reliability, support burden, and user satisfaction.
-4. Retire incumbent apps one workflow at a time only after the corresponding exit gate passes; retain export/read-only fallback for the approved transition window.
+4. Before retiring any provider-backed incumbent workflow, complete #381: name the credential-key owner, validate rotation and emergency recovery, and retain the drill evidence.
+5. Retire incumbent apps one workflow at a time only after the corresponding exit gate passes; retain export/read-only fallback for the approved transition window.
 
 Exit: product, operations, finance, privacy/legal, and affected users approve the supported replacement scope; no core system is retired based only on code or local tests.
 
