@@ -433,11 +433,8 @@ export default async function authRoutes(fastify) {
         if (env.isProduction) {
           return reply.status(503).send({ error: 'Email service not configured. Please contact support to reset your password.' });
         } else {
-          // Dev fallback: surface the link in the server log so the developer
-          // can complete the flow without a configured email provider. The
-          // token is single-use, expires in 24h, and is hashed at rest, so
-          // logging it locally is acceptable as a dev-only affordance.
-          logger.info({ resetLink }, '[auth] Dev mode — password reset link (do not use in production)');
+          // Authentication action links are credentials. Never write them to logs;
+          // local testing must use an approved sandbox email provider.
         }
       }
 
@@ -565,9 +562,8 @@ export default async function authRoutes(fastify) {
       }
     } else {
       logger.warn('[auth] Mailgun not configured — invitation email not sent');
-      // Dev fallback: same caveat as the password reset link — single-use,
-      // 7-day expiry, hashed at rest, dev-only.
-      logger.info({ inviteLink }, '[auth] Dev mode — client invitation link (do not use in production)');
+      // The authenticated admin response below is the only non-email recovery
+      // path. Never copy the invitation credential into application logs.
     }
 
     return {
