@@ -14,6 +14,7 @@ const patterns = [
   ['AWS access key', /AKIA[0-9A-Z]{16}/g],
   ['Discord webhook', /https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\/\d+\/[A-Za-z0-9._-]{20,}/g],
   ['JSON login password', /"password"\s*:\s*"(?=[^"]{8,}")(?=[^"]*[A-Za-z])(?=[^"]*[0-9])(?=[^"]*[!@#])[^"]+"/g, placeholder],
+  ['documented login credential', /\bLogin as [^\r\n]{1,120} with:\s*(?=\S{8,})(?=[^\r\n]*[A-Za-z])(?=[^\r\n]*[0-9])(?=[^\r\n]*[!@#$%^&*])[^\s`\r\n]+/gi, placeholder],
 ];
 
 let bad = false;
