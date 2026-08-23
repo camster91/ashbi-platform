@@ -29,6 +29,7 @@ vi.mock('../lib/api', () => ({
     getWPFleetStatus: vi.fn(),
     postWPFleetDigest: vi.fn(),
     registerWPSite: vi.fn(),
+    updateWPSiteMagicLoginUser: vi.fn(),
     getWPBackups: vi.fn(),
     getWPReports: vi.fn(),
     getWPAlerts: vi.fn(),
@@ -173,6 +174,45 @@ describe('WPSites row buttons (PR-E: hub-ui-buttons-wire)', () => {
     // Defense in depth: opener / referer leak protection.
     expect(winFeatures).toContain('noopener');
     expect(winFeatures).toContain('noreferrer');
+  });
+
+  it('configures a missing administrator ID, then retries magic login with that site target', async () => {
+    const unconfigured = { ...SAMPLE_SITE, magicLoginUserId: null };
+    api.listWPSites
+      .mockResolvedValueOnce([unconfigured])
+      .mockResolvedValue([SAMPLE_SITE]);
+    api.updateWPSiteMagicLoginUser.mockResolvedValue({ ...SAMPLE_SITE });
+    api.getWPFleetStatus.mockResolvedValue(SAMPLE_FLEET);
+    api.postWPFleetDigest.mockResolvedValue({});
+    api.getWPFleetOps.mockResolvedValue({ ops: [] });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: 0, gcTime: 0, refetchOnWindowFocus: false }, mutations: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter><WPSites /></BrowserRouter>
+      </QueryClientProvider>
+    );
+
+    fireEvent.click(await screen.findByTestId('magic-login-button'));
+    fireEvent.change(screen.getByLabelText('WordPress administrator user ID'), { target: { value: '12' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save administrator' }));
+
+    await waitFor(() => expect(api.updateWPSiteMagicLoginUser).toHaveBeenCalledWith('site-42', { magicLoginUserId: 12 }));
+    await waitFor(() => expect(screen.queryByText('Configure WordPress administrator')).not.toBeInTheDocument());
+
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ results: [{ siteUrl: 'https://example.com', url: 'https://example.com/wp-login.php?ashbi_magic=retry' }] })
+    });
+    fireEvent.click(await screen.findByTestId('magic-login-button'));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ targetSites: ['site-42'] });
+    await waitFor(() => expect(windowOpenMock).toHaveBeenCalledWith(
+      'https://example.com/wp-login.php?ashbi_magic=retry', '_blank', 'noopener,noreferrer'
+    ));
   });
 
   it('Delete button DELETEs /api/wp-bridge/<siteId> via path param (not query string)', async () => {

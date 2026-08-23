@@ -388,7 +388,7 @@ export default async function wpBridgeRoutes(fastify) {
     const { filePath, find, replace, targetSites, targetAll, dryRun } = request.body;
     let sites;
     try {
-      sites = await resolveTargetSites({ targetAll, targetSites });
+      sites = await resolveTargetSites({ targetAll, targetSites, prismaClient: request.prisma });
     } catch (err) {
       if (request.log && request.log.error) {
         request.log.error({ err }, '[fleet/file/patch] resolveTargetSites failed');
@@ -406,7 +406,8 @@ export default async function wpBridgeRoutes(fastify) {
         endpoint: 'file/patch',
         createdBy: request.user.id,
         dryRun: !!dryRun,
-        timeoutMs: PER_SITE_TIMEOUT_MS
+        timeoutMs: PER_SITE_TIMEOUT_MS,
+        prismaClient: request.prisma
       });
       return result;
     } catch (err) {
@@ -427,7 +428,7 @@ export default async function wpBridgeRoutes(fastify) {
     const { cmd, targetSites, targetAll } = request.body;
     let sites;
     try {
-      sites = await resolveTargetSites({ targetAll, targetSites });
+      sites = await resolveTargetSites({ targetAll, targetSites, prismaClient: request.prisma });
     } catch (err) {
       if (request.log && request.log.error) {
         request.log.error({ err }, '[fleet/command] resolveTargetSites failed');
@@ -444,7 +445,8 @@ export default async function wpBridgeRoutes(fastify) {
         targetSites: sites,
         endpoint: 'command',
         createdBy: request.user.id,
-        timeoutMs: PER_SITE_TIMEOUT_MS
+        timeoutMs: PER_SITE_TIMEOUT_MS,
+        prismaClient: request.prisma
       });
       return result;
     } catch (err) {
@@ -470,7 +472,7 @@ export default async function wpBridgeRoutes(fastify) {
     }
     let sites;
     try {
-      sites = await resolveTargetSites({ targetAll, targetSites });
+      sites = await resolveTargetSites({ targetAll, targetSites, prismaClient: request.prisma });
     } catch (err) {
       if (request.log && request.log.error) {
         request.log.error({ err }, '[fleet/option/set] resolveTargetSites failed');
@@ -487,7 +489,8 @@ export default async function wpBridgeRoutes(fastify) {
         targetSites: sites,
         endpoint: 'option/set',
         createdBy: request.user.id,
-        timeoutMs: PER_SITE_TIMEOUT_MS
+        timeoutMs: PER_SITE_TIMEOUT_MS,
+        prismaClient: request.prisma
       });
       return result;
     } catch (err) {
@@ -517,7 +520,7 @@ export default async function wpBridgeRoutes(fastify) {
     const { targetSites, targetAll } = request.body;
     let sites;
     try {
-      sites = await resolveTargetSites({ targetAll, targetSites });
+      sites = await resolveTargetSites({ targetAll, targetSites, prismaClient: request.prisma });
     } catch (err) {
       if (request.log && request.log.error) {
         request.log.error({ err }, '[fleet/magic-login] resolveTargetSites failed');
@@ -545,7 +548,8 @@ export default async function wpBridgeRoutes(fastify) {
         targetSites: sites,
         endpoint: 'magic-login',
         createdBy: request.user.id,
-        timeoutMs: PER_SITE_TIMEOUT_MS
+        timeoutMs: PER_SITE_TIMEOUT_MS,
+        prismaClient: request.prisma
       });
       await Promise.all(raw.results.map(async (result) => {
         const site = sites.find((candidate) => candidate.url === result.siteUrl);
@@ -567,7 +571,7 @@ export default async function wpBridgeRoutes(fastify) {
           status: issued ? 'issued' : 'rejected',
           reason: issued ? null : (result.error || 'plugin_response_invalid'),
           tokenHash
-        });
+        }, { prismaClient: request.prisma });
       }));
       return {
         opId: raw.opId,
@@ -593,7 +597,7 @@ export default async function wpBridgeRoutes(fastify) {
   }, async (request, reply) => {
     const { limit, op_type: opType } = request.query;
     try {
-      const ops = await listFleetOps({ limit, opType });
+      const ops = await listFleetOps({ limit, opType, prismaClient: request.prisma });
       return { ops };
     } catch (err) {
       if (request.log && request.log.error) {
@@ -633,7 +637,7 @@ export default async function wpBridgeRoutes(fastify) {
         siteUrl: siteUrl || null,
         status: status || null,
         limit: cap
-      });
+      }, { prismaClient: request.prisma });
       return { entries, count: entries.length, limit: cap };
     } catch (err) {
       if (request.log && request.log.error) {
@@ -682,7 +686,7 @@ export default async function wpBridgeRoutes(fastify) {
 
     let site;
     try {
-      site = await findMagicLoginSite({ siteId, siteUrl });
+      site = await findMagicLoginSite({ siteId, siteUrl }, { prismaClient: request.prisma });
     } catch (err) {
       if (request.log && request.log.error) {
         request.log.error({ err }, '[magic-login/revoke] resolve failed');
@@ -694,7 +698,7 @@ export default async function wpBridgeRoutes(fastify) {
     // Per-fleet rate limit (5/hr default). Revocations are lightweight but
     // we still cap the volume so an admin hot-keying the kill-switch
     // doesn't drown the plugin endpoint.
-    const rl = await checkMagicLoginRateLimit({ siteId: site.id });
+    const rl = await checkMagicLoginRateLimit({ siteId: site.id }, { prismaClient: request.prisma });
     if (!rl.allowed) {
       reply.header('Retry-After', String(rl.retryAfterSeconds));
       return reply.status(429).send({
@@ -710,7 +714,8 @@ export default async function wpBridgeRoutes(fastify) {
         targetSites: [site],
         endpoint: 'magic-login/revoke',
         createdBy: request.user.id,
-        timeoutMs: PER_SITE_TIMEOUT_MS
+        timeoutMs: PER_SITE_TIMEOUT_MS,
+        prismaClient: request.prisma
       });
       const result = raw.results && raw.results[0];
       const pluginResponse = result && result.output && result.output.body;
@@ -724,7 +729,7 @@ export default async function wpBridgeRoutes(fastify) {
         status: 'revoked',
         reason: 'manual_revoke',
         tokenHash: callerHash
-      });
+      }, { prismaClient: request.prisma });
 
       return {
         ok,

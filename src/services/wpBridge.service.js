@@ -50,7 +50,7 @@ export async function recordMagicLoginEvent({
   status,
   reason = null,
   tokenHash = null
-} = {}) {
+} = {}, { prismaClient = prisma } = {}) {
   if (!siteUrl || typeof siteUrl !== 'string') {
     throw new TypeError('recordMagicLoginEvent: siteUrl is required');
   }
@@ -59,10 +59,10 @@ export async function recordMagicLoginEvent({
     throw new TypeError(`recordMagicLoginEvent: status must be one of ${allowed.join(', ')}`);
   }
 
-  return prisma.wPMagicLoginLog.create({
+  return prismaClient.wPMagicLoginLog.create({
     data: {
       siteId,
-      siteUrl: site.url,
+      siteUrl: canonicalSiteUrl(siteUrl),
       userId: Number.isFinite(userId) ? userId : null,
       hubUserId: hubUserId || null,
       ip: ip || '0.0.0.0',
@@ -77,9 +77,9 @@ export async function recordMagicLoginEvent({
  * Read the magic-login audit log. Filterable by siteId and/or status.
  * Returns at most `limit` rows (default 100, max 500) ordered by ts desc.
  */
-export async function getMagicLoginLog({ siteId = null, siteUrl = null, status = null, limit = 100 } = {}) {
+export async function getMagicLoginLog({ siteId = null, siteUrl = null, status = null, limit = 100 } = {}, { prismaClient = prisma } = {}) {
   const cap = Math.min(Math.max(1, Number(limit) || 100), MAGIC_LOGIN_AUDIT_MAX);
-  return prisma.wPMagicLoginLog.findMany({
+  return prismaClient.wPMagicLoginLog.findMany({
     where: {
       ...(siteId ? { siteId } : {}),
       ...(siteUrl ? { siteUrl } : {}),
@@ -100,12 +100,12 @@ export async function getMagicLoginLog({ siteId = null, siteUrl = null, status =
  * is responsible for translating `!allowed` into a 429 with the
  * Retry-After header.
  */
-export async function checkMagicLoginRateLimit({ siteId, limit = MAGIC_LOGIN_RATE_LIMIT_DEFAULT, now = new Date() } = {}) {
+export async function checkMagicLoginRateLimit({ siteId, limit = MAGIC_LOGIN_RATE_LIMIT_DEFAULT, now = new Date() } = {}, { prismaClient = prisma } = {}) {
   if (!siteId) {
     throw new TypeError('checkMagicLoginRateLimit: siteId is required');
   }
   const hourAgo = new Date(now.getTime() - 60 * 60 * 1000);
-  const count = await prisma.wPMagicLoginLog.count({
+  const count = await prismaClient.wPMagicLoginLog.count({
     where: {
       siteId,
       status: 'issued',
@@ -124,12 +124,12 @@ export async function checkMagicLoginRateLimit({ siteId, limit = MAGIC_LOGIN_RAT
  * Look up a WPSite by id OR canonical URL. Used by the magic-login revoke
  * route which accepts either siteId or siteUrl.
  */
-export async function findMagicLoginSite({ siteId = null, siteUrl = null } = {}) {
+export async function findMagicLoginSite({ siteId = null, siteUrl = null } = {}, { prismaClient = prisma } = {}) {
   if (siteId) {
-    return prisma.wPSite.findUnique({ where: { id: siteId } });
+    return prismaClient.wPSite.findUnique({ where: { id: siteId } });
   }
   if (siteUrl) {
-    return prisma.wPSite.findFirst({ where: { url: siteUrl } });
+    return prismaClient.wPSite.findFirst({ where: { url: canonicalSiteUrl(siteUrl) } });
   }
   return null;
 }

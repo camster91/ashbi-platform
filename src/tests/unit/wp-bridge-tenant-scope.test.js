@@ -2,6 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createScopedPrisma } from '../../utils/prisma-tenant-proxy.js';
 import { tenancyMiddleware } from '../../middleware/tenancy.js';
+import { executeFleetOp, listFleetOps, resolveTargetSites } from '../../services/fleetOps.service.js';
+import {
+  checkMagicLoginRateLimit,
+  findMagicLoginSite,
+  getMagicLoginLog,
+  recordMagicLoginEvent
+} from '../../services/wpBridge.service.js';
 
 const MODELS = ['wPSite', 'wPBackup', 'wPReport', 'wPAlert', 'wPFleetOp', 'wPMagicLoginLog', 'supportHourEntry'];
 
@@ -48,4 +55,74 @@ test('human bridge reads use JWT tenancy while only signed plugin writes are exe
   await tenancyMiddleware(untrustedFleetWrite, reply);
   assert.equal(reply.statusCode, 403);
   assert.equal(reply.payload.code, 'ORG_CONTEXT_REQUIRED');
+});
+
+test('fleet target selection and audit rows use the request-scoped Prisma client', async () => {
+  const calls = { sites: [], creates: [], updates: [], lists: [] };
+  const scoped = createScopedPrisma({
+    wPSite: {
+      findMany: async (args) => {
+        calls.sites.push(args);
+        return [{ id: 'site-a', url: 'https://a.example', name: 'A', magicLoginUserId: 7, bridgeSecretEncrypted: null }];
+      }
+    },
+    wPFleetOp: {
+      create: async (args) => { calls.creates.push(args); return { id: 'fleet-a' }; },
+      update: async (args) => { calls.updates.push(args); return { id: 'fleet-a' }; },
+      findMany: async (args) => { calls.lists.push(args); return []; }
+    }
+  }, 'org-a');
+
+  const sites = await resolveTargetSites({ targetAll: true, prismaClient: scoped });
+  assert.equal(sites.length, 1);
+  assert.equal(calls.sites[0].where.organizationId, 'org-a');
+
+  await executeFleetOp({
+    opType: 'command', payload: { cmd: 'wp option get home' }, targetSites: [], endpoint: 'command', createdBy: 'admin-a', prismaClient: scoped
+  });
+  assert.equal(calls.creates[0].data.organizationId, 'org-a');
+  assert.equal(calls.updates[0].where.organizationId, 'org-a');
+
+  await listFleetOps({ prismaClient: scoped });
+  assert.equal(calls.lists[0].where.organizationId, 'org-a');
+});
+
+test('magic-login site resolution, rate limits, and audit logs remain tenant-scoped', async () => {
+  const calls = { site: [], logCreate: [], logRead: [], logCount: [] };
+  const scoped = createScopedPrisma({
+    wPSite: {
+      findUnique: async (args) => { calls.site.push(args); return { id: 'site-a', url: 'https://a.example' }; }
+    },
+    wPMagicLoginLog: {
+      create: async (args) => { calls.logCreate.push(args); return { id: 'log-a' }; },
+      findMany: async (args) => { calls.logRead.push(args); return []; },
+      count: async (args) => { calls.logCount.push(args); return 0; }
+    }
+  }, 'org-a');
+
+  await findMagicLoginSite({ siteId: 'site-a' }, { prismaClient: scoped });
+  await recordMagicLoginEvent({ siteId: 'site-a', siteUrl: 'https://a.example', status: 'issued' }, { prismaClient: scoped });
+  await getMagicLoginLog({}, { prismaClient: scoped });
+  await checkMagicLoginRateLimit({ siteId: 'site-a' }, { prismaClient: scoped });
+
+  assert.equal(calls.site[0].where.organizationId, 'org-a');
+  assert.equal(calls.logCreate[0].data.organizationId, 'org-a');
+  assert.equal(calls.logRead[0].where.organizationId, 'org-a');
+  assert.equal(calls.logCount[0].where.organizationId, 'org-a');
+});
+
+test('every human fleet route passes request-scoped Prisma to its service calls', async () => {
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const routePath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'routes', 'wp-bridge.routes.js');
+  const source = fs.readFileSync(routePath, 'utf8');
+
+  const targetResolutionCalls = source.match(/resolveTargetSites\(\{ targetAll, targetSites, prismaClient: request\.prisma \}\)/g) || [];
+  assert.equal(targetResolutionCalls.length, 4, 'file patch, command, option set, and magic login must scope target selection');
+
+  const fleetOperationCalls = source.match(/executeFleetOp\(\{[\s\S]*?prismaClient: request\.prisma[\s\S]*?\}\);/g) || [];
+  assert.equal(fleetOperationCalls.length, 5, 'every fleet operation, including magic-login revoke, must scope its audit writes');
+  assert.match(source, /listFleetOps\(\{ limit, opType, prismaClient: request\.prisma \}\)/);
+  assert.match(source, /getMagicLoginLog\([\s\S]{0,300}?prismaClient: request\.prisma/);
 });

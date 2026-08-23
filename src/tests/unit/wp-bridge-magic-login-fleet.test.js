@@ -1,8 +1,9 @@
 // Integration tests for the WP-bridge magic-login fleet endpoint (Plan 8).
 //
 // Endpoint: POST /api/wp-bridge/fleet/magic-login
-//   Body: { user_id, targetSites | targetAll }
-//   Plugin-side: POST {siteUrl}/wp-json/ashbi/v1/magic-login with { user_id }
+//   Body: { targetSites | targetAll }
+//   Plugin-side: POST {siteUrl}/wp-json/ashbi/v1/magic-login with that
+//   site's stored { user_id } configuration.
 //   Plugin response shape: { url: "https://..." } on success
 //   Hub-side response shape: { opId, total, succeeded, failed, results: [{ siteUrl, url? | error? }] }
 //
@@ -188,7 +189,7 @@ function makeStubPrisma({ sites = [], ops = [] } = {}) {
           const set = new Set(where.url.in);
           rows = sites.filter((s) => set.has(s.url));
         }
-        return rows.map((s) => ({ id: s.id, url: s.url, name: s.name }));
+        return rows.map((s) => ({ id: s.id, url: s.url, name: s.name, magicLoginUserId: s.magicLoginUserId }));
       }
     },
     wPFleetOp: {
@@ -245,23 +246,27 @@ async function bootMagicLoginServer({ stubPrisma, fetchImpl }) {
     } catch { return reply.status(401).send({ error: 'Unauthorized' }); }
   });
 
-  // Inline magic-login route handler — mirrors the production handler in
-  // src/routes/wp-bridge.routes.js without booting the daily digest cron.
-  async function executeMagicLoginFleet({ userId, targetSites, targetAll, createdBy }) {
+  // Inline magic-login route handler — mirrors the production handler's
+  // per-site administrator lookup without booting the daily digest cron.
+  async function executeMagicLoginFleet({ targetSites, targetAll, createdBy }) {
     const sites = await stubPrisma.wPSite.findMany({
       where: targetAll ? undefined : { url: { in: targetSites } },
-      select: { id: true, url: true, name: true }
+      select: { id: true, url: true, name: true, magicLoginUserId: true }
     });
     if (sites.length === 0) return { statusCode: 404, body: { error: 'No matching sites found' } };
+    const unconfigured = sites.filter((site) => !Number.isInteger(site.magicLoginUserId) || site.magicLoginUserId < 1);
+    if (unconfigured.length > 0) {
+      return { statusCode: 409, body: { error: 'Set a WordPress administrator ID for every selected site before issuing magic login.' } };
+    }
 
     const opId = (await stubPrisma.wPFleetOp.create({
-      data: { opType: 'magic_login', payload: { user_id: userId }, targetCount: sites.length, createdBy }
+      data: { opType: 'magic_login', payload: { mode: 'per_site_magic_login_user' }, targetCount: sites.length, createdBy }
     })).id;
 
     const fan = await executeFanOutPure({
       targetSites: sites,
       endpoint: 'magic-login',
-      payload: { user_id: userId },
+      payloadForSite: (site) => ({ user_id: site.magicLoginUserId }),
       secret: process.env.WP_BRIDGE_SECRET,
       fetchImpl
     });
@@ -286,15 +291,11 @@ async function bootMagicLoginServer({ stubPrisma, fetchImpl }) {
   fastify.post('/api/wp-bridge/fleet/magic-login', {
     onRequest: [fastify.adminOnly]
   }, async (request, reply) => {
-    const { user_id: userId, targetSites, targetAll } = request.body || {};
-    if (typeof userId !== 'number' || !Number.isInteger(userId) || userId < 1) {
-      return reply.status(400).send({ error: 'user_id is required (positive integer)' });
-    }
+    const { targetSites, targetAll } = request.body || {};
     if (targetAll !== true && (!Array.isArray(targetSites) || targetSites.length === 0)) {
       return reply.status(400).send({ error: 'Either targetAll=true or a non-empty targetSites[] is required' });
     }
     const out = await executeMagicLoginFleet({
-      userId,
       targetSites,
       targetAll: targetAll === true,
       createdBy: request.user.id
@@ -373,9 +374,9 @@ describe('POST /api/wp-bridge/fleet/magic-login — Fastify integration', () => 
     ops = [];
     stub = makeStubPrisma({
       sites: [
-        { id: 's1', url: 'https://a.com', name: 'A' },
-        { id: 's2', url: 'https://b.com', name: 'B' },
-        { id: 's3', url: 'https://c.com', name: 'C' }
+        { id: 's1', url: 'https://a.com', name: 'A', magicLoginUserId: 11 },
+        { id: 's2', url: 'https://b.com', name: 'B', magicLoginUserId: 22 },
+        { id: 's3', url: 'https://c.com', name: 'C', magicLoginUserId: 33 }
       ],
       ops
     });
@@ -409,7 +410,6 @@ describe('POST /api/wp-bridge/fleet/magic-login — Fastify integration', () => 
   test('3-site fan-out: 2 succeed, 1 fails -> success_count=2 failure_count=1', async () => {
     const token = makeAdminToken(app);
     const res = await postJson(port, '/api/wp-bridge/fleet/magic-login', {
-      user_id: 1,
       targetSites: ['https://a.com', 'https://b.com', 'https://c.com']
     }, { authorization: `Bearer ${token}` });
     assert.equal(res.status, 200);
@@ -435,7 +435,10 @@ describe('POST /api/wp-bridge/fleet/magic-login — Fastify integration', () => 
       assert.match(call.init.headers['X-Ashbi-Timestamp'], /^\d+$/);
       // Per-site body must be exactly { user_id, _timestamp } — no target metadata.
       const parsed = JSON.parse(call.init.body);
-      assert.equal(parsed.user_id, 1);
+      const siteUrl = call.url.replace('/wp-json/ashbi/v1/magic-login', '');
+      assert.equal(parsed.user_id, new Map([
+        ['https://a.com', 11], ['https://b.com', 22], ['https://c.com', 33]
+      ]).get(siteUrl));
       assert.equal(parsed.targetAll, undefined);
       assert.equal(parsed.targetSites, undefined);
       assert.equal(typeof parsed._timestamp, 'number');
@@ -445,7 +448,7 @@ describe('POST /api/wp-bridge/fleet/magic-login — Fastify integration', () => 
   test('audit row persisted with op_type="magic_login" and final counts', async () => {
     const token = makeAdminToken(app);
     const res = await postJson(port, '/api/wp-bridge/fleet/magic-login', {
-      user_id: 1, targetAll: true
+      targetAll: true
     }, { authorization: `Bearer ${token}` });
     assert.equal(res.status, 200);
 
@@ -455,14 +458,14 @@ describe('POST /api/wp-bridge/fleet/magic-login — Fastify integration', () => 
     assert.equal(ops[0].successCount, 2);
     assert.equal(ops[0].failureCount, 1);
     assert.equal(ops[0].createdBy, 'admin-1');
-    assert.equal(ops[0].payload.user_id, 1);
+    assert.equal(ops[0].payload.mode, 'per_site_magic_login_user');
     assert.ok(ops[0].completedAt instanceof Date);
   });
 
   test('targetAll=true fans out to every site in wPSite', async () => {
     const token = makeAdminToken(app);
     const res = await postJson(port, '/api/wp-bridge/fleet/magic-login', {
-      user_id: 1, targetAll: true
+      targetAll: true
     }, { authorization: `Bearer ${token}` });
     assert.equal(res.status, 200);
     const body = await res.json();
@@ -479,7 +482,6 @@ describe('POST /api/wp-bridge/fleet/magic-login — Fastify integration', () => 
   test('targetSites=[a,c] filters out b — only 2 calls made', async () => {
     const token = makeAdminToken(app);
     const res = await postJson(port, '/api/wp-bridge/fleet/magic-login', {
-      user_id: 1,
       targetSites: ['https://a.com', 'https://c.com']
     }, { authorization: `Bearer ${token}` });
     assert.equal(res.status, 200);
@@ -496,7 +498,7 @@ describe('POST /api/wp-bridge/fleet/magic-login — Fastify integration', () => 
   test('HMAC on every outgoing request verifies with the shared secret', async () => {
     const token = makeAdminToken(app);
     const res = await postJson(port, '/api/wp-bridge/fleet/magic-login', {
-      user_id: 1, targetSites: ['https://a.com', 'https://b.com']
+      targetSites: ['https://a.com', 'https://b.com']
     }, { authorization: `Bearer ${token}` });
     assert.equal(res.status, 200);
     for (const call of fetchCalls) {
@@ -530,7 +532,7 @@ describe('POST /api/wp-bridge/fleet/magic-login — Fastify integration', () => 
     const token = makeAdminToken(app);
     const start = Date.now();
     const res = await postJson(port, '/api/wp-bridge/fleet/magic-login', {
-      user_id: 1, targetAll: true
+      targetAll: true
     }, { authorization: `Bearer ${token}` });
     const elapsed = Date.now() - start;
     assert.equal(res.status, 200);
@@ -543,7 +545,7 @@ describe('POST /api/wp-bridge/fleet/magic-login — Fastify integration', () => 
 
   test('auth: missing JWT -> 401', async () => {
     const res = await postJson(port, '/api/wp-bridge/fleet/magic-login', {
-      user_id: 1, targetSites: ['https://a.com']
+      targetSites: ['https://a.com']
     });
     assert.equal(res.status, 401);
   });
@@ -551,23 +553,24 @@ describe('POST /api/wp-bridge/fleet/magic-login — Fastify integration', () => 
   test('auth: non-admin JWT -> 403', async () => {
     const token = makeNonAdminToken(app);
     const res = await postJson(port, '/api/wp-bridge/fleet/magic-login', {
-      user_id: 1, targetSites: ['https://a.com']
+      targetSites: ['https://a.com']
     }, { authorization: `Bearer ${token}` });
     assert.equal(res.status, 403);
   });
 
-  test('validation: missing user_id -> 400', async () => {
+  test('validation: a selected site without a configured administrator -> 409', async () => {
     const token = makeAdminToken(app);
+    stub.wPSite.findMany = async () => [{ id: 's1', url: 'https://a.com', name: 'A', magicLoginUserId: null }];
     const res = await postJson(port, '/api/wp-bridge/fleet/magic-login', {
       targetSites: ['https://a.com']
     }, { authorization: `Bearer ${token}` });
-    assert.equal(res.status, 400);
+    assert.equal(res.status, 409);
   });
 
   test('validation: empty targetSites AND no targetAll -> 400', async () => {
     const token = makeAdminToken(app);
     const res = await postJson(port, '/api/wp-bridge/fleet/magic-login', {
-      user_id: 1
+      targetAll: false
     }, { authorization: `Bearer ${token}` });
     assert.equal(res.status, 400);
   });
@@ -586,7 +589,7 @@ describe('POST /api/wp-bridge/fleet/magic-login — Fastify integration', () => 
 
     const token = makeAdminToken(app);
     const res = await postJson(port, '/api/wp-bridge/fleet/magic-login', {
-      user_id: 1, targetAll: true
+      targetAll: true
     }, { authorization: `Bearer ${token}` });
     assert.equal(res.status, 200);
     const body = await res.json();

@@ -236,16 +236,16 @@ export async function executeFanOutPure({
  * - targetSites=[id-or-url, ...]: filter to matching IDs or URLs in wPSite
  * - neither: returns [] (caller should reject before calling executeFleetOp)
  */
-export async function resolveTargetSites({ targetAll, targetSites } = {}) {
+export async function resolveTargetSites({ targetAll, targetSites, prismaClient = prisma } = {}) {
   const select = { id: true, url: true, name: true, magicLoginUserId: true, bridgeSecretEncrypted: true };
   let sites;
   if (targetAll === true) {
-    sites = await prisma.wPSite.findMany({
+    sites = await prismaClient.wPSite.findMany({
       select,
       orderBy: { createdAt: 'asc' }
     });
   } else if (Array.isArray(targetSites) && targetSites.length > 0) {
-    sites = await prisma.wPSite.findMany({
+    sites = await prismaClient.wPSite.findMany({
       where: {
         OR: [
           { id: { in: targetSites } },
@@ -276,8 +276,8 @@ export async function resolveTargetSites({ targetAll, targetSites } = {}) {
  * Insert a new fleet-ops audit row before fan-out starts. Returns the new
  * row's id (cuid).
  */
-export async function recordFleetOp({ opType, payload, targetCount, createdBy }) {
-  const row = await prisma.wPFleetOp.create({
+export async function recordFleetOp({ opType, payload, targetCount, createdBy, prismaClient = prisma }) {
+  const row = await prismaClient.wPFleetOp.create({
     data: {
       opType,
       payload,
@@ -292,8 +292,8 @@ export async function recordFleetOp({ opType, payload, targetCount, createdBy })
  * Mark an op as completed with the final counts. Idempotent: a second call
  * just overwrites.
  */
-export async function completeFleetOp({ opId, successCount, failureCount }) {
-  return prisma.wPFleetOp.update({
+export async function completeFleetOp({ opId, successCount, failureCount, prismaClient = prisma }) {
+  return prismaClient.wPFleetOp.update({
     where: { id: opId },
     data: {
       successCount,
@@ -307,11 +307,11 @@ export async function completeFleetOp({ opId, successCount, failureCount }) {
  * List recent fleet ops, newest first. Used by GET /api/wp-bridge/fleet/ops
  * for the WPSites "Fleet Ops history" tab.
  */
-export async function listFleetOps({ limit = 50, opType } = {}) {
+export async function listFleetOps({ limit = 50, opType, prismaClient = prisma } = {}) {
   const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 500);
   const where = {};
   if (opType) where.opType = opType;
-  return prisma.wPFleetOp.findMany({
+  return prismaClient.wPFleetOp.findMany({
     where,
     orderBy: { createdAt: 'desc' },
     take: safeLimit
@@ -333,7 +333,8 @@ export async function executeFleetOp({
   createdBy,
   fetchImpl,
   dryRun = false,
-  timeoutMs = PER_SITE_TIMEOUT_MS
+  timeoutMs = PER_SITE_TIMEOUT_MS,
+  prismaClient = prisma
 }) {
   const targetArr = Array.isArray(targetSites) ? targetSites : [];
   // Record the row up front so an empty target list still leaves an audit trail.
@@ -341,7 +342,8 @@ export async function executeFleetOp({
     opType,
     payload,
     targetCount: targetArr.length,
-    createdBy
+    createdBy,
+    prismaClient
   });
 
   const fan = await executeFanOutPure({
@@ -357,7 +359,8 @@ export async function executeFleetOp({
   await completeFleetOp({
     opId,
     successCount: fan.succeeded,
-    failureCount: fan.failed
+    failureCount: fan.failed,
+    prismaClient
   });
 
   return {
