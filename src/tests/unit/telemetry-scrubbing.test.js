@@ -38,3 +38,17 @@ test('tracing is opt-in and never exits ahead of application shutdown', () => {
   assert.match(tracing, /process\.env\.APP_REVISION/);
   assert.match(tracing, /ATTR_DEPLOYMENT_ENVIRONMENT_NAME/);
 });
+
+
+test('authentication action links are never written to application logs', () => {
+  const authRoutes = fs.readFileSync(new URL('../../routes/auth.routes.js', import.meta.url), 'utf8');
+  const logCalls = authRoutes.match(/(?:console|logger)\.(?:log|info|warn|error)\([\s\S]*?\);/g) || [];
+
+  for (const logCall of logCalls) {
+    assert.doesNotMatch(
+      logCall,
+      /\b(?:resetLink|inviteLink|resetToken|token)\b|\?token=/,
+      `Authentication credential found in log call: ${logCall}`
+    );
+  }
+});
