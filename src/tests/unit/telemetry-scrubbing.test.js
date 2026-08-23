@@ -46,7 +46,7 @@ test('authentication action links are never written to application logs', () => 
   for (const logCall of logCalls) {
     assert.doesNotMatch(
       logCall,
-      /\b(?:resetLink|inviteLink|resetToken)\b/,
+      /\b(?:resetLink|inviteLink|resetToken|token)\b|\?token=/,
       `Authentication credential found in log call: ${logCall}`
     );
   }
