@@ -6,7 +6,7 @@ import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import env from '../config/env.js';
 import logger from '../utils/logger.js';
-import { isCurrentUserSession, revokeUserSessions, sessionCookieMaxAge, signUserSession } from '../auth/session.js';
+import { isCurrentUserSession, revokeUserSessions, sessionCookieMaxAge, sessionCookieOptions, signUserSession } from '../auth/session.js';
 import {
   validateBody,
   schemas,
@@ -66,11 +66,8 @@ export default async function authRoutes(fastify) {
 
       reply
         .setCookie('token', token, {
-          path: '/',
-          httpOnly: true,
-          secure: env.isProduction,
-          sameSite: env.isProduction ? 'strict' : 'lax',
-          maxAge: sessionCookieMaxAge()
+          ...sessionCookieOptions(),
+          maxAge: sessionCookieMaxAge(),
         })
         .send({ user });
     } catch (err) {
@@ -95,11 +92,7 @@ export default async function authRoutes(fastify) {
       // Cookie-clear options must match the cookie-set options used in /login
       // (name+path+secure+sameSite). If they diverge, the browser keeps the
       // session cookie and the user appears to remain signed in.
-      .clearCookie('token', {
-        path: '/',
-        secure: env.isProduction,
-        sameSite: env.isProduction ? 'strict' : 'lax',
-      })
+      .clearCookie('token', sessionCookieOptions())
       .send({ success: true });
   });
 
@@ -314,12 +307,9 @@ export default async function authRoutes(fastify) {
 
     reply
       .setCookie('token', jwtToken, {
-        path: '/',
-        httpOnly: true,
-        secure: env.isProduction,
-        sameSite: env.isProduction ? 'strict' : 'lax',
-        maxAge: sessionCookieMaxAge()
-      })
+          ...sessionCookieOptions(),
+          maxAge: sessionCookieMaxAge(),
+        })
       .send({
         user: {
           id: user.id,
@@ -362,12 +352,9 @@ export default async function authRoutes(fastify) {
 
     reply
       .setCookie('token', token, {
-        path: '/',
-        httpOnly: true,
-        secure: env.isProduction,
-        sameSite: env.isProduction ? 'strict' : 'lax',
-        maxAge: sessionCookieMaxAge()
-      })
+          ...sessionCookieOptions(),
+          maxAge: sessionCookieMaxAge(),
+        })
       .send({
         user: {
           id: user.id,
