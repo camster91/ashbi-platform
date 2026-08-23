@@ -69,9 +69,9 @@ stale note.
 
 | Symptom | Closed in | How to verify today |
 |---|---|---|
-| `prisma/seed.js` imported the missing `bcryptjs` dep | `0ae6678` (test refactor), originally `97eda8e` | `prisma/seed.js:3` imports `bcrypt`; `package.json` lists `bcrypt ^6.0.0` and no `bcryptjs` |
+| `prisma/seed.js` imported the missing `bcryptjs` dep | `31c72df` (PR #251); regression introduced in `97eda8e` | `prisma/seed.js:3` imports `bcrypt`; `package.json` lists `bcrypt ^6.0.0` and no `bcryptjs` |
 | Dashboard `/api/dashboard/stats` returned 500 (table casing) | `31c72df` (PR #251), broader hardening in `10bd6e0` (PR #238) | `src/routes/dashboard.routes.js:250` uses `FROM "invoices" i`; covered by `src/tests/integration/invoice.test.js` |
-| Clients page always showed 6 hardcoded `ASHBI_DESIGN_CLIENTS` | `409764a` (PR #267), client-CRM work in `8701d37` (PR #246) | `web/src/pages/Clients.jsx:193` returns `Array.isArray(clients) ? clients : []`; no fallback constant is referenced by the render path |
+| Clients page always showed 6 hardcoded `ASHBI_DESIGN_CLIENTS` | `31c72df` (PR #251); unused constant removed in `080866d` | `web/src/pages/Clients.jsx:124` returns `Array.isArray(clients) ? clients : []`; no fallback constant is referenced by the render path |
 
 For the current backlog and known defects, see issue **#290** (tracking)
 and **#291** (shipping plan). Do not add new bug notes to this file —
