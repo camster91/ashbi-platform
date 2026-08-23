@@ -6,7 +6,6 @@ import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import * as resources from '@opentelemetry/resources';
 import * as sc from '@opentelemetry/semantic-conventions';
 import env from './config/env.js';
-import logger from './utils/logger.js';
 
 // SERVICE_ROLE and APP_REVISION are intentionally read directly from
 // process.env: SERVICE_ROLE is a per-process label injected by the
@@ -41,6 +40,10 @@ if (sdk) {
     try {
       await sdk.shutdown();
     } catch (error) {
+      // Import the shared Pino instance only after sdk.start() has registered
+      // its instrumentation, otherwise ESM's eager imports prevent log/trace
+      // correlation from being attached to the application logger.
+      const { default: logger } = await import('./utils/logger.js');
       logger.error({ err: error }, 'Error terminating tracing');
     }
   });
