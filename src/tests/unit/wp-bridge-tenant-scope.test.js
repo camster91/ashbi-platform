@@ -5,6 +5,7 @@ import { tenancyMiddleware } from '../../middleware/tenancy.js';
 import { executeFleetOp, listFleetOps, resolveTargetSites } from '../../services/fleetOps.service.js';
 import {
   checkMagicLoginRateLimit,
+  deleteSite,
   findMagicLoginSite,
   getMagicLoginLog,
   recordMagicLoginEvent
@@ -111,6 +112,24 @@ test('magic-login site resolution, rate limits, and audit logs remain tenant-sco
   assert.equal(calls.logCount[0].where.organizationId, 'org-a');
 });
 
+test('removing a WordPress site uses the request-scoped Prisma client', async () => {
+  const calls = [];
+  const scoped = createScopedPrisma({
+    wPSite: {
+      delete: async (args) => {
+        calls.push(args);
+        return { id: 'site-a' };
+      }
+    }
+  }, 'org-a');
+
+  await deleteSite('site-a', { prismaClient: scoped });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].where.id, 'site-a');
+  assert.equal(calls[0].where.organizationId, 'org-a');
+});
+
 test('every human fleet route passes request-scoped Prisma to its service calls', async () => {
   const fs = await import('node:fs');
   const path = await import('node:path');
@@ -125,4 +144,5 @@ test('every human fleet route passes request-scoped Prisma to its service calls'
   assert.equal(fleetOperationCalls.length, 5, 'every fleet operation, including magic-login revoke, must scope its audit writes');
   assert.match(source, /listFleetOps\(\{ limit, opType, prismaClient: request\.prisma \}\)/);
   assert.match(source, /getMagicLoginLog\([\s\S]{0,300}?prismaClient: request\.prisma/);
+  assert.match(source, /deleteSite\(id, \{ prismaClient: request\.prisma \}\)/);
 });

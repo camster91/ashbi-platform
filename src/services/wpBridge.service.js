@@ -659,8 +659,8 @@ export { verifySecret };
 /**
  * Delete a site
  */
-export async function deleteSite(id) {
-  return prisma.wPSite.delete({ where: { id } });
+export async function deleteSite(id, { prismaClient = prisma } = {}) {
+  return prismaClient.wPSite.delete({ where: { id } });
 }
 
 /**

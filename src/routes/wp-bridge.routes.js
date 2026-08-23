@@ -210,7 +210,7 @@ export default async function wpBridgeRoutes(fastify) {
     onRequest: [fastify.authenticate, fastify.adminOnly]
   }, async (request, reply) => {
     const { id } = request.params;
-    await deleteSite(id);
+    await deleteSite(id, { prismaClient: request.prisma });
     return reply.status(204).send();
   });
 
