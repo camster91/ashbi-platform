@@ -18,7 +18,7 @@ async function sendContractEmail(to, clientName, contractTitle, signUrl) {
     await sendContractSignEmail({ to, clientName, contractTitle, signLink: signUrl });
     return true;
   } catch (err) {
-    logger.error({ err, to, contractTitle }, '[Contract] Email send error');
+    logger.error({ errorName: err?.name, errorCode: err?.code }, '[Contract] Email send error');
     return false;
   }
 }
