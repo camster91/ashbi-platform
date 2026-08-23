@@ -41,7 +41,7 @@ test('tracing is opt-in and never exits ahead of application shutdown', () => {
 
 test('authentication action links are never written to application logs', () => {
   const authRoutes = fs.readFileSync(new URL('../../routes/auth.routes.js', import.meta.url), 'utf8');
-  const logCalls = authRoutes.match(/(?:console|logger)\.(?:log|info|warn|error)\([\s\S]*?\);/g) || [];
+  const logCalls = authRoutes.match(/(?:(?:request|fastify)\.log|console|logger)\.(?:log|info|warn|error)\([\s\S]*?\);/g) || [];
 
   for (const logCall of logCalls) {
     assert.doesNotMatch(
