@@ -217,6 +217,7 @@ model Client {
   wpSites          WPSite[]             @relation("WPSiteClient")
   estimates        Estimate[]
   rateCards        RateCard[]
+  convertedLeads   Lead[]               @relation("LeadConvertedClient")
 
   @@index([status])
   @@index([organizationId])
@@ -563,6 +564,11 @@ model Lead {
   budgetBand           String?
   budgetCurrency       String?
   status               String       @default("NEW")
+  qualificationNotes   String?
+  qualifiedAt          DateTime?
+  convertedClientId    String?
+  convertedClient      Client?      @relation("LeadConvertedClient", fields: [convertedClientId], references: [id], onDelete: SetNull)
+  convertedAt          DateTime?
   source               String?
   medium               String?
   campaign             String?
@@ -582,6 +588,7 @@ model Lead {
   @@index([organizationId, status, createdAt])
   @@index([organizationId, email])
   @@index([accountOwnerId, status])
+  @@index([convertedClientId])
   @@map("leads")
 }
 

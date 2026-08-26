@@ -77,7 +77,10 @@ const DIRECT_PARENT_RELATIONS = {
   notionimportrecord: [{ relation: 'project', field: 'projectId', model: 'project', delegate: 'project', required: true }],
   aibridgeaction: [{ relation: 'user', field: 'userId', model: 'user', delegate: 'user', required: true }],
   onboardingprogress: [{ relation: 'user', field: 'userId', model: 'user', delegate: 'user', required: true }],
-  lead: [{ relation: 'accountOwner', field: 'accountOwnerId', model: 'user', delegate: 'user', required: true }],
+  lead: [
+    { relation: 'accountOwner', field: 'accountOwnerId', model: 'user', delegate: 'user', required: true },
+    { relation: 'convertedClient', field: 'convertedClientId', model: 'client', delegate: 'client' },
+  ],
   leadevent: [{ relation: 'lead', field: 'leadId', model: 'lead', delegate: 'lead', required: true }],
 };
 

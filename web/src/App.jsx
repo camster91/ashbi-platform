@@ -50,6 +50,7 @@ const Invoices = lazy(() => import('./pages/Invoices'));
 const InvoiceDetail = lazy(() => import('./pages/InvoiceDetail'));
 const Expenses = lazy(() => import('./pages/Expenses'));
 const Pipeline = lazy(() => import('./pages/Pipeline'));
+const LeadInbox = lazy(() => import('./pages/LeadInbox'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Credentials = lazy(() => import('./pages/Credentials'));
 const Chat = lazy(() => import('./pages/Chat'));
@@ -216,6 +217,7 @@ function AppRoutes() {
                   <Route path="/invoices/:id" element={<InvoiceDetail />} />
                   <Route path="/expenses" element={<Expenses />} />
                   <Route path="/pipeline" element={<Pipeline />} />
+                  <Route path="/inquiries" element={<LeadInbox />} />
                                                                         <Route path="/estimates" element={<Estimates />} />
                   <Route path="/schedule" element={<Schedule />} />
                   <Route path="/timesheets" element={<Timesheets />} />

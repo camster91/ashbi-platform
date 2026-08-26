@@ -178,6 +178,18 @@ export const api = {
   changePassword: (data) =>
     request('/auth/change-password', { method: 'POST', body: data }),
 
+  // Governed Ashbi.ca inquiry qualification
+  getQualifiedLeads: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/client-acquisition/leads${query ? `?${query}` : ''}`);
+  },
+  getQualifiedLead: (id) =>
+    request(`/client-acquisition/leads/${id}`),
+  updateLeadQualification: (id, data) =>
+    request(`/client-acquisition/leads/${id}/qualification`, { method: 'PATCH', body: data }),
+  convertQualifiedLead: (id) =>
+    request(`/client-acquisition/leads/${id}/convert`, { method: 'POST' }),
+
   // Inbox
   getInbox: (params = {}) => {
     const query = new URLSearchParams(params).toString();

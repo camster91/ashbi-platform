@@ -38,6 +38,8 @@ The Hub implementation uses two intentionally public routes:
 
 The write route remains disabled unless the target organization, internal owner, privacy version, and allowed Ashbi.ca origins are all explicitly configured. The database migration, production identifiers, Ashbi.ca form connection, and controlled live test remain pending.
 
+Authenticated staff use `/inquiries` in the Hub to review the original evidence, record an internal human qualification decision, and convert only a `QUALIFIED` inquiry. Conversion creates or reuses one tenant client based on a case-insensitive contact-email match, links the inquiry to that client, and records a durable event. A transactional claim prevents simultaneous requests from creating duplicate clients. Conversion does not send a message, generate a proposal, or infer project scope.
+
 Minimum accepted fields:
 
 - Name and contact method.
@@ -60,6 +62,8 @@ Controls:
 - Owner notification without automatic prospect messaging.
 - No secret, credential, private client record, or internal note in public responses.
 - An allowed browser origin, matching privacy-notice version, and a silent honeypot path that performs no database write.
+- Staff-only qualification states and notes; converted inquiries cannot be reopened through the qualification route.
+- Deliberate, idempotent inquiry-to-client conversion with tenant-scoped client/contact reuse.
 
 ## Portal boundary
 

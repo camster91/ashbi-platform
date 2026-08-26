@@ -193,6 +193,7 @@ test('public intake route validates and stores one inquiry without returning per
     notification: { create: async () => ({ id: 'notification-1' }) },
   };
   const app = Fastify();
+  app.decorate('authenticate', async () => {});
   t.after(() => app.close());
   app.decorate('prisma', { $transaction: async (operation) => operation(transaction) });
   await app.register(clientAcquisitionRoutes, {
@@ -217,6 +218,7 @@ test('public intake route validates and stores one inquiry without returning per
 
 test('public intake config exposes no tenant or owner identifiers', async (t) => {
   const app = Fastify();
+  app.decorate('authenticate', async () => {});
   t.after(() => app.close());
   await app.register(clientAcquisitionRoutes, {
     prefix: '/api/client-acquisition',
@@ -237,6 +239,7 @@ test('public intake config exposes no tenant or owner identifiers', async (t) =>
 test('public intake fails closed when its tenant configuration is incomplete', async (t) => {
   let transactionCalls = 0;
   const app = Fastify();
+  app.decorate('authenticate', async () => {});
   t.after(() => app.close());
   app.decorate('prisma', { $transaction: async () => { transactionCalls += 1; } });
   await app.register(clientAcquisitionRoutes, {
@@ -262,6 +265,7 @@ test('public intake fails closed when its tenant configuration is incomplete', a
 test('public intake rejects invalid payload, unapproved origin, and stale privacy consent before writing', async (t) => {
   let transactionCalls = 0;
   const app = Fastify();
+  app.decorate('authenticate', async () => {});
   t.after(() => app.close());
   app.decorate('prisma', { $transaction: async () => { transactionCalls += 1; } });
   await app.register(clientAcquisitionRoutes, {
@@ -302,6 +306,7 @@ test('public intake rejects invalid payload, unapproved origin, and stale privac
 test('public intake honeypot accepts silently without storing or echoing the submission', async (t) => {
   let transactionCalls = 0;
   const app = Fastify();
+  app.decorate('authenticate', async () => {});
   t.after(() => app.close());
   app.decorate('prisma', { $transaction: async () => { transactionCalls += 1; } });
   await app.register(clientAcquisitionRoutes, {
@@ -347,6 +352,6 @@ test('the governed intake replaces the duplicate unmatched-email public write pa
 test('lead records and events participate in the Hub tenant isolation policy', () => {
   const proxy = fs.readFileSync(path.join(process.cwd(), 'src', 'utils', 'prisma-tenant-proxy.js'), 'utf8');
   assert.match(proxy, /DIRECT_SCOPED_MODELS[\s\S]*'lead', 'leadevent'/);
-  assert.match(proxy, /lead:\s*\[\{ relation: 'accountOwner',[\s\S]*model: 'user'/);
+  assert.match(proxy, /lead:\s*\[[\s\S]*relation: 'accountOwner',[\s\S]*model: 'user'/);
   assert.match(proxy, /leadevent:\s*\[\{ relation: 'lead',[\s\S]*model: 'lead'/);
 });

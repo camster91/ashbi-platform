@@ -1379,6 +1379,26 @@ export const publicInquirySchema = z.object({
   }
 });
 
+export const QUALIFIED_LEAD_STATUSES = [
+  'NEW',
+  'REVIEWING',
+  'QUALIFIED',
+  'NURTURE',
+  'DISQUALIFIED',
+];
+
+export const leadListQuerySchema = z.object({
+  status: z.enum([...QUALIFIED_LEAD_STATUSES, 'CONVERTED']).optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+}).strict();
+
+export const leadIdParamsSchema = z.object({ id: cuidId }).strict();
+
+export const leadQualificationSchema = z.object({
+  status: z.enum(QUALIFIED_LEAD_STATUSES),
+  qualificationNotes: z.string().trim().max(5_000).optional(),
+}).strict();
+
 export const landingLeadSchema = z.object({
   name: z.string().min(1).max(200),
   email: z.string().email().max(255),

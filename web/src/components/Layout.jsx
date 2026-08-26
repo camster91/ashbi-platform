@@ -156,6 +156,7 @@ export default function Layout({ children }) {
     { name: 'Inbox', href: '/inbox', icon: Inbox, badge: stats?.needsResponse },
     { name: 'Chat', href: '/chat', icon: MessageSquare },
     { name: 'Projects', href: '/projects', icon: FolderOpen, id: 'projects-link' },
+    { name: 'Inquiries', href: '/inquiries', icon: Target },
     { name: 'Clients', href: '/clients', icon: Users, id: 'clients-link' },
     { name: 'Invoices', href: '/invoices', icon: Receipt },
   ];

@@ -14,6 +14,10 @@ CREATE TABLE "leads" (
   "budgetBand" TEXT,
   "budgetCurrency" TEXT,
   "status" TEXT NOT NULL DEFAULT 'NEW',
+  "qualificationNotes" TEXT,
+  "qualifiedAt" TIMESTAMP(3),
+  "convertedClientId" TEXT,
+  "convertedAt" TIMESTAMP(3),
   "source" TEXT,
   "medium" TEXT,
   "campaign" TEXT,
@@ -43,10 +47,12 @@ CREATE UNIQUE INDEX "leads_organizationId_intakeIdempotencyKey_key" ON "leads"("
 CREATE INDEX "leads_organizationId_status_createdAt_idx" ON "leads"("organizationId", "status", "createdAt");
 CREATE INDEX "leads_organizationId_email_idx" ON "leads"("organizationId", "email");
 CREATE INDEX "leads_accountOwnerId_status_idx" ON "leads"("accountOwnerId", "status");
+CREATE INDEX "leads_convertedClientId_idx" ON "leads"("convertedClientId");
 CREATE INDEX "lead_events_organizationId_eventName_occurredAt_idx" ON "lead_events"("organizationId", "eventName", "occurredAt");
 CREATE INDEX "lead_events_leadId_occurredAt_idx" ON "lead_events"("leadId", "occurredAt");
 
 ALTER TABLE "leads" ADD CONSTRAINT "leads_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "leads" ADD CONSTRAINT "leads_accountOwnerId_fkey" FOREIGN KEY ("accountOwnerId") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "leads" ADD CONSTRAINT "leads_convertedClientId_fkey" FOREIGN KEY ("convertedClientId") REFERENCES "clients"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "lead_events" ADD CONSTRAINT "lead_events_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "lead_events" ADD CONSTRAINT "lead_events_leadId_fkey" FOREIGN KEY ("leadId") REFERENCES "leads"("id") ON DELETE CASCADE ON UPDATE CASCADE;

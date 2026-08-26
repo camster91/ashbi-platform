@@ -1,5 +1,19 @@
 import { createPublicInquiry, PublicInquiryError } from '../services/public-inquiry.service.js';
-import { PUBLIC_SERVICE_LINES, publicInquirySchema, validateBody } from '../validators/schemas.js';
+import {
+  convertQualifiedLead,
+  LeadQualificationError,
+  updateLeadQualification,
+} from '../services/lead-qualification.service.js';
+import {
+  leadIdParamsSchema,
+  leadListQuerySchema,
+  leadQualificationSchema,
+  PUBLIC_SERVICE_LINES,
+  publicInquirySchema,
+  validateBody,
+  validateParams,
+  validateQuery,
+} from '../validators/schemas.js';
 
 function normalizedOrigins(values = []) {
   return new Set(values.map((value) => {
@@ -66,6 +80,106 @@ export default async function clientAcquisitionRoutes(fastify, options) {
       }
       request.log.error({ errorName: error.name, code: error.code }, 'Public inquiry persistence failed');
       return reply.status(503).send({ error: 'Inquiry could not be saved', code: 'INTAKE_UNAVAILABLE' });
+    }
+  });
+
+  const staffOnly = async (request, reply) => {
+    if (!['ADMIN', 'TEAM'].includes(request.user?.role)) {
+      return reply.status(403).send({ error: 'Staff access required', code: 'STAFF_ACCESS_REQUIRED' });
+    }
+  };
+
+  const qualificationError = (error, reply) => {
+    if (!(error instanceof LeadQualificationError)) return false;
+    const statuses = {
+      LEAD_NOT_FOUND: 404,
+      LEAD_ALREADY_CONVERTED: 409,
+      LEAD_CONVERSION_INCOMPLETE: 409,
+      LEAD_NOT_QUALIFIED: 409,
+      LEAD_CONVERSION_IN_PROGRESS: 409,
+    };
+    reply.status(statuses[error.code] ?? 400).send({ error: error.message, code: error.code });
+    return true;
+  };
+
+  fastify.get('/leads', {
+    onRequest: [fastify.authenticate],
+    preHandler: [staffOnly, validateQuery(leadListQuerySchema)],
+  }, async (request) => {
+    const leads = await request.prisma.lead.findMany({
+      where: request.query.status ? { status: request.query.status } : {},
+      orderBy: { createdAt: 'desc' },
+      take: request.query.limit,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        company: true,
+        serviceLine: true,
+        timing: true,
+        budgetBand: true,
+        budgetCurrency: true,
+        status: true,
+        source: true,
+        campaign: true,
+        qualificationNotes: true,
+        qualifiedAt: true,
+        convertedClientId: true,
+        convertedAt: true,
+        createdAt: true,
+      },
+    });
+    return { leads };
+  });
+
+  fastify.get('/leads/:id', {
+    onRequest: [fastify.authenticate],
+    preHandler: [staffOnly, validateParams(leadIdParamsSchema)],
+  }, async (request, reply) => {
+    const lead = await request.prisma.lead.findFirst({
+      where: { id: request.params.id },
+      include: {
+        events: { orderBy: { occurredAt: 'desc' }, take: 50 },
+        accountOwner: { select: { id: true, name: true } },
+        convertedClient: { select: { id: true, name: true } },
+      },
+    });
+    if (!lead) return reply.status(404).send({ error: 'Lead not found', code: 'LEAD_NOT_FOUND' });
+    return lead;
+  });
+
+  fastify.patch('/leads/:id/qualification', {
+    onRequest: [fastify.authenticate],
+    preHandler: [staffOnly, validateParams(leadIdParamsSchema), validateBody(leadQualificationSchema)],
+  }, async (request, reply) => {
+    try {
+      return await updateLeadQualification({
+        prisma: request.prisma,
+        leadId: request.params.id,
+        status: request.body.status,
+        qualificationNotes: request.body.qualificationNotes,
+        actorUserId: request.user.id,
+      });
+    } catch (error) {
+      if (qualificationError(error, reply)) return reply;
+      throw error;
+    }
+  });
+
+  fastify.post('/leads/:id/convert', {
+    onRequest: [fastify.authenticate],
+    preHandler: [staffOnly, validateParams(leadIdParamsSchema)],
+  }, async (request, reply) => {
+    try {
+      const result = await convertQualifiedLead({
+        prisma: request.prisma,
+        leadId: request.params.id,
+        actorUserId: request.user.id,
+      });
+      return reply.status(result.idempotent ? 200 : 201).send(result);
+    } catch (error) {
+      if (qualificationError(error, reply)) return reply;
+      throw error;
     }
   });
 }
