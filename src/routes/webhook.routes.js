@@ -2,7 +2,7 @@
 
 import { parseEmail } from '../utils/emailParser.js';
 import { processEmailPipeline } from '../services/pipeline.service.js';
-import { clearExpiredCheckout, handleWebhook, recordCompletedCheckout } from '../services/stripe.service.js';
+import { handleWebhook, reconcileCheckoutEvent } from '../services/stripe.service.js';
 import env from '../config/env.js';
 import crypto from 'crypto';
 import {validateBody, webhookEmailTestSchema} from '../validators/schemas.js';
@@ -127,22 +127,23 @@ export default async function webhookRoutes(fastify) {
       return reply.status(400).send({ error: 'Invalid webhook signature' });
     }
 
-    // Handle the event
+    // Handle every Checkout lifecycle event through one reconciliation boundary.
     switch (event.type) {
-      case 'checkout.session.completed': {
-        try {
-          const result = await recordCompletedCheckout(fastify.prisma, event);
-          fastify.log.info({ invoiceId: result.invoiceId, duplicate: result.duplicate }, 'Stripe checkout processed');
-        } catch (error) {
-          fastify.log.error({ error }, 'Error processing Stripe payment');
-          return reply.status(400).send({ error: 'Stripe payment did not match an invoice' });
-        }
-        break;
-      }
-
+      case 'checkout.session.completed':
+      case 'checkout.session.async_payment_succeeded':
+      case 'checkout.session.async_payment_failed':
       case 'checkout.session.expired': {
-        const session = event.data.object;
-        await clearExpiredCheckout(fastify.prisma, session);
+        try {
+          const result = await reconcileCheckoutEvent(fastify.prisma, event);
+          fastify.log.info({
+            invoiceId: result.invoiceId,
+            state: result.state,
+            duplicate: result.duplicate,
+          }, 'Stripe checkout reconciled');
+        } catch (error) {
+          fastify.log.error({ error }, 'Error reconciling Stripe checkout');
+          return reply.status(400).send({ error: 'Stripe checkout did not match an active invoice attempt' });
+        }
         break;
       }
 

@@ -1,5 +1,5 @@
 // Invoice routes — full CRUD + send + PDF + payments + templates
-import { createPaymentLink, handleWebhook, recordCompletedCheckout } from '../services/stripe.service.js';
+import { createPaymentLink } from '../services/stripe.service.js';
 import { generateInvoicePdf } from '../utils/generate-invoice-pdf.js';
 import { generateInvoiceNumber } from '../utils/invoice.js';
 import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
@@ -300,53 +300,69 @@ export default async function invoiceRoutes(fastify) {
 
   // ─── POST /:id/send — send invoice to client ───────────────────────────────
   fastify.post('/:id/send', { onRequest: [fastify.authenticate], preHandler: [validateBody(sendInvoiceSchema)] }, async (request, reply) => {
-    const invoice = await fastify.prisma.invoice.findUnique({
+    const invoice = await request.prisma.invoice.findUnique({
       where: { id: request.params.id },
-      include: {
-        client: {
-          include: { contacts: { where: { isPrimary: true }, take: 1 } }
-        },
-        lineItems: { orderBy: { position: 'asc' } }
-      }
     });
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
     if (invoice.status !== 'DRAFT') return reply.status(400).send({ error: 'Only draft invoices can be sent' });
 
     const access = createPublicAccessWindow(invoice.dueDate);
-    const updateData = {
-      status: 'SENT',
-      sentAt: new Date(),
-      viewToken: access.token,
-      publicAccessExpiresAt: access.expiresAt,
-      publicAccessRevokedAt: access.revokedAt,
-    };
+    const claimed = await request.prisma.invoice.updateMany({
+      where: { id: request.params.id, status: 'DRAFT' },
+      data: {
+        status: 'SENT',
+        sentAt: new Date(),
+        viewToken: access.token,
+        publicAccessExpiresAt: access.expiresAt,
+        publicAccessRevokedAt: access.revokedAt,
+      },
+    });
+    if (claimed.count !== 1) {
+      return reply.status(409).send({ error: 'Invoice delivery was already started' });
+    }
+
+    const preparedInvoice = await request.prisma.invoice.findUnique({
+      where: { id: request.params.id },
+      include: {
+        client: { include: { contacts: { where: { isPrimary: true }, take: 1 } } },
+        lineItems: { orderBy: { position: 'asc' } },
+      },
+    });
+
+    let paymentLink = null;
 
     // Attempt Stripe payment link
     try {
-      const result = await createPaymentLink(invoice);
+      const result = await createPaymentLink(preparedInvoice);
       if (result) {
-        updateData.stripePaymentLink = result.paymentLink;
-        updateData.stripeCheckoutSessionId = result.checkoutSessionId;
-        updateData.stripePaymentIntentId = result.paymentIntentId;
+        paymentLink = result.paymentLink;
+        await request.prisma.invoice.update({
+          where: { id: request.params.id },
+          data: {
+            stripePaymentLink: result.paymentLink,
+            stripeCheckoutSessionId: result.checkoutSessionId,
+            stripePaymentIntentId: result.paymentIntentId,
+          },
+        });
       }
     } catch (err) {
       fastify.log.warn({ err }, 'Stripe payment link failed — sending without it');
     }
 
     // Stub Mailgun email send
-    const primaryContact = invoice.client?.contacts?.[0];
+    const primaryContact = preparedInvoice.client?.contacts?.[0];
     let emailSent = false;
     if (primaryContact?.email) {
       try {
-        const viewUrl = `${process.env.APP_URL || 'https://hub.ashbi.ca'}/portal/invoice/${access.token}`;
+        const viewUrl = `${process.env.APP_URL || 'https://hub.ashbi.ca'}/portal/invoice/${preparedInvoice.viewToken}`;
         const delivery = await sendInvoiceDeliveryEmail({
           to: primaryContact.email,
-          clientName: primaryContact.name || invoice.client.name,
-          invoiceNumber: invoice.invoiceNumber,
-          total: invoice.total,
-          dueDate: invoice.dueDate,
+          clientName: primaryContact.name || preparedInvoice.client.name,
+          invoiceNumber: preparedInvoice.invoiceNumber,
+          total: preparedInvoice.total,
+          dueDate: preparedInvoice.dueDate,
           viewUrl,
-          paymentLink: updateData.stripePaymentLink,
+          paymentLink,
         });
         emailSent = delivery.ok;
         if (emailSent) fastify.log.info('Invoice email accepted by delivery provider');
@@ -356,9 +372,8 @@ export default async function invoiceRoutes(fastify) {
       }
     }
 
-    const updated = await fastify.prisma.invoice.update({
+    const updated = await request.prisma.invoice.findUnique({
       where: { id: request.params.id },
-      data: updateData,
       include: {
         client: { select: { id: true, name: true } },
         lineItems: { orderBy: { position: 'asc' } }
@@ -437,7 +452,7 @@ export default async function invoiceRoutes(fastify) {
 
   // ─── POST /:id/payment-link — generate or return Stripe payment link ───────
   fastify.post('/:id/payment-link', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const invoice = await fastify.prisma.invoice.findUnique({
+    const invoice = await request.prisma.invoice.findUnique({
       where: { id: request.params.id },
       include: { client: true, lineItems: true }
     });
@@ -455,7 +470,7 @@ export default async function invoiceRoutes(fastify) {
       const result = await createPaymentLink(invoice);
       if (!result) return reply.status(503).send({ error: 'Stripe not configured' });
 
-      const updated = await fastify.prisma.invoice.update({
+      const updated = await request.prisma.invoice.update({
         where: { id: request.params.id },
         data: {
           stripePaymentLink: result.paymentLink,
@@ -573,25 +588,6 @@ export default async function invoiceRoutes(fastify) {
       data: { viewToken: access.token, publicAccessExpiresAt: access.expiresAt, publicAccessRevokedAt: null, stripePaymentLink: null, stripeCheckoutSessionId: null },
       select: { viewToken: true, publicAccessExpiresAt: true },
     });
-  });
-
-  // ─── POST /stripe-webhook ───────────────────────────────────────────────────
-  fastify.post('/stripe-webhook', { config: { rawBody: true, public: true } }, async (request, reply) => {
-    const signature = request.headers['stripe-signature'];
-    if (!signature) return reply.status(400).send({ error: 'Missing stripe-signature header' });
-
-    try {
-      const event = await handleWebhook(request.rawBody || request.body, signature);
-
-      if (event.type === 'checkout.session.completed') {
-        await recordCompletedCheckout(fastify.prisma, event);
-      }
-
-      return { received: true };
-    } catch (err) {
-      fastify.log.error({ err }, 'Stripe webhook error');
-      return reply.status(400).send({ error: 'Webhook verification failed' });
-    }
   });
 
   // ─── POST /bulk/mark-paid — mark multiple invoices as paid ──────────────────

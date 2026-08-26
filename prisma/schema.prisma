@@ -1067,6 +1067,7 @@ model Invoice {
   stripePaymentLink       String?
   stripeCheckoutSessionId String?
   stripePaymentIntentId   String?
+  stripeCheckoutAttempt   Int        @default(0)
   paymentMethod           String? // STRIPE | BANK | CHECK | CASH | OTHER
   paymentNotes            String?
   transactionId           String?
