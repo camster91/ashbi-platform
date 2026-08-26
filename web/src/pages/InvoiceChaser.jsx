@@ -113,7 +113,11 @@ export default function InvoiceChaser() {
     }
   };
 
-  const totalOutstanding = overdueInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
+  const outstandingByCurrency = overdueInvoices.reduce((totals, invoice) => {
+    const currency = ['CAD', 'USD'].includes(invoice.currency) ? invoice.currency : 'UNASSIGNED';
+    totals[currency] = (totals[currency] || 0) + (Number(invoice.total) || 0);
+    return totals;
+  }, {});
 
   return (
     <div className="space-y-6">
@@ -150,7 +154,11 @@ export default function InvoiceChaser() {
           <div className="flex-1">
             <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
               {overdueInvoices.length} overdue {overdueInvoices.length === 1 ? 'invoice' : 'invoices'} totaling{' '}
-              <span className="font-bold">${totalOutstanding.toLocaleString('en-CA', { minimumFractionDigits: 2 })}</span>
+              <span className="font-bold">
+                {Object.entries(outstandingByCurrency).map(([currency, amount]) => (
+                  <span key={currency} className="ml-1 inline-block">{amount.toLocaleString('en-CA', { minimumFractionDigits: 2 })} {currency}</span>
+                ))}
+              </span>
             </p>
           </div>
           <DollarSign className="w-5 h-5 text-amber-600" />
@@ -197,7 +205,7 @@ export default function InvoiceChaser() {
                         </span>
                       </div>
                       <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
-                        <span className="font-semibold text-foreground">${invoice.total?.toLocaleString('en-CA', { minimumFractionDigits: 2 })}</span>
+                        <span className="font-semibold text-foreground">{invoice.total?.toLocaleString('en-CA', { minimumFractionDigits: 2 })} {invoice.currency || 'UNASSIGNED'}</span>
                         {invoice.dueDate && (
                           <span className="flex items-center gap-1">
                             <Clock className="w-3 h-3" />

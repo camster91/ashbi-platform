@@ -692,6 +692,8 @@ export const api = {
   },
   getInvoiceStats: () =>
     request('/invoices/stats'),
+  getInvoiceCollectionSummary: () =>
+    request('/invoices/collection-summary'),
   getInvoice: (id) =>
     request(`/invoices/${id}`),
   createInvoice: (data) =>

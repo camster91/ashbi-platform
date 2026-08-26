@@ -33,6 +33,15 @@ import RevenueSparklineWidget from '../components/widgets/RevenueSparklineWidget
 import WPSiteHealthWidget from '../components/widgets/WPSiteHealthWidget';
 import QueryErrorState from '../components/QueryErrorState';
 
+function formatCurrencyMap(amounts = {}) {
+  const entries = Object.entries(amounts).filter(([, amount]) => amount !== 0);
+  if (entries.length === 0) return '—';
+  return entries.map(([currency, amount]) => {
+    if (!['CAD', 'USD'].includes(currency)) return `${Number(amount).toLocaleString('en-CA')} ${currency}`;
+    return new Intl.NumberFormat('en-CA', { style: 'currency', currency, currencyDisplay: 'code', maximumFractionDigits: 0 }).format(amount);
+  }).join(' · ');
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -132,7 +141,7 @@ export default function Dashboard() {
             iconColor="text-emerald-600"
             iconBg="bg-emerald-100 dark:bg-emerald-900/30"
             label="MRR"
-            value={`$${(stats?.mrr || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}
+            value={`${(stats?.mrr || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} USD`}
             onClick={() => navigate('/retainers')}
           />
         )}
@@ -144,11 +153,11 @@ export default function Dashboard() {
             iconColor={stats?.overdueCount > 0 ? 'text-red-600' : 'text-green-600'}
             iconBg={stats?.overdueCount > 0 ? 'bg-red-100 dark:bg-red-900/30' : 'bg-green-100 dark:bg-green-900/30'}
             label="Outstanding"
-            value={`$${(stats?.totalOutstanding || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}
+            value={formatCurrencyMap(stats?.totalOutstandingByCurrency)}
             subtitle={stats?.overdueCount > 0 ? (
               <span className="text-xs text-red-500 flex items-center gap-1">
                 <AlertTriangle className="w-3 h-3" />
-                {stats.overdueCount} overdue (${(stats.overdueAmount || 0).toLocaleString()})
+                {stats.overdueCount} overdue ({formatCurrencyMap(stats.overdueByCurrency)})
               </span>
             ) : null}
             onClick={() => navigate('/invoices')}
@@ -724,7 +733,7 @@ function ClientHealthCard({ client, navigate }) {
             retainerBadge[client.retainerStatus] || 'bg-muted text-muted-foreground'
           )}>
             {client.retainerStatus.replace('_', ' ')}
-            {client.monthlyAmount > 0 && ` · $${client.monthlyAmount.toLocaleString()}/mo`}
+            {client.monthlyAmount > 0 && ` · ${client.monthlyAmount.toLocaleString()} USD/mo`}
           </span>
         )}
 

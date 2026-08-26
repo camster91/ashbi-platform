@@ -54,8 +54,21 @@ const STATUS_CONFIG = {
   VOID:    { label: 'Void',    color: 'bg-muted text-muted-foreground',              icon: Receipt },
 };
 
-function fmt(n) {
-  return `$${(n || 0).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function fmt(n, currency) {
+  const amount = Number(n) || 0;
+  if (['CAD', 'USD'].includes(currency)) {
+    return new Intl.NumberFormat('en-CA', { style: 'currency', currency, currencyDisplay: 'code' }).format(amount);
+  }
+  const formatted = amount.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return currency ? `${formatted} ${currency}` : `$${formatted}`;
+}
+
+function CurrencyAmounts({ amounts = {}, minor = false }) {
+  const entries = Object.entries(amounts).filter(([, amount]) => amount !== 0);
+  if (entries.length === 0) return <span>—</span>;
+  return entries.map(([currency, amount]) => (
+    <span key={currency} className="block">{fmt(minor ? amount / 100 : amount, currency)}</span>
+  ));
 }
 
 export default function Invoices() {
@@ -105,6 +118,11 @@ export default function Invoices() {
   const { data: templates = [] } = useQuery({
     queryKey: ['line-item-templates'],
     queryFn: () => api.getLineItemTemplates(),
+  });
+
+  const { data: collectionSummary = { byCurrency: {}, unresolvedPaymentCount: 0 } } = useQuery({
+    queryKey: ['invoice-collection-summary'],
+    queryFn: () => api.getInvoiceCollectionSummary(),
   });
 
   // Mutations
@@ -296,15 +314,15 @@ export default function Invoices() {
       </div>
 
       {activeTab === 'collections' ? (
-        <CollectionsDashboard stats={stats} invoices={invoices} onMarkPaid={(id) => markPaidMutation.mutate({ id })} />
+        <CollectionsDashboard stats={stats} collectionSummary={collectionSummary} invoices={invoices} onMarkPaid={(id) => markPaidMutation.mutate({ id })} />
       ) : (
         <>
           {/* Stats Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <StatCard label="Outstanding" value={fmt(stats.totalOutstanding || 0)} icon={DollarSign} color="blue" />
-            <StatCard label="Paid (all time)" value={fmt(stats.paid?.amount || 0)} icon={CheckCircle} color="green" />
-            <StatCard label="Overdue" value={stats.overdue?.count || 0} sub={stats.overdue?.count > 0 ? fmt(stats.overdue?.amount || 0) : undefined} icon={AlertTriangle} color="red" />
-            <StatCard label="Draft" value={stats.draft?.count || 0} sub={fmt(stats.draft?.amount || 0)} icon={FileText} color="gray" />
+            <StatCard label="Outstanding" value={<CurrencyAmounts amounts={stats.totalOutstandingByCurrency} />} icon={DollarSign} color="blue" />
+            <StatCard label="Paid (all time)" value={<CurrencyAmounts amounts={stats.paid?.byCurrency} />} icon={CheckCircle} color="green" />
+            <StatCard label="Overdue" value={stats.overdue?.count || 0} sub={<CurrencyAmounts amounts={stats.overdue?.byCurrency} />} icon={AlertTriangle} color="red" />
+            <StatCard label="Draft" value={stats.draft?.count || 0} sub={<CurrencyAmounts amounts={stats.draft?.byCurrency} />} icon={FileText} color="gray" />
           </div>
 
           {/* Filters */}
@@ -428,7 +446,7 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
             </div>
             <p className="text-sm text-muted-foreground truncate">{invoice.client?.name}</p>
           </div>
-          <span className="text-lg font-semibold">{fmt(invoice.total)}</span>
+          <span className="text-lg font-semibold">{fmt(invoice.total, invoice.currency)}</span>
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
           {invoice.dueDate && (
@@ -470,7 +488,7 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
             {invoice.title && <span className="text-xs text-muted-foreground truncate">— {invoice.title}</span>}
           </div>
           <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
-            <span className="font-semibold text-foreground text-sm">{fmt(invoice.total)}</span>
+            <span className="font-semibold text-foreground text-sm">{fmt(invoice.total, invoice.currency)}</span>
             {invoice.dueDate && (
               <span className={`flex items-center gap-1 ${invoice.isOverdue ? 'text-red-500' : ''}`}>
                 <Clock className="w-3 h-3" />
@@ -844,22 +862,44 @@ function InvoiceCreateForm({
 }
 
 // ─── Collections Dashboard ────────────────────────────────────────────────────
-function CollectionsDashboard({ stats, invoices, onMarkPaid }) {
+function CollectionsDashboard({ stats, collectionSummary, invoices, onMarkPaid }) {
   const overdue = invoices.filter(i => i.isOverdue || (i.status === 'SENT' && i.dueDate && new Date(i.dueDate) < new Date()));
 
   return (
     <div className="space-y-6">
       {/* KPI Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <BigStat label="Total Outstanding" value={fmt((stats.sent?.amount || 0) + (stats.overdue?.amount || 0))}
-          sub={`${(stats.sent?.count || 0) + (stats.overdue?.count || 0)} invoices`} color="blue" />
-        <BigStat label="Overdue" value={fmt(stats.overdue?.amount || 0)}
+        <BigStat label="Total Outstanding" value={<CurrencyAmounts amounts={stats.totalOutstandingByCurrency} />}
+          sub={`${stats.totalOutstandingCount || 0} invoices`} color="blue" />
+        <BigStat label="Overdue" value={<CurrencyAmounts amounts={stats.overdue?.byCurrency} />}
           sub={`${stats.overdue?.count || 0} invoices`} color="red" urgent={stats.overdue?.count > 0} />
-        <BigStat label="Paid (all time)" value={fmt(stats.paid?.amount || 0)}
+        <BigStat label="Paid (all time)" value={<CurrencyAmounts amounts={stats.paid?.byCurrency} />}
           sub={`${stats.paid?.count || 0} invoices`} color="green" />
-        <BigStat label="Draft / Unbilled" value={fmt(stats.draft?.amount || 0)}
+        <BigStat label="Draft / Unbilled" value={<CurrencyAmounts amounts={stats.draft?.byCurrency} />}
           sub={`${stats.draft?.count || 0} invoices`} color="gray" />
       </div>
+
+      <Card className="p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Net collected before fees</p>
+            <div className="mt-1 text-2xl font-bold">
+              <CurrencyAmounts
+                minor
+                amounts={Object.fromEntries(Object.entries(collectionSummary.byCurrency || {}).map(([currency, row]) => [currency, row.netCollectedBeforeFeesMinor]))}
+              />
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">Recorded payments less successful refunds. This is not profit or net settlement.</p>
+          </div>
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-300">
+            <p className="font-medium">Provider fees unavailable</p>
+            <p className="text-xs">Net settlement remains unavailable until Stripe fee evidence is reconciled.</p>
+          </div>
+        </div>
+        {collectionSummary.unresolvedPaymentCount > 0 && (
+          <p className="mt-3 text-xs text-amber-600">{collectionSummary.unresolvedPaymentCount} legacy payment(s) excluded because exact currency/minor-unit evidence is unresolved.</p>
+        )}
+      </Card>
 
       {/* Overdue Invoices */}
       {overdue.length > 0 && (
@@ -882,7 +922,7 @@ function CollectionsDashboard({ stats, invoices, onMarkPaid }) {
                       {getDaysOverdue(inv.dueDate)} days overdue · Due {formatDate(inv.dueDate)}
                     </div>
                   </div>
-                  <span className="text-lg font-semibold">{fmt(inv.total)}</span>
+                  <span className="text-lg font-semibold">{fmt(inv.total, inv.currency)}</span>
                   <Button size="sm" onClick={() => onMarkPaid(inv.id)}
                     leftIcon={<DollarSign className="w-3 h-3" />}>
                     Mark Paid
@@ -950,12 +990,13 @@ function formatDate(date) {
 }
 
 function exportToCSV(invoices) {
-  const headers = ['Invoice #', 'Client', 'Title', 'Status', 'Issue Date', 'Due Date', 'Subtotal', 'Tax', 'Total', 'Paid At'];
+  const headers = ['Invoice #', 'Client', 'Title', 'Status', 'Currency', 'Issue Date', 'Due Date', 'Subtotal', 'Tax', 'Total', 'Paid At'];
   const rows = invoices.map(inv => [
     inv.invoiceNumber,
     inv.client?.name || '',
     inv.title || '',
     inv.isOverdue ? 'OVERDUE' : inv.status,
+    inv.currency || 'UNASSIGNED',
     inv.issueDate ? formatDate(inv.issueDate) : '',
     inv.dueDate ? formatDate(inv.dueDate) : '',
     inv.subtotal?.toFixed(2),

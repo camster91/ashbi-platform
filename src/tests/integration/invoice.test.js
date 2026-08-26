@@ -423,7 +423,7 @@ describe('Invoice CRUD', { skip }, () => {
     assert.ok('draft' in body, 'Stats should include draft');
     assert.ok('sent' in body, 'Stats should include sent');
     assert.ok('overdue' in body, 'Stats should include overdue');
-    assert.ok('totalOutstanding' in body, 'Stats should include totalOutstanding');
+    assert.ok('totalOutstandingByCurrency' in body, 'Stats should separate outstanding totals by currency');
     assert.ok(body.paid.count > 0, 'Should have at least one paid invoice');
     console.log(`  ✓ Stats: ${JSON.stringify(body)}`);
   });

@@ -1,5 +1,13 @@
 // Dashboard stats — single endpoint for the command center
 
+function sumByCurrency(rows, predicate = () => true) {
+  return rows.filter(predicate).reduce((totals, row) => {
+    const currency = ['CAD', 'USD'].includes(row.currency) ? row.currency : 'UNASSIGNED';
+    totals[currency] = Math.round(((totals[currency] || 0) + (Number(row.total) || 0)) * 100) / 100;
+    return totals;
+  }, {});
+}
+
 export default async function dashboardRoutes(fastify) {
   // GET /api/dashboard/stats — all numbers in one call
   fastify.get('/stats', {
@@ -48,7 +56,7 @@ export default async function dashboardRoutes(fastify) {
       }),
       request.prisma.invoice.findMany({
         where: { status: { in: ['SENT', 'OVERDUE'] } },
-        select: { total: true, status: true, dueDate: true }
+        select: { total: true, currency: true, status: true, dueDate: true }
       }),
       request.prisma.project.count({
         where: { status: { notIn: ['LAUNCHED', 'CANCELLED', 'ON_HOLD'] } }
@@ -245,6 +253,7 @@ export default async function dashboardRoutes(fastify) {
       request.prisma.$queryRaw`
         SELECT
           date_trunc('month', i."paidAt") AS month,
+          i.currency AS currency,
           SUM(i.total)::float AS revenue,
           COUNT(*)::int AS invoice_count
         FROM "invoices" i
@@ -252,8 +261,8 @@ export default async function dashboardRoutes(fastify) {
         WHERE i.status = 'PAID'
           AND i."paidAt" >= ${sixMonthsAgo}::timestamptz
           AND c."organizationId" = ${request.organizationId}
-        GROUP BY month
-        ORDER BY month ASC
+        GROUP BY month, i.currency
+        ORDER BY month ASC, i.currency ASC
       `
     ]);
 
@@ -261,9 +270,9 @@ export default async function dashboardRoutes(fastify) {
     const mrr = activeRetainers.reduce((sum, r) => sum + (r.monthlyAmountUsd || 0), 0);
 
     // Outstanding totals
-    const totalOutstanding = outstandingInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
+    const totalOutstandingByCurrency = sumByCurrency(outstandingInvoices);
     const overdueInvoices = outstandingInvoices.filter(inv => inv.status === 'OVERDUE' || (inv.dueDate && new Date(inv.dueDate) < now));
-    const overdueAmount = overdueInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
+    const overdueByCurrency = sumByCurrency(overdueInvoices);
 
     // Build client health grid with computed fields
     const clientHealth = activeClients.map(client => {
@@ -298,8 +307,8 @@ export default async function dashboardRoutes(fastify) {
 
     return {
       mrr,
-      totalOutstanding,
-      overdueAmount,
+      totalOutstandingByCurrency,
+      overdueByCurrency,
       overdueCount: overdueInvoices.length,
       activeProjects: activeProjectCount,
       pendingApprovals: pendingApprovalCount,
@@ -400,13 +409,18 @@ export default async function dashboardRoutes(fastify) {
         (revenueHistory || []).forEach(row => {
           const d = new Date(row.month);
           const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-          grouped[key] = (grouped[key] || 0) + (Number(row.revenue) || 0);
+          const currency = ['CAD', 'USD'].includes(row.currency) ? row.currency : 'UNASSIGNED';
+          grouped[`${key}:${currency}`] = (grouped[`${key}:${currency}`] || 0) + (Number(row.revenue) || 0);
         });
-        return Object.entries(grouped).map(([key, total]) => ({
+        return Object.entries(grouped).map(([seriesKey, total]) => {
+          const [key, currency] = seriesKey.split(':');
+          return {
           month: months[parseInt(key.split('-')[1]) - 1],
           year: key.split('-')[0],
+          currency,
           total: Math.round(total * 100) / 100
-        }));
+        };
+        });
       })()
     };
   });

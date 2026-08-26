@@ -9,6 +9,7 @@ import { createManualInvoiceDraft } from '../services/manualInvoice.service.js';
 import { invalidateInvoiceCheckout } from '../services/invoiceCheckoutInvalidation.service.js';
 import { deliverInvoiceWithEvidence } from '../services/invoiceDelivery.service.js';
 import { randomUUID } from 'node:crypto';
+import { buildCollectionSummary, buildInvoiceStats } from '../services/financialReporting.service.js';
 
 const VOID_UNDO_WINDOW_MS = 10_000;
 const VOIDABLE_STATUSES = new Set(['DRAFT', 'SENT', 'OVERDUE']);
@@ -62,7 +63,7 @@ export default async function invoiceRoutes(fastify) {
     }
 
     const [invoices, total] = await Promise.all([
-      fastify.prisma.invoice.findMany({
+      request.prisma.invoice.findMany({
         where,
         include: {
           client: { select: { id: true, name: true } },
@@ -73,60 +74,54 @@ export default async function invoiceRoutes(fastify) {
         take: limit ? parseInt(limit) : undefined,
         skip: offset ? parseInt(offset) : undefined,
       }),
-      fastify.prisma.invoice.count({ where })
+      request.prisma.invoice.count({ where })
     ]);
 
     return {
       invoices: invoices.map(flagOverdue),
       total,
-      stats: await getStats()
+      stats: await getStats(request.prisma)
     };
   });
 
-  async function getStats() {
+  async function getStats(prisma) {
     // Performance: previously this ran `findMany({ select })` with no `where`
     // and pulled every invoice row to compute aggregates in JS — a full table
     // scan on every GET /api/invoices call. Replace with `groupBy` so the
     // database does the aggregation server-side. The overdue total still
     // needs a separate aggregation since it depends on `dueDate < now`.
     const now = new Date();
-    const [byStatus, overdueAgg] = await Promise.all([
-      fastify.prisma.invoice.groupBy({
-        by: ['status'],
+    const [byStatus, overdueSentRows] = await Promise.all([
+      prisma.invoice.groupBy({
+        by: ['status', 'currency'],
         _count: { _all: true },
         _sum: { total: true },
       }),
-      fastify.prisma.invoice.aggregate({
+      prisma.invoice.groupBy({
+        by: ['currency'],
         where: { status: 'SENT', dueDate: { lt: now } },
         _count: { _all: true },
         _sum: { total: true },
       }),
     ]);
-
-    const stats = {
-      draft: { count: 0, amount: 0 },
-      sent: { count: 0, amount: 0 },
-      paid: { count: 0, amount: 0 },
-      overdue: { count: overdueAgg._count._all, amount: overdueAgg._sum.total ?? 0 },
-      void: { count: 0, amount: 0 },
-      totalOutstanding: 0,
-    };
-
-    for (const row of byStatus) {
-      const key = row.status.toLowerCase();
-      if (stats[key]) {
-        stats[key].count = row._count._all;
-        stats[key].amount = row._sum.total ?? 0;
-      }
-    }
-
-    stats.totalOutstanding = stats.sent.amount + stats.overdue.amount;
-    return stats;
+    return buildInvoiceStats({ statusRows: byStatus, overdueSentRows });
   }
 
   // ─── GET /stats — collections dashboard ────────────────────────────────────
-  fastify.get('/stats', { onRequest: [fastify.authenticate] }, async () => {
-    return getStats();
+  fastify.get('/stats', { onRequest: [fastify.authenticate] }, async (request) => {
+    return getStats(request.prisma);
+  });
+
+  // ─── GET /collection-summary — currency-safe collected cash evidence ──────
+  fastify.get('/collection-summary', { onRequest: [fastify.authenticate] }, async (request) => {
+    const payments = await request.prisma.invoicePayment.findMany({
+      select: {
+        amountMinor: true,
+        currency: true,
+        refunds: { select: { amountMinor: true, currency: true, status: true } },
+      },
+    });
+    return buildCollectionSummary(payments);
   });
 
   // ─── GET /templates — line item templates ──────────────────────────────────
