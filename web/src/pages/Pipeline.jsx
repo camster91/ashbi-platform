@@ -423,6 +423,105 @@ function MoveToDropdown({ deal, stages, currentStageId, onMove }) {
   );
 }
 
+function ProposalDraftModal({ deal, isOpen, onClose }) {
+  const queryClient = useQueryClient();
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [amount, setAmount] = useState('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!isOpen || !deal) return;
+    setTitle(`${deal.name || deal.title} proposal`);
+    setDescription('');
+    setAmount(String(deal.value ?? deal.total ?? ''));
+    setError('');
+  }, [deal, isOpen]);
+
+  const mutation = useMutation({
+    mutationFn: (data) => api.createPipelineProposalDraft(deal.id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pipeline'] });
+      queryClient.invalidateQueries({ queryKey: ['proposals'] });
+      onClose();
+    },
+    onError: (requestError) => setError(requestError.message || 'Failed to create proposal draft'),
+  });
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    const numericAmount = Number(amount);
+    if (!title.trim() || !description.trim() || amount === '' || !Number.isFinite(numericAmount) || numericAmount < 0) {
+      setError('Enter a proposal title, reviewed line-item description, and valid amount.');
+      return;
+    }
+    mutation.mutate({
+      title: title.trim(),
+      lineItems: [{ description: description.trim(), quantity: 1, unitPrice: numericAmount }],
+    });
+  };
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Create proposal draft">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          This creates one internal draft only. It does not send a message or create a contract, invoice, project, or charge.
+        </p>
+        <p className="text-sm font-medium">Currency: {deal?.currency} from this deal</p>
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+        <div>
+          <label htmlFor="deal-proposal-title" className="block text-sm font-medium mb-1">Proposal title</label>
+          <input
+            id="deal-proposal-title"
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            className="min-h-11 w-full rounded-lg border px-3 py-2"
+            required
+          />
+        </div>
+        <div>
+          <label htmlFor="deal-proposal-description" className="block text-sm font-medium mb-1">
+            Proposal line item description
+          </label>
+          <textarea
+            id="deal-proposal-description"
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            className="w-full rounded-lg border px-3 py-2"
+            rows={3}
+            required
+          />
+        </div>
+        <div>
+          <label htmlFor="deal-proposal-amount" className="block text-sm font-medium mb-1">
+            Proposal amount ({deal?.currency})
+          </label>
+          <input
+            id="deal-proposal-amount"
+            type="number"
+            min="0"
+            step="0.01"
+            value={amount}
+            onChange={(event) => setAmount(event.target.value)}
+            className="min-h-11 w-full rounded-lg border px-3 py-2"
+            required
+          />
+        </div>
+        <ModalFooter>
+          <button type="button" onClick={onClose} className="min-h-11 rounded-lg px-4 py-2 text-sm">Cancel</button>
+          <button
+            type="submit"
+            disabled={mutation.isPending}
+            className="min-h-11 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50"
+          >
+            {mutation.isPending ? 'Creating…' : 'Create draft proposal'}
+          </button>
+        </ModalFooter>
+      </form>
+    </Modal>
+  );
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────
 export default function Pipeline() {
   const [expandedStage, setExpandedStage] = useState(null);
@@ -663,6 +762,7 @@ export default function Pipeline() {
 function StageDetail({ stage, stages, config, onClose }) {
   const queryClient = useQueryClient();
   const [itemToDelete, setItemToDelete] = useState(null);
+  const [dealForProposal, setDealForProposal] = useState(null);
 
   const moveMutation = useMutation({
     mutationFn: ({ id, stageId }) => api.updatePipelineDeal(id, { stageId }),
@@ -751,8 +851,29 @@ function StageDetail({ stage, stages, config, onClose }) {
 
                   {/* Action buttons — only for pipeline deals with an id */}
                   {item.id && (
-                    <div className="flex items-center gap-0.5 ml-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                    <div className="flex items-center gap-0.5 ml-2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity"
                       onClick={(e) => e.preventDefault()}>
+                      {item.proposalId ? (
+                        <Link
+                          to={`/proposal/${item.proposalId}`}
+                          onClick={(event) => event.stopPropagation()}
+                          aria-label={`Open proposal draft for ${name}`}
+                          className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-md hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          <FileText className="w-4 h-4" />
+                        </Link>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={(event) => { event.preventDefault(); event.stopPropagation(); setDealForProposal(item); }}
+                          disabled={!['CAD', 'USD'].includes(item.currency)}
+                          aria-label={`Create proposal draft for ${name}`}
+                          title={item.currency ? 'Create proposal draft' : 'Review deal currency first'}
+                          className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-md hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-40"
+                        >
+                          <FileText className="w-4 h-4" />
+                        </button>
+                      )}
                       <MoveToDropdown deal={item} stages={stages} currentStageId={stage.id}
                         onMove={(id, stageId) => moveMutation.mutate({ id, stageId })} />
                       <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(item); }}
@@ -769,6 +890,11 @@ function StageDetail({ stage, stages, config, onClose }) {
           })}
         </div>
        )}
+       <ProposalDraftModal
+         deal={dealForProposal}
+         isOpen={Boolean(dealForProposal)}
+         onClose={() => setDealForProposal(null)}
+       />
        <ConfirmDialog
          isOpen={Boolean(itemToDelete)}
          title="Delete pipeline item"

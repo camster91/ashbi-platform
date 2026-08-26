@@ -114,7 +114,7 @@ export default async function proposalRoutes(fastify) {
     onRequest: [fastify.authenticate],
     preHandler: validateBody(proposalCreateSchema),
   }, async (request, reply) => {
-    const { clientId, title, lineItems, notes, validUntil, projectId } = request.body;
+    const { clientId, title, lineItems, notes, validUntil, projectId, currency } = request.body;
 
     const computedLineItems = lineItems.map(item => ({
       description: item.description,
@@ -131,6 +131,7 @@ export default async function proposalRoutes(fastify) {
       const created = await tx.proposal.create({
         data: {
           title,
+          currency,
           clientId,
           projectId: projectId || null,
           createdById: request.user.id,
@@ -179,7 +180,7 @@ export default async function proposalRoutes(fastify) {
       return reply.status(400).send({ error: 'Only DRAFT proposals can be updated' });
     }
 
-    const { title, notes, validUntil, projectId, lineItems, discount } = request.body;
+    const { title, notes, validUntil, projectId, lineItems, discount, currency } = request.body;
 
     const data = {};
     if (title !== undefined) data.title = title;
@@ -187,6 +188,7 @@ export default async function proposalRoutes(fastify) {
     if (validUntil !== undefined) data.validUntil = validUntil ? new Date(validUntil) : null;
     if (projectId !== undefined) data.projectId = projectId || null;
     if (discount !== undefined) data.discount = discount;
+    if (currency !== undefined) data.currency = currency;
 
     const proposal = await request.prisma.$transaction(async (tx) => {
       // If lineItems provided, replace them
@@ -365,6 +367,7 @@ export default async function proposalRoutes(fastify) {
           subtotal: existing.subtotal,
           discount: existing.discount,
           total: existing.total,
+          currency: existing.currency,
           internalNotes: existing.internalNotes,
           lineItems: {
             create: existing.lineItems.map(item => ({

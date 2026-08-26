@@ -31,6 +31,7 @@ function shapeDeal(deal) {
     currency: deal.currency,
     clientId: deal.client.id,
     clientName: deal.client.name,
+    ...(deal.proposal?.id && { proposalId: deal.proposal.id }),
   };
 }
 
@@ -60,7 +61,10 @@ export async function getPipelineStages(prisma) {
     orderBy: { order: 'asc' },
     include: {
       deals: {
-        include: { client: { select: { id: true, name: true } } },
+        include: {
+          client: { select: { id: true, name: true } },
+          proposal: { select: { id: true } },
+        },
         orderBy: { createdAt: 'desc' },
       },
     },
@@ -179,6 +183,70 @@ export async function updateDeal(prisma, dealId, data) {
 
 export async function deleteDeal(prisma, dealId) {
   return prisma.pipelineDeal.delete({ where: { id: dealId } });
+}
+
+export async function createDraftProposalFromDeal(prisma, dealId, actorUserId, data) {
+  const deal = await prisma.pipelineDeal.findFirst({
+    where: { id: dealId },
+    include: {
+      proposal: {
+        include: {
+          client: { select: { id: true, name: true } },
+          lineItems: true,
+        },
+      },
+    },
+  });
+  if (!deal) {
+    throw new PipelineError('Pipeline deal not found', 'PIPELINE_DEAL_NOT_FOUND', 404);
+  }
+  if (deal.proposal) {
+    return { proposal: deal.proposal, idempotent: true };
+  }
+  if (!['CAD', 'USD'].includes(deal.currency)) {
+    throw new PipelineError(
+      'Assign and verify the deal currency before creating a proposal',
+      'DEAL_CURRENCY_UNASSIGNED',
+      409,
+    );
+  }
+
+  const lineItems = data.lineItems.map((item) => ({
+    description: item.description,
+    quantity: item.quantity ?? 1,
+    unitPrice: item.unitPrice,
+    total: (item.quantity ?? 1) * item.unitPrice,
+  }));
+  const subtotal = lineItems.reduce((sum, item) => sum + item.total, 0);
+  const include = {
+    client: { select: { id: true, name: true } },
+    lineItems: true,
+  };
+
+  try {
+    const proposal = await prisma.proposal.create({
+      data: {
+        dealId: deal.id,
+        clientId: deal.clientId,
+        createdById: actorUserId,
+        title: data.title,
+        notes: data.notes ?? null,
+        validUntil: data.validUntil ? new Date(data.validUntil) : null,
+        currency: deal.currency,
+        subtotal,
+        discount: 0,
+        total: subtotal,
+        lineItems: { create: lineItems },
+      },
+      include,
+    });
+    return { proposal, idempotent: false };
+  } catch (error) {
+    if (error?.code !== 'P2002') throw error;
+    const proposal = await prisma.proposal.findFirst({ where: { dealId }, include });
+    if (!proposal) throw error;
+    return { proposal, idempotent: true };
+  }
 }
 
 export async function getPipelineAnalytics(prisma) {

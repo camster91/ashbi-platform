@@ -34,6 +34,14 @@ const statusConfig = {
   DECLINED: { label: 'Declined', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400', icon: XCircle },
 };
 
+function formatProposalMoney(value, currency) {
+  const amount = Number(value || 0).toLocaleString('en-CA', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return `$${amount} ${currency || 'currency unassigned'}`;
+}
+
 export default function Proposals() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -42,7 +50,7 @@ export default function Proposals() {
   const [showCreate, setShowCreate] = useState(searchParams.get('create') === 'true');
   const [showGenerator, setShowGenerator] = useState(false);
   const [filterStatus, setFilterStatus] = useState('');
-  const [form, setForm] = useState({ clientId: '', title: '', notes: '' });
+  const [form, setForm] = useState({ clientId: '', title: '', notes: '', currency: '' });
   const [proposalToDelete, setProposalToDelete] = useState(null);
   const formDraft = useAutosave('proposal', 'new', form);
 
@@ -196,8 +204,9 @@ export default function Proposals() {
           />
           <form onSubmit={handleCreate} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-1">Client</label>
+              <label htmlFor="new-proposal-client" className="block text-sm font-medium mb-1">Proposal client</label>
               <select
+                id="new-proposal-client"
                 value={form.clientId}
                 onChange={(e) => setForm({ ...form, clientId: e.target.value })}
                 className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
@@ -210,8 +219,9 @@ export default function Proposals() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Title</label>
+              <label htmlFor="new-proposal-title" className="block text-sm font-medium mb-1">Proposal title</label>
               <input
+                id="new-proposal-title"
                 type="text"
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
@@ -219,6 +229,20 @@ export default function Proposals() {
                 placeholder="e.g., Website Redesign Proposal"
                 required
               />
+            </div>
+            <div>
+              <label htmlFor="new-proposal-currency" className="block text-sm font-medium mb-1">Proposal currency</label>
+              <select
+                id="new-proposal-currency"
+                value={form.currency}
+                onChange={(e) => setForm({ ...form, currency: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+                required
+              >
+                <option value="">Select currency...</option>
+                <option value="CAD">CAD</option>
+                <option value="USD">USD</option>
+              </select>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Notes (optional)</label>
@@ -230,7 +254,7 @@ export default function Proposals() {
               />
             </div>
             <div className="flex gap-2">
-              <Button type="submit" loading={createMutation.isPending}>Create</Button>
+              <Button type="submit" loading={createMutation.isPending}>Create proposal</Button>
               <Button variant="ghost" onClick={() => setShowCreate(false)}>Cancel</Button>
             </div>
           </form>
@@ -276,7 +300,7 @@ export default function Proposals() {
                     </Link>
                     <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
                       <span>{proposal.client?.name}</span>
-                      <span>${proposal.total?.toFixed(2)}</span>
+                      <span>{formatProposalMoney(proposal.total, proposal.currency)}</span>
                       {proposal.validUntil && (
                         <span className="flex items-center gap-1">
                           <Clock className="w-3 h-3" />
@@ -362,6 +386,7 @@ function ProposalGenerator({ clients, onClose, onSaveDraft }) {
     clientName: '',
     projectType: 'branding',
     budget: '',
+    currency: '',
     requirements: '',
     tone: 'professional',
   });
@@ -482,6 +507,7 @@ function ProposalGenerator({ clients, onClose, onSaveDraft }) {
       title,
       notes: content,
       lineItems,
+      currency: genForm.currency,
     });
   };
 
@@ -552,6 +578,21 @@ function ProposalGenerator({ clients, onClose, onSaveDraft }) {
               placeholder="e.g., 5000"
               min="0"
             />
+          </div>
+
+          <div>
+            <label htmlFor="generated-proposal-currency" className="block text-sm font-medium mb-1">Proposal currency</label>
+            <select
+              id="generated-proposal-currency"
+              value={genForm.currency}
+              onChange={(e) => setGenForm({ ...genForm, currency: e.target.value })}
+              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+              required
+            >
+              <option value="">Select currency...</option>
+              <option value="CAD">CAD</option>
+              <option value="USD">USD</option>
+            </select>
           </div>
 
           {/* Requirements */}

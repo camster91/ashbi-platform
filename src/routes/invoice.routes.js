@@ -532,20 +532,23 @@ export default async function invoiceRoutes(fastify) {
 
   // ─── POST /from-proposal/:proposalId — create from approved proposal ────────
   fastify.post('/from-proposal/:proposalId', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const proposal = await fastify.prisma.proposal.findUnique({
+    const proposal = await request.prisma.proposal.findUnique({
       where: { id: request.params.proposalId },
       include: { client: true, lineItems: true }
     });
 
     if (!proposal) return reply.status(404).send({ error: 'Proposal not found' });
     if (proposal.status !== 'APPROVED') return reply.status(400).send({ error: 'Proposal must be approved first' });
+    if (!['CAD', 'USD'].includes(proposal.currency)) {
+      return reply.status(409).send({ error: 'Proposal currency must be reviewed before creating an invoice' });
+    }
 
     const invoiceInclude = {
       client: { select: { id: true, name: true } },
       lineItems: { orderBy: { position: 'asc' } },
       payments: true,
     };
-    const existing = await fastify.prisma.invoice.findUnique({
+    const existing = await request.prisma.invoice.findUnique({
       where: { proposalId: proposal.id },
       include: invoiceInclude
     });
@@ -564,13 +567,14 @@ export default async function invoiceRoutes(fastify) {
     const { subtotal, tax, total } = calcTotals(processedItems, HST_RATE, proposal.discount || 0);
 
     try {
-      return await fastify.prisma.invoice.create({
+      return await request.prisma.invoice.create({
         data: {
           invoiceNumber,
           title: `Invoice for: ${proposal.title}`,
           clientId: proposal.clientId,
           projectId: proposal.projectId || null,
           proposalId: proposal.id,
+          currency: proposal.currency,
           subtotal,
           discountAmount: proposal.discount || 0,
           taxRate: HST_RATE,
@@ -585,7 +589,7 @@ export default async function invoiceRoutes(fastify) {
       });
     } catch (error) {
       if (error?.code !== 'P2002') throw error;
-      return fastify.prisma.invoice.findUnique({
+      return request.prisma.invoice.findUnique({
         where: { proposalId: proposal.id },
         include: invoiceInclude
       });

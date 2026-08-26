@@ -1263,6 +1263,8 @@ export const api = {
     request(`/pipeline/deals/${id}`, { method: 'PUT', body: data }),
   deletePipelineDeal: (id) =>
     request(`/pipeline/deals/${id}`, { method: 'DELETE' }),
+  createPipelineProposalDraft: (id, data) =>
+    request(`/pipeline/deals/${id}/proposal-draft`, { method: 'POST', body: data }),
 
   // ===== SEMANTIC SEARCH (CLIENT BRAIN) =====
   semanticSearch: (query, limit, clientId) => {

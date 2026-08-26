@@ -9,6 +9,7 @@ import {
   createDeal,
   updateDeal,
   deleteDeal,
+  createDraftProposalFromDeal,
   getPipelineAnalytics,
   PipelineError,
 } from '../services/dealPipeline.service.js';
@@ -18,6 +19,7 @@ import {
   pipelineStageUpdateSchema,
   pipelineDealCreateSchema,
   pipelineDealUpdateSchema,
+  dealProposalDraftSchema,
 } from '../validators/schemas.js';
 
 export default async function pipelineRoutes(fastify) {
@@ -104,6 +106,19 @@ export default async function pipelineRoutes(fastify) {
     const { id } = request.params;
     try {
       return await updateDeal(request.prisma, id, request.body);
+    } catch (error) {
+      return handlePipelineError(error, reply);
+    }
+  });
+
+  fastify.post('/deals/:id/proposal-draft', {
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(dealProposalDraftSchema),
+  }, async (request, reply) => {
+    const { id } = request.params;
+    try {
+      const result = await createDraftProposalFromDeal(request.prisma, id, request.user.id, request.body);
+      return reply.status(result.idempotent ? 200 : 201).send(result);
     } catch (error) {
       return handlePipelineError(error, reply);
     }

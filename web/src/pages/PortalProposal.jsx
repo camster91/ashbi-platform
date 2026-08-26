@@ -164,8 +164,12 @@ export default function PortalProposal() {
                   <tr key={i} className="hover:bg-slate-50/50">
                     <td className="px-6 py-4 text-sm text-slate-700">{item.description}</td>
                     <td className="px-6 py-4 text-sm text-slate-600 text-right">{item.quantity}</td>
-                    <td className="px-6 py-4 text-sm text-slate-600 text-right">${Number(item.rate || item.unitPrice || 0).toFixed(2)}</td>
-                    <td className="px-6 py-4 text-sm font-medium text-slate-800 text-right">${Number(item.amount || item.total || (item.quantity * (item.rate || item.unitPrice || 0))).toFixed(2)}</td>
+                    <td className="px-6 py-4 text-sm text-slate-600 text-right">
+                      ${Number(item.rate || item.unitPrice || 0).toFixed(2)} {proposal.currency || 'currency unassigned'}
+                    </td>
+                    <td className="px-6 py-4 text-sm font-medium text-slate-800 text-right">
+                      ${Number(item.amount || item.total || (item.quantity * (item.rate || item.unitPrice || 0))).toFixed(2)} {proposal.currency || 'currency unassigned'}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -179,6 +183,7 @@ export default function PortalProposal() {
               <span className="text-xl font-bold text-slate-800 flex items-center gap-1">
                 <DollarSign className="w-5 h-5" />
                 {Number(proposal.total || proposal.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                {' '}{proposal.currency || 'currency unassigned'}
               </span>
             </div>
           </div>

@@ -116,9 +116,10 @@ client portal identity. Do not send a real charge or contract to a customer.
 
 | Case | Required proof |
 | --- | --- |
-| Proposal | Staff creates and sends a proposal; client can view, approve or decline, and cannot access another client/project. |
+| Deal to proposal draft | Staff selects an authorized currency-assigned deal, enters reviewed scope, and creates exactly one linked internal draft. Repeating the action returns the same draft. No email, contract, invoice, project, payment link, or charge is created. A legacy deal with unassigned currency is rejected until source evidence is reviewed. |
+| Proposal | Staff creates and sends a CAD or USD proposal; every staff/client-view amount carries that currency label; client can view, approve or decline, and cannot access another client/project. A legacy proposal with unassigned currency cannot become an invoice. |
 | Contract | Client signs once; expiry, revoke, replay, and signed-document retention/export are tested. |
-| Invoice/payment | An approved invoice leads to a Stripe test payment; repeated checkout initiation returns the same provider session through the invoice-scoped idempotency key, the webhook is processed once, a duplicate delivery is idempotent, and the final invoice/ledger state matches Stripe. |
+| Invoice/payment | An approved proposal creates an invoice in the exact same verified currency. The approved invoice leads to a Stripe test payment; repeated checkout initiation returns the same provider session through the invoice-scoped idempotency key, the webhook is processed once, a duplicate delivery is idempotent, and the final invoice/ledger state matches Stripe. |
 | Email and recovery | Proposal, invoice, reminder, and failure email reach the sandbox mailbox; retry/cancellation/overdue flows preserve correct state and audit history. |
 | Portal quality | At 375px and with keyboard navigation, proposal, signature, and payment journeys work without horizontal scrolling or inaccessible controls. |
 

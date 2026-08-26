@@ -940,6 +940,7 @@ model Proposal {
   subtotal              Float     @default(0)
   discount              Float     @default(0)
   total                 Float     @default(0)
+  currency              String? // CAD | USD; null means legacy currency evidence is unresolved
   notes                 String?
   internalNotes         String?
   viewToken             String?   @unique @default(cuid())
@@ -950,6 +951,7 @@ model Proposal {
   sentAt                DateTime?
   clientId              String
   projectId             String?
+  dealId                String?   @unique
   createdById           String
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
@@ -971,6 +973,7 @@ model Proposal {
 
   client    Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
   project   Project?           @relation(fields: [projectId], references: [id])
+  deal      PipelineDeal?      @relation(fields: [dealId], references: [id], onDelete: SetNull)
   createdBy User               @relation("ProposalCreator", fields: [createdById], references: [id])
   lineItems ProposalLineItem[]
   versions  ProposalVersion[]
@@ -1589,6 +1592,7 @@ model PipelineDeal {
   stage  PipelineStage @relation(fields: [stageId], references: [id])
   client Client        @relation(fields: [clientId], references: [id])
   convertedLead Lead?  @relation("LeadConvertedDeal")
+  proposal      Proposal?
 
   @@index([stageId])
   @@index([clientId])

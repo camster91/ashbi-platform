@@ -16,4 +16,9 @@ describe('portal proposal actions accessibility contract', () => {
     expect(source).toContain('role="status" aria-live="polite"');
     expect(source).toContain('respondMutation.isError');
   });
+
+  it('labels every client-facing amount with proposal currency evidence', () => {
+    expect(source).toContain("proposal.currency || 'currency unassigned'");
+    expect(source.match(/proposal\.currency \|\| 'currency unassigned'/g)?.length).toBeGreaterThanOrEqual(3);
+  });
 });

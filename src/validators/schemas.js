@@ -670,6 +670,7 @@ const proposalLineItemInput = z.object({
 export const proposalCreateSchema = z.object({
   clientId: cuidId,
   title: z.string().min(1).max(200),
+  currency: z.enum(['CAD', 'USD']),
   // Must have at least one line item — proposal with no items would be
   // a $0 quote and likely a misuse. The handler also checks this manually
   // but we surface it at validation time too.
@@ -687,7 +688,17 @@ export const proposalUpdateSchema = z.object({
   validUntil: z.string().datetime().optional(),
   projectId: cuidId.optional(),
   status: z.enum(['DRAFT', 'SENT', 'VIEWED', 'APPROVED', 'DECLINED']).optional(),
+  currency: z.enum(['CAD', 'USD']).optional(),
+  lineItems: z.array(proposalLineItemInput).min(1).max(100).optional(),
+  discount: z.number().nonnegative().max(10_000_000).optional(),
 });
+
+export const dealProposalDraftSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  lineItems: z.array(proposalLineItemInput).min(1).max(100),
+  notes: z.string().max(10_000).optional(),
+  validUntil: z.string().datetime().optional(),
+}).strict();
 
 // Bulk operations take a list of IDs
 export const proposalBulkIdsSchema = z.object({

@@ -323,11 +323,11 @@ export default function ProposalDetail() {
                     step="0.01"
                   />
                 ) : (
-                  <span className="text-sm">${item.unitPrice?.toFixed(2)}</span>
+                  <span className="text-sm">${item.unitPrice?.toFixed(2)} {proposal.currency || 'currency unassigned'}</span>
                 )}
               </div>
               <div className="col-span-2 text-right text-sm font-medium">
-                ${((parseFloat(item.quantity) || 1) * (parseFloat(item.unitPrice) || 0)).toFixed(2)}
+                ${((parseFloat(item.quantity) || 1) * (parseFloat(item.unitPrice) || 0)).toFixed(2)} {proposal.currency || 'currency unassigned'}
               </div>
               {editing && (
                 <div className="col-span-1">
@@ -353,7 +353,7 @@ export default function ProposalDetail() {
         <div className="mt-6 border-t border-border pt-4 space-y-2">
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Subtotal</span>
-            <span>${subtotal.toFixed(2)}</span>
+            <span>${subtotal.toFixed(2)} {proposal.currency || 'currency unassigned'}</span>
           </div>
           <div className="flex justify-between text-sm">
             <span className="text-muted-foreground">Discount</span>
@@ -367,12 +367,12 @@ export default function ProposalDetail() {
                 step="0.01"
               />
             ) : (
-              <span>-${(proposal.discount || 0).toFixed(2)}</span>
+              <span>-${(proposal.discount || 0).toFixed(2)} {proposal.currency || 'currency unassigned'}</span>
             )}
           </div>
           <div className="flex justify-between text-base font-semibold border-t border-border pt-2">
             <span>Total</span>
-            <span>${total.toFixed(2)}</span>
+            <span>${total.toFixed(2)} {proposal.currency || 'currency unassigned'}</span>
           </div>
         </div>
       </Card>

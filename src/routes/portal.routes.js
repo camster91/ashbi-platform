@@ -128,6 +128,7 @@ export default async function portalRoutes(fastify) {
       subtotal: proposal.subtotal,
       discount: proposal.discount,
       total: proposal.total,
+      currency: proposal.currency,
       notes: proposal.notes,
       sentAt: proposal.sentAt,
       approvedAt: proposal.approvedAt,
