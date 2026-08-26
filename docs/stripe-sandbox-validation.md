@@ -26,6 +26,8 @@ Use separate authorized CAD and USD invoices with reviewed tax evidence.
 | Exact replay | Repeating checkout for the same active attempt returns the same Stripe session and creates no second Hub payment. |
 | Concurrent replay | Two simultaneous requests resolve to one Stripe session and one persisted active attempt. |
 | Expiry | A signed `checkout.session.expired` event clears only that active session, increments the attempt once, and a later request creates one different session. |
+| Revoke/rotate/void | Public access is shielded before the exact active session is expired. The local action finalizes only after confirmation, advances the attempt once, and stores append-only audit evidence. Rotation exposes the new token only after confirmation. |
+| Invalidation race | A completed session or unknown provider response leaves the invoice payable state intact, keeps the session for investigation, blocks public access, and records a reconciliation-required audit without leaking provider error details. A later verified payment clears the reconciliation flag. |
 | Delayed method | An unpaid completion leaves the invoice `SENT`; signed delayed success records one payment; signed delayed failure clears only the active attempt. |
 | Mismatch denial | Bad signature, stale session ID, wrong invoice number, amount, or currency does not change invoice or ledger state. |
 | Voided invoice | A late completion cannot change a `VOID` invoice to `PAID`; the incident is retained for reconciliation. |
@@ -34,9 +36,8 @@ Use separate authorized CAD and USD invoices with reviewed tax evidence.
 
 ## Required gap closure before a passing run
 
-The current local implementation is not yet eligible to pass the complete provider lifecycle:
+The provider-backed invalidation boundary is code-present locally but still needs the sandbox evidence above. The complete provider lifecycle is not yet eligible to pass because:
 
-- Revoking, rotating, or voiding an invoice must expire its active Checkout Session at Stripe and reconcile uncertain provider outcomes.
 - Successful and partial refunds need a signed-event reconciliation path and durable currency-safe ledger representation.
 - Invoice email acceptance/failure must have truthful delivery state and retry evidence.
 - Currency-safe reporting and export must reconcile invoice totals, payments, refunds, fees, and net settlement without combining CAD and USD.

@@ -145,6 +145,7 @@ const TENANT_PATHS = {
   // 1-hop to Invoice (via invoiceId FK, then invoice → client)
   invoicelineitem:  ['invoice', 'client'],
   invoicepayment:   ['invoice', 'client'],
+  invoicecheckoutaudit: ['invoice', 'client'],
 
   // 1-hop to Proposal (via proposalId FK, then proposal → client)
   proposallineitem: ['proposal', 'client'],

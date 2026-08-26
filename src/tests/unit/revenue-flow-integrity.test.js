@@ -35,9 +35,9 @@ function paymentHarness() {
   const tx = {
     invoice: {
       findUnique: async ({ where }) => where.id === state.invoice.id ? { ...state.invoice } : null,
-      updateMany: async () => {
+      updateMany: async ({ data }) => {
         if (state.invoice.status === 'PAID') return { count: 0 };
-        state.invoice.status = 'PAID';
+        Object.assign(state.invoice, data);
         return { count: 1 };
       },
     },
@@ -62,6 +62,8 @@ test('public document access windows are high entropy, expiring, and revocable',
 
 test('Stripe checkout completion transitions an invoice and records payment exactly once', async () => {
   const { state, prisma } = paymentHarness();
+  state.invoice.stripeCheckoutReconciliationRequiredAt = new Date('2026-08-26T20:00:00.000Z');
+  state.invoice.stripeCheckoutReconciliationReason = 'CHECKOUT_INVALIDATION_OUTCOME_UNKNOWN';
   const first = await recordCompletedCheckout(prisma, checkoutEvent());
   const replay = await recordCompletedCheckout(prisma, checkoutEvent());
   assert.deepEqual(first, { duplicate: false, invoiceId: 'invoice-1' });
@@ -69,6 +71,8 @@ test('Stripe checkout completion transitions an invoice and records payment exac
   assert.equal(state.invoice.status, 'PAID');
   assert.equal(state.payments.length, 1);
   assert.equal(state.payments[0].transactionId, 'pi_123');
+  assert.equal(state.invoice.stripeCheckoutReconciliationRequiredAt, null);
+  assert.equal(state.invoice.stripeCheckoutReconciliationReason, null);
 });
 
 test('Stripe checkout creation uses one stable idempotency key per invoice', async () => {

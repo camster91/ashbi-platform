@@ -6,7 +6,7 @@ import env from '../config/env.js';
 const SUPPORTED_CURRENCIES = new Set(['CAD', 'USD']);
 let stripe = null;
 
-function getStripe() {
+export function getStripeClient() {
   if (!stripe && env.stripeSecretKey) {
     stripe = new Stripe(env.stripeSecretKey, { apiVersion: '2026-07-29.dahlia' });
   }
@@ -59,7 +59,7 @@ function assertMatchingCheckout(invoice, session, { requirePaid = false } = {}) 
 }
 
 export async function createPaymentLink(invoice) {
-  const stripeClient = getStripe();
+  const stripeClient = getStripeClient();
   if (!stripeClient) return null;
 
   return createPaymentLinkWithClient(invoice, stripeClient);
@@ -101,7 +101,7 @@ export async function createPaymentLinkWithClient(invoice, stripeClient) {
 }
 
 export async function handleWebhook(payload, signature) {
-  const stripeClient = getStripe();
+  const stripeClient = getStripeClient();
   if (!stripeClient) throw new Error('Stripe not configured');
 
   const webhookSecret = env.stripeWebhookSecret;
@@ -130,6 +130,8 @@ export async function recordCompletedCheckout(prisma, event) {
           paymentMethod: 'STRIPE',
           stripeCheckoutSessionId: session.id,
           stripePaymentIntentId: transactionId,
+          stripeCheckoutReconciliationRequiredAt: null,
+          stripeCheckoutReconciliationReason: null,
         },
       });
 

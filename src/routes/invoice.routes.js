@@ -7,6 +7,7 @@ import { validateBody, createInvoiceSchema, updateInvoiceSchema, markInvoicePaid
 import { sendInvoiceDeliveryEmail } from '../services/email.service.js';
 import { createDraftInvoiceFromProposal } from '../services/proposalInvoice.service.js';
 import { createManualInvoiceDraft } from '../services/manualInvoice.service.js';
+import { invalidateInvoiceCheckout } from '../services/invoiceCheckoutInvalidation.service.js';
 
 const VOID_UNDO_WINDOW_MS = 10_000;
 const VOIDABLE_STATUSES = new Set(['DRAFT', 'SENT', 'OVERDUE']);
@@ -265,15 +266,26 @@ export default async function invoiceRoutes(fastify) {
       return reply.status(409).send({ error: 'Invoice is already void or cannot be voided' });
     }
 
-    const voidedAt = new Date();
-    const updated = await request.prisma.invoice.update({
-      where: { id: request.params.id },
-      data: { status: 'VOID', voidedAt, voidedFromStatus: invoice.status }
-    });
-    return {
-      ...updated,
-      undoExpiresAt: new Date(voidedAt.getTime() + VOID_UNDO_WINDOW_MS),
-    };
+    try {
+      const updated = await invalidateInvoiceCheckout({
+        prisma: request.prisma,
+        invoice,
+        action: 'VOID',
+        actorUserId: request.user.id,
+      });
+      return {
+        ...updated,
+        undoExpiresAt: new Date(updated.voidedAt.getTime() + VOID_UNDO_WINDOW_MS),
+        reconciliationRequired: false,
+      };
+    } catch (error) {
+      if (!error.reconciliationRequired) throw error;
+      return reply.status(error.statusCode).send({
+        error: error.message,
+        code: error.code,
+        reconciliationRequired: true,
+      });
+    }
   });
 
   fastify.post('/:id/undo-void', { onRequest: [fastify.adminOnly] }, async (request, reply) => {
@@ -543,11 +555,22 @@ export default async function invoiceRoutes(fastify) {
   fastify.post('/:id/public-link/revoke', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     const invoice = await request.prisma.invoice.findUnique({ where: { id: request.params.id } });
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
-    await request.prisma.invoice.update({
-      where: { id: invoice.id },
-      data: { publicAccessRevokedAt: new Date(), stripePaymentLink: null },
-    });
-    return { revoked: true };
+    try {
+      await invalidateInvoiceCheckout({
+        prisma: request.prisma,
+        invoice,
+        action: 'REVOKE',
+        actorUserId: request.user.id,
+      });
+      return { revoked: true, reconciliationRequired: false };
+    } catch (error) {
+      if (!error.reconciliationRequired) throw error;
+      return reply.status(error.statusCode).send({
+        error: error.message,
+        code: error.code,
+        reconciliationRequired: true,
+      });
+    }
   });
 
   fastify.post('/:id/resend', { onRequest: [fastify.authenticate] }, async (request, reply) => {
@@ -582,12 +605,26 @@ export default async function invoiceRoutes(fastify) {
     const invoice = await request.prisma.invoice.findUnique({ where: { id: request.params.id } });
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
     if (!['SENT', 'PAID'].includes(invoice.status)) return reply.status(409).send({ error: 'Invoice has not been sent' });
-    const access = createPublicAccessWindow();
-    return request.prisma.invoice.update({
-      where: { id: invoice.id },
-      data: { viewToken: access.token, publicAccessExpiresAt: access.expiresAt, publicAccessRevokedAt: null, stripePaymentLink: null, stripeCheckoutSessionId: null },
-      select: { viewToken: true, publicAccessExpiresAt: true },
-    });
+    try {
+      const updated = await invalidateInvoiceCheckout({
+        prisma: request.prisma,
+        invoice,
+        action: 'ROTATE',
+        actorUserId: request.user.id,
+      });
+      return {
+        viewToken: updated.viewToken,
+        publicAccessExpiresAt: updated.publicAccessExpiresAt,
+        reconciliationRequired: false,
+      };
+    } catch (error) {
+      if (!error.reconciliationRequired) throw error;
+      return reply.status(error.statusCode).send({
+        error: error.message,
+        code: error.code,
+        reconciliationRequired: true,
+      });
+    }
   });
 
   // ─── POST /bulk/mark-paid — mark multiple invoices as paid ──────────────────
