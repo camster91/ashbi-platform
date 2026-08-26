@@ -1,0 +1,76 @@
+# Public site and Hub contract
+
+Status: Proposed architecture decision
+
+## Decision
+
+Keep `ashbi.ca` and `hub.ashbi.ca` as separate applications with one shared company strategy, service vocabulary, evidence policy, and event taxonomy.
+
+- `ashbi.ca` is the fast public acquisition and publishing surface.
+- `hub.ashbi.ca` is the authenticated operating system with narrowly scoped public intake, document, and client-portal endpoints.
+- The client portal exposes approved client information, not internal Hub state.
+- Bonsai remains the financial fallback until replacement gates pass.
+- Notion remains a controlled migration source, not a permanent competing task system.
+
+## Journey
+
+```text
+Search / referral / Upwork / outreach
+                 -> ashbi.ca proof, services, fit, inquiry
+                 -> Hub public intake and attribution
+                 -> qualification and discovery
+                 -> proposal and contract
+                 -> project, tasks, approvals, and delivery
+                 -> invoice and Stripe payment
+                 -> managed support, referral, and approved case-study learning
+```
+
+## Shared identifiers
+
+The journey needs durable identifiers for organization, person/contact, lead, opportunity, proposal, contract, project, invoice, payment, and source event. Public URLs and analytics must not expose internal sequential identifiers or sensitive client data.
+
+## Public intake contract
+
+Minimum accepted fields:
+
+- Name and contact method.
+- Business or organization name when supplied.
+- Service interest using the canonical service taxonomy.
+- Business context and requested outcome.
+- Timing and approved budget band when requested.
+- Consent and privacy acknowledgement.
+- First-party attribution: landing page, referrer, source, medium, campaign, and approved click identifier where available.
+- A client-generated idempotency token.
+
+Controls:
+
+- Server-side schema validation and normalized enumerations.
+- Rate limiting, abuse detection, safe errors, and no internal stack details.
+- Idempotent lead creation and an auditable source event.
+- Retention limits for raw attribution and form content.
+- Owner notification without automatic prospect messaging.
+- No secret, credential, private client record, or internal note in public responses.
+
+## Portal boundary
+
+The portal may show approved status, milestones, requests, files, proposals, contracts, invoices, payments, and feedback for the authenticated client. It must not expose internal notes, credentials, private margins, unrelated clients, internal AI context, or unapproved files.
+
+Capability links expire or revoke. Client authentication, tenant ownership, and object ownership are independently verified.
+
+## Revenue boundary
+
+Stripe Checkout is the planned hosted payment surface. The Hub owns invoice state and reconciles provider events idempotently. A browser redirect never proves payment; only a verified provider event and matching amount, currency, invoice, and transaction can transition the ledger.
+
+Live keys, charges, refunds, subscriptions, tax configuration, provider connections, and Bonsai cutover require action-time approval. Taxes remain explicitly configured from approved registrations and responsibilities; they are not inferred by the application.
+
+## Integration principles
+
+- Least-privilege, environment-specific credentials.
+- Signed inbound webhooks and idempotent outbound commands.
+- Explicit unknown or reconciliation-required state after uncertain delivery.
+- Audit trail, monitoring, cost limits, manual fallback, and bounded retries.
+- Portable export and documented deletion/retention behavior.
+
+## Release gate
+
+No surface is called unified until a controlled inquiry can be traced through the correct Hub tenant, opportunity, proposal, contract, project, invoice, test payment, and ledger entry without duplicate records or manual database correction.
