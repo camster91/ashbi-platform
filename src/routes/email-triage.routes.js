@@ -91,7 +91,7 @@ Choose ALL applicable tags. "needs-reply" means Cameron should respond. "lead" m
 
     if (!item) return reply.status(404).send({ error: 'Triage item not found' });
 
-    const system = `You are a professional email assistant for Cameron Ashley, founder of Ashbi Design, a Toronto-based CPG/DTC creative agency specializing in branding, packaging design, and ecommerce web development. Draft polite, professional, on-brand replies.`;
+    const system = `You are a professional email assistant for Cameron Ashley at Ashbi Design, a Toronto-based studio focused on CPG/DTC branding, packaging, production, and ecommerce web development. Draft polite, professional replies grounded only in the supplied message and client context.`;
 
     const prompt = `Draft 2 different reply options for this email:
 

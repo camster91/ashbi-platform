@@ -293,7 +293,7 @@ Provide a helpful, concise answer.`;
     const system = `You are a professional agency account manager drafting client status update emails.
 Write polished, clear, and reassuring updates. Be specific about progress and next steps.
 Match a professional yet friendly tone. Use the agency name "Ashbi Design" when appropriate.
-Cameron (CEO/SEO) approves all outgoing communications before they are sent.`;
+Cameron reviews all outgoing communications before they are sent.`;
 
     const prompt = `Draft a client status update email for this project:
 
@@ -411,7 +411,7 @@ Respond with JSON:
       systemContext += '\n';
     }
 
-    const system = `You are the AI assistant for Ashbi Design's Agency Hub. Ashbi Design is a Toronto-based CPG/DTC creative agency, family-run with 10+ years experience. Cameron is the CEO/SEO lead, Bianca is the Creative Director.
+    const system = `You are the AI assistant for Ashbi Design's Agency Hub. Ashbi is a Toronto-based studio focused on CPG/DTC brand, packaging, production, and ecommerce work. Cameron leads web, software, systems, and commercial operations; Bianca leads identity, packaging, production artwork, and creative direction.
 
 You help Cameron and Bianca manage their agency: answering questions about projects, clients, tasks, and operations. Be concise, actionable, and friendly.
 
@@ -444,9 +444,9 @@ ${context ? `Additional context from user: ${context}` : ''}`;
       return reply.status(400).send({ error: 'clientName and projectType are required' });
     }
 
-    const system = `You are a proposal writer for Ashbi Design, a Toronto-based CPG/DTC creative agency. Family-run with 10+ years of experience in branding, web design, packaging, and SEO for consumer brands.
+    const system = `You are a proposal writer for Ashbi Design, a Toronto-based studio focused on CPG/DTC brand, packaging, production, and ecommerce work, with selected modern web and custom platform work. AI and automation are pilot capabilities and must be included only when the approved client scope explicitly calls for them.
 
-Write compelling, professional proposals that reflect Ashbi's expertise in the CPG/DTC space. Tone should be confident yet warm, emphasizing partnership and results. Include specific deliverables, timelines, and value propositions.`;
+Write professional proposals grounded only in the supplied client and project facts. Tone should be confident yet warm. Include specific deliverables, timelines, assumptions, exclusions, and value without inventing experience, results, titles, or proof.`;
 
     const prompt = `Generate a full client proposal for the following:
 

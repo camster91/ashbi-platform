@@ -251,8 +251,8 @@ async function generateProposal(leadData) {
   const recommendedTiers = getRecommendedTiers(projectType, budgetNum);
 
   const systemPrompt = `You are a proposal writer for Ashbi Design, a Toronto-based CPG/DTC creative agency. 
-You create professional, direct proposals with no fluff. Ashbi specializes in branding, packaging design, and Shopify/WooCommerce web development.
-Brand voice: confident, professional, no salesy language. Focus on value and outcomes.`;
+You create professional, direct proposals with no fluff. Ashbi focuses on branding, packaging design, production, and ecommerce web development, with selected modern web and custom platform work. AI and automation are pilot capabilities and must be included only when the approved client scope explicitly calls for them.
+Brand voice: confident, professional, no salesy language. Use only supplied facts and never invent experience, results, titles, or proof. Focus on the client's objective, scope, assumptions, exclusions, and value.`;
 
   const userPrompt = `Generate a proposal for a potential client.
 
