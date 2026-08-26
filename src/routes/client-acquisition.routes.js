@@ -2,12 +2,14 @@ import { createPublicInquiry, PublicInquiryError } from '../services/public-inqu
 import {
   convertQualifiedLead,
   LeadQualificationError,
+  promoteQualifiedLeadToDeal,
   updateLeadQualification,
 } from '../services/lead-qualification.service.js';
 import {
   leadIdParamsSchema,
   leadListQuerySchema,
   leadQualificationSchema,
+  leadPromotionSchema,
   PUBLIC_SERVICE_LINES,
   publicInquirySchema,
   validateBody,
@@ -97,6 +99,7 @@ export default async function clientAcquisitionRoutes(fastify, options) {
       LEAD_CONVERSION_INCOMPLETE: 409,
       LEAD_NOT_QUALIFIED: 409,
       LEAD_CONVERSION_IN_PROGRESS: 409,
+      PIPELINE_STAGE_NOT_FOUND: 404,
     };
     reply.status(statuses[error.code] ?? 400).send({ error: error.message, code: error.code });
     return true;
@@ -125,6 +128,7 @@ export default async function clientAcquisitionRoutes(fastify, options) {
         qualificationNotes: true,
         qualifiedAt: true,
         convertedClientId: true,
+        convertedDealId: true,
         convertedAt: true,
         createdAt: true,
       },
@@ -142,6 +146,7 @@ export default async function clientAcquisitionRoutes(fastify, options) {
         events: { orderBy: { occurredAt: 'desc' }, take: 50 },
         accountOwner: { select: { id: true, name: true } },
         convertedClient: { select: { id: true, name: true } },
+        convertedDeal: { select: { id: true, title: true, currency: true, value: true, stageId: true } },
       },
     });
     if (!lead) return reply.status(404).send({ error: 'Lead not found', code: 'LEAD_NOT_FOUND' });
@@ -175,6 +180,24 @@ export default async function clientAcquisitionRoutes(fastify, options) {
         prisma: request.prisma,
         leadId: request.params.id,
         actorUserId: request.user.id,
+      });
+      return reply.status(result.idempotent ? 200 : 201).send(result);
+    } catch (error) {
+      if (qualificationError(error, reply)) return reply;
+      throw error;
+    }
+  });
+
+  fastify.post('/leads/:id/promote', {
+    onRequest: [fastify.authenticate],
+    preHandler: [staffOnly, validateParams(leadIdParamsSchema), validateBody(leadPromotionSchema)],
+  }, async (request, reply) => {
+    try {
+      const result = await promoteQualifiedLeadToDeal({
+        prisma: request.prisma,
+        leadId: request.params.id,
+        actorUserId: request.user.id,
+        deal: request.body,
       });
       return reply.status(result.idempotent ? 200 : 201).send(result);
     } catch (error) {

@@ -28,6 +28,7 @@ function shapeDeal(deal) {
     name: deal.title,
     value: deal.value,
     total: deal.value,
+    currency: deal.currency,
     clientId: deal.client.id,
     clientName: deal.client.name,
   };
@@ -35,6 +36,11 @@ function shapeDeal(deal) {
 
 function shapeStage(stage) {
   const items = stage.deals.map(shapeDeal);
+  const valuesByCurrency = items.reduce((totals, deal) => {
+    const currency = deal.currency || 'UNASSIGNED';
+    totals[currency] = (totals[currency] || 0) + (Number(deal.value) || 0);
+    return totals;
+  }, {});
   return {
     id: stage.id,
     key: stage.id,
@@ -44,7 +50,7 @@ function shapeStage(stage) {
     color: stage.color,
     probability: stage.probability,
     count: items.length,
-    value: items.reduce((sum, deal) => sum + (Number(deal.value) || 0), 0),
+    valuesByCurrency,
     items,
   };
 }
@@ -136,6 +142,7 @@ export async function createDeal(prisma, data) {
       clientId: data.clientId,
       stageId: data.stageId,
       value: data.value ?? 0,
+      currency: data.currency,
       ...(data.expectedCloseDate !== undefined && {
         expectedCloseDate: data.expectedCloseDate ? new Date(data.expectedCloseDate) : null,
       }),
@@ -154,6 +161,7 @@ export async function updateDeal(prisma, dealId, data) {
     ...(data.name !== undefined && { title: data.name }),
     ...(data.stageId !== undefined && { stageId: data.stageId }),
     ...(data.value !== undefined && { value: data.value }),
+    ...(data.currency !== undefined && { currency: data.currency }),
     ...(data.expectedCloseDate !== undefined && {
       expectedCloseDate: data.expectedCloseDate ? new Date(data.expectedCloseDate) : null,
     }),
@@ -174,9 +182,12 @@ export async function deleteDeal(prisma, dealId) {
 }
 
 export async function getPipelineAnalytics(prisma) {
-  const [totals, wonDeals, totalDeals] = await Promise.all([
-    prisma.pipelineDeal.aggregate({
+  const [currencyTotals, totals, wonDeals, totalDeals] = await Promise.all([
+    prisma.pipelineDeal.groupBy({
+      by: ['currency'],
       _sum: { value: true },
+    }),
+    prisma.pipelineDeal.aggregate({
       _avg: { probability: true },
     }),
     prisma.pipelineDeal.count({ where: { probability: { gte: 100 } } }),
@@ -184,7 +195,10 @@ export async function getPipelineAnalytics(prisma) {
   ]);
 
   return {
-    totalPipelineValue: totals._sum.value ?? 0,
+    totalPipelineValueByCurrency: Object.fromEntries(currencyTotals.map((entry) => [
+      entry.currency || 'UNASSIGNED',
+      entry._sum.value ?? 0,
+    ])),
     averageWinProbability: totals._avg.probability ?? 0,
     wonDeals,
     totalDeals,

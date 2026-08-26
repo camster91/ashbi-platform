@@ -5,6 +5,7 @@ import path from 'node:path';
 import {
   createStage,
   createDeal,
+  getPipelineAnalytics,
   getPipelineStages,
   updateStage,
   updateDeal,
@@ -23,7 +24,7 @@ test('pipeline stages are read through the injected tenant client and shaped for
         calls.push(args);
         return [{
           id: 'stage-1', name: 'Qualified', order: 1, color: '#123456', probability: 50,
-          deals: [{ id: 'deal-1', title: 'Packaging system', value: 12000, client: { id: 'client-1', name: 'Example Foods' } }],
+          deals: [{ id: 'deal-1', title: 'Packaging system', value: 12000, currency: 'CAD', client: { id: 'client-1', name: 'Example Foods' } }],
         }];
       },
     },
@@ -34,8 +35,8 @@ test('pipeline stages are read through the injected tenant client and shaped for
   assert.equal(calls.length, 1);
   assert.deepEqual(result, [{
     id: 'stage-1', key: 'stage-1', label: 'Qualified', name: 'Qualified', order: 1,
-    color: '#123456', probability: 50, count: 1, value: 12000,
-    items: [{ id: 'deal-1', title: 'Packaging system', name: 'Packaging system', value: 12000, total: 12000, clientId: 'client-1', clientName: 'Example Foods' }],
+    color: '#123456', probability: 50, count: 1, valuesByCurrency: { CAD: 12000 },
+    items: [{ id: 'deal-1', title: 'Packaging system', name: 'Packaging system', value: 12000, total: 12000, currency: 'CAD', clientId: 'client-1', clientName: 'Example Foods' }],
   }]);
 });
 
@@ -90,13 +91,13 @@ test('deal creation requires a tenant stage and maps the web contract to the Pri
   );
 
   const result = await createDeal(prisma, {
-    name: 'Packaging system', clientId: 'client-1', stageId: 'stage-1', value: 12000,
+    name: 'Packaging system', clientId: 'client-1', stageId: 'stage-1', value: 12000, currency: 'CAD',
     expectedCloseDate: '2026-10-01T00:00:00.000Z', notes: 'Human-reviewed scope only.',
   });
 
   assert.equal(result.id, 'deal-1');
   assert.deepEqual(createArgs.data, {
-    title: 'Packaging system', clientId: 'client-1', stageId: 'stage-1', value: 12000,
+    title: 'Packaging system', clientId: 'client-1', stageId: 'stage-1', value: 12000, currency: 'CAD',
     expectedCloseDate: new Date('2026-10-01T00:00:00.000Z'), notes: 'Human-reviewed scope only.',
   });
 });
@@ -143,6 +144,7 @@ test('deal creation contract requires a client and uses the page value field', (
     clientId: 'cm12345678901234567890123',
     stageId: 'cm12345678901234567890124',
     value: 12000,
+    currency: 'CAD',
   });
   const missingClient = pipelineDealCreateSchema.safeParse({
     name: 'Packaging system',
@@ -153,6 +155,58 @@ test('deal creation contract requires a client and uses the page value field', (
   assert.equal(missingClient.success, false);
 });
 
+test('deal creation requires an explicit supported currency', () => {
+  const base = {
+    name: 'Packaging system',
+    clientId: 'cm12345678901234567890123',
+    stageId: 'cm12345678901234567890124',
+    value: 12000,
+  };
+  assert.equal(pipelineDealCreateSchema.safeParse(base).success, false);
+  assert.equal(pipelineDealCreateSchema.safeParse({ ...base, currency: 'EUR' }).success, false);
+  assert.equal(pipelineDealCreateSchema.safeParse({ ...base, currency: 'CAD' }).success, true);
+  assert.equal(pipelineDealCreateSchema.safeParse({ ...base, currency: 'USD' }).success, true);
+});
+
+test('pipeline values are grouped by currency instead of being added together', async () => {
+  const prisma = {
+    pipelineStage: {
+      findMany: async () => [{
+        id: 'stage-1', name: 'Qualified', order: 1, color: '#123456', probability: 50,
+        deals: [
+          { id: 'deal-cad', title: 'Packaging', value: 12000, currency: 'CAD', client: { id: 'client-1', name: 'Example Foods' } },
+          { id: 'deal-usd', title: 'Website', value: 8000, currency: 'USD', client: { id: 'client-2', name: 'Example Goods' } },
+          { id: 'deal-legacy', title: 'Needs review', value: 500, currency: null, client: { id: 'client-3', name: 'Legacy Client' } },
+        ],
+      }],
+    },
+  };
+
+  const [stage] = await getPipelineStages(prisma);
+
+  assert.deepEqual(stage.valuesByCurrency, { CAD: 12000, USD: 8000, UNASSIGNED: 500 });
+  assert.equal('value' in stage, false);
+});
+
+test('pipeline analytics reports currency totals separately', async () => {
+  const prisma = {
+    pipelineDeal: {
+      groupBy: async () => [
+        { currency: 'CAD', _sum: { value: 15000 } },
+        { currency: 'USD', _sum: { value: 9000 } },
+        { currency: null, _sum: { value: 500 } },
+      ],
+      aggregate: async () => ({ _avg: { probability: 35 } }),
+      count: async ({ where } = {}) => where ? 1 : 4,
+    },
+  };
+
+  const analytics = await getPipelineAnalytics(prisma);
+
+  assert.deepEqual(analytics.totalPipelineValueByCurrency, { CAD: 15000, USD: 9000, UNASSIGNED: 500 });
+  assert.equal('totalPipelineValue' in analytics, false);
+});
+
 test('pipeline stage contracts reject whitespace-only names', () => {
   assert.equal(pipelineStageCreateSchema.safeParse({ name: '   ' }).success, false);
   assert.equal(pipelineStageUpdateSchema.safeParse({ name: '\t' }).success, false);
@@ -161,7 +215,7 @@ test('pipeline stage contracts reject whitespace-only names', () => {
 test('pipeline page does not offer an ownerless deal', () => {
   const page = fs.readFileSync(path.join(process.cwd(), 'web', 'src', 'pages', 'Pipeline.jsx'), 'utf8');
   assert.doesNotMatch(page, /-- No client --/);
-  assert.match(page, /Client \*/);
+  assert.match(page, /htmlFor="pipeline-deal-client"[^>]*>Client</);
 });
 
 test('pipeline page does not invent a close score from a deal name and value', () => {

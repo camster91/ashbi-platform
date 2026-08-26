@@ -4,8 +4,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   convertQualifiedLead,
+  promoteQualifiedLeadToDeal,
   updateLeadQualification,
 } from '../../services/lead-qualification.service.js';
+import { leadPromotionSchema } from '../../validators/schemas.js';
 
 test('qualification update records the human decision and a durable event atomically', async () => {
   const writes = { updates: [], events: [] };
@@ -175,6 +177,114 @@ test('replaying or racing a completed conversion returns the linked client witho
   assert.deepEqual(raced, { leadId: 'lead-1', clientId: 'client-race-winner', idempotent: true, reusedClient: true });
 });
 
+test('qualified inquiry promotion creates one client and one currency-labelled pipeline deal atomically', async () => {
+  const writes = { clients: [], contacts: [], deals: [], leadUpdates: [], events: [] };
+  const transaction = {
+    lead: {
+      findFirst: async () => ({
+        id: 'lead-1', status: 'QUALIFIED', convertedClientId: null, convertedDealId: null,
+        convertedAt: null, name: 'Casey Founder', email: 'casey@example.com',
+        company: 'Example Foods', phone: '416-555-0100', serviceLine: 'brand_packaging',
+      }),
+      updateMany: async () => ({ count: 1 }),
+      update: async ({ data }) => { writes.leadUpdates.push(data); return { id: 'lead-1', ...data }; },
+    },
+    pipelineStage: { findFirst: async () => ({ id: 'stage-1' }) },
+    contact: {
+      findFirst: async () => null,
+      create: async ({ data }) => { writes.contacts.push(data); return { id: 'contact-1', ...data }; },
+    },
+    client: { create: async ({ data }) => { writes.clients.push(data); return { id: 'client-1', ...data }; } },
+    pipelineDeal: { create: async ({ data }) => { writes.deals.push(data); return { id: 'deal-1', ...data }; } },
+    leadEvent: { create: async ({ data }) => writes.events.push(data) },
+  };
+  const now = new Date('2026-08-26T23:45:00.000Z');
+
+  const result = await promoteQualifiedLeadToDeal({
+    prisma: { $transaction: async (operation) => operation(transaction) },
+    leadId: 'lead-1',
+    actorUserId: 'user-1',
+    deal: { stageId: 'stage-1', name: 'Example Foods brand system', value: 12000, currency: 'CAD' },
+    now,
+  });
+
+  assert.deepEqual(result, { leadId: 'lead-1', clientId: 'client-1', dealId: 'deal-1', idempotent: false });
+  assert.equal(writes.clients.length, 1);
+  assert.deepEqual(writes.deals[0], {
+    title: 'Example Foods brand system', clientId: 'client-1', stageId: 'stage-1',
+    value: 12000, currency: 'CAD', source: 'WEBSITE', contactPerson: 'Casey Founder',
+  });
+  assert.deepEqual(writes.leadUpdates[0], {
+    status: 'CONVERTED', convertedClientId: 'client-1', convertedDealId: 'deal-1', convertedAt: now,
+  });
+  assert.equal(writes.events[0].eventName, 'lead_promoted_to_pipeline');
+});
+
+test('converted inquiry promotion reuses its linked client and does not create another one', async () => {
+  let clientCreates = 0;
+  let contactReads = 0;
+  const transaction = {
+    lead: {
+      findFirst: async () => ({
+        id: 'lead-1', status: 'CONVERTED', convertedClientId: 'client-1', convertedDealId: null,
+        convertedAt: new Date('2026-08-26T22:00:00.000Z'), name: 'Casey Founder',
+      }),
+      updateMany: async () => ({ count: 1 }),
+      update: async ({ data }) => ({ id: 'lead-1', ...data }),
+    },
+    pipelineStage: { findFirst: async () => ({ id: 'stage-1' }) },
+    contact: { findFirst: async () => { contactReads += 1; } },
+    client: { create: async () => { clientCreates += 1; } },
+    pipelineDeal: { create: async ({ data }) => ({ id: 'deal-1', ...data }) },
+    leadEvent: { create: async () => ({}) },
+  };
+
+  const result = await promoteQualifiedLeadToDeal({
+    prisma: { $transaction: async (operation) => operation(transaction) },
+    leadId: 'lead-1', actorUserId: 'user-1',
+    deal: { stageId: 'stage-1', name: 'Website discovery', value: 5000, currency: 'USD' },
+  });
+
+  assert.equal(result.clientId, 'client-1');
+  assert.equal(clientCreates, 0);
+  assert.equal(contactReads, 0);
+});
+
+test('replaying inquiry promotion returns its linked deal without duplicate writes', async () => {
+  let writes = 0;
+  const transaction = {
+    lead: {
+      findFirst: async () => ({
+        id: 'lead-1', status: 'CONVERTED', convertedClientId: 'client-1', convertedDealId: 'deal-1',
+      }),
+      updateMany: async () => { writes += 1; },
+    },
+    pipelineDeal: { create: async () => { writes += 1; } },
+  };
+
+  const result = await promoteQualifiedLeadToDeal({
+    prisma: { $transaction: async (operation) => operation(transaction) },
+    leadId: 'lead-1', actorUserId: 'user-1',
+    deal: { stageId: 'stage-1', name: 'Website discovery', value: 5000, currency: 'USD' },
+  });
+
+  assert.deepEqual(result, { leadId: 'lead-1', clientId: 'client-1', dealId: 'deal-1', idempotent: true });
+  assert.equal(writes, 0);
+});
+
+test('inquiry promotion contract requires a deliberate stage, deal name, and currency', () => {
+  const valid = {
+    stageId: 'cm12345678901234567890124',
+    name: 'Packaging system',
+    value: 12000,
+    currency: 'CAD',
+  };
+  assert.equal(leadPromotionSchema.safeParse(valid).success, true);
+  assert.equal(leadPromotionSchema.safeParse({ ...valid, stageId: undefined }).success, false);
+  assert.equal(leadPromotionSchema.safeParse({ ...valid, name: '   ' }).success, false);
+  assert.equal(leadPromotionSchema.safeParse({ ...valid, currency: 'EUR' }).success, false);
+});
+
 test('lead schema and routes expose a tenant-safe human qualification workflow', () => {
   const schema = fs.readFileSync(path.join(process.cwd(), 'prisma', 'schema.prisma'), 'utf8');
   const migration = fs.readFileSync(path.join(process.cwd(), 'prisma', 'migrations', '20260826173000_public_client_acquisition_intake', 'migration.sql'), 'utf8');
@@ -184,12 +294,14 @@ test('lead schema and routes expose a tenant-safe human qualification workflow',
   assert.match(model, /qualificationNotes\s+String\?/);
   assert.match(model, /qualifiedAt\s+DateTime\?/);
   assert.match(model, /convertedClientId\s+String\?/);
+  assert.match(model, /convertedDealId\s+String\?/);
   assert.match(model, /convertedClient\s+Client\?/);
   assert.match(migration, /"qualificationNotes" TEXT/);
   assert.match(migration, /"convertedClientId" TEXT/);
   assert.match(routes, /fastify\.get\('\/leads'/);
   assert.match(routes, /fastify\.patch\('\/leads\/:id\/qualification'/);
   assert.match(routes, /fastify\.post\('\/leads\/:id\/convert'/);
+  assert.match(routes, /fastify\.post\('\/leads\/:id\/promote'/);
   assert.match(routes, /request\.prisma/);
   assert.doesNotMatch(routes, /fastify\.prisma\.lead\.(?:find|update|create)/);
 });

@@ -878,18 +878,20 @@ export const pipelineStageUpdateSchema = z.object({
 }).strict();
 
 export const pipelineDealCreateSchema = z.object({
-  name: z.string().min(1).max(200),
+  name: z.string().trim().min(1).max(200),
   clientId: cuidId,
   stageId: cuidId,
   value: z.number().nonnegative().max(10_000_000).optional(),
+  currency: z.enum(['CAD', 'USD']),
   expectedCloseDate: z.string().datetime().optional(),
   notes: z.string().max(10_000).optional(),
 }).strict();
 
 export const pipelineDealUpdateSchema = z.object({
-  name: z.string().min(1).max(200).optional(),
+  name: z.string().trim().min(1).max(200).optional(),
   stageId: cuidId.optional(),
   value: z.number().nonnegative().max(10_000_000).optional(),
+  currency: z.enum(['CAD', 'USD']).optional(),
   expectedCloseDate: z.string().datetime().nullable().optional(),
   notes: z.string().max(10_000).optional(),
 }).strict();
@@ -1395,6 +1397,13 @@ export const leadIdParamsSchema = z.object({ id: cuidId }).strict();
 export const leadQualificationSchema = z.object({
   status: z.enum(QUALIFIED_LEAD_STATUSES),
   qualificationNotes: z.string().trim().max(5_000).optional(),
+}).strict();
+
+export const leadPromotionSchema = z.object({
+  stageId: cuidId,
+  name: z.string().trim().min(1).max(200),
+  value: z.number().nonnegative().max(10_000_000).optional(),
+  currency: z.enum(['CAD', 'USD']),
 }).strict();
 
 export const landingLeadSchema = z.object({

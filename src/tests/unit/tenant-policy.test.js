@@ -350,6 +350,20 @@ test('direct-scoped project creation rejects a client owned by another organizat
   assert.equal(created, false);
 });
 
+test('direct-scoped lead update rejects a converted deal owned by another organization', async () => {
+  let updated = false;
+  const scoped = createScopedPrisma({
+    pipelineDeal: { findFirst: async () => null },
+    lead: { update: async () => { updated = true; return {}; } },
+  }, 'org-a');
+
+  await assert.rejects(
+    scoped.lead.update({ where: { id: 'lead-a' }, data: { convertedDealId: 'deal-b' } }),
+    /convertedDeal deal-b does not belong to organization org-a/i,
+  );
+  assert.equal(updated, false);
+});
+
 test('direct-scoped nested connect is ownership-checked before writing', async () => {
   let created = false;
   const scoped = createScopedPrisma({

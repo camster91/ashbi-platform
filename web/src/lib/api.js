@@ -189,6 +189,8 @@ export const api = {
     request(`/client-acquisition/leads/${id}/qualification`, { method: 'PATCH', body: data }),
   convertQualifiedLead: (id) =>
     request(`/client-acquisition/leads/${id}/convert`, { method: 'POST' }),
+  promoteQualifiedLead: (id, data) =>
+    request(`/client-acquisition/leads/${id}/promote`, { method: 'POST', body: data }),
 
   // Inbox
   getInbox: (params = {}) => {

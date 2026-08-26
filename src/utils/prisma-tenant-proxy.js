@@ -80,6 +80,7 @@ const DIRECT_PARENT_RELATIONS = {
   lead: [
     { relation: 'accountOwner', field: 'accountOwnerId', model: 'user', delegate: 'user', required: true },
     { relation: 'convertedClient', field: 'convertedClientId', model: 'client', delegate: 'client' },
+    { relation: 'convertedDeal', field: 'convertedDealId', model: 'pipelinedeal', delegate: 'pipelineDeal' },
   ],
   leadevent: [{ relation: 'lead', field: 'leadId', model: 'lead', delegate: 'lead', required: true }],
 };

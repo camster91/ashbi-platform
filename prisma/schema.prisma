@@ -568,6 +568,8 @@ model Lead {
   qualifiedAt          DateTime?
   convertedClientId    String?
   convertedClient      Client?      @relation("LeadConvertedClient", fields: [convertedClientId], references: [id], onDelete: SetNull)
+  convertedDealId      String?       @unique
+  convertedDeal        PipelineDeal? @relation("LeadConvertedDeal", fields: [convertedDealId], references: [id], onDelete: SetNull)
   convertedAt          DateTime?
   source               String?
   medium               String?
@@ -589,6 +591,7 @@ model Lead {
   @@index([organizationId, email])
   @@index([accountOwnerId, status])
   @@index([convertedClientId])
+  @@index([convertedDealId])
   @@map("leads")
 }
 
@@ -1571,6 +1574,7 @@ model PipelineDeal {
   id                String    @id @default(cuid())
   title             String
   value             Float     @default(0)
+  currency          String? // CAD | USD; null means a legacy value still needs review
   clientId          String
   stageId           String
   probability       Int       @default(0) // Win probability percentage
@@ -1584,6 +1588,7 @@ model PipelineDeal {
 
   stage  PipelineStage @relation(fields: [stageId], references: [id])
   client Client        @relation(fields: [clientId], references: [id])
+  convertedLead Lead?  @relation("LeadConvertedDeal")
 
   @@index([stageId])
   @@index([clientId])

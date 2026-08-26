@@ -9,6 +9,7 @@ import QueryErrorState from '../components/QueryErrorState';
 import ConfirmDialog from '../components/ConfirmDialog';
 
 const STATUSES = ['NEW', 'REVIEWING', 'QUALIFIED', 'NURTURE', 'DISQUALIFIED', 'CONVERTED'];
+const EMPTY_STAGES = [];
 
 const STATUS_LABELS = {
   NEW: 'New',
@@ -68,6 +69,9 @@ export default function LeadInbox() {
   const [reviewStatus, setReviewStatus] = useState('REVIEWING');
   const [qualificationNotes, setQualificationNotes] = useState('');
   const [confirmConversion, setConfirmConversion] = useState(false);
+  const [showPromotion, setShowPromotion] = useState(false);
+  const [confirmPromotion, setConfirmPromotion] = useState(false);
+  const [promotion, setPromotion] = useState({ name: '', stageId: '', value: '', currency: '' });
   const queryClient = useQueryClient();
   const toast = useToast();
 
@@ -89,11 +93,31 @@ export default function LeadInbox() {
   });
   const selected = detailQuery.data;
 
+  const stagesQuery = useQuery({
+    queryKey: ['pipeline'],
+    queryFn: () => api.getPipelineStages(),
+    enabled: Boolean(selectedId && showPromotion),
+  });
+  const stages = stagesQuery.data || EMPTY_STAGES;
+
   useEffect(() => {
     if (!selected) return;
     setReviewStatus(selected.status === 'CONVERTED' ? 'QUALIFIED' : selected.status);
     setQualificationNotes(selected.qualificationNotes || '');
+    setShowPromotion(false);
+    setConfirmPromotion(false);
+    setPromotion({ name: '', stageId: '', value: '', currency: '' });
   }, [selected]);
+
+  useEffect(() => {
+    if (!showPromotion || !selected) return;
+    setPromotion((current) => ({
+      ...current,
+      name: current.name || `${selected.company || selected.name} ${SERVICE_LABELS[selected.serviceLine] || 'engagement'}`,
+      stageId: current.stageId || stages[0]?.id || '',
+      currency: current.currency || selected.budgetCurrency || '',
+    }));
+  }, [selected, showPromotion, stages]);
 
   const refresh = async () => {
     await Promise.all([
@@ -125,6 +149,33 @@ export default function LeadInbox() {
       );
     },
   });
+
+  const promoteMutation = useMutation({
+    mutationFn: () => api.promoteQualifiedLead(selectedId, {
+      name: promotion.name.trim(),
+      stageId: promotion.stageId,
+      value: promotion.value === '' ? undefined : Number(promotion.value),
+      currency: promotion.currency,
+    }),
+    onSuccess: async (result) => {
+      setConfirmPromotion(false);
+      setShowPromotion(false);
+      await refresh();
+      queryClient.invalidateQueries({ queryKey: ['clients'] });
+      queryClient.invalidateQueries({ queryKey: ['pipeline'] });
+      toast.success(
+        result.idempotent ? 'Pipeline deal already linked' : 'Inquiry added to pipeline',
+        'The client and currency-labelled deal are linked to the original inquiry.',
+      );
+    },
+  });
+
+  const canReviewPromotion = Boolean(
+    promotion.name.trim()
+    && promotion.stageId
+    && ['CAD', 'USD'].includes(promotion.currency)
+    && (promotion.value === '' || (Number.isFinite(Number(promotion.value)) && Number(promotion.value) >= 0)),
+  );
 
   return (
     <div className="space-y-6">
@@ -258,6 +309,64 @@ export default function LeadInbox() {
                     {selected.status !== 'QUALIFIED' && <p className="text-xs text-muted-foreground">Save this inquiry as Qualified before converting it to a client.</p>}
                   </div>
                 )}
+
+                {selected.convertedDeal ? (
+                  <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 dark:border-blue-900 dark:bg-blue-950/20">
+                    <p className="text-sm font-medium text-blue-800 dark:text-blue-300">This inquiry is linked to a pipeline deal.</p>
+                    <Link to="/pipeline" className="mt-2 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                      Open {selected.convertedDeal.title}<ArrowRight className="h-4 w-4" aria-hidden="true" />
+                    </Link>
+                  </div>
+                ) : ['QUALIFIED', 'CONVERTED'].includes(selected.status) ? (
+                  <div className="space-y-4 rounded-xl border border-border p-4">
+                    {!showPromotion ? (
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <h3 className="text-sm font-semibold text-foreground">Sales pipeline</h3>
+                          <p className="mt-1 text-sm text-muted-foreground">Create a deliberate, currency-labelled opportunity linked to this inquiry.</p>
+                        </div>
+                        <Button onClick={() => setShowPromotion(true)}>Add to pipeline</Button>
+                      </div>
+                    ) : stagesQuery.isLoading ? (
+                      <LoadingState label="Loading pipeline stages…" />
+                    ) : stagesQuery.isError ? (
+                      <QueryErrorState error={stagesQuery.error} message="Pipeline stages could not be loaded" onRetry={stagesQuery.refetch} isRetrying={stagesQuery.isFetching} />
+                    ) : stages.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">Set up a pipeline stage before promoting this inquiry.</p>
+                    ) : (
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="sm:col-span-2">
+                          <label htmlFor="inquiry-deal-name" className="mb-1 block text-sm font-medium text-foreground">Deal name</label>
+                          <input id="inquiry-deal-name" value={promotion.name} onChange={(event) => setPromotion((current) => ({ ...current, name: event.target.value }))} maxLength={200} className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground" />
+                        </div>
+                        <div>
+                          <label htmlFor="inquiry-deal-stage" className="mb-1 block text-sm font-medium text-foreground">Pipeline stage</label>
+                          <select id="inquiry-deal-stage" value={promotion.stageId} onChange={(event) => setPromotion((current) => ({ ...current, stageId: event.target.value }))} className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground">
+                            <option value="">Select a stage</option>
+                            {stages.map((stage) => <option key={stage.id} value={stage.id}>{stage.label || stage.name}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label htmlFor="inquiry-deal-value" className="mb-1 block text-sm font-medium text-foreground">Value</label>
+                          <input id="inquiry-deal-value" type="number" min="0" step="100" value={promotion.value} onChange={(event) => setPromotion((current) => ({ ...current, value: event.target.value }))} className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground" />
+                        </div>
+                        <div>
+                          <label htmlFor="inquiry-deal-currency" className="mb-1 block text-sm font-medium text-foreground">Currency</label>
+                          <select id="inquiry-deal-currency" value={promotion.currency} onChange={(event) => setPromotion((current) => ({ ...current, currency: event.target.value }))} className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground">
+                            <option value="">Select currency</option>
+                            <option value="CAD">CAD</option>
+                            <option value="USD">USD</option>
+                          </select>
+                        </div>
+                        {promoteMutation.isError && <p role="alert" className="text-sm text-destructive sm:col-span-2">{promoteMutation.error?.message}</p>}
+                        <div className="flex flex-col gap-3 sm:col-span-2 sm:flex-row sm:justify-end">
+                          <Button variant="outline" onClick={() => setShowPromotion(false)}>Cancel</Button>
+                          <Button onClick={() => setConfirmPromotion(true)} disabled={!canReviewPromotion}>Review pipeline promotion</Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </Card>
@@ -273,6 +382,17 @@ export default function LeadInbox() {
         onCancel={() => { if (!convertMutation.isPending) setConfirmConversion(false); }}
         pending={convertMutation.isPending}
         error={convertMutation.error?.message}
+        destructive={false}
+      />
+      <ConfirmDialog
+        isOpen={confirmPromotion}
+        title="Add qualified inquiry to pipeline?"
+        description={`This will ${selected?.convertedClientId ? 'reuse the linked client and create one deal' : 'create or reuse one client and create one deal'} for ${promotion.value === '' ? '$0' : `$${Number(promotion.value).toLocaleString('en-CA')}`} ${promotion.currency}. It will not send a message, proposal, contract, or invoice.`}
+        confirmLabel={selected?.convertedClientId ? 'Create deal' : 'Create client and deal'}
+        onConfirm={() => promoteMutation.mutate()}
+        onCancel={() => { if (!promoteMutation.isPending) setConfirmPromotion(false); }}
+        pending={promoteMutation.isPending}
+        error={promoteMutation.error?.message}
         destructive={false}
       />
     </div>

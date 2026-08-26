@@ -15,9 +15,22 @@ import ConfirmDialog from '../components/ConfirmDialog';
 const PRIMARY = '#2e2958';
 const ACCENT = '#e6f354';
 
-function fmt(n) {
+function fmt(n, currency) {
   if (n == null) return '--';
-  return `$${(n || 0).toLocaleString('en-CA', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  const amount = `$${(n || 0).toLocaleString('en-CA', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  return currency === 'UNASSIGNED' ? `${amount} currency unassigned` : `${amount} ${currency}`;
+}
+
+function CurrencyTotals({ values, className = '' }) {
+  const entries = Object.entries(values || {});
+  if (!entries.length) return null;
+  return (
+    <span className={className}>
+      {entries.map(([currency, value]) => (
+        <span key={currency} className="block">{fmt(value, currency)}</span>
+      ))}
+    </span>
+  );
 }
 
 const STAGE_CONFIG = {
@@ -39,7 +52,7 @@ const CONVERSION_LABELS = {
 // ── Create Deal Modal ──────────────────────────────────────────────────
 function CreateDealModal({ isOpen, onClose, stages }) {
   const queryClient = useQueryClient();
-  const [formData, setFormData] = useState({ name: '', clientId: '', value: '', stageId: '' });
+  const [formData, setFormData] = useState({ name: '', clientId: '', value: '', currency: '', stageId: '' });
   const [error, setError] = useState('');
 
   const { data: clientsData } = useQuery({
@@ -60,7 +73,7 @@ function CreateDealModal({ isOpen, onClose, stages }) {
     mutationFn: (data) => api.createPipelineDeal(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pipeline'] });
-      setFormData({ name: '', clientId: '', value: '', stageId: stages[0]?.id || '' });
+      setFormData({ name: '', clientId: '', value: '', currency: '', stageId: stages[0]?.id || '' });
       setError('');
       onClose();
     },
@@ -71,11 +84,13 @@ function CreateDealModal({ isOpen, onClose, stages }) {
     e.preventDefault();
     if (!formData.name.trim()) { setError('Deal name is required'); return; }
     if (!formData.clientId) { setError('Client is required'); return; }
+    if (!formData.currency) { setError('Currency is required'); return; }
     if (!formData.stageId) { setError('Pipeline stage is required'); return; }
     mutation.mutate({
       name: formData.name,
       clientId: formData.clientId,
       value: formData.value ? Number(formData.value) : undefined,
+      currency: formData.currency,
       stageId: formData.stageId,
     });
   };
@@ -91,14 +106,14 @@ function CreateDealModal({ isOpen, onClose, stages }) {
         {error && <div className="mb-4 p-3 text-sm text-red-600 bg-red-50 rounded-lg">{error}</div>}
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Deal Name *</label>
-            <input type="text" name="name" value={formData.name} onChange={handleChange}
+            <label htmlFor="pipeline-deal-name" className="block text-sm font-medium text-gray-700 mb-1">Deal name</label>
+            <input id="pipeline-deal-name" type="text" name="name" value={formData.name} onChange={handleChange}
               className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2"
               style={{ '--tw-ring-color': ACCENT }} placeholder="Website Redesign" autoFocus />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Client *</label>
-            <select name="clientId" value={formData.clientId} onChange={handleChange}
+            <label htmlFor="pipeline-deal-client" className="block text-sm font-medium text-gray-700 mb-1">Client</label>
+            <select id="pipeline-deal-client" name="clientId" value={formData.clientId} onChange={handleChange}
               className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2">
               <option value="">Select a client</option>
               {clients.map(c => (
@@ -107,14 +122,23 @@ function CreateDealModal({ isOpen, onClose, stages }) {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Value ($)</label>
-            <input type="number" name="value" value={formData.value} onChange={handleChange}
+            <label htmlFor="pipeline-deal-value" className="block text-sm font-medium text-gray-700 mb-1">Value</label>
+            <input id="pipeline-deal-value" type="number" name="value" value={formData.value} onChange={handleChange}
               className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2"
               placeholder="5000" min="0" step="100" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Stage</label>
-            <select name="stageId" value={formData.stageId} onChange={handleChange}
+            <label htmlFor="pipeline-deal-currency" className="block text-sm font-medium text-gray-700 mb-1">Currency</label>
+            <select id="pipeline-deal-currency" name="currency" value={formData.currency} onChange={handleChange}
+              className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2">
+              <option value="">Select currency</option>
+              <option value="CAD">CAD</option>
+              <option value="USD">USD</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="pipeline-deal-stage" className="block text-sm font-medium text-gray-700 mb-1">Stage</label>
+            <select id="pipeline-deal-stage" name="stageId" value={formData.stageId} onChange={handleChange}
               className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2">
               {stages.map(s => (
                 <option key={s.id} value={s.id}>{s.label || s.name}</option>
@@ -517,15 +541,16 @@ export default function Pipeline() {
             {stages.map((stage, i) => {
               const config = STAGE_CONFIG[stage.key] || STAGE_CONFIG.leads;
               const Icon = config.icon;
-              const isExpanded = expandedStage === stage.key;
+              const stageKey = stage.key || stage.id;
+              const isExpanded = expandedStage === stageKey;
 
               return (
-                <div key={stage.key} className="flex items-stretch flex-1">
+                <div key={stageKey} className="flex items-stretch flex-1">
                   <button
                     type="button"
                     aria-expanded={isExpanded}
                     aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${stage.label} stage`}
-                    onClick={() => setExpandedStage(isExpanded ? null : stage.key)}
+                    onClick={() => setExpandedStage(isExpanded ? null : stageKey)}
                     className={`flex-1 relative p-4 rounded-xl border-2 transition-all duration-200 hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                       isExpanded ? `${config.border} shadow-lg` : 'border-border hover:border-primary/30'
                     }`}
@@ -536,9 +561,7 @@ export default function Pipeline() {
                     <div className="text-center">
                       <p className="text-xs text-muted-foreground font-medium">{stage.label}</p>
                       <p className="text-2xl font-bold text-foreground mt-0.5">{stage.count}</p>
-                      {stage.value != null && (
-                        <p className={`text-sm font-semibold ${config.text} mt-0.5`}>{fmt(stage.value)}</p>
-                      )}
+                      <CurrencyTotals values={stage.valuesByCurrency} className={`text-sm font-semibold ${config.text} mt-0.5`} />
                     </div>
                   </button>
                   {i < stages.length - 1 && (
@@ -557,17 +580,18 @@ export default function Pipeline() {
           {stages.map((stage, i) => {
             const config = STAGE_CONFIG[stage.key] || STAGE_CONFIG.leads;
             const Icon = config.icon;
-            const isExpanded = expandedStage === stage.key;
+            const stageKey = stage.key || stage.id;
+            const isExpanded = expandedStage === stageKey;
             // Width decreases through funnel for visual effect
             const widthPct = 100 - (i * 6);
 
             return (
-              <div key={stage.key} style={{ width: `${widthPct}%` }} className="mx-auto">
+              <div key={stageKey} style={{ width: `${widthPct}%` }} className="mx-auto">
                 <button
                   type="button"
                   aria-expanded={isExpanded}
                   aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${stage.label} stage`}
-                  onClick={() => setExpandedStage(isExpanded ? null : stage.key)}
+                  onClick={() => setExpandedStage(isExpanded ? null : stageKey)}
                   className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                     isExpanded ? `${config.border} shadow-lg` : 'border-border'
                   }`}
@@ -579,9 +603,7 @@ export default function Pipeline() {
                     <p className="text-xs text-muted-foreground">{stage.label}</p>
                     <p className="text-lg font-bold text-foreground">{stage.count}</p>
                   </div>
-                  {stage.value != null && (
-                    <p className={`text-sm font-semibold ${config.text}`}>{fmt(stage.value)}</p>
-                  )}
+                  <CurrencyTotals values={stage.valuesByCurrency} className={`text-sm font-semibold ${config.text}`} />
                   <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
                 </button>
               </div>
@@ -593,7 +615,7 @@ export default function Pipeline() {
       {/* Expanded stage items */}
       {expandedStage && (
         <StageDetail
-          stage={stages.find(s => s.key === expandedStage)}
+          stage={stages.find(s => (s.key || s.id) === expandedStage)}
           stages={stages}
           config={STAGE_CONFIG[expandedStage]}
           onClose={() => setExpandedStage(null)}
@@ -688,7 +710,7 @@ function StageDetail({ stage, stages, config, onClose }) {
         <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
           <Icon className={`w-5 h-5 ${config?.text || 'text-primary'}`} />
           {stage.label} ({stage.count})
-          {stage.value != null && <span className={`text-sm font-normal ${config?.text}`}> -- {fmt(stage.value)}</span>}
+          <CurrencyTotals values={stage.valuesByCurrency} className={`text-sm font-normal ${config?.text}`} />
         </h3>
         <button onClick={onClose} className="p-1 rounded hover:bg-muted transition-colors">
           <X className="w-4 h-4 text-muted-foreground" />
@@ -722,7 +744,7 @@ function StageDetail({ stage, stages, config, onClose }) {
                 <div className="flex items-center gap-2">
                   {(item.total != null || item.budget != null) && (
                     <span className={`text-sm font-semibold ${config?.text || 'text-foreground'}`}>
-                      {fmt(item.total ?? item.budget)}
+                      {fmt(item.total ?? item.budget, item.currency || 'UNASSIGNED')}
                     </span>
                   )}
                   {link && <ExternalLink className="w-3.5 h-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />}
