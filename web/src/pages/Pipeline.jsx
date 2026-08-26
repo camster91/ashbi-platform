@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import {
   Target, FileText, ScrollText, FolderOpen, Receipt, DollarSign,
   ChevronRight, ArrowRight, X, ExternalLink, TrendingUp,
-  Plus, Trash2, MoveRight, Sparkles, Loader2,
+  Plus, Trash2, MoveRight,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { Card, LoadingState } from '../components/ui';
@@ -70,11 +70,13 @@ function CreateDealModal({ isOpen, onClose, stages }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.name.trim()) { setError('Deal name is required'); return; }
+    if (!formData.clientId) { setError('Client is required'); return; }
+    if (!formData.stageId) { setError('Pipeline stage is required'); return; }
     mutation.mutate({
       name: formData.name,
-      clientId: formData.clientId || undefined,
+      clientId: formData.clientId,
       value: formData.value ? Number(formData.value) : undefined,
-      stageId: formData.stageId || undefined,
+      stageId: formData.stageId,
     });
   };
 
@@ -95,10 +97,10 @@ function CreateDealModal({ isOpen, onClose, stages }) {
               style={{ '--tw-ring-color': ACCENT }} placeholder="Website Redesign" autoFocus />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Client</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Client *</label>
             <select name="clientId" value={formData.clientId} onChange={handleChange}
               className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2">
-              <option value="">-- No client --</option>
+              <option value="">Select a client</option>
               {clients.map(c => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
@@ -173,61 +175,6 @@ function MoveToDropdown({ deal, stages, currentStageId, onMove }) {
   );
 }
 
-// ── AI Score Popover ───────────────────────────────────────────────────
-function AIScoreButton({ deal, stageLabel }) {
-  const [score, setScore] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [show, setShow] = useState(false);
-  const ref = useRef(null);
-
-  useEffect(() => {
-    if (!show) return;
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setShow(false); };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [show]);
-
-  const fetchScore = async (e) => {
-    e.stopPropagation();
-    if (score) { setShow(v => !v); return; }
-    setLoading(true);
-    setShow(true);
-    try {
-      const res = await api.aiChat({
-        message: `Rate this deal's likelihood of closing on a scale of 1-10 based on: name="${deal.name}", value=${deal.value ?? 'unknown'}, stage="${stageLabel}". Give a brief reasoning in 1-2 sentences. Format: Score: X/10 - Reasoning`,
-      });
-      setScore(typeof res === 'string' ? res : res?.reply || res?.message || res?.content || JSON.stringify(res));
-    } catch {
-      setScore('AI scoring unavailable');
-    }
-    setLoading(false);
-  };
-
-  return (
-    <div className="relative" ref={ref}>
-      <button type="button" onClick={fetchScore}
-        aria-expanded={show}
-        aria-label={`Show AI lead score for ${deal.name}`}
-        className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-md hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        title="AI Lead Score">
-        {loading ? <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
-          : <Sparkles className="w-4 h-4" style={{ color: ACCENT }} />}
-      </button>
-      {show && (
-        <div className="absolute right-0 top-full mt-1 z-30 w-64 bg-white rounded-lg shadow-lg border p-3 text-sm">
-          {loading ? (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Loader2 className="w-4 h-4 animate-spin" /> Scoring...
-            </div>
-          ) : (
-            <p className="text-gray-700 whitespace-pre-wrap">{score}</p>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Main Page ──────────────────────────────────────────────────────────
 export default function Pipeline() {
   const [expandedStage, setExpandedStage] = useState(null);
@@ -294,7 +241,9 @@ export default function Pipeline() {
         <button
           type="button"
           onClick={() => setShowCreateDeal(true)}
-          className="min-h-11 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg transition-all hover:opacity-90 hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          disabled={!stages.length}
+          title={!stages.length ? 'Set up a pipeline stage first' : 'Create a deal'}
+          className="min-h-11 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg transition-all hover:opacity-90 hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
           style={{ backgroundColor: PRIMARY }}>
           <Plus className="w-4 h-4" />
           New Deal
@@ -313,6 +262,12 @@ export default function Pipeline() {
           <TrendingUp className="w-5 h-5 text-primary" />
           Sales Funnel
         </h2>
+
+        {!stages.length && (
+          <p className="text-sm text-muted-foreground">
+            Set up at least one pipeline stage before creating a deal.
+          </p>
+        )}
 
         {/* Desktop: horizontal funnel */}
         <div className="hidden lg:block">
@@ -526,9 +481,9 @@ function StageDetail({ stage, stages, config, onClose }) {
                       onClick={(e) => e.preventDefault()}>
                       <MoveToDropdown deal={item} stages={stages} currentStageId={stage.id}
                         onMove={(id, stageId) => moveMutation.mutate({ id, stageId })} />
-                      <AIScoreButton deal={item} stageLabel={stage.label || stage.name} />
                       <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(item); }}
-                        className="p-1.5 rounded-md hover:bg-red-50 hover:text-red-500 transition-colors"
+                        aria-label={`Delete ${name}`}
+                        className="min-h-11 min-w-11 inline-flex items-center justify-center p-1.5 rounded-md hover:bg-red-50 hover:text-red-500 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         title="Delete deal">
                         <Trash2 className="w-4 h-4 text-muted-foreground hover:text-red-500" />
                       </button>

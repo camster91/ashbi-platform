@@ -1,150 +1,174 @@
-// Deal Pipeline service - CRM deal management
-// Migrated from ashbi-hub raw SQL to Prisma
+// Deal pipeline service. Every operation receives the request-scoped Prisma
+// client so pipeline data cannot escape the authenticated organization.
 
-import prisma from '../config/db.js';
-
-/**
- * Get all pipeline stages with their deals
- */
-export async function getPipelineStages() {
-  return prisma.pipelineStage.findMany({
-    orderBy: { order: 'asc' },
-    include: {
-      deals: {
-        include: {
-          client: { select: { id: true, name: true } }
-        },
-        orderBy: { createdAt: 'desc' }
-      }
-    }
-  });
-}
-
-/**
- * Create a new pipeline stage
- */
-export async function createStage(data) {
-  const { name, color, probability, order } = data;
-
-  return prisma.pipelineStage.create({
-    data: {
-      name,
-      color: color || '#3B82F6',
-      probability: probability || 0,
-      order: order ?? 0
-    }
-  });
-}
-
-/**
- * Update a pipeline stage
- */
-export async function updateStage(stageId, data) {
-  return prisma.pipelineStage.update({
-    where: { id: stageId },
-    data
-  });
-}
-
-/**
- * Delete a pipeline stage and optionally reassign its deals
- */
-export async function deleteStage(stageId, moveToStageId) {
-  if (moveToStageId) {
-    await prisma.pipelineDeal.updateMany({
-      where: { stageId },
-      data: { stageId: moveToStageId }
-    });
+export class PipelineError extends Error {
+  constructor(message, code, statusCode = 400) {
+    super(message);
+    this.name = 'PipelineError';
+    this.code = code;
+    this.statusCode = statusCode;
   }
-
-  return prisma.pipelineStage.delete({
-    where: { id: stageId }
-  });
 }
 
-/**
- * Create a new deal
- */
-export async function createDeal(data) {
-  const { title, value, clientId, stageId, probability, expectedCloseDate, notes, contactPerson, source } = data;
-
-  return prisma.pipelineDeal.create({
-    data: {
-      title,
-      value: value || 0,
-      clientId,
-      stageId,
-      probability: probability || 0,
-      expectedCloseDate: expectedCloseDate ? new Date(expectedCloseDate) : null,
-      notes,
-      contactPerson,
-      source
-    },
-    include: {
-      client: { select: { id: true, name: true } },
-      stage: true
-    }
+async function assertStage(prisma, stageId) {
+  const stage = await prisma.pipelineStage.findFirst({
+    where: { id: stageId },
+    select: { id: true },
   });
+  if (!stage) {
+    throw new PipelineError('Pipeline stage not found', 'PIPELINE_STAGE_NOT_FOUND', 404);
+  }
+  return stage;
 }
 
-/**
- * Update a deal (move between stages, update value, etc.)
- */
-export async function updateDeal(dealId, data) {
-  return prisma.pipelineDeal.update({
-    where: { id: dealId },
-    data,
-    include: {
-      client: { select: { id: true, name: true } },
-      stage: true
-    }
-  });
+function shapeDeal(deal) {
+  return {
+    id: deal.id,
+    title: deal.title,
+    name: deal.title,
+    value: deal.value,
+    total: deal.value,
+    clientId: deal.client.id,
+    clientName: deal.client.name,
+  };
 }
 
-/**
- * Delete a deal
- */
-export async function deleteDeal(dealId) {
-  return prisma.pipelineDeal.delete({
-    where: { id: dealId }
-  });
+function shapeStage(stage) {
+  const items = stage.deals.map(shapeDeal);
+  return {
+    id: stage.id,
+    key: stage.id,
+    label: stage.name,
+    name: stage.name,
+    order: stage.order,
+    color: stage.color,
+    probability: stage.probability,
+    count: items.length,
+    value: items.reduce((sum, deal) => sum + (Number(deal.value) || 0), 0),
+    items,
+  };
 }
 
-/**
- * Get pipeline analytics
- */
-export async function getPipelineAnalytics() {
+export async function getPipelineStages(prisma) {
   const stages = await prisma.pipelineStage.findMany({
     orderBy: { order: 'asc' },
     include: {
-      _count: { select: { deals: true } }
+      deals: {
+        include: { client: { select: { id: true, name: true } } },
+        orderBy: { createdAt: 'desc' },
+      },
+    },
+  });
+  return stages.map(shapeStage);
+}
+
+export async function createStage(prisma, data) {
+  const { name, color, probability, order } = data;
+  return prisma.pipelineStage.create({
+    data: {
+      name,
+      color: color ?? '#3B82F6',
+      probability: probability ?? 0,
+      order: order ?? 0,
+    },
+  });
+}
+
+export async function updateStage(prisma, stageId, data) {
+  await assertStage(prisma, stageId);
+  return prisma.pipelineStage.update({ where: { id: stageId }, data });
+}
+
+export async function deleteStage(prisma, stageId, moveToStageId) {
+  await assertStage(prisma, stageId);
+  if (moveToStageId === stageId) {
+    throw new PipelineError('A stage cannot be moved into itself', 'PIPELINE_STAGE_CONFLICT', 409);
+  }
+  if (moveToStageId) await assertStage(prisma, moveToStageId);
+
+  return prisma.$transaction(async (transaction) => {
+    if (moveToStageId) {
+      await transaction.pipelineDeal.updateMany({
+        where: { stageId },
+        data: { stageId: moveToStageId },
+      });
+    } else {
+      const dealCount = await transaction.pipelineDeal.count({ where: { stageId } });
+      if (dealCount > 0) {
+        throw new PipelineError(
+          'Move this stage\'s deals before deleting it',
+          'PIPELINE_STAGE_NOT_EMPTY',
+          409,
+        );
+      }
     }
+    return transaction.pipelineStage.delete({ where: { id: stageId } });
   });
+}
 
-  const totalValue = await prisma.pipelineDeal.aggregate({
-    _sum: { value: true },
-    _avg: { probability: true }
+export async function createDeal(prisma, data) {
+  await assertStage(prisma, data.stageId);
+  return prisma.pipelineDeal.create({
+    data: {
+      title: data.name,
+      clientId: data.clientId,
+      stageId: data.stageId,
+      value: data.value ?? 0,
+      ...(data.expectedCloseDate !== undefined && {
+        expectedCloseDate: data.expectedCloseDate ? new Date(data.expectedCloseDate) : null,
+      }),
+      ...(data.notes !== undefined && { notes: data.notes }),
+    },
+    include: {
+      client: { select: { id: true, name: true } },
+      stage: true,
+    },
   });
+}
 
-  const dealsByStage = await prisma.pipelineDeal.groupBy({
-    by: ['stageId'],
-    _sum: { value: true },
-    _count: true
+export async function updateDeal(prisma, dealId, data) {
+  if (data.stageId) await assertStage(prisma, data.stageId);
+  const update = {
+    ...(data.name !== undefined && { title: data.name }),
+    ...(data.stageId !== undefined && { stageId: data.stageId }),
+    ...(data.value !== undefined && { value: data.value }),
+    ...(data.expectedCloseDate !== undefined && {
+      expectedCloseDate: data.expectedCloseDate ? new Date(data.expectedCloseDate) : null,
+    }),
+    ...(data.notes !== undefined && { notes: data.notes }),
+  };
+  return prisma.pipelineDeal.update({
+    where: { id: dealId },
+    data: update,
+    include: {
+      client: { select: { id: true, name: true } },
+      stage: true,
+    },
   });
+}
 
-  const wonDeals = await prisma.pipelineDeal.count({
-    where: { probability: { gte: 100 } }
-  });
+export async function deleteDeal(prisma, dealId) {
+  return prisma.pipelineDeal.delete({ where: { id: dealId } });
+}
 
-  const totalDeals = await prisma.pipelineDeal.count();
+export async function getPipelineAnalytics(prisma) {
+  const [totals, wonDeals, totalDeals] = await Promise.all([
+    prisma.pipelineDeal.aggregate({
+      _sum: { value: true },
+      _avg: { probability: true },
+    }),
+    prisma.pipelineDeal.count({ where: { probability: { gte: 100 } } }),
+    prisma.pipelineDeal.count(),
+  ]);
 
   return {
-    stages,
-    totalPipelineValue: totalValue._sum.value || 0,
-    averageWinProbability: totalValue._avg.probability || 0,
-    dealsByStage,
+    totalPipelineValue: totals._sum.value ?? 0,
+    averageWinProbability: totals._avg.probability ?? 0,
     wonDeals,
     totalDeals,
-    winRate: totalDeals > 0 ? (wonDeals / totalDeals) * 100 : 0
+    winRate: totalDeals > 0 ? (wonDeals / totalDeals) * 100 : 0,
+    // Named funnel rates need explicit lifecycle evidence. Do not infer them
+    // from arbitrary user-defined stage names.
+    conversionRates: {},
   };
 }

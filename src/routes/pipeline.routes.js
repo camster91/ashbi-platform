@@ -9,7 +9,8 @@ import {
   createDeal,
   updateDeal,
   deleteDeal,
-  getPipelineAnalytics
+  getPipelineAnalytics,
+  PipelineError,
 } from '../services/dealPipeline.service.js';
 import {
   validateBody,
@@ -20,18 +21,27 @@ import {
 } from '../validators/schemas.js';
 
 export default async function pipelineRoutes(fastify) {
+  const handlePipelineError = (error, reply) => {
+    if (error instanceof PipelineError) {
+      return reply.status(error.statusCode).send({
+        error: { message: error.message, type: error.code },
+      });
+    }
+    throw error;
+  };
+
   // Get pipeline stages with deals
   fastify.get('/', {
     onRequest: [fastify.authenticate]
-  }, async () => {
-    return getPipelineStages();
+  }, async (request) => {
+    return getPipelineStages(request.prisma);
   });
 
   // Get pipeline analytics
   fastify.get('/analytics', {
     onRequest: [fastify.authenticate]
-  }, async () => {
-    return getPipelineAnalytics();
+  }, async (request) => {
+    return getPipelineAnalytics(request.prisma);
   });
 
   // Create a new stage
@@ -39,7 +49,7 @@ export default async function pipelineRoutes(fastify) {
     onRequest: [fastify.authenticate],
     preHandler: validateBody(pipelineStageCreateSchema),
   }, async (request, reply) => {
-    const stage = await createStage(request.body);
+    const stage = await createStage(request.prisma, request.body);
     return reply.status(201).send(stage);
   });
 
@@ -47,18 +57,26 @@ export default async function pipelineRoutes(fastify) {
   fastify.put('/stages/:id', {
     onRequest: [fastify.authenticate],
     preHandler: validateBody(pipelineStageUpdateSchema),
-  }, async (request) => {
+  }, async (request, reply) => {
     const { id } = request.params;
-    return updateStage(id, request.body);
+    try {
+      return await updateStage(request.prisma, id, request.body);
+    } catch (error) {
+      return handlePipelineError(error, reply);
+    }
   });
 
   // Delete a stage
   fastify.delete('/stages/:id', {
     onRequest: [fastify.authenticate]
-  }, async (request) => {
+  }, async (request, reply) => {
     const { id } = request.params;
     const { moveToStageId } = request.query;
-    return deleteStage(id, moveToStageId);
+    try {
+      return await deleteStage(request.prisma, id, moveToStageId);
+    } catch (error) {
+      return handlePipelineError(error, reply);
+    }
   });
 
   // Create a new deal
@@ -66,17 +84,25 @@ export default async function pipelineRoutes(fastify) {
     onRequest: [fastify.authenticate],
     preHandler: validateBody(pipelineDealCreateSchema),
   }, async (request, reply) => {
-    const deal = await createDeal(request.body);
-    return reply.status(201).send(deal);
+    try {
+      const deal = await createDeal(request.prisma, request.body);
+      return reply.status(201).send(deal);
+    } catch (error) {
+      return handlePipelineError(error, reply);
+    }
   });
 
   // Update a deal (move between stages, update value, etc.)
   fastify.put('/deals/:id', {
     onRequest: [fastify.authenticate],
     preHandler: validateBody(pipelineDealUpdateSchema),
-  }, async (request) => {
+  }, async (request, reply) => {
     const { id } = request.params;
-    return updateDeal(id, request.body);
+    try {
+      return await updateDeal(request.prisma, id, request.body);
+    } catch (error) {
+      return handlePipelineError(error, reply);
+    }
   });
 
   // Delete a deal
@@ -84,6 +110,6 @@ export default async function pipelineRoutes(fastify) {
     onRequest: [fastify.authenticate]
   }, async (request) => {
     const { id } = request.params;
-    return deleteDeal(id);
+    return deleteDeal(request.prisma, id);
   });
 }

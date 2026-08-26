@@ -868,33 +868,31 @@ export const pipelineStageCreateSchema = z.object({
   order: z.number().int().min(0).max(1000).default(0),
   color: z.string().max(20).optional(),
   probability: z.number().int().min(0).max(100).default(50),
-});
+}).strict();
 
 export const pipelineStageUpdateSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   order: z.number().int().min(0).max(1000).optional(),
   color: z.string().max(20).optional(),
   probability: z.number().int().min(0).max(100).optional(),
-});
+}).strict();
 
 export const pipelineDealCreateSchema = z.object({
   name: z.string().min(1).max(200),
-  clientId: cuidId.optional(),
-  projectId: cuidId.optional(),
+  clientId: cuidId,
   stageId: cuidId,
-  amount: z.number().nonnegative().max(10_000_000).optional(),
+  value: z.number().nonnegative().max(10_000_000).optional(),
   expectedCloseDate: z.string().datetime().optional(),
   notes: z.string().max(10_000).optional(),
-});
+}).strict();
 
 export const pipelineDealUpdateSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   stageId: cuidId.optional(),
-  amount: z.number().nonnegative().max(10_000_000).nullable().optional(),
+  value: z.number().nonnegative().max(10_000_000).optional(),
   expectedCloseDate: z.string().datetime().nullable().optional(),
   notes: z.string().max(10_000).optional(),
-  status: z.enum(['OPEN', 'WON', 'LOST']).optional(),
-});
+}).strict();
 
 // ── Response (AI-drafted reply) ───────────────────────────────────────────
 export const responseCreateSchema = z.object({
