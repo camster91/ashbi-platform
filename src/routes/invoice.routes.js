@@ -6,8 +6,8 @@ import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-d
 import { validateBody, createInvoiceSchema, updateInvoiceSchema, markInvoicePaidSchema, sendInvoiceSchema, lineItemTemplateCreateSchema, invoiceBulkIdsSchema, invoiceBulkArchiveSchema, bulkMarkPaidSchema, proposalInvoiceDraftSchema } from '../validators/schemas.js';
 import { sendInvoiceDeliveryEmail } from '../services/email.service.js';
 import { createDraftInvoiceFromProposal } from '../services/proposalInvoice.service.js';
+import { createManualInvoiceDraft } from '../services/manualInvoice.service.js';
 
-const HST_RATE = 13; // Ontario HST
 const VOID_UNDO_WINDOW_MS = 10_000;
 const VOIDABLE_STATUSES = new Set(['DRAFT', 'SENT', 'OVERDUE']);
 
@@ -175,61 +175,15 @@ export default async function invoiceRoutes(fastify) {
   });
 
   // ─── POST / — create invoice ────────────────────────────────────────────────
-  fastify.post('/', { onRequest: [fastify.authenticate], preHandler: [validateBody(createInvoiceSchema)] }, async (request, reply) => {
-    const {
-      clientId,
-      projectId,
-      title,
-      lineItems = [],
-      notes,
-      internalNotes,
-      dueDate,
-      issueDate,
-      taxRate = HST_RATE,
-      taxType = 'HST',
-      discountAmount = 0,
-      isRecurring = false,
-      recurringInterval,
-    } = request.body;
-
-    if (!clientId) return reply.status(400).send({ error: 'clientId is required' });
-    if (lineItems.length === 0) return reply.status(400).send({ error: 'At least one line item is required' });
-
-    const invoiceNumber = await generateInvoiceNumber();
-    const processedItems = processLineItems(lineItems);
-    const { subtotal, tax, total } = calcTotals(processedItems, taxRate, discountAmount);
-
-    return fastify.prisma.invoice.create({
-      data: {
-        invoiceNumber,
-        title: title || null,
-        clientId,
-        projectId: projectId || null,
-        subtotal,
-        discountAmount: parseFloat(discountAmount),
-        taxRate: parseFloat(taxRate),
-        taxType,
-        tax,
-        total,
-        notes: notes || null,
-        internalNotes: internalNotes || null,
-        dueDate: dueDate ? new Date(dueDate) : null,
-        issueDate: issueDate ? new Date(issueDate) : new Date(),
-        isRecurring,
-        recurringInterval: isRecurring ? recurringInterval : null,
-        createdById: request.user.id,
-        lineItems: {
-          create: processedItems
-        }
-      },
-      include: {
-        client: { select: { id: true, name: true } },
-        createdBy: { select: { id: true, name: true } },
-        lineItems: { orderBy: { position: 'asc' } },
-        payments: true,
-      }
-    });
-  });
+  fastify.post('/', {
+    onRequest: [fastify.authenticate],
+    preHandler: [validateBody(createInvoiceSchema)],
+  }, async (request) => createManualInvoiceDraft({
+    prisma: request.prisma,
+    actorUserId: request.user.id,
+    input: request.body,
+    invoiceNumberFactory: () => generateInvoiceNumber(),
+  }));
 
   // ─── PUT /:id — update invoice ──────────────────────────────────────────────
   fastify.put('/:id', { onRequest: [fastify.authenticate], preHandler: [validateBody(updateInvoiceSchema)] }, async (request, reply) => {

@@ -136,7 +136,7 @@ export const updateClientSchema = z.object({
 // ── Invoice schemas ───────────────────────────────────────────────────────
 const invoiceRouteLineItemSchema = z.object({
   description: z.string().min(1).max(500),
-  itemType: z.enum(['LABOR', 'MATERIAL', 'MATERIALS', 'EXPENSE', 'DISCOUNT', 'OTHER']).optional().default('LABOR'),
+  itemType: z.enum(['LABOR', 'MATERIAL', 'MATERIALS', 'EXPENSE', 'DISCOUNT', 'CUSTOM', 'OTHER']).optional().default('LABOR'),
   quantity: z.number().positive(),
   unitPrice: z.number().nonnegative(),
   total: z.number().nonnegative().optional(),
@@ -144,20 +144,30 @@ const invoiceRouteLineItemSchema = z.object({
 });
 
 export const createInvoiceSchema = z.object({
+  creationRequestId: z.string().uuid(),
   clientId: cuidId,
   projectId: cuidId.optional(),
-  title: z.string().min(1).max(200),
+  title: z.string().min(1).max(200).optional(),
   issueDate: z.string().datetime().optional(),
-  dueDate: z.string().datetime(),
-  currency: z.enum(['CAD', 'USD']).optional().default('CAD'),
-  taxRate: z.number().min(0).max(50).optional().default(13),
+  dueDate: z.string().datetime().optional(),
+  currency: z.enum(['CAD', 'USD']),
+  taxRate: z.number().min(0).max(50),
   discountAmount: z.number().min(0).optional().default(0),
   notes: z.string().max(2000).optional(),
   internalNotes: z.string().max(2000).optional(),
-  taxType: z.enum(['HST', 'GST', 'PST', 'NONE']).optional(),
+  taxType: z.enum(['HST', 'GST', 'PST', 'NONE']),
+  taxReviewed: z.literal(true),
   isRecurring: z.boolean().optional(),
   recurringInterval: z.enum(['MONTHLY', 'QUARTERLY', 'ANNUALLY']).optional(),
   lineItems: z.array(invoiceRouteLineItemSchema).min(1),
+}).strict().superRefine((value, context) => {
+  if (value.taxType === 'NONE' && value.taxRate !== 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['taxRate'],
+      message: 'Tax rate must be 0 when tax type is NONE',
+    });
+  }
 });
 
 export const proposalInvoiceDraftSchema = z.object({

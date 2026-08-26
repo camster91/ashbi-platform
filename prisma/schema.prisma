@@ -1041,8 +1041,9 @@ model Contract {
 }
 
 model Invoice {
-  id            String    @id @default(cuid())
-  invoiceNumber String    @unique
+  id                String    @id @default(cuid())
+  invoiceNumber     String    @unique
+  creationRequestId String?   @unique
   status        String    @default("DRAFT") // DRAFT | SENT | PAID | OVERDUE | VOID
   title         String?
   dueDate       DateTime?

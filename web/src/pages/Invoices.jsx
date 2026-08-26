@@ -15,7 +15,36 @@ import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 import ConfirmDialog from '../components/ConfirmDialog';
 
-const HST_RATE = 13;
+function newInvoiceForm(clientId = '') {
+  return {
+    creationRequestId: crypto.randomUUID(),
+    clientId,
+    projectId: '',
+    title: '',
+    notes: '',
+    dueDate: '',
+    currency: '',
+    taxRate: '',
+    taxType: '',
+    taxReviewed: false,
+    discountAmount: 0,
+    isRecurring: false,
+    recurringInterval: 'MONTHLY',
+    lineItems: [{ description: '', itemType: 'LABOR', quantity: 1, unitPrice: 0 }],
+  };
+}
+
+function recoveredInvoiceForm(draft) {
+  return {
+    ...newInvoiceForm(draft?.clientId || ''),
+    ...draft,
+    creationRequestId: draft?.creationRequestId || crypto.randomUUID(),
+    currency: draft?.currency || '',
+    taxType: draft?.taxType || '',
+    taxRate: draft?.taxRate ?? '',
+    taxReviewed: false,
+  };
+}
 
 const STATUS_CONFIG = {
   DRAFT:   { label: 'Draft',   color: 'bg-muted text-muted-foreground',                                              icon: Receipt },
@@ -47,19 +76,7 @@ export default function Invoices() {
   const [activeTab, setActiveTab] = useState('list'); // 'list' | 'collections'
   const [invoiceToVoid, setInvoiceToVoid] = useState(null);
 
-  const [form, setForm] = useState({
-    clientId: initClientId,
-    projectId: '',
-    title: '',
-    notes: '',
-    dueDate: '',
-    taxRate: HST_RATE,
-    taxType: 'HST',
-    discountAmount: 0,
-    isRecurring: false,
-    recurringInterval: 'MONTHLY',
-    lineItems: [{ description: '', itemType: 'LABOR', quantity: 1, unitPrice: 0 }],
-  });
+  const [form, setForm] = useState(() => newInvoiceForm(initClientId));
   const formDraft = useAutosave('invoice', 'new', form);
 
   useEffect(() => {
@@ -98,7 +115,7 @@ export default function Invoices() {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       setShowCreate(false);
       resetForm();
-      toast.success('Invoice created');
+      toast.success('Invoice draft created');
     },
     onError: (err) => toast.error('Failed to create invoice', err.message),
   });
@@ -153,12 +170,7 @@ export default function Invoices() {
   });
 
   // Form helpers
-  const resetForm = () => setForm({
-    clientId: '', projectId: '', title: '', notes: '', dueDate: '',
-    taxRate: HST_RATE, taxType: 'HST', discountAmount: 0,
-    isRecurring: false, recurringInterval: 'MONTHLY',
-    lineItems: [{ description: '', itemType: 'LABOR', quantity: 1, unitPrice: 0 }],
-  });
+  const resetForm = () => setForm(newInvoiceForm());
 
   const addLineItem = () => setForm(f => ({
     ...f,
@@ -188,17 +200,21 @@ export default function Invoices() {
 
   const handleCreate = (e) => {
     e.preventDefault();
+    if (!invoiceFormValid) return;
     createMutation.mutate({
+      creationRequestId: form.creationRequestId,
       clientId: form.clientId,
-      projectId: form.projectId || undefined,
-      title: form.title || undefined,
-      notes: form.notes || undefined,
-      dueDate: form.dueDate || undefined,
+      ...(form.projectId && { projectId: form.projectId }),
+      ...(form.title && { title: form.title }),
+      ...(form.notes && { notes: form.notes }),
+      ...(form.dueDate && { dueDate: new Date(`${form.dueDate}T23:59:59.000Z`).toISOString() }),
+      currency: form.currency,
       taxRate: parseFloat(form.taxRate),
       taxType: form.taxType,
+      taxReviewed: true,
       discountAmount: parseFloat(form.discountAmount) || 0,
       isRecurring: form.isRecurring,
-      recurringInterval: form.isRecurring ? form.recurringInterval : undefined,
+      ...(form.isRecurring && { recurringInterval: form.recurringInterval }),
       lineItems: form.lineItems.map(li => ({
         description: li.description,
         itemType: li.itemType,
@@ -214,7 +230,19 @@ export default function Invoices() {
   );
   const formDiscount = parseFloat(form.discountAmount) || 0;
   const formDiscounted = Math.max(0, formSubtotal - formDiscount);
-  const formTax = parseFloat(((formDiscounted * parseFloat(form.taxRate)) / 100).toFixed(2));
+  const parsedTaxRate = form.taxRate === '' ? Number.NaN : Number(form.taxRate);
+  const taxDecisionValid = Boolean(form.taxType)
+    && Number.isFinite(parsedTaxRate)
+    && parsedTaxRate >= 0
+    && parsedTaxRate <= 50
+    && (form.taxType !== 'NONE' || parsedTaxRate === 0)
+    && form.taxReviewed;
+  const lineItemsValid = form.lineItems.length > 0
+    && form.lineItems.every((lineItem) => lineItem.description.trim().length > 0);
+  const invoiceFormValid = Boolean(form.clientId && form.currency && taxDecisionValid && lineItemsValid);
+  const formTax = taxDecisionValid
+    ? parseFloat(((formDiscounted * parsedTaxRate) / 100).toFixed(2))
+    : 0;
   const formTotal = parseFloat((formDiscounted + formTax).toFixed(2));
 
   const invoices = invoiceData.invoices || [];
@@ -320,6 +348,7 @@ export default function Invoices() {
               loading={createMutation.isPending}
               error={createMutation.error?.message}
               draftState={formDraft}
+              canSubmit={invoiceFormValid}
             />
           )}
 
@@ -501,7 +530,7 @@ function InvoiceCreateForm({
   form, clients, projects, templates,
   formSubtotal, formDiscount, formTax, formTotal,
   onFormChange, onLineItemUpdate, onLineItemAdd, onLineItemRemove,
-  onApplyTemplate, onSubmit, onCancel, loading, error, draftState
+  onApplyTemplate, onSubmit, onCancel, loading, error, draftState, canSubmit
 }) {
   const clientProjects = projects.filter(p => p.clientId === form.clientId);
 
@@ -513,16 +542,18 @@ function InvoiceCreateForm({
         draftSavedAt={draftState.draftMeta?.draftSavedAt}
         status={draftState.status}
         lastSaved={draftState.lastSaved}
-        onRecover={(recovered) => { onFormChange(recovered); draftState.setDraft(null); }}
+        onRecover={(recovered) => { onFormChange(recoveredInvoiceForm(recovered)); draftState.setDraft(null); }}
         onDiscard={draftState.discardDraft}
         onRetry={draftState.saveNow}
       />
       <form onSubmit={onSubmit} className="space-y-5">
         {/* Client / Project / Title */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Client *</label>
+            <label htmlFor="invoice-client" className="block text-sm font-medium mb-1">Client *</label>
             <select
+              id="invoice-client"
+              aria-label="Invoice client"
               value={form.clientId}
               onChange={(e) => onFormChange(f => ({ ...f, clientId: e.target.value, projectId: '' }))}
               className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
@@ -532,8 +563,9 @@ function InvoiceCreateForm({
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Project (optional)</label>
+            <label htmlFor="invoice-project" className="block text-sm font-medium mb-1">Project (optional)</label>
             <select
+              id="invoice-project"
               value={form.projectId}
               onChange={(e) => onFormChange(f => ({ ...f, projectId: e.target.value }))}
               className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
@@ -543,8 +575,9 @@ function InvoiceCreateForm({
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Invoice Title (optional)</label>
+            <label htmlFor="invoice-title" className="block text-sm font-medium mb-1">Invoice Title (optional)</label>
             <input
+              id="invoice-title"
               type="text"
               value={form.title}
               onChange={(e) => onFormChange(f => ({ ...f, title: e.target.value }))}
@@ -552,35 +585,63 @@ function InvoiceCreateForm({
               className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
             />
           </div>
+          <div>
+            <label htmlFor="invoice-currency" className="block text-sm font-medium mb-1">Currency *</label>
+            <select
+              id="invoice-currency"
+              aria-label="Invoice currency"
+              value={form.currency}
+              onChange={(e) => onFormChange(f => ({ ...f, currency: e.target.value }))}
+              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+              required
+            >
+              <option value="">Choose currency...</option>
+              <option value="CAD">CAD</option>
+              <option value="USD">USD</option>
+            </select>
+          </div>
         </div>
 
         {/* Dates */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Due Date</label>
-            <input type="date" value={form.dueDate}
+            <label htmlFor="invoice-due-date" className="block text-sm font-medium mb-1">Due Date (optional)</label>
+            <input id="invoice-due-date" type="date" value={form.dueDate}
               onChange={(e) => onFormChange(f => ({ ...f, dueDate: e.target.value }))}
               className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Tax</label>
-            <div className="flex gap-2">
-              <select value={form.taxType}
-                onChange={(e) => onFormChange(f => ({ ...f, taxType: e.target.value,
-                  taxRate: e.target.value === 'HST' ? 13 : e.target.value === 'GST' ? 5 : e.target.value === 'NONE' ? 0 : f.taxRate
-                }))}
-                className="w-28 px-2 py-2 rounded-lg border border-border bg-background text-sm">
+            <label htmlFor="invoice-tax-type" className="block text-sm font-medium mb-1">Tax type *</label>
+              <select id="invoice-tax-type" aria-label="Tax type" value={form.taxType}
+                onChange={(e) => onFormChange(f => ({ ...f, taxType: e.target.value }))}
+                className="w-full px-2 py-2 rounded-lg border border-border bg-background text-sm" required>
+                <option value="">Choose tax type...</option>
                 <option value="HST">HST</option>
                 <option value="GST">GST</option>
                 <option value="PST">PST</option>
                 <option value="NONE">None</option>
               </select>
-              <input type="number" value={form.taxRate} min="0" max="30" step="0.5"
-                onChange={(e) => onFormChange(f => ({ ...f, taxRate: e.target.value }))}
-                className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm"
-                placeholder="Rate %" />
-            </div>
           </div>
+          <div>
+            <label htmlFor="invoice-tax-rate" className="block text-sm font-medium mb-1">Tax rate percent *</label>
+            <input id="invoice-tax-rate" aria-label="Tax rate percent" type="number" value={form.taxRate} min="0" max="50" step="0.01"
+              onChange={(e) => onFormChange(f => ({ ...f, taxRate: e.target.value }))}
+              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
+              placeholder="Enter reviewed rate" required />
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-amber-500/30 bg-amber-50 p-4 text-sm text-amber-950 dark:bg-amber-950/20 dark:text-amber-100">
+          <p>This creates an internal draft only. It does not email the client, create a payment link, or charge anything.</p>
+          <label className="mt-3 flex items-start gap-3 font-medium">
+            <input type="checkbox" checked={form.taxReviewed}
+              onChange={(e) => onFormChange(f => ({ ...f, taxReviewed: e.target.checked }))}
+              className="mt-1" />
+            <span>I reviewed the tax treatment for this client and work</span>
+          </label>
+          {form.taxType === 'NONE' && form.taxRate !== '' && Number(form.taxRate) !== 0 && (
+            <p className="mt-2 text-destructive">No tax requires a 0% rate.</p>
+          )}
         </div>
 
         {/* Line Items */}
@@ -626,6 +687,7 @@ function InvoiceCreateForm({
                     <option value="CUSTOM">Custom</option>
                   </select>
                   <input type="text" value={li.description}
+                    aria-label="Line item description"
                     onChange={(e) => onLineItemUpdate(idx, 'description', e.target.value)}
                     placeholder="Description"
                     className="col-span-4 px-2 py-1.5 rounded border border-border bg-background text-sm"
@@ -634,6 +696,7 @@ function InvoiceCreateForm({
                     onChange={(e) => onLineItemUpdate(idx, 'quantity', e.target.value)}
                     className="col-span-2 px-2 py-1.5 rounded border border-border bg-background text-sm text-center" />
                   <input type="number" value={li.unitPrice} min="0" step="0.01"
+                    aria-label="Line item unit price"
                     onChange={(e) => onLineItemUpdate(idx, 'unitPrice', e.target.value)}
                     className="col-span-2 px-2 py-1.5 rounded border border-border bg-background text-sm text-right" />
                   <span className="col-span-2 text-sm text-right font-medium">
@@ -651,6 +714,7 @@ function InvoiceCreateForm({
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="flex-1">
                       <input type="text" value={li.description}
+                        aria-label="Line item description"
                         onChange={(e) => onLineItemUpdate(idx, 'description', e.target.value)}
                         placeholder="Description"
                         className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm mb-2"
@@ -681,6 +745,7 @@ function InvoiceCreateForm({
                     <div>
                       <label className="block text-xs text-muted-foreground mb-0.5">Unit Price</label>
                       <input type="number" value={li.unitPrice} min="0" step="0.01"
+                        aria-label="Line item unit price"
                         onChange={(e) => onLineItemUpdate(idx, 'unitPrice', e.target.value)}
                         className="w-full px-2 py-1.5 rounded border border-border bg-background text-sm" />
                     </div>
@@ -743,28 +808,28 @@ function InvoiceCreateForm({
         <div className="rounded-lg bg-muted/50 p-4 space-y-1.5 text-sm">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Subtotal</span>
-            <span>{fmt(formSubtotal)}</span>
+            <span>{fmt(formSubtotal)} {form.currency || 'currency unassigned'}</span>
           </div>
           {formDiscount > 0 && (
             <div className="flex justify-between text-green-600">
               <span>Discount</span>
-              <span>-{fmt(formDiscount)}</span>
+              <span>-{fmt(formDiscount)} {form.currency || 'currency unassigned'}</span>
             </div>
           )}
           <div className="flex justify-between">
-            <span className="text-muted-foreground">{form.taxType} ({form.taxRate}%)</span>
-            <span>{fmt(formTax)}</span>
+            <span className="text-muted-foreground">{form.taxType || 'Tax unreviewed'} ({form.taxRate === '' ? '—' : form.taxRate}%)</span>
+            <span>{fmt(formTax)} {form.currency || 'currency unassigned'}</span>
           </div>
           <div className="flex justify-between font-semibold text-base border-t border-border pt-2 mt-2">
             <span>Total</span>
-            <span>{fmt(formTotal)} CAD</span>
+            <span>{fmt(formTotal)} {form.currency || 'currency unassigned'}</span>
           </div>
         </div>
 
         {error && <p className="text-sm text-destructive">{error}</p>}
 
         <div className="flex gap-2">
-          <Button type="submit" loading={loading}>Create Invoice</Button>
+          <Button type="submit" loading={loading} disabled={!canSubmit}>Create internal draft</Button>
           <Button variant="ghost" type="button" onClick={onCancel}>Cancel</Button>
         </div>
       </form>
