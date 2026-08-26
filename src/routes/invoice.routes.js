@@ -3,8 +3,9 @@ import { createPaymentLink, handleWebhook, recordCompletedCheckout } from '../se
 import { generateInvoicePdf } from '../utils/generate-invoice-pdf.js';
 import { generateInvoiceNumber } from '../utils/invoice.js';
 import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
-import { validateBody, createInvoiceSchema, updateInvoiceSchema, markInvoicePaidSchema, sendInvoiceSchema, lineItemTemplateCreateSchema, invoiceBulkIdsSchema, invoiceBulkArchiveSchema, bulkMarkPaidSchema } from '../validators/schemas.js';
+import { validateBody, createInvoiceSchema, updateInvoiceSchema, markInvoicePaidSchema, sendInvoiceSchema, lineItemTemplateCreateSchema, invoiceBulkIdsSchema, invoiceBulkArchiveSchema, bulkMarkPaidSchema, proposalInvoiceDraftSchema } from '../validators/schemas.js';
 import { sendInvoiceDeliveryEmail } from '../services/email.service.js';
+import { createDraftInvoiceFromProposal } from '../services/proposalInvoice.service.js';
 
 const HST_RATE = 13; // Ontario HST
 const VOID_UNDO_WINDOW_MS = 10_000;
@@ -531,70 +532,16 @@ export default async function invoiceRoutes(fastify) {
   });
 
   // ─── POST /from-proposal/:proposalId — create from approved proposal ────────
-  fastify.post('/from-proposal/:proposalId', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const proposal = await request.prisma.proposal.findUnique({
-      where: { id: request.params.proposalId },
-      include: { client: true, lineItems: true }
-    });
-
-    if (!proposal) return reply.status(404).send({ error: 'Proposal not found' });
-    if (proposal.status !== 'APPROVED') return reply.status(400).send({ error: 'Proposal must be approved first' });
-    if (!['CAD', 'USD'].includes(proposal.currency)) {
-      return reply.status(409).send({ error: 'Proposal currency must be reviewed before creating an invoice' });
-    }
-
-    const invoiceInclude = {
-      client: { select: { id: true, name: true } },
-      lineItems: { orderBy: { position: 'asc' } },
-      payments: true,
-    };
-    const existing = await request.prisma.invoice.findUnique({
-      where: { proposalId: proposal.id },
-      include: invoiceInclude
-    });
-    if (existing) return existing;
-
-    const invoiceNumber = await generateInvoiceNumber();
-    const processedItems = proposal.lineItems.map((li, idx) => ({
-      description: li.description,
-      itemType: 'LABOR',
-      quantity: li.quantity,
-      unitPrice: li.unitPrice,
-      total: li.total,
-      position: idx,
-    }));
-
-    const { subtotal, tax, total } = calcTotals(processedItems, HST_RATE, proposal.discount || 0);
-
-    try {
-      return await request.prisma.invoice.create({
-        data: {
-          invoiceNumber,
-          title: `Invoice for: ${proposal.title}`,
-          clientId: proposal.clientId,
-          projectId: proposal.projectId || null,
-          proposalId: proposal.id,
-          currency: proposal.currency,
-          subtotal,
-          discountAmount: proposal.discount || 0,
-          taxRate: HST_RATE,
-          taxType: 'HST',
-          tax,
-          total,
-          notes: `Invoice for proposal: ${proposal.title}`,
-          createdById: request.user.id,
-          lineItems: { create: processedItems }
-        },
-        include: invoiceInclude
-      });
-    } catch (error) {
-      if (error?.code !== 'P2002') throw error;
-      return request.prisma.invoice.findUnique({
-        where: { proposalId: proposal.id },
-        include: invoiceInclude
-      });
-    }
-  });
+  fastify.post('/from-proposal/:proposalId', {
+    onRequest: [fastify.authenticate],
+    preHandler: validateBody(proposalInvoiceDraftSchema),
+  }, async (request) => createDraftInvoiceFromProposal({
+    prisma: request.prisma,
+    proposalId: request.params.proposalId,
+    actorUserId: request.user.id,
+    taxDecision: request.body,
+    invoiceNumberFactory: () => generateInvoiceNumber(),
+  }));
 
   // ─── GET /client/:viewToken — public client view ────────────────────────────
   fastify.get('/client/:viewToken', { config: { public: true } }, async (request, reply) => {

@@ -30,10 +30,13 @@ describe('revenue detail workflow states', () => {
     expect(proposal).toContain('loading={generateContractMutation.isPending}');
   });
 
-  it('guards proposal-to-invoice generation with explicit mutation state', () => {
+  it('guards proposal-to-invoice generation with reviewed input and explicit mutation state', () => {
     expect(proposal).toContain('const createInvoiceMutation = useMutation({');
     expect(proposal).toContain("onError: (error) => toast.error('Failed to create invoice', error.message)");
-    expect(proposal).toContain('onClick={() => createInvoiceMutation.mutate()}');
+    expect(proposal).toContain('onClick={() => setInvoiceReviewOpen(true)}');
+    expect(proposal).toContain('if (!invoiceTaxDecisionValid) return;');
+    expect(proposal).toContain('createInvoiceMutation.mutate({');
+    expect(proposal).toContain('disabled={!invoiceTaxDecisionValid}');
     expect(proposal).toContain('loading={createInvoiceMutation.isPending}');
   });
 });

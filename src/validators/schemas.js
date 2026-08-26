@@ -160,6 +160,20 @@ export const createInvoiceSchema = z.object({
   lineItems: z.array(invoiceRouteLineItemSchema).min(1),
 });
 
+export const proposalInvoiceDraftSchema = z.object({
+  taxType: z.enum(['HST', 'GST', 'PST', 'NONE']),
+  taxRate: z.number().min(0).max(50),
+  taxReviewed: z.literal(true),
+}).strict().superRefine((value, context) => {
+  if (value.taxType === 'NONE' && value.taxRate !== 0) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['taxRate'],
+      message: 'Tax rate must be 0 when tax type is NONE',
+    });
+  }
+});
+
 // ── Expense schemas ────────────────────────────────────────────────────────
 export const createExpenseSchema = z.object({
   description: z.string().min(1).max(500),

@@ -132,6 +132,7 @@ test('proposal and invoice persistence preserve deal currency without a USD fall
   const migrationPath = path.join(process.cwd(), 'prisma', 'migrations', '20260826235900_deal_proposal_currency', 'migration.sql');
   const routes = fs.readFileSync(path.join(process.cwd(), 'src', 'routes', 'pipeline.routes.js'), 'utf8');
   const invoices = fs.readFileSync(path.join(process.cwd(), 'src', 'routes', 'invoice.routes.js'), 'utf8');
+  const invoiceService = fs.readFileSync(path.join(process.cwd(), 'src', 'services', 'proposalInvoice.service.js'), 'utf8');
   const portal = fs.readFileSync(path.join(process.cwd(), 'src', 'routes', 'portal.routes.js'), 'utf8');
 
   assert.match(proposalModel, /currency\s+String\?/);
@@ -139,8 +140,8 @@ test('proposal and invoice persistence preserve deal currency without a USD fall
   assert.match(dealModel, /proposal\s+Proposal\?/);
   assert.equal(fs.existsSync(migrationPath), true);
   assert.match(routes, /createDraftProposalFromDeal\(request\.prisma, id, request\.user\.id, request\.body\)/);
-  assert.match(invoices, /\['CAD', 'USD'\]\.includes\(proposal\.currency\)/);
-  assert.match(invoices, /currency:\s*proposal\.currency/);
+  assert.match(invoiceService, /\['CAD', 'USD'\]\.includes\(proposal\.currency\)/);
+  assert.match(invoiceService, /currency:\s*proposal\.currency/);
   assert.doesNotMatch(invoices.slice(invoices.indexOf("fastify.post('/from-proposal/:proposalId'"), invoices.indexOf('// ─── GET /client/:viewToken')), /fastify\.prisma/);
   assert.match(portal, /currency:\s*proposal\.currency/);
 });

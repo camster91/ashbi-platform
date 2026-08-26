@@ -42,6 +42,10 @@ export default function ProposalDetail() {
   const [notes, setNotes] = useState('');
   const [title, setTitle] = useState('');
   const [discount, setDiscount] = useState(0);
+  const [invoiceReviewOpen, setInvoiceReviewOpen] = useState(false);
+  const [invoiceTaxType, setInvoiceTaxType] = useState('');
+  const [invoiceTaxRate, setInvoiceTaxRate] = useState('');
+  const [invoiceTaxReviewed, setInvoiceTaxReviewed] = useState(false);
   const editDraftData = useMemo(() => editing ? { title, notes, discount, lineItems } : null, [editing, title, notes, discount, lineItems]);
   const formDraft = useAutosave('proposal', id, editDraftData, 500, { baseUpdatedAt: proposal?.updatedAt });
 
@@ -92,10 +96,11 @@ export default function ProposalDetail() {
   });
 
   const createInvoiceMutation = useMutation({
-    mutationFn: () => api.createInvoiceFromProposal(id),
+    mutationFn: (taxDecision) => api.createInvoiceFromProposal(id, taxDecision),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
-      toast.success('Invoice created');
+      setInvoiceReviewOpen(false);
+      toast.success('Invoice draft created');
       navigate('/invoices');
     },
     onError: (error) => toast.error('Failed to create invoice', error.message),
@@ -122,6 +127,23 @@ export default function ProposalDetail() {
       unitPrice: parseFloat(li.unitPrice) || 0,
     }));
     updateMutation.mutate({ title, notes, discount: parseFloat(discount) || 0, lineItems: items });
+  };
+
+  const parsedInvoiceTaxRate = invoiceTaxRate === '' ? Number.NaN : Number(invoiceTaxRate);
+  const invoiceTaxDecisionValid = Boolean(invoiceTaxType)
+    && Number.isFinite(parsedInvoiceTaxRate)
+    && parsedInvoiceTaxRate >= 0
+    && parsedInvoiceTaxRate <= 50
+    && (invoiceTaxType !== 'NONE' || parsedInvoiceTaxRate === 0)
+    && invoiceTaxReviewed;
+
+  const handleCreateInvoiceDraft = () => {
+    if (!invoiceTaxDecisionValid) return;
+    createInvoiceMutation.mutate({
+      taxType: invoiceTaxType,
+      taxRate: parsedInvoiceTaxRate,
+      taxReviewed: true,
+    });
   };
 
   if (isLoading) {
@@ -248,27 +270,97 @@ export default function ProposalDetail() {
               <ExternalLink className="w-3 h-3" /> Copy client view link
             </button>
           )}
-          {proposal.status === 'APPROVED' && !proposal.contract && (
+          {proposal.status === 'APPROVED' && (
             <div className="mt-2 flex gap-2">
+              {!proposal.contract && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => generateContractMutation.mutate()}
+                  loading={generateContractMutation.isPending}
+                >
+                  Generate Contract
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => generateContractMutation.mutate()}
-                loading={generateContractMutation.isPending}
+                onClick={() => setInvoiceReviewOpen(true)}
               >
-                Generate Contract
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => createInvoiceMutation.mutate()}
-                loading={createInvoiceMutation.isPending}
-              >
-                Create Invoice
+                Review invoice draft
               </Button>
             </div>
           )}
         </Card>
+      )}
+
+      {invoiceReviewOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <Card
+            className="w-full max-w-lg space-y-5 p-6"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="invoice-review-title"
+          >
+            <div>
+              <h2 id="invoice-review-title" className="text-xl font-semibold">Review invoice draft</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                This creates an internal draft only. It does not email the client, create a payment link, or charge anything.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="invoice-tax-type" className="text-sm font-medium">Tax type</label>
+              <select
+                id="invoice-tax-type"
+                value={invoiceTaxType}
+                onChange={(event) => setInvoiceTaxType(event.target.value)}
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              >
+                <option value="">Choose reviewed tax type</option>
+                <option value="HST">HST</option>
+                <option value="GST">GST</option>
+                <option value="PST">PST</option>
+                <option value="NONE">No tax</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="invoice-tax-rate" className="text-sm font-medium">Tax rate percent</label>
+              <input
+                id="invoice-tax-rate"
+                type="number"
+                min="0"
+                max="50"
+                step="0.01"
+                value={invoiceTaxRate}
+                onChange={(event) => setInvoiceTaxRate(event.target.value)}
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                placeholder="Enter the reviewed rate"
+              />
+              {invoiceTaxType === 'NONE' && parsedInvoiceTaxRate !== 0 && invoiceTaxRate !== '' && (
+                <p className="text-sm text-destructive">No tax requires a 0% rate.</p>
+              )}
+            </div>
+            <label className="flex items-start gap-3 text-sm">
+              <input
+                type="checkbox"
+                checked={invoiceTaxReviewed}
+                onChange={(event) => setInvoiceTaxReviewed(event.target.checked)}
+                className="mt-1"
+              />
+              <span>I reviewed the tax treatment for this client and work</span>
+            </label>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setInvoiceReviewOpen(false)}>Cancel</Button>
+              <Button
+                onClick={handleCreateInvoiceDraft}
+                disabled={!invoiceTaxDecisionValid}
+                loading={createInvoiceMutation.isPending}
+              >
+                Create internal draft
+              </Button>
+            </div>
+          </Card>
+        </div>
       )}
 
       {/* Line Items */}

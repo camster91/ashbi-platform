@@ -702,8 +702,8 @@ export const api = {
     request(`/invoices/${id}`, { method: 'DELETE' }),
   undoInvoiceVoid: (id) =>
     request(`/invoices/${id}/undo-void`, { method: 'POST' }),
-  createInvoiceFromProposal: (proposalId) =>
-    request(`/invoices/from-proposal/${proposalId}`, { method: 'POST' }),
+  createInvoiceFromProposal: (proposalId, taxDecision) =>
+    request(`/invoices/from-proposal/${proposalId}`, { method: 'POST', body: JSON.stringify(taxDecision) }),
   sendInvoice: (id) =>
     request(`/invoices/${id}/send`, { method: 'POST' }),
   getInvoicePdf: (id) =>
