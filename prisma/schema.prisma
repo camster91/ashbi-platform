@@ -1095,6 +1095,8 @@ model Invoice {
   createdBy   User              @relation("InvoiceCreator", fields: [createdById], references: [id])
   lineItems   InvoiceLineItem[]
   payments    InvoicePayment[]
+  refunds     InvoiceRefund[]
+  refundEvents InvoiceRefundEvent[]
   checkoutAudits InvoiceCheckoutAudit[]
   timeEntries TimeEntry[]
   expenses    Expense[]
@@ -1126,6 +1128,8 @@ model InvoiceLineItem {
 model InvoicePayment {
   id            String   @id @default(cuid())
   amount        Float
+  amountMinor   Int?
+  currency      String?
   method        String   @default("BANK") // STRIPE | BANK | CHECK | CASH | OTHER
   notes         String?
   transactionId String?  @unique
@@ -1134,8 +1138,56 @@ model InvoicePayment {
   createdAt     DateTime @default(now())
 
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  refunds InvoiceRefund[]
 
   @@map("invoice_payments")
+}
+
+model InvoiceRefund {
+  id                  String   @id @default(cuid())
+  invoiceId           String
+  paymentId           String
+  stripeRefundId      String   @unique
+  amountMinor         Int
+  currency            String
+  status              String
+  failureReason       String?
+  providerCreatedAt   DateTime
+  lastProviderEventAt DateTime
+  lastStripeEventId   String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  invoice Invoice              @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  payment InvoicePayment       @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  events  InvoiceRefundEvent[]
+
+  @@index([invoiceId, status])
+  @@index([paymentId, status])
+  @@map("invoice_refunds")
+}
+
+model InvoiceRefundEvent {
+  id                String   @id @default(cuid())
+  invoiceId         String
+  refundId          String
+  stripeRefundId    String
+  stripeEventId     String   @unique
+  eventType         String
+  paymentIntentId   String
+  amountMinor       Int
+  currency          String
+  status            String
+  signedStatus      String
+  providerEventAt   DateTime
+  createdAt         DateTime @default(now())
+
+  invoice Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  refund  InvoiceRefund @relation(fields: [refundId], references: [id], onDelete: Restrict)
+
+  @@index([invoiceId, providerEventAt])
+  @@index([refundId, providerEventAt])
+  @@map("invoice_refund_events")
 }
 
 model InvoiceCheckoutAudit {

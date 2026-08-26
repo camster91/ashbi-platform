@@ -145,6 +145,8 @@ export async function recordCompletedCheckout(prisma, event) {
         data: {
           invoiceId,
           amount: invoice.total,
+          amountMinor: session.amount_total,
+          currency: invoice.currency,
           method: 'STRIPE',
           transactionId,
           paidAt: new Date(event.created * 1000),
@@ -159,6 +161,169 @@ export async function recordCompletedCheckout(prisma, event) {
       if (prior?.invoiceId === invoiceId) return { duplicate: true, invoiceId };
     }
     throw err;
+  }
+}
+
+const REFUND_EVENT_TYPES = new Set(['refund.created', 'refund.updated', 'refund.failed']);
+const REFUND_STATUSES = new Set(['pending', 'requires_action', 'succeeded', 'failed', 'canceled']);
+const INACTIVE_REFUND_STATUSES = ['failed', 'canceled'];
+
+function providerObjectId(value) {
+  if (typeof value === 'string') return value;
+  return value?.id || null;
+}
+
+function assertRefundProviderSnapshot(event, webhookRefund, refund) {
+  if (!event?.id || !REFUND_EVENT_TYPES.has(event.type)) throw new Error('Stripe refund event type is unsupported');
+  if (!webhookRefund?.id || refund?.id !== webhookRefund.id) throw new Error('Stripe refund identity does not match');
+  if (!Number.isInteger(refund.amount) || refund.amount <= 0) throw new Error('Stripe refund amount is invalid');
+  if (!SUPPORTED_CURRENCIES.has(refund.currency?.toUpperCase())) throw new Error('Stripe refund currency is unsupported');
+  if (!REFUND_STATUSES.has(refund.status)) throw new Error('Stripe refund status is unsupported');
+  if (!REFUND_STATUSES.has(webhookRefund.status)) throw new Error('Stripe signed event status is unsupported');
+
+  const webhookPaymentIntentId = providerObjectId(webhookRefund.payment_intent);
+  const paymentIntentId = providerObjectId(refund.payment_intent);
+  if (!paymentIntentId) throw new Error('Stripe refund payment intent is missing');
+  if (webhookPaymentIntentId && webhookPaymentIntentId !== paymentIntentId) {
+    throw new Error('Stripe refund payment intent does not match its signed event');
+  }
+  if (Number.isInteger(webhookRefund.amount) && webhookRefund.amount !== refund.amount) {
+    throw new Error('Stripe refund amount does not match its signed event');
+  }
+  if (webhookRefund.currency && webhookRefund.currency.toLowerCase() !== refund.currency.toLowerCase()) {
+    throw new Error('Stripe refund currency does not match its signed event');
+  }
+  return paymentIntentId;
+}
+
+function assertRefundPaymentEvidence(payment, refund) {
+  if (!payment?.invoice || payment.method !== 'STRIPE') {
+    throw new Error('Stripe refund does not match a recorded Stripe payment');
+  }
+  if (!Number.isInteger(payment.amountMinor) || !SUPPORTED_CURRENCIES.has(payment.currency)) {
+    throw new Error('Stripe payment currency and amount evidence is incomplete');
+  }
+  if (payment.amountMinor !== Math.round(payment.amount * 100)) {
+    throw new Error('Stripe payment amount evidence does not reconcile');
+  }
+  const refundCurrency = refund.currency.toUpperCase();
+  if (payment.currency !== refundCurrency || payment.invoice.currency !== refundCurrency) {
+    throw new Error('Stripe refund currency does not match the payment and invoice currency');
+  }
+  if (refund.amount > payment.amountMinor) throw new Error('Stripe refund exceeds the recorded payment');
+}
+
+function duplicateRefundResult(eventRecord) {
+  return {
+    state: eventRecord.status,
+    duplicate: true,
+    invoiceId: eventRecord.invoiceId,
+    stripeRefundId: eventRecord.stripeRefundId,
+  };
+}
+
+export async function reconcileRefundEvent(prisma, event, { stripeClient = getStripeClient() } = {}) {
+  if (!stripeClient) throw new Error('Stripe not configured');
+  const webhookRefund = event?.data?.object;
+  if (!webhookRefund?.id) throw new Error('Stripe refund identity is missing');
+
+  const priorEvent = await prisma.invoiceRefundEvent.findUnique({ where: { stripeEventId: event.id } });
+  if (priorEvent) return duplicateRefundResult(priorEvent);
+
+  const refund = await stripeClient.refunds.retrieve(webhookRefund.id);
+  const paymentIntentId = assertRefundProviderSnapshot(event, webhookRefund, refund);
+  const providerEventAt = new Date(event.created * 1000);
+  const providerCreatedAt = new Date(refund.created * 1000);
+
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const duplicate = await tx.invoiceRefundEvent.findUnique({ where: { stripeEventId: event.id } });
+      if (duplicate) return duplicateRefundResult(duplicate);
+
+      const payment = await tx.invoicePayment.findUnique({
+        where: { transactionId: paymentIntentId },
+        include: { invoice: true },
+      });
+      assertRefundPaymentEvidence(payment, refund);
+
+      const existing = await tx.invoiceRefund.findUnique({ where: { stripeRefundId: refund.id } });
+      if (existing && (
+        existing.paymentId !== payment.id
+        || existing.invoiceId !== payment.invoiceId
+        || existing.amountMinor !== refund.amount
+        || existing.currency !== refund.currency.toUpperCase()
+      )) {
+        throw new Error('Stripe refund immutable evidence changed');
+      }
+
+      const otherActiveRefunds = await tx.invoiceRefund.findMany({
+        where: {
+          paymentId: payment.id,
+          stripeRefundId: { not: refund.id },
+          status: { notIn: INACTIVE_REFUND_STATUSES },
+        },
+        select: { amountMinor: true },
+      });
+      const activeTotal = otherActiveRefunds.reduce((sum, item) => sum + item.amountMinor, 0)
+        + (INACTIVE_REFUND_STATUSES.includes(refund.status) ? 0 : refund.amount);
+      if (activeTotal > payment.amountMinor) throw new Error('Stripe refund total exceeds the recorded payment');
+
+      const currentEventAt = existing?.lastProviderEventAt ? new Date(existing.lastProviderEventAt) : null;
+      const advancesEventClock = !currentEventAt || providerEventAt > currentEventAt;
+      const refundData = {
+        status: refund.status,
+        failureReason: refund.failure_reason || null,
+        ...(advancesEventClock && {
+          lastProviderEventAt: providerEventAt,
+          lastStripeEventId: event.id,
+        }),
+      };
+      const storedRefund = existing
+        ? await tx.invoiceRefund.update({ where: { id: existing.id }, data: refundData })
+        : await tx.invoiceRefund.create({
+          data: {
+            invoiceId: payment.invoiceId,
+            paymentId: payment.id,
+            stripeRefundId: refund.id,
+            amountMinor: refund.amount,
+            currency: refund.currency.toUpperCase(),
+            status: refund.status,
+            failureReason: refund.failure_reason || null,
+            providerCreatedAt,
+            lastProviderEventAt: providerEventAt,
+            lastStripeEventId: event.id,
+          },
+        });
+
+      await tx.invoiceRefundEvent.create({
+        data: {
+          invoiceId: payment.invoiceId,
+          refundId: storedRefund.id,
+          stripeRefundId: refund.id,
+          stripeEventId: event.id,
+          eventType: event.type,
+          paymentIntentId,
+          amountMinor: refund.amount,
+          currency: refund.currency.toUpperCase(),
+          status: refund.status,
+          signedStatus: webhookRefund.status,
+          providerEventAt,
+        },
+      });
+
+      return {
+        state: refund.status,
+        duplicate: false,
+        invoiceId: payment.invoiceId,
+        stripeRefundId: refund.id,
+      };
+    }, { isolationLevel: 'Serializable' });
+  } catch (error) {
+    if (error?.code === 'P2002') {
+      const duplicate = await prisma.invoiceRefundEvent.findUnique({ where: { stripeEventId: event.id } });
+      if (duplicate) return duplicateRefundResult(duplicate);
+    }
+    throw error;
   }
 }
 

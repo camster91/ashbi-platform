@@ -27,8 +27,16 @@ const STATUS_CONFIG = {
   VOID:    { label: 'Void',    color: 'bg-muted text-muted-foreground' },
 };
 
-function fmt(n) {
-  return `$${(n || 0).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function fmt(n, currency) {
+  const amount = Number(n) || 0;
+  if (!['CAD', 'USD'].includes(currency)) {
+    return `${amount.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency || 'UNASSIGNED'}`;
+  }
+  return new Intl.NumberFormat('en-CA', {
+    style: 'currency',
+    currency,
+    currencyDisplay: 'code',
+  }).format(amount);
 }
 
 function formatDate(date) {
@@ -489,7 +497,7 @@ export default function InvoiceDetail() {
                       })}
                       className="col-span-2 px-2 py-1.5 rounded border border-border bg-background text-sm text-right" />
                     <span className="col-span-2 text-sm text-right font-medium">
-                      {fmt((parseFloat(li.quantity) || 1) * (parseFloat(li.unitPrice) || 0))}
+                      {fmt((parseFloat(li.quantity) || 1) * (parseFloat(li.unitPrice) || 0), invoice.currency)}
                     </span>
                     <button type="button"
                       onClick={() => setEditForm(f => ({ ...f, lineItems: f.lineItems.filter((_, i) => i !== idx) }))}
@@ -559,7 +567,7 @@ export default function InvoiceDetail() {
                       <div>
                         <label className="block text-xs text-muted-foreground mb-0.5">Total</label>
                         <div className="px-2 py-1.5 text-sm font-medium">
-                          {fmt((parseFloat(li.quantity) || 1) * (parseFloat(li.unitPrice) || 0))}
+                          {fmt((parseFloat(li.quantity) || 1) * (parseFloat(li.unitPrice) || 0), invoice.currency)}
                         </div>
                       </div>
                     </div>
@@ -618,10 +626,10 @@ export default function InvoiceDetail() {
 
             {/* Total preview */}
             <div className="rounded-lg bg-muted/50 p-3 text-sm space-y-1">
-              <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{fmt(editSubtotal)}</span></div>
-              {editDiscount > 0 && <div className="flex justify-between text-green-600"><span>Discount</span><span>-{fmt(editDiscount)}</span></div>}
-              <div className="flex justify-between text-muted-foreground"><span>{editForm.taxType} ({editForm.taxRate}%)</span><span>{fmt(editTax)}</span></div>
-              <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1"><span>Total</span><span>{fmt(editTotal)} CAD</span></div>
+              <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{fmt(editSubtotal, invoice.currency)}</span></div>
+              {editDiscount > 0 && <div className="flex justify-between text-green-600"><span>Discount</span><span>-{fmt(editDiscount, invoice.currency)}</span></div>}
+              <div className="flex justify-between text-muted-foreground"><span>{editForm.taxType} ({editForm.taxRate}%)</span><span>{fmt(editTax, invoice.currency)}</span></div>
+              <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1"><span>Total</span><span>{fmt(editTotal, invoice.currency)}</span></div>
             </div>
 
             <div className="flex gap-2">
@@ -679,8 +687,8 @@ export default function InvoiceDetail() {
                             <div className="text-xs text-muted-foreground mt-0.5">{li.itemType}</div>
                           </td>
                           <td className="px-3 py-3 text-center text-muted-foreground">{li.quantity}</td>
-                          <td className="px-3 py-3 text-right">{fmt(li.unitPrice)}</td>
-                          <td className="px-4 py-3 text-right font-medium">{fmt(li.total)}</td>
+                          <td className="px-3 py-3 text-right">{fmt(li.unitPrice, invoice.currency)}</td>
+                          <td className="px-4 py-3 text-right font-medium">{fmt(li.total, invoice.currency)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -696,11 +704,11 @@ export default function InvoiceDetail() {
                           <p className="font-medium truncate">{li.description}</p>
                           <p className="text-xs text-muted-foreground">{li.itemType}</p>
                         </div>
-                        <p className="font-semibold whitespace-nowrap">{fmt(li.total)}</p>
+                        <p className="font-semibold whitespace-nowrap">{fmt(li.total, invoice.currency)}</p>
                       </div>
                       <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
                         <span>Qty: {li.quantity}</span>
-                        <span>@ {fmt(li.unitPrice)}</span>
+                        <span>@ {fmt(li.unitPrice, invoice.currency)}</span>
                       </div>
                     </div>
                   ))}
@@ -710,18 +718,18 @@ export default function InvoiceDetail() {
                 <div className="mt-4 flex justify-end">
                   <div className="w-full sm:w-64 space-y-1.5 text-sm">
                     <div className="flex justify-between text-muted-foreground">
-                      <span>Subtotal</span><span>{fmt(invoice.subtotal)}</span>
+                      <span>Subtotal</span><span>{fmt(invoice.subtotal, invoice.currency)}</span>
                     </div>
                     {invoice.discountAmount > 0 && (
                       <div className="flex justify-between text-green-600">
-                        <span>Discount</span><span>-{fmt(invoice.discountAmount)}</span>
+                        <span>Discount</span><span>-{fmt(invoice.discountAmount, invoice.currency)}</span>
                       </div>
                     )}
                     <div className="flex justify-between text-muted-foreground">
-                      <span>{invoice.taxType} ({invoice.taxRate}%)</span><span>{fmt(invoice.tax)}</span>
+                      <span>{invoice.taxType} ({invoice.taxRate}%)</span><span>{fmt(invoice.tax, invoice.currency)}</span>
                     </div>
                     <div className="flex justify-between font-bold text-lg border-t border-border pt-2 mt-2">
-                      <span>Total</span><span>{fmt(invoice.total)} CAD</span>
+                      <span>Total</span><span>{fmt(invoice.total, invoice.currency)}</span>
                     </div>
                     {isPaid && (
                       <div className="flex justify-between text-green-600 text-sm">
@@ -785,10 +793,20 @@ export default function InvoiceDetail() {
                       {payments.map(p => (
                         <div key={p.id} className="flex items-center justify-between text-sm">
                           <div>
-                            <p className="font-medium">{fmt(p.amount)}</p>
+                            <p className="font-medium">{fmt(p.amount, p.currency)}</p>
                             <p className="text-xs text-muted-foreground">{p.method} · {formatDate(p.paidAt)}</p>
                             {p.transactionId && <p className="text-xs text-muted-foreground font-mono">{p.transactionId}</p>}
                             {p.notes && <p className="text-xs text-muted-foreground">{p.notes}</p>}
+                            {p.refunds?.map(refund => (
+                              <div key={refund.id} className="mt-2 border-l-2 border-amber-400 pl-2">
+                                <p className="text-xs font-medium">
+                                  Refund · {fmt(refund.amountMinor / 100, refund.currency)}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  {refund.status} · {formatDate(refund.providerCreatedAt)}
+                                </p>
+                              </div>
+                            ))}
                           </div>
                           <CheckCircle className="w-4 h-4 text-green-500" />
                         </div>
@@ -840,7 +858,7 @@ export default function InvoiceDetail() {
         <form onSubmit={(event) => { event.preventDefault(); markPaidMutation.mutate(payForm); }} className="space-y-4">
           <div>
             <p className="text-sm text-muted-foreground">Invoice: <span className="font-medium text-foreground">{invoice.invoiceNumber}</span></p>
-            <p className="text-sm text-muted-foreground">Amount: <span className="font-semibold text-foreground">{fmt(invoice.total)}</span></p>
+            <p className="text-sm text-muted-foreground">Amount: <span className="font-semibold text-foreground">{fmt(invoice.total, invoice.currency)}</span></p>
           </div>
           <div>
             <label htmlFor="invoice-payment-method" className="block text-sm font-medium mb-1">Payment method</label>

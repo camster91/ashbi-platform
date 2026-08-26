@@ -33,14 +33,18 @@ Use separate authorized CAD and USD invoices with reviewed tax evidence.
 | Voided invoice | A late completion cannot change a `VOID` invoice to `PAID`; the incident is retained for reconciliation. |
 | Duplicate delivery | Replaying the same verified success event returns success to Stripe but leaves exactly one payment row and one paid transition. |
 | Redirect | Success/cancel URLs contain the exact persisted public token and a browser redirect alone never marks an invoice paid. |
+| Successful partial refund | A signed `refund.created` event retrieves the current refund, links it to the exact PaymentIntent-backed payment, records integer minor units and matching CAD/USD, and displays one staff-visible refund. |
+| Refund replay and order | Replaying an event creates no duplicate. Delivering older refund events after newer ones retains every append-only event, uses current provider truth, and never moves the provider-event clock backwards. |
+| Refund failure and limits | `refund.updated` and `refund.failed` update current state while preserving prior events. Currency/payment mismatches, legacy payments without exact evidence, and aggregate refunds above the payment amount fail closed without a ledger mutation. |
 
 ## Required gap closure before a passing run
 
-The provider-backed invalidation boundary is code-present locally but still needs the sandbox evidence above. The complete provider lifecycle is not yet eligible to pass because:
+The provider-backed invalidation and refund-reconciliation boundaries are code-present locally but still need the sandbox evidence above. The complete provider lifecycle is not yet eligible to pass because:
 
-- Successful and partial refunds need a signed-event reconciliation path and durable currency-safe ledger representation.
 - Invoice email acceptance/failure must have truthful delivery state and retry evidence.
 - Currency-safe reporting and export must reconcile invoice totals, payments, refunds, fees, and net settlement without combining CAD and USD.
+
+Historical payment rows intentionally remain without inferred currency/minor-unit fields. Review and reconcile those rows from source evidence before using them in any refund test; do not backfill from defaults.
 
 These are engineering gates, not sandbox exceptions. Do not mark the runbook passed by skipping them.
 

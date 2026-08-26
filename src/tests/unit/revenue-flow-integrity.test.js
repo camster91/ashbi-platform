@@ -71,6 +71,8 @@ test('Stripe checkout completion transitions an invoice and records payment exac
   assert.equal(state.invoice.status, 'PAID');
   assert.equal(state.payments.length, 1);
   assert.equal(state.payments[0].transactionId, 'pi_123');
+  assert.equal(state.payments[0].amountMinor, 11300);
+  assert.equal(state.payments[0].currency, 'CAD');
   assert.equal(state.invoice.stripeCheckoutReconciliationRequiredAt, null);
   assert.equal(state.invoice.stripeCheckoutReconciliationReason, null);
 });

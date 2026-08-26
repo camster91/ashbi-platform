@@ -2,7 +2,7 @@
 
 import { parseEmail } from '../utils/emailParser.js';
 import { processEmailPipeline } from '../services/pipeline.service.js';
-import { handleWebhook, reconcileCheckoutEvent } from '../services/stripe.service.js';
+import { handleWebhook, reconcileCheckoutEvent, reconcileRefundEvent } from '../services/stripe.service.js';
 import env from '../config/env.js';
 import crypto from 'crypto';
 import {validateBody, webhookEmailTestSchema} from '../validators/schemas.js';
@@ -143,6 +143,24 @@ export default async function webhookRoutes(fastify) {
         } catch (error) {
           fastify.log.error({ error }, 'Error reconciling Stripe checkout');
           return reply.status(400).send({ error: 'Stripe checkout did not match an active invoice attempt' });
+        }
+        break;
+      }
+
+      case 'refund.created':
+      case 'refund.updated':
+      case 'refund.failed': {
+        try {
+          const result = await reconcileRefundEvent(fastify.prisma, event);
+          fastify.log.info({
+            invoiceId: result.invoiceId,
+            stripeRefundId: result.stripeRefundId,
+            state: result.state,
+            duplicate: result.duplicate,
+          }, 'Stripe refund reconciled');
+        } catch (error) {
+          fastify.log.error({ error }, 'Error reconciling Stripe refund');
+          return reply.status(400).send({ error: 'Stripe refund did not match a recorded payment' });
         }
         break;
       }

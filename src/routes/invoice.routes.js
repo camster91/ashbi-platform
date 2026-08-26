@@ -188,7 +188,7 @@ export default async function invoiceRoutes(fastify) {
 
   // ─── PUT /:id — update invoice ──────────────────────────────────────────────
   fastify.put('/:id', { onRequest: [fastify.authenticate], preHandler: [validateBody(updateInvoiceSchema)] }, async (request, reply) => {
-    const invoice = await fastify.prisma.invoice.findUnique({ where: { id: request.params.id } });
+    const invoice = await request.prisma.invoice.findUnique({ where: { id: request.params.id } });
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
     if (invoice.status !== 'DRAFT') return reply.status(400).send({ error: 'Only draft invoices can be fully updated. Use /mark-paid or /void for status changes.' });
 
@@ -434,14 +434,15 @@ export default async function invoiceRoutes(fastify) {
   fastify.post('/:id/mark-paid', { onRequest: [fastify.authenticate], preHandler: [validateBody(markInvoicePaidSchema)] }, async (request, reply) => {
     const { method, paymentMethod: requestedPaymentMethod, paymentNotes, transactionId, amount, paidAt } = request.body;
     const paymentMethod = requestedPaymentMethod || method || 'OTHER';
-    const invoice = await fastify.prisma.invoice.findUnique({ where: { id: request.params.id } });
+    const invoice = await request.prisma.invoice.findUnique({ where: { id: request.params.id } });
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
     if (invoice.status === 'PAID') return reply.status(400).send({ error: 'Invoice already paid' });
     if (invoice.status === 'VOID') return reply.status(400).send({ error: 'Cannot pay a voided invoice' });
 
     const paidDate = paidAt ? new Date(paidAt) : new Date();
+    const paidAmount = amount ?? invoice.total;
 
-    const updated = await fastify.prisma.$transaction(async (tx) => {
+    const updated = await request.prisma.$transaction(async (tx) => {
       const paidInvoice = await tx.invoice.update({
         where: { id: request.params.id },
         data: { status: 'PAID', paidAt: paidDate, paymentMethod, paymentNotes: paymentNotes || null, transactionId: transactionId || null }
@@ -449,7 +450,9 @@ export default async function invoiceRoutes(fastify) {
       await tx.invoicePayment.create({
         data: {
           invoiceId: request.params.id,
-          amount: amount ?? invoice.total,
+          amount: paidAmount,
+          amountMinor: Math.round(paidAmount * 100),
+          currency: invoice.currency,
           method: paymentMethod,
           notes: paymentNotes || null,
           transactionId: transactionId || null,
@@ -500,14 +503,17 @@ export default async function invoiceRoutes(fastify) {
 
   // ─── GET /:id/payments — payment history ───────────────────────────────────
   fastify.get('/:id/payments', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const invoice = await fastify.prisma.invoice.findUnique({
+    const invoice = await request.prisma.invoice.findUnique({
       where: { id: request.params.id },
       select: { id: true }
     });
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
 
-    return fastify.prisma.invoicePayment.findMany({
+    return request.prisma.invoicePayment.findMany({
       where: { invoiceId: request.params.id },
+      include: {
+        refunds: { orderBy: { providerCreatedAt: 'desc' } },
+      },
       orderBy: { paidAt: 'desc' }
     });
   });
