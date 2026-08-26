@@ -41,7 +41,7 @@ Use separate authorized CAD and USD invoices with reviewed tax evidence.
 
 The provider-backed invalidation and refund-reconciliation boundaries are code-present locally but still need the sandbox evidence above. The complete provider lifecycle is not yet eligible to pass because:
 
-- Invoice email acceptance/failure must have truthful delivery state and retry evidence.
+- Complete the separate [invoice email sandbox runbook](invoice-email-sandbox-validation.md); provider acceptance is not inbox-delivery proof.
 - Currency-safe reporting and export must reconcile invoice totals, payments, refunds, fees, and net settlement without combining CAD and USD.
 
 Historical payment rows intentionally remain without inferred currency/minor-unit fields. Review and reconcile those rows from source evidence before using them in any refund test; do not backfill from defaults.

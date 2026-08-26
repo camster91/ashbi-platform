@@ -4,10 +4,11 @@ import { generateInvoicePdf } from '../utils/generate-invoice-pdf.js';
 import { generateInvoiceNumber } from '../utils/invoice.js';
 import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
 import { validateBody, createInvoiceSchema, updateInvoiceSchema, markInvoicePaidSchema, sendInvoiceSchema, lineItemTemplateCreateSchema, invoiceBulkIdsSchema, invoiceBulkArchiveSchema, bulkMarkPaidSchema, proposalInvoiceDraftSchema } from '../validators/schemas.js';
-import { sendInvoiceDeliveryEmail } from '../services/email.service.js';
 import { createDraftInvoiceFromProposal } from '../services/proposalInvoice.service.js';
 import { createManualInvoiceDraft } from '../services/manualInvoice.service.js';
 import { invalidateInvoiceCheckout } from '../services/invoiceCheckoutInvalidation.service.js';
+import { deliverInvoiceWithEvidence } from '../services/invoiceDelivery.service.js';
+import { randomUUID } from 'node:crypto';
 
 const VOID_UNDO_WINDOW_MS = 10_000;
 const VOIDABLE_STATUSES = new Set(['DRAFT', 'SENT', 'OVERDUE']);
@@ -158,7 +159,7 @@ export default async function invoiceRoutes(fastify) {
 
   // ─── GET /:id — single invoice ──────────────────────────────────────────────
   fastify.get('/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
-    const invoice = await fastify.prisma.invoice.findUnique({
+    const invoice = await request.prisma.invoice.findUnique({
       where: { id: request.params.id },
       include: {
         client: {
@@ -169,6 +170,7 @@ export default async function invoiceRoutes(fastify) {
         createdBy: { select: { id: true, name: true, email: true } },
         lineItems: { orderBy: { position: 'asc' } },
         payments: { orderBy: { paidAt: 'desc' } },
+        deliveryAttempts: { orderBy: { createdAt: 'desc' }, take: 10 },
       }
     });
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
@@ -361,27 +363,31 @@ export default async function invoiceRoutes(fastify) {
       fastify.log.warn({ err }, 'Stripe payment link failed — sending without it');
     }
 
-    // Stub Mailgun email send
+    // Invoice issuance and email-provider acceptance are separate facts.
     const primaryContact = preparedInvoice.client?.contacts?.[0];
-    let emailSent = false;
+    let emailDelivery = null;
     if (primaryContact?.email) {
-      try {
-        const viewUrl = `${process.env.APP_URL || 'https://hub.ashbi.ca'}/portal/invoice/${preparedInvoice.viewToken}`;
-        const delivery = await sendInvoiceDeliveryEmail({
-          to: primaryContact.email,
+      const viewUrl = `${process.env.APP_URL || 'https://hub.ashbi.ca'}/portal/invoice/${preparedInvoice.viewToken}`;
+      emailDelivery = await deliverInvoiceWithEvidence({
+        prisma: request.prisma,
+        invoiceId: preparedInvoice.id,
+        requestId: request.body.requestId || randomUUID(),
+        kind: 'INITIAL',
+        recipient: primaryContact.email,
+        actorUserId: request.user.id,
+        email: {
           clientName: primaryContact.name || preparedInvoice.client.name,
           invoiceNumber: preparedInvoice.invoiceNumber,
           total: preparedInvoice.total,
           dueDate: preparedInvoice.dueDate,
           viewUrl,
           paymentLink,
-        });
-        emailSent = delivery.ok;
-        if (emailSent) fastify.log.info('Invoice email accepted by delivery provider');
-        else fastify.log.warn({ emailError: delivery.error }, 'Invoice email delivery unavailable');
-      } catch (emailErr) {
-        fastify.log.warn({ emailErr }, 'Email send failed — invoice still marked sent');
-      }
+        },
+      });
+      fastify.log[emailDelivery.status === 'PROVIDER_ACCEPTED' ? 'info' : 'warn'](
+        { deliveryStatus: emailDelivery.status, attemptId: emailDelivery.id },
+        'Invoice email provider outcome recorded',
+      );
     }
 
     const updated = await request.prisma.invoice.findUnique({
@@ -392,7 +398,7 @@ export default async function invoiceRoutes(fastify) {
       }
     });
 
-    return { ...flagOverdue(updated), emailSent };
+    return { ...flagOverdue(updated), emailDelivery };
   });
 
   // ─── GET /:id/pdf — generate and download PDF ──────────────────────────────
@@ -579,7 +585,7 @@ export default async function invoiceRoutes(fastify) {
     }
   });
 
-  fastify.post('/:id/resend', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.post('/:id/resend', { onRequest: [fastify.authenticate], preHandler: [validateBody(sendInvoiceSchema)] }, async (request, reply) => {
     const invoice = await request.prisma.invoice.findUnique({
       where: { id: request.params.id },
       include: {
@@ -594,17 +600,31 @@ export default async function invoiceRoutes(fastify) {
     const contact = invoice.client?.contacts?.[0];
     if (!contact?.email) return reply.status(409).send({ error: 'Primary client email is missing' });
     const viewUrl = `${process.env.APP_URL || 'https://hub.ashbi.ca'}/portal/invoice/${invoice.viewToken}`;
-    const delivery = await sendInvoiceDeliveryEmail({
-      to: contact.email,
-      clientName: contact.name || invoice.client.name,
-      invoiceNumber: invoice.invoiceNumber,
-      total: invoice.total,
-      dueDate: invoice.dueDate,
-      viewUrl,
-      paymentLink: invoice.stripePaymentLink,
+    const emailDelivery = await deliverInvoiceWithEvidence({
+      prisma: request.prisma,
+      invoiceId: invoice.id,
+      requestId: request.body.requestId || randomUUID(),
+      kind: 'RESEND',
+      recipient: contact.email,
+      actorUserId: request.user.id,
+      email: {
+        clientName: contact.name || invoice.client.name,
+        invoiceNumber: invoice.invoiceNumber,
+        total: invoice.total,
+        dueDate: invoice.dueDate,
+        viewUrl,
+        paymentLink: invoice.stripePaymentLink,
+      },
     });
-    if (!delivery.ok) return reply.status(503).send({ error: 'Invoice email delivery is unavailable', retryable: true });
-    return { emailSent: true };
+    if (emailDelivery.status !== 'PROVIDER_ACCEPTED') {
+      return reply.status(503).send({
+        error: emailDelivery.status === 'OUTCOME_UNKNOWN'
+          ? 'Email provider outcome is unknown; reconcile before retrying'
+          : 'Invoice email was not accepted by the provider',
+        emailDelivery,
+      });
+    }
+    return { emailDelivery };
   });
 
   fastify.post('/:id/public-link/rotate', { onRequest: [fastify.authenticate] }, async (request, reply) => {

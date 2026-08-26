@@ -704,8 +704,10 @@ export const api = {
     request(`/invoices/${id}/undo-void`, { method: 'POST' }),
   createInvoiceFromProposal: (proposalId, taxDecision) =>
     request(`/invoices/from-proposal/${proposalId}`, { method: 'POST', body: JSON.stringify(taxDecision) }),
-  sendInvoice: (id) =>
-    request(`/invoices/${id}/send`, { method: 'POST' }),
+  sendInvoice: (id, requestId = crypto.randomUUID()) =>
+    request(`/invoices/${id}/send`, { method: 'POST', body: JSON.stringify({ requestId }) }),
+  resendInvoice: (id, requestId = crypto.randomUUID()) =>
+    request(`/invoices/${id}/resend`, { method: 'POST', body: JSON.stringify({ requestId }) }),
   getInvoicePdf: (id) =>
     request(`/invoices/${id}/pdf`, { method: 'GET' }),
   markInvoicePaid: (id, data = {}) =>

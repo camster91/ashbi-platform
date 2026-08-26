@@ -148,6 +148,8 @@ const TENANT_PATHS = {
   invoicecheckoutaudit: ['invoice', 'client'],
   invoicerefund:    ['invoice', 'client'],
   invoicerefundevent: ['invoice', 'client'],
+  invoicedeliveryattempt: ['invoice', 'client'],
+  invoicedeliveryevent: ['invoice', 'client'],
 
   // 1-hop to Proposal (via proposalId FK, then proposal → client)
   proposallineitem: ['proposal', 'client'],

@@ -122,9 +122,15 @@ export default function Invoices() {
 
   const sendMutation = useMutation({
     mutationFn: (id) => api.sendInvoice(id),
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
-      toast.success('Invoice sent', 'Client will receive an email');
+      if (result.emailDelivery?.status === 'PROVIDER_ACCEPTED') {
+        toast.success('Invoice issued', 'Accepted by email provider; inbox delivery is not yet confirmed');
+      } else if (result.emailDelivery?.status === 'OUTCOME_UNKNOWN') {
+        toast.success('Invoice issued', 'Email outcome unknown; reconcile before retrying');
+      } else {
+        toast.success('Invoice issued', 'Email was not accepted or was not attempted; review the invoice evidence');
+      }
     },
     onError: (err) => toast.error('Failed to send invoice', err.message),
   });

@@ -27,6 +27,25 @@ const STATUS_CONFIG = {
   VOID:    { label: 'Void',    color: 'bg-muted text-muted-foreground' },
 };
 
+const DELIVERY_STATUS = {
+  PREPARED: { label: 'Prepared', color: 'text-muted-foreground' },
+  PROVIDER_ACCEPTED: { label: 'Accepted by email provider', color: 'text-green-600' },
+  FAILED: { label: 'Provider rejected', color: 'text-red-600' },
+  OUTCOME_UNKNOWN: { label: 'Outcome unknown', color: 'text-amber-600' },
+  CANCELED: { label: 'Canceled before sending', color: 'text-muted-foreground' },
+};
+
+function deliveryToast(delivery) {
+  if (!delivery) return ['Invoice issued', 'No primary client email was available, so email was not attempted'];
+  if (delivery.status === 'PROVIDER_ACCEPTED') {
+    return ['Invoice issued', 'Accepted by email provider; inbox delivery is not yet confirmed'];
+  }
+  if (delivery.status === 'OUTCOME_UNKNOWN') {
+    return ['Invoice issued', 'Email outcome unknown; reconcile before retrying'];
+  }
+  return ['Invoice issued', 'Email was not accepted by the provider; the attempt is saved for retry'];
+}
+
 function fmt(n, currency) {
   const amount = Number(n) || 0;
   if (!['CAD', 'USD'].includes(currency)) {
@@ -105,12 +124,26 @@ export default function InvoiceDetail() {
 
   const sendMutation = useMutation({
     mutationFn: () => api.sendInvoice(id),
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['invoice', id] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
-      toast.success('Invoice sent', 'Client will receive an email with payment link');
+      const [title, message] = deliveryToast(result.emailDelivery);
+      toast.success(title, message);
     },
     onError: () => toast.error('Failed to send invoice'),
+  });
+
+  const resendMutation = useMutation({
+    mutationFn: () => api.resendInvoice(id),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['invoice', id] });
+      const [title, message] = deliveryToast(result.emailDelivery);
+      toast.success(title.replace('issued', 'email retried'), message);
+    },
+    onError: (error) => {
+      queryClient.invalidateQueries({ queryKey: ['invoice', id] });
+      toast.error('Email retry was not accepted', error.message);
+    },
   });
 
   const markPaidMutation = useMutation({
@@ -310,10 +343,18 @@ export default function InvoiceDetail() {
             </>
           )}
           {isSent && !isPaid && (
-            <Button size="sm" leftIcon={<DollarSign className="w-4 h-4" />}
-              onClick={openMarkPaid}>
-              Mark as Paid
-            </Button>
+            <>
+              {isAdmin && (
+                <Button variant="outline" size="sm" leftIcon={<Send className="w-4 h-4" />}
+                  onClick={() => resendMutation.mutate()} loading={resendMutation.isPending}>
+                  Resend Email
+                </Button>
+              )}
+              <Button size="sm" leftIcon={<DollarSign className="w-4 h-4" />}
+                onClick={openMarkPaid}>
+                Mark as Paid
+              </Button>
+            </>
           )}
           <Button variant="outline" size="sm" leftIcon={<Printer className="w-4 h-4" />}
             onClick={handlePrint}>
@@ -388,10 +429,18 @@ export default function InvoiceDetail() {
             </>
           )}
           {isSent && !isPaid && (
-            <Button size="sm" leftIcon={<DollarSign className="w-4 h-4" />}
-              onClick={openMarkPaid}>
-              Mark Paid
-            </Button>
+            <>
+              {isAdmin && (
+                <Button variant="outline" size="sm" leftIcon={<Send className="w-4 h-4" />}
+                  onClick={() => resendMutation.mutate()} loading={resendMutation.isPending}>
+                  Resend Email
+                </Button>
+              )}
+              <Button size="sm" leftIcon={<DollarSign className="w-4 h-4" />}
+                onClick={openMarkPaid}>
+                Mark Paid
+              </Button>
+            </>
           )}
           <Button variant="outline" size="sm" leftIcon={<Printer className="w-4 h-4" />} onClick={handlePrint}>
             Print
@@ -774,6 +823,33 @@ export default function InvoiceDetail() {
                   {invoice.paymentNotes && (
                     <p className="text-xs text-muted-foreground mt-1">{invoice.paymentNotes}</p>
                   )}
+                </Card>
+              )}
+
+              {/* Email provider evidence */}
+              {invoice.deliveryAttempts?.length > 0 && (
+                <Card className="p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Email Attempts</p>
+                  <div className="space-y-3">
+                    {invoice.deliveryAttempts.map(attempt => {
+                      const status = DELIVERY_STATUS[attempt.status] || DELIVERY_STATUS.OUTCOME_UNKNOWN;
+                      return (
+                        <div key={attempt.id} className="text-sm border-l-2 border-border pl-3">
+                          <p className={`font-medium ${status.color}`}>{status.label}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {attempt.kind === 'INITIAL' ? 'Initial issue' : 'Resend'} · {formatDate(attempt.createdAt)}
+                          </p>
+                          <p className="text-xs text-muted-foreground break-all">{attempt.recipient}</p>
+                          {attempt.providerMessageId && (
+                            <p className="text-xs text-muted-foreground font-mono break-all">{attempt.providerMessageId}</p>
+                          )}
+                          {attempt.status === 'OUTCOME_UNKNOWN' && (
+                            <p className="text-xs text-amber-600 mt-1">Do not retry until this outcome is reconciled.</p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </Card>
               )}
 

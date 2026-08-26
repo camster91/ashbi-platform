@@ -60,7 +60,7 @@ export async function sendMailgunEmail({ to, subject, html, from, replyTo, text 
   if (!MAILGUN_API_KEY) {
     console.warn('[email] MAILGUN_API_KEY not set — skipping email send');
     console.log('[email] To:', to, '| Subject:', subject);
-    return { ok: false, error: 'MAILGUN_API_KEY not set' };
+    return { ok: false, outcome: 'FAILED', failureCode: 'PROVIDER_UNCONFIGURED', error: 'MAILGUN_API_KEY not set' };
   }
 
   const formData = new URLSearchParams();
@@ -85,12 +85,12 @@ export async function sendMailgunEmail({ to, subject, html, from, replyTo, text 
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       console.error('[email] Mailgun error:', res.status, data);
-      return { ok: false, error: data.message || `HTTP ${res.status}` };
+      return { ok: false, outcome: 'FAILED', failureCode: 'PROVIDER_REJECTED', error: data.message || `HTTP ${res.status}` };
     }
-    return { ok: true, id: data.id };
+    return { ok: true, outcome: 'PROVIDER_ACCEPTED', id: data.id };
   } catch (err) {
     console.error('[email] Send error:', err.message);
-    return { ok: false, error: err.message };
+    return { ok: false, outcome: 'OUTCOME_UNKNOWN', failureCode: 'TRANSPORT_UNKNOWN', error: err.message };
   }
 }
 
@@ -167,7 +167,7 @@ export async function sendInvoiceDeliveryEmail(options) {
     return await sendEmail(buildInvoiceDeliveryEmail(options));
   } catch (error) {
     console.error('[email] Invoice delivery preparation failed:', error.message);
-    return { ok: false, error: error.message };
+    return { ok: false, outcome: 'FAILED', failureCode: 'PREPARATION_FAILED', error: error.message };
   }
 }
 

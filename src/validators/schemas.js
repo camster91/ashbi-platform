@@ -227,6 +227,7 @@ export const markInvoicePaidSchema = z.object({
 export const sendInvoiceSchema = z.object({
   email: email.optional(),
   message: z.string().max(2000).optional(),
+  requestId: z.string().uuid().optional(),
 }).default({});
 
 // ── Portal schemas ─────────────────────────────────────────────────────────

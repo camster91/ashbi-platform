@@ -548,11 +548,11 @@ model UnmatchedEmail {
 }
 
 model Lead {
-  id                   String       @id @default(cuid())
+  id                   String        @id @default(cuid())
   organizationId       String
-  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization         Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   accountOwnerId       String
-  accountOwner         User         @relation("LeadAccountOwner", fields: [accountOwnerId], references: [id], onDelete: Restrict)
+  accountOwner         User          @relation("LeadAccountOwner", fields: [accountOwnerId], references: [id], onDelete: Restrict)
   name                 String
   email                String
   company              String?
@@ -563,11 +563,11 @@ model Lead {
   timing               String?
   budgetBand           String?
   budgetCurrency       String?
-  status               String       @default("NEW")
+  status               String        @default("NEW")
   qualificationNotes   String?
   qualifiedAt          DateTime?
   convertedClientId    String?
-  convertedClient      Client?      @relation("LeadConvertedClient", fields: [convertedClientId], references: [id], onDelete: SetNull)
+  convertedClient      Client?       @relation("LeadConvertedClient", fields: [convertedClientId], references: [id], onDelete: SetNull)
   convertedDealId      String?       @unique
   convertedDeal        PipelineDeal? @relation("LeadConvertedDeal", fields: [convertedDealId], references: [id], onDelete: SetNull)
   convertedAt          DateTime?
@@ -581,8 +581,8 @@ model Lead {
   consentAt            DateTime
   intakeIdempotencyKey String
   intakePayloadHash    String
-  createdAt            DateTime     @default(now())
-  updatedAt            DateTime     @updatedAt
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
 
   events LeadEvent[]
 
@@ -1044,10 +1044,10 @@ model Invoice {
   id                String    @id @default(cuid())
   invoiceNumber     String    @unique
   creationRequestId String?   @unique
-  status        String    @default("DRAFT") // DRAFT | SENT | PAID | OVERDUE | VOID
-  title         String?
-  dueDate       DateTime?
-  issueDate     DateTime  @default(now())
+  status            String    @default("DRAFT") // DRAFT | SENT | PAID | OVERDUE | VOID
+  title             String?
+  dueDate           DateTime?
+  issueDate         DateTime  @default(now())
 
   // Bonsai migration fields
   bonsaiInvoiceId String? // Original Bonsai invoice ID
@@ -1056,52 +1056,55 @@ model Invoice {
   amountCad       Float?
   daysToPayActual Int? // Historical: actual days client took to pay
 
-  subtotal                Float     @default(0)
-  discountAmount          Float     @default(0)
-  taxRate                 Float     @default(13) // HST 13% default for Ontario
-  taxType                 String    @default("HST") // HST | GST | PST | NONE
-  tax                     Float     @default(0)
-  total                   Float     @default(0)
-  notes                   String?
-  internalNotes           String?
-  stripePaymentLink       String?
-  stripeCheckoutSessionId String?
-  stripePaymentIntentId   String?
-  stripeCheckoutAttempt   Int        @default(0)
+  subtotal                               Float     @default(0)
+  discountAmount                         Float     @default(0)
+  taxRate                                Float     @default(13) // HST 13% default for Ontario
+  taxType                                String    @default("HST") // HST | GST | PST | NONE
+  tax                                    Float     @default(0)
+  total                                  Float     @default(0)
+  notes                                  String?
+  internalNotes                          String?
+  stripePaymentLink                      String?
+  stripeCheckoutSessionId                String?
+  stripePaymentIntentId                  String?
+  stripeCheckoutAttempt                  Int       @default(0)
+  emailDeliveryAttempt                   Int       @default(0)
   stripeCheckoutReconciliationRequiredAt DateTime?
   stripeCheckoutReconciliationReason     String?
-  paymentMethod           String? // STRIPE | BANK | CHECK | CASH | OTHER
-  paymentNotes            String?
-  transactionId           String?
-  paidAt                  DateTime?
-  sentAt                  DateTime?
-  voidedAt                DateTime?
-  voidedFromStatus        String?
-  isRecurring             Boolean   @default(false)
-  recurringInterval       String? // MONTHLY | QUARTERLY | ANNUALLY
-  recurringNextDate       DateTime?
-  reminderSentAt          DateTime?
-  viewToken               String?   @unique @default(cuid())
-  publicAccessExpiresAt   DateTime?
-  publicAccessRevokedAt   DateTime?
-  clientId                String
-  projectId               String?
-  proposalId              String?   @unique
-  createdById             String
-  createdAt               DateTime  @default(now())
-  updatedAt               DateTime  @updatedAt
+  paymentMethod                          String? // STRIPE | BANK | CHECK | CASH | OTHER
+  paymentNotes                           String?
+  transactionId                          String?
+  paidAt                                 DateTime?
+  sentAt                                 DateTime?
+  voidedAt                               DateTime?
+  voidedFromStatus                       String?
+  isRecurring                            Boolean   @default(false)
+  recurringInterval                      String? // MONTHLY | QUARTERLY | ANNUALLY
+  recurringNextDate                      DateTime?
+  reminderSentAt                         DateTime?
+  viewToken                              String?   @unique @default(cuid())
+  publicAccessExpiresAt                  DateTime?
+  publicAccessRevokedAt                  DateTime?
+  clientId                               String
+  projectId                              String?
+  proposalId                             String?   @unique
+  createdById                            String
+  createdAt                              DateTime  @default(now())
+  updatedAt                              DateTime  @updatedAt
 
-  client      Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  createdBy   User              @relation("InvoiceCreator", fields: [createdById], references: [id])
-  lineItems   InvoiceLineItem[]
-  payments    InvoicePayment[]
-  refunds     InvoiceRefund[]
-  refundEvents InvoiceRefundEvent[]
-  checkoutAudits InvoiceCheckoutAudit[]
-  timeEntries TimeEntry[]
-  expenses    Expense[]
+  client           Client                   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  createdBy        User                     @relation("InvoiceCreator", fields: [createdById], references: [id])
+  lineItems        InvoiceLineItem[]
+  payments         InvoicePayment[]
+  refunds          InvoiceRefund[]
+  refundEvents     InvoiceRefundEvent[]
+  checkoutAudits   InvoiceCheckoutAudit[]
+  deliveryAttempts InvoiceDeliveryAttempt[]
+  deliveryEvents   InvoiceDeliveryEvent[]
+  timeEntries      TimeEntry[]
+  expenses         Expense[]
   // Soft delete
-  deletedAt   DateTime?
+  deletedAt        DateTime?
 
   // Autosave draft
   draftData String? // JSON of unsaved form data
@@ -1109,6 +1112,51 @@ model Invoice {
   @@index([status, dueDate])
   @@index([clientId, status])
   @@map("invoices")
+}
+
+model InvoiceDeliveryAttempt {
+  id                String    @id @default(cuid())
+  invoiceId         String
+  requestId         String    @unique
+  attemptNumber     Int
+  kind              String
+  recipient         String
+  status            String
+  provider          String
+  providerMessageId String?
+  failureCode       String?
+  requestedById     String?
+  acceptedAt        DateTime?
+  failedAt          DateTime?
+  outcomeUnknownAt  DateTime?
+  canceledAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  invoice Invoice                @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  events  InvoiceDeliveryEvent[]
+
+  @@unique([invoiceId, attemptNumber])
+  @@index([invoiceId, createdAt])
+  @@map("invoice_delivery_attempts")
+}
+
+model InvoiceDeliveryEvent {
+  id                String   @id @default(cuid())
+  attemptId         String
+  invoiceId         String
+  status            String
+  providerMessageId String?
+  failureCode       String?
+  occurredAt        DateTime @default(now())
+  createdAt         DateTime @default(now())
+
+  attempt InvoiceDeliveryAttempt @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  invoice Invoice                @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+
+  @@index([invoiceId, occurredAt])
+  @@index([attemptId, occurredAt])
+  @@map("invoice_delivery_events")
 }
 
 model InvoiceLineItem {
@@ -1137,7 +1185,7 @@ model InvoicePayment {
   invoiceId     String
   createdAt     DateTime @default(now())
 
-  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoice Invoice         @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   refunds InvoiceRefund[]
 
   @@map("invoice_payments")
@@ -1168,19 +1216,19 @@ model InvoiceRefund {
 }
 
 model InvoiceRefundEvent {
-  id                String   @id @default(cuid())
-  invoiceId         String
-  refundId          String
-  stripeRefundId    String
-  stripeEventId     String   @unique
-  eventType         String
-  paymentIntentId   String
-  amountMinor       Int
-  currency          String
-  status            String
-  signedStatus      String
-  providerEventAt   DateTime
-  createdAt         DateTime @default(now())
+  id              String   @id @default(cuid())
+  invoiceId       String
+  refundId        String
+  stripeRefundId  String
+  stripeEventId   String   @unique
+  eventType       String
+  paymentIntentId String
+  amountMinor     Int
+  currency        String
+  status          String
+  signedStatus    String
+  providerEventAt DateTime
+  createdAt       DateTime @default(now())
 
   invoice Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
   refund  InvoiceRefund @relation(fields: [refundId], references: [id], onDelete: Restrict)
@@ -1665,9 +1713,9 @@ model PipelineDeal {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  stage  PipelineStage @relation(fields: [stageId], references: [id])
-  client Client        @relation(fields: [clientId], references: [id])
-  convertedLead Lead?  @relation("LeadConvertedDeal")
+  stage         PipelineStage @relation(fields: [stageId], references: [id])
+  client        Client        @relation(fields: [clientId], references: [id])
+  convertedLead Lead?         @relation("LeadConvertedDeal")
   proposal      Proposal?
 
   @@index([stageId])
