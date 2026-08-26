@@ -3,11 +3,17 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import {
+  createStage,
   createDeal,
   getPipelineStages,
+  updateStage,
   updateDeal,
 } from '../../services/dealPipeline.service.js';
-import { pipelineDealCreateSchema } from '../../validators/schemas.js';
+import {
+  pipelineDealCreateSchema,
+  pipelineStageCreateSchema,
+  pipelineStageUpdateSchema,
+} from '../../validators/schemas.js';
 
 test('pipeline stages are read through the injected tenant client and shaped for the shipped page', async () => {
   const calls = [];
@@ -31,6 +37,42 @@ test('pipeline stages are read through the injected tenant client and shaped for
     color: '#123456', probability: 50, count: 1, value: 12000,
     items: [{ id: 'deal-1', title: 'Packaging system', name: 'Packaging system', value: 12000, total: 12000, clientId: 'client-1', clientName: 'Example Foods' }],
   }]);
+});
+
+test('pipeline stage creation rejects a case-insensitive duplicate in the tenant', async () => {
+  let createCalls = 0;
+  const prisma = {
+    pipelineStage: {
+      findFirst: async () => ({ id: 'stage-existing' }),
+      create: async () => { createCalls += 1; },
+    },
+  };
+
+  await assert.rejects(
+    createStage(prisma, { name: 'qualified', probability: 40, order: 1 }),
+    (error) => error.code === 'PIPELINE_STAGE_EXISTS',
+  );
+  assert.equal(createCalls, 0);
+});
+
+test('pipeline stage rename rejects another tenant stage with the same name', async () => {
+  let findCalls = 0;
+  let updateCalls = 0;
+  const prisma = {
+    pipelineStage: {
+      findFirst: async () => {
+        findCalls += 1;
+        return findCalls === 1 ? { id: 'stage-1' } : { id: 'stage-2' };
+      },
+      update: async () => { updateCalls += 1; },
+    },
+  };
+
+  await assert.rejects(
+    updateStage(prisma, 'stage-1', { name: 'Discovery' }),
+    (error) => error.code === 'PIPELINE_STAGE_EXISTS',
+  );
+  assert.equal(updateCalls, 0);
 });
 
 test('deal creation requires a tenant stage and maps the web contract to the Prisma model', async () => {
@@ -85,6 +127,16 @@ test('pipeline routes and service never bypass the request-scoped tenant client'
   assert.match(routes, /deleteDeal\(request\.prisma, id\)/);
 });
 
+test('pipeline stage creation returns reviewed domain conflicts instead of a server error', () => {
+  const routes = fs.readFileSync(path.join(process.cwd(), 'src', 'routes', 'pipeline.routes.js'), 'utf8');
+  const createRoute = routes.slice(
+    routes.indexOf("fastify.post('/stages'"),
+    routes.indexOf('// Update a stage'),
+  );
+  assert.match(createRoute, /try\s*{/);
+  assert.match(createRoute, /handlePipelineError\(error, reply\)/);
+});
+
 test('deal creation contract requires a client and uses the page value field', () => {
   const accepted = pipelineDealCreateSchema.safeParse({
     name: 'Packaging system',
@@ -99,6 +151,11 @@ test('deal creation contract requires a client and uses the page value field', (
   });
   assert.equal(accepted.success, true);
   assert.equal(missingClient.success, false);
+});
+
+test('pipeline stage contracts reject whitespace-only names', () => {
+  assert.equal(pipelineStageCreateSchema.safeParse({ name: '   ' }).success, false);
+  assert.equal(pipelineStageUpdateSchema.safeParse({ name: '\t' }).success, false);
 });
 
 test('pipeline page does not offer an ownerless deal', () => {

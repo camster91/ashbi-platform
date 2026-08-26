@@ -49,8 +49,12 @@ export default async function pipelineRoutes(fastify) {
     onRequest: [fastify.authenticate],
     preHandler: validateBody(pipelineStageCreateSchema),
   }, async (request, reply) => {
-    const stage = await createStage(request.prisma, request.body);
-    return reply.status(201).send(stage);
+    try {
+      const stage = await createStage(request.prisma, request.body);
+      return reply.status(201).send(stage);
+    } catch (error) {
+      return handlePipelineError(error, reply);
+    }
   });
 
   // Update a stage

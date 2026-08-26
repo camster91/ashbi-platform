@@ -64,9 +64,17 @@ export async function getPipelineStages(prisma) {
 
 export async function createStage(prisma, data) {
   const { name, color, probability, order } = data;
+  const normalizedName = name.trim();
+  const existing = await prisma.pipelineStage.findFirst({
+    where: { name: { equals: normalizedName, mode: 'insensitive' } },
+    select: { id: true },
+  });
+  if (existing) {
+    throw new PipelineError('A pipeline stage with this name already exists', 'PIPELINE_STAGE_EXISTS', 409);
+  }
   return prisma.pipelineStage.create({
     data: {
-      name,
+      name: normalizedName,
       color: color ?? '#3B82F6',
       probability: probability ?? 0,
       order: order ?? 0,
@@ -76,7 +84,21 @@ export async function createStage(prisma, data) {
 
 export async function updateStage(prisma, stageId, data) {
   await assertStage(prisma, stageId);
-  return prisma.pipelineStage.update({ where: { id: stageId }, data });
+  const update = { ...data };
+  if (data.name !== undefined) {
+    update.name = data.name.trim();
+    const existing = await prisma.pipelineStage.findFirst({
+      where: {
+        id: { not: stageId },
+        name: { equals: update.name, mode: 'insensitive' },
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new PipelineError('A pipeline stage with this name already exists', 'PIPELINE_STAGE_EXISTS', 409);
+    }
+  }
+  return prisma.pipelineStage.update({ where: { id: stageId }, data: update });
 }
 
 export async function deleteStage(prisma, stageId, moveToStageId) {

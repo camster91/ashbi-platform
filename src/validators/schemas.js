@@ -864,14 +864,14 @@ export const projectUpdateSchema = z.object({
 
 // ── Pipeline (sales Kanban) ───────────────────────────────────────────────
 export const pipelineStageCreateSchema = z.object({
-  name: z.string().min(1).max(100),
+  name: z.string().trim().min(1).max(100),
   order: z.number().int().min(0).max(1000).default(0),
   color: z.string().max(20).optional(),
   probability: z.number().int().min(0).max(100).default(50),
 }).strict();
 
 export const pipelineStageUpdateSchema = z.object({
-  name: z.string().min(1).max(100).optional(),
+  name: z.string().trim().min(1).max(100).optional(),
   order: z.number().int().min(0).max(1000).optional(),
   color: z.string().max(20).optional(),
   probability: z.number().int().min(0).max(100).optional(),

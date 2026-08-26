@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 import {
   Target, FileText, ScrollText, FolderOpen, Receipt, DollarSign,
   ChevronRight, ArrowRight, X, ExternalLink, TrendingUp,
-  Plus, Trash2, MoveRight,
+  Plus, Trash2, MoveRight, Settings2,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { Card, LoadingState } from '../components/ui';
@@ -136,6 +136,230 @@ function CreateDealModal({ isOpen, onClose, stages }) {
   );
 }
 
+function isValidProbability(value) {
+  if (String(value).trim() === '') return false;
+  const number = Number(value);
+  return Number.isInteger(number) && number >= 0 && number <= 100;
+}
+
+function StageEditor({ stage, stages }) {
+  const queryClient = useQueryClient();
+  const originalName = stage.label || stage.name;
+  const [name, setName] = useState(originalName);
+  const [probability, setProbability] = useState(String(stage.probability ?? 0));
+  const [moveToStageId, setMoveToStageId] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const updateMutation = useMutation({
+    mutationFn: (data) => api.updatePipelineStage(stage.id, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['pipeline'] }),
+  });
+  const deleteMutation = useMutation({
+    mutationFn: () => api.deletePipelineStage(stage.id, moveToStageId || undefined),
+    onSuccess: () => {
+      setConfirmDelete(false);
+      queryClient.invalidateQueries({ queryKey: ['pipeline'] });
+    },
+  });
+
+  const handleSave = (event) => {
+    event.preventDefault();
+    const normalizedName = name.trim();
+    if (!normalizedName || !isValidProbability(probability)) return;
+    updateMutation.mutate({ name: normalizedName, probability: Number(probability) });
+  };
+
+  return (
+    <li className="rounded-lg border p-3">
+      <form onSubmit={handleSave} className="grid gap-3 sm:grid-cols-[1fr_9rem_auto] sm:items-end">
+        <div>
+          <label htmlFor={`pipeline-stage-name-${stage.id}`} className="block text-sm font-medium mb-1">
+            Stage name for {originalName}
+          </label>
+          <input
+            id={`pipeline-stage-name-${stage.id}`}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            maxLength={100}
+            className="min-h-11 w-full rounded-lg border px-3 py-2"
+          />
+        </div>
+        <div>
+          <label htmlFor={`pipeline-stage-probability-${stage.id}`} className="block text-sm font-medium mb-1">
+            Probability for {originalName}
+          </label>
+          <input
+            id={`pipeline-stage-probability-${stage.id}`}
+            type="number"
+            min="0"
+            max="100"
+            value={probability}
+            onChange={(event) => setProbability(event.target.value)}
+            aria-invalid={!isValidProbability(probability)}
+            className="min-h-11 w-full rounded-lg border px-3 py-2"
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={updateMutation.isPending || !name.trim() || !isValidProbability(probability)}
+          className="min-h-11 rounded-lg border px-3 py-2 text-sm font-medium disabled:opacity-50"
+          aria-label={`Save ${originalName}`}
+        >
+          {updateMutation.isPending ? 'Saving…' : 'Save'}
+        </button>
+      </form>
+      <p className="mt-2 text-xs text-muted-foreground">
+        {stage.count} {stage.count === 1 ? 'deal' : 'deals'} in this stage
+      </p>
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        {stage.count > 0 ? (
+          <div className="flex-1">
+            <label htmlFor={`pipeline-stage-destination-${stage.id}`} className="block text-sm font-medium mb-1">
+              Move deals from {originalName} to
+            </label>
+            <select
+              id={`pipeline-stage-destination-${stage.id}`}
+              value={moveToStageId}
+              onChange={(event) => setMoveToStageId(event.target.value)}
+              className="min-h-11 w-full rounded-lg border px-3 py-2"
+            >
+              <option value="">Select a destination stage</option>
+              {stages.filter((candidate) => candidate.id !== stage.id).map((candidate) => (
+                <option key={candidate.id} value={candidate.id}>
+                  {candidate.label || candidate.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : <span />}
+        <button
+          type="button"
+          onClick={() => setConfirmDelete(true)}
+          disabled={stage.count > 0 && !moveToStageId}
+          aria-label={`Delete ${originalName}`}
+          className="min-h-11 rounded-lg px-3 py-2 text-sm font-medium text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Delete stage
+        </button>
+      </div>
+      {updateMutation.error && (
+        <p role="alert" className="mt-2 text-sm text-destructive">
+          {updateMutation.error.message || 'Failed to update stage'}
+        </p>
+      )}
+      <ConfirmDialog
+        isOpen={confirmDelete}
+        title={`Delete ${originalName} stage`}
+        description={stage.count > 0
+          ? `Move ${stage.count} ${stage.count === 1 ? 'deal' : 'deals'} to the selected stage, then permanently delete ${originalName}?`
+          : `Permanently delete the empty ${originalName} stage?`}
+        confirmLabel={stage.count > 0
+          ? `Move ${stage.count} ${stage.count === 1 ? 'deal' : 'deals'} and delete stage`
+          : 'Delete stage'}
+        onConfirm={() => deleteMutation.mutate()}
+        onCancel={() => { deleteMutation.reset(); setConfirmDelete(false); }}
+        pending={deleteMutation.isPending}
+        error={deleteMutation.error?.message}
+      />
+    </li>
+  );
+}
+
+function StageManagerModal({ isOpen, onClose, stages }) {
+  const queryClient = useQueryClient();
+  const [name, setName] = useState('');
+  const [probability, setProbability] = useState('0');
+  const [error, setError] = useState('');
+
+  const createMutation = useMutation({
+    mutationFn: (data) => api.createPipelineStage(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pipeline'] });
+      setName('');
+      setProbability('0');
+      setError('');
+    },
+    onError: (err) => setError(err.message || 'Failed to create stage'),
+  });
+
+  const handleCreate = (event) => {
+    event.preventDefault();
+    const normalizedName = name.trim();
+    if (!normalizedName) {
+      setError('Stage name is required');
+      return;
+    }
+    if (!isValidProbability(probability)) {
+      setError('Probability must be a whole number from 0 to 100');
+      return;
+    }
+    const order = stages.length
+      ? Math.max(...stages.map((stage) => Number(stage.order) || 0)) + 1
+      : 0;
+    createMutation.mutate({
+      name: normalizedName,
+      probability: Number(probability),
+      order,
+    });
+  };
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Manage pipeline stages" size="lg">
+      <p className="text-sm text-muted-foreground mb-4">
+        Stages are shared by the authenticated Ashbi workspace. Add only stages the team has deliberately approved.
+      </p>
+      {stages.length > 0 && (
+        <ol className="space-y-2 mb-6" aria-label="Current pipeline stages">
+          {stages.map((stage) => (
+            <StageEditor key={stage.id} stage={stage} stages={stages} />
+          ))}
+        </ol>
+      )}
+      <form onSubmit={handleCreate}>
+        <h3 className="font-semibold text-foreground mb-3">Add a stage</h3>
+        {error && <p role="alert" className="mb-3 text-sm text-destructive">{error}</p>}
+        <div className="grid gap-4 sm:grid-cols-[1fr_10rem_auto] sm:items-end">
+          <div>
+            <label htmlFor="new-pipeline-stage-name" className="block text-sm font-medium mb-1">
+              New stage name
+            </label>
+            <input
+              id="new-pipeline-stage-name"
+              value={name}
+              onChange={(event) => { setName(event.target.value); setError(''); }}
+              className="min-h-11 w-full rounded-lg border px-3 py-2"
+              maxLength={100}
+            />
+          </div>
+          <div>
+            <label htmlFor="new-pipeline-stage-probability" className="block text-sm font-medium mb-1">
+              Probability (%)
+            </label>
+            <input
+              id="new-pipeline-stage-probability"
+              type="number"
+              min="0"
+              max="100"
+              value={probability}
+              onChange={(event) => { setProbability(event.target.value); setError(''); }}
+              aria-invalid={!isValidProbability(probability)}
+              className="min-h-11 w-full rounded-lg border px-3 py-2"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={createMutation.isPending || !name.trim() || !isValidProbability(probability)}
+            className="min-h-11 rounded-lg px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            style={{ backgroundColor: PRIMARY }}
+          >
+            {createMutation.isPending ? 'Adding…' : 'Add stage'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 // ── Move-to dropdown (inline) ──────────────────────────────────────────
 function MoveToDropdown({ deal, stages, currentStageId, onMove }) {
   const [open, setOpen] = useState(false);
@@ -179,6 +403,7 @@ function MoveToDropdown({ deal, stages, currentStageId, onMove }) {
 export default function Pipeline() {
   const [expandedStage, setExpandedStage] = useState(null);
   const [showCreateDeal, setShowCreateDeal] = useState(false);
+  const [showStageManager, setShowStageManager] = useState(false);
 
   const {
     data,
@@ -229,6 +454,7 @@ export default function Pipeline() {
 
   const stages = data?.stages || [];
   const rates = data?.conversionRates || {};
+  const hasConversionEvidence = Object.keys(rates).length > 0;
 
   return (
     <div className="space-y-6">
@@ -238,17 +464,33 @@ export default function Pipeline() {
           <h1 className="text-2xl font-heading font-bold text-foreground">Pipeline</h1>
           <p className="text-sm text-muted-foreground mt-1">Track deals from lead to payment</p>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowCreateDeal(true)}
-          disabled={!stages.length}
-          title={!stages.length ? 'Set up a pipeline stage first' : 'Create a deal'}
-          className="min-h-11 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg transition-all hover:opacity-90 hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
-          style={{ backgroundColor: PRIMARY }}>
-          <Plus className="w-4 h-4" />
-          New Deal
-        </button>
+        <div className="flex flex-wrap justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setShowStageManager(true)}
+            className="min-h-11 inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Settings2 className="w-4 h-4" />
+            Manage stages
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowCreateDeal(true)}
+            disabled={!stages.length}
+            title={!stages.length ? 'Set up a pipeline stage first' : 'Create a deal'}
+            className="min-h-11 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white rounded-lg transition-all hover:opacity-90 hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0"
+            style={{ backgroundColor: PRIMARY }}>
+            <Plus className="w-4 h-4" />
+            New Deal
+          </button>
+        </div>
       </div>
+
+      <StageManagerModal
+        isOpen={showStageManager}
+        onClose={() => setShowStageManager(false)}
+        stages={stages}
+      />
 
       <CreateDealModal
         isOpen={showCreateDeal}
@@ -359,28 +601,38 @@ export default function Pipeline() {
       )}
 
       {/* Conversion Rates */}
-      <Card className="p-6">
-        <h2 className="text-lg font-semibold text-foreground mb-4">Conversion Rates (All-Time)</h2>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {Object.entries(CONVERSION_LABELS).map(([key, label]) => {
-            const rate = rates[key] || 0;
-            return (
-              <div key={key} className="text-center p-3 rounded-lg bg-muted/50">
-                <p className="text-xs text-muted-foreground mb-1">{label}</p>
-                <p className={`text-xl font-bold ${rate >= 50 ? 'text-emerald-500' : rate >= 25 ? 'text-amber-500' : 'text-red-400'}`}>
-                  {rate}%
-                </p>
-                <div className="w-full h-1.5 bg-muted rounded-full mt-2 overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${rate >= 50 ? 'bg-emerald-500' : rate >= 25 ? 'bg-amber-500' : 'bg-red-400'}`}
-                    style={{ width: `${Math.min(rate, 100)}%` }}
-                  />
+      {hasConversionEvidence ? (
+        <Card className="p-6">
+          <h2 className="text-lg font-semibold text-foreground mb-4">Conversion Rates (All-Time)</h2>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {Object.entries(CONVERSION_LABELS).map(([key, label]) => {
+              const rate = rates[key];
+              if (rate == null) return null;
+              return (
+                <div key={key} className="text-center p-3 rounded-lg bg-muted/50">
+                  <p className="text-xs text-muted-foreground mb-1">{label}</p>
+                  <p className={`text-xl font-bold ${rate >= 50 ? 'text-emerald-500' : rate >= 25 ? 'text-amber-500' : 'text-red-400'}`}>
+                    {rate}%
+                  </p>
+                  <div className="w-full h-1.5 bg-muted rounded-full mt-2 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${rate >= 50 ? 'bg-emerald-500' : rate >= 25 ? 'bg-amber-500' : 'bg-red-400'}`}
+                      style={{ width: `${Math.min(rate, 100)}%` }}
+                    />
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      </Card>
+              );
+            })}
+          </div>
+        </Card>
+      ) : (
+        <Card className="p-6">
+          <h2 className="text-lg font-semibold text-foreground mb-2">Conversion evidence</h2>
+          <p className="text-sm text-muted-foreground">
+            Conversion rates need verified lifecycle events before they can be reported.
+          </p>
+        </Card>
+      )}
     </div>
   );
 }
