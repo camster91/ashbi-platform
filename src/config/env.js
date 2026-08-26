@@ -13,6 +13,16 @@ const env = {
     .map(origin => origin.trim())
     .filter(Boolean),
 
+  // Public Ashbi.ca inquiry bridge. The route remains disabled unless every
+  // value is explicitly configured for the intended Hub tenant and owner.
+  publicIntakeOrganizationId: process.env.PUBLIC_INTAKE_ORGANIZATION_ID,
+  publicIntakeOwnerUserId: process.env.PUBLIC_INTAKE_OWNER_USER_ID,
+  publicIntakePrivacyVersion: process.env.PUBLIC_INTAKE_PRIVACY_VERSION,
+  publicIntakeAllowedOrigins: (process.env.PUBLIC_INTAKE_ALLOWED_ORIGINS || '')
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean),
+
   // Auth
   jwtSecret: process.env.JWT_SECRET,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',

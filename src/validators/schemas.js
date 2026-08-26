@@ -1337,6 +1337,48 @@ export const clientPortalMessageNewSchema = z.object({
 });
 
 // ── Landing (public lead form) ───────────────────────────────────────────
+export const PUBLIC_SERVICE_LINES = [
+  'brand_packaging',
+  'web_commerce',
+  'custom_platform',
+  'ai_automation',
+  'managed_support',
+  'unknown',
+];
+
+export const publicInquirySchema = z.object({
+  idempotencyKey: z.string().regex(/^[A-Za-z0-9._:-]{16,128}$/),
+  name: z.string().trim().min(1).max(200),
+  email: z.string().trim().email().max(255),
+  company: z.string().trim().max(200).optional(),
+  phone: z.string().trim().max(50).optional(),
+  serviceLine: z.enum(PUBLIC_SERVICE_LINES),
+  businessContext: z.string().trim().min(10).max(5_000),
+  requestedOutcome: z.string().trim().min(10).max(2_000),
+  timing: z.enum(['urgent_30_days', 'one_to_three_months', 'three_to_six_months', 'exploring']).optional(),
+  budgetBand: z.enum(['under_5k', '5k_10k', '10k_25k', '25k_plus', 'not_sure', 'prefer_not_to_say']).optional(),
+  budgetCurrency: z.enum(['CAD', 'USD']).optional(),
+  consent: z.literal(true),
+  privacyVersion: z.string().regex(/^\d{4}-\d{2}-\d{2}(?:\.[A-Za-z0-9_-]+)?$/),
+  attribution: z.object({
+    landingPage: z.string().trim().regex(/^\/(?!\/)[^?#]{0,499}$/),
+    referrer: z.string().trim().url().max(2_048).optional(),
+    source: z.string().trim().max(100).optional(),
+    medium: z.string().trim().max(100).optional(),
+    campaign: z.string().trim().max(100).optional(),
+    clickId: z.string().trim().max(200).optional(),
+  }).strict(),
+  website: z.string().max(200).optional(),
+}).strict().superRefine((value, context) => {
+  if (Boolean(value.budgetBand) !== Boolean(value.budgetCurrency)) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: value.budgetBand ? ['budgetCurrency'] : ['budgetBand'],
+      message: 'Budget band and currency must be supplied together',
+    });
+  }
+});
+
 export const landingLeadSchema = z.object({
   name: z.string().min(1).max(200),
   email: z.string().email().max(255),

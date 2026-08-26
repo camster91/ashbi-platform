@@ -1,6 +1,6 @@
 # Public site and Hub contract
 
-Status: Proposed architecture decision
+Status: Architecture decision; Hub intake code-present, not deployed or connected
 
 ## Decision
 
@@ -31,6 +31,13 @@ The journey needs durable identifiers for organization, person/contact, lead, op
 
 ## Public intake contract
 
+The Hub implementation uses two intentionally public routes:
+
+- `GET /api/client-acquisition/config` returns whether intake is enabled, the active privacy version, and the canonical service lines. It does not return organization or owner identifiers.
+- `POST /api/client-acquisition/intake` accepts the validated inquiry, creates one tenant-owned lead and source event, and notifies the configured internal owner. New submissions return `202`; exact idempotent replays return `200` without another write.
+
+The write route remains disabled unless the target organization, internal owner, privacy version, and allowed Ashbi.ca origins are all explicitly configured. The database migration, production identifiers, Ashbi.ca form connection, and controlled live test remain pending.
+
 Minimum accepted fields:
 
 - Name and contact method.
@@ -42,6 +49,8 @@ Minimum accepted fields:
 - First-party attribution: landing page, referrer, source, medium, campaign, and approved click identifier where available.
 - A client-generated idempotency token.
 
+Canonical service values are `brand_packaging`, `web_commerce`, `custom_platform`, `ai_automation`, `managed_support`, and `unknown`. Budget, when supplied, is stored as a band plus an explicit `CAD` or `USD` currency; currencies are not combined.
+
 Controls:
 
 - Server-side schema validation and normalized enumerations.
@@ -50,6 +59,7 @@ Controls:
 - Retention limits for raw attribution and form content.
 - Owner notification without automatic prospect messaging.
 - No secret, credential, private client record, or internal note in public responses.
+- An allowed browser origin, matching privacy-notice version, and a silent honeypot path that performs no database write.
 
 ## Portal boundary
 

@@ -35,7 +35,8 @@ const DIRECT_SCOPED_MODELS = new Set([
   'weeklydigest', 'tasktemplate', 'outreachsequence', 'emailtriageitem',
   'aicontext', 'ashconversation', 'projecttemplate', 'brandsettings',
   'pipelinestage', 'promptversion', 'credential', 'credentialaccessaudit',
-  'onboardingprogress', 'slackinstallation', 'slackchannelmapping', 'slackeventreceipt', 'googlecalendarconnection', 'notionimportrecord', 'aibridgeaction'
+  'onboardingprogress', 'slackinstallation', 'slackchannelmapping', 'slackeventreceipt', 'googlecalendarconnection', 'notionimportrecord', 'aibridgeaction',
+  'lead', 'leadevent'
 ]);
 
 // Models that are intentionally shared across organizations. Every Prisma
@@ -76,6 +77,8 @@ const DIRECT_PARENT_RELATIONS = {
   notionimportrecord: [{ relation: 'project', field: 'projectId', model: 'project', delegate: 'project', required: true }],
   aibridgeaction: [{ relation: 'user', field: 'userId', model: 'user', delegate: 'user', required: true }],
   onboardingprogress: [{ relation: 'user', field: 'userId', model: 'user', delegate: 'user', required: true }],
+  lead: [{ relation: 'accountOwner', field: 'accountOwnerId', model: 'user', delegate: 'user', required: true }],
+  leadevent: [{ relation: 'lead', field: 'leadId', model: 'lead', delegate: 'lead', required: true }],
 };
 
 const RESTRICTED_MODELS = new Set([]);
@@ -181,6 +184,7 @@ const RELATION_OWNER_MODELS = {
   item: { model: 'emailtriageitem', delegate: 'emailTriageItem' },
   conversation: { model: 'ashconversation', delegate: 'ashConversation' },
   form: { model: 'intakeform', delegate: 'intakeForm' },
+  lead: { model: 'lead', delegate: 'lead' },
 };
 
 export const tenantModelPolicy = Object.freeze({

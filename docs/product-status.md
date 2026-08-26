@@ -1,6 +1,6 @@
 # Canonical product and release status
 
-This is the repository's authoritative status map as of 2026-08-13. A feature is **code-present** when routes/UI/tests exist, **target-verified** only when target-environment evidence exists, **blocked** when an external decision/provider/human gate remains, and **deferred** when it is explicitly outside the current supported milestone. Code presence is never sufficient evidence for production, accessibility, legal, provider, or market-readiness claims.
+This is the repository's authoritative status map as of 2026-08-26. A feature is **code-present** when routes/UI/tests exist, **target-verified** only when target-environment evidence exists, **blocked** when an external decision/provider/human gate remains, and **deferred** when it is explicitly outside the current supported milestone. Code presence is never sufficient evidence for production, accessibility, legal, provider, or market-readiness claims.
 
 The active agency-replacement acceptance map is [replacement-readiness-matrix.md](replacement-readiness-matrix.md).
 
@@ -10,6 +10,7 @@ The supported milestone is a controlled Ashbi agency-operations deployment: auth
 
 | Capability | Classification | Authoritative evidence or remaining gate |
 | --- | --- | --- |
+| Ashbi.ca public inquiry capture | Code-present locally; not deployed or connected | Strict consent/attribution schema, explicit tenant and owner configuration, origin/privacy checks, idempotent tenant-owned lead/event creation, owner notification, safe responses, and regression coverage are present. The committed migration is unapplied; production tenant/owner/privacy values remain blank; Ashbi.ca is not connected; retention/deletion approval and a controlled target test lead remain pending. |
 | Authentication, session revocation, roles, tenancy | Code-present and production-deployed | Security/unit/integration coverage; authenticated manual evidence remains in [#319](https://github.com/camster91/ashbi-platform/issues/319) and [#305](https://github.com/camster91/ashbi-platform/issues/305) |
 | Clients, projects, tasks, time, team operations | Code-present and production-deployed | Final supported workflow/IA decision in [#309](https://github.com/camster91/ashbi-platform/issues/309) |
 | Proposals, contracts, invoices, estimates, expenses | Code-present; provider lifecycle not cleared | Invoice checkout creation uses an invoice-scoped Stripe idempotency key, and completion is transactionally idempotent; the full revenue journey remains under [#280](https://github.com/camster91/ashbi-platform/issues/280), Stripe [#378](https://github.com/camster91/ashbi-platform/issues/378), email [#379](https://github.com/camster91/ashbi-platform/issues/379), e-sign/retention [#380](https://github.com/camster91/ashbi-platform/issues/380) |

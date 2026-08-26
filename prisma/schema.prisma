@@ -22,44 +22,46 @@ model Organization {
   updatedAt DateTime @updatedAt
 
   // Relations
-  users              User[]
-  clients            Client[]
-  projects           Project[]
-  formDrafts         FormDraft[]
-  attachments        Attachment[]
-  wpSites            WPSite[]
-  wpBackups          WPBackup[]
-  wpReports          WPReport[]
-  wpAlerts           WPAlert[]
-  wpFleetOps         WPFleetOp[]
-  wpMagicLoginLogs   WPMagicLoginLog[]
-  wpBridgeNonces     WPBridgeNonce[]
-  supportHourEntries SupportHourEntry[]
-  integrations       Integration[]
-  trashedItems       TrashedItem[]
-  assignmentRules    AssignmentRule[]
-  templates          Template[]
-  unmatchedEmails    UnmatchedEmail[]
-  lineItemTemplates  LineItemTemplate[]
-  weeklyDigests      WeeklyDigest[]
-  taskTemplates      TaskTemplate[]
-  outreachSequences  OutreachSequence[]
-  emailTriageItems   EmailTriageItem[]
-  aiContexts         AiContext[]
-  ashConversations   AshConversation[]
-  projectTemplates   ProjectTemplate[]
-  brandSettings      BrandSettings[]
-  pipelineStages     PipelineStage[]
-  promptVersions     PromptVersion[]
-  credentials        Credential[]
-  credentialAudits   CredentialAccessAudit[]
-  onboardingProgress OnboardingProgress[]
-  slackInstallations SlackInstallation[]
-  slackChannelMappings SlackChannelMapping[]
-  slackEventReceipts SlackEventReceipt[]
+  users                     User[]
+  clients                   Client[]
+  projects                  Project[]
+  formDrafts                FormDraft[]
+  attachments               Attachment[]
+  wpSites                   WPSite[]
+  wpBackups                 WPBackup[]
+  wpReports                 WPReport[]
+  wpAlerts                  WPAlert[]
+  wpFleetOps                WPFleetOp[]
+  wpMagicLoginLogs          WPMagicLoginLog[]
+  wpBridgeNonces            WPBridgeNonce[]
+  supportHourEntries        SupportHourEntry[]
+  integrations              Integration[]
+  trashedItems              TrashedItem[]
+  assignmentRules           AssignmentRule[]
+  templates                 Template[]
+  unmatchedEmails           UnmatchedEmail[]
+  lineItemTemplates         LineItemTemplate[]
+  weeklyDigests             WeeklyDigest[]
+  taskTemplates             TaskTemplate[]
+  outreachSequences         OutreachSequence[]
+  emailTriageItems          EmailTriageItem[]
+  aiContexts                AiContext[]
+  ashConversations          AshConversation[]
+  projectTemplates          ProjectTemplate[]
+  brandSettings             BrandSettings[]
+  pipelineStages            PipelineStage[]
+  promptVersions            PromptVersion[]
+  credentials               Credential[]
+  credentialAudits          CredentialAccessAudit[]
+  onboardingProgress        OnboardingProgress[]
+  slackInstallations        SlackInstallation[]
+  slackChannelMappings      SlackChannelMapping[]
+  slackEventReceipts        SlackEventReceipt[]
   googleCalendarConnections GoogleCalendarConnection[]
-  notionImportRecords NotionImportRecord[]
-  aiBridgeActions AiBridgeAction[]
+  notionImportRecords       NotionImportRecord[]
+  aiBridgeActions           AiBridgeAction[]
+  leads                     Lead[]
+  leadEvents                LeadEvent[]
 
   @@map("organizations")
 }
@@ -84,33 +86,34 @@ model User {
   updatedAt           DateTime     @updatedAt
 
   // Relations
-  assignedThreads    Thread[]            @relation("AssignedTo")
-  assignedTasks      Task[]              @relation("TaskAssignee")
-  draftedResponses   Response[]          @relation("DraftedBy")
-  approvedResponses  Response[]          @relation("ApprovedBy")
-  notifications      Notification[]
-  internalNotes      InternalNote[]
-  chatMessages       ChatMessage[]       @relation("ChatAuthor")
-  chatReactions      ChatReaction[]
-  notes              Note[]              @relation("NoteAuthor")
-  timeEntries        TimeEntry[]
-  attachments        Attachment[]
-  activities         Activity[]
-  taskComments       TaskComment[]       @relation("CommentAuthor")
-  createdEvents      CalendarEvent[]     @relation("EventCreator")
-  eventAttendees     EventAttendee[]
-  proposals          Proposal[]          @relation("ProposalCreator")
-  contracts          Contract[]          @relation("ContractCreator")
-  invoices           Invoice[]           @relation("InvoiceCreator")
-  pushSubscriptions  PushSubscription[]
-  snippets           Snippet[]
-  proposalVersions   ProposalVersion[]
-  timeSessions       TimeSession[]
-  apiKeys            ApiKey[]
-  formDrafts         FormDraft[]
-  onboardingProgress OnboardingProgress?
+  assignedThreads          Thread[]                  @relation("AssignedTo")
+  assignedTasks            Task[]                    @relation("TaskAssignee")
+  draftedResponses         Response[]                @relation("DraftedBy")
+  approvedResponses        Response[]                @relation("ApprovedBy")
+  notifications            Notification[]
+  internalNotes            InternalNote[]
+  chatMessages             ChatMessage[]             @relation("ChatAuthor")
+  chatReactions            ChatReaction[]
+  notes                    Note[]                    @relation("NoteAuthor")
+  timeEntries              TimeEntry[]
+  attachments              Attachment[]
+  activities               Activity[]
+  taskComments             TaskComment[]             @relation("CommentAuthor")
+  createdEvents            CalendarEvent[]           @relation("EventCreator")
+  eventAttendees           EventAttendee[]
+  proposals                Proposal[]                @relation("ProposalCreator")
+  contracts                Contract[]                @relation("ContractCreator")
+  invoices                 Invoice[]                 @relation("InvoiceCreator")
+  pushSubscriptions        PushSubscription[]
+  snippets                 Snippet[]
+  proposalVersions         ProposalVersion[]
+  timeSessions             TimeSession[]
+  apiKeys                  ApiKey[]
+  formDrafts               FormDraft[]
+  onboardingProgress       OnboardingProgress?
   googleCalendarConnection GoogleCalendarConnection?
-  aiBridgeActions        AiBridgeAction[]
+  aiBridgeActions          AiBridgeAction[]
+  ownedLeads               Lead[]                    @relation("LeadAccountOwner")
 
   @@index([organizationId])
   @@map("users")
@@ -272,28 +275,28 @@ model Project {
   draftData String? // JSON of unsaved form data
 
   // Relations
-  client         Client                 @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  threads        Thread[]
-  tasks          Task[]
-  chatMessages   ChatMessage[]
-  notes          Note[]
-  milestones     Milestone[]
-  timeEntries    TimeEntry[]
-  activities     Activity[]
-  calendarEvents CalendarEvent[]
-  revisionRounds RevisionRound[]
-  proposals      Proposal[]
-  credentials    Credential[]
-  aiTeamMessages AiTeamMessage[]
-  expenses       Expense[]
-  approvals      Approval[]
-  communications ProjectCommunication[]
-  context        ProjectContext?
-  creativeBriefs CreativeBrief[]
-  timeSessions   TimeSession[]
-  wpSite         WPSite?
+  client               Client                 @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  threads              Thread[]
+  tasks                Task[]
+  chatMessages         ChatMessage[]
+  notes                Note[]
+  milestones           Milestone[]
+  timeEntries          TimeEntry[]
+  activities           Activity[]
+  calendarEvents       CalendarEvent[]
+  revisionRounds       RevisionRound[]
+  proposals            Proposal[]
+  credentials          Credential[]
+  aiTeamMessages       AiTeamMessage[]
+  expenses             Expense[]
+  approvals            Approval[]
+  communications       ProjectCommunication[]
+  context              ProjectContext?
+  creativeBriefs       CreativeBrief[]
+  timeSessions         TimeSession[]
+  wpSite               WPSite?
   slackChannelMappings SlackChannelMapping[]
-  notionImportRecords NotionImportRecord[]
+  notionImportRecords  NotionImportRecord[]
 
   @@index([clientId])
   @@index([status])
@@ -543,22 +546,76 @@ model UnmatchedEmail {
   @@map("unmatched_emails")
 }
 
+model Lead {
+  id                   String       @id @default(cuid())
+  organizationId       String
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  accountOwnerId       String
+  accountOwner         User         @relation("LeadAccountOwner", fields: [accountOwnerId], references: [id], onDelete: Restrict)
+  name                 String
+  email                String
+  company              String?
+  phone                String?
+  serviceLine          String
+  businessContext      String
+  requestedOutcome     String
+  timing               String?
+  budgetBand           String?
+  budgetCurrency       String?
+  status               String       @default("NEW")
+  source               String?
+  medium               String?
+  campaign             String?
+  landingPage          String
+  referrer             String?
+  clickId              String?
+  consentVersion       String
+  consentAt            DateTime
+  intakeIdempotencyKey String
+  intakePayloadHash    String
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  events LeadEvent[]
+
+  @@unique([organizationId, intakeIdempotencyKey])
+  @@index([organizationId, status, createdAt])
+  @@index([organizationId, email])
+  @@index([accountOwnerId, status])
+  @@map("leads")
+}
+
+model LeadEvent {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leadId         String
+  lead           Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  eventName      String
+  properties     Json
+  occurredAt     DateTime     @default(now())
+
+  @@index([organizationId, eventName, occurredAt])
+  @@index([leadId, occurredAt])
+  @@map("lead_events")
+}
+
 model ChatMessage {
-  id        String    @id @default(cuid())
-  content   String
-  type      String    @default("TEXT") // TEXT, FILE, SYSTEM
-  metadata  String? // JSON: file info, mentions, etc.
+  id                 String    @id @default(cuid())
+  content            String
+  type               String    @default("TEXT") // TEXT, FILE, SYSTEM
+  metadata           String? // JSON: file info, mentions, etc.
   externalSource     String? // e.g. SLACK; never treated as an Ashbi user
   externalAuthorName String?
   externalMessageId  String? // Provider-native message identifier for durable reconciliation
   externalThreadId   String? // Provider-native root-thread identifier
-  isEdited  Boolean   @default(false)
-  editedAt  DateTime?
-  parentId  String? // For thread replies
-  projectId String
-  authorId  String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  isEdited           Boolean   @default(false)
+  editedAt           DateTime?
+  parentId           String? // For thread replies
+  projectId          String
+  authorId           String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   // Relations
   project   Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -638,26 +695,26 @@ model Milestone {
 }
 
 model TimeEntry {
-  id          String    @id @default(cuid())
-  description String?
-  duration    Int // Duration in minutes
-  date        DateTime  @default(now())
-  billable    Boolean   @default(true)
-  hourlyRate  Float? // Override rate for this entry
-  source      String    @default("MANUAL")
-  invoiced    Boolean   @default(false) // Has this been included in an invoice?
-  invoiceId   String? // Link to invoice if billed
-  reviewStatus   String    @default("PENDING") // PENDING, APPROVED, REJECTED
-  reviewedAt     DateTime?
-  reviewedById   String?
+  id              String    @id @default(cuid())
+  description     String?
+  duration        Int // Duration in minutes
+  date            DateTime  @default(now())
+  billable        Boolean   @default(true)
+  hourlyRate      Float? // Override rate for this entry
+  source          String    @default("MANUAL")
+  invoiced        Boolean   @default(false) // Has this been included in an invoice?
+  invoiceId       String? // Link to invoice if billed
+  reviewStatus    String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  reviewedAt      DateTime?
+  reviewedById    String?
   rejectionReason String?
-  taskId      String?
-  projectId   String
-  userId      String
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  taskId          String?
+  projectId       String
+  userId          String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
   // Soft delete
-  deletedAt   DateTime?
+  deletedAt       DateTime?
 
   // Relations
   task    Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
@@ -734,25 +791,25 @@ model TaskComment {
 }
 
 model CalendarEvent {
-  id          String   @id @default(cuid())
-  title       String
-  description String?
-  startTime   DateTime
-  endTime     DateTime
-  type        String   @default("MEETING") // MEETING, DEADLINE, REMINDER, MILESTONE
-  location    String? // Physical location or video call link
-  isAllDay    Boolean  @default(false)
-  color       String   @default("#3B82F6")
-  recurrence  String? // JSON: recurrence rules
-  googleEventId  String?  @unique
-  googleEventUrl String?
-  googleSyncStatus String @default("NOT_CONNECTED") // NOT_CONNECTED, SYNCED, FAILED
-  googleSyncError String?
-  googleSyncedAt DateTime?
-  projectId   String?
-  createdById String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id               String    @id @default(cuid())
+  title            String
+  description      String?
+  startTime        DateTime
+  endTime          DateTime
+  type             String    @default("MEETING") // MEETING, DEADLINE, REMINDER, MILESTONE
+  location         String? // Physical location or video call link
+  isAllDay         Boolean   @default(false)
+  color            String    @default("#3B82F6")
+  recurrence       String? // JSON: recurrence rules
+  googleEventId    String?   @unique
+  googleEventUrl   String?
+  googleSyncStatus String    @default("NOT_CONNECTED") // NOT_CONNECTED, SYNCED, FAILED
+  googleSyncError  String?
+  googleSyncedAt   DateTime?
+  projectId        String?
+  createdById      String
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   // Relations
   project   Project?        @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -1704,7 +1761,7 @@ model ApiKey {
 // Confirmation and audit ledger for actions requested through the tenant API
 // bridge. An idempotency key belongs to exactly one acting user.
 model AiBridgeAction {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   organizationId String
   userId         String
   action         String
@@ -1712,14 +1769,14 @@ model AiBridgeAction {
   input          Json
   inputHash      String
   preview        Json
-  status         String   @default("PENDING_CONFIRMATION") // PENDING_CONFIRMATION, EXECUTING, EXECUTED, FAILED, EXPIRED
+  status         String    @default("PENDING_CONFIRMATION") // PENDING_CONFIRMATION, EXECUTING, EXECUTED, FAILED, EXPIRED
   result         Json?
   errorCode      String?
   expiresAt      DateTime
   confirmedAt    DateTime?
   executedAt     DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1790,18 +1847,18 @@ model Integration {
 // One outbound, Ashbi-authoritative Google Calendar connection per user. OAuth
 // tokens are encrypted; only a refresh token is retained after the exchange.
 model GoogleCalendarConnection {
-  id                    String   @id @default(cuid())
+  id                    String    @id @default(cuid())
   organizationId        String
-  userId                String   @unique
-  calendarId            String   @default("primary")
+  userId                String    @unique
+  calendarId            String    @default("primary")
   refreshTokenEncrypted String
-  scopes                String   @default("[]")
-  status                String   @default("ACTIVE") // ACTIVE, DISCONNECTED, ERROR
+  scopes                String    @default("[]")
+  status                String    @default("ACTIVE") // ACTIVE, DISCONNECTED, ERROR
   lastError             String?
   lastSyncedAt          DateTime?
   disconnectedAt        DateTime?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1814,18 +1871,18 @@ model GoogleCalendarConnection {
 // unique source key lets a rerun prove it is referring to the same export
 // page, rather than guessing based on its title or current parent folder.
 model NotionImportRecord {
-  id            String   @id @default(cuid())
+  id             String   @id @default(cuid())
   organizationId String
-  projectId     String
-  noteId        String?
-  sourceKey     String
-  sourcePath    String
-  contentSha256 String
-  outcome       String   @default("IMPORTED") // IMPORTED, UNCHANGED, CONFLICT, SKIPPED
-  lastError     String?
-  importedAt    DateTime @default(now())
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  projectId      String
+  noteId         String?
+  sourceKey      String
+  sourcePath     String
+  contentSha256  String
+  outcome        String   @default("IMPORTED") // IMPORTED, UNCHANGED, CONFLICT, SKIPPED
+  lastError      String?
+  importedAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -1853,7 +1910,7 @@ model SlackInstallation {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
-  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   channelMappings SlackChannelMapping[]
   eventReceipts   SlackEventReceipt[]
 
@@ -1862,16 +1919,16 @@ model SlackInstallation {
 }
 
 model SlackChannelMapping {
-  id             String    @id @default(cuid())
-  organizationId String
-  installationId String
-  projectId      String
-  channelId      String
-  channelName    String?
-  inboundEnabled Boolean   @default(true)
+  id              String   @id @default(cuid())
+  organizationId  String
+  installationId  String
+  projectId       String
+  channelId       String
+  channelName     String?
+  inboundEnabled  Boolean  @default(true)
   outboundEnabled Boolean  @default(false)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   installation SlackInstallation @relation(fields: [installationId], references: [id], onDelete: Cascade)

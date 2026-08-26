@@ -38,6 +38,7 @@ import botRoutes from './routes/bot.routes.js';
 import onboardingRoutes from './routes/onboarding.routes.js';
 import retainerRoutes from './routes/retainer.routes.js';
 import leadRoutes from './routes/leads.routes.js';
+import clientAcquisitionRoutes from './routes/client-acquisition.routes.js';
 import credentialRoutes from './routes/credential.routes.js';
 import portalRoutes from './routes/portal.routes.js';
 import templateRoutes from './routes/template.routes.js';
@@ -253,6 +254,13 @@ await fastify.register(templateRoutes, { prefix: '/api/templates' });
 await fastify.register(portalRoutes, { prefix: '/api/portal' });
 await fastify.register(credentialRoutes, { prefix: '/api/credentials' });
 await fastify.register(leadRoutes, { prefix: '/api/leads' });
+await fastify.register(clientAcquisitionRoutes, {
+  prefix: '/api/client-acquisition',
+  organizationId: env.publicIntakeOrganizationId,
+  ownerUserId: env.publicIntakeOwnerUserId,
+  privacyVersion: env.publicIntakePrivacyVersion,
+  allowedOrigins: env.publicIntakeAllowedOrigins,
+});
 await fastify.register(retainerRoutes, { prefix: '/api/retainers' });
 await fastify.register(onboardingRoutes, { prefix: '/api/onboarding' });
 await fastify.register(botRoutes, { prefix: '/api/bot' });
