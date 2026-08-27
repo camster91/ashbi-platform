@@ -26,17 +26,38 @@ const REQUIRED_ARTIFACTS = [
 
 function fixture() {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ashbi-cutover-'));
+  const emptyRecords = Object.fromEntries(REVENUE_EVIDENCE_COLLECTIONS.map(collection => [collection, []]));
+  const revenueManifest = buildRevenueEvidenceManifest(emptyRecords);
+  const revenuePayload = {
+    format: 'ashbi-revenue-evidence-export',
+    version: 1,
+    organizationId: 'org-1',
+    exportedAt: '2026-08-15T18:00:00.000Z',
+    records: emptyRecords,
+    manifest: revenueManifest,
+  };
+  const revenueContent = Buffer.from(JSON.stringify(revenuePayload));
+  const revenueArtifactSha256 = crypto.createHash('sha256').update(revenueContent).digest('hex');
+  const parallelPayload = {
+    format: 'ashbi-parallel-reconciliation',
+    version: 1,
+    organizationId: 'org-1',
+    completedAt: '2026-08-15T19:00:00.000Z',
+    unresolvedFindings: 0,
+    currenciesSeparated: true,
+    revenueEvidence: {
+      artifactSha256: revenueArtifactSha256,
+      recordsSha256: revenueManifest.recordsSha256,
+      collectionCounts: Object.fromEntries(REVENUE_EVIDENCE_COLLECTIONS.map(
+        collection => [collection, revenueManifest.collections[collection].count],
+      )),
+    },
+  };
   const artifacts = REQUIRED_ARTIFACTS.map((id) => {
     const relativePath = `${id}.json`;
-    const emptyRecords = Object.fromEntries(REVENUE_EVIDENCE_COLLECTIONS.map(collection => [collection, []]));
-    const content = Buffer.from(JSON.stringify(id === 'revenue-evidence-export' ? {
-      format: 'ashbi-revenue-evidence-export',
-      version: 1,
-      organizationId: 'org-1',
-      exportedAt: '2026-08-15T18:00:00.000Z',
-      records: emptyRecords,
-      manifest: buildRevenueEvidenceManifest(emptyRecords),
-    } : { id, synthetic: true }));
+    const content = id === 'revenue-evidence-export'
+      ? revenueContent
+      : Buffer.from(JSON.stringify(id === 'parallel-reconciliation' ? parallelPayload : { id, synthetic: true }));
     fs.writeFileSync(path.join(directory, relativePath), content);
     return { id, path: relativePath, sha256: crypto.createHash('sha256').update(content).digest('hex') };
   });
@@ -169,6 +190,24 @@ test('cutover evaluator rejects a missing revenue evidence artifact', () => {
   }
 });
 
+test('cutover evaluator binds parallel reconciliation to the exact revenue export', () => {
+  const { directory, manifest } = fixture();
+  const artifact = manifest.artifacts.find(item => item.id === 'parallel-reconciliation');
+  const reportPath = path.join(directory, artifact.path);
+  const payload = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+  payload.revenueEvidence.recordsSha256 = 'f'.repeat(64);
+  const content = Buffer.from(JSON.stringify(payload));
+  fs.writeFileSync(reportPath, content);
+  artifact.sha256 = crypto.createHash('sha256').update(content).digest('hex');
+  try {
+    const report = evaluateBonsaiCutoverReadiness({ manifest, manifestDirectory: directory });
+    assert.equal(report.ready, false);
+    assert.equal(report.checks.find((check) => check.id === 'parallel-revenue-binding').ok, false);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('cutover evaluator never reads evidence outside the manifest directory', () => {
   const { directory, manifest } = fixture();
   manifest.artifacts[0].path = '../outside.json';
@@ -186,6 +225,7 @@ test('cutover command is read-only and package-addressable', () => {
   const packageJson = fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf8');
   const migrationRunbook = fs.readFileSync(path.join(process.cwd(), 'docs', 'bonsai-migration.md'), 'utf8');
   const examplePath = path.join(process.cwd(), 'docs', 'bonsai-cutover-manifest.example.json');
+  const reconciliationExamplePath = path.join(process.cwd(), 'docs', 'parallel-reconciliation.example.json');
   assert.doesNotMatch(script, /writeFile|appendFile|rmSync|unlink|fetch\(|prisma|stripe\.|mailgun\./i);
   assert.match(packageJson, /"check:bonsai-cutover": "node scripts\/check-bonsai-cutover-readiness\.mjs"/);
   assert.match(migrationRunbook, /npm run check:bonsai-cutover -- --manifest/);
@@ -193,4 +233,7 @@ test('cutover command is read-only and package-addressable', () => {
   const example = JSON.parse(fs.readFileSync(examplePath, 'utf8'));
   assert.equal(example.approval.decision, 'PENDING');
   assert.deepEqual(example.artifacts.map((artifact) => artifact.id), REQUIRED_ARTIFACTS);
+  const reconciliationExample = JSON.parse(fs.readFileSync(reconciliationExamplePath, 'utf8'));
+  assert.equal(reconciliationExample.format, 'ashbi-parallel-reconciliation');
+  assert.deepEqual(Object.keys(reconciliationExample.revenueEvidence.collectionCounts), REVENUE_EVIDENCE_COLLECTIONS);
 });

@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { verifyRevenueEvidenceExport } from './revenueEvidenceExport.service.js';
+import { REVENUE_EVIDENCE_COLLECTIONS, verifyRevenueEvidenceExport } from './revenueEvidenceExport.service.js';
 
 const REQUIRED_RECORD_TYPES = [
   'clients',
@@ -65,15 +65,25 @@ function artifactsAreIntact(artifacts, manifestDirectory) {
   });
 }
 
-function revenueEvidenceIsValid({ artifacts, manifestDirectory, organizationId, parallelEndedAt, evidenceCompletedAt }) {
-  if (!artifactInventoryIsComplete(artifacts) || !manifestDirectory) return false;
-  const artifact = artifacts.find(item => item.id === 'revenue-evidence-export');
-  if (!artifact) return false;
+function readContainedJsonArtifact(artifacts, id, manifestDirectory) {
+  if (!Array.isArray(artifacts) || !manifestDirectory) return null;
+  const artifact = artifacts.find(item => item?.id === id);
+  if (!artifact) return null;
   const root = path.resolve(manifestDirectory);
   const artifactPath = path.resolve(root, String(artifact.path ?? ''));
-  if (artifactPath !== root && !artifactPath.startsWith(`${root}${path.sep}`)) return false;
+  if (artifactPath !== root && !artifactPath.startsWith(`${root}${path.sep}`)) return null;
   try {
-    const payload = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
+    return JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function revenueEvidenceIsValid({ artifacts, manifestDirectory, organizationId, parallelEndedAt, evidenceCompletedAt }) {
+  if (!artifactInventoryIsComplete(artifacts) || !manifestDirectory) return false;
+  try {
+    const payload = readContainedJsonArtifact(artifacts, 'revenue-evidence-export', manifestDirectory);
+    if (!payload) return false;
     const exportedAt = timestamp(payload.exportedAt);
     return typeof organizationId === 'string'
       && organizationId.trim().length > 0
@@ -87,6 +97,37 @@ function revenueEvidenceIsValid({ artifacts, manifestDirectory, organizationId, 
   } catch {
     return false;
   }
+}
+
+function parallelRevenueIsBound({ artifacts, manifestDirectory, organizationId, reconciliation, evidenceCompletedAt }) {
+  const parallelReport = readContainedJsonArtifact(artifacts, 'parallel-reconciliation', manifestDirectory);
+  const revenuePayload = readContainedJsonArtifact(artifacts, 'revenue-evidence-export', manifestDirectory);
+  const revenueArtifact = Array.isArray(artifacts)
+    ? artifacts.find(item => item?.id === 'revenue-evidence-export')
+    : null;
+  if (!parallelReport || !revenuePayload || !revenueArtifact) return false;
+  const completedAt = timestamp(parallelReport.completedAt);
+  const exportedAt = timestamp(revenuePayload.exportedAt);
+  const countsMatch = REVENUE_EVIDENCE_COLLECTIONS.every(collection => (
+    Number.isInteger(parallelReport.revenueEvidence?.collectionCounts?.[collection])
+      && parallelReport.revenueEvidence.collectionCounts[collection]
+        === revenuePayload.manifest?.collections?.[collection]?.count
+  ));
+  return parallelReport.format === 'ashbi-parallel-reconciliation'
+    && parallelReport.version === 1
+    && parallelReport.organizationId === organizationId
+    && parallelReport.unresolvedFindings === reconciliation.unresolvedFindings
+    && parallelReport.unresolvedFindings === 0
+    && parallelReport.currenciesSeparated === reconciliation.currenciesSeparated
+    && parallelReport.currenciesSeparated === true
+    && parallelReport.revenueEvidence?.artifactSha256 === revenueArtifact.sha256
+    && parallelReport.revenueEvidence?.recordsSha256 === revenuePayload.manifest?.recordsSha256
+    && countsMatch
+    && completedAt !== null
+    && exportedAt !== null
+    && evidenceCompletedAt !== null
+    && completedAt >= exportedAt
+    && completedAt <= evidenceCompletedAt;
 }
 
 export function evaluateBonsaiCutoverReadiness({ manifest = {}, manifestDirectory } = {}) {
@@ -168,6 +209,18 @@ export function evaluateBonsaiCutoverReadiness({ manifest = {}, manifestDirector
       }),
       'The final tenant revenue artifact is internally valid and postdates the parallel run.',
       'Export and verify tenant-matched revenue evidence after the parallel run and before evidence completion.',
+    ),
+    check(
+      'parallel-revenue-binding',
+      parallelRevenueIsBound({
+        artifacts: manifest.artifacts,
+        manifestDirectory,
+        organizationId: manifest.organizationId,
+        reconciliation,
+        evidenceCompletedAt,
+      }),
+      'Parallel reconciliation is bound to the exact tenant revenue artifact and collection counts.',
+      'Reconcile and record the exact tenant revenue artifact checksum, record checksum, and collection counts.',
     ),
     check(
       'recovery',

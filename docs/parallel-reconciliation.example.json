@@ -1,0 +1,23 @@
+{
+  "format": "ashbi-parallel-reconciliation",
+  "version": 1,
+  "organizationId": "REPLACE_WITH_ASHBI_ORGANIZATION_ID",
+  "completedAt": null,
+  "unresolvedFindings": null,
+  "currenciesSeparated": false,
+  "revenueEvidence": {
+    "artifactSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "recordsSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "collectionCounts": {
+      "invoices": null,
+      "lineItems": null,
+      "deliveryAttempts": null,
+      "deliveryEvents": null,
+      "payments": null,
+      "refunds": null,
+      "refundEvents": null,
+      "settlementEvents": null,
+      "checkoutAudits": null
+    }
+  }
+}
