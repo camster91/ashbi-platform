@@ -891,6 +891,7 @@ async function runImport(prisma) {
       // Dedup: same description + date + amount
       const existing = await prisma.expense.findFirst({
         where: {
+          organizationId: ORGANIZATION_ID,
           description,
           date,
           amount,
@@ -906,6 +907,7 @@ async function runImport(prisma) {
       if (!DRY_RUN) {
         await prisma.expense.create({
           data: {
+            organizationId: ORGANIZATION_ID,
             description,
             amount,
             currency,

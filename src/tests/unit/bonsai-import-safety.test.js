@@ -12,6 +12,10 @@ test('Bonsai full importer requires an explicit tenant and scopes imported recor
   assert.match(source, /--summary-file/);
   assert.match(source, /IMPORT_ORGANIZATION_ID/);
   assert.match(source, /organizationId: ORGANIZATION_ID/);
+  const expenseCreate = source.slice(source.indexOf('await prisma.expense.create'), source.indexOf('stats.expenses.created'));
+  assert.match(expenseCreate, /organizationId: ORGANIZATION_ID/);
+  const expenseLookup = source.slice(source.indexOf('const existing = await prisma.expense.findFirst'), source.indexOf('await prisma.expense.create'));
+  assert.match(expenseLookup, /organizationId: ORGANIZATION_ID/);
   assert.match(source, /Organization not found/);
   assert.doesNotMatch(source, /password:\s*'imported-no-login'/);
   assert.match(source, /mappedToImporter/);

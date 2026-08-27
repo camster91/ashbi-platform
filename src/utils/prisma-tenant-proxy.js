@@ -36,7 +36,7 @@ const DIRECT_SCOPED_MODELS = new Set([
   'aicontext', 'ashconversation', 'projecttemplate', 'brandsettings',
   'pipelinestage', 'promptversion', 'credential', 'credentialaccessaudit',
   'onboardingprogress', 'slackinstallation', 'slackchannelmapping', 'slackeventreceipt', 'googlecalendarconnection', 'notionimportrecord', 'aibridgeaction',
-  'lead', 'leadevent'
+  'lead', 'leadevent', 'expense'
 ]);
 
 // Models that are intentionally shared across organizations. Every Prisma
@@ -83,6 +83,11 @@ const DIRECT_PARENT_RELATIONS = {
     { relation: 'convertedDeal', field: 'convertedDealId', model: 'pipelinedeal', delegate: 'pipelineDeal' },
   ],
   leadevent: [{ relation: 'lead', field: 'leadId', model: 'lead', delegate: 'lead', required: true }],
+  expense: [
+    { relation: 'client', field: 'clientId', model: 'client', delegate: 'client' },
+    { relation: 'project', field: 'projectId', model: 'project', delegate: 'project' },
+    { relation: 'invoice', field: 'invoiceId', model: 'invoice', delegate: 'invoice' },
+  ],
 };
 
 const RESTRICTED_MODELS = new Set([]);
@@ -110,7 +115,6 @@ const TENANT_PATHS = {
   contract:         ['client'],
   retainerplan:     ['client'],
   pipelinedeal:     ['client'],
-  expense:          ['client'],
   clientembedding:  ['client'],
   report:           ['client'],
   aiteammessage:    ['client'],

@@ -194,6 +194,54 @@ test('newly owned root models inject the verified organization on create', async
   assert.equal(calls[0].data.organizationId, 'org-a');
 });
 
+test('expenses carry indexed organization ownership while legacy unassigned rows remain explicit', async () => {
+  const schema = await readFile(new URL('../../../prisma/schema.prisma', import.meta.url), 'utf8');
+  const expense = schema.match(/model Expense \{[\s\S]*?\n\}/)?.[0] || '';
+  assert.match(expense, /organizationId\s+String\?/);
+  assert.match(expense, /organization\s+Organization\?/);
+  assert.match(expense, /@@index\(\[organizationId\]\)/);
+});
+
+test('general expenses receive verified organization ownership without requiring a client', async () => {
+  const calls = [];
+  const scoped = createScopedPrisma({
+    expense: { create: async (args) => { calls.push(args); return args.data; } },
+  }, 'org-a');
+
+  await scoped.expense.create({ data: { description: 'Software', amount: 25, currency: 'CAD' } });
+
+  assert.equal(calls[0].data.organizationId, 'org-a');
+  assert.equal(calls[0].data.clientId, undefined);
+});
+
+test('direct-owned expense rejects a client from another organization', async () => {
+  let created = false;
+  const scoped = createScopedPrisma({
+    client: { findFirst: async () => null },
+    expense: { create: async () => { created = true; return {}; } },
+  }, 'org-a');
+
+  await assert.rejects(
+    scoped.expense.create({ data: { description: 'Foreign', amount: 25, clientId: 'client-b' } }),
+    /client client-b does not belong to organization org-a/i,
+  );
+  assert.equal(created, false);
+});
+
+test('direct-owned expense rejects an invoice from another organization', async () => {
+  let created = false;
+  const scoped = createScopedPrisma({
+    invoice: { findFirst: async () => null },
+    expense: { create: async () => { created = true; return {}; } },
+  }, 'org-a');
+
+  await assert.rejects(
+    scoped.expense.create({ data: { description: 'Foreign', amount: 25, invoiceId: 'invoice-b' } }),
+    /invoice invoice-b does not belong to organization org-a/i,
+  );
+  assert.equal(created, false);
+});
+
 test('direct-scoped throwing reads include the verified organization', async () => {
   const calls = [];
   const missing = Object.assign(new Error('No record found'), { code: 'P2025' });

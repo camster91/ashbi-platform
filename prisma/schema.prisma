@@ -62,6 +62,7 @@ model Organization {
   aiBridgeActions           AiBridgeAction[]
   leads                     Lead[]
   leadEvents                LeadEvent[]
+  expenses                  Expense[]
 
   @@map("organizations")
 }
@@ -1490,6 +1491,7 @@ model AiContext {
 
 model Expense {
   id          String   @id @default(cuid())
+  organizationId String?
   description String
   amount      Float
   currency    String   @default("USD") // USD | CAD
@@ -1505,12 +1507,14 @@ model Expense {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  client    Client?   @relation(fields: [clientId], references: [id])
-  project   Project?  @relation(fields: [projectId], references: [id])
-  invoice   Invoice?  @relation(fields: [invoiceId], references: [id])
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  client       Client?       @relation(fields: [clientId], references: [id])
+  project      Project?      @relation(fields: [projectId], references: [id])
+  invoice      Invoice?      @relation(fields: [invoiceId], references: [id])
   // Soft delete
   deletedAt DateTime?
 
+  @@index([organizationId])
   @@index([clientId])
   @@index([projectId])
   @@index([invoiceId])
