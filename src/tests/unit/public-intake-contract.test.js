@@ -341,6 +341,12 @@ test('the application wires public intake only through explicit environment conf
   assert.match(example, /^PUBLIC_INTAKE_OWNER_USER_ID=$/m);
 });
 
+test('approved public intake origins are also allowed through the browser CORS boundary', () => {
+  const index = fs.readFileSync(path.join(process.cwd(), 'src', 'index.js'), 'utf8');
+  assert.match(index, /const browserCorsOrigins = \[\.\.\.new Set\(\[[\s\S]*env\.isDev[\s\S]*\.\.\.env\.corsOrigins,[\s\S]*\.\.\.env\.publicIntakeAllowedOrigins/);
+  assert.match(index, /fastify\.register\(cors, \{ origin: browserCorsOrigins/);
+});
+
 test('the governed intake replaces the duplicate unmatched-email public write path', () => {
   const legacyRoutes = fs.readFileSync(path.join(process.cwd(), 'src', 'routes', 'leads.routes.js'), 'utf8');
   const tenancy = fs.readFileSync(path.join(process.cwd(), 'src', 'middleware', 'tenancy.js'), 'utf8');

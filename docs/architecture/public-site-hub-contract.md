@@ -1,6 +1,6 @@
 # Public site and Hub contract
 
-Status: Architecture decision; Hub intake code-present, not deployed or connected
+Status: Architecture decision; two-sided intake code-present locally, not deployed or target-connected
 
 ## Decision
 
@@ -36,7 +36,7 @@ The Hub implementation uses two intentionally public routes:
 - `GET /api/client-acquisition/config` returns whether intake is enabled, the active privacy version, and the canonical service lines. It does not return organization or owner identifiers.
 - `POST /api/client-acquisition/intake` accepts the validated inquiry, creates one tenant-owned lead and source event, and notifies the configured internal owner. New submissions return `202`; exact idempotent replays return `200` without another write.
 
-The write route remains disabled unless the target organization, internal owner, privacy version, and allowed Ashbi.ca origins are all explicitly configured. The database migration, production identifiers, Ashbi.ca form connection, and controlled live test remain pending.
+The write route remains disabled unless the target organization, internal owner, privacy version, and allowed Ashbi.ca origins are all explicitly configured. Ashbi.ca now has a local contact form that reads this public configuration, preserves an unchanged-payload retry key, and posts the canonical consent and attribution contract. It remains inert without an explicit build endpoint. The database migrations, target identifiers, deployed connection, and controlled target test remain pending.
 
 Authenticated staff use `/inquiries` in the Hub to review the original evidence, attribution, and account owner. `REVIEWING`, `QUALIFIED`, and `NURTURE` decisions require a named next human action and due date; `QUALIFIED`, `NURTURE`, and `DISQUALIFIED` decisions require concise internal evidence; and a disqualification requires one bounded reason code. Only a `QUALIFIED` inquiry can be converted. Conversion creates or reuses one tenant client based on a case-insensitive contact-email match, links the inquiry to that client, clears the completed inquiry follow-up, and records a durable event. A transactional claim prevents simultaneous requests from creating duplicate clients. Conversion does not send a message, generate a proposal, or infer project scope.
 

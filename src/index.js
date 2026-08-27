@@ -89,6 +89,11 @@ import { getRequestPrisma } from './utils/request-context.js';
  * Runtime-only bridges can be disabled for isolated construction tests.
  */
 export async function buildApp({ initializeRuntime = true, jwtSecret = env.jwtSecret } = {}) {
+const browserCorsOrigins = [...new Set([
+  ...(env.isDev ? ['http://localhost:3000', 'http://localhost:5173'] : []),
+  ...env.corsOrigins,
+  ...env.publicIntakeAllowedOrigins,
+])];
 // Initialize Sentry error monitoring
 if (initializeRuntime && initSentry('api', [Sentry.fastifyIntegration()])) {
   logger.info('[Sentry] Error monitoring initialized');
@@ -127,7 +132,7 @@ fastify.addHook('onSend', async (_request, reply, payload) => {
   return payload;
 });
 await fastify.register(compress, { global: true });
-await fastify.register(cors, { origin: env.isDev ? ['http://localhost:3000', 'http://localhost:5173'] : env.corsOrigins, credentials: true });
+await fastify.register(cors, { origin: browserCorsOrigins, credentials: true });
 await fastify.register(cookie);
 await fastify.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } });
 await fastify.register(rateLimit, {
