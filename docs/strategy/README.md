@@ -14,6 +14,7 @@ These proposed documents govern how Ashbi is positioned, sold, delivered, measur
 ## Operating playbooks
 
 - [Growth operating cadence](growth-operating-cadence.md) — proposed weekly and monthly evidence review using the Hub as the action system.
+- [Unified launch readiness](../unified-launch-readiness.md) — machine-verified evidence gate spanning strategy, both deployments, the full commercial journey, migration, growth cadence, recovery, and final approval.
 
 ## Change rule
 

@@ -43,6 +43,7 @@
     "check:public-intake-readiness": "node scripts/check-public-intake-readiness.mjs",
     "bootstrap:sandbox-workspace": "node scripts/bootstrap-sandbox-workspace.mjs",
     "check:bonsai-cutover": "node scripts/check-bonsai-cutover-readiness.mjs",
+    "check:unified-launch": "node scripts/check-unified-launch-readiness.mjs",
     "verify:revenue-evidence": "node scripts/verify-revenue-evidence-export.js",
     "reconcile:bonsai-revenue": "node scripts/reconcile-bonsai-revenue.js",
     "reconcile:bonsai-operations": "node scripts/reconcile-bonsai-operations.js",

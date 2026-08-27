@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "evidenceCompletedAt": null,
+  "artifacts": [
+    { "id": "strategy-approval", "path": "evidence/strategy-approval.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
+    { "id": "ashbi-ca-deployment", "path": "evidence/ashbi-ca-deployment.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
+    { "id": "hub-deployment", "path": "evidence/hub-deployment.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
+    { "id": "controlled-journey", "path": "evidence/controlled-journey.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
+    { "id": "growth-cadence", "path": "evidence/growth-cadence.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
+    { "id": "notion-confirmed-import", "path": "evidence/notion-confirmed-import.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
+    { "id": "notion-idempotent-rerun", "path": "evidence/notion-idempotent-rerun.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
+    { "id": "bonsai-cutover-manifest", "path": "evidence/bonsai/cutover-manifest.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
+    { "id": "final-launch-approval", "path": "evidence/final-launch-approval.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" }
+  ]
+}
