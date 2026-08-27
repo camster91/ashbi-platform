@@ -15,6 +15,13 @@ sandbox sender, recipient, invoice, and test window. Use a dedicated sandbox
 mailbox and Mailgun test configuration. Apply the reviewed migration only in an
 approved disposable or controlled test environment with a verified backup.
 
+Run `npm run check:sandbox-readiness` in that exact environment before applying
+the migration or contacting Mailgun. The read-only command must confirm the
+sandbox-labelled application/database, synthetic staff and client identities,
+backup and approval references, Stripe test isolation, and a non-production
+Mailgun domain. Its report contains no credential values. A failed check stops
+the run.
+
 ## Required cases
 
 | Case | Required evidence |

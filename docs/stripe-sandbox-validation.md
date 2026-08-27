@@ -16,6 +16,8 @@ Prove the Hub can replace Bonsai's payment path without guessing currency or tax
 6. Confirm the sandbox `APP_URL`, invoice portal URL, tenant, test client, and staff account.
 7. Keep Stripe automatic tax disabled. A tax advisor/business decision and confirmed active registrations are separate prerequisites before any future automatic-tax work.
 
+Before any migration or provider call, run `npm run check:sandbox-readiness` inside the exact target environment. It must pass using a sandbox-labelled application/database target, synthetic staff and client identities, a verified backup reference, Cameron's exact action-time approval reference, a least-privilege `rk_test_` Stripe key, a `whsec_` signing secret, and the separate email sandbox configuration. The command is read-only and redacts all values. A failed check stops the run; do not bypass it by substituting a live or broad `sk_` key.
+
 ## Checkout cases
 
 Use separate authorized CAD and USD invoices with reviewed tax evidence.
