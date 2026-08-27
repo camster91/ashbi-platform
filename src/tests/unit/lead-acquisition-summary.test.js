@@ -6,17 +6,20 @@ import { summarizeLeadAcquisition } from '../../services/lead-acquisition-summar
 
 test('lead acquisition summary separates source evidence and follow-up gaps', async () => {
   const calls = [];
+  const groupCalls = [];
   const transaction = {
     lead: {
       count: async ({ where } = {}) => {
         calls.push(where ?? null);
         if (!where) return 12;
+        if (Object.keys(where).length === 1 && where.createdAt) return 12;
         if (where.source === null) return 3;
         if (where.nextActionDueAt?.lt) return 2;
         if (where.OR) return 1;
         return 5;
       },
-      groupBy: async ({ by }) => {
+      groupBy: async ({ by, where }) => {
+        groupCalls.push(where ?? null);
         if (by[0] === 'status') return [{ status: 'NEW', _count: { _all: 4 } }, { status: 'QUALIFIED', _count: { _all: 3 } }];
         if (by[0] === 'serviceLine') return [{ serviceLine: 'brand_packaging', _count: { _all: 7 } }];
         return [{ source: null, _count: { _all: 3 } }, { source: 'linkedin', _count: { _all: 4 } }];
@@ -27,10 +30,12 @@ test('lead acquisition summary separates source evidence and follow-up gaps', as
   const result = await summarizeLeadAcquisition({
     prisma: { $transaction: async (operation) => operation(transaction) },
     now,
+    days: 30,
   });
 
   assert.deepEqual(result, {
     asOf: now.toISOString(),
+    window: { days: 30, from: '2026-07-28T01:00:00.000Z' },
     total: 12,
     attribution: { sourceCaptured: 9, sourceMissing: 3 },
     followUp: { scheduled: 5, overdue: 2, unscheduled: 1 },
@@ -38,6 +43,12 @@ test('lead acquisition summary separates source evidence and follow-up gaps', as
     byServiceLine: [{ key: 'brand_packaging', count: 7 }],
     bySource: [{ key: 'linkedin', count: 4 }, { key: 'UNATTRIBUTED', count: 3 }],
   });
+  const expectedWindow = new Date('2026-07-28T01:00:00.000Z');
+  const followUpCalls = calls.filter((where) => where?.status?.in);
+  const acquisitionCalls = calls.filter((where) => !where?.status?.in);
+  assert.equal(acquisitionCalls.every((where) => where?.createdAt?.gte?.getTime() === expectedWindow.getTime()), true);
+  assert.equal(followUpCalls.every((where) => where?.createdAt === undefined), true);
+  assert.equal(groupCalls.every((where) => where?.createdAt?.gte?.getTime() === expectedWindow.getTime()), true);
   assert.equal(calls.some((where) => where?.status?.in?.includes('CONVERTED')), false);
 });
 
@@ -47,5 +58,7 @@ test('staff acquisition summary is routed before the lead id route', () => {
   const detail = routes.indexOf("fastify.get('/leads/:id'");
   assert.ok(summary > -1);
   assert.ok(detail > summary);
-  assert.match(routes, /summarizeLeadAcquisition\(\{ prisma: request\.prisma/);
+  assert.match(routes, /summarizeLeadAcquisition\(\{[\s\S]*prisma: request\.prisma/);
+  assert.match(routes, /days: request\.query\.days/);
+  assert.match(routes, /validateQuery\(leadAcquisitionSummaryQuerySchema\)/);
 });

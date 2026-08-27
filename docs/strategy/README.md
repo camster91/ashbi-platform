@@ -11,6 +11,10 @@ These proposed documents govern how Ashbi is positioned, sold, delivered, measur
 5. [Public site and Hub contract](../architecture/public-site-hub-contract.md)
 6. [Marketing and revenue event taxonomy](../architecture/marketing-event-taxonomy.md)
 
+## Operating playbooks
+
+- [Growth operating cadence](growth-operating-cadence.md) — proposed weekly and monthly evidence review using the Hub as the action system.
+
 ## Change rule
 
 Public copy, forms, pipeline fields, dashboards, automations, proposals, and internal AI prompts must use the approved language and state definitions here. A service may move from Pilot to Current only after a real engagement or internal workflow has been operated, supported, and documented with evidence suitable for the intended claim.

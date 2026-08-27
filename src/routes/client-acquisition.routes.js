@@ -8,6 +8,7 @@ import {
 } from '../services/lead-qualification.service.js';
 import {
   leadIdParamsSchema,
+  leadAcquisitionSummaryQuerySchema,
   leadListQuerySchema,
   leadQualificationSchema,
   leadPromotionSchema,
@@ -143,8 +144,11 @@ export default async function clientAcquisitionRoutes(fastify, options) {
 
   fastify.get('/leads/summary', {
     onRequest: [fastify.authenticate],
-    preHandler: [staffOnly],
-  }, async (request) => summarizeLeadAcquisition({ prisma: request.prisma ?? fastify.prisma }));
+    preHandler: [staffOnly, validateQuery(leadAcquisitionSummaryQuerySchema)],
+  }, async (request) => summarizeLeadAcquisition({
+    prisma: request.prisma ?? fastify.prisma,
+    days: request.query.days,
+  }));
 
   fastify.get('/leads/:id', {
     onRequest: [fastify.authenticate],

@@ -90,6 +90,7 @@ function StatusBadge({ status }) {
 
 export default function LeadInbox() {
   const [statusFilter, setStatusFilter] = useState('');
+  const [summaryDays, setSummaryDays] = useState('30');
   const [selectedId, setSelectedId] = useState(null);
   const [reviewStatus, setReviewStatus] = useState('REVIEWING');
   const [qualificationNotes, setQualificationNotes] = useState('');
@@ -110,8 +111,8 @@ export default function LeadInbox() {
   });
   const leads = listQuery.data?.leads || [];
   const summaryQuery = useQuery({
-    queryKey: ['lead-acquisition-summary'],
-    queryFn: () => api.getLeadAcquisitionSummary(),
+    queryKey: ['lead-acquisition-summary', summaryDays],
+    queryFn: () => api.getLeadAcquisitionSummary(summaryDays ? { days: summaryDays } : {}),
     refetchInterval: 60000,
   });
   const summary = summaryQuery.data;
@@ -249,9 +250,24 @@ export default function LeadInbox() {
       </div>
 
       <section aria-labelledby="acquisition-evidence-heading" className="space-y-3">
-        <div>
-          <h2 id="acquisition-evidence-heading" className="text-lg font-heading font-semibold text-foreground">Acquisition evidence</h2>
-          <p className="text-sm text-muted-foreground">Counts reflect recorded Hub data; missing attribution is shown, not assumed.</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 id="acquisition-evidence-heading" className="text-lg font-heading font-semibold text-foreground">Acquisition evidence</h2>
+            <p className="text-sm text-muted-foreground">Counts reflect recorded Hub data; missing attribution is shown, not assumed.</p>
+          </div>
+          <div>
+            <label htmlFor="acquisition-window" className="mb-1 block text-sm font-medium text-foreground">Reporting window</label>
+            <select
+              id="acquisition-window"
+              value={summaryDays}
+              onChange={(event) => setSummaryDays(event.target.value)}
+              className="min-h-11 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <option value="30">Last 30 days</option>
+              <option value="90">Last 90 days</option>
+              <option value="">All recorded time</option>
+            </select>
+          </div>
         </div>
         {summaryQuery.isError ? (
           <QueryErrorState error={summaryQuery.error} onRetry={() => summaryQuery.refetch()} compact />
@@ -277,6 +293,47 @@ export default function LeadInbox() {
             <Card className="p-4">
               <p className="text-sm text-muted-foreground">Unscheduled active leads</p>
               <p className="mt-1 text-2xl font-semibold text-foreground">{summary?.followUp.unscheduled ?? '—'}</p>
+            </Card>
+          </div>
+        )}
+        <p className="text-xs text-muted-foreground">Follow-up gaps always cover all active leads, regardless of the acquisition reporting window.</p>
+        {summary && (
+          <div className="grid gap-3 lg:grid-cols-3">
+            <Card className="p-4">
+              <h3 className="font-semibold text-foreground">Demand by service</h3>
+              <ul className="mt-3 space-y-2">
+                {summary.byServiceLine.map((item) => (
+                  <li key={item.key} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="text-muted-foreground">{SERVICE_LABELS[item.key] || item.key}</span>
+                    <span className="font-semibold text-foreground">{item.count}</span>
+                  </li>
+                ))}
+                {summary.byServiceLine.length === 0 && <li className="text-sm text-muted-foreground">No recorded demand in this window.</li>}
+              </ul>
+            </Card>
+            <Card className="p-4">
+              <h3 className="font-semibold text-foreground">Lead sources</h3>
+              <ul className="mt-3 space-y-2">
+                {summary.bySource.map((item) => (
+                  <li key={item.key} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="text-muted-foreground">{item.key === 'UNATTRIBUTED' ? 'Unattributed' : item.key}</span>
+                    <span className="font-semibold text-foreground">{item.count}</span>
+                  </li>
+                ))}
+                {summary.bySource.length === 0 && <li className="text-sm text-muted-foreground">No recorded sources in this window.</li>}
+              </ul>
+            </Card>
+            <Card className="p-4">
+              <h3 className="font-semibold text-foreground">Current stages</h3>
+              <ul className="mt-3 space-y-2">
+                {summary.byStatus.map((item) => (
+                  <li key={item.key} className="flex items-center justify-between gap-3 text-sm">
+                    <span className="text-muted-foreground">{STATUS_LABELS[item.key] || item.key}</span>
+                    <span className="font-semibold text-foreground">{item.count}</span>
+                  </li>
+                ))}
+                {summary.byStatus.length === 0 && <li className="text-sm text-muted-foreground">No recorded stages in this window.</li>}
+              </ul>
             </Card>
           </div>
         )}

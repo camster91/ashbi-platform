@@ -1437,6 +1437,10 @@ export const leadListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(50),
 }).strict();
 
+export const leadAcquisitionSummaryQuerySchema = z.object({
+  days: z.coerce.number().int().min(7).max(365).optional(),
+}).strict();
+
 export const leadIdParamsSchema = z.object({ id: cuidId }).strict();
 
 export const leadQualificationSchema = z.object({
