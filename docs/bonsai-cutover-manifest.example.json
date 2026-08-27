@@ -1,5 +1,6 @@
 {
   "schemaVersion": 1,
+  "organizationId": "REPLACE_WITH_ASHBI_ORGANIZATION_ID",
   "targetEnvironment": "hub.ashbi.ca",
   "revision": "REPLACE_WITH_DEPLOYED_REVISION",
   "evidenceCompletedAt": null,
@@ -53,10 +54,10 @@
     { "id": "parallel-reconciliation", "path": "evidence/parallel-reconciliation.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
     { "id": "stripe-sandbox", "path": "evidence/stripe-sandbox.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
     { "id": "email-sandbox", "path": "evidence/email-sandbox.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
+    { "id": "revenue-evidence-export", "path": "evidence/revenue-evidence-export.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
     { "id": "workspace-export", "path": "evidence/workspace-export.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
     { "id": "database-backup", "path": "evidence/database-backup.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
     { "id": "restore-drill", "path": "evidence/restore-drill.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
     { "id": "financial-approval", "path": "evidence/financial-approval.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" }
   ]
 }
-

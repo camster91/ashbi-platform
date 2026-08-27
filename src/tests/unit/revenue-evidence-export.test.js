@@ -95,6 +95,7 @@ test('revenue evidence keeps unresolved currency and settlement gaps visible', (
     invoices: [{ ...records.invoices[0], currency: 'UNASSIGNED' }],
     payments: [{
       ...records.payments[0],
+      method: 'STRIPE',
       amountMinor: null,
       currency: null,
       settlementEvidenceStatus: 'PENDING',
@@ -114,6 +115,31 @@ test('revenue evidence keeps unresolved currency and settlement gaps visible', (
     { code: 'PAYMENT_EXACT_AMOUNT_UNRESOLVED', id: 'payment-1' },
     { code: 'PAYMENT_SETTLEMENT_UNRESOLVED', id: 'payment-1', status: 'PENDING' },
   ]);
+});
+
+test('exact non-Stripe payments do not invent provider settlement evidence', () => {
+  const bankRecords = {
+    ...records,
+    payments: [{
+      ...records.payments[0],
+      method: 'BANK',
+      settlementEvidenceStatus: 'PENDING',
+      settlementGrossMinor: null,
+      providerFeeMinor: null,
+      settlementNetMinor: null,
+      settlementCurrency: null,
+    }],
+  };
+  const result = revenueExport.verifyRevenueEvidenceExport({
+    format: 'ashbi-revenue-evidence-export',
+    version: 1,
+    organizationId: 'org-1',
+    records: bankRecords,
+    manifest: revenueExport.buildRevenueEvidenceManifest(bankRecords),
+  });
+
+  assert.equal(result.valid, true);
+  assert.deepEqual(result.findings, []);
 });
 
 test('revenue evidence verification rejects orphaned child evidence', () => {

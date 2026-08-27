@@ -51,7 +51,7 @@ Copy [bonsai-cutover-manifest.example.json](bonsai-cutover-manifest.example.json
 npm run check:bonsai-cutover -- --manifest <owner-only-evidence-directory>/cutover-manifest.json
 ```
 
-The command is read-only. It verifies the agreed parallel duration, complete operating and financial record scope, zero unresolved discrepancies, separate currency evidence, the full Stripe/email sandbox journey, backups and isolated restore, Cameron's post-evidence approval, the required artifact inventory, path containment, and every checksum. It reports only generic pass/fail messages and never disables Bonsai.
+The command is read-only. It verifies the agreed parallel duration, complete operating and financial record scope, zero unresolved discrepancies, separate currency evidence, the full Stripe/email sandbox journey, backups and isolated restore, Cameron's post-evidence approval, the required artifact inventory, path containment, and every checksum. The final revenue artifact must match the manifest's Ashbi organization, pass its internal verifier, and be exported after the parallel run ends but before evidence is finalized. The command reports only generic pass/fail messages and never disables Bonsai.
 
 A passing report is necessary but does not perform or authorize the cutover. Cameron must still approve the exact cancellation, downgrade, or system-of-record mutation at action time. Preserve the passing report with the evidence package.
 

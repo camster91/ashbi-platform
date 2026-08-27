@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import { verifyRevenueEvidenceExport } from './revenueEvidenceExport.service.js';
 
 const REQUIRED_RECORD_TYPES = [
   'clients',
@@ -24,6 +25,7 @@ const REQUIRED_ARTIFACT_IDS = [
   'parallel-reconciliation',
   'stripe-sandbox',
   'email-sandbox',
+  'revenue-evidence-export',
   'workspace-export',
   'database-backup',
   'restore-drill',
@@ -61,6 +63,30 @@ function artifactsAreIntact(artifacts, manifestDirectory) {
       return false;
     }
   });
+}
+
+function revenueEvidenceIsValid({ artifacts, manifestDirectory, organizationId, parallelEndedAt, evidenceCompletedAt }) {
+  if (!artifactInventoryIsComplete(artifacts) || !manifestDirectory) return false;
+  const artifact = artifacts.find(item => item.id === 'revenue-evidence-export');
+  if (!artifact) return false;
+  const root = path.resolve(manifestDirectory);
+  const artifactPath = path.resolve(root, String(artifact.path ?? ''));
+  if (artifactPath !== root && !artifactPath.startsWith(`${root}${path.sep}`)) return false;
+  try {
+    const payload = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
+    const exportedAt = timestamp(payload.exportedAt);
+    return typeof organizationId === 'string'
+      && organizationId.trim().length > 0
+      && payload.organizationId === organizationId
+      && verifyRevenueEvidenceExport(payload).valid
+      && exportedAt !== null
+      && parallelEndedAt !== null
+      && evidenceCompletedAt !== null
+      && exportedAt >= parallelEndedAt
+      && exportedAt <= evidenceCompletedAt;
+  } catch {
+    return false;
+  }
 }
 
 export function evaluateBonsaiCutoverReadiness({ manifest = {}, manifestDirectory } = {}) {
@@ -130,6 +156,18 @@ export function evaluateBonsaiCutoverReadiness({ manifest = {}, manifestDirector
         && providers.proposalToPaymentPassed === true,
       'The complete sandbox provider journey passed.',
       'Complete Stripe, email, and proposal-to-payment sandbox validation.',
+    ),
+    check(
+      'revenue-evidence',
+      revenueEvidenceIsValid({
+        artifacts: manifest.artifacts,
+        manifestDirectory,
+        organizationId: manifest.organizationId,
+        parallelEndedAt: endedAt,
+        evidenceCompletedAt,
+      }),
+      'The final tenant revenue artifact is internally valid and postdates the parallel run.',
+      'Export and verify tenant-matched revenue evidence after the parallel run and before evidence completion.',
     ),
     check(
       'recovery',

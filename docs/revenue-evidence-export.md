@@ -12,6 +12,6 @@ Verify a downloaded artifact without contacting the Hub, Stripe, Mailgun, Bonsai
 npm run verify:revenue-evidence -- C:\path\to\ashbi-revenue-evidence-2026-08-27.json
 ```
 
-The verifier checks checksums, duplicate identifiers, record relationships, supported invoice/payment currency, exact invoice/line/payment/refund amounts, refund currency, and verified settlement arithmetic. A matching checksum detects changes when the original manifest is retained; it does not authenticate the artifact against a malicious rewrite. Any unresolved currency, exact minor-unit amount, or settlement evidence keeps the result invalid and must be reconciled against source records.
+The verifier checks checksums, duplicate identifiers, record relationships, supported invoice/payment currency, exact invoice/line/payment/refund amounts, refund currency, and verified Stripe settlement arithmetic. Bank, check, cash, and other external payments retain their exact amount evidence without inventing unavailable Stripe fees. A matching checksum detects changes when the original manifest is retained; it does not authenticate the artifact against a malicious rewrite. Any unresolved currency, exact minor-unit amount, or required Stripe settlement evidence keeps the result invalid and must be reconciled against source records.
 
 This export does not authorize a Bonsai cutover, data migration, provider configuration, billing change, or production release. Those remain separate sandbox, parallel-run, reconciliation, backup, and Cameron approval gates.

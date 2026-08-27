@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { evaluateBonsaiCutoverReadiness } from '../../services/bonsai-cutover-readiness.service.js';
+import { buildRevenueEvidenceManifest, REVENUE_EVIDENCE_COLLECTIONS } from '../../services/revenueEvidenceExport.service.js';
 
 const REQUIRED_ARTIFACTS = [
   'bonsai-source-export',
@@ -16,6 +17,7 @@ const REQUIRED_ARTIFACTS = [
   'parallel-reconciliation',
   'stripe-sandbox',
   'email-sandbox',
+  'revenue-evidence-export',
   'workspace-export',
   'database-backup',
   'restore-drill',
@@ -26,12 +28,21 @@ function fixture() {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ashbi-cutover-'));
   const artifacts = REQUIRED_ARTIFACTS.map((id) => {
     const relativePath = `${id}.json`;
-    const content = Buffer.from(JSON.stringify({ id, synthetic: true }));
+    const emptyRecords = Object.fromEntries(REVENUE_EVIDENCE_COLLECTIONS.map(collection => [collection, []]));
+    const content = Buffer.from(JSON.stringify(id === 'revenue-evidence-export' ? {
+      format: 'ashbi-revenue-evidence-export',
+      version: 1,
+      organizationId: 'org-1',
+      exportedAt: '2026-08-15T18:00:00.000Z',
+      records: emptyRecords,
+      manifest: buildRevenueEvidenceManifest(emptyRecords),
+    } : { id, synthetic: true }));
     fs.writeFileSync(path.join(directory, relativePath), content);
     return { id, path: relativePath, sha256: crypto.createHash('sha256').update(content).digest('hex') };
   });
   const manifest = {
     schemaVersion: 1,
+    organizationId: 'org-1',
     targetEnvironment: 'hub.ashbi.ca',
     revision: '68be6ed',
     evidenceCompletedAt: '2026-08-15T20:00:00.000Z',
@@ -124,6 +135,35 @@ test('cutover evaluator rejects a changed evidence artifact', () => {
     const report = evaluateBonsaiCutoverReadiness({ manifest, manifestDirectory: directory });
     assert.equal(report.ready, false);
     assert.equal(report.checks.find((check) => check.id === 'artifact-integrity').ok, false);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('cutover evaluator requires internally valid tenant-bound revenue evidence', () => {
+  const { directory, manifest } = fixture();
+  const artifact = manifest.artifacts.find(item => item.id === 'revenue-evidence-export');
+  const payload = JSON.parse(fs.readFileSync(path.join(directory, artifact.path), 'utf8'));
+  payload.organizationId = 'another-org';
+  const content = Buffer.from(JSON.stringify(payload));
+  fs.writeFileSync(path.join(directory, artifact.path), content);
+  artifact.sha256 = crypto.createHash('sha256').update(content).digest('hex');
+  try {
+    const report = evaluateBonsaiCutoverReadiness({ manifest, manifestDirectory: directory });
+    assert.equal(report.ready, false);
+    assert.equal(report.checks.find((check) => check.id === 'revenue-evidence').ok, false);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('cutover evaluator rejects a missing revenue evidence artifact', () => {
+  const { directory, manifest } = fixture();
+  manifest.artifacts = manifest.artifacts.filter(item => item.id !== 'revenue-evidence-export');
+  try {
+    const report = evaluateBonsaiCutoverReadiness({ manifest, manifestDirectory: directory });
+    assert.equal(report.ready, false);
+    assert.equal(report.checks.find((check) => check.id === 'artifact-inventory').ok, false);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }

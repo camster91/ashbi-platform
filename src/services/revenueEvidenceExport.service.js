@@ -11,6 +11,7 @@ export const REVENUE_EVIDENCE_COLLECTIONS = Object.freeze([
   'settlementEvents',
   'checkoutAudits',
 ]);
+const NON_STRIPE_SETTLEMENT_METHODS = new Set(['BANK', 'CHECK', 'CASH', 'OTHER']);
 
 function stableJson(value) {
   if (value instanceof Date) return JSON.stringify(value.toISOString());
@@ -350,17 +351,18 @@ export function verifyRevenueEvidenceExport(payload) {
     if (!Number.isInteger(payment.amountMinor) || !['CAD', 'USD'].includes(payment.currency)) {
       findings.push({ code: 'PAYMENT_EXACT_AMOUNT_UNRESOLVED', id: payment.id });
     }
-    if (payment.settlementEvidenceStatus !== 'VERIFIED') {
+    const settlementRequired = !NON_STRIPE_SETTLEMENT_METHODS.has(payment.method);
+    if (settlementRequired && payment.settlementEvidenceStatus !== 'VERIFIED') {
       findings.push({
         code: 'PAYMENT_SETTLEMENT_UNRESOLVED',
         id: payment.id,
         status: payment.settlementEvidenceStatus ?? null,
       });
-    } else if (!Number.isInteger(payment.settlementGrossMinor)
+    } else if (settlementRequired && (!Number.isInteger(payment.settlementGrossMinor)
       || !Number.isInteger(payment.providerFeeMinor)
       || !Number.isInteger(payment.settlementNetMinor)
       || !['CAD', 'USD'].includes(payment.settlementCurrency)
-      || payment.settlementGrossMinor - payment.providerFeeMinor !== payment.settlementNetMinor) {
+      || payment.settlementGrossMinor - payment.providerFeeMinor !== payment.settlementNetMinor)) {
       findings.push({ code: 'PAYMENT_SETTLEMENT_AMOUNTS_INVALID', id: payment.id });
     }
   }
