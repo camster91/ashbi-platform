@@ -21,7 +21,7 @@ The importer records each file's row count and SHA-256 digest. It produces one c
 node scripts/import-bonsai-full.js --dry-run --organization-id <sandbox-org-id> --csv-dir <bonsai-export> --summary-file <new-dry-run-report.json>
 ```
 
-The report is created once with owner-only permissions. Review every source count, mapped owner, create/match/skip count, and reconciliation finding. A missing file, unsupported currency/status, conflicting Hub record, or incomplete financial/date evidence must be resolved at the source or reviewed manually; the importer does not guess or overwrite it.
+The report is created once with owner-only permissions. Review every source count, mapped owner, create/match/skip count, and reconciliation finding. A missing file, malformed or over-precise financial value, unsupported currency/status, conflicting Hub record, or incomplete financial/date evidence must be resolved at the source or reviewed manually; the importer does not partially parse, guess, or overwrite it.
 
 ## Confirmed sandbox import
 

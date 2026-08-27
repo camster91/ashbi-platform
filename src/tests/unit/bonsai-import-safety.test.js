@@ -28,6 +28,16 @@ test('confirmed Bonsai imports are atomic and reject unresolved reconciliation e
   assert.match(source, /if \(!DRY_RUN && stats\.errors\.length > 0\)/);
 });
 
+test('Bonsai importer uses exact CSV number parsing and retains malformed money as findings', async () => {
+  const source = await readFile(fullImporter, 'utf8');
+  assert.match(source, /import \{ parseBonsaiMoney, parseBonsaiDecimal \}/);
+  assert.doesNotMatch(source, /parseFloat\(|function parseFloat2/);
+  assert.match(source, /project budget is malformed/);
+  assert.match(source, /invoice totals are malformed/);
+  assert.match(source, /time-entry rate is malformed/);
+  assert.match(source, /expense amount is malformed/);
+});
+
 test('Bonsai reconciliation reports are owner-only, never overwrite evidence, and follow a committed import', async () => {
   const source = await readFile(fullImporter, 'utf8');
   assert.match(source, /fs\.openSync\(summaryDestination, 'wx', 0o600\)/);

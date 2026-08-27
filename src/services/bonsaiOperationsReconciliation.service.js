@@ -1,4 +1,5 @@
 import { verifyWorkspaceExport, workspaceExportCollections } from './workspace-export-integrity.service.js';
+import { parseBonsaiMoney } from './bonsaiCsvValues.service.js';
 
 const PROJECT_STATUS_MAP = Object.freeze({
   active: 'DESIGN_DEV',
@@ -38,19 +39,6 @@ function durationMinutes(value) {
 function decimal(value) {
   const number = Number.parseFloat(String(value ?? '').trim());
   return Number.isFinite(number) ? number : null;
-}
-
-function exactMoney(value) {
-  const raw = String(value ?? '').trim();
-  const valid = raw.includes(',')
-    ? /^-?\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?$/.test(raw)
-    : /^-?\d+(?:\.\d{1,2})?$/.test(raw);
-  if (!valid) return null;
-  const sign = raw.startsWith('-') ? -1 : 1;
-  const normalizedValue = raw.replace(/^-/, '').replace(/,/g, '');
-  const [whole, fraction = ''] = normalizedValue.split('.');
-  const minor = sign * ((Number(whole) * 100) + Number(fraction.padEnd(2, '0')));
-  return Number.isSafeInteger(minor) ? minor / 100 : null;
 }
 
 function expenseCategory(tags) {
@@ -271,7 +259,7 @@ export function reconcileBonsaiOperations({
       const date = isoDate(row.date);
       const duration = durationMinutes(row.formatted_time);
       const rateRaw = String(row.rate ?? '').trim();
-      const parsedRate = rateRaw ? exactMoney(rateRaw) : null;
+      const parsedRate = rateRaw ? parseBonsaiMoney(rateRaw) : null;
       const expectedRate = parsedRate || null;
       if (!normalized(row.project_title)) invalidFields.push('project_title');
       if (projectMatches.length !== 1) invalidFields.push('project_identity');
@@ -328,7 +316,7 @@ export function reconcileBonsaiOperations({
       const clientMatches = normalized(row.client) ? (clientsByNormalizedName.get(normalized(row.client)) ?? []) : [];
       const projectMatches = normalized(row.project) && normalized(row.client)
         ? (projectsByClientAndName.get(`${normalized(row.client)}|${normalized(row.project)}`) ?? []) : [];
-      const amount = exactMoney(row.amount_after_tax || row.amount_pre_tax);
+      const amount = parseBonsaiMoney(row.amount_after_tax || row.amount_pre_tax);
       const date = isoDate(row.date);
       const currency = String(row.currency ?? '').trim().toUpperCase();
       if (!normalized(row.name)) invalidFields.push('name');

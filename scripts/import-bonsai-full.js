@@ -30,6 +30,7 @@ import { Readable } from 'node:stream';
 import { fileURLToPath } from 'url';
 import csvParser from 'csv-parser';
 import { assertApprovedBonsaiDryRun, fingerprintBonsaiPlan, fingerprintInputInventory, sourceDifferences } from '../src/services/bonsai-import-evidence.service.js';
+import { parseBonsaiMoney, parseBonsaiDecimal } from '../src/services/bonsaiCsvValues.service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const prisma = new PrismaClient({
@@ -180,11 +181,6 @@ function parseDate(dateStr) {
   if (!dateStr || dateStr.trim() === '') return null;
   const d = new Date(dateStr);
   return isNaN(d.getTime()) ? null : d;
-}
-
-function parseFloat2(val) {
-  const n = parseFloat(val);
-  return isNaN(n) ? 0 : n;
 }
 
 // === Extract Bonsai ID from URL ===
@@ -520,7 +516,13 @@ async function runImport(prisma) {
         stats.projects.skipped++;
         continue;
       }
-      const budget = proj.project_budget_amount ? parseFloat2(proj.project_budget_amount) : null;
+      const budgetRaw = String(proj.project_budget_amount ?? '').trim();
+      const budget = budgetRaw ? parseBonsaiMoney(budgetRaw) : null;
+      if (budgetRaw && budget === null) {
+        stats.errors.push(`Project "${title}": project budget is malformed`);
+        stats.projects.skipped++;
+        continue;
+      }
       const startDate = parseDate(proj.start_date);
       const endDate = parseDate(proj.finish_date);
 
@@ -603,12 +605,19 @@ async function runImport(prisma) {
 
     try {
       const status = mapInvoiceStatus(inv.status);
-      const totalAmount = parseFloat2(inv.total_amount);
-      const tax = parseFloat2(inv.calculated_tax_amount);
-      const taxRate = parseFloat2(inv.calculated_tax_percent);
+      const totalAmount = parseBonsaiMoney(inv.total_amount);
+      const taxRaw = String(inv.calculated_tax_amount ?? '').trim();
+      const taxRateRaw = String(inv.calculated_tax_percent ?? '').trim();
+      const tax = taxRaw ? parseBonsaiMoney(taxRaw) : 0;
+      const taxRate = taxRateRaw ? parseBonsaiDecimal(taxRateRaw) : 0;
       const currency = (inv.currency || '').toUpperCase();
       const issueDate = parseDate(inv.issued_date);
       const paidDate = parseDate(inv.paid_date);
+      if (totalAmount === null || tax === null || taxRate === null) {
+        stats.errors.push(`Invoice #${invoiceNumber}: invoice totals are malformed`);
+        stats.invoices.skipped++;
+        continue;
+      }
       if (!status || !['CAD', 'USD'].includes(currency) || !issueDate || totalAmount < 0 || tax < 0 || tax > totalAmount
         || (status === 'PAID' && !paidDate)) {
         stats.errors.push(`Invoice #${invoiceNumber}: incomplete or unsupported status, currency, date, or totals`);
@@ -778,7 +787,13 @@ async function runImport(prisma) {
       if (!date) { stats.timeEntries.skipped++; continue; }
 
       const userId = await resolveUserId(ownerName);
-      const rate = parseFloat2(entry.rate);
+      const rateRaw = String(entry.rate ?? '').trim();
+      const rate = rateRaw ? parseBonsaiMoney(rateRaw) : null;
+      if (rateRaw && rate === null) {
+        stats.timeEntries.skipped++;
+        stats.errors.push(`TimeEntry "${projectTitle}" ${dateStr}: time-entry rate is malformed`);
+        continue;
+      }
       const billable = (entry.billing_status || '').toLowerCase() === 'billed';
       const notes = (entry.notes || '').trim();
       const timeEntrySourceKey = [resolvedProjectId, userId, date.toISOString(), duration].join('|');
@@ -857,7 +872,7 @@ async function runImport(prisma) {
     }
 
     const description = (exp.name || '').trim();
-    const amount = parseFloat2(exp.amount_after_tax || exp.amount_pre_tax);
+    const amount = parseBonsaiMoney(exp.amount_after_tax || exp.amount_pre_tax);
     const currency = (exp.currency || '').toUpperCase();
     const category = mapExpenseCategory(exp.tags);
     const date = parseDate(exp.date);
@@ -865,6 +880,11 @@ async function runImport(prisma) {
     const clientName = (exp.client || '').trim();
     const projectName = (exp.project || '').trim();
 
+    if (amount === null) {
+      stats.expenses.skipped++;
+      stats.errors.push(`Expense "${description.substring(0, 40)}": expense amount is malformed`);
+      continue;
+    }
     if (!description || amount === 0 || !date || !['CAD', 'USD'].includes(currency)) {
       stats.expenses.skipped++;
       if (description && amount !== 0 && date && !['CAD', 'USD'].includes(currency)) {
