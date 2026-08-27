@@ -27,6 +27,12 @@ test('inquiry page shows evidence and requires deliberate conversion confirmatio
   assert.match(page, /Requested outcome/);
   assert.match(page, /budgetCurrency/);
   assert.match(page, /qualificationNotes/);
+  assert.match(page, /qualificationReasonCode/);
+  assert.match(page, /nextAction/);
+  assert.match(page, /nextActionDueAt/);
+  assert.match(page, /Account owner/);
+  assert.match(page, /Attribution/);
+  assert.match(page, /Follow-up overdue/);
   assert.match(page, /QUALIFIED/);
   assert.match(page, /ConfirmDialog/);
   assert.match(page, /Convert to client/);

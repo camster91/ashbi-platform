@@ -7,7 +7,38 @@ import {
   promoteQualifiedLeadToDeal,
   updateLeadQualification,
 } from '../../services/lead-qualification.service.js';
-import { leadPromotionSchema } from '../../validators/schemas.js';
+import { leadPromotionSchema, leadQualificationSchema } from '../../validators/schemas.js';
+
+test('active qualification states require a dated next human action', () => {
+  const base = {
+    status: 'QUALIFIED',
+    qualificationNotes: 'Confirmed fit from the supplied project evidence.',
+  };
+  assert.equal(leadQualificationSchema.safeParse(base).success, false);
+  assert.equal(leadQualificationSchema.safeParse({
+    ...base,
+    nextAction: 'Schedule discovery with the named decision maker',
+    nextActionDueAt: '2026-08-29T14:00:00.000Z',
+  }).success, true);
+});
+
+test('disqualified leads require a bounded reason and clear follow-up', () => {
+  const base = {
+    status: 'DISQUALIFIED',
+    qualificationNotes: 'The requested service is outside the approved catalogue.',
+  };
+  assert.equal(leadQualificationSchema.safeParse(base).success, false);
+  assert.equal(leadQualificationSchema.safeParse({
+    ...base,
+    qualificationReasonCode: 'SERVICE_MISMATCH',
+  }).success, true);
+  assert.equal(leadQualificationSchema.safeParse({
+    ...base,
+    qualificationReasonCode: 'SERVICE_MISMATCH',
+    nextAction: 'Send a follow-up anyway',
+    nextActionDueAt: '2026-08-29T14:00:00.000Z',
+  }).success, false);
+});
 
 test('qualification update records the human decision and a durable event atomically', async () => {
   const writes = { updates: [], events: [] };
@@ -28,17 +59,23 @@ test('qualification update records the human decision and a durable event atomic
     leadId: 'lead-1',
     status: 'QUALIFIED',
     qualificationNotes: 'Strong fit for a human-led packaging and commerce engagement.',
+    nextAction: 'Schedule discovery with the named decision maker',
+    nextActionDueAt: '2026-08-29T14:00:00.000Z',
     actorUserId: 'user-1',
     now,
   });
 
   assert.equal(result.status, 'QUALIFIED');
   assert.equal(writes.updates[0].qualifiedAt, now);
+  assert.equal(writes.updates[0].nextAction, 'Schedule discovery with the named decision maker');
+  assert.equal(writes.updates[0].nextActionDueAt.toISOString(), '2026-08-29T14:00:00.000Z');
   assert.equal(writes.events[0].eventName, 'qualification_updated');
   assert.deepEqual(writes.events[0].properties, {
     fromStatus: 'NEW',
     toStatus: 'QUALIFIED',
     actorUserId: 'user-1',
+    qualificationReasonCode: null,
+    nextActionDueAt: '2026-08-29T14:00:00.000Z',
   });
   assert.equal(JSON.stringify(writes.events[0]).includes('Strong fit'), false);
 });
@@ -97,6 +134,8 @@ test('qualified lead conversion creates one client and primary contact, then lin
   assert.equal(writes.leadUpdates[0].status, 'CONVERTED');
   assert.equal(writes.leadUpdates[0].convertedClientId, 'client-1');
   assert.equal(writes.leadUpdates[0].convertedAt, now);
+  assert.equal(writes.leadUpdates[0].nextAction, null);
+  assert.equal(writes.leadUpdates[0].nextActionDueAt, null);
   assert.equal(writes.events[0].eventName, 'lead_converted');
 });
 
@@ -216,6 +255,7 @@ test('qualified inquiry promotion creates one client and one currency-labelled p
   });
   assert.deepEqual(writes.leadUpdates[0], {
     status: 'CONVERTED', convertedClientId: 'client-1', convertedDealId: 'deal-1', convertedAt: now,
+    nextAction: null, nextActionDueAt: null,
   });
   assert.equal(writes.events[0].eventName, 'lead_promoted_to_pipeline');
 });
@@ -292,12 +332,19 @@ test('lead schema and routes expose a tenant-safe human qualification workflow',
   const model = schema.match(/model Lead \{[\s\S]*?\n\}/)?.[0] || '';
 
   assert.match(model, /qualificationNotes\s+String\?/);
+  assert.match(model, /qualificationReasonCode\s+String\?/);
+  assert.match(model, /nextAction\s+String\?/);
+  assert.match(model, /nextActionDueAt\s+DateTime\?/);
   assert.match(model, /qualifiedAt\s+DateTime\?/);
   assert.match(model, /convertedClientId\s+String\?/);
   assert.match(model, /convertedDealId\s+String\?/);
   assert.match(model, /convertedClient\s+Client\?/);
   assert.match(migration, /"qualificationNotes" TEXT/);
   assert.match(migration, /"convertedClientId" TEXT/);
+  const followUpMigration = fs.readFileSync(path.join(process.cwd(), 'prisma', 'migrations', '20260827013000_lead_follow_up_control', 'migration.sql'), 'utf8');
+  assert.match(followUpMigration, /"qualificationReasonCode" TEXT/);
+  assert.match(followUpMigration, /"nextAction" TEXT/);
+  assert.match(followUpMigration, /"nextActionDueAt" TIMESTAMP\(3\)/);
   assert.match(routes, /fastify\.get\('\/leads'/);
   assert.match(routes, /fastify\.patch\('\/leads\/:id\/qualification'/);
   assert.match(routes, /fastify\.post\('\/leads\/:id\/convert'/);

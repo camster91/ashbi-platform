@@ -126,6 +126,10 @@ export default async function clientAcquisitionRoutes(fastify, options) {
         source: true,
         campaign: true,
         qualificationNotes: true,
+        qualificationReasonCode: true,
+        nextAction: true,
+        nextActionDueAt: true,
+        accountOwner: { select: { id: true, name: true } },
         qualifiedAt: true,
         convertedClientId: true,
         convertedDealId: true,
@@ -163,6 +167,9 @@ export default async function clientAcquisitionRoutes(fastify, options) {
         leadId: request.params.id,
         status: request.body.status,
         qualificationNotes: request.body.qualificationNotes,
+        qualificationReasonCode: request.body.qualificationReasonCode,
+        nextAction: request.body.nextAction,
+        nextActionDueAt: request.body.nextActionDueAt,
         actorUserId: request.user.id,
       });
     } catch (error) {

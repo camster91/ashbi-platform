@@ -38,6 +38,17 @@ const SERVICE_LABELS = {
   unknown: 'Needs discovery',
 };
 
+const DISQUALIFICATION_REASONS = {
+  BUDGET_MISMATCH: 'Budget mismatch',
+  TIMING_MISMATCH: 'Timing mismatch',
+  SERVICE_MISMATCH: 'Service mismatch',
+  NO_CONTACT_PATH: 'No valid contact path',
+  NOT_PURSUING: 'Not pursuing',
+  OTHER: 'Other evidenced reason',
+};
+
+const FOLLOW_UP_STATUSES = new Set(['REVIEWING', 'QUALIFIED', 'NURTURE']);
+
 function formatDate(value) {
   return new Intl.DateTimeFormat('en-CA', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
 }
@@ -55,6 +66,20 @@ function formatBudget(lead) {
   return `${labels[lead.budgetBand] || lead.budgetBand} ${lead.budgetCurrency}`;
 }
 
+function toLocalDateTimeInput(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const part = (number) => String(number).padStart(2, '0');
+  return `${date.getFullYear()}-${part(date.getMonth() + 1)}-${part(date.getDate())}T${part(date.getHours())}:${part(date.getMinutes())}`;
+}
+
+function isOverdue(lead) {
+  return FOLLOW_UP_STATUSES.has(lead.status)
+    && lead.nextActionDueAt
+    && new Date(lead.nextActionDueAt).getTime() < Date.now();
+}
+
 function StatusBadge({ status }) {
   return (
     <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_STYLES[status] || STATUS_STYLES.NEW}`}>
@@ -68,6 +93,9 @@ export default function LeadInbox() {
   const [selectedId, setSelectedId] = useState(null);
   const [reviewStatus, setReviewStatus] = useState('REVIEWING');
   const [qualificationNotes, setQualificationNotes] = useState('');
+  const [qualificationReasonCode, setQualificationReasonCode] = useState('');
+  const [nextAction, setNextAction] = useState('');
+  const [nextActionDueAt, setNextActionDueAt] = useState('');
   const [confirmConversion, setConfirmConversion] = useState(false);
   const [showPromotion, setShowPromotion] = useState(false);
   const [confirmPromotion, setConfirmPromotion] = useState(false);
@@ -104,6 +132,9 @@ export default function LeadInbox() {
     if (!selected) return;
     setReviewStatus(selected.status === 'CONVERTED' ? 'QUALIFIED' : selected.status);
     setQualificationNotes(selected.qualificationNotes || '');
+    setQualificationReasonCode(selected.qualificationReasonCode || '');
+    setNextAction(selected.nextAction || '');
+    setNextActionDueAt(toLocalDateTimeInput(selected.nextActionDueAt));
     setShowPromotion(false);
     setConfirmPromotion(false);
     setPromotion({ name: '', stageId: '', value: '', currency: '' });
@@ -130,6 +161,9 @@ export default function LeadInbox() {
     mutationFn: () => api.updateLeadQualification(selectedId, {
       status: reviewStatus,
       qualificationNotes,
+      qualificationReasonCode: reviewStatus === 'DISQUALIFIED' ? qualificationReasonCode : null,
+      nextAction: FOLLOW_UP_STATUSES.has(reviewStatus) ? nextAction.trim() : null,
+      nextActionDueAt: FOLLOW_UP_STATUSES.has(reviewStatus) && nextActionDueAt ? new Date(nextActionDueAt).toISOString() : null,
     }),
     onSuccess: async () => {
       await refresh();
@@ -176,6 +210,11 @@ export default function LeadInbox() {
     && ['CAD', 'USD'].includes(promotion.currency)
     && (promotion.value === '' || (Number.isFinite(Number(promotion.value)) && Number(promotion.value) >= 0)),
   );
+  const hasDecisionEvidence = !['QUALIFIED', 'NURTURE', 'DISQUALIFIED'].includes(reviewStatus)
+    || qualificationNotes.trim().length >= 10;
+  const canSaveReview = hasDecisionEvidence
+    && (!FOLLOW_UP_STATUSES.has(reviewStatus) || (nextAction.trim() && nextActionDueAt))
+    && (reviewStatus !== 'DISQUALIFIED' || Boolean(qualificationReasonCode));
 
   return (
     <div className="space-y-6">
@@ -244,6 +283,7 @@ export default function LeadInbox() {
                     <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                       <span>{formatBudget(lead)}</span>
                       <span>{formatDate(lead.createdAt)}</span>
+                      {isOverdue(lead) && <span className="font-semibold text-destructive">Follow-up overdue</span>}
                     </div>
                   </button>
                 );
@@ -275,6 +315,8 @@ export default function LeadInbox() {
                   <div><dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Company</dt><dd className="mt-1 flex items-center gap-1.5 text-sm text-foreground"><Building2 className="h-4 w-4" aria-hidden="true" />{selected.company || 'Not provided'}</dd></div>
                   <div><dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Budget</dt><dd className="mt-1 text-sm text-foreground">{formatBudget(selected)}</dd></div>
                   <div><dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Timing</dt><dd className="mt-1 text-sm text-foreground">{selected.timing || 'Not provided'}</dd></div>
+                  <div><dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Account owner</dt><dd className="mt-1 text-sm text-foreground">{selected.accountOwner?.name || 'Owner unavailable'}</dd></div>
+                  <div><dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Attribution</dt><dd className="mt-1 text-sm text-foreground">{[selected.source, selected.medium, selected.campaign].filter(Boolean).join(' · ') || 'Source not captured'}</dd><dd className="mt-1 break-all text-xs text-muted-foreground">{selected.landingPage}</dd></div>
                 </dl>
 
                 <div className="space-y-4 rounded-xl border border-border bg-muted/30 p-4">
@@ -301,9 +343,30 @@ export default function LeadInbox() {
                       <label htmlFor="qualification-notes" className="mb-1 block text-sm font-medium text-foreground">Internal qualification notes</label>
                       <textarea id="qualification-notes" value={qualificationNotes} onChange={(event) => setQualificationNotes(event.target.value)} maxLength={5000} rows={5} placeholder="Record evidence, fit, concerns, and the next human action." className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
                     </div>
+                    {reviewStatus === 'DISQUALIFIED' && (
+                      <div>
+                        <label htmlFor="qualification-reason" className="mb-1 block text-sm font-medium text-foreground">Reason</label>
+                        <select id="qualification-reason" value={qualificationReasonCode} onChange={(event) => setQualificationReasonCode(event.target.value)} className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                          <option value="">Select an evidenced reason</option>
+                          {Object.entries(DISQUALIFICATION_REASONS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                        </select>
+                      </div>
+                    )}
+                    {FOLLOW_UP_STATUSES.has(reviewStatus) && (
+                      <div className="grid gap-4 sm:grid-cols-[1fr_14rem]">
+                        <div>
+                          <label htmlFor="next-action" className="mb-1 block text-sm font-medium text-foreground">Next human action</label>
+                          <input id="next-action" value={nextAction} onChange={(event) => setNextAction(event.target.value)} maxLength={500} placeholder="Schedule discovery with the decision maker" className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                        </div>
+                        <div>
+                          <label htmlFor="next-action-due" className="mb-1 block text-sm font-medium text-foreground">Due</label>
+                          <input id="next-action-due" type="datetime-local" value={nextActionDueAt} onChange={(event) => setNextActionDueAt(event.target.value)} className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                        </div>
+                      </div>
+                    )}
                     {(reviewMutation.isError || convertMutation.isError) && <p role="alert" className="text-sm text-destructive">{reviewMutation.error?.message || convertMutation.error?.message}</p>}
                     <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
-                      <Button variant="outline" onClick={() => reviewMutation.mutate()} loading={reviewMutation.isPending}>Save decision</Button>
+                      <Button variant="outline" onClick={() => reviewMutation.mutate()} loading={reviewMutation.isPending} disabled={!canSaveReview}>Save decision</Button>
                       <Button onClick={() => setConfirmConversion(true)} disabled={selected.status !== 'QUALIFIED'}>Convert to client</Button>
                     </div>
                     {selected.status !== 'QUALIFIED' && <p className="text-xs text-muted-foreground">Save this inquiry as Qualified before converting it to a client.</p>}

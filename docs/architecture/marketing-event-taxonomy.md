@@ -67,7 +67,7 @@ Status: Proposed. Instrumentation begins only after privacy and retention approv
 
 ## Funnel definitions
 
-- Qualified lead: a lead with a named owner, fit decision, service line, and valid contact path.
+- Qualified lead: a lead with a named owner, evidenced fit decision, service line, valid contact path, and dated next human action.
 - Opportunity: qualified work with a defined problem and next commercial action.
 - Win: an accepted proposal plus the required contract and payment gate; proposal acceptance alone is not revenue.
 - Revenue: reconciled invoice payment in its original currency; it is not profit.

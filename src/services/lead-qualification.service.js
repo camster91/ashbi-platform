@@ -11,6 +11,9 @@ export async function updateLeadQualification({
   leadId,
   status,
   qualificationNotes,
+  qualificationReasonCode,
+  nextAction,
+  nextActionDueAt,
   actorUserId,
   now = new Date(),
 }) {
@@ -32,6 +35,11 @@ export async function updateLeadQualification({
       data: {
         status,
         qualificationNotes: qualificationNotes?.trim() || null,
+        qualificationReasonCode: status === 'DISQUALIFIED' ? qualificationReasonCode : null,
+        nextAction: ['REVIEWING', 'QUALIFIED', 'NURTURE'].includes(status) ? nextAction?.trim() || null : null,
+        nextActionDueAt: ['REVIEWING', 'QUALIFIED', 'NURTURE'].includes(status) && nextActionDueAt
+          ? new Date(nextActionDueAt)
+          : null,
         ...(status === 'QUALIFIED' ? { qualifiedAt: now } : {}),
       },
     });
@@ -43,6 +51,8 @@ export async function updateLeadQualification({
           fromStatus: lead.status,
           toStatus: status,
           actorUserId,
+          qualificationReasonCode: status === 'DISQUALIFIED' ? qualificationReasonCode : null,
+          nextActionDueAt: ['REVIEWING', 'QUALIFIED', 'NURTURE'].includes(status) ? nextActionDueAt : null,
         },
         occurredAt: now,
       },
@@ -145,6 +155,8 @@ export async function convertQualifiedLead({ prisma, leadId, actorUserId, now = 
         status: 'CONVERTED',
         convertedClientId: clientId,
         convertedAt: now,
+        nextAction: null,
+        nextActionDueAt: null,
       },
     });
     await transaction.leadEvent.create({
@@ -238,6 +250,8 @@ export async function promoteQualifiedLeadToDeal({ prisma, leadId, actorUserId, 
         convertedClientId: clientId,
         convertedDealId: pipelineDeal.id,
         convertedAt: lead.convertedAt || now,
+        nextAction: null,
+        nextActionDueAt: null,
       },
     });
     await transaction.leadEvent.create({

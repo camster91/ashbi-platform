@@ -548,46 +548,50 @@ model UnmatchedEmail {
 }
 
 model Lead {
-  id                   String        @id @default(cuid())
-  organizationId       String
-  organization         Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  accountOwnerId       String
-  accountOwner         User          @relation("LeadAccountOwner", fields: [accountOwnerId], references: [id], onDelete: Restrict)
-  name                 String
-  email                String
-  company              String?
-  phone                String?
-  serviceLine          String
-  businessContext      String
-  requestedOutcome     String
-  timing               String?
-  budgetBand           String?
-  budgetCurrency       String?
-  status               String        @default("NEW")
-  qualificationNotes   String?
-  qualifiedAt          DateTime?
-  convertedClientId    String?
-  convertedClient      Client?       @relation("LeadConvertedClient", fields: [convertedClientId], references: [id], onDelete: SetNull)
-  convertedDealId      String?       @unique
-  convertedDeal        PipelineDeal? @relation("LeadConvertedDeal", fields: [convertedDealId], references: [id], onDelete: SetNull)
-  convertedAt          DateTime?
-  source               String?
-  medium               String?
-  campaign             String?
-  landingPage          String
-  referrer             String?
-  clickId              String?
-  consentVersion       String
-  consentAt            DateTime
-  intakeIdempotencyKey String
-  intakePayloadHash    String
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
+  id                      String        @id @default(cuid())
+  organizationId          String
+  organization            Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  accountOwnerId          String
+  accountOwner            User          @relation("LeadAccountOwner", fields: [accountOwnerId], references: [id], onDelete: Restrict)
+  name                    String
+  email                   String
+  company                 String?
+  phone                   String?
+  serviceLine             String
+  businessContext         String
+  requestedOutcome        String
+  timing                  String?
+  budgetBand              String?
+  budgetCurrency          String?
+  status                  String        @default("NEW")
+  qualificationNotes      String?
+  qualificationReasonCode String?
+  nextAction              String?
+  nextActionDueAt         DateTime?
+  qualifiedAt             DateTime?
+  convertedClientId       String?
+  convertedClient         Client?       @relation("LeadConvertedClient", fields: [convertedClientId], references: [id], onDelete: SetNull)
+  convertedDealId         String?       @unique
+  convertedDeal           PipelineDeal? @relation("LeadConvertedDeal", fields: [convertedDealId], references: [id], onDelete: SetNull)
+  convertedAt             DateTime?
+  source                  String?
+  medium                  String?
+  campaign                String?
+  landingPage             String
+  referrer                String?
+  clickId                 String?
+  consentVersion          String
+  consentAt               DateTime
+  intakeIdempotencyKey    String
+  intakePayloadHash       String
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
 
   events LeadEvent[]
 
   @@unique([organizationId, intakeIdempotencyKey])
   @@index([organizationId, status, createdAt])
+  @@index([organizationId, status, nextActionDueAt])
   @@index([organizationId, email])
   @@index([accountOwnerId, status])
   @@index([convertedClientId])

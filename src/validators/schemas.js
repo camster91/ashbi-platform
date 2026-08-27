@@ -1423,6 +1423,15 @@ export const QUALIFIED_LEAD_STATUSES = [
   'DISQUALIFIED',
 ];
 
+export const LEAD_DISQUALIFICATION_REASONS = [
+  'BUDGET_MISMATCH',
+  'TIMING_MISMATCH',
+  'SERVICE_MISMATCH',
+  'NO_CONTACT_PATH',
+  'NOT_PURSUING',
+  'OTHER',
+];
+
 export const leadListQuerySchema = z.object({
   status: z.enum([...QUALIFIED_LEAD_STATUSES, 'CONVERTED']).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
@@ -1433,7 +1442,27 @@ export const leadIdParamsSchema = z.object({ id: cuidId }).strict();
 export const leadQualificationSchema = z.object({
   status: z.enum(QUALIFIED_LEAD_STATUSES),
   qualificationNotes: z.string().trim().max(5_000).optional(),
-}).strict();
+  qualificationReasonCode: z.enum(LEAD_DISQUALIFICATION_REASONS).nullable().optional(),
+  nextAction: z.string().trim().min(1).max(500).nullable().optional(),
+  nextActionDueAt: z.string().datetime().nullable().optional(),
+}).strict().superRefine((value, context) => {
+  const needsFollowUp = ['REVIEWING', 'QUALIFIED', 'NURTURE'].includes(value.status);
+  if (needsFollowUp && !value.nextAction) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['nextAction'], message: 'A next action is required for active leads' });
+  }
+  if (needsFollowUp && !value.nextActionDueAt) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['nextActionDueAt'], message: 'A next-action due date is required for active leads' });
+  }
+  if (value.status === 'DISQUALIFIED' && !value.qualificationReasonCode) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['qualificationReasonCode'], message: 'A bounded reason is required for disqualified leads' });
+  }
+  if (value.status === 'DISQUALIFIED' && (value.nextAction || value.nextActionDueAt)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['nextAction'], message: 'Disqualified leads cannot keep an active follow-up' });
+  }
+  if (['QUALIFIED', 'NURTURE', 'DISQUALIFIED'].includes(value.status) && (!value.qualificationNotes || value.qualificationNotes.length < 10)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['qualificationNotes'], message: 'Record concise evidence for this decision' });
+  }
+});
 
 export const leadPromotionSchema = z.object({
   stageId: cuidId,
