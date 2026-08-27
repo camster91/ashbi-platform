@@ -7,8 +7,8 @@
  * from Bonsai CSV exports plus a complete authenticated task snapshot.
  *
  * Usage:
- *   node scripts/import-bonsai-full.js --dry-run --organization-id <id> --csv-dir ./bonsai-export --connections-csv ./connection_export.csv --tasks-csv ./task_export.csv --tasks-json ./tasks.json --summary-file ./reconciliation.json
- *   node scripts/import-bonsai-full.js --confirm --organization-id <id> --csv-dir ./bonsai-export --connections-csv ./connection_export.csv --tasks-csv ./task_export.csv --tasks-json ./tasks.json --approved-summary ./reviewed-dry-run.json --summary-file ./live-reconciliation.json
+ *   node scripts/import-bonsai-full.js --dry-run --organization-id <id> --connections-csv ./connection_export.csv --projects-csv ./project_export.csv --tasks-csv ./task_export.csv --tasks-json ./tasks.json --invoices-csv ./invoice_export.csv --time-entries-csv ./time_export.csv --expenses-csv ./expense_export.csv --addresses-csv ./addresses.csv --summary-file ./reconciliation.json
+ *   node scripts/import-bonsai-full.js --confirm --organization-id <id> --connections-csv ./connection_export.csv --projects-csv ./project_export.csv --tasks-csv ./task_export.csv --tasks-json ./tasks.json --invoices-csv ./invoice_export.csv --time-entries-csv ./time_export.csv --expenses-csv ./expense_export.csv --addresses-csv ./addresses.csv --approved-summary ./reviewed-dry-run.json --summary-file ./live-reconciliation.json
  *
  * Reconciliation-first and replay-safe. Existing Hub records are matched but
  * never automatically overwritten. Natural/source identities are checked on:
@@ -54,6 +54,11 @@ const ORGANIZATION_ID = readOption('--organization-id', process.env.IMPORT_ORGAN
 const TASK_SNAPSHOT_FILE = readOption('--tasks-json', process.env.BONSAI_TASK_SNAPSHOT);
 const TASK_EXPORT_FILE = readOption('--tasks-csv', process.env.BONSAI_TASK_EXPORT);
 const CONNECTIONS_CSV_FILE = readOption('--connections-csv', process.env.BONSAI_CONNECTIONS_CSV);
+const PROJECTS_CSV_FILE = readOption('--projects-csv', process.env.BONSAI_PROJECTS_CSV);
+const INVOICES_CSV_FILE = readOption('--invoices-csv', process.env.BONSAI_INVOICES_CSV);
+const TIME_ENTRIES_CSV_FILE = readOption('--time-entries-csv', process.env.BONSAI_TIME_ENTRIES_CSV);
+const EXPENSES_CSV_FILE = readOption('--expenses-csv', process.env.BONSAI_EXPENSES_CSV);
+const ADDRESSES_CSV_FILE = readOption('--addresses-csv', process.env.BONSAI_ADDRESSES_CSV);
 
 if (DRY_RUN && CONFIRM_LIVE) {
   console.error('Choose exactly one import mode: --dry-run or --confirm.');
@@ -283,12 +288,12 @@ async function runImport(prisma) {
   console.log('📂 Loading CSVs...');
   const [clientsRaw, projectsRaw, historicalTasksRaw, invoicesRaw, timeEntriesRaw, expensesRaw, addressesRaw] = await Promise.all([
     readCSV('clients.csv', CONNECTIONS_CSV_FILE, 'connections'),
-    readCSV('projects.csv'),
+    readCSV('projects.csv', PROJECTS_CSV_FILE, 'projects.csv'),
     readCSV('tasks.csv', TASK_EXPORT_FILE, 'task-history'),
-    readCSV('invoices.csv'),
-    readCSV('time-entries.csv'),
-    readCSV('expenses.csv'),
-    readCSV('addresses.csv'),
+    readCSV('invoices.csv', INVOICES_CSV_FILE, 'invoices.csv'),
+    readCSV('time-entries.csv', TIME_ENTRIES_CSV_FILE, 'time-entries.csv'),
+    readCSV('expenses.csv', EXPENSES_CSV_FILE, 'expenses.csv'),
+    readCSV('addresses.csv', ADDRESSES_CSV_FILE, 'addresses.csv'),
   ]);
   const taskSnapshotPath = path.resolve(TASK_SNAPSHOT_FILE);
   const taskSnapshotBytes = fs.readFileSync(taskSnapshotPath);
@@ -308,13 +313,13 @@ async function runImport(prisma) {
   const usesConnectionExport = connectionInventory?.headers?.includes('Name')
     && connectionInventory.headers.includes('Email');
   console.log(`  ${connectionInventory?.filename || 'clients.csv'}: ${clientsRaw.length} rows`);
-  console.log(`  projects.csv: ${projectsRaw.length} rows`);
+  console.log(`  ${inputInventory.find(file => file.kind === 'projects.csv')?.filename || 'projects.csv'}: ${projectsRaw.length} rows`);
   console.log(`  ${path.basename(TASK_EXPORT_FILE)}: ${historicalTasksRaw.length} historical rows`);
   console.log(`  bonsai-tasks.json: ${tasksRaw.length} rows`);
-  console.log(`  invoices.csv: ${invoicesRaw.length} rows`);
-  console.log(`  time-entries.csv: ${timeEntriesRaw.length} rows`);
-  console.log(`  expenses.csv: ${expensesRaw.length} rows`);
-  console.log(`  addresses.csv: ${addressesRaw.length} rows`);
+  console.log(`  ${inputInventory.find(file => file.kind === 'invoices.csv')?.filename || 'invoices.csv'}: ${invoicesRaw.length} rows`);
+  console.log(`  ${inputInventory.find(file => file.kind === 'time-entries.csv')?.filename || 'time-entries.csv'}: ${timeEntriesRaw.length} rows`);
+  console.log(`  ${inputInventory.find(file => file.kind === 'expenses.csv')?.filename || 'expenses.csv'}: ${expensesRaw.length} rows`);
+  console.log(`  ${inputInventory.find(file => file.kind === 'addresses.csv')?.filename || 'addresses.csv'}: ${addressesRaw.length} rows`);
 
   const requiredHeaders = {
     'projects.csv': ['project_id', 'status', 'title', 'client_or_company_name'],

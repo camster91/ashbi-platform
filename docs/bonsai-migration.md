@@ -23,7 +23,7 @@ The Companies export is a mixed CRM connection population, not a client list. Th
 ## Dry run
 
 ```text
-node scripts/import-bonsai-full.js --dry-run --organization-id <sandbox-org-id> --csv-dir <bonsai-export> --connections-csv <timestamped-connection-export.csv> --tasks-csv <timestamped-task-export.csv> --tasks-json <bonsai-tasks.json> --summary-file <new-dry-run-report.json>
+node scripts/import-bonsai-full.js --dry-run --organization-id <sandbox-org-id> --connections-csv <connection-export.csv> --projects-csv <project-export.csv> --tasks-csv <task-export.csv> --tasks-json <bonsai-tasks.json> --invoices-csv <invoice-export.csv> --time-entries-csv <time-export.csv> --expenses-csv <expense-export.csv> --addresses-csv <addresses.csv> --summary-file <new-dry-run-report.json>
 ```
 
 The report is created once with owner-only permissions. Review every source count, mapped owner, create/match/skip count, and reconciliation finding. A missing file, malformed or over-precise financial value, unsupported currency/status, conflicting Hub record, or incomplete financial/date evidence must be resolved at the source or reviewed manually; the importer does not partially parse, guess, or overwrite it.
@@ -33,7 +33,7 @@ The report is created once with owner-only permissions. Review every source coun
 After an approved backup and human review of a clean dry run, use the exact unchanged CSV directory and reference that dry-run report:
 
 ```text
-node scripts/import-bonsai-full.js --confirm --organization-id <sandbox-org-id> --csv-dir <bonsai-export> --connections-csv <timestamped-connection-export.csv> --tasks-csv <timestamped-task-export.csv> --tasks-json <bonsai-tasks.json> --approved-summary <reviewed-dry-run-report.json> --summary-file <new-live-report.json>
+node scripts/import-bonsai-full.js --confirm --organization-id <sandbox-org-id> --connections-csv <connection-export.csv> --projects-csv <project-export.csv> --tasks-csv <task-export.csv> --tasks-json <bonsai-tasks.json> --invoices-csv <invoice-export.csv> --time-entries-csv <time-export.csv> --expenses-csv <expense-export.csv> --addresses-csv <addresses.csv> --approved-summary <reviewed-dry-run-report.json> --summary-file <new-live-report.json>
 ```
 
 The confirmed import refuses to start without the reviewed report. It rolls back if the tenant, CSV fingerprint, destination plan, required inventory, or reconciliation findings differ from the approved dry run. Existing Hub clients, projects, and invoices are compared and never automatically overwritten. A matching record with different evidence is a manual reconciliation finding.

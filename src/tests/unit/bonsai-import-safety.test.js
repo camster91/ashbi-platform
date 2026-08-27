@@ -13,6 +13,11 @@ test('Bonsai full importer requires an explicit tenant and scopes imported recor
   assert.match(source, /--tasks-json/);
   assert.match(source, /--tasks-csv/);
   assert.match(source, /--connections-csv/);
+  assert.match(source, /--projects-csv/);
+  assert.match(source, /--invoices-csv/);
+  assert.match(source, /--time-entries-csv/);
+  assert.match(source, /--expenses-csv/);
+  assert.match(source, /--addresses-csv/);
   assert.match(source, /IMPORT_ORGANIZATION_ID/);
   assert.match(source, /organizationId: ORGANIZATION_ID/);
   const expenseCreate = source.slice(source.indexOf('await prisma.expense.create'), source.indexOf('stats.expenses.created'));
