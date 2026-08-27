@@ -35,6 +35,13 @@ const DELIVERY_STATUS = {
   CANCELED: { label: 'Canceled before sending', color: 'text-muted-foreground' },
 };
 
+const PROVIDER_LIFECYCLE_STATUS = {
+  PENDING: { label: 'Recipient-server status pending', color: 'text-muted-foreground' },
+  RECIPIENT_SERVER_ACCEPTED: { label: 'Accepted by recipient mail server', color: 'text-green-600' },
+  TEMPORARY_DELIVERY_FAILURE: { label: 'Temporary delivery failure', color: 'text-amber-600' },
+  PERMANENT_DELIVERY_FAILURE: { label: 'Permanent delivery failure', color: 'text-red-600' },
+};
+
 function deliveryToast(delivery) {
   if (!delivery) return ['Invoice issued', 'No primary client email was available, so email was not attempted'];
   if (delivery.status === 'PROVIDER_ACCEPTED') {
@@ -833,9 +840,18 @@ export default function InvoiceDetail() {
                   <div className="space-y-3">
                     {invoice.deliveryAttempts.map(attempt => {
                       const status = DELIVERY_STATUS[attempt.status] || DELIVERY_STATUS.OUTCOME_UNKNOWN;
+                      const providerLifecycle = PROVIDER_LIFECYCLE_STATUS[
+                        attempt.providerLifecycleStatus || 'PENDING'
+                      ];
                       return (
                         <div key={attempt.id} className="text-sm border-l-2 border-border pl-3">
                           <p className={`font-medium ${status.color}`}>{status.label}</p>
+                          <p className={`text-xs ${providerLifecycle.color}`}>{providerLifecycle.label}</p>
+                          {attempt.providerLifecycleStatus === 'RECIPIENT_SERVER_ACCEPTED' && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              This does not prove the person opened or read the email.
+                            </p>
+                          )}
                           <p className="text-xs text-muted-foreground">
                             {attempt.kind === 'INITIAL' ? 'Initial issue' : 'Resend'} · {formatDate(attempt.createdAt)}
                           </p>

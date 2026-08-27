@@ -8,8 +8,11 @@ import crypto from 'crypto';
 import {validateBody, webhookEmailTestSchema} from '../validators/schemas.js';
 import { runTenantJob } from '../jobs/tenant-iteration.js';
 import { prisma as backgroundPrisma } from '../config/db.js';
+import mailgunInvoiceDeliveryRoutes from './mailgun-invoice-delivery.routes.js';
 
 export default async function webhookRoutes(fastify) {
+  await fastify.register(mailgunInvoiceDeliveryRoutes);
+
   // Email webhook endpoint
   fastify.post('/email', { config: { skipValidation: true } }, async (request, reply) => {
     // Verify webhook secret (fail closed)

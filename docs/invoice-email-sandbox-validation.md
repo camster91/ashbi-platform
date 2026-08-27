@@ -31,6 +31,7 @@ the run.
 | Draft creation | Creating or editing a draft produces no delivery attempt and no provider call. |
 | Initial issue | One reviewed issue action creates one `INITIAL` attempt and one prepared event before the provider call. |
 | Provider acceptance | The attempt becomes `PROVIDER_ACCEPTED`, retains the provider message ID, and the UI says “Accepted by email provider”; it never says delivered or received. |
+| Recipient-server lifecycle | Configure `delivered`, `temporary_fail`, and `permanent_fail` on POST `/api/webhooks/mailgun/invoice-delivery`. Prove signed event acceptance, exact message/recipient correlation, duplicate and simultaneous replay safety, out-of-order protection, and append-only evidence. A delivered event means the recipient mail server accepted the message; it does not prove inbox placement or human reading. |
 | Request replay | Replaying the same request ID returns the same attempt and does not call the provider again. |
 | Confirmed rejection | The attempt becomes `FAILED`, retains a safe reason code, and staff can make a separate explicit resend attempt. |
 | Unknown outcome | A timeout or transport loss becomes `OUTCOME_UNKNOWN`; staff are told not to retry until reconciliation proves whether the provider accepted it. |
@@ -47,6 +48,10 @@ event, but neither proves a person read the message. Record sandbox mailbox
 arrival separately with timestamp, matching provider message ID, and the
 approved recipient. Do not generalize sandbox arrival into production inbox
 deliverability.
+
+The signed lifecycle receiver is code-present locally, but its migration is unapplied and the Mailgun webhook has not been configured or exercised in a named sandbox. Do not infer provider, mailbox, or production evidence from unit tests.
+
+Provider contract references: [Mailgun webhook signing](https://documentation.mailgun.com/docs/mailgun/user-manual/webhooks/securing-webhooks), [event payloads](https://documentation.mailgun.com/docs/mailgun/user-manual/webhooks/webhook-payloads), and [domain webhook event types](https://documentation.mailgun.com/docs/mailgun/api-reference/send/mailgun/domain-webhooks/post-v3-domains--domain--webhooks).
 
 ## Exit criteria
 

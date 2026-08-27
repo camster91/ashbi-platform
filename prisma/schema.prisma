@@ -1136,6 +1136,11 @@ model InvoiceDeliveryAttempt {
   failedAt          DateTime?
   outcomeUnknownAt  DateTime?
   canceledAt        DateTime?
+  providerLifecycleStatus    String    @default("PENDING")
+  lastProviderEventAt        DateTime?
+  recipientServerAcceptedAt  DateTime?
+  temporaryFailureAt         DateTime?
+  permanentFailureAt         DateTime?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -1154,6 +1159,9 @@ model InvoiceDeliveryEvent {
   status            String
   providerMessageId String?
   failureCode       String?
+  providerEventId   String?
+  providerEventKey  String?  @unique
+  providerOccurredAt DateTime?
   occurredAt        DateTime @default(now())
   createdAt         DateTime @default(now())
 
