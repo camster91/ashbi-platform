@@ -10,7 +10,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { buildNotionMarkdownImportPlan } from '../src/services/notion-markdown-import.service.js';
+import { assertApprovedNotionDryRun, buildNotionMarkdownImportPlan, fingerprintNotionExport, fingerprintNotionPlan } from '../src/services/notion-markdown-import.service.js';
 
 const { PrismaClient } = prismaPkg;
 const option = (name) => { const index = process.argv.indexOf(name); return index >= 0 ? process.argv[index + 1] : null; };
@@ -18,12 +18,24 @@ const organizationId = option('--organization-id') || process.env.IMPORT_ORGANIZ
 const projectId = option('--project-id');
 const inputDir = option('--input-dir') || process.env.NOTION_EXPORT_DIR;
 const summaryFile = option('--summary-file');
+const approvedSummaryFile = option('--approved-summary');
 const dryRun = !process.argv.includes('--confirm');
 
-if (!organizationId || !projectId || !inputDir) {
-  console.error('Usage: node scripts/import-notion-markdown.js --organization-id <id> --project-id <id> --input-dir <export> [--summary-file <report.json>] [--confirm]');
+if (!organizationId || !projectId || !inputDir || !summaryFile) {
+  console.error('Usage: node scripts/import-notion-markdown.js --organization-id <id> --project-id <id> --input-dir <export> --summary-file <new-report.json> [--confirm --approved-summary <reviewed-dry-run.json>]');
   process.exit(2);
 }
+if (!dryRun && !approvedSummaryFile) {
+  console.error('Refusing confirmed Notion import without --approved-summary.');
+  process.exit(2);
+}
+
+const summaryTarget = path.resolve(summaryFile);
+const summaryHandle = await fs.open(summaryTarget, 'wx', 0o600);
+let summaryWritten = false;
+await summaryHandle.writeFile(`${JSON.stringify({
+  generatedAt: new Date().toISOString(), mode: dryRun ? 'dry-run' : 'live', state: 'RESERVED', complete: false,
+})}\n`, 'utf8');
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
 
@@ -60,23 +72,35 @@ async function main() {
   if (!project) throw new Error('Project was not found in the supplied organization');
   if (!importer) throw new Error('No user is available in the supplied organization to own imported notes');
 
-  const relativeFiles = exportFiles.map((filename) => path.relative(resolvedInput, filename));
-  const markdownPaths = relativeFiles.filter((relativePath) => relativePath.toLowerCase().endsWith('.md'));
-  const plan = buildNotionMarkdownImportPlan(markdownPaths);
-  const payloads = await Promise.all(plan.map(async (entry) => {
-    const content = await fs.readFile(path.join(resolvedInput, entry.relativePath), 'utf8');
-    return { ...entry, content, contentSha256: contentSha256(content), title: titleFromRelativePath(entry.relativePath) };
+  const relativeFiles = exportFiles.map((filename) => path.relative(resolvedInput, filename).split(path.sep).join('/'));
+  const fileEvidence = await Promise.all(relativeFiles.map(async (relativePath) => {
+    const bytes = await fs.readFile(path.join(resolvedInput, relativePath));
+    return { relativePath, bytes: bytes.length, sha256: contentSha256(bytes), content: bytes };
   }));
-  const unsupportedFiles = relativeFiles.filter((relativePath) => !relativePath.toLowerCase().endsWith('.md'));
+  const sourceFingerprint = fingerprintNotionExport(fileEvidence);
+  const markdownPaths = fileEvidence
+    .filter(file => file.relativePath.toLowerCase().endsWith('.md'))
+    .map(file => file.relativePath);
+  const plan = buildNotionMarkdownImportPlan(markdownPaths);
+  const evidenceByPath = new Map(fileEvidence.map(file => [file.relativePath, file]));
+  const payloads = plan.map((entry) => {
+    const evidence = evidenceByPath.get(entry.relativePath);
+    const content = new TextDecoder('utf-8', { fatal: true }).decode(evidence.content);
+    return { ...entry, content, contentSha256: evidence.sha256, title: titleFromRelativePath(entry.relativePath) };
+  });
+  const unsupportedFiles = fileEvidence
+    .filter(file => !file.relativePath.toLowerCase().endsWith('.md'))
+    .map(({ relativePath, bytes, sha256 }) => ({ relativePath, bytes, sha256 }));
 
   const report = {
     format: 'ashbi-notion-markdown-import-report',
-    version: 2,
+    version: 3,
     generatedAt: new Date().toISOString(),
     mode: dryRun ? 'dry-run' : 'live',
     organization: { id: organization.id, name: organization.name },
     project: { id: project.id, name: project.name },
-    input: { directory: resolvedInput, markdownFiles: payloads.length, unsupportedFiles },
+    input: { directory: resolvedInput, files: fileEvidence.length, markdownFiles: payloads.length, unsupportedFiles },
+    sourceFingerprint,
     notes: { planned: 0, created: 0, unchanged: 0, conflicts: 0, skipped: 0 },
     hierarchy: { planned: [], unresolved: [] },
     records: { created: 0, existing: 0 },
@@ -159,19 +183,38 @@ async function main() {
       if (report.errors.length > 0 || unsupportedFiles.length > 0) {
         throw new Error('Live import cannot complete with unresolved reconciliation findings');
       }
+      report.complete = true;
+      report.planFingerprint = fingerprintNotionPlan({ sourceFingerprint, report });
+      const approved = JSON.parse(await fs.readFile(path.resolve(approvedSummaryFile), 'utf8'));
+      assertApprovedNotionDryRun(approved, {
+        organizationId, projectId, sourceFingerprint, planFingerprint: report.planFingerprint,
+      });
     });
   }
 
   report.complete = report.errors.length === 0 && unsupportedFiles.length === 0;
+  report.planFingerprint ||= fingerprintNotionPlan({ sourceFingerprint, report });
   const serialized = `${JSON.stringify(report, null, 2)}\n`;
-  if (summaryFile) {
-    const target = path.resolve(summaryFile);
-    await fs.writeFile(target, serialized, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
-    await fs.chmod(target, 0o600);
-    report.summaryFile = target;
-  }
+  await summaryHandle.truncate(0);
+  await summaryHandle.writeFile(serialized, 'utf8');
+  await fs.chmod(summaryTarget, 0o600);
+  summaryWritten = true;
+  report.summaryFile = summaryTarget;
   console.log(JSON.stringify(report, null, 2));
   if (dryRun) console.log('Dry run complete. Review the report, retain a backup, and rerun with --confirm only after reconciliation approval.');
 }
 
-main().catch((error) => { console.error(`Notion import failed: ${error.message}`); process.exitCode = 1; }).finally(() => prisma.$disconnect());
+main().catch(async (error) => {
+  console.error(`Notion import failed: ${error.message}`);
+  if (!summaryWritten) {
+    await summaryHandle.truncate(0);
+    await summaryHandle.writeFile(`${JSON.stringify({
+      generatedAt: new Date().toISOString(), mode: dryRun ? 'dry-run' : 'live', state: 'FAILED', complete: false,
+      reasonCode: 'IMPORT_FAILED',
+    }, null, 2)}\n`, 'utf8');
+  }
+  process.exitCode = 1;
+}).finally(async () => {
+  await summaryHandle.close();
+  await prisma.$disconnect();
+});

@@ -41,12 +41,22 @@ report remains incomplete until they are reviewed and resolved.
 
 4. Review the exact planned hierarchy, unchanged records, conflicts,
    unsupported files, and errors. Do not proceed if the report is incomplete.
-5. After a human reconciliation approval, repeat with `--confirm` and a new
-   report filename. The live writes run in one database transaction and roll
-   back completely if any reconciliation finding is encountered.
+5. After a human reconciliation approval, repeat with `--confirm`, the exact
+   reviewed dry-run report, and a new report filename:
+
+   ```text
+   node scripts/import-notion-markdown.js --organization-id <id> --project-id <id> --input-dir <Notion-export> --confirm --approved-summary <reviewed-dry-run-report.json> --summary-file <new-live-report.json>
+   ```
+
+   The importer verifies the tenant, project, SHA-256 fingerprint of every
+   exported file, and the destination plan. The live writes run in one database
+   transaction and roll back completely if the source, plan, or any
+   reconciliation finding differs from the approved dry run.
 6. Rerun the same dry-run, compare record/note counts and hierarchy, then
    perform the authenticated editing and recovery checks before retiring the
    Notion workspace.
 
-The report file is created once with owner-only permissions. Do not reuse or
-overwrite a prior report; retain it with the related backup evidence.
+The report file is reserved before database work and created once with
+owner-only permissions. Do not reuse or overwrite a prior report; retain it
+with the exact source export, approved dry run, confirmed report, and related
+backup evidence.
