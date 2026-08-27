@@ -51,6 +51,17 @@ test('Bonsai importer does not treat near-matching time or expense rows as recon
   assert.match(expenseBlock, /category', 'billable'/);
 });
 
+test('Bonsai importer never drops unresolved client or project identity', async () => {
+  const source = await readFile(fullImporter, 'utf8');
+  const timeBlock = source.slice(source.indexOf('// STEP 4: TIME ENTRIES'), source.indexOf('// STEP 5: EXPENSES'));
+  assert.doesNotMatch(timeBlock, /Try to find any project with this title/);
+  assert.doesNotMatch(timeBlock, /prisma\.project\.findFirst/);
+  assert.match(timeBlock, /no exact client\/project match/);
+  const expenseBlock = source.slice(source.indexOf('// STEP 5: EXPENSES'));
+  assert.match(expenseBlock, /no client match/);
+  assert.match(expenseBlock, /no exact client\/project match/);
+});
+
 test('Bonsai reconciliation reports are owner-only, never overwrite evidence, and follow a committed import', async () => {
   const source = await readFile(fullImporter, 'utf8');
   assert.match(source, /fs\.openSync\(summaryDestination, 'wx', 0o600\)/);

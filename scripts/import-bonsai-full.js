@@ -757,25 +757,10 @@ async function runImport(prisma) {
       continue;
     }
 
-    const projectId = resolveProjectId(clientName, projectTitle);
-    if (!projectId) {
-      // Try to find any project with this title
-      const fallback = await prisma.project.findFirst({
-        where: { organizationId: ORGANIZATION_ID, name: { equals: projectTitle, mode: 'insensitive' } },
-      });
-      if (!fallback) {
-        stats.timeEntries.skipped++;
-        stats.errors.push(`TimeEntry: no project match for "${projectTitle}" / "${clientName}"`);
-        continue;
-      }
-    }
-
-    const resolvedProjectId = projectId || (await prisma.project.findFirst({
-      where: { organizationId: ORGANIZATION_ID, name: { equals: projectTitle, mode: 'insensitive' } },
-    }))?.id;
-
+    const resolvedProjectId = resolveProjectId(clientName, projectTitle);
     if (!resolvedProjectId) {
       stats.timeEntries.skipped++;
+      stats.errors.push(`TimeEntry: no exact client/project match for "${projectTitle}" / "${clientName}"`);
       continue;
     }
 
@@ -901,10 +886,24 @@ async function runImport(prisma) {
     }
 
     const clientId = clientName ? resolveClientId(clientName) : null;
-    // Try to resolve project
+    if (clientName && !clientId) {
+      stats.expenses.skipped++;
+      stats.errors.push(`Expense "${description.substring(0, 40)}": no client match for "${clientName}"`);
+      continue;
+    }
     let projectId = null;
-    if (projectName && clientName) {
+    if (projectName) {
+      if (!clientName) {
+        stats.expenses.skipped++;
+        stats.errors.push(`Expense "${description.substring(0, 40)}": no exact client/project match for "${projectName}"`);
+        continue;
+      }
       projectId = resolveProjectId(clientName, projectName);
+      if (!projectId) {
+        stats.expenses.skipped++;
+        stats.errors.push(`Expense "${description.substring(0, 40)}": no exact client/project match for "${projectName}" / "${clientName}"`);
+        continue;
+      }
     }
 
     try {
