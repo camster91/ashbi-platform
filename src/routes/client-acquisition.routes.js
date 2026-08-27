@@ -1,6 +1,10 @@
 import { createPublicInquiry, PublicInquiryError } from '../services/public-inquiry.service.js';
 import { summarizeLeadAcquisition } from '../services/lead-acquisition-summary.service.js';
 import {
+  createWeeklyGrowthReviewTask,
+  GrowthReviewTaskError,
+} from '../services/growth-review-task.service.js';
+import {
   convertQualifiedLead,
   LeadQualificationError,
   promoteQualifiedLeadToDeal,
@@ -9,6 +13,7 @@ import {
 import {
   leadIdParamsSchema,
   leadAcquisitionSummaryQuerySchema,
+  growthReviewTaskSchema,
   leadListQuerySchema,
   leadQualificationSchema,
   leadPromotionSchema,
@@ -149,6 +154,26 @@ export default async function clientAcquisitionRoutes(fastify, options) {
     prisma: request.prisma ?? fastify.prisma,
     days: request.query.days,
   }));
+
+  fastify.post('/leads/growth-review-task', {
+    onRequest: [fastify.authenticate],
+    preHandler: [staffOnly, validateBody(growthReviewTaskSchema)],
+  }, async (request, reply) => {
+    try {
+      const result = await createWeeklyGrowthReviewTask({
+        prisma: request.prisma,
+        organizationId: request.user.organizationId,
+        actorUserId: request.user.id,
+        ...request.body,
+      });
+      return reply.status(result.idempotent ? 200 : 201).send(result);
+    } catch (error) {
+      if (error instanceof GrowthReviewTaskError) {
+        return reply.status(error.statusCode).send({ error: error.message, code: error.code });
+      }
+      throw error;
+    }
+  });
 
   fastify.get('/leads/:id', {
     onRequest: [fastify.authenticate],

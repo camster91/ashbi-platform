@@ -1441,6 +1441,28 @@ export const leadAcquisitionSummaryQuerySchema = z.object({
   days: z.coerce.number().int().min(7).max(365).optional(),
 }).strict();
 
+export const growthReviewTaskSchema = z.object({
+  projectId: cuidId,
+  assigneeId: cuidId,
+  weekOf: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  action: z.string().trim().min(10).max(500),
+  dueDate: z.string().datetime(),
+}).strict().superRefine((value, context) => {
+  const weekStart = new Date(`${value.weekOf}T00:00:00.000Z`);
+  const [year, month, day] = value.weekOf.split('-').map(Number);
+  const isCalendarDate = !Number.isNaN(weekStart.getTime())
+    && weekStart.getUTCFullYear() === year
+    && weekStart.getUTCMonth() + 1 === month
+    && weekStart.getUTCDate() === day;
+  if (!isCalendarDate || weekStart.getUTCDay() !== 1) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['weekOf'], message: 'Week must start on Monday' });
+    return;
+  }
+  if (new Date(value.dueDate) < weekStart) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['dueDate'], message: 'Due date cannot precede the review week' });
+  }
+});
+
 export const leadIdParamsSchema = z.object({ id: cuidId }).strict();
 
 export const leadQualificationSchema = z.object({

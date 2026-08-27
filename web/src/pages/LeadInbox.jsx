@@ -74,6 +74,18 @@ function toLocalDateTimeInput(value) {
   return `${date.getFullYear()}-${part(date.getMonth() + 1)}-${part(date.getDate())}T${part(date.getHours())}:${part(date.getMinutes())}`;
 }
 
+function growthReviewDefaults(now = new Date()) {
+  const monday = new Date(now);
+  const daysSinceMonday = (monday.getDay() + 6) % 7;
+  monday.setDate(monday.getDate() - daysSinceMonday);
+  monday.setHours(0, 0, 0, 0);
+  const friday = new Date(monday);
+  friday.setDate(friday.getDate() + 4);
+  friday.setHours(17, 0, 0, 0);
+  const weekOf = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`;
+  return { weekOf, dueDate: toLocalDateTimeInput(friday) };
+}
+
 function isOverdue(lead) {
   return FOLLOW_UP_STATUSES.has(lead.status)
     && lead.nextActionDueAt
@@ -101,6 +113,14 @@ export default function LeadInbox() {
   const [showPromotion, setShowPromotion] = useState(false);
   const [confirmPromotion, setConfirmPromotion] = useState(false);
   const [promotion, setPromotion] = useState({ name: '', stageId: '', value: '', currency: '' });
+  const [showGrowthReview, setShowGrowthReview] = useState(false);
+  const [growthReview, setGrowthReview] = useState(() => ({
+    projectId: '',
+    assigneeId: '',
+    action: '',
+    ...growthReviewDefaults(),
+  }));
+  const [growthTask, setGrowthTask] = useState(null);
   const queryClient = useQueryClient();
   const toast = useToast();
 
@@ -116,6 +136,18 @@ export default function LeadInbox() {
     refetchInterval: 60000,
   });
   const summary = summaryQuery.data;
+  const growthProjectsQuery = useQuery({
+    queryKey: ['projects', 'growth-review'],
+    queryFn: () => api.getProjects().then((response) => response?.projects ?? []),
+    enabled: showGrowthReview,
+  });
+  const growthTeamQuery = useQuery({
+    queryKey: ['team', 'growth-review'],
+    queryFn: () => api.getTeam(),
+    enabled: showGrowthReview,
+  });
+  const growthProjects = growthProjectsQuery.data || [];
+  const growthOwners = (growthTeamQuery.data || []).filter((member) => member.isActive && ['ADMIN', 'TEAM'].includes(member.role));
 
   useEffect(() => {
     if (selectedId && !leads.some((lead) => lead.id === selectedId)) setSelectedId(null);
@@ -212,6 +244,25 @@ export default function LeadInbox() {
     },
   });
 
+  const growthTaskMutation = useMutation({
+    mutationFn: () => api.createWeeklyGrowthReviewTask({
+      projectId: growthReview.projectId,
+      assigneeId: growthReview.assigneeId,
+      weekOf: growthReview.weekOf,
+      action: growthReview.action.trim(),
+      dueDate: new Date(growthReview.dueDate).toISOString(),
+    }),
+    onSuccess: (result) => {
+      setGrowthTask(result.task);
+      setShowGrowthReview(false);
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      toast.success(
+        result.idempotent ? 'Weekly growth task already exists' : 'Weekly growth task created',
+        'The action, owner, due date, and recorded acquisition evidence are together in the Hub.',
+      );
+    },
+  });
+
   const canReviewPromotion = Boolean(
     promotion.name.trim()
     && promotion.stageId
@@ -223,6 +274,17 @@ export default function LeadInbox() {
   const canSaveReview = hasDecisionEvidence
     && (!FOLLOW_UP_STATUSES.has(reviewStatus) || (nextAction.trim() && nextActionDueAt))
     && (reviewStatus !== 'DISQUALIFIED' || Boolean(qualificationReasonCode));
+  const growthWeekIsMonday = growthReview.weekOf
+    && new Date(`${growthReview.weekOf}T00:00:00.000Z`).getUTCDay() === 1;
+  const canCreateGrowthTask = Boolean(
+    summary
+    && growthReview.projectId
+    && growthReview.assigneeId
+    && growthWeekIsMonday
+    && growthReview.action.trim().length >= 10
+    && growthReview.dueDate
+    && !Number.isNaN(new Date(growthReview.dueDate).getTime()),
+  );
 
   return (
     <div className="space-y-6">
@@ -337,6 +399,69 @@ export default function LeadInbox() {
             </Card>
           </div>
         )}
+        <Card className="p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h3 className="font-semibold text-foreground">Weekly growth action</h3>
+              <p className="mt-1 text-sm text-muted-foreground">Turn this review into one owned Hub task with fresh 30-day and 90-day evidence.</p>
+            </div>
+            {!showGrowthReview && !growthTask && (
+              <Button variant="outline" onClick={() => setShowGrowthReview(true)}>Plan weekly action</Button>
+            )}
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">Internal task only. This does not send outreach, publish content, change ad spend, or call a provider.</p>
+
+          {growthTask && (
+            <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 dark:border-emerald-900 dark:bg-emerald-950/20">
+              <p className="text-sm font-medium text-emerald-800 dark:text-emerald-300">This week’s growth action is recorded.</p>
+              <Link to={`/task/${growthTask.id}`} className="mt-2 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                Open task in the Hub<ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
+            </div>
+          )}
+
+          {showGrowthReview && (
+            <form
+              className="mt-4 grid gap-4 sm:grid-cols-2"
+              onSubmit={(event) => { event.preventDefault(); growthTaskMutation.mutate(); }}
+            >
+              <div>
+                <label htmlFor="growth-review-project" className="mb-1 block text-sm font-medium text-foreground">Growth project</label>
+                <select id="growth-review-project" value={growthReview.projectId} onChange={(event) => setGrowthReview((current) => ({ ...current, projectId: event.target.value }))} className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground">
+                  <option value="">Select the Hub project</option>
+                  {growthProjects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="growth-review-owner" className="mb-1 block text-sm font-medium text-foreground">Owner</label>
+                <select id="growth-review-owner" value={growthReview.assigneeId} onChange={(event) => setGrowthReview((current) => ({ ...current, assigneeId: event.target.value }))} className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground">
+                  <option value="">Select one owner</option>
+                  {growthOwners.map((member) => <option key={member.id} value={member.id}>{member.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="growth-review-week" className="mb-1 block text-sm font-medium text-foreground">Week of Monday</label>
+                <input id="growth-review-week" type="date" value={growthReview.weekOf} onChange={(event) => setGrowthReview((current) => ({ ...current, weekOf: event.target.value }))} className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground" />
+                {!growthWeekIsMonday && <p className="mt-1 text-xs text-destructive">Choose the Monday that starts the review week.</p>}
+              </div>
+              <div>
+                <label htmlFor="growth-review-due" className="mb-1 block text-sm font-medium text-foreground">Due</label>
+                <input id="growth-review-due" type="datetime-local" value={growthReview.dueDate} onChange={(event) => setGrowthReview((current) => ({ ...current, dueDate: event.target.value }))} className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground" />
+              </div>
+              <div className="sm:col-span-2">
+                <label htmlFor="growth-review-action" className="mb-1 block text-sm font-medium text-foreground">One acquisition action</label>
+                <textarea id="growth-review-action" rows={3} maxLength={500} value={growthReview.action} onChange={(event) => setGrowthReview((current) => ({ ...current, action: event.target.value }))} placeholder="Prepare one evidence-backed case study for approval" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground" />
+              </div>
+              {(growthProjectsQuery.isError || growthTeamQuery.isError || growthTaskMutation.isError) && (
+                <p role="alert" className="sm:col-span-2 text-sm text-destructive">{growthTaskMutation.error?.message || growthProjectsQuery.error?.message || growthTeamQuery.error?.message}</p>
+              )}
+              <div className="flex flex-col gap-3 sm:col-span-2 sm:flex-row sm:justify-end">
+                <Button type="button" variant="ghost" onClick={() => setShowGrowthReview(false)}>Cancel</Button>
+                <Button type="submit" loading={growthTaskMutation.isPending} disabled={!canCreateGrowthTask}>Create growth task</Button>
+              </div>
+            </form>
+          )}
+        </Card>
       </section>
 
       {listQuery.isLoading ? (

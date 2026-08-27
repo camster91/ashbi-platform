@@ -187,6 +187,8 @@ export const api = {
     const query = new URLSearchParams(params).toString();
     return request(`/client-acquisition/leads/summary${query ? `?${query}` : ''}`);
   },
+  createWeeklyGrowthReviewTask: (data) =>
+    request('/client-acquisition/leads/growth-review-task', { method: 'POST', body: data }),
   getQualifiedLead: (id) =>
     request(`/client-acquisition/leads/${id}`),
   updateLeadQualification: (id, data) =>

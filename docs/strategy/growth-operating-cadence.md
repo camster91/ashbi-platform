@@ -15,7 +15,9 @@ Use the staff **Inquiries** workspace and complete the review in this order:
 3. Compare **Demand by service**, **Lead sources**, and **Current stages** with the **Last 90 days** window to distinguish a recent signal from the broader recorded pattern.
 4. Review each new inquiry for fit, assign one account owner, and record one dated next human action before moving it into an active stage.
 5. Select one primary acquisition action for the coming week. Examples include one evidence-backed case-study draft, one service-page improvement, one approved Upwork proposal batch, or one bounded prospecting experiment.
-6. Create the resulting work as owned Hub tasks under the internal Growth project. Do not create a parallel spreadsheet or free-standing task list.
+6. Use **Weekly growth action** to create the resulting work as one owned Hub task under the internal Growth project. Do not create a parallel spreadsheet or free-standing task list.
+
+The handoff permits one task per organization and Monday-starting week. An exact replay reuses the existing task; a different action for the same week is reported as a conflict instead of overwriting its evidence. The task records fresh 30-day and 90-day summaries, the action, owner, due date, and approval boundary. Code presence or a generated task does not prove that a weekly review occurred; the review counts only after the team actually completes the evidence steps above.
 
 ## Required decision record
 

@@ -329,6 +329,7 @@ model Task {
   dueDate        DateTime?
   completedAt    DateTime?
   sourceThreadId String?
+  growthReviewKey String?  @unique
   blockedBy      String?
   aiGenerated    Boolean   @default(false)
   position       Int       @default(0) // For Kanban board ordering
