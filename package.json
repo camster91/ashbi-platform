@@ -40,6 +40,7 @@
     "drill:credential-rotation": "node scripts/drill-credential-rotation.mjs",
     "check:credential-key-config": "node scripts/check-credential-key-config.mjs",
     "check:sandbox-readiness": "node scripts/check-sandbox-readiness.mjs",
+    "check:bonsai-cutover": "node scripts/check-bonsai-cutover-readiness.mjs",
     "test:all": "node scripts/run-node-tests.mjs src/tests/unit src/tests/integration",
     "test:e2e:setup": "bash tests/e2e/setup.sh",
     "test:e2e:teardown": "bash tests/e2e/teardown.sh",

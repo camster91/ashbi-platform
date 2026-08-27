@@ -42,4 +42,16 @@ The confirmed import refuses to start without the reviewed report. It rolls back
 5. Retain the source export, both reports, database backup, checksums, exception decisions, and reviewer sign-off.
 6. Retire Bonsai only after Cameron explicitly approves the financial cutover at action time.
 
+## Machine-verified cutover gate
+
+Copy [bonsai-cutover-manifest.example.json](bonsai-cutover-manifest.example.json) into the owner-only evidence directory and replace every pending value with reviewed evidence. Keep every referenced artifact beneath that directory and record its SHA-256 checksum. Then run:
+
+```text
+npm run check:bonsai-cutover -- --manifest <owner-only-evidence-directory>/cutover-manifest.json
+```
+
+The command is read-only. It verifies the agreed parallel duration, complete operating and financial record scope, zero unresolved discrepancies, separate currency evidence, the full Stripe/email sandbox journey, backups and isolated restore, Cameron's post-evidence approval, the required artifact inventory, path containment, and every checksum. It reports only generic pass/fail messages and never disables Bonsai.
+
+A passing report is necessary but does not perform or authorize the cutover. Cameron must still approve the exact cancellation, downgrade, or system-of-record mutation at action time. Preserve the passing report with the evidence package.
+
 Historical Bonsai credit-card payments are classified as external/other evidence, not Ashbi Stripe payments. The importer does not estimate foreign exchange, combine CAD and USD, or infer customer tier from mixed-currency revenue.
