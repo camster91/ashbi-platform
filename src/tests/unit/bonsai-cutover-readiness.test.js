@@ -16,6 +16,7 @@ const REQUIRED_ARTIFACTS = [
   'bonsai-source-export',
   'bonsai-clients-csv',
   'bonsai-projects-csv',
+  'bonsai-tasks-json',
   'bonsai-time-entries-csv',
   'bonsai-expenses-csv',
   'bonsai-invoices-csv',
@@ -26,6 +27,7 @@ const REQUIRED_ARTIFACTS = [
   'notion-import-confirmed',
   'parallel-reconciliation',
   'operations-reconciliation',
+  'tasks-reconciliation',
   'stripe-sandbox',
   'email-sandbox',
   'revenue-evidence-export',
@@ -40,11 +42,17 @@ function fixture() {
   const bonsaiInvoicesContent = Buffer.from('invoice_number,status,currency,total_amount\nINV-001,paid,CAD,113.00\n');
   const bonsaiClientsContent = Buffer.from('Client,Contact Email\nAcme,owner@acme.ca\n');
   const bonsaiProjectsContent = Buffer.from('project_id,title,client_or_company_name,status\n123,Acme Website,Acme,active\n');
+  const bonsaiTasksPayload = {
+    format: 'bonsai-task-snapshot', version: 1, scope: 'all', complete: true,
+    capturedAt: '2026-08-15T18:15:00.000Z', tasks: [],
+  };
+  const bonsaiTasksContent = Buffer.from(JSON.stringify(bonsaiTasksPayload));
   const bonsaiTimeEntriesContent = Buffer.from('client_name,project_title,owner_name,date,formatted_time\nAcme,Acme Website,Cameron,2026-08-01,01:00:00\n');
   const bonsaiExpensesContent = Buffer.from('name,amount_after_tax,currency,date\nFigma,20.00,CAD,2026-08-02\n');
   const bonsaiInvoicesSha256 = crypto.createHash('sha256').update(bonsaiInvoicesContent).digest('hex');
   const bonsaiClientsSha256 = crypto.createHash('sha256').update(bonsaiClientsContent).digest('hex');
   const bonsaiProjectsSha256 = crypto.createHash('sha256').update(bonsaiProjectsContent).digest('hex');
+  const bonsaiTasksSha256 = crypto.createHash('sha256').update(bonsaiTasksContent).digest('hex');
   const bonsaiTimeEntriesSha256 = crypto.createHash('sha256').update(bonsaiTimeEntriesContent).digest('hex');
   const bonsaiExpensesSha256 = crypto.createHash('sha256').update(bonsaiExpensesContent).digest('hex');
   const emptyRecords = Object.fromEntries(REVENUE_EVIDENCE_COLLECTIONS.map(collection => [collection, []]));
@@ -101,6 +109,22 @@ function fixture() {
       )),
     },
   };
+  const tasksPayload = {
+    format: 'ashbi-bonsai-task-reconciliation', version: 1, complete: true,
+    organizationId: 'org-1', completedAt: '2026-08-15T19:00:00.000Z', unresolvedFindings: 0,
+    summary: { sourceTasks: 0, hubBonsaiTasks: 0, matchedTasks: 0 }, findings: [],
+    sourceEvidence: {
+      tasksSha256: bonsaiTasksSha256, taskRows: 0,
+      capturedAt: bonsaiTasksPayload.capturedAt, scope: 'all',
+    },
+    workspaceEvidence: {
+      artifactSha256: workspaceArtifactSha256,
+      recordsSha256: workspaceManifest.recordsSha256,
+      collectionCounts: Object.fromEntries(WORKSPACE_EXPORT_V3_COLLECTIONS.map(
+        collection => [collection, workspaceManifest.collections[collection].count],
+      )),
+    },
+  };
   const artifacts = REQUIRED_ARTIFACTS.map((id) => {
     const relativePath = `${id}.json`;
     const content = id === 'revenue-evidence-export'
@@ -111,6 +135,8 @@ function fixture() {
           ? bonsaiClientsContent
           : id === 'bonsai-projects-csv'
             ? bonsaiProjectsContent
+            : id === 'bonsai-tasks-json'
+              ? bonsaiTasksContent
             : id === 'bonsai-time-entries-csv'
               ? bonsaiTimeEntriesContent
               : id === 'bonsai-expenses-csv'
@@ -121,6 +147,8 @@ function fixture() {
           ? parallelPayload
           : id === 'operations-reconciliation'
             ? operationsPayload
+            : id === 'tasks-reconciliation'
+              ? tasksPayload
             : { id, synthetic: true }));
     fs.writeFileSync(path.join(directory, relativePath), content);
     return { id, path: relativePath, sha256: crypto.createHash('sha256').update(content).digest('hex') };
@@ -365,6 +393,24 @@ test('cutover evaluator rejects an operating report that omits time and expense 
   }
 });
 
+test('cutover evaluator binds task reconciliation to the exact complete Bonsai task snapshot', () => {
+  const { directory, manifest } = fixture();
+  const artifact = manifest.artifacts.find(item => item.id === 'tasks-reconciliation');
+  const reportPath = path.join(directory, artifact.path);
+  const payload = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+  payload.sourceEvidence.tasksSha256 = 'f'.repeat(64);
+  const content = Buffer.from(JSON.stringify(payload));
+  fs.writeFileSync(reportPath, content);
+  artifact.sha256 = crypto.createHash('sha256').update(content).digest('hex');
+  try {
+    const report = evaluateBonsaiCutoverReadiness({ manifest, manifestDirectory: directory });
+    assert.equal(report.ready, false);
+    assert.equal(report.checks.find((check) => check.id === 'task-reconciliation-binding').ok, false);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('cutover evaluator never reads evidence outside the manifest directory', () => {
   const { directory, manifest } = fixture();
   manifest.artifacts[0].path = '../outside.json';
@@ -384,6 +430,7 @@ test('cutover command is read-only and package-addressable', () => {
   const examplePath = path.join(process.cwd(), 'docs', 'bonsai-cutover-manifest.example.json');
   const reconciliationExamplePath = path.join(process.cwd(), 'docs', 'parallel-reconciliation.example.json');
   const operationsExamplePath = path.join(process.cwd(), 'docs', 'operations-reconciliation.example.json');
+  const tasksExamplePath = path.join(process.cwd(), 'docs', 'task-reconciliation.example.json');
   assert.doesNotMatch(script, /writeFile|appendFile|rmSync|unlink|fetch\(|prisma|stripe\.|mailgun\./i);
   assert.match(packageJson, /"check:bonsai-cutover": "node scripts\/check-bonsai-cutover-readiness\.mjs"/);
   assert.match(migrationRunbook, /npm run check:bonsai-cutover -- --manifest/);
@@ -397,4 +444,7 @@ test('cutover command is read-only and package-addressable', () => {
   const operationsExample = JSON.parse(fs.readFileSync(operationsExamplePath, 'utf8'));
   assert.equal(operationsExample.format, 'ashbi-bonsai-operations-reconciliation');
   assert.deepEqual(Object.keys(operationsExample.workspaceEvidence.collectionCounts), WORKSPACE_EXPORT_V3_COLLECTIONS);
+  const tasksExample = JSON.parse(fs.readFileSync(tasksExamplePath, 'utf8'));
+  assert.equal(tasksExample.format, 'ashbi-bonsai-task-reconciliation');
+  assert.deepEqual(Object.keys(tasksExample.workspaceEvidence.collectionCounts), WORKSPACE_EXPORT_V3_COLLECTIONS);
 });

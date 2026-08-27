@@ -1,0 +1,25 @@
+{
+  "format": "bonsai-task-snapshot",
+  "version": 1,
+  "scope": "all",
+  "complete": false,
+  "capturedAt": null,
+  "tasks": [
+    {
+      "uuid": "REPLACE_WITH_BONSAI_TASK_UUID",
+      "title": "Example task",
+      "project_id": 123,
+      "project_title": "Example project",
+      "assignee_member_name": "Example owner",
+      "due_date": null,
+      "start_date": null,
+      "completed_at": null,
+      "archived_at": null,
+      "priority": null,
+      "task_status": {
+        "status": "To Do",
+        "state": "active"
+      }
+    }
+  ]
+}

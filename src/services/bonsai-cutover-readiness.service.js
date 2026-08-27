@@ -20,6 +20,7 @@ const REQUIRED_ARTIFACT_IDS = [
   'bonsai-source-export',
   'bonsai-clients-csv',
   'bonsai-projects-csv',
+  'bonsai-tasks-json',
   'bonsai-time-entries-csv',
   'bonsai-expenses-csv',
   'bonsai-invoices-csv',
@@ -30,6 +31,7 @@ const REQUIRED_ARTIFACT_IDS = [
   'notion-import-confirmed',
   'parallel-reconciliation',
   'operations-reconciliation',
+  'tasks-reconciliation',
   'stripe-sandbox',
   'email-sandbox',
   'revenue-evidence-export',
@@ -193,6 +195,46 @@ function operationsReconciliationIsBound({ artifacts, manifestDirectory, organiz
     && completedAt <= evidenceCompletedAt;
 }
 
+function taskReconciliationIsBound({ artifacts, manifestDirectory, organizationId, reconciliation, evidenceCompletedAt }) {
+  const taskReport = readContainedJsonArtifact(artifacts, 'tasks-reconciliation', manifestDirectory);
+  const workspacePayload = readContainedJsonArtifact(artifacts, 'workspace-export', manifestDirectory);
+  const artifact = id => Array.isArray(artifacts) ? artifacts.find(item => item?.id === id) : null;
+  const tasksArtifact = artifact('bonsai-tasks-json');
+  const workspaceArtifact = artifact('workspace-export');
+  if (!taskReport || !workspacePayload || !tasksArtifact || !workspaceArtifact) return false;
+  const completedAt = timestamp(taskReport.completedAt);
+  const capturedAt = timestamp(taskReport.sourceEvidence?.capturedAt);
+  const exportedAt = timestamp(workspacePayload.exportedAt);
+  const countsMatch = workspaceExportCollections(workspacePayload.version).every(collection => (
+    Number.isInteger(taskReport.workspaceEvidence?.collectionCounts?.[collection])
+      && taskReport.workspaceEvidence.collectionCounts[collection]
+        === workspacePayload.manifest?.collections?.[collection]?.count
+  ));
+  return taskReport.format === 'ashbi-bonsai-task-reconciliation'
+    && taskReport.version === 1
+    && taskReport.complete === true
+    && taskReport.organizationId === organizationId
+    && taskReport.unresolvedFindings === reconciliation.unresolvedFindings
+    && taskReport.unresolvedFindings === 0
+    && taskReport.sourceEvidence?.tasksSha256 === tasksArtifact.sha256
+    && Number.isInteger(taskReport.sourceEvidence?.taskRows)
+    && taskReport.sourceEvidence.taskRows >= 0
+    && taskReport.sourceEvidence?.scope === 'all'
+    && taskReport.workspaceEvidence?.artifactSha256 === workspaceArtifact.sha256
+    && taskReport.workspaceEvidence?.recordsSha256 === workspacePayload.manifest?.recordsSha256
+    && workspacePayload.organization?.id === organizationId
+    && workspacePayload.version === 3
+    && verifyWorkspaceExport(workspacePayload).valid
+    && countsMatch
+    && capturedAt !== null
+    && exportedAt !== null
+    && completedAt !== null
+    && evidenceCompletedAt !== null
+    && completedAt >= capturedAt
+    && completedAt >= exportedAt
+    && completedAt <= evidenceCompletedAt;
+}
+
 export function evaluateBonsaiCutoverReadiness({ manifest = {}, manifestDirectory } = {}) {
   const parallel = manifest.parallelRun ?? {};
   const reconciliation = manifest.reconciliation ?? {};
@@ -296,6 +338,18 @@ export function evaluateBonsaiCutoverReadiness({ manifest = {}, manifestDirector
       }),
       'Client and project reconciliation is bound to the exact Bonsai sources and tenant workspace export.',
       'Reconcile the exact Bonsai client/project sources against the tenant workspace export and bind every checksum and collection count.',
+    ),
+    check(
+      'task-reconciliation-binding',
+      taskReconciliationIsBound({
+        artifacts: manifest.artifacts,
+        manifestDirectory,
+        organizationId: manifest.organizationId,
+        reconciliation,
+        evidenceCompletedAt,
+      }),
+      'Task reconciliation is bound to a complete all-scope Bonsai snapshot and the exact tenant workspace export.',
+      'Reconcile a complete all-scope Bonsai task snapshot against the exact tenant workspace export.',
     ),
     check(
       'recovery',

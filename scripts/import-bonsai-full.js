@@ -3,8 +3,8 @@
 /**
  * Bonsai → Agency Hub Full Import Script
  *
- * Imports: Clients, Contacts, Projects, Invoices, Time Entries, Expenses
- * from Bonsai CSV exports into the Agency Hub database.
+ * Imports: Clients, Contacts, Projects, Tasks, Invoices, Time Entries, Expenses
+ * from Bonsai CSV exports plus a complete authenticated task snapshot.
  *
  * Usage:
  *   node scripts/import-bonsai-full.js --dry-run --organization-id <id> --csv-dir ./bonsai-export --summary-file ./reconciliation.json
@@ -14,6 +14,7 @@
  * never automatically overwritten. Natural/source identities are checked on:
  *   - Clients: by email or name
  *   - Projects: by bonsaiProjectId
+ *   - Tasks: by Bonsai UUID stored in task properties
  *   - Invoices: by invoiceNumber
  *   - Time entries: by date + project + duration + user
  *   - Expenses: by description + date + amount
@@ -48,6 +49,7 @@ const CSV_DIR = path.resolve(readOption('--csv-dir', process.env.BONSAI_CSV_DIR 
 const SUMMARY_FILE = readOption('--summary-file');
 const APPROVED_SUMMARY_FILE = readOption('--approved-summary');
 const ORGANIZATION_ID = readOption('--organization-id', process.env.IMPORT_ORGANIZATION_ID);
+const TASK_SNAPSHOT_FILE = readOption('--tasks-json', process.env.BONSAI_TASK_SNAPSHOT);
 
 if (DRY_RUN && CONFIRM_LIVE) {
   console.error('Choose exactly one import mode: --dry-run or --confirm.');
@@ -67,6 +69,10 @@ if (!DRY_RUN && !APPROVED_SUMMARY_FILE) {
 }
 if (!SUMMARY_FILE) {
   console.error('Refusing import without --summary-file. Migration evidence is required.');
+  process.exit(2);
+}
+if (!TASK_SNAPSHOT_FILE) {
+  console.error('Refusing import without --tasks-json pointing to a complete all-scope Bonsai task snapshot.');
   process.exit(2);
 }
 
@@ -142,6 +148,36 @@ function mapInvoiceStatus(bonsaiStatus) {
   }
 }
 
+function mapTaskStatus(task) {
+  const state = (task?.task_status?.state || '').trim().toLowerCase();
+  const label = (task?.task_status?.status || '').trim().toLowerCase();
+  if (state === 'complete') return 'COMPLETED';
+  if (state !== 'active') return null;
+  if (label.includes('blocked') || label.includes('waiting')) return 'BLOCKED';
+  if (label.includes('progress') || label === 'doing') return 'IN_PROGRESS';
+  return 'PENDING';
+}
+
+function mapTaskPriority(priority) {
+  switch ((priority || '').trim().toLowerCase()) {
+    case 'urgent': return 'CRITICAL';
+    case 'high': return 'HIGH';
+    case 'medium': return 'NORMAL';
+    case 'low': return 'LOW';
+    case '': return 'NORMAL';
+    default: return null;
+  }
+}
+
+function parseTaskProperties(value) {
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 function mapPaymentMethod(bonsaiMethod) {
   switch (bonsaiMethod?.toLowerCase()) {
     case 'credit_card': return 'OTHER';
@@ -198,6 +234,7 @@ const stats = {
   clients: { created: 0, existing: 0, skipped: 0 },
   contacts: { created: 0, existing: 0 },
   projects: { created: 0, existing: 0, skipped: 0 },
+  tasks: { created: 0, existing: 0, skipped: 0 },
   invoices: { created: 0, existing: 0, skipped: 0 },
   lineItems: { created: 0 },
   timeEntries: { created: 0, existing: 0, skipped: 0 },
@@ -242,9 +279,23 @@ async function runImport(prisma) {
     readCSV('expenses.csv'),
     readCSV('addresses.csv'),
   ]);
+  const taskSnapshotPath = path.resolve(TASK_SNAPSHOT_FILE);
+  const taskSnapshotBytes = fs.readFileSync(taskSnapshotPath);
+  const taskSnapshot = JSON.parse(taskSnapshotBytes.toString('utf8'));
+  if (taskSnapshot?.format !== 'bonsai-task-snapshot' || taskSnapshot?.version !== 1
+    || taskSnapshot?.scope !== 'all' || taskSnapshot?.complete !== true || !Array.isArray(taskSnapshot?.tasks)
+    || !parseDate(taskSnapshot?.capturedAt)) {
+    throw new TypeError('A complete all-scope Bonsai task snapshot version 1 with capturedAt is required');
+  }
+  const tasksRaw = taskSnapshot.tasks;
+  inputInventory.push({
+    filename: 'bonsai-tasks.json', path: taskSnapshotPath, present: true, rows: tasksRaw.length,
+    sha256: crypto.createHash('sha256').update(taskSnapshotBytes).digest('hex'), headers: [],
+  });
 
   console.log(`  clients.csv: ${clientsRaw.length} rows`);
   console.log(`  projects.csv: ${projectsRaw.length} rows`);
+  console.log(`  bonsai-tasks.json: ${tasksRaw.length} rows`);
   console.log(`  invoices.csv: ${invoicesRaw.length} rows`);
   console.log(`  time-entries.csv: ${timeEntriesRaw.length} rows`);
   console.log(`  expenses.csv: ${expensesRaw.length} rows`);
@@ -592,8 +643,121 @@ async function runImport(prisma) {
     return projectLookup.get(key) || null;
   }
 
+  // Resolve historical owners only within this organization. External sources
+  // never create login-capable accounts; unknown owners remain unresolved for
+  // tasks and are attributed to the importer only for historical time rows.
+  const userRecordCache = new Map();
+  const organizationUsers = await prisma.user.findMany({ where: { organizationId: ORGANIZATION_ID } });
+
+  async function findUser(ownerName) {
+    const key = (ownerName || '').trim().toLowerCase();
+    if (!key) return null;
+    if (userRecordCache.has(key)) return userRecordCache.get(key);
+    const exact = organizationUsers.filter(user => (user.name || '').trim().toLowerCase() === key);
+    const firstName = key.includes('cameron') ? 'cameron'
+      : key.includes('bianca') ? 'bianca' : key.split(/\s+/)[0];
+    const candidates = exact.length > 0 ? exact : organizationUsers.filter(
+      user => (user.name || '').trim().toLowerCase().split(/\s+/).includes(firstName),
+    );
+    const user = candidates.length === 1 ? candidates[0] : null;
+    userRecordCache.set(key, user || null);
+    return user || null;
+  }
+
   // ============================================================
-  // STEP 3: INVOICES
+  // STEP 3: TASKS
+  // ============================================================
+  console.log('\n✅ Importing Tasks...');
+  const existingTasks = await prisma.task.findMany({
+    where: { project: { organizationId: ORGANIZATION_ID }, deletedAt: null },
+  });
+  const tasksByBonsaiId = new Map();
+  for (const task of existingTasks) {
+    const sourceId = String(parseTaskProperties(task.properties).bonsaiTaskId || '').trim();
+    if (!sourceId) continue;
+    if (tasksByBonsaiId.has(sourceId)) {
+      stats.errors.push(`Task ${sourceId}: duplicate Hub Bonsai task identity`);
+      continue;
+    }
+    tasksByBonsaiId.set(sourceId, task);
+  }
+  const seenTaskIds = new Set();
+  for (const task of tasksRaw) {
+    const sourceId = String(task.uuid || '').trim();
+    const title = String(task.title || '').trim();
+    const projectSourceId = String(task.project_id || '').trim();
+    if (!sourceId || !title) {
+      stats.tasks.skipped++;
+      stats.errors.push(`Task "${title}": missing source UUID or title`);
+      continue;
+    }
+    if (seenTaskIds.has(sourceId)) {
+      stats.tasks.skipped++;
+      stats.errors.push(`Task ${sourceId}: duplicate Bonsai source identity`);
+      continue;
+    }
+    seenTaskIds.add(sourceId);
+    const projectId = projectIdMap.get(projectSourceId);
+    if (!projectSourceId || !projectId) {
+      stats.tasks.skipped++;
+      stats.errors.push(`Task "${title}": no exact Bonsai project ID match (${projectSourceId || 'projectless'})`);
+      continue;
+    }
+    if (task.archived_at) {
+      stats.tasks.skipped++;
+      stats.errors.push(`Task "${title}": archived source task requires an explicit retention decision`);
+      continue;
+    }
+    const status = mapTaskStatus(task);
+    const priority = mapTaskPriority(task.priority);
+    const startDate = task.start_date ? parseDate(task.start_date) : null;
+    const dueDate = task.due_date ? parseDate(task.due_date) : null;
+    const completedAt = task.completed_at ? parseDate(task.completed_at) : null;
+    if (!status || !priority || (task.start_date && !startDate) || (task.due_date && !dueDate)
+      || (task.completed_at && !completedAt)) {
+      stats.tasks.skipped++;
+      stats.errors.push(`Task "${title}": unsupported status, priority, or date evidence`);
+      continue;
+    }
+    const ownerName = String(task.assignee_member_name || '').trim();
+    const owner = ownerName ? await findUser(ownerName) : null;
+    if (ownerName && !owner) {
+      stats.tasks.skipped++;
+      stats.errors.push(`Task "${title}": no exact organization owner match for "${ownerName}"`);
+      continue;
+    }
+    const taskData = {
+      title,
+      description: String(task.description_plain_text || '').trim() || null,
+      status,
+      priority,
+      projectId,
+      assigneeId: owner?.id || null,
+      startDate,
+      dueDate,
+      completedAt,
+      properties: JSON.stringify({ bonsaiTaskId: sourceId }),
+    };
+    const existing = tasksByBonsaiId.get(sourceId);
+    if (existing) {
+      const differences = sourceDifferences(taskData, existing, [
+        'title', 'description', 'status', 'priority', 'projectId', 'assigneeId',
+        'startDate', 'dueDate', 'completedAt',
+      ]);
+      if (differences.length > 0) {
+        stats.errors.push(`Task "${title}": Existing Hub record differs in ${differences.join(', ')}; manual reconciliation required`);
+      }
+      stats.tasks.existing++;
+      continue;
+    }
+    if (!DRY_RUN) await prisma.task.create({ data: taskData });
+    stats.tasks.created++;
+    if (DRY_RUN && stats.tasks.created <= 10) console.log(`  [would create] ${title}`);
+  }
+  console.log(`  ✅ Tasks: ${stats.tasks.created} created, ${stats.tasks.existing} existing, ${stats.tasks.skipped} skipped`);
+
+  // ============================================================
+  // STEP 4: INVOICES
   // ============================================================
   console.log('\n💰 Importing Invoices...');
   const seenInvoiceNumbers = new Set();
@@ -722,44 +886,24 @@ async function runImport(prisma) {
   console.log(`  ✅ Line Items: ${stats.lineItems.created} created`);
 
   // ============================================================
-  // STEP 4: TIME ENTRIES
+  // STEP 5: TIME ENTRIES
   // ============================================================
   console.log('\n⏱️  Importing Time Entries...');
 
   // Resolve historical owners only within this organization. External exports
   // must not create login-capable accounts; unmatched owners remain attributed
   // to the importer and are visible in the reconciliation summary.
-  const userCache = new Map(); // owner_name(lower) → userId
   const seenTimeEntryKeys = new Set();
 
   async function resolveUserId(ownerName) {
-    const key = (ownerName || '').trim().toLowerCase();
-    if (userCache.has(key)) return userCache.get(key);
+    const ownerKey = (ownerName || '').trim();
+    const user = await findUser(ownerName);
 
-    let user = null;
-    if (key.includes('cameron')) {
-      user = await prisma.user.findFirst({
-        where: { organizationId: ORGANIZATION_ID, OR: [{ name: { contains: 'Cameron', mode: 'insensitive' } }, { email: { contains: 'cameron' } }] },
-      });
-    } else if (key.includes('bianca')) {
-      user = await prisma.user.findFirst({
-        where: { organizationId: ORGANIZATION_ID, OR: [{ name: { contains: 'Bianca', mode: 'insensitive' } }, { email: { contains: 'bianca' } }] },
-      });
-    }
-
-    if (!user) {
-      // Try generic match
-      user = await prisma.user.findFirst({
-        where: { organizationId: ORGANIZATION_ID, name: { contains: ownerName.split(' ')[0], mode: 'insensitive' } },
-      });
-    }
-
-    if (!user && key) {
+    if (!user && ownerKey) {
       stats.owners.mappedToImporter++;
       console.log(`  [owner mapped to importer] ${ownerName}`);
     }
     const id = user?.id || adminUser.id;
-    userCache.set(key, id);
     return id;
   }
 
@@ -859,7 +1003,7 @@ async function runImport(prisma) {
   console.log(`  ✅ Time Entries: ${stats.timeEntries.created} created, ${stats.timeEntries.existing} existing, ${stats.timeEntries.skipped} skipped`);
 
   // ============================================================
-  // STEP 5: EXPENSES
+  // STEP 6: EXPENSES
   // ============================================================
   console.log('\n💸 Importing Expenses...');
   const seenExpenseKeys = new Set();
@@ -1009,6 +1153,7 @@ async function runImport(prisma) {
   console.log(`  Clients:      ${stats.clients.created} new, ${stats.clients.existing} matched, ${stats.clients.skipped} skipped`);
   console.log(`  Contacts:     ${stats.contacts.created} new, ${stats.contacts.existing} existing`);
   console.log(`  Projects:     ${stats.projects.created} new, ${stats.projects.existing} matched, ${stats.projects.skipped} skipped`);
+  console.log(`  Tasks:        ${stats.tasks.created} new, ${stats.tasks.existing} matched, ${stats.tasks.skipped} skipped`);
   console.log(`  Invoices:     ${stats.invoices.created} new, ${stats.invoices.existing} existing, ${stats.invoices.skipped} skipped`);
   console.log(`  Line Items:   ${stats.lineItems.created} new`);
   console.log(`  Time Entries: ${stats.timeEntries.created} new, ${stats.timeEntries.existing} existing, ${stats.timeEntries.skipped} skipped`);

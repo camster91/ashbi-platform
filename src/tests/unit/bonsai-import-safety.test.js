@@ -10,6 +10,7 @@ test('Bonsai full importer requires an explicit tenant and scopes imported recor
   assert.match(source, /--organization-id/);
   assert.match(source, /--approved-summary/);
   assert.match(source, /--summary-file/);
+  assert.match(source, /--tasks-json/);
   assert.match(source, /IMPORT_ORGANIZATION_ID/);
   assert.match(source, /organizationId: ORGANIZATION_ID/);
   const expenseCreate = source.slice(source.indexOf('await prisma.expense.create'), source.indexOf('stats.expenses.created'));
@@ -28,6 +29,18 @@ test('confirmed Bonsai imports are atomic and reject unresolved reconciliation e
   assert.match(source, /if \(!DRY_RUN && stats\.errors\.length > 0\)/);
 });
 
+test('Bonsai importer treats tasks as source-bound evidence and never guesses project or owner identity', async () => {
+  const source = await readFile(fullImporter, 'utf8');
+  const taskBlock = source.slice(source.indexOf('// STEP 3: TASKS'), source.indexOf('// STEP 4: INVOICES'));
+  assert.match(taskBlock, /bonsaiTaskId/);
+  assert.match(taskBlock, /no exact Bonsai project ID match/);
+  assert.match(taskBlock, /no exact organization owner match/);
+  assert.match(taskBlock, /archived source task requires an explicit retention decision/);
+  assert.match(taskBlock, /Existing Hub record differs/);
+  assert.doesNotMatch(taskBlock, /prisma\.project\.findFirst/);
+  assert.doesNotMatch(taskBlock, /prisma\.user\.create/);
+});
+
 test('Bonsai importer uses exact CSV number parsing and retains malformed money as findings', async () => {
   const source = await readFile(fullImporter, 'utf8');
   assert.match(source, /import \{ parseBonsaiMoney, parseBonsaiDecimal \}/);
@@ -40,11 +53,11 @@ test('Bonsai importer uses exact CSV number parsing and retains malformed money 
 
 test('Bonsai importer does not treat near-matching time or expense rows as reconciled', async () => {
   const source = await readFile(fullImporter, 'utf8');
-  const timeBlock = source.slice(source.indexOf('// STEP 4: TIME ENTRIES'), source.indexOf('// STEP 5: EXPENSES'));
+  const timeBlock = source.slice(source.indexOf('// STEP 5: TIME ENTRIES'), source.indexOf('// STEP 6: EXPENSES'));
   assert.match(timeBlock, /sourceDifferences\(timeEntryData, existing/);
   assert.match(timeBlock, /description', 'billable', 'hourlyRate', 'source'/);
   assert.match(timeBlock, /Existing Hub record differs/);
-  const expenseBlock = source.slice(source.indexOf('// STEP 5: EXPENSES'));
+  const expenseBlock = source.slice(source.indexOf('// STEP 6: EXPENSES'));
   assert.match(expenseBlock, /currency,/);
   assert.match(expenseBlock, /projectId: projectId \|\| null/);
   assert.match(expenseBlock, /sourceDifferences\(expenseData, existing/);
@@ -53,11 +66,11 @@ test('Bonsai importer does not treat near-matching time or expense rows as recon
 
 test('Bonsai importer never drops unresolved client or project identity', async () => {
   const source = await readFile(fullImporter, 'utf8');
-  const timeBlock = source.slice(source.indexOf('// STEP 4: TIME ENTRIES'), source.indexOf('// STEP 5: EXPENSES'));
+  const timeBlock = source.slice(source.indexOf('// STEP 5: TIME ENTRIES'), source.indexOf('// STEP 6: EXPENSES'));
   assert.doesNotMatch(timeBlock, /Try to find any project with this title/);
   assert.doesNotMatch(timeBlock, /prisma\.project\.findFirst/);
   assert.match(timeBlock, /no exact client\/project match/);
-  const expenseBlock = source.slice(source.indexOf('// STEP 5: EXPENSES'));
+  const expenseBlock = source.slice(source.indexOf('// STEP 6: EXPENSES'));
   assert.match(expenseBlock, /no client match/);
   assert.match(expenseBlock, /no exact client\/project match/);
 });
