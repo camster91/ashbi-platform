@@ -803,6 +803,16 @@ async function runImport(prisma) {
         continue;
       }
       seenTimeEntryKeys.add(timeEntrySourceKey);
+      const timeEntryData = {
+        description: notes || `${projectTitle} work`,
+        duration,
+        date,
+        billable,
+        hourlyRate: rate || null,
+        projectId: resolvedProjectId,
+        userId,
+        source: 'BONSAI_IMPORT',
+      };
 
       // Dedup: same project + user + date + duration
       const existing = await prisma.timeEntry.findFirst({
@@ -815,22 +825,19 @@ async function runImport(prisma) {
       });
 
       if (existing) {
+        const differences = sourceDifferences(timeEntryData, existing, [
+          'description', 'billable', 'hourlyRate', 'source',
+        ]);
+        if (differences.length > 0) {
+          stats.errors.push(`TimeEntry "${projectTitle}" ${dateStr}: Existing Hub record differs in ${differences.join(', ')}; manual reconciliation required`);
+        }
         stats.timeEntries.existing++;
         continue;
       }
 
       if (!DRY_RUN) {
         await prisma.timeEntry.create({
-          data: {
-            description: notes || `${projectTitle} work`,
-            duration,
-            date,
-            billable,
-            hourlyRate: rate || null,
-            projectId: resolvedProjectId,
-            userId,
-            source: 'BONSAI_IMPORT',
-          },
+          data: timeEntryData,
         });
       }
 
@@ -908,18 +915,34 @@ async function runImport(prisma) {
         continue;
       }
       seenExpenseKeys.add(expenseSourceKey);
-      // Dedup: same description + date + amount
+      const expenseData = {
+        description,
+        amount,
+        currency,
+        category,
+        date,
+        billable,
+        clientId: clientId || null,
+        projectId: projectId || null,
+      };
+      // Dedup by the complete source identity, not a partial financial match.
       const existing = await prisma.expense.findFirst({
         where: {
           organizationId: ORGANIZATION_ID,
           description,
           date,
           amount,
-          clientId: clientId || undefined,
+          currency,
+          clientId: clientId || null,
+          projectId: projectId || null,
         },
       });
 
       if (existing) {
+        const differences = sourceDifferences(expenseData, existing, ['category', 'billable']);
+        if (differences.length > 0) {
+          stats.errors.push(`Expense "${description.substring(0, 40)}": Existing Hub record differs in ${differences.join(', ')}; manual reconciliation required`);
+        }
         stats.expenses.skipped++;
         continue;
       }
@@ -928,14 +951,7 @@ async function runImport(prisma) {
         await prisma.expense.create({
           data: {
             organizationId: ORGANIZATION_ID,
-            description,
-            amount,
-            currency,
-            category,
-            date,
-            billable,
-            clientId: clientId || undefined,
-            projectId: projectId || undefined,
+            ...expenseData,
           },
         });
       }

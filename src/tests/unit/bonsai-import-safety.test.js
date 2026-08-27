@@ -38,6 +38,19 @@ test('Bonsai importer uses exact CSV number parsing and retains malformed money 
   assert.match(source, /expense amount is malformed/);
 });
 
+test('Bonsai importer does not treat near-matching time or expense rows as reconciled', async () => {
+  const source = await readFile(fullImporter, 'utf8');
+  const timeBlock = source.slice(source.indexOf('// STEP 4: TIME ENTRIES'), source.indexOf('// STEP 5: EXPENSES'));
+  assert.match(timeBlock, /sourceDifferences\(timeEntryData, existing/);
+  assert.match(timeBlock, /description', 'billable', 'hourlyRate', 'source'/);
+  assert.match(timeBlock, /Existing Hub record differs/);
+  const expenseBlock = source.slice(source.indexOf('// STEP 5: EXPENSES'));
+  assert.match(expenseBlock, /currency,/);
+  assert.match(expenseBlock, /projectId: projectId \|\| null/);
+  assert.match(expenseBlock, /sourceDifferences\(expenseData, existing/);
+  assert.match(expenseBlock, /category', 'billable'/);
+});
+
 test('Bonsai reconciliation reports are owner-only, never overwrite evidence, and follow a committed import', async () => {
   const source = await readFile(fullImporter, 'utf8');
   assert.match(source, /fs\.openSync\(summaryDestination, 'wx', 0o600\)/);
