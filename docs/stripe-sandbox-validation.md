@@ -8,6 +8,8 @@ Prove the Hub can replace Bonsai's payment path without guessing currency or tax
 
 ## Preconditions
 
+Prepare and replay-check the bounded synthetic operating records using [sandbox-workspace-bootstrap.md](sandbox-workspace-bootstrap.md) before beginning the provider journey.
+
 1. Use a dedicated Stripe sandbox and an authorized synthetic Ashbi client; never use a real client or live-mode key.
 2. Back up the target database and record the revision and rollback procedure.
 3. Review and apply the committed Hub migrations in that sandbox, including `stripeCheckoutAttempt`.

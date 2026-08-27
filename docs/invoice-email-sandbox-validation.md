@@ -10,6 +10,8 @@ cutover.
 
 ## Approval and setup gates
 
+Prepare and replay-check the bounded synthetic operating records using [sandbox-workspace-bootstrap.md](sandbox-workspace-bootstrap.md) before beginning the provider journey.
+
 Before any provider call, obtain Cameron's action-time approval for the exact
 sandbox sender, recipient, invoice, and test window. Use a dedicated sandbox
 mailbox and Mailgun test configuration. Apply the reviewed migration only in an
