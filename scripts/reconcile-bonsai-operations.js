@@ -28,6 +28,8 @@ function parseCsv(bytes) {
 
 const organizationId = option('--organization-id');
 const clientsPath = option('--bonsai-clients');
+const connectionsPath = option('--bonsai-connections');
+const invoicesPath = option('--bonsai-invoices');
 const projectsPath = option('--bonsai-projects');
 const timeEntriesPath = option('--bonsai-time-entries');
 const expensesPath = option('--bonsai-expenses');
@@ -35,14 +37,17 @@ const workspacePath = option('--workspace-export');
 const completedAt = option('--completed-at');
 const outputPath = option('--output');
 
-if (!organizationId || !clientsPath || !projectsPath || !workspacePath || !completedAt || !outputPath) {
-  console.error('Usage: npm run reconcile:bonsai-operations -- --organization-id <id> --bonsai-clients <clients.csv> --bonsai-projects <projects.csv> [--bonsai-time-entries <time-entries.csv> --bonsai-expenses <expenses.csv>] --workspace-export <workspace.json> --completed-at <ISO> --output <new-report.json>');
+if (!organizationId || (!clientsPath && !connectionsPath) || (clientsPath && connectionsPath)
+  || !projectsPath || !workspacePath || !completedAt || !outputPath || (connectionsPath && !invoicesPath)) {
+  console.error('Usage: npm run reconcile:bonsai-operations -- --organization-id <id> (--bonsai-connections <connections.csv> --bonsai-invoices <invoices.csv> | --bonsai-clients <legacy-clients.csv>) --bonsai-projects <projects.csv> [--bonsai-time-entries <time-entries.csv> --bonsai-expenses <expenses.csv>] --workspace-export <workspace.json> --completed-at <ISO> --output <new-report.json>');
   process.exitCode = 2;
 } else {
   let output;
   try {
     output = fs.openSync(path.resolve(outputPath), 'wx', 0o600);
-    const clientsBytes = fs.readFileSync(path.resolve(clientsPath));
+    const clientsBytes = clientsPath ? fs.readFileSync(path.resolve(clientsPath)) : null;
+    const connectionsBytes = connectionsPath ? fs.readFileSync(path.resolve(connectionsPath)) : null;
+    const invoicesBytes = invoicesPath ? fs.readFileSync(path.resolve(invoicesPath)) : null;
     const projectsBytes = fs.readFileSync(path.resolve(projectsPath));
     const workspaceBytes = fs.readFileSync(path.resolve(workspacePath));
     const workspaceExport = JSON.parse(workspaceBytes.toString('utf8'));
@@ -54,12 +59,16 @@ if (!organizationId || !clientsPath || !projectsPath || !workspacePath || !compl
     const report = reconcileBonsaiOperations({
       organizationId,
       completedAt,
-      bonsaiClientsSha256: sha256(clientsBytes),
+      bonsaiClientsSha256: clientsBytes ? sha256(clientsBytes) : undefined,
+      bonsaiConnectionsSha256: connectionsBytes ? sha256(connectionsBytes) : undefined,
+      bonsaiConnectionInvoicesSha256: invoicesBytes ? sha256(invoicesBytes) : undefined,
       bonsaiProjectsSha256: sha256(projectsBytes),
       bonsaiTimeEntriesSha256: timeEntriesBytes ? sha256(timeEntriesBytes) : undefined,
       bonsaiExpensesSha256: expensesBytes ? sha256(expensesBytes) : undefined,
       workspaceArtifactSha256: sha256(workspaceBytes),
-      bonsaiClientRows: await parseCsv(clientsBytes),
+      bonsaiClientRows: clientsBytes ? await parseCsv(clientsBytes) : undefined,
+      bonsaiConnectionRows: connectionsBytes ? await parseCsv(connectionsBytes) : undefined,
+      bonsaiInvoiceRows: invoicesBytes ? await parseCsv(invoicesBytes) : undefined,
       bonsaiProjectRows: await parseCsv(projectsBytes),
       bonsaiTimeEntryRows: timeEntriesBytes ? await parseCsv(timeEntriesBytes) : undefined,
       bonsaiExpenseRows: expensesBytes ? await parseCsv(expensesBytes) : undefined,

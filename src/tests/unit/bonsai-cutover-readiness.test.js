@@ -14,7 +14,7 @@ import {
 
 const REQUIRED_ARTIFACTS = [
   'bonsai-source-export',
-  'bonsai-clients-csv',
+  'bonsai-connections-csv',
   'bonsai-projects-csv',
   'bonsai-tasks-json',
   'bonsai-time-entries-csv',
@@ -40,7 +40,7 @@ const REQUIRED_ARTIFACTS = [
 function fixture() {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ashbi-cutover-'));
   const bonsaiInvoicesContent = Buffer.from('invoice_number,status,currency,total_amount\nINV-001,paid,CAD,113.00\n');
-  const bonsaiClientsContent = Buffer.from('Client,Contact Email\nAcme,owner@acme.ca\n');
+  const bonsaiConnectionsContent = Buffer.from('Name,Email,Domain\nAcme,owner@acme.ca,acme.ca\n');
   const bonsaiProjectsContent = Buffer.from('project_id,title,client_or_company_name,status\n123,Acme Website,Acme,active\n');
   const bonsaiTasksPayload = {
     format: 'bonsai-task-snapshot', version: 1, scope: 'all', complete: true,
@@ -50,7 +50,7 @@ function fixture() {
   const bonsaiTimeEntriesContent = Buffer.from('client_name,project_title,owner_name,date,formatted_time\nAcme,Acme Website,Cameron,2026-08-01,01:00:00\n');
   const bonsaiExpensesContent = Buffer.from('name,amount_after_tax,currency,date\nFigma,20.00,CAD,2026-08-02\n');
   const bonsaiInvoicesSha256 = crypto.createHash('sha256').update(bonsaiInvoicesContent).digest('hex');
-  const bonsaiClientsSha256 = crypto.createHash('sha256').update(bonsaiClientsContent).digest('hex');
+  const bonsaiConnectionsSha256 = crypto.createHash('sha256').update(bonsaiConnectionsContent).digest('hex');
   const bonsaiProjectsSha256 = crypto.createHash('sha256').update(bonsaiProjectsContent).digest('hex');
   const bonsaiTasksSha256 = crypto.createHash('sha256').update(bonsaiTasksContent).digest('hex');
   const bonsaiTimeEntriesSha256 = crypto.createHash('sha256').update(bonsaiTimeEntriesContent).digest('hex');
@@ -93,10 +93,11 @@ function fixture() {
     },
   };
   const operationsPayload = {
-    format: 'ashbi-bonsai-operations-reconciliation', version: 2, complete: true,
+    format: 'ashbi-bonsai-operations-reconciliation', version: 3, complete: true,
     organizationId: 'org-1', completedAt: '2026-08-15T19:00:00.000Z', unresolvedFindings: 0,
     sourceEvidence: {
-      clientsSha256: bonsaiClientsSha256, clientRows: 1,
+      connectionsSha256: bonsaiConnectionsSha256, connectionRows: 1,
+      connectionInvoicesSha256: bonsaiInvoicesSha256, connectionInvoiceRows: 1,
       projectsSha256: bonsaiProjectsSha256, projectRows: 1,
       timeEntriesSha256: bonsaiTimeEntriesSha256, timeEntryRows: 1,
       expensesSha256: bonsaiExpensesSha256, expenseRows: 1,
@@ -131,8 +132,8 @@ function fixture() {
       ? revenueContent
       : id === 'workspace-export'
         ? workspaceContent
-        : id === 'bonsai-clients-csv'
-          ? bonsaiClientsContent
+        : id === 'bonsai-connections-csv'
+          ? bonsaiConnectionsContent
           : id === 'bonsai-projects-csv'
             ? bonsaiProjectsContent
             : id === 'bonsai-tasks-json'
@@ -318,12 +319,12 @@ test('cutover evaluator binds parallel reconciliation to the exact Bonsai invoic
   }
 });
 
-test('cutover evaluator binds operating reconciliation to the exact Bonsai client source', () => {
+test('cutover evaluator binds operating reconciliation to the exact Bonsai Connections source', () => {
   const { directory, manifest } = fixture();
   const artifact = manifest.artifacts.find(item => item.id === 'operations-reconciliation');
   const reportPath = path.join(directory, artifact.path);
   const payload = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
-  payload.sourceEvidence.clientsSha256 = 'd'.repeat(64);
+  payload.sourceEvidence.connectionsSha256 = 'd'.repeat(64);
   const content = Buffer.from(JSON.stringify(payload));
   fs.writeFileSync(reportPath, content);
   artifact.sha256 = crypto.createHash('sha256').update(content).digest('hex');

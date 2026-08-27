@@ -1,5 +1,6 @@
 import { verifyWorkspaceExport, workspaceExportCollections } from './workspace-export-integrity.service.js';
 import { parseBonsaiMoney } from './bonsaiCsvValues.service.js';
+import { mapBonsaiConnections } from './bonsaiConnectionMapper.service.js';
 
 const PROJECT_STATUS_MAP = Object.freeze({
   active: 'DESIGN_DEV',
@@ -81,11 +82,15 @@ export function reconcileBonsaiOperations({
   organizationId,
   completedAt,
   bonsaiClientsSha256,
+  bonsaiConnectionsSha256,
+  bonsaiConnectionInvoicesSha256,
   bonsaiProjectsSha256,
   bonsaiTimeEntriesSha256,
   bonsaiExpensesSha256,
   workspaceArtifactSha256,
   bonsaiClientRows,
+  bonsaiConnectionRows,
+  bonsaiInvoiceRows,
   bonsaiProjectRows,
   bonsaiTimeEntryRows,
   bonsaiExpenseRows,
@@ -100,13 +105,25 @@ export function reconcileBonsaiOperations({
   if (Number.isNaN(completed.getTime())) throw new TypeError('completedAt must be a valid date');
   if (Number.isNaN(exported.getTime())) throw new TypeError('workspace export must include a valid exportedAt');
   if (completed < exported) throw new TypeError('completedAt must not predate the workspace export');
-  if (!Array.isArray(bonsaiClientRows) || !Array.isArray(bonsaiProjectRows)) throw new TypeError('Bonsai source rows must be arrays');
+  const usesConnectionExport = Array.isArray(bonsaiConnectionRows);
+  if ((!usesConnectionExport && !Array.isArray(bonsaiClientRows)) || !Array.isArray(bonsaiProjectRows)) {
+    throw new TypeError('Bonsai source rows must be arrays');
+  }
+  if (usesConnectionExport && !Array.isArray(bonsaiInvoiceRows)) {
+    throw new TypeError('Connections reconciliation requires Bonsai invoice rows');
+  }
   const includesOperatingLedger = workspaceExport.version === 3;
   if (includesOperatingLedger && (!Array.isArray(bonsaiTimeEntryRows) || !Array.isArray(bonsaiExpenseRows))) {
     throw new TypeError('Version 3 reconciliation requires Bonsai time-entry and expense rows');
   }
-  const clientRows = bonsaiClientRows.filter(row => !shouldSkipClient(row.Client));
+  const clientRows = usesConnectionExport ? [] : bonsaiClientRows.filter(row => !shouldSkipClient(row.Client));
   const projectRows = bonsaiProjectRows.filter(row => !shouldSkipClient(row.client_or_company_name) && normalized(row.title));
+  const connectionMapping = usesConnectionExport ? mapBonsaiConnections({
+    connectionRows: bonsaiConnectionRows,
+    projectRows: bonsaiProjectRows,
+    invoiceRows: bonsaiInvoiceRows,
+    shouldSkipClient,
+  }) : null;
 
   const hubClientGroups = new Map();
   for (const client of workspaceExport.records.clients) {
@@ -125,11 +142,24 @@ export function reconcileBonsaiOperations({
     hubProjectGroups.set(sourceId, [...(hubProjectGroups.get(sourceId) ?? []), project]);
   }
   const projectsByBonsaiId = new Map([...hubProjectGroups].map(([sourceId, projects]) => [sourceId, projects[0]]));
-  const findings = [];
+  const findings = connectionMapping ? [...connectionMapping.findings] : [];
   const sourceClientGroups = new Map();
-  for (const row of clientRows) {
-    const name = normalized(row.Client);
-    sourceClientGroups.set(name, [...(sourceClientGroups.get(name) ?? []), row]);
+  if (connectionMapping) {
+    for (const mapped of connectionMapping.clients) {
+      sourceClientGroups.set(normalized(mapped.name), [{
+        Client: mapped.name,
+        'Contact Email': mapped.primaryConnection?.email || '',
+        mappedConnections: mapped.connections,
+        invoiceEmails: mapped.invoiceEmails,
+        mappedDomain: mapped.domain,
+        primaryConnection: mapped.primaryConnection,
+      }]);
+    }
+  } else {
+    for (const row of clientRows) {
+      const name = normalized(row.Client);
+      sourceClientGroups.set(name, [...(sourceClientGroups.get(name) ?? []), row]);
+    }
   }
   for (const row of projectRows) {
     const name = normalized(row.client_or_company_name);
@@ -160,6 +190,22 @@ export function reconcileBonsaiOperations({
     const hubEmail = [...hubEmails].sort()[0] ?? '';
     if (!client) {
       findings.push({ code: 'BONSAI_CLIENT_MISSING_IN_HUB', clientName: String(row.Client ?? '').trim() });
+    } else if (usesConnectionExport) {
+      const expectedEmails = new Set([
+        ...(row.mappedConnections ?? []).map(connection => normalized(connection.email)),
+        ...(row.invoiceEmails ?? []).map(normalized),
+      ].filter(Boolean));
+      const missingEmails = [...expectedEmails].filter(email => !hubEmails.has(email));
+      const primary = row.primaryConnection;
+      const mismatchedFields = [];
+      if (missingEmails.length > 0) mismatchedFields.push('contacts');
+      if (row.mappedDomain && normalized(client.domain) !== normalized(row.mappedDomain)) mismatchedFields.push('domain');
+      if (primary?.name && normalized(client.contactPerson) !== normalized(primary.name)) mismatchedFields.push('contactPerson');
+      if (mismatchedFields.length > 0) {
+        findings.push({ code: 'CLIENT_CONNECTION_MISMATCH', clientName: client.name, fields: mismatchedFields });
+      } else {
+        matchedClients += 1;
+      }
     } else if (bonsaiEmail && !hubEmails.has(bonsaiEmail)) {
       findings.push({ code: 'CLIENT_EMAIL_MISMATCH', clientName: client.name, bonsai: bonsaiEmail, hub: hubEmail || null });
     } else {
@@ -361,7 +407,7 @@ export function reconcileBonsaiOperations({
 
   return {
     format: 'ashbi-bonsai-operations-reconciliation',
-    version: includesOperatingLedger ? 2 : 1,
+    version: usesConnectionExport && includesOperatingLedger ? 3 : includesOperatingLedger ? 2 : 1,
     complete: findings.length === 0,
     organizationId,
     completedAt: completed.toISOString(),
@@ -372,6 +418,7 @@ export function reconcileBonsaiOperations({
       sourceProjects: projectRows.length,
       hubBonsaiProjects: [...hubProjectGroups.values()].reduce((sum, projects) => sum + projects.length, 0),
       matchedProjects,
+      ...(connectionMapping ? { connectionMapping: connectionMapping.summary } : {}),
       ...(includesOperatingLedger ? {
         sourceTimeEntries: relevantTimeRows.length,
         matchedTimeEntries,
@@ -381,8 +428,15 @@ export function reconcileBonsaiOperations({
     },
     findings,
     sourceEvidence: {
-      clientsSha256: requireSha256(bonsaiClientsSha256, 'bonsaiClientsSha256'),
-      clientRows: bonsaiClientRows.length,
+      ...(usesConnectionExport ? {
+        connectionsSha256: requireSha256(bonsaiConnectionsSha256, 'bonsaiConnectionsSha256'),
+        connectionRows: bonsaiConnectionRows.length,
+        connectionInvoicesSha256: requireSha256(bonsaiConnectionInvoicesSha256, 'bonsaiConnectionInvoicesSha256'),
+        connectionInvoiceRows: bonsaiInvoiceRows.length,
+      } : {
+        clientsSha256: requireSha256(bonsaiClientsSha256, 'bonsaiClientsSha256'),
+        clientRows: bonsaiClientRows.length,
+      }),
       projectsSha256: requireSha256(bonsaiProjectsSha256, 'bonsaiProjectsSha256'),
       projectRows: bonsaiProjectRows.length,
       ...(includesOperatingLedger ? {

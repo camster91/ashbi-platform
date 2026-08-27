@@ -18,7 +18,7 @@ const REQUIRED_RECORD_TYPES = [
 
 const REQUIRED_ARTIFACT_IDS = [
   'bonsai-source-export',
-  'bonsai-clients-csv',
+  'bonsai-connections-csv',
   'bonsai-projects-csv',
   'bonsai-tasks-json',
   'bonsai-time-entries-csv',
@@ -150,12 +150,13 @@ function operationsReconciliationIsBound({ artifacts, manifestDirectory, organiz
   const operationsReport = readContainedJsonArtifact(artifacts, 'operations-reconciliation', manifestDirectory);
   const workspacePayload = readContainedJsonArtifact(artifacts, 'workspace-export', manifestDirectory);
   const artifact = id => Array.isArray(artifacts) ? artifacts.find(item => item?.id === id) : null;
-  const clientsArtifact = artifact('bonsai-clients-csv');
+  const connectionsArtifact = artifact('bonsai-connections-csv');
+  const invoicesArtifact = artifact('bonsai-invoices-csv');
   const projectsArtifact = artifact('bonsai-projects-csv');
   const timeEntriesArtifact = artifact('bonsai-time-entries-csv');
   const expensesArtifact = artifact('bonsai-expenses-csv');
   const workspaceArtifact = artifact('workspace-export');
-  if (!operationsReport || !workspacePayload || !clientsArtifact || !projectsArtifact
+  if (!operationsReport || !workspacePayload || !connectionsArtifact || !invoicesArtifact || !projectsArtifact
     || !timeEntriesArtifact || !expensesArtifact || !workspaceArtifact) return false;
   const completedAt = timestamp(operationsReport.completedAt);
   const exportedAt = timestamp(workspacePayload.exportedAt);
@@ -165,7 +166,7 @@ function operationsReconciliationIsBound({ artifacts, manifestDirectory, organiz
         === workspacePayload.manifest?.collections?.[collection]?.count
   ));
   return operationsReport.format === 'ashbi-bonsai-operations-reconciliation'
-    && operationsReport.version === 2
+    && operationsReport.version === 3
     && operationsReport.complete === true
     && operationsReport.organizationId === organizationId
     && operationsReport.unresolvedFindings === reconciliation.unresolvedFindings
@@ -173,9 +174,12 @@ function operationsReconciliationIsBound({ artifacts, manifestDirectory, organiz
     && workspacePayload.organization?.id === organizationId
     && workspacePayload.version === 3
     && verifyWorkspaceExport(workspacePayload).valid
-    && operationsReport.sourceEvidence?.clientsSha256 === clientsArtifact.sha256
-    && Number.isInteger(operationsReport.sourceEvidence?.clientRows)
-    && operationsReport.sourceEvidence.clientRows >= 0
+    && operationsReport.sourceEvidence?.connectionsSha256 === connectionsArtifact.sha256
+    && Number.isInteger(operationsReport.sourceEvidence?.connectionRows)
+    && operationsReport.sourceEvidence.connectionRows >= 0
+    && operationsReport.sourceEvidence?.connectionInvoicesSha256 === invoicesArtifact.sha256
+    && Number.isInteger(operationsReport.sourceEvidence?.connectionInvoiceRows)
+    && operationsReport.sourceEvidence.connectionInvoiceRows >= 0
     && operationsReport.sourceEvidence?.projectsSha256 === projectsArtifact.sha256
     && Number.isInteger(operationsReport.sourceEvidence?.projectRows)
     && operationsReport.sourceEvidence.projectRows >= 0

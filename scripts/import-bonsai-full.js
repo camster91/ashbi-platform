@@ -7,8 +7,8 @@
  * from Bonsai CSV exports plus a complete authenticated task snapshot.
  *
  * Usage:
- *   node scripts/import-bonsai-full.js --dry-run --organization-id <id> --csv-dir ./bonsai-export --summary-file ./reconciliation.json
- *   node scripts/import-bonsai-full.js --confirm --organization-id <id> --csv-dir ./bonsai-export --approved-summary ./reviewed-dry-run.json --summary-file ./live-reconciliation.json
+ *   node scripts/import-bonsai-full.js --dry-run --organization-id <id> --csv-dir ./bonsai-export --connections-csv ./connection_export.csv --tasks-json ./tasks.json --summary-file ./reconciliation.json
+ *   node scripts/import-bonsai-full.js --confirm --organization-id <id> --csv-dir ./bonsai-export --connections-csv ./connection_export.csv --tasks-json ./tasks.json --approved-summary ./reviewed-dry-run.json --summary-file ./live-reconciliation.json
  *
  * Reconciliation-first and replay-safe. Existing Hub records are matched but
  * never automatically overwritten. Natural/source identities are checked on:
@@ -32,6 +32,7 @@ import { fileURLToPath } from 'url';
 import csvParser from 'csv-parser';
 import { assertApprovedBonsaiDryRun, fingerprintBonsaiPlan, fingerprintInputInventory, missingRequiredCsvHeaders, sourceDifferences } from '../src/services/bonsai-import-evidence.service.js';
 import { parseBonsaiMoney, parseBonsaiDecimal } from '../src/services/bonsaiCsvValues.service.js';
+import { mapBonsaiConnections } from '../src/services/bonsaiConnectionMapper.service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const prisma = new PrismaClient({
@@ -50,6 +51,7 @@ const SUMMARY_FILE = readOption('--summary-file');
 const APPROVED_SUMMARY_FILE = readOption('--approved-summary');
 const ORGANIZATION_ID = readOption('--organization-id', process.env.IMPORT_ORGANIZATION_ID);
 const TASK_SNAPSHOT_FILE = readOption('--tasks-json', process.env.BONSAI_TASK_SNAPSHOT);
+const CONNECTIONS_CSV_FILE = readOption('--connections-csv', process.env.BONSAI_CONNECTIONS_CSV);
 
 if (DRY_RUN && CONFIRM_LIVE) {
   console.error('Choose exactly one import mode: --dry-run or --confirm.');
@@ -100,13 +102,14 @@ function shouldSkipClient(name) {
 }
 
 // === CSV Reader ===
-function readCSV(filename) {
+function readCSV(filename, explicitPath = null, kind = filename) {
   return new Promise((resolve, reject) => {
     const results = [];
     let headers = [];
-    const filePath = path.join(CSV_DIR, filename);
+    const filePath = explicitPath ? path.resolve(explicitPath) : path.join(CSV_DIR, filename);
+    const evidenceFilename = explicitPath ? path.basename(filePath) : filename;
     if (!fs.existsSync(filePath)) {
-      inputInventory.push({ filename, path: filePath, present: false, rows: 0, sha256: null, headers: [] });
+      inputInventory.push({ filename: evidenceFilename, kind, path: filePath, present: false, rows: 0, sha256: null, headers: [] });
       console.log(`  ⚠ File not found: ${filePath}`);
       resolve([]);
       return;
@@ -118,7 +121,7 @@ function readCSV(filename) {
       .on('data', (row) => results.push(row))
       .on('end', () => {
         const sha256 = crypto.createHash('sha256').update(sourceBytes).digest('hex');
-        inputInventory.push({ filename, path: filePath, present: true, rows: results.length, sha256, headers });
+        inputInventory.push({ filename: evidenceFilename, kind, path: filePath, present: true, rows: results.length, sha256, headers });
         resolve(results);
       })
       .on('error', reject);
@@ -272,7 +275,7 @@ async function runImport(prisma) {
   // Load all CSVs
   console.log('📂 Loading CSVs...');
   const [clientsRaw, projectsRaw, invoicesRaw, timeEntriesRaw, expensesRaw, addressesRaw] = await Promise.all([
-    readCSV('clients.csv'),
+    readCSV('clients.csv', CONNECTIONS_CSV_FILE, 'connections'),
     readCSV('projects.csv'),
     readCSV('invoices.csv'),
     readCSV('time-entries.csv'),
@@ -293,7 +296,10 @@ async function runImport(prisma) {
     sha256: crypto.createHash('sha256').update(taskSnapshotBytes).digest('hex'), headers: [],
   });
 
-  console.log(`  clients.csv: ${clientsRaw.length} rows`);
+  const connectionInventory = inputInventory.find(file => file.kind === 'connections');
+  const usesConnectionExport = connectionInventory?.headers?.includes('Name')
+    && connectionInventory.headers.includes('Email');
+  console.log(`  ${connectionInventory?.filename || 'clients.csv'}: ${clientsRaw.length} rows`);
   console.log(`  projects.csv: ${projectsRaw.length} rows`);
   console.log(`  bonsai-tasks.json: ${tasksRaw.length} rows`);
   console.log(`  invoices.csv: ${invoicesRaw.length} rows`);
@@ -302,15 +308,19 @@ async function runImport(prisma) {
   console.log(`  addresses.csv: ${addressesRaw.length} rows`);
 
   const requiredHeaders = {
-    'clients.csv': ['Client'],
     'projects.csv': ['project_id', 'status', 'title', 'client_or_company_name'],
     'invoices.csv': ['status', 'total_amount', 'currency', 'invoice_number', 'client_or_company_name'],
     'time-entries.csv': ['date', 'hours', 'member', 'project', 'client'],
     'expenses.csv': ['date', 'name', 'currency', 'amount_after_tax', 'project', 'member', 'client'],
     'addresses.csv': ['Client'],
   };
+  const connectionHeaders = usesConnectionExport ? ['Name', 'Email', 'Domain'] : ['Client'];
+  const missingConnectionHeaders = missingRequiredCsvHeaders(connectionInventory?.headers, connectionHeaders);
+  if (missingConnectionHeaders.length > 0) {
+    stats.errors.push(`${connectionInventory?.filename || 'clients.csv'}: missing required CSV columns (${missingConnectionHeaders.join(', ')})`);
+  }
   for (const [filename, expected] of Object.entries(requiredHeaders)) {
-    const inventory = inputInventory.find(file => file.filename === filename);
+    const inventory = inputInventory.find(file => file.kind === filename || file.filename === filename);
     const missing = missingRequiredCsvHeaders(inventory?.headers, expected);
     if (missing.length > 0) {
       stats.errors.push(`${filename}: missing required CSV columns (${missing.join(', ')})`);
@@ -335,27 +345,59 @@ async function runImport(prisma) {
   // ============================================================
   console.log('\n👥 Importing Clients...');
 
-  // Merge client sources: clients.csv + unique names from invoices/projects
+  // Merge operational client evidence from the legacy client export or the
+  // modern mixed Connections export plus unique names from invoices/projects.
   const clientDataMap = new Map(); // normalized name → best data
 
-  // From clients.csv
-  for (const row of clientsRaw) {
-    const name = (row['Client'] || '').trim();
-    if (shouldSkipClient(name)) { stats.clients.skipped++; continue; }
-    const key = name.toLowerCase();
-    const sourceClient = {
-      name,
-      contactName: (row['Contact Name'] || '').trim(),
-      contactEmail: (row['Contact Email'] || '').trim().toLowerCase(),
-      phone: (row['Phone Number'] || '').trim(),
-      website: (row['Website'] || '').trim(),
-      tags: (row['Tags'] || '').trim(),
-    };
-    if (clientDataMap.has(key) && JSON.stringify(clientDataMap.get(key)) !== JSON.stringify(sourceClient)) {
-      stats.errors.push(`Client "${name}": duplicate source rows differ; manual reconciliation required`);
-      continue;
+  if (usesConnectionExport) {
+    const connectionMapping = mapBonsaiConnections({
+      connectionRows: clientsRaw,
+      projectRows: projectsRaw,
+      invoiceRows: invoicesRaw,
+      shouldSkipClient,
+    });
+    stats.connectionMapping = connectionMapping.summary;
+    for (const finding of connectionMapping.findings) {
+      stats.errors.push(`Connections export: ${finding.code} (${finding.clientName || `row ${finding.sourceRow}`})`);
     }
-    clientDataMap.set(key, sourceClient);
+    for (const mapped of connectionMapping.clients) {
+      const primary = mapped.primaryConnection;
+      clientDataMap.set(mapped.name.toLowerCase(), {
+        name: mapped.name,
+        contactName: primary?.name || '',
+        contactEmail: primary?.email || '',
+        phone: primary?.phone || '',
+        website: mapped.domain || '',
+        tags: '',
+        contacts: mapped.connections.map(connection => ({
+          name: connection.name || mapped.name,
+          email: connection.email,
+        })),
+      });
+    }
+  } else {
+    for (const row of clientsRaw) {
+      const name = (row['Client'] || '').trim();
+      if (shouldSkipClient(name)) { stats.clients.skipped++; continue; }
+      const key = name.toLowerCase();
+      const sourceClient = {
+        name,
+        contactName: (row['Contact Name'] || '').trim(),
+        contactEmail: (row['Contact Email'] || '').trim().toLowerCase(),
+        phone: (row['Phone Number'] || '').trim(),
+        website: (row['Website'] || '').trim(),
+        tags: (row['Tags'] || '').trim(),
+        contacts: (row['Contact Email'] || '').trim() ? [{
+          name: (row['Contact Name'] || '').trim() || name,
+          email: (row['Contact Email'] || '').trim().toLowerCase(),
+        }] : [],
+      };
+      if (clientDataMap.has(key) && JSON.stringify(clientDataMap.get(key)) !== JSON.stringify(sourceClient)) {
+        stats.errors.push(`Client "${name}": duplicate source rows differ; manual reconciliation required`);
+        continue;
+      }
+      clientDataMap.set(key, sourceClient);
+    }
   }
 
   // From invoices (may add clients not in clients.csv)
@@ -371,6 +413,7 @@ async function runImport(prisma) {
         phone: '',
         website: '',
         tags: '',
+        contacts: (inv.client_email || '').trim() ? [{ name, email: inv.client_email.trim().toLowerCase() }] : [],
       });
     } else if (inv.client_email) {
       const invoiceEmail = inv.client_email.trim().toLowerCase();
@@ -379,6 +422,9 @@ async function runImport(prisma) {
         stats.errors.push(`Client "${name}": duplicate source rows differ in contact email; manual reconciliation required`);
       } else if (!knownEmail) {
         clientDataMap.get(key).contactEmail = invoiceEmail;
+      }
+      if (!clientDataMap.get(key).contacts.some(contact => contact.email === invoiceEmail)) {
+        clientDataMap.get(key).contacts.push({ name, email: invoiceEmail });
       }
     }
   }
@@ -396,6 +442,7 @@ async function runImport(prisma) {
         phone: '',
         website: '',
         tags: '',
+        contacts: [],
       });
     }
   }
@@ -403,12 +450,13 @@ async function runImport(prisma) {
   // Dedup: also check by email across clients
   const emailToClientKey = new Map(); // email → clientDataMap key  
   for (const [key, data] of clientDataMap) {
-    if (data.contactEmail) {
-      const priorClientKey = emailToClientKey.get(data.contactEmail);
+    for (const contact of data.contacts) {
+      if (!contact.email) continue;
+      const priorClientKey = emailToClientKey.get(contact.email);
       if (priorClientKey && priorClientKey !== key) {
         stats.errors.push(`Client "${data.name}": contact email matches another Bonsai client; manual reconciliation required`);
       } else {
-        emailToClientKey.set(data.contactEmail, key);
+        emailToClientKey.set(contact.email, key);
       }
     }
   }
@@ -434,13 +482,20 @@ async function runImport(prisma) {
     try {
       // Try to find by email first, then by name
       let existing = null;
-      if (data.contactEmail) {
+      const emailMatches = [];
+      for (const sourceContact of data.contacts) {
         const contact = await prisma.contact.findFirst({
-          where: { email: data.contactEmail, client: { organizationId: ORGANIZATION_ID } },
+          where: { email: sourceContact.email, client: { organizationId: ORGANIZATION_ID } },
           include: { client: true },
         });
-        if (contact) existing = contact.client;
+        if (contact && !emailMatches.some(client => client.id === contact.client.id)) emailMatches.push(contact.client);
       }
+      if (emailMatches.length > 1) {
+        stats.errors.push(`Client "${data.name}": source contacts resolve to multiple Hub clients; manual reconciliation required`);
+        stats.clients.skipped++;
+        continue;
+      }
+      if (emailMatches.length === 1) existing = emailMatches[0];
       if (!existing) {
         existing = await prisma.client.findFirst({
           where: { organizationId: ORGANIZATION_ID, name: { equals: data.name, mode: 'insensitive' } },
@@ -470,7 +525,7 @@ async function runImport(prisma) {
           stats.errors.push(`Client "${data.name}": Existing Hub record differs in ${differences.join(', ')}; manual reconciliation required`);
         }
         clientIdMap.set(key, existing.id);
-        if (data.contactEmail) emailToClientId.set(data.contactEmail, existing.id);
+        for (const contact of data.contacts) emailToClientId.set(contact.email, existing.id);
         stats.clients.existing++;
       } else {
         if (clientData.domain) {
@@ -486,36 +541,45 @@ async function runImport(prisma) {
         if (!DRY_RUN) {
           const created = await prisma.client.create({ data: { ...clientData, organizationId: ORGANIZATION_ID } });
           clientIdMap.set(key, created.id);
-          if (data.contactEmail) emailToClientId.set(data.contactEmail, created.id);
+          for (const contact of data.contacts) emailToClientId.set(contact.email, created.id);
         }
         stats.clients.created++;
         if (DRY_RUN) {
           const dryClientId = `dry-client-${key}`;
           clientIdMap.set(key, dryClientId);
-          if (data.contactEmail) emailToClientId.set(data.contactEmail, dryClientId);
+          for (const contact of data.contacts) emailToClientId.set(contact.email, dryClientId);
           console.log(`  [would create] ${data.name}`);
         }
       }
 
-      // Upsert contact
+      // Create or reconcile every mapped contact. A primary is selected only
+      // when the source mapper resolved one without ambiguity.
       const clientId = clientIdMap.get(key);
-      if (data.contactEmail && clientId) {
+      for (const sourceContact of data.contacts) {
+        if (!sourceContact.email || !clientId) continue;
         const existingContact = await prisma.contact.findFirst({
-          where: { email: data.contactEmail, clientId },
+          where: { email: sourceContact.email, clientId },
         });
         if (!existingContact) {
           if (!DRY_RUN) {
             await prisma.contact.create({
               data: {
-                email: data.contactEmail,
-                name: data.contactName || data.name,
+                email: sourceContact.email,
+                name: sourceContact.name || data.name,
                 clientId,
-                isPrimary: true,
+                isPrimary: sourceContact.email === data.contactEmail,
               },
             });
           }
           stats.contacts.created++;
         } else {
+          const contactDifferences = sourceDifferences({
+            name: sourceContact.name || data.name,
+            isPrimary: sourceContact.email === data.contactEmail,
+          }, existingContact, ['name', 'isPrimary']);
+          if (contactDifferences.length > 0) {
+            stats.errors.push(`Contact for "${data.name}": Existing Hub record differs in ${contactDifferences.join(', ')}; manual reconciliation required`);
+          }
           stats.contacts.existing++;
         }
       }

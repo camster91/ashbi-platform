@@ -11,6 +11,7 @@ test('Bonsai full importer requires an explicit tenant and scopes imported recor
   assert.match(source, /--approved-summary/);
   assert.match(source, /--summary-file/);
   assert.match(source, /--tasks-json/);
+  assert.match(source, /--connections-csv/);
   assert.match(source, /IMPORT_ORGANIZATION_ID/);
   assert.match(source, /organizationId: ORGANIZATION_ID/);
   const expenseCreate = source.slice(source.indexOf('await prisma.expense.create'), source.indexOf('stats.expenses.created'));
@@ -27,6 +28,16 @@ test('confirmed Bonsai imports are atomic and reject unresolved reconciliation e
   assert.match(source, /prisma\.\$transaction\(/);
   assert.match(source, /Live import cannot complete with unresolved reconciliation findings/);
   assert.match(source, /if \(!DRY_RUN && stats\.errors\.length > 0\)/);
+});
+
+test('Bonsai Connections export promotes only evidence-linked clients and preserves all mapped contacts', async () => {
+  const source = await readFile(fullImporter, 'utf8');
+  const clientBlock = source.slice(source.indexOf('// STEP 1: CLIENTS'), source.indexOf('// STEP 2: PROJECTS'));
+  assert.match(source, /mapBonsaiConnections/);
+  assert.match(clientBlock, /connectionMapping\.findings/);
+  assert.match(clientBlock, /for \(const sourceContact of data\.contacts\)/);
+  assert.match(clientBlock, /source contacts resolve to multiple Hub clients/);
+  assert.doesNotMatch(clientBlock, /for \(const row of clientsRaw\)[\s\S]*row\.Name[\s\S]*clientDataMap\.set/);
 });
 
 test('Bonsai importer treats tasks as source-bound evidence and never guesses project or owner identity', async () => {

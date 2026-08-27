@@ -46,7 +46,7 @@
   },
   "artifacts": [
     { "id": "bonsai-source-export", "path": "evidence/bonsai-source-export.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
-    { "id": "bonsai-clients-csv", "path": "evidence/clients.csv", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
+    { "id": "bonsai-connections-csv", "path": "evidence/connection_export.csv", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
     { "id": "bonsai-projects-csv", "path": "evidence/projects.csv", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
     { "id": "bonsai-tasks-json", "path": "evidence/bonsai-tasks.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
     { "id": "bonsai-time-entries-csv", "path": "evidence/time-entries.csv", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
