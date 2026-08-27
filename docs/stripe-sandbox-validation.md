@@ -36,13 +36,15 @@ Use separate authorized CAD and USD invoices with reviewed tax evidence.
 | Successful partial refund | A signed `refund.created` event retrieves the current refund, links it to the exact PaymentIntent-backed payment, records integer minor units and matching CAD/USD, and displays one staff-visible refund. |
 | Refund replay and order | Replaying an event creates no duplicate. Delivering older refund events after newer ones retains every append-only event, uses current provider truth, and never moves the provider-event clock backwards. |
 | Refund failure and limits | `refund.updated` and `refund.failed` update current state while preserving prior events. Currency/payment mismatches, legacy payments without exact evidence, and aggregate refunds above the payment amount fail closed without a ledger mutation. |
+| Charge settlement evidence | As an administrator, reconcile each recorded Stripe payment through `POST /api/invoices/:invoiceId/payments/:paymentId/reconcile-settlement` with a unique `Idempotency-Key`. The PaymentIntent charge must match the recorded payment amount/currency; its expanded balance transaction must satisfy gross minus fee equals net. Payment currency and Stripe balance currency remain separate. |
+| Settlement retry and uncertainty | Repeating the same reconciliation request performs no second provider read. A missing balance transaction remains `PENDING`; a provider read failure is `OUTCOME_UNKNOWN` with a safe reason; neither state reports zero fees. A later verified balance transaction cannot silently replace an already stored provider identity. |
 
 ## Required gap closure before a passing run
 
 The provider-backed invalidation and refund-reconciliation boundaries are code-present locally but still need the sandbox evidence above. The complete provider lifecycle is not yet eligible to pass because:
 
 - Complete the separate [invoice email sandbox runbook](invoice-email-sandbox-validation.md); provider acceptance is not inbox-delivery proof.
-- Reconcile gross paid, successful refunds, provider fees, and net settlement by currency. The current local report stops at net collected before fees until Stripe balance-transaction evidence is stored; it must not infer fees, combine CAD/USD, or label collected cash as profit.
+- Reconcile gross paid and successful refunds by payment currency, then reconcile verified charge gross, provider fees, and net charge settlement separately by Stripe balance currency. The local evidence path is code-present but still requires this sandbox proof; it must not infer fees, combine currencies, treat pending evidence as zero, or label collected cash as profit.
 - Currency-safe reporting and export must reconcile invoice totals, payments, refunds, fees, and net settlement without combining CAD and USD.
 
 Historical payment rows intentionally remain without inferred currency/minor-unit fields. Review and reconcile those rows from source evidence before using them in any refund test; do not backfill from defaults.

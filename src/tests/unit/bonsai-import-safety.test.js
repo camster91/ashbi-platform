@@ -8,6 +8,8 @@ const legacyImporter = new URL('../../../scripts/import-bonsai.js', import.meta.
 test('Bonsai full importer requires an explicit tenant and scopes imported records', async () => {
   const source = await readFile(fullImporter, 'utf8');
   assert.match(source, /--organization-id/);
+  assert.match(source, /--approved-summary/);
+  assert.match(source, /--summary-file/);
   assert.match(source, /IMPORT_ORGANIZATION_ID/);
   assert.match(source, /organizationId: ORGANIZATION_ID/);
   assert.match(source, /Organization not found/);
@@ -24,9 +26,10 @@ test('confirmed Bonsai imports are atomic and reject unresolved reconciliation e
 
 test('Bonsai reconciliation reports are owner-only, never overwrite evidence, and follow a committed import', async () => {
   const source = await readFile(fullImporter, 'utf8');
-  assert.match(source, /fs\.openSync\(destination, 'wx', 0o600\)/);
+  assert.match(source, /fs\.openSync\(summaryDestination, 'wx', 0o600\)/);
   assert.match(source, /const reconciliation = DRY_RUN\s*\? await runImport\(prisma\)\s*:\s*await prisma\.\$transaction/);
   assert.match(source, /writeSummary\(reconciliation\)/);
+  assert.match(source, /state: 'RESERVED'/);
   assert.match(source, /return reconciliation;/);
 });
 

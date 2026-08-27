@@ -8,9 +8,10 @@
  *
  * Usage:
  *   node scripts/import-bonsai-full.js --dry-run --organization-id <id> --csv-dir ./bonsai-export --summary-file ./reconciliation.json
- *   node scripts/import-bonsai-full.js --confirm --organization-id <id> --csv-dir ./bonsai-export # Live import after review
+ *   node scripts/import-bonsai-full.js --confirm --organization-id <id> --csv-dir ./bonsai-export --approved-summary ./reviewed-dry-run.json --summary-file ./live-reconciliation.json
  *
- * Idempotent — safe to run multiple times. Uses upsert/dedup on:
+ * Reconciliation-first and replay-safe. Existing Hub records are matched but
+ * never automatically overwritten. Natural/source identities are checked on:
  *   - Clients: by email or name
  *   - Projects: by bonsaiProjectId
  *   - Invoices: by invoiceNumber
@@ -24,8 +25,11 @@ const { PrismaClient } = prismaPkg;
 import { PrismaPg } from '@prisma/adapter-pg';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'node:crypto';
+import { Readable } from 'node:stream';
 import { fileURLToPath } from 'url';
 import csvParser from 'csv-parser';
+import { assertApprovedBonsaiDryRun, fingerprintBonsaiPlan, fingerprintInputInventory, sourceDifferences } from '../src/services/bonsai-import-evidence.service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const prisma = new PrismaClient({
@@ -41,8 +45,13 @@ function readOption(name, fallback = null) {
 
 const CSV_DIR = path.resolve(readOption('--csv-dir', process.env.BONSAI_CSV_DIR || path.join(__dirname, '..', 'data', 'bonsai-export')));
 const SUMMARY_FILE = readOption('--summary-file');
+const APPROVED_SUMMARY_FILE = readOption('--approved-summary');
 const ORGANIZATION_ID = readOption('--organization-id', process.env.IMPORT_ORGANIZATION_ID);
 
+if (DRY_RUN && CONFIRM_LIVE) {
+  console.error('Choose exactly one import mode: --dry-run or --confirm.');
+  process.exit(2);
+}
 if (!DRY_RUN && !CONFIRM_LIVE) {
   console.error('Refusing live import without --confirm. Use --dry-run first and review the reconciliation summary.');
   process.exit(2);
@@ -51,6 +60,21 @@ if (!ORGANIZATION_ID) {
   console.error('Refusing import without --organization-id (or IMPORT_ORGANIZATION_ID). Imports must be explicitly tenant-scoped.');
   process.exit(2);
 }
+if (!DRY_RUN && !APPROVED_SUMMARY_FILE) {
+  console.error('Refusing live import without --approved-summary pointing to the reviewed dry-run report.');
+  process.exit(2);
+}
+if (!SUMMARY_FILE) {
+  console.error('Refusing import without --summary-file. Migration evidence is required.');
+  process.exit(2);
+}
+
+const summaryDestination = path.resolve(SUMMARY_FILE);
+const summaryDescriptor = fs.openSync(summaryDestination, 'wx', 0o600);
+let summaryWritten = false;
+fs.writeFileSync(summaryDescriptor, `${JSON.stringify({
+  generatedAt: new Date().toISOString(), mode: DRY_RUN ? 'dry-run' : 'live', state: 'RESERVED', complete: false,
+})}\n`, 'utf8');
 
 // === CSV Directory ===
 // Override with --csv-dir or BONSAI_CSV_DIR; never depend on a developer machine path.
@@ -74,16 +98,18 @@ function readCSV(filename) {
     const results = [];
     const filePath = path.join(CSV_DIR, filename);
     if (!fs.existsSync(filePath)) {
-      inputInventory.push({ filename, path: filePath, present: false, rows: 0 });
+      inputInventory.push({ filename, path: filePath, present: false, rows: 0, sha256: null });
       console.log(`  ⚠ File not found: ${filePath}`);
       resolve([]);
       return;
     }
-    fs.createReadStream(filePath)
+    const sourceBytes = fs.readFileSync(filePath);
+    Readable.from(sourceBytes)
       .pipe(csvParser())
       .on('data', (row) => results.push(row))
       .on('end', () => {
-        inputInventory.push({ filename, path: filePath, present: true, rows: results.length });
+        const sha256 = crypto.createHash('sha256').update(sourceBytes).digest('hex');
+        inputInventory.push({ filename, path: filePath, present: true, rows: results.length, sha256 });
         resolve(results);
       })
       .on('error', reject);
@@ -96,7 +122,7 @@ function mapProjectStatus(bonsaiStatus) {
     case 'active': return 'DESIGN_DEV';
     case 'completed': return 'LAUNCHED';
     case 'archived': return 'ON_HOLD';
-    default: return 'STARTING_UP';
+    default: return null;
   }
 }
 
@@ -109,13 +135,13 @@ function mapInvoiceStatus(bonsaiStatus) {
     case 'scheduled': return 'DRAFT';
     case 'sent': return 'SENT';
     case 'void': return 'VOID';
-    default: return 'DRAFT';
+    default: return null;
   }
 }
 
 function mapPaymentMethod(bonsaiMethod) {
   switch (bonsaiMethod?.toLowerCase()) {
-    case 'credit_card': return 'STRIPE';
+    case 'credit_card': return 'OTHER';
     case 'ach': return 'BANK';
     case 'bank_transfer': return 'BANK';
     case 'marked_as_paid': return 'OTHER';
@@ -184,15 +210,10 @@ const stats = {
 const inputInventory = [];
 
 function writeSummary(reconciliation) {
-  if (!SUMMARY_FILE) return;
-  const destination = path.resolve(SUMMARY_FILE);
-  const descriptor = fs.openSync(destination, 'wx', 0o600);
-  try {
-    fs.writeFileSync(descriptor, `${JSON.stringify(reconciliation, null, 2)}\n`, 'utf8');
-  } finally {
-    fs.closeSync(descriptor);
-  }
-  console.log(`  Reconciliation summary: ${destination}`);
+  fs.ftruncateSync(summaryDescriptor, 0);
+  fs.writeFileSync(summaryDescriptor, `${JSON.stringify(reconciliation, null, 2)}\n`, 'utf8');
+  summaryWritten = true;
+  console.log(`  Reconciliation summary: ${summaryDestination}`);
 }
 
 // ======================================================================
@@ -235,28 +256,13 @@ async function runImport(prisma) {
   const addressMap = new Map();
   for (const addr of addressesRaw) {
     const clientName = addr['Client']?.trim();
-    if (clientName) addressMap.set(clientName.toLowerCase(), addr);
-  }
-
-  // Build invoice revenue lookup: client email/name → total paid USD/CAD
-  const revenueByClient = new Map(); // name(lower) → { usd, cad }
-  for (const inv of invoicesRaw) {
-    if (inv.status?.toLowerCase() !== 'paid') continue;
-    const name = (inv.client_or_company_name || '').trim().toLowerCase();
-    const amount = parseFloat2(inv.paid_amount);
-    const currency = (inv.currency || 'USD').toUpperCase();
-    if (!revenueByClient.has(name)) revenueByClient.set(name, { usd: 0, cad: 0 });
-    const rev = revenueByClient.get(name);
-    if (currency === 'CAD') rev.cad += amount;
-    else rev.usd += amount;
-  }
-
-  // Build email→clientName lookup from invoices
-  const emailToClientName = new Map();
-  for (const inv of invoicesRaw) {
-    const email = (inv.client_email || '').trim().toLowerCase();
-    const name = (inv.client_or_company_name || '').trim();
-    if (email && name) emailToClientName.set(email, name);
+    if (!clientName) continue;
+    const key = clientName.toLowerCase();
+    if (addressMap.has(key) && JSON.stringify(addressMap.get(key)) !== JSON.stringify(addr)) {
+      stats.errors.push(`Address "${clientName}": duplicate source rows differ; manual reconciliation required`);
+      continue;
+    }
+    addressMap.set(key, addr);
   }
 
   // ============================================================
@@ -272,14 +278,19 @@ async function runImport(prisma) {
     const name = (row['Client'] || '').trim();
     if (shouldSkipClient(name)) { stats.clients.skipped++; continue; }
     const key = name.toLowerCase();
-    clientDataMap.set(key, {
+    const sourceClient = {
       name,
       contactName: (row['Contact Name'] || '').trim(),
       contactEmail: (row['Contact Email'] || '').trim().toLowerCase(),
       phone: (row['Phone Number'] || '').trim(),
       website: (row['Website'] || '').trim(),
       tags: (row['Tags'] || '').trim(),
-    });
+    };
+    if (clientDataMap.has(key) && JSON.stringify(clientDataMap.get(key)) !== JSON.stringify(sourceClient)) {
+      stats.errors.push(`Client "${name}": duplicate source rows differ; manual reconciliation required`);
+      continue;
+    }
+    clientDataMap.set(key, sourceClient);
   }
 
   // From invoices (may add clients not in clients.csv)
@@ -296,8 +307,14 @@ async function runImport(prisma) {
         website: '',
         tags: '',
       });
-    } else if (!clientDataMap.get(key).contactEmail && inv.client_email) {
-      clientDataMap.get(key).contactEmail = inv.client_email.trim().toLowerCase();
+    } else if (inv.client_email) {
+      const invoiceEmail = inv.client_email.trim().toLowerCase();
+      const knownEmail = clientDataMap.get(key).contactEmail;
+      if (knownEmail && knownEmail !== invoiceEmail) {
+        stats.errors.push(`Client "${name}": duplicate source rows differ in contact email; manual reconciliation required`);
+      } else if (!knownEmail) {
+        clientDataMap.get(key).contactEmail = invoiceEmail;
+      }
     }
   }
 
@@ -322,7 +339,12 @@ async function runImport(prisma) {
   const emailToClientKey = new Map(); // email → clientDataMap key  
   for (const [key, data] of clientDataMap) {
     if (data.contactEmail) {
-      emailToClientKey.set(data.contactEmail, key);
+      const priorClientKey = emailToClientKey.get(data.contactEmail);
+      if (priorClientKey && priorClientKey !== key) {
+        stats.errors.push(`Client "${data.name}": contact email matches another Bonsai client; manual reconciliation required`);
+      } else {
+        emailToClientKey.set(data.contactEmail, key);
+      }
     }
   }
 
@@ -360,13 +382,6 @@ async function runImport(prisma) {
         });
       }
 
-      // Revenue & tier
-      const rev = revenueByClient.get(key) || { usd: 0, cad: 0 };
-      const totalUsdEquiv = rev.usd + rev.cad * 0.74; // rough CAD→USD
-      let tier = 'T3';
-      if (totalUsdEquiv >= 5000) tier = 'T1';
-      else if (totalUsdEquiv >= 2000) tier = 'T2';
-
       // Address
       const addr = addressMap.get(key);
 
@@ -375,10 +390,7 @@ async function runImport(prisma) {
         contactPerson: data.contactName || null,
         phone: data.phone || null,
         domain: data.website || null,
-        tier,
-        totalRevenueUsd: rev.usd,
-        totalRevenueCad: rev.cad,
-        country: addr?.Country || 'US',
+        country: addr?.Country || null,
         address: addr ? [addr['Address 1'], addr['Address 2']].filter(Boolean).join(', ') : null,
         city: addr?.City || null,
         provinceState: addr?.Region || null,
@@ -386,19 +398,27 @@ async function runImport(prisma) {
       };
 
       if (existing) {
-        if (!DRY_RUN) {
-          await prisma.client.update({ where: { id: existing.id }, data: clientData });
+        const differences = sourceDifferences(clientData, existing, [
+          'name', 'contactPerson', 'phone', 'domain', 'country', 'address', 'city', 'provinceState', 'postalCode',
+        ]);
+        if (differences.length > 0) {
+          stats.errors.push(`Client "${data.name}": Existing Hub record differs in ${differences.join(', ')}; manual reconciliation required`);
         }
         clientIdMap.set(key, existing.id);
         if (data.contactEmail) emailToClientId.set(data.contactEmail, existing.id);
         stats.clients.existing++;
       } else {
-        if (!DRY_RUN) {
-          // Remove domain if it would conflict
-          if (clientData.domain) {
-            const domainConflict = await prisma.client.findFirst({ where: { organizationId: ORGANIZATION_ID, domain: clientData.domain } });
-            if (domainConflict) clientData.domain = null;
+        if (clientData.domain) {
+          const domainConflict = await prisma.client.findFirst({
+            where: { organizationId: ORGANIZATION_ID, domain: clientData.domain },
+          });
+          if (domainConflict) {
+            stats.errors.push(`Client "${data.name}": Existing Hub record differs by matching domain; manual reconciliation required`);
+            stats.clients.skipped++;
+            continue;
           }
+        }
+        if (!DRY_RUN) {
           const created = await prisma.client.create({ data: { ...clientData, organizationId: ORGANIZATION_ID } });
           clientIdMap.set(key, created.id);
           if (data.contactEmail) emailToClientId.set(data.contactEmail, created.id);
@@ -408,7 +428,7 @@ async function runImport(prisma) {
           const dryClientId = `dry-client-${key}`;
           clientIdMap.set(key, dryClientId);
           if (data.contactEmail) emailToClientId.set(data.contactEmail, dryClientId);
-          console.log(`  [would create] ${data.name} (${tier})`);
+          console.log(`  [would create] ${data.name}`);
         }
       }
 
@@ -439,7 +459,7 @@ async function runImport(prisma) {
     }
   }
 
-  console.log(`  ✅ Clients: ${stats.clients.created} created, ${stats.clients.existing} updated, ${stats.clients.skipped} skipped`);
+  console.log(`  ✅ Clients: ${stats.clients.created} created, ${stats.clients.existing} matched, ${stats.clients.skipped} skipped`);
   console.log(`  ✅ Contacts: ${stats.contacts.created} created, ${stats.contacts.existing} existing`);
 
   // Helper: resolve client ID from name or email
@@ -456,6 +476,7 @@ async function runImport(prisma) {
 
   const projectIdMap = new Map(); // bonsaiProjectId → DB id
   const projectLookup = new Map(); // "clientName|projectTitle" → DB id
+  const seenProjectSourceKeys = new Set();
 
   for (const proj of projectsRaw) {
     const clientName = (proj.client_or_company_name || '').trim();
@@ -466,6 +487,13 @@ async function runImport(prisma) {
       stats.projects.skipped++;
       continue;
     }
+    const projectSourceKey = bonsaiId || `${clientName.toLowerCase()}|${title.toLowerCase()}`;
+    if (seenProjectSourceKeys.has(projectSourceKey)) {
+      stats.projects.skipped++;
+      stats.errors.push(`Project "${title}": duplicate Bonsai source identity`);
+      continue;
+    }
+    seenProjectSourceKeys.add(projectSourceKey);
 
     const clientId = resolveClientId(clientName);
     if (!clientId) {
@@ -487,7 +515,12 @@ async function runImport(prisma) {
       }
 
       const status = mapProjectStatus(proj.status);
-      const budget = parseFloat2(proj.project_budget_amount) || parseFloat2(proj.amount_paid) || null;
+      if (!status) {
+        stats.errors.push(`Project "${title}": unsupported or missing Bonsai status`);
+        stats.projects.skipped++;
+        continue;
+      }
+      const budget = proj.project_budget_amount ? parseFloat2(proj.project_budget_amount) : null;
       const startDate = parseDate(proj.start_date);
       const endDate = parseDate(proj.finish_date);
 
@@ -503,8 +536,11 @@ async function runImport(prisma) {
       };
 
       if (existing) {
-        if (!DRY_RUN) {
-          await prisma.project.update({ where: { id: existing.id }, data: projectData });
+        const differences = sourceDifferences(projectData, existing, [
+          'name', 'clientId', 'status', 'bonsaiProjectId', 'budget', 'startDate', 'endDate', 'completedAt',
+        ]);
+        if (differences.length > 0) {
+          stats.errors.push(`Project "${title}": Existing Hub record differs in ${differences.join(', ')}; manual reconciliation required`);
         }
         projectIdMap.set(bonsaiId, existing.id);
         projectLookup.set(`${clientName.toLowerCase()}|${title.toLowerCase()}`, existing.id);
@@ -528,7 +564,7 @@ async function runImport(prisma) {
     }
   }
 
-  console.log(`  ✅ Projects: ${stats.projects.created} created, ${stats.projects.existing} updated, ${stats.projects.skipped} skipped`);
+  console.log(`  ✅ Projects: ${stats.projects.created} created, ${stats.projects.existing} matched, ${stats.projects.skipped} skipped`);
 
   // Helper: resolve project ID
   function resolveProjectId(clientName, projectTitle) {
@@ -540,6 +576,7 @@ async function runImport(prisma) {
   // STEP 3: INVOICES
   // ============================================================
   console.log('\n💰 Importing Invoices...');
+  const seenInvoiceNumbers = new Set();
 
   for (const inv of invoicesRaw) {
     const invoiceNumber = (inv.invoice_number || '').trim();
@@ -550,6 +587,12 @@ async function runImport(prisma) {
       stats.invoices.skipped++;
       continue;
     }
+    if (seenInvoiceNumbers.has(invoiceNumber.toLowerCase())) {
+      stats.invoices.skipped++;
+      stats.errors.push(`Invoice #${invoiceNumber}: duplicate Bonsai source identity`);
+      continue;
+    }
+    seenInvoiceNumbers.add(invoiceNumber.toLowerCase());
 
     const clientId = resolveClientId(clientName, clientEmail);
     if (!clientId) {
@@ -559,25 +602,37 @@ async function runImport(prisma) {
     }
 
     try {
+      const status = mapInvoiceStatus(inv.status);
+      const totalAmount = parseFloat2(inv.total_amount);
+      const tax = parseFloat2(inv.calculated_tax_amount);
+      const taxRate = parseFloat2(inv.calculated_tax_percent);
+      const currency = (inv.currency || '').toUpperCase();
+      const issueDate = parseDate(inv.issued_date);
+      const paidDate = parseDate(inv.paid_date);
+      if (!status || !['CAD', 'USD'].includes(currency) || !issueDate || totalAmount < 0 || tax < 0 || tax > totalAmount
+        || (status === 'PAID' && !paidDate)) {
+        stats.errors.push(`Invoice #${invoiceNumber}: incomplete or unsupported status, currency, date, or totals`);
+        stats.invoices.skipped++;
+        continue;
+      }
       // Dedup by invoiceNumber
       const existing = await prisma.invoice.findFirst({
         where: { invoiceNumber, client: { organizationId: ORGANIZATION_ID } },
       });
 
       if (existing) {
+        const differences = sourceDifferences({
+          clientId, status, currency, total: totalAmount,
+        }, existing, ['clientId', 'status', 'currency', 'total']);
+        if (differences.length > 0) {
+          stats.errors.push(`Invoice #${invoiceNumber}: Existing Hub record differs in ${differences.join(', ')}; manual reconciliation required`);
+        }
         stats.invoices.existing++;
         continue;
       }
 
-      const status = mapInvoiceStatus(inv.status);
-      const totalAmount = parseFloat2(inv.total_amount);
-      const tax = parseFloat2(inv.calculated_tax_amount);
-      const taxRate = parseFloat2(inv.calculated_tax_percent);
       const subtotal = totalAmount - tax;
-      const currency = (inv.currency || 'USD').toUpperCase();
-      const issueDate = parseDate(inv.issued_date) || new Date();
       const dueDate = parseDate(inv.due_date);
-      const paidDate = parseDate(inv.paid_date);
       const paymentMethod = mapPaymentMethod(inv.payment_method);
       const bonsaiInvoiceId = extractBonsaiId(inv.contractor_invoice_link) || invoiceNumber;
       const projectName = (inv.contractor_project_name || '').trim();
@@ -648,6 +703,7 @@ async function runImport(prisma) {
   // must not create login-capable accounts; unmatched owners remain attributed
   // to the importer and are visible in the reconciliation summary.
   const userCache = new Map(); // owner_name(lower) → userId
+  const seenTimeEntryKeys = new Set();
 
   async function resolveUserId(ownerName) {
     const key = (ownerName || '').trim().toLowerCase();
@@ -725,6 +781,13 @@ async function runImport(prisma) {
       const rate = parseFloat2(entry.rate);
       const billable = (entry.billing_status || '').toLowerCase() === 'billed';
       const notes = (entry.notes || '').trim();
+      const timeEntrySourceKey = [resolvedProjectId, userId, date.toISOString(), duration].join('|');
+      if (seenTimeEntryKeys.has(timeEntrySourceKey)) {
+        stats.timeEntries.skipped++;
+        stats.errors.push(`TimeEntry "${projectTitle}" ${dateStr}: duplicate Bonsai source identity`);
+        continue;
+      }
+      seenTimeEntryKeys.add(timeEntrySourceKey);
 
       // Dedup: same project + user + date + duration
       const existing = await prisma.timeEntry.findFirst({
@@ -774,6 +837,7 @@ async function runImport(prisma) {
   // STEP 5: EXPENSES
   // ============================================================
   console.log('\n💸 Importing Expenses...');
+  const seenExpenseKeys = new Set();
 
   // Skip personal and e-Transfer entries
   function shouldSkipExpense(row) {
@@ -794,15 +858,18 @@ async function runImport(prisma) {
 
     const description = (exp.name || '').trim();
     const amount = parseFloat2(exp.amount_after_tax || exp.amount_pre_tax);
-    const currency = (exp.currency || 'USD').toUpperCase();
+    const currency = (exp.currency || '').toUpperCase();
     const category = mapExpenseCategory(exp.tags);
     const date = parseDate(exp.date);
     const billable = (exp.billable || '').toLowerCase() === 'true';
     const clientName = (exp.client || '').trim();
     const projectName = (exp.project || '').trim();
 
-    if (!description || amount === 0 || !date) {
+    if (!description || amount === 0 || !date || !['CAD', 'USD'].includes(currency)) {
       stats.expenses.skipped++;
+      if (description && amount !== 0 && date && !['CAD', 'USD'].includes(currency)) {
+        stats.errors.push(`Expense "${description.substring(0, 40)}": currency is missing or unsupported`);
+      }
       continue;
     }
 
@@ -814,6 +881,13 @@ async function runImport(prisma) {
     }
 
     try {
+      const expenseSourceKey = [description.toLowerCase(), date.toISOString(), amount, currency, clientId || '', projectId || ''].join('|');
+      if (seenExpenseKeys.has(expenseSourceKey)) {
+        stats.expenses.skipped++;
+        stats.errors.push(`Expense "${description.substring(0, 40)}": duplicate Bonsai source identity`);
+        continue;
+      }
+      seenExpenseKeys.add(expenseSourceKey);
       // Dedup: same description + date + amount
       const existing = await prisma.expense.findFirst({
         where: {
@@ -864,6 +938,12 @@ async function runImport(prisma) {
   if (!DRY_RUN && !inputInventory.every(file => file.present)) {
     throw new Error('Live import cannot complete with an incomplete input inventory');
   }
+  const sourceFingerprint = fingerprintInputInventory(inputInventory);
+  const planFingerprint = fingerprintBonsaiPlan({ sourceFingerprint, stats });
+  if (!DRY_RUN) {
+    const approved = JSON.parse(fs.readFileSync(path.resolve(APPROVED_SUMMARY_FILE), 'utf8'));
+    assertApprovedBonsaiDryRun(approved, { organizationId: ORGANIZATION_ID, sourceFingerprint, planFingerprint });
+  }
 
   // ============================================================
   // SUMMARY
@@ -871,9 +951,9 @@ async function runImport(prisma) {
   console.log(`\n${'='.repeat(60)}`);
   console.log(`  IMPORT SUMMARY ${DRY_RUN ? '(DRY RUN — nothing written)' : '(LIVE)'}`);
   console.log(`${'='.repeat(60)}`);
-  console.log(`  Clients:      ${stats.clients.created} new, ${stats.clients.existing} updated, ${stats.clients.skipped} skipped`);
+  console.log(`  Clients:      ${stats.clients.created} new, ${stats.clients.existing} matched, ${stats.clients.skipped} skipped`);
   console.log(`  Contacts:     ${stats.contacts.created} new, ${stats.contacts.existing} existing`);
-  console.log(`  Projects:     ${stats.projects.created} new, ${stats.projects.existing} updated, ${stats.projects.skipped} skipped`);
+  console.log(`  Projects:     ${stats.projects.created} new, ${stats.projects.existing} matched, ${stats.projects.skipped} skipped`);
   console.log(`  Invoices:     ${stats.invoices.created} new, ${stats.invoices.existing} existing, ${stats.invoices.skipped} skipped`);
   console.log(`  Line Items:   ${stats.lineItems.created} new`);
   console.log(`  Time Entries: ${stats.timeEntries.created} new, ${stats.timeEntries.existing} existing, ${stats.timeEntries.skipped} skipped`);
@@ -896,8 +976,10 @@ async function runImport(prisma) {
     organization: { id: organization.id, name: organization.name },
     csvDir: CSV_DIR,
     inputInventory,
+    sourceFingerprint,
+    planFingerprint,
     stats,
-    complete: inputInventory.every(file => file.present),
+    complete: inputInventory.every(file => file.present) && stats.errors.length === 0,
   };
   console.log('');
   return reconciliation;
@@ -906,6 +988,19 @@ async function runImport(prisma) {
 main()
   .catch((e) => {
     console.error('❌ Import failed:', e);
+    if (!summaryWritten) {
+      fs.ftruncateSync(summaryDescriptor, 0);
+      fs.writeFileSync(summaryDescriptor, `${JSON.stringify({
+        generatedAt: new Date().toISOString(),
+        mode: DRY_RUN ? 'dry-run' : 'live',
+        state: 'FAILED',
+        complete: false,
+        reasonCode: 'IMPORT_FAILED',
+      }, null, 2)}\n`, 'utf8');
+    }
     process.exit(1);
   })
-  .finally(() => prisma.$disconnect());
+  .finally(async () => {
+    fs.closeSync(summaryDescriptor);
+    await prisma.$disconnect();
+  });
