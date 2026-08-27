@@ -44,6 +44,7 @@
     "bootstrap:sandbox-workspace": "node scripts/bootstrap-sandbox-workspace.mjs",
     "check:bonsai-cutover": "node scripts/check-bonsai-cutover-readiness.mjs",
     "verify:revenue-evidence": "node scripts/verify-revenue-evidence-export.js",
+    "reconcile:bonsai-revenue": "node scripts/reconcile-bonsai-revenue.js",
     "test:all": "node scripts/run-node-tests.mjs src/tests/unit src/tests/integration",
     "test:e2e:setup": "bash tests/e2e/setup.sh",
     "test:e2e:teardown": "bash tests/e2e/teardown.sh",

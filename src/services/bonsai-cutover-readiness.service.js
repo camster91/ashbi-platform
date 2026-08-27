@@ -17,6 +17,7 @@ const REQUIRED_RECORD_TYPES = [
 
 const REQUIRED_ARTIFACT_IDS = [
   'bonsai-source-export',
+  'bonsai-invoices-csv',
   'bonsai-import-dry-run',
   'bonsai-import-confirmed',
   'notion-source-export',
@@ -105,7 +106,10 @@ function parallelRevenueIsBound({ artifacts, manifestDirectory, organizationId, 
   const revenueArtifact = Array.isArray(artifacts)
     ? artifacts.find(item => item?.id === 'revenue-evidence-export')
     : null;
-  if (!parallelReport || !revenuePayload || !revenueArtifact) return false;
+  const bonsaiInvoicesArtifact = Array.isArray(artifacts)
+    ? artifacts.find(item => item?.id === 'bonsai-invoices-csv')
+    : null;
+  if (!parallelReport || !revenuePayload || !revenueArtifact || !bonsaiInvoicesArtifact) return false;
   const completedAt = timestamp(parallelReport.completedAt);
   const exportedAt = timestamp(revenuePayload.exportedAt);
   const countsMatch = REVENUE_EVIDENCE_COLLECTIONS.every(collection => (
@@ -115,11 +119,15 @@ function parallelRevenueIsBound({ artifacts, manifestDirectory, organizationId, 
   ));
   return parallelReport.format === 'ashbi-parallel-reconciliation'
     && parallelReport.version === 1
+    && parallelReport.complete === true
     && parallelReport.organizationId === organizationId
     && parallelReport.unresolvedFindings === reconciliation.unresolvedFindings
     && parallelReport.unresolvedFindings === 0
     && parallelReport.currenciesSeparated === reconciliation.currenciesSeparated
     && parallelReport.currenciesSeparated === true
+    && parallelReport.sourceEvidence?.invoicesSha256 === bonsaiInvoicesArtifact.sha256
+    && Number.isInteger(parallelReport.sourceEvidence?.invoiceRows)
+    && parallelReport.sourceEvidence.invoiceRows >= 0
     && parallelReport.revenueEvidence?.artifactSha256 === revenueArtifact.sha256
     && parallelReport.revenueEvidence?.recordsSha256 === revenuePayload.manifest?.recordsSha256
     && countsMatch

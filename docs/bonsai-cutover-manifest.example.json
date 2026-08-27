@@ -46,6 +46,7 @@
   },
   "artifacts": [
     { "id": "bonsai-source-export", "path": "evidence/bonsai-source-export.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
+    { "id": "bonsai-invoices-csv", "path": "evidence/invoices.csv", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
     { "id": "bonsai-import-dry-run", "path": "evidence/bonsai-import-dry-run.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
     { "id": "bonsai-import-confirmed", "path": "evidence/bonsai-import-confirmed.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
     { "id": "notion-source-export", "path": "evidence/notion-source-export.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
