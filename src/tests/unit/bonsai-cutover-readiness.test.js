@@ -17,6 +17,7 @@ const REQUIRED_ARTIFACTS = [
   'bonsai-connections-csv',
   'bonsai-projects-csv',
   'bonsai-tasks-json',
+  'bonsai-tasks-csv',
   'bonsai-time-entries-csv',
   'bonsai-expenses-csv',
   'bonsai-invoices-csv',
@@ -47,12 +48,14 @@ function fixture() {
     capturedAt: '2026-08-15T18:15:00.000Z', tasks: [],
   };
   const bonsaiTasksContent = Buffer.from(JSON.stringify(bonsaiTasksPayload));
+  const bonsaiHistoricalTasksContent = Buffer.from('Task Name,Project,Company,Assignee,Status,Task ID,Created,Task Type,Parent Task ID\n');
   const bonsaiTimeEntriesContent = Buffer.from('client_name,project_title,owner_name,date,formatted_time\nAcme,Acme Website,Cameron,2026-08-01,01:00:00\n');
   const bonsaiExpensesContent = Buffer.from('name,amount_after_tax,currency,date\nFigma,20.00,CAD,2026-08-02\n');
   const bonsaiInvoicesSha256 = crypto.createHash('sha256').update(bonsaiInvoicesContent).digest('hex');
   const bonsaiConnectionsSha256 = crypto.createHash('sha256').update(bonsaiConnectionsContent).digest('hex');
   const bonsaiProjectsSha256 = crypto.createHash('sha256').update(bonsaiProjectsContent).digest('hex');
   const bonsaiTasksSha256 = crypto.createHash('sha256').update(bonsaiTasksContent).digest('hex');
+  const bonsaiHistoricalTasksSha256 = crypto.createHash('sha256').update(bonsaiHistoricalTasksContent).digest('hex');
   const bonsaiTimeEntriesSha256 = crypto.createHash('sha256').update(bonsaiTimeEntriesContent).digest('hex');
   const bonsaiExpensesSha256 = crypto.createHash('sha256').update(bonsaiExpensesContent).digest('hex');
   const emptyRecords = Object.fromEntries(REVENUE_EVIDENCE_COLLECTIONS.map(collection => [collection, []]));
@@ -111,12 +114,14 @@ function fixture() {
     },
   };
   const tasksPayload = {
-    format: 'ashbi-bonsai-task-reconciliation', version: 1, complete: true,
+    format: 'ashbi-bonsai-task-reconciliation', version: 2, complete: true,
     organizationId: 'org-1', completedAt: '2026-08-15T19:00:00.000Z', unresolvedFindings: 0,
     summary: { sourceTasks: 0, hubBonsaiTasks: 0, matchedTasks: 0 }, findings: [],
     sourceEvidence: {
       tasksSha256: bonsaiTasksSha256, taskRows: 0,
       capturedAt: bonsaiTasksPayload.capturedAt, scope: 'all',
+      historicalTasksSha256: bonsaiHistoricalTasksSha256, historicalTaskRows: 0,
+      historicalProjectsSha256: bonsaiProjectsSha256, historicalProjectRows: 1,
     },
     workspaceEvidence: {
       artifactSha256: workspaceArtifactSha256,
@@ -138,6 +143,8 @@ function fixture() {
             ? bonsaiProjectsContent
             : id === 'bonsai-tasks-json'
               ? bonsaiTasksContent
+              : id === 'bonsai-tasks-csv'
+                ? bonsaiHistoricalTasksContent
             : id === 'bonsai-time-entries-csv'
               ? bonsaiTimeEntriesContent
               : id === 'bonsai-expenses-csv'
@@ -400,6 +407,25 @@ test('cutover evaluator binds task reconciliation to the exact complete Bonsai t
   const reportPath = path.join(directory, artifact.path);
   const payload = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
   payload.sourceEvidence.tasksSha256 = 'f'.repeat(64);
+  const content = Buffer.from(JSON.stringify(payload));
+  fs.writeFileSync(reportPath, content);
+  artifact.sha256 = crypto.createHash('sha256').update(content).digest('hex');
+  try {
+    const report = evaluateBonsaiCutoverReadiness({ manifest, manifestDirectory: directory });
+    assert.equal(report.ready, false);
+    assert.equal(report.checks.find((check) => check.id === 'task-reconciliation-binding').ok, false);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('cutover evaluator binds task reconciliation to native history and project sources', () => {
+  const { directory, manifest } = fixture();
+  const artifact = manifest.artifacts.find(item => item.id === 'tasks-reconciliation');
+  const reportPath = path.join(directory, artifact.path);
+  const payload = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+  payload.sourceEvidence.historicalTasksSha256 = 'e'.repeat(64);
+  payload.sourceEvidence.historicalProjectsSha256 = 'd'.repeat(64);
   const content = Buffer.from(JSON.stringify(payload));
   fs.writeFileSync(reportPath, content);
   artifact.sha256 = crypto.createHash('sha256').update(content).digest('hex');

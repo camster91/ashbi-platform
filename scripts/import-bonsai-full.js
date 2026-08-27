@@ -7,8 +7,8 @@
  * from Bonsai CSV exports plus a complete authenticated task snapshot.
  *
  * Usage:
- *   node scripts/import-bonsai-full.js --dry-run --organization-id <id> --csv-dir ./bonsai-export --connections-csv ./connection_export.csv --tasks-json ./tasks.json --summary-file ./reconciliation.json
- *   node scripts/import-bonsai-full.js --confirm --organization-id <id> --csv-dir ./bonsai-export --connections-csv ./connection_export.csv --tasks-json ./tasks.json --approved-summary ./reviewed-dry-run.json --summary-file ./live-reconciliation.json
+ *   node scripts/import-bonsai-full.js --dry-run --organization-id <id> --csv-dir ./bonsai-export --connections-csv ./connection_export.csv --tasks-csv ./task_export.csv --tasks-json ./tasks.json --summary-file ./reconciliation.json
+ *   node scripts/import-bonsai-full.js --confirm --organization-id <id> --csv-dir ./bonsai-export --connections-csv ./connection_export.csv --tasks-csv ./task_export.csv --tasks-json ./tasks.json --approved-summary ./reviewed-dry-run.json --summary-file ./live-reconciliation.json
  *
  * Reconciliation-first and replay-safe. Existing Hub records are matched but
  * never automatically overwritten. Natural/source identities are checked on:
@@ -33,6 +33,7 @@ import csvParser from 'csv-parser';
 import { assertApprovedBonsaiDryRun, fingerprintBonsaiPlan, fingerprintInputInventory, missingRequiredCsvHeaders, sourceDifferences } from '../src/services/bonsai-import-evidence.service.js';
 import { parseBonsaiMoney, parseBonsaiDecimal } from '../src/services/bonsaiCsvValues.service.js';
 import { mapBonsaiConnections } from '../src/services/bonsaiConnectionMapper.service.js';
+import { mapBonsaiHistoricalTasks } from '../src/services/bonsaiHistoricalTaskMapper.service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const prisma = new PrismaClient({
@@ -51,6 +52,7 @@ const SUMMARY_FILE = readOption('--summary-file');
 const APPROVED_SUMMARY_FILE = readOption('--approved-summary');
 const ORGANIZATION_ID = readOption('--organization-id', process.env.IMPORT_ORGANIZATION_ID);
 const TASK_SNAPSHOT_FILE = readOption('--tasks-json', process.env.BONSAI_TASK_SNAPSHOT);
+const TASK_EXPORT_FILE = readOption('--tasks-csv', process.env.BONSAI_TASK_EXPORT);
 const CONNECTIONS_CSV_FILE = readOption('--connections-csv', process.env.BONSAI_CONNECTIONS_CSV);
 
 if (DRY_RUN && CONFIRM_LIVE) {
@@ -75,6 +77,10 @@ if (!SUMMARY_FILE) {
 }
 if (!TASK_SNAPSHOT_FILE) {
   console.error('Refusing import without --tasks-json pointing to a complete all-scope Bonsai task snapshot.');
+  process.exit(2);
+}
+if (!TASK_EXPORT_FILE) {
+  console.error('Refusing import without --tasks-csv pointing to the native Bonsai historical task export.');
   process.exit(2);
 }
 
@@ -238,6 +244,7 @@ const stats = {
   contacts: { created: 0, existing: 0 },
   projects: { created: 0, existing: 0, skipped: 0 },
   tasks: { created: 0, existing: 0, skipped: 0 },
+  historicalTasks: { created: 0, existing: 0, skipped: 0, parentsLinked: 0 },
   invoices: { created: 0, existing: 0, skipped: 0 },
   lineItems: { created: 0 },
   timeEntries: { created: 0, existing: 0, skipped: 0 },
@@ -274,9 +281,10 @@ async function runImport(prisma) {
 
   // Load all CSVs
   console.log('📂 Loading CSVs...');
-  const [clientsRaw, projectsRaw, invoicesRaw, timeEntriesRaw, expensesRaw, addressesRaw] = await Promise.all([
+  const [clientsRaw, projectsRaw, historicalTasksRaw, invoicesRaw, timeEntriesRaw, expensesRaw, addressesRaw] = await Promise.all([
     readCSV('clients.csv', CONNECTIONS_CSV_FILE, 'connections'),
     readCSV('projects.csv'),
+    readCSV('tasks.csv', TASK_EXPORT_FILE, 'task-history'),
     readCSV('invoices.csv'),
     readCSV('time-entries.csv'),
     readCSV('expenses.csv'),
@@ -301,6 +309,7 @@ async function runImport(prisma) {
     && connectionInventory.headers.includes('Email');
   console.log(`  ${connectionInventory?.filename || 'clients.csv'}: ${clientsRaw.length} rows`);
   console.log(`  projects.csv: ${projectsRaw.length} rows`);
+  console.log(`  ${path.basename(TASK_EXPORT_FILE)}: ${historicalTasksRaw.length} historical rows`);
   console.log(`  bonsai-tasks.json: ${tasksRaw.length} rows`);
   console.log(`  invoices.csv: ${invoicesRaw.length} rows`);
   console.log(`  time-entries.csv: ${timeEntriesRaw.length} rows`);
@@ -318,6 +327,13 @@ async function runImport(prisma) {
   const missingConnectionHeaders = missingRequiredCsvHeaders(connectionInventory?.headers, connectionHeaders);
   if (missingConnectionHeaders.length > 0) {
     stats.errors.push(`${connectionInventory?.filename || 'clients.csv'}: missing required CSV columns (${missingConnectionHeaders.join(', ')})`);
+  }
+  const taskHistoryInventory = inputInventory.find(file => file.kind === 'task-history');
+  const missingTaskHistoryHeaders = missingRequiredCsvHeaders(taskHistoryInventory?.headers, [
+    'Task Name', 'Project', 'Company', 'Assignee', 'Status', 'Task ID', 'Created', 'Task Type', 'Parent Task ID',
+  ]);
+  if (missingTaskHistoryHeaders.length > 0) {
+    stats.errors.push(`${taskHistoryInventory?.filename || 'tasks.csv'}: missing required CSV columns (${missingTaskHistoryHeaders.join(', ')})`);
   }
   for (const [filename, expected] of Object.entries(requiredHeaders)) {
     const inventory = inputInventory.find(file => file.kind === filename || file.filename === filename);
@@ -604,8 +620,13 @@ async function runImport(prisma) {
   console.log('\n📁 Importing Projects...');
 
   const projectIdMap = new Map(); // bonsaiProjectId → DB id
-  const projectLookup = new Map(); // "clientName|projectTitle" → DB id
+  const projectLookup = new Map(); // "clientName|projectTitle" → Set<DB id>
   const seenProjectSourceKeys = new Set();
+
+  function registerProjectLookup(clientName, title, projectId) {
+    const key = `${clientName.toLowerCase()}|${title.toLowerCase()}`;
+    projectLookup.set(key, new Set([...(projectLookup.get(key) ?? []), projectId]));
+  }
 
   for (const proj of projectsRaw) {
     const clientName = (proj.client_or_company_name || '').trim();
@@ -616,7 +637,12 @@ async function runImport(prisma) {
       stats.projects.skipped++;
       continue;
     }
-    const projectSourceKey = bonsaiId || `${clientName.toLowerCase()}|${title.toLowerCase()}`;
+    if (!bonsaiId) {
+      stats.projects.skipped++;
+      stats.errors.push(`Project "${title}": missing immutable Bonsai project ID`);
+      continue;
+    }
+    const projectSourceKey = bonsaiId;
     if (seenProjectSourceKeys.has(projectSourceKey)) {
       stats.projects.skipped++;
       stats.errors.push(`Project "${title}": duplicate Bonsai source identity`);
@@ -663,7 +689,7 @@ async function runImport(prisma) {
         name: title,
         clientId,
         status,
-        bonsaiProjectId: bonsaiId || null,
+        bonsaiProjectId: bonsaiId,
         budget,
         startDate,
         endDate,
@@ -678,19 +704,19 @@ async function runImport(prisma) {
           stats.errors.push(`Project "${title}": Existing Hub record differs in ${differences.join(', ')}; manual reconciliation required`);
         }
         projectIdMap.set(bonsaiId, existing.id);
-        projectLookup.set(`${clientName.toLowerCase()}|${title.toLowerCase()}`, existing.id);
+        registerProjectLookup(clientName, title, existing.id);
         stats.projects.existing++;
       } else {
         if (!DRY_RUN) {
           const created = await prisma.project.create({ data: { ...projectData, organizationId: ORGANIZATION_ID } });
           projectIdMap.set(bonsaiId, created.id);
-          projectLookup.set(`${clientName.toLowerCase()}|${title.toLowerCase()}`, created.id);
+          registerProjectLookup(clientName, title, created.id);
         }
         stats.projects.created++;
         if (DRY_RUN) {
-          const dryProjectId = `dry-project-${bonsaiId || `${clientName}-${title}`}`;
+          const dryProjectId = `dry-project-${bonsaiId}`;
           projectIdMap.set(bonsaiId, dryProjectId);
-          projectLookup.set(`${clientName.toLowerCase()}|${title.toLowerCase()}`, dryProjectId);
+          registerProjectLookup(clientName, title, dryProjectId);
         }
         if (DRY_RUN) console.log(`  [would create] ${title} → ${clientName} (${status})`);
       }
@@ -699,12 +725,19 @@ async function runImport(prisma) {
     }
   }
 
+  for (const [key, matches] of projectLookup) {
+    if (matches.size > 1) {
+      stats.errors.push(`Project lookup "${key}": multiple exact Bonsai projects require consolidation before name-based records can be imported`);
+    }
+  }
+
   console.log(`  ✅ Projects: ${stats.projects.created} created, ${stats.projects.existing} matched, ${stats.projects.skipped} skipped`);
 
   // Helper: resolve project ID
   function resolveProjectId(clientName, projectTitle) {
     const key = `${(clientName || '').trim().toLowerCase()}|${(projectTitle || '').trim().toLowerCase()}`;
-    return projectLookup.get(key) || null;
+    const matches = [...(projectLookup.get(key) ?? [])];
+    return matches.length === 1 ? matches[0] : null;
   }
 
   // Resolve historical owners only within this organization. External sources
@@ -819,6 +852,106 @@ async function runImport(prisma) {
     if (DRY_RUN && stats.tasks.created <= 10) console.log(`  [would create] ${title}`);
   }
   console.log(`  ✅ Tasks: ${stats.tasks.created} created, ${stats.tasks.existing} existing, ${stats.tasks.skipped} skipped`);
+
+  // The native task export is a separate historical source. Its task_… IDs do
+  // not equal API UUIDs, so it is never merged into the current snapshot by
+  // guesswork. Exact displayed overlaps and projectless rows remain findings.
+  console.log('\n🗂️ Importing Historical Tasks...');
+  const historicalMapping = mapBonsaiHistoricalTasks({
+    taskRows: historicalTasksRaw,
+    projectRows: projectsRaw,
+    currentTasks: tasksRaw,
+    shouldSkipClient,
+  });
+  stats.historicalTaskMapping = historicalMapping.summary;
+  stats.historicalTasks.skipped += historicalTasksRaw.length - historicalMapping.tasks.length;
+  for (const finding of historicalMapping.findings) {
+    stats.errors.push(`Historical task row ${finding.sourceRow || 'unknown'}: ${finding.code}`);
+  }
+
+  const historicalTasksById = new Map();
+  for (const task of existingTasks) {
+    const sourceId = String(parseTaskProperties(task.properties).bonsaiLegacyTaskId || '').trim();
+    if (!sourceId) continue;
+    if (historicalTasksById.has(sourceId)) {
+      stats.errors.push(`Historical task ${sourceId}: duplicate Hub Bonsai task identity`);
+      continue;
+    }
+    historicalTasksById.set(sourceId, task);
+  }
+  const historicalTaskIdMap = new Map();
+  const historicalTaskRecords = new Map();
+  for (const source of historicalMapping.tasks) {
+    const projectId = projectIdMap.get(source.projectSourceId);
+    if (!projectId) {
+      stats.historicalTasks.skipped++;
+      stats.errors.push(`Historical task ${source.sourceId}: no exact Bonsai project ID match`);
+      continue;
+    }
+    const owner = source.ownerName ? await findUser(source.ownerName) : null;
+    if (source.ownerName && !owner) {
+      stats.historicalTasks.skipped++;
+      stats.errors.push(`Historical task ${source.sourceId}: no exact organization owner match`);
+      continue;
+    }
+    const properties = JSON.stringify({
+      bonsaiLegacyTaskId: source.sourceId,
+      bonsaiSource: 'native-task-export',
+      ...source.evidence,
+    });
+    const taskData = {
+      title: source.title,
+      status: source.status,
+      priority: source.priority,
+      projectId,
+      assigneeId: owner?.id || null,
+      startDate: source.startDate ? new Date(source.startDate) : null,
+      dueDate: source.dueDate ? new Date(source.dueDate) : null,
+      estimatedTime: source.evidence.estimate,
+      properties,
+      ...(source.createdAt ? { createdAt: new Date(source.createdAt) } : {}),
+    };
+    const existing = historicalTasksById.get(source.sourceId);
+    if (existing) {
+      const differences = sourceDifferences(taskData, existing, [
+        'title', 'status', 'priority', 'projectId', 'assigneeId', 'startDate', 'dueDate',
+        'estimatedTime', 'properties', 'createdAt',
+      ]);
+      if (differences.length > 0) {
+        stats.errors.push(`Historical task ${source.sourceId}: Existing Hub record differs in ${differences.join(', ')}`);
+      }
+      historicalTaskIdMap.set(source.sourceId, existing.id);
+      historicalTaskRecords.set(source.sourceId, existing);
+      stats.historicalTasks.existing++;
+      continue;
+    }
+    if (!DRY_RUN) {
+      const created = await prisma.task.create({ data: taskData });
+      historicalTaskIdMap.set(source.sourceId, created.id);
+    } else {
+      historicalTaskIdMap.set(source.sourceId, `dry-historical-task-${source.sourceId}`);
+    }
+    stats.historicalTasks.created++;
+  }
+
+  // Link hierarchy only after every historical task has a stable destination
+  // identity. The surrounding confirmed import transaction makes this atomic.
+  for (const source of historicalMapping.tasks.filter(task => task.parentSourceId)) {
+    const taskId = historicalTaskIdMap.get(source.sourceId);
+    const parentId = historicalTaskIdMap.get(source.parentSourceId);
+    if (!taskId || !parentId) {
+      stats.errors.push(`Historical task ${source.sourceId}: parent destination is unavailable`);
+      continue;
+    }
+    const existing = historicalTaskRecords.get(source.sourceId);
+    if (existing && existing.parentId !== parentId) {
+      stats.errors.push(`Historical task ${source.sourceId}: Existing Hub parent differs from source evidence`);
+      continue;
+    }
+    if (!DRY_RUN && !existing) await prisma.task.update({ where: { id: taskId }, data: { parentId } });
+    stats.historicalTasks.parentsLinked++;
+  }
+  console.log(`  ✅ Historical tasks: ${stats.historicalTasks.created} created, ${stats.historicalTasks.existing} existing, ${stats.historicalTasks.skipped} blocked`);
 
   // ============================================================
   // STEP 4: INVOICES
@@ -1218,6 +1351,7 @@ async function runImport(prisma) {
   console.log(`  Contacts:     ${stats.contacts.created} new, ${stats.contacts.existing} existing`);
   console.log(`  Projects:     ${stats.projects.created} new, ${stats.projects.existing} matched, ${stats.projects.skipped} skipped`);
   console.log(`  Tasks:        ${stats.tasks.created} new, ${stats.tasks.existing} matched, ${stats.tasks.skipped} skipped`);
+  console.log(`  Task History: ${stats.historicalTasks.created} new, ${stats.historicalTasks.existing} matched, ${stats.historicalTasks.skipped} blocked, ${stats.historicalTasks.parentsLinked} parents linked`);
   console.log(`  Invoices:     ${stats.invoices.created} new, ${stats.invoices.existing} existing, ${stats.invoices.skipped} skipped`);
   console.log(`  Line Items:   ${stats.lineItems.created} new`);
   console.log(`  Time Entries: ${stats.timeEntries.created} new, ${stats.timeEntries.existing} existing, ${stats.timeEntries.skipped} skipped`);

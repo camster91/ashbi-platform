@@ -58,6 +58,39 @@ test('task reconciliation binds exact task, project, owner, schedule, status, an
   assert.equal(report.workspaceEvidence.collectionCounts.tasks, 1);
 });
 
+test('task reconciliation version 2 binds and verifies native historical task evidence', () => {
+  const workspace = workspaceExport();
+  workspace.records.projects.push({ id: 'project-history', bonsaiProjectId: 'LEG-0001', clientId: 'client-1', name: 'Legacy Website' });
+  workspace.records.tasks.push({
+    id: 'task-history', projectId: 'project-history', parentId: null, assigneeId: 'user-1',
+    title: 'Legacy design', status: 'COMPLETED', priority: 'NORMAL', estimatedTime: '60',
+    properties: JSON.stringify({
+      bonsaiLegacyTaskId: 'task_001', bonsaiSource: 'native-task-export', taskList: null,
+      progress: null, estimate: '60', timeTracked: null, timeRemaining: null,
+      billing: null, service: null, tags: null, taskType: 'task',
+    }),
+    dueDate: null, startDate: null, completedAt: null, createdAt: '2025-01-01T10:00:00.000Z',
+  });
+  workspace.manifest = buildWorkspaceExportManifest(workspace.records, { version: 3 });
+  const report = reconcileBonsaiTasks({
+    ...input(taskSnapshot(), workspace),
+    bonsaiHistoricalTasksSha256: 'c'.repeat(64),
+    bonsaiProjectsSha256: 'd'.repeat(64),
+    bonsaiHistoricalTaskRows: [{
+      'Task Name': 'Legacy design', Project: 'Legacy Website', Company: 'Acme',
+      Assignee: 'Cameron Ashley', Priority: '', 'Start Date': '', 'Due Date': '',
+      Estimate: '60', Status: 'Done', 'Task ID': 'task_001',
+      Created: '2025-01-01 10:00:00', 'Task Type': 'task', 'Parent Task ID': '',
+    }],
+    bonsaiProjectRows: [{ project_id: 'LEG-0001', title: 'Legacy Website', client_or_company_name: 'Acme' }],
+  });
+  assert.equal(report.complete, true);
+  assert.equal(report.version, 2);
+  assert.equal(report.summary.matchedHistoricalTasks, 1);
+  assert.equal(report.sourceEvidence.historicalTasksSha256, 'c'.repeat(64));
+  assert.equal(report.sourceEvidence.historicalProjectsSha256, 'd'.repeat(64));
+});
+
 test('task reconciliation refuses incomplete or active-only source snapshots', () => {
   const snapshot = taskSnapshot();
   snapshot.scope = 'active';
@@ -117,24 +150,31 @@ test('task reconciliation command creates an immutable owner-only report', () =>
   try {
     const tasksPath = path.join(directory, 'tasks.json');
     const workspacePath = path.join(directory, 'workspace.json');
+    const historicalTasksPath = path.join(directory, 'task-history.csv');
+    const projectsPath = path.join(directory, 'projects.csv');
     const outputPath = path.join(directory, 'report.json');
     const tasksContent = Buffer.from(JSON.stringify(taskSnapshot()));
     const workspaceContent = Buffer.from(JSON.stringify(workspaceExport()));
     fs.writeFileSync(tasksPath, tasksContent);
     fs.writeFileSync(workspacePath, workspaceContent);
+    fs.writeFileSync(historicalTasksPath, 'Task Name,Project,Company,Assignee,Status,Task ID,Created,Task Type,Parent Task ID\n');
+    fs.writeFileSync(projectsPath, 'project_id,title,client_or_company_name\n');
     const result = spawnSync(process.execPath, [
       'scripts/reconcile-bonsai-tasks.js', '--organization-id', 'org-1',
-      '--bonsai-tasks', tasksPath, '--workspace-export', workspacePath,
+      '--bonsai-tasks', tasksPath, '--bonsai-task-history', historicalTasksPath,
+      '--bonsai-projects', projectsPath, '--workspace-export', workspacePath,
       '--completed-at', '2026-08-20T13:00:00.000Z', '--output', outputPath,
     ], { cwd: process.cwd(), encoding: 'utf8' });
     assert.equal(result.status, 0, result.stderr);
     const report = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
     assert.equal(report.complete, true);
+    assert.equal(report.version, 2);
     assert.equal(report.sourceEvidence.tasksSha256, crypto.createHash('sha256').update(tasksContent).digest('hex'));
     assert.match(result.stdout, /passed with zero findings/);
     const overwrite = spawnSync(process.execPath, [
       'scripts/reconcile-bonsai-tasks.js', '--organization-id', 'org-1',
-      '--bonsai-tasks', tasksPath, '--workspace-export', workspacePath,
+      '--bonsai-tasks', tasksPath, '--bonsai-task-history', historicalTasksPath,
+      '--bonsai-projects', projectsPath, '--workspace-export', workspacePath,
       '--completed-at', '2026-08-20T13:00:00.000Z', '--output', outputPath,
     ], { cwd: process.cwd(), encoding: 'utf8' });
     assert.equal(overwrite.status, 2);

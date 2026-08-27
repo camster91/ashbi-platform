@@ -11,6 +11,7 @@ test('Bonsai full importer requires an explicit tenant and scopes imported recor
   assert.match(source, /--approved-summary/);
   assert.match(source, /--summary-file/);
   assert.match(source, /--tasks-json/);
+  assert.match(source, /--tasks-csv/);
   assert.match(source, /--connections-csv/);
   assert.match(source, /IMPORT_ORGANIZATION_ID/);
   assert.match(source, /organizationId: ORGANIZATION_ID/);
@@ -48,6 +49,9 @@ test('Bonsai importer treats tasks as source-bound evidence and never guesses pr
   assert.match(taskBlock, /no exact organization owner match/);
   assert.match(taskBlock, /archived source task requires an explicit retention decision/);
   assert.match(taskBlock, /Existing Hub record differs/);
+  assert.match(taskBlock, /bonsaiLegacyTaskId/);
+  assert.match(taskBlock, /parent destination is unavailable/);
+  assert.match(taskBlock, /prisma\.task\.update/);
   assert.doesNotMatch(taskBlock, /prisma\.project\.findFirst/);
   assert.doesNotMatch(taskBlock, /prisma\.user\.create/);
 });
@@ -77,6 +81,8 @@ test('Bonsai importer does not treat near-matching time or expense rows as recon
 
 test('Bonsai importer never drops unresolved client or project identity', async () => {
   const source = await readFile(fullImporter, 'utf8');
+  assert.match(source, /missing immutable Bonsai project ID/);
+  assert.match(source, /multiple exact Bonsai projects require consolidation/);
   const timeBlock = source.slice(source.indexOf('// STEP 5: TIME ENTRIES'), source.indexOf('// STEP 6: EXPENSES'));
   assert.doesNotMatch(timeBlock, /Try to find any project with this title/);
   assert.doesNotMatch(timeBlock, /prisma\.project\.findFirst/);

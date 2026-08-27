@@ -21,6 +21,7 @@ const REQUIRED_ARTIFACT_IDS = [
   'bonsai-connections-csv',
   'bonsai-projects-csv',
   'bonsai-tasks-json',
+  'bonsai-tasks-csv',
   'bonsai-time-entries-csv',
   'bonsai-expenses-csv',
   'bonsai-invoices-csv',
@@ -204,8 +205,10 @@ function taskReconciliationIsBound({ artifacts, manifestDirectory, organizationI
   const workspacePayload = readContainedJsonArtifact(artifacts, 'workspace-export', manifestDirectory);
   const artifact = id => Array.isArray(artifacts) ? artifacts.find(item => item?.id === id) : null;
   const tasksArtifact = artifact('bonsai-tasks-json');
+  const historicalTasksArtifact = artifact('bonsai-tasks-csv');
+  const projectsArtifact = artifact('bonsai-projects-csv');
   const workspaceArtifact = artifact('workspace-export');
-  if (!taskReport || !workspacePayload || !tasksArtifact || !workspaceArtifact) return false;
+  if (!taskReport || !workspacePayload || !tasksArtifact || !historicalTasksArtifact || !projectsArtifact || !workspaceArtifact) return false;
   const completedAt = timestamp(taskReport.completedAt);
   const capturedAt = timestamp(taskReport.sourceEvidence?.capturedAt);
   const exportedAt = timestamp(workspacePayload.exportedAt);
@@ -215,7 +218,7 @@ function taskReconciliationIsBound({ artifacts, manifestDirectory, organizationI
         === workspacePayload.manifest?.collections?.[collection]?.count
   ));
   return taskReport.format === 'ashbi-bonsai-task-reconciliation'
-    && taskReport.version === 1
+    && taskReport.version === 2
     && taskReport.complete === true
     && taskReport.organizationId === organizationId
     && taskReport.unresolvedFindings === reconciliation.unresolvedFindings
@@ -224,6 +227,12 @@ function taskReconciliationIsBound({ artifacts, manifestDirectory, organizationI
     && Number.isInteger(taskReport.sourceEvidence?.taskRows)
     && taskReport.sourceEvidence.taskRows >= 0
     && taskReport.sourceEvidence?.scope === 'all'
+    && taskReport.sourceEvidence?.historicalTasksSha256 === historicalTasksArtifact.sha256
+    && Number.isInteger(taskReport.sourceEvidence?.historicalTaskRows)
+    && taskReport.sourceEvidence.historicalTaskRows >= 0
+    && taskReport.sourceEvidence?.historicalProjectsSha256 === projectsArtifact.sha256
+    && Number.isInteger(taskReport.sourceEvidence?.historicalProjectRows)
+    && taskReport.sourceEvidence.historicalProjectRows >= 0
     && taskReport.workspaceEvidence?.artifactSha256 === workspaceArtifact.sha256
     && taskReport.workspaceEvidence?.recordsSha256 === workspacePayload.manifest?.recordsSha256
     && workspacePayload.organization?.id === organizationId

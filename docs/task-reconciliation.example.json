@@ -1,6 +1,6 @@
 {
   "format": "ashbi-bonsai-task-reconciliation",
-  "version": 1,
+  "version": 2,
   "complete": false,
   "organizationId": "REPLACE_WITH_ASHBI_ORGANIZATION_ID",
   "completedAt": null,
@@ -8,14 +8,22 @@
   "summary": {
     "sourceTasks": null,
     "hubBonsaiTasks": null,
-    "matchedTasks": null
+    "matchedTasks": null,
+    "sourceHistoricalTasks": null,
+    "mappedHistoricalTasks": null,
+    "hubBonsaiHistoricalTasks": null,
+    "matchedHistoricalTasks": null
   },
   "findings": [],
   "sourceEvidence": {
     "tasksSha256": "0000000000000000000000000000000000000000000000000000000000000000",
     "taskRows": null,
     "capturedAt": null,
-    "scope": "all"
+    "scope": "all",
+    "historicalTasksSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "historicalTaskRows": null,
+    "historicalProjectsSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "historicalProjectRows": null
   },
   "workspaceEvidence": {
     "artifactSha256": "0000000000000000000000000000000000000000000000000000000000000000",

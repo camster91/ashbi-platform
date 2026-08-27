@@ -49,6 +49,7 @@
     { "id": "bonsai-connections-csv", "path": "evidence/connection_export.csv", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
     { "id": "bonsai-projects-csv", "path": "evidence/projects.csv", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
     { "id": "bonsai-tasks-json", "path": "evidence/bonsai-tasks.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
+    { "id": "bonsai-tasks-csv", "path": "evidence/task-export.csv", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
     { "id": "bonsai-time-entries-csv", "path": "evidence/time-entries.csv", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
     { "id": "bonsai-expenses-csv", "path": "evidence/expenses.csv", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
     { "id": "bonsai-invoices-csv", "path": "evidence/invoices.csv", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },

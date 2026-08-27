@@ -1,4 +1,5 @@
 import { verifyWorkspaceExport, workspaceExportCollections } from './workspace-export-integrity.service.js';
+import { mapBonsaiHistoricalTasks } from './bonsaiHistoricalTaskMapper.service.js';
 
 const PRIORITY_MAP = Object.freeze({
   urgent: 'CRITICAL',
@@ -71,8 +72,12 @@ export function reconcileBonsaiTasks({
   organizationId,
   completedAt,
   bonsaiTasksSha256,
+  bonsaiHistoricalTasksSha256,
+  bonsaiProjectsSha256,
   workspaceArtifactSha256,
   bonsaiTaskSnapshot,
+  bonsaiHistoricalTaskRows,
+  bonsaiProjectRows,
   workspaceExport,
 }) {
   if (typeof organizationId !== 'string' || !organizationId.trim()) throw new TypeError('organizationId is required');
@@ -95,6 +100,10 @@ export function reconcileBonsaiTasks({
   if (completed < captured || completed < exported) throw new TypeError('completedAt must not predate source evidence');
 
   const sourceTasks = bonsaiTaskSnapshot.tasks;
+  const includesHistory = Array.isArray(bonsaiHistoricalTaskRows);
+  if (includesHistory && !Array.isArray(bonsaiProjectRows)) {
+    throw new TypeError('Historical task reconciliation requires Bonsai project rows');
+  }
   const findings = [];
   const sourceGroups = groupBy(sourceTasks, task => String(task?.uuid ?? '').trim());
   const duplicateSourceIds = new Set();
@@ -185,9 +194,97 @@ export function reconcileBonsaiTasks({
     }
   }
 
+  let historicalSummary = null;
+  if (includesHistory) {
+    const historicalMapping = mapBonsaiHistoricalTasks({
+      taskRows: bonsaiHistoricalTaskRows,
+      projectRows: bonsaiProjectRows,
+      currentTasks: sourceTasks,
+      shouldSkipClient: name => ['ashbi design', 'test client'].includes(normalized(name)),
+    });
+    findings.push(...historicalMapping.findings);
+    const historicalHubGroups = new Map();
+    for (const task of workspaceExport.records.tasks) {
+      const sourceId = String(parseProperties(task.properties).bonsaiLegacyTaskId ?? '').trim();
+      if (!sourceId) continue;
+      historicalHubGroups.set(sourceId, [...(historicalHubGroups.get(sourceId) ?? []), task]);
+    }
+    const duplicateHistoricalHubIds = new Set();
+    for (const [sourceId, tasks] of historicalHubGroups) {
+      if (tasks.length > 1) {
+        duplicateHistoricalHubIds.add(sourceId);
+        findings.push({
+          code: 'DUPLICATE_HUB_BONSAI_HISTORICAL_TASK_ID', sourceId,
+          hubTaskIds: tasks.map(task => task.id).sort(),
+        });
+      }
+    }
+    const mappedById = new Map(historicalMapping.tasks.map(task => [task.sourceId, task]));
+    let matchedHistoricalTasks = 0;
+    for (const source of historicalMapping.tasks) {
+      if (duplicateHistoricalHubIds.has(source.sourceId)) continue;
+      const hubMatches = historicalHubGroups.get(source.sourceId) ?? [];
+      if (hubMatches.length === 0) {
+        findings.push({ code: 'BONSAI_HISTORICAL_TASK_MISSING_IN_HUB', sourceId: source.sourceId });
+        continue;
+      }
+      const projectMatches = projectsBySourceId.get(source.projectSourceId) ?? [];
+      const ownerMatches = matchingUsers(users, source.ownerName);
+      const expectedParent = source.parentSourceId ? historicalHubGroups.get(source.parentSourceId) ?? [] : [];
+      const hub = hubMatches[0];
+      const hubProperties = parseProperties(hub.properties);
+      const expectedProperties = {
+        bonsaiLegacyTaskId: source.sourceId,
+        bonsaiSource: 'native-task-export',
+        ...source.evidence,
+      };
+      const mismatchedFields = [];
+      if (projectMatches.length !== 1) mismatchedFields.push('project_identity');
+      else if (hub.projectId !== projectMatches[0].id) mismatchedFields.push('project');
+      if (source.ownerName && ownerMatches.length !== 1) mismatchedFields.push('owner_identity');
+      else if ((hub.assigneeId ?? null) !== (ownerMatches[0]?.id ?? null)) mismatchedFields.push('assignee');
+      if (hub.title !== source.title) mismatchedFields.push('title');
+      if (hub.status !== source.status) mismatchedFields.push('status');
+      if (hub.priority !== source.priority) mismatchedFields.push('priority');
+      if (dateOnly(hub.startDate) !== dateOnly(source.startDate)) mismatchedFields.push('startDate');
+      if (dateOnly(hub.dueDate) !== dateOnly(source.dueDate)) mismatchedFields.push('dueDate');
+      if (timestamp(hub.createdAt) !== timestamp(source.createdAt)) mismatchedFields.push('createdAt');
+      if ((hub.estimatedTime ?? null) !== (source.evidence.estimate ?? null)) mismatchedFields.push('estimatedTime');
+      if (Object.entries(expectedProperties).some(([key, value]) => (hubProperties[key] ?? null) !== (value ?? null))) {
+        mismatchedFields.push('properties');
+      }
+      if (source.parentSourceId) {
+        if (expectedParent.length !== 1) mismatchedFields.push('parent_identity');
+        else if (hub.parentId !== expectedParent[0].id) mismatchedFields.push('parent');
+      } else if (hub.parentId !== null && hub.parentId !== undefined) mismatchedFields.push('parent');
+      if (mismatchedFields.length > 0) {
+        findings.push({
+          code: 'HISTORICAL_TASK_FIELD_MISMATCH', sourceId: source.sourceId,
+          hubTaskId: hub.id, fields: mismatchedFields,
+        });
+      } else {
+        matchedHistoricalTasks += 1;
+      }
+    }
+    for (const [sourceId, tasks] of historicalHubGroups) {
+      if (!mappedById.has(sourceId) && !duplicateHistoricalHubIds.has(sourceId)) {
+        findings.push({
+          code: 'HUB_BONSAI_HISTORICAL_TASK_MISSING_IN_SOURCE', sourceId,
+          hubTaskId: tasks[0].id,
+        });
+      }
+    }
+    historicalSummary = {
+      sourceHistoricalTasks: bonsaiHistoricalTaskRows.length,
+      mappedHistoricalTasks: historicalMapping.tasks.length,
+      hubBonsaiHistoricalTasks: [...historicalHubGroups.values()].reduce((sum, tasks) => sum + tasks.length, 0),
+      matchedHistoricalTasks,
+    };
+  }
+
   return {
     format: 'ashbi-bonsai-task-reconciliation',
-    version: 1,
+    version: includesHistory ? 2 : 1,
     complete: findings.length === 0,
     organizationId,
     completedAt: new Date(completed).toISOString(),
@@ -196,6 +293,7 @@ export function reconcileBonsaiTasks({
       sourceTasks: sourceTasks.length,
       hubBonsaiTasks: [...hubGroups.values()].reduce((sum, tasks) => sum + tasks.length, 0),
       matchedTasks,
+      ...(historicalSummary ?? {}),
     },
     findings,
     sourceEvidence: {
@@ -203,6 +301,12 @@ export function reconcileBonsaiTasks({
       taskRows: sourceTasks.length,
       capturedAt: new Date(captured).toISOString(),
       scope: bonsaiTaskSnapshot.scope,
+      ...(includesHistory ? {
+        historicalTasksSha256: requireSha256(bonsaiHistoricalTasksSha256, 'bonsaiHistoricalTasksSha256'),
+        historicalTaskRows: bonsaiHistoricalTaskRows.length,
+        historicalProjectsSha256: requireSha256(bonsaiProjectsSha256, 'bonsaiProjectsSha256'),
+        historicalProjectRows: bonsaiProjectRows.length,
+      } : {}),
     },
     workspaceEvidence: {
       artifactSha256: requireSha256(workspaceArtifactSha256, 'workspaceArtifactSha256'),
