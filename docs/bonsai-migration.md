@@ -15,6 +15,8 @@ Export and retain these six Bonsai CSV files together:
 
 The importer records each file's row count and SHA-256 digest. It produces one combined source fingerprint and one plan fingerprint covering the exact source and planned outcomes.
 
+The current Bonsai Data screen labels the client export as **Companies** and generates a timestamped `connection_export` whose observed 2026-08-27 column contract does not match the legacy `clients.csv` mapping above. Do not rename that file and proceed: retain the untouched export, record its checksum and headers, and keep the migration blocked until the company/contact relationship mapper is reviewed against representative rows. The importer now records CSV headers and reports every missing required column as a reconciliation finding, so an incompatible or renamed export cannot produce an approved live import.
+
 ## Dry run
 
 ```text

@@ -29,7 +29,7 @@ import crypto from 'node:crypto';
 import { Readable } from 'node:stream';
 import { fileURLToPath } from 'url';
 import csvParser from 'csv-parser';
-import { assertApprovedBonsaiDryRun, fingerprintBonsaiPlan, fingerprintInputInventory, sourceDifferences } from '../src/services/bonsai-import-evidence.service.js';
+import { assertApprovedBonsaiDryRun, fingerprintBonsaiPlan, fingerprintInputInventory, missingRequiredCsvHeaders, sourceDifferences } from '../src/services/bonsai-import-evidence.service.js';
 import { parseBonsaiMoney, parseBonsaiDecimal } from '../src/services/bonsaiCsvValues.service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -97,9 +97,10 @@ function shouldSkipClient(name) {
 function readCSV(filename) {
   return new Promise((resolve, reject) => {
     const results = [];
+    let headers = [];
     const filePath = path.join(CSV_DIR, filename);
     if (!fs.existsSync(filePath)) {
-      inputInventory.push({ filename, path: filePath, present: false, rows: 0, sha256: null });
+      inputInventory.push({ filename, path: filePath, present: false, rows: 0, sha256: null, headers: [] });
       console.log(`  ⚠ File not found: ${filePath}`);
       resolve([]);
       return;
@@ -107,10 +108,11 @@ function readCSV(filename) {
     const sourceBytes = fs.readFileSync(filePath);
     Readable.from(sourceBytes)
       .pipe(csvParser())
+      .on('headers', (sourceHeaders) => { headers = sourceHeaders; })
       .on('data', (row) => results.push(row))
       .on('end', () => {
         const sha256 = crypto.createHash('sha256').update(sourceBytes).digest('hex');
-        inputInventory.push({ filename, path: filePath, present: true, rows: results.length, sha256 });
+        inputInventory.push({ filename, path: filePath, present: true, rows: results.length, sha256, headers });
         resolve(results);
       })
       .on('error', reject);
@@ -247,6 +249,22 @@ async function runImport(prisma) {
   console.log(`  time-entries.csv: ${timeEntriesRaw.length} rows`);
   console.log(`  expenses.csv: ${expensesRaw.length} rows`);
   console.log(`  addresses.csv: ${addressesRaw.length} rows`);
+
+  const requiredHeaders = {
+    'clients.csv': ['Client'],
+    'projects.csv': ['project_id', 'status', 'title', 'client_or_company_name'],
+    'invoices.csv': ['status', 'total_amount', 'currency', 'invoice_number', 'client_or_company_name'],
+    'time-entries.csv': ['date', 'hours', 'member', 'project', 'client'],
+    'expenses.csv': ['date', 'name', 'currency', 'amount_after_tax', 'project', 'member', 'client'],
+    'addresses.csv': ['Client'],
+  };
+  for (const [filename, expected] of Object.entries(requiredHeaders)) {
+    const inventory = inputInventory.find(file => file.filename === filename);
+    const missing = missingRequiredCsvHeaders(inventory?.headers, expected);
+    if (missing.length > 0) {
+      stats.errors.push(`${filename}: missing required CSV columns (${missing.join(', ')})`);
+    }
+  }
 
   // Build address lookup: Client name → address data
   const addressMap = new Map();

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { assertApprovedBonsaiDryRun, fingerprintBonsaiPlan, fingerprintInputInventory, sourceDifferences } from '../../services/bonsai-import-evidence.service.js';
+import { assertApprovedBonsaiDryRun, fingerprintBonsaiPlan, fingerprintInputInventory, missingRequiredCsvHeaders, sourceDifferences } from '../../services/bonsai-import-evidence.service.js';
 
 const inventory = [
   { filename: 'projects.csv', present: true, rows: 2, sha256: 'bbb' },
@@ -13,6 +13,12 @@ test('source fingerprint is deterministic and changes with file evidence', () =>
   assert.equal(first, fingerprintInputInventory([...inventory].reverse()));
   assert.notEqual(first, fingerprintInputInventory([{ ...inventory[0], rows: 3 }, inventory[1]]));
   assert.notEqual(first, fingerprintInputInventory([{ ...inventory[0], sha256: 'changed' }, inventory[1]]));
+});
+
+test('Bonsai CSV schema checks fail closed on renamed or missing columns', () => {
+  assert.deepEqual(missingRequiredCsvHeaders(['Client', 'Contact Email'], ['Client']), []);
+  assert.deepEqual(missingRequiredCsvHeaders(['Name', 'Email', 'Domain'], ['Client', 'Contact Email']), ['Client', 'Contact Email']);
+  assert.deepEqual(missingRequiredCsvHeaders([], ['project_id', 'title']), ['project_id', 'title']);
 });
 
 test('confirmed import requires the exact clean dry-run source and tenant', () => {

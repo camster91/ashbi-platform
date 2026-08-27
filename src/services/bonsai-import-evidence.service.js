@@ -23,6 +23,11 @@ export function fingerprintBonsaiPlan({ sourceFingerprint, stats }) {
   return sha256Json({ sourceFingerprint, stats });
 }
 
+export function missingRequiredCsvHeaders(actualHeaders = [], requiredHeaders = []) {
+  const actual = new Set(actualHeaders.map(header => String(header).trim()));
+  return requiredHeaders.filter(header => !actual.has(header));
+}
+
 export function assertApprovedBonsaiDryRun(approved, current) {
   if (!approved || approved.mode !== 'dry-run') throw new Error('Approved Bonsai evidence must be a dry-run report');
   if (approved.organization?.id !== current.organizationId) throw new Error('Approved Bonsai report organization does not match');
