@@ -1,7 +1,9 @@
 # Phase 2 Agent Deployment Guide
 
+> **Superseded deployment document.** This is a historical implementation plan, not evidence that any agent, schedule, credential, or production deployment is current. Use [docs/product-status.md](docs/product-status.md) for verified product state and [docs/deployment-and-rollback.md](docs/deployment-and-rollback.md) for the only current deployment process. Historical credentials referenced by earlier versions of this file must be reviewed and rotated before any related integration is enabled.
+
 **Created:** 2026-03-20  
-**Status:** Ready for deployment to hub.ashbi.ca
+**Status:** Historical plan; deployment state unverified
 
 ---
 
@@ -62,7 +64,7 @@ npm install
 **Config (.env):**
 ```
 HUB_API_BASE=https://hub.ashbi.ca/api
-HUB_BOT_SECRET=<from memory/api-keys.md>
+HUB_BOT_SECRET=<inject-from-approved-secret-manager>
 ```
 
 **Run:**
@@ -88,7 +90,7 @@ node agents/upwork-scraper.js
 
 **Config (.env):**
 ```
-MAILGUN_API_KEY=<from memory/api-keys.md>
+MAILGUN_API_KEY=<inject-from-approved-secret-manager>
 MAILGUN_DOMAIN=ashbi.ca
 ```
 
@@ -118,7 +120,7 @@ node agents/email-followup.js
 
 **Config (.env):**
 ```
-NOTION_TOKEN=<from memory/api-keys.md>
+NOTION_TOKEN=<inject-from-approved-secret-manager>
 HUB_API_BASE=https://hub.ashbi.ca/api
 ```
 
@@ -168,7 +170,7 @@ node agents/arcan-phase2-verify.js
 
 **Prerequisites:**
 ```bash
-# SSH credentials in memory/api-keys.md
+# Obtain temporary SSH access through the approved access process
 HOSTINGER_HOST=88.223.82.6
 HOSTINGER_PORT=65002
 HOSTINGER_USER=u633679196
@@ -194,13 +196,13 @@ bash agents/hostinger-db-optimize.sh
 cat > .env <<EOF
 # Hub
 HUB_API_BASE=https://hub.ashbi.ca/api
-HUB_BOT_SECRET=<from memory/api-keys.md>
+HUB_BOT_SECRET=<inject-from-approved-secret-manager>
 
 # Notion
-NOTION_TOKEN=<from memory/api-keys.md>
+NOTION_TOKEN=<inject-from-approved-secret-manager>
 
 # Mailgun
-MAILGUN_API_KEY=<from memory/api-keys.md>
+MAILGUN_API_KEY=<inject-from-approved-secret-manager>
 MAILGUN_DOMAIN=ashbi.ca
 
 # Hostinger
@@ -299,15 +301,15 @@ tail /home/u633679196/domains/app.influencerslink.com/data/heartbeat.log
 
 ---
 
-## Success Criteria
+## Historical Success Criteria (not verified)
 
-- ✅ All agents deployed to GitHub
-- ✅ All agents deployed to hub.ashbi.ca
-- ✅ Environment variables configured
-- ✅ Cron jobs installed
-- ✅ Gmail OAuth setup (email agent)
-- ✅ First test runs successful
-- ✅ Logs generated in memory/ directory
+- [ ] Confirm the intended agents still exist in the current source tree
+- [ ] Confirm deployment state using current production evidence
+- [ ] Confirm environment variables through the approved secret process
+- [ ] Confirm schedules from the active scheduler
+- [ ] Confirm Gmail OAuth only if the email workflow is re-approved
+- [ ] Run bounded tests in a non-production environment
+- [ ] Capture current logs without placing credentials in the repository
 
 ---
 

@@ -131,13 +131,9 @@ npm run build
    ```
 
 2. **Change default passwords immediately:**
-   - Login as cameron@ashbi.ca with: Ashbi2026!
-   - Go to Settings → Change Password
-   - Use a strong unique password
-
-   - Login as bianca@ashbi.ca with: Ashbi2026!  
-   - Go to Settings → Change Password
-   - Use a strong unique password
+   - Do not use a shared or documented default password.
+   - Provision each approved user through the current account-recovery or invitation flow.
+   - Treat any historical default password as compromised and rotate affected credentials before access is enabled.
 
 3. **Verify security headers:**
    ```bash

@@ -20,8 +20,16 @@ test('README points setup and production operations at authoritative paths', () 
 });
 
 test('historical plans carry an explicit superseded or historical warning', () => {
-  for (const path of ['PRODUCT_ROADMAP.md', 'PRODUCTION_DEPLOYMENT.md', 'SECURITY_CHECKLIST.md', 'UX_UI_IMPROVEMENT_PLAN.md', 'spec.md']) {
+  for (const path of ['AGENT_DEPLOYMENT.md', 'PRODUCT_ROADMAP.md', 'PRODUCTION_DEPLOYMENT.md', 'SECURITY_CHECKLIST.md', 'UX_UI_IMPROVEMENT_PLAN.md', 'spec.md']) {
     assert.match(read(path).slice(0, 1_500), /Superseded|Historical checklist/, `${path} lacks an early warning`);
+  }
+});
+
+test('historical deployment guides do not contain credential sources or default logins', () => {
+  for (const path of ['AGENT_DEPLOYMENT.md', 'PRODUCTION_DEPLOYMENT.md']) {
+    const guide = read(path);
+    assert.doesNotMatch(guide, /memory\/api-keys\.md/i, `${path} points readers at an unsafe credential source`);
+    assert.doesNotMatch(guide, /Login as [^\n]+ with:\s+\S+/i, `${path} contains a default login`);
   }
 });
 
