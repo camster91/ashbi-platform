@@ -10,6 +10,7 @@ import { invalidateInvoiceCheckout } from '../services/invoiceCheckoutInvalidati
 import { deliverInvoiceWithEvidence } from '../services/invoiceDelivery.service.js';
 import { randomUUID } from 'node:crypto';
 import { buildCollectionSummary, buildInvoiceStats } from '../services/financialReporting.service.js';
+import { createRevenueEvidenceExport } from '../services/revenueEvidenceExport.service.js';
 
 const VOID_UNDO_WINDOW_MS = 10_000;
 const VOIDABLE_STATUSES = new Set(['DRAFT', 'SENT', 'OVERDUE']);
@@ -128,6 +129,20 @@ export default async function invoiceRoutes(fastify) {
       },
     });
     return buildCollectionSummary(payments);
+  });
+
+  // ─── GET /evidence-export — admin-only reconciliation artifact ────────────
+  fastify.get('/evidence-export', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+    if (request.user.role !== 'ADMIN') {
+      return reply.status(403).send({ error: 'Admin access required' });
+    }
+    const evidence = await createRevenueEvidenceExport({
+      prisma: request.prisma,
+      organizationId: request.user.organizationId,
+    });
+    const date = evidence.exportedAt.slice(0, 10);
+    reply.header('Content-Disposition', `attachment; filename="ashbi-revenue-evidence-${date}.json"`);
+    return evidence;
   });
 
   // ─── GET /templates — line item templates ──────────────────────────────────

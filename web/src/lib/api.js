@@ -700,6 +700,8 @@ export const api = {
     request('/invoices/stats'),
   getInvoiceCollectionSummary: () =>
     request('/invoices/collection-summary'),
+  getRevenueEvidence: () =>
+    request('/invoices/evidence-export'),
   getInvoice: (id) =>
     request(`/invoices/${id}`),
   createInvoice: (data) =>

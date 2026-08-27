@@ -37,6 +37,7 @@ The confirmed import refuses to start without the reviewed report. It rolls back
 
 1. Rerun the same export as a dry run and prove no duplicate creation.
 2. Compare clients, active projects, statuses, owners, invoice totals by currency, time, and expenses between Bonsai and the Hub.
+   Download the Hub's admin-only revenue evidence artifact and run `npm run verify:revenue-evidence -- <artifact.json>` before comparing invoice, payment, refund, delivery, and settlement records. Preserve both the artifact and verifier output.
 3. Run at least one complete proposal-to-payment sandbox journey and retain provider evidence.
 4. Keep Bonsai available and unchanged through the agreed parallel period.
 5. Retain the source export, both reports, database backup, checksums, exception decisions, and reviewer sign-off.

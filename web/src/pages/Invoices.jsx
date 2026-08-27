@@ -88,6 +88,7 @@ export default function Invoices() {
   const [showCreate, setShowCreate] = useState(initCreate);
   const [activeTab, setActiveTab] = useState('list'); // 'list' | 'collections'
   const [invoiceToVoid, setInvoiceToVoid] = useState(null);
+  const [isExportingEvidence, setIsExportingEvidence] = useState(false);
 
   const [form, setForm] = useState(() => newInvoiceForm(initClientId));
   const formDraft = useAutosave('invoice', 'new', form);
@@ -280,6 +281,25 @@ export default function Invoices() {
     return (PRIORITY[aS] ?? 5) - (PRIORITY[bS] ?? 5);
   });
 
+  const exportEvidence = async () => {
+    setIsExportingEvidence(true);
+    try {
+      const evidence = await api.getRevenueEvidence();
+      const blob = new Blob([JSON.stringify(evidence, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `ashbi-revenue-evidence-${evidence.exportedAt.slice(0, 10)}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      toast.success('Revenue evidence exported', 'Verify the file offline before reconciliation');
+    } catch (error) {
+      toast.error('Failed to export revenue evidence', error.message);
+    } finally {
+      setIsExportingEvidence(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -289,6 +309,12 @@ export default function Invoices() {
           <p className="text-sm text-muted-foreground mt-1">Track payments and billing</p>
         </div>
         <div className="flex items-center gap-2">
+          {isAdmin && (
+            <Button variant="outline" size="sm" leftIcon={<Download className="w-4 h-4" />}
+              loading={isExportingEvidence} onClick={exportEvidence}>
+              Export evidence
+            </Button>
+          )}
           <Button variant="outline" size="sm" leftIcon={<Download className="w-4 h-4" />}
             onClick={() => exportToCSV(invoices)}>
             Export CSV
