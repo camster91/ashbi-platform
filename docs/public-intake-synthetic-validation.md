@@ -12,6 +12,12 @@ Status: local two-sided contract and browser proof complete; target persistence 
 - Exact replay, simultaneous replay, changed-payload conflict, stale privacy consent, invalid content, unapproved origin, disabled configuration, and honeypot behavior are covered by executable tests.
 - A local browser flow against a synthetic non-persistent Hub response passed at 1440×1000 and 390×844 with native required-field validation, success feedback, no horizontal overflow, no console errors, and no failed requests.
 
+## Sandbox readiness inspection
+
+Run `npm run check:public-intake-readiness` inside the exact target environment before requesting any migration or configuration change. The command first rejects production-shaped URLs, databases, identifiers, privacy configuration, wildcard origins, mixed production/sandbox origins, and incomplete sandbox labelling without importing the database client. Only after that isolation gate passes does it perform a read-only database inspection for the three required lead migrations, the configured organization, and an active `ADMIN` or `TEAM` owner in that organization. Its JSON report contains check names and generic messages, not environment values, identifiers, credentials, database errors, or personal data.
+
+The command does not apply migrations, create records, change configuration, send notifications, or call a provider. A passing report does not prove that the Ashbi.ca target test, authenticated review, replay reconciliation, retention/deletion exercise, deployment, or production launch has occurred.
+
 ## Not proven
 
 - The committed intake and weekly-growth migrations have not been applied to a named environment.
