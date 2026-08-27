@@ -15,10 +15,20 @@ test('staff inquiry page is wired into the app and primary navigation', () => {
 
 test('inquiry page uses the governed API for list, detail, review, and conversion', () => {
   const api = read('src/lib/api.js');
+  assert.match(api, /getLeadAcquisitionSummary:[\s\S]*client-acquisition\/leads\/summary/);
   assert.match(api, /getQualifiedLeads:[\s\S]*client-acquisition\/leads/);
   assert.match(api, /getQualifiedLead:[\s\S]*client-acquisition\/leads\/\$\{id\}/);
   assert.match(api, /updateLeadQualification:[\s\S]*qualification[\s\S]*method: 'PATCH'/);
   assert.match(api, /convertQualifiedLead:[\s\S]*convert[\s\S]*method: 'POST'/);
+});
+
+test('inquiry page reports recorded acquisition evidence and follow-up gaps', () => {
+  const page = read('src/pages/LeadInbox.jsx');
+  assert.match(page, /Acquisition evidence/);
+  assert.match(page, /Source captured/);
+  assert.match(page, /Follow-up overdue/);
+  assert.match(page, /Unscheduled active leads/);
+  assert.match(page, /missing attribution/);
 });
 
 test('inquiry page shows evidence and requires deliberate conversion confirmation', () => {

@@ -76,3 +76,5 @@ Status: Proposed. Instrumentation begins only after privacy and retention approv
 ## Governance
 
 Event schema changes require an architecture decision, analytics/privacy review, migration plan, and validation in both Ashbi.ca and the Hub. Dashboards must disclose incomplete or missing source data rather than silently treating it as zero.
+
+The local staff acquisition summary is descriptive only: it groups persisted leads by status, service line, and recorded source, and reports missing source attribution plus scheduled, overdue, and unscheduled active follow-up. Funnel percentages remain unavailable until the required lifecycle events and reporting windows are verified.

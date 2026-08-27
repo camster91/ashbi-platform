@@ -109,6 +109,12 @@ export default function LeadInbox() {
     refetchInterval: 60000,
   });
   const leads = listQuery.data?.leads || [];
+  const summaryQuery = useQuery({
+    queryKey: ['lead-acquisition-summary'],
+    queryFn: () => api.getLeadAcquisitionSummary(),
+    refetchInterval: 60000,
+  });
+  const summary = summaryQuery.data;
 
   useEffect(() => {
     if (selectedId && !leads.some((lead) => lead.id === selectedId)) setSelectedId(null);
@@ -154,6 +160,7 @@ export default function LeadInbox() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ['qualified-leads'] }),
       queryClient.invalidateQueries({ queryKey: ['qualified-lead', selectedId] }),
+      queryClient.invalidateQueries({ queryKey: ['lead-acquisition-summary'] }),
     ]);
   };
 
@@ -240,6 +247,40 @@ export default function LeadInbox() {
           </select>
         </div>
       </div>
+
+      <section aria-labelledby="acquisition-evidence-heading" className="space-y-3">
+        <div>
+          <h2 id="acquisition-evidence-heading" className="text-lg font-heading font-semibold text-foreground">Acquisition evidence</h2>
+          <p className="text-sm text-muted-foreground">Counts reflect recorded Hub data; missing attribution is shown, not assumed.</p>
+        </div>
+        {summaryQuery.isError ? (
+          <QueryErrorState error={summaryQuery.error} onRetry={() => summaryQuery.refetch()} compact />
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <Card className="p-4">
+              <p className="text-sm text-muted-foreground">Total inquiries</p>
+              <p className="mt-1 text-2xl font-semibold text-foreground">{summary?.total ?? '—'}</p>
+            </Card>
+            <Card className="p-4">
+              <p className="text-sm text-muted-foreground">Source captured</p>
+              <p className="mt-1 text-2xl font-semibold text-foreground">
+                {summary ? `${summary.attribution.sourceCaptured} / ${summary.total}` : '—'}
+              </p>
+              {summary?.attribution.sourceMissing > 0 && (
+                <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">{summary.attribution.sourceMissing} missing attribution</p>
+              )}
+            </Card>
+            <Card className="p-4">
+              <p className="text-sm text-muted-foreground">Follow-up overdue</p>
+              <p className="mt-1 text-2xl font-semibold text-foreground">{summary?.followUp.overdue ?? '—'}</p>
+            </Card>
+            <Card className="p-4">
+              <p className="text-sm text-muted-foreground">Unscheduled active leads</p>
+              <p className="mt-1 text-2xl font-semibold text-foreground">{summary?.followUp.unscheduled ?? '—'}</p>
+            </Card>
+          </div>
+        )}
+      </section>
 
       {listQuery.isLoading ? (
         <LoadingState label="Loading inquiries…" />

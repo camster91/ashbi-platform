@@ -183,6 +183,8 @@ export const api = {
     const query = new URLSearchParams(params).toString();
     return request(`/client-acquisition/leads${query ? `?${query}` : ''}`);
   },
+  getLeadAcquisitionSummary: () =>
+    request('/client-acquisition/leads/summary'),
   getQualifiedLead: (id) =>
     request(`/client-acquisition/leads/${id}`),
   updateLeadQualification: (id, data) =>

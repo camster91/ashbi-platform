@@ -1,4 +1,5 @@
 import { createPublicInquiry, PublicInquiryError } from '../services/public-inquiry.service.js';
+import { summarizeLeadAcquisition } from '../services/lead-acquisition-summary.service.js';
 import {
   convertQualifiedLead,
   LeadQualificationError,
@@ -139,6 +140,11 @@ export default async function clientAcquisitionRoutes(fastify, options) {
     });
     return { leads };
   });
+
+  fastify.get('/leads/summary', {
+    onRequest: [fastify.authenticate],
+    preHandler: [staffOnly],
+  }, async (request) => summarizeLeadAcquisition({ prisma: request.prisma ?? fastify.prisma }));
 
   fastify.get('/leads/:id', {
     onRequest: [fastify.authenticate],
