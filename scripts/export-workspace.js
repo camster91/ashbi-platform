@@ -31,13 +31,13 @@ async function main() {
 
   const clients = await prisma.client.findMany({
     where: { organizationId, deletedAt: null },
-    select: { id: true, name: true, email: true, domain: true, status: true, contactPerson: true, phone: true, address: true, city: true, provinceState: true, postalCode: true, country: true, serviceType: true, createdAt: true, updatedAt: true },
+    select: { id: true, bonsaiClientId: true, name: true, email: true, domain: true, status: true, contactPerson: true, phone: true, address: true, city: true, provinceState: true, postalCode: true, country: true, serviceType: true, createdAt: true, updatedAt: true },
     orderBy: { name: 'asc' },
   });
   const contacts = await prisma.contact.findMany({ where: { client: { organizationId, deletedAt: null } }, select: { id: true, clientId: true, email: true, name: true, role: true, isPrimary: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'asc' } });
   const projects = await prisma.project.findMany({
     where: { organizationId, deletedAt: null },
-    select: { id: true, clientId: true, name: true, description: true, status: true, health: true, healthScore: true, budget: true, hourlyBudget: true, serviceType: true, startDate: true, endDate: true, completedAt: true, createdAt: true, updatedAt: true },
+    select: { id: true, bonsaiProjectId: true, clientId: true, name: true, description: true, status: true, health: true, healthScore: true, budget: true, hourlyBudget: true, serviceType: true, startDate: true, endDate: true, completedAt: true, createdAt: true, updatedAt: true },
     orderBy: { createdAt: 'asc' },
   });
   const projectIds = projects.map(({ id }) => id);

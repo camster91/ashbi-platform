@@ -6,9 +6,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { evaluateBonsaiCutoverReadiness } from '../../services/bonsai-cutover-readiness.service.js';
 import { buildRevenueEvidenceManifest, REVENUE_EVIDENCE_COLLECTIONS } from '../../services/revenueEvidenceExport.service.js';
+import { buildWorkspaceExportManifest, WORKSPACE_EXPORT_COLLECTIONS } from '../../services/workspace-export-integrity.service.js';
 
 const REQUIRED_ARTIFACTS = [
   'bonsai-source-export',
+  'bonsai-clients-csv',
+  'bonsai-projects-csv',
   'bonsai-invoices-csv',
   'bonsai-import-dry-run',
   'bonsai-import-confirmed',
@@ -16,6 +19,7 @@ const REQUIRED_ARTIFACTS = [
   'notion-import-dry-run',
   'notion-import-confirmed',
   'parallel-reconciliation',
+  'operations-reconciliation',
   'stripe-sandbox',
   'email-sandbox',
   'revenue-evidence-export',
@@ -28,7 +32,11 @@ const REQUIRED_ARTIFACTS = [
 function fixture() {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ashbi-cutover-'));
   const bonsaiInvoicesContent = Buffer.from('invoice_number,status,currency,total_amount\nINV-001,paid,CAD,113.00\n');
+  const bonsaiClientsContent = Buffer.from('Client,Contact Email\nAcme,owner@acme.ca\n');
+  const bonsaiProjectsContent = Buffer.from('project_id,title,client_or_company_name,status\n123,Acme Website,Acme,active\n');
   const bonsaiInvoicesSha256 = crypto.createHash('sha256').update(bonsaiInvoicesContent).digest('hex');
+  const bonsaiClientsSha256 = crypto.createHash('sha256').update(bonsaiClientsContent).digest('hex');
+  const bonsaiProjectsSha256 = crypto.createHash('sha256').update(bonsaiProjectsContent).digest('hex');
   const emptyRecords = Object.fromEntries(REVENUE_EVIDENCE_COLLECTIONS.map(collection => [collection, []]));
   const revenueManifest = buildRevenueEvidenceManifest(emptyRecords);
   const revenuePayload = {
@@ -41,6 +49,14 @@ function fixture() {
   };
   const revenueContent = Buffer.from(JSON.stringify(revenuePayload));
   const revenueArtifactSha256 = crypto.createHash('sha256').update(revenueContent).digest('hex');
+  const workspaceRecords = Object.fromEntries(WORKSPACE_EXPORT_COLLECTIONS.map(collection => [collection, []]));
+  const workspaceManifest = buildWorkspaceExportManifest(workspaceRecords);
+  const workspacePayload = {
+    format: 'ashbi-workspace-export', version: 2, exportedAt: '2026-08-15T18:00:00.000Z',
+    organization: { id: 'org-1', name: 'Ashbi', slug: 'ashbi' }, records: workspaceRecords, manifest: workspaceManifest,
+  };
+  const workspaceContent = Buffer.from(JSON.stringify(workspacePayload));
+  const workspaceArtifactSha256 = crypto.createHash('sha256').update(workspaceContent).digest('hex');
   const parallelPayload = {
     format: 'ashbi-parallel-reconciliation',
     version: 1,
@@ -58,13 +74,38 @@ function fixture() {
       )),
     },
   };
+  const operationsPayload = {
+    format: 'ashbi-bonsai-operations-reconciliation', version: 1, complete: true,
+    organizationId: 'org-1', completedAt: '2026-08-15T19:00:00.000Z', unresolvedFindings: 0,
+    sourceEvidence: {
+      clientsSha256: bonsaiClientsSha256, clientRows: 1,
+      projectsSha256: bonsaiProjectsSha256, projectRows: 1,
+    },
+    workspaceEvidence: {
+      artifactSha256: workspaceArtifactSha256,
+      recordsSha256: workspaceManifest.recordsSha256,
+      collectionCounts: Object.fromEntries(WORKSPACE_EXPORT_COLLECTIONS.map(
+        collection => [collection, workspaceManifest.collections[collection].count],
+      )),
+    },
+  };
   const artifacts = REQUIRED_ARTIFACTS.map((id) => {
     const relativePath = `${id}.json`;
     const content = id === 'revenue-evidence-export'
       ? revenueContent
+      : id === 'workspace-export'
+        ? workspaceContent
+        : id === 'bonsai-clients-csv'
+          ? bonsaiClientsContent
+          : id === 'bonsai-projects-csv'
+            ? bonsaiProjectsContent
       : id === 'bonsai-invoices-csv'
         ? bonsaiInvoicesContent
-        : Buffer.from(JSON.stringify(id === 'parallel-reconciliation' ? parallelPayload : { id, synthetic: true }));
+        : Buffer.from(JSON.stringify(id === 'parallel-reconciliation'
+          ? parallelPayload
+          : id === 'operations-reconciliation'
+            ? operationsPayload
+            : { id, synthetic: true }));
     fs.writeFileSync(path.join(directory, relativePath), content);
     return { id, path: relativePath, sha256: crypto.createHash('sha256').update(content).digest('hex') };
   });
@@ -228,6 +269,24 @@ test('cutover evaluator binds parallel reconciliation to the exact Bonsai invoic
     const report = evaluateBonsaiCutoverReadiness({ manifest, manifestDirectory: directory });
     assert.equal(report.ready, false);
     assert.equal(report.checks.find((check) => check.id === 'parallel-revenue-binding').ok, false);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('cutover evaluator binds operating reconciliation to the exact Bonsai client source', () => {
+  const { directory, manifest } = fixture();
+  const artifact = manifest.artifacts.find(item => item.id === 'operations-reconciliation');
+  const reportPath = path.join(directory, artifact.path);
+  const payload = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+  payload.sourceEvidence.clientsSha256 = 'd'.repeat(64);
+  const content = Buffer.from(JSON.stringify(payload));
+  fs.writeFileSync(reportPath, content);
+  artifact.sha256 = crypto.createHash('sha256').update(content).digest('hex');
+  try {
+    const report = evaluateBonsaiCutoverReadiness({ manifest, manifestDirectory: directory });
+    assert.equal(report.ready, false);
+    assert.equal(report.checks.find((check) => check.id === 'operations-reconciliation-binding').ok, false);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }

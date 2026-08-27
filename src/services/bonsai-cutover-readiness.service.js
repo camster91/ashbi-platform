@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { REVENUE_EVIDENCE_COLLECTIONS, verifyRevenueEvidenceExport } from './revenueEvidenceExport.service.js';
+import { WORKSPACE_EXPORT_COLLECTIONS, verifyWorkspaceExport } from './workspace-export-integrity.service.js';
 
 const REQUIRED_RECORD_TYPES = [
   'clients',
@@ -17,6 +18,8 @@ const REQUIRED_RECORD_TYPES = [
 
 const REQUIRED_ARTIFACT_IDS = [
   'bonsai-source-export',
+  'bonsai-clients-csv',
+  'bonsai-projects-csv',
   'bonsai-invoices-csv',
   'bonsai-import-dry-run',
   'bonsai-import-confirmed',
@@ -24,6 +27,7 @@ const REQUIRED_ARTIFACT_IDS = [
   'notion-import-dry-run',
   'notion-import-confirmed',
   'parallel-reconciliation',
+  'operations-reconciliation',
   'stripe-sandbox',
   'email-sandbox',
   'revenue-evidence-export',
@@ -138,6 +142,45 @@ function parallelRevenueIsBound({ artifacts, manifestDirectory, organizationId, 
     && completedAt <= evidenceCompletedAt;
 }
 
+function operationsReconciliationIsBound({ artifacts, manifestDirectory, organizationId, reconciliation, evidenceCompletedAt }) {
+  const operationsReport = readContainedJsonArtifact(artifacts, 'operations-reconciliation', manifestDirectory);
+  const workspacePayload = readContainedJsonArtifact(artifacts, 'workspace-export', manifestDirectory);
+  const artifact = id => Array.isArray(artifacts) ? artifacts.find(item => item?.id === id) : null;
+  const clientsArtifact = artifact('bonsai-clients-csv');
+  const projectsArtifact = artifact('bonsai-projects-csv');
+  const workspaceArtifact = artifact('workspace-export');
+  if (!operationsReport || !workspacePayload || !clientsArtifact || !projectsArtifact || !workspaceArtifact) return false;
+  const completedAt = timestamp(operationsReport.completedAt);
+  const exportedAt = timestamp(workspacePayload.exportedAt);
+  const countsMatch = WORKSPACE_EXPORT_COLLECTIONS.every(collection => (
+    Number.isInteger(operationsReport.workspaceEvidence?.collectionCounts?.[collection])
+      && operationsReport.workspaceEvidence.collectionCounts[collection]
+        === workspacePayload.manifest?.collections?.[collection]?.count
+  ));
+  return operationsReport.format === 'ashbi-bonsai-operations-reconciliation'
+    && operationsReport.version === 1
+    && operationsReport.complete === true
+    && operationsReport.organizationId === organizationId
+    && operationsReport.unresolvedFindings === reconciliation.unresolvedFindings
+    && operationsReport.unresolvedFindings === 0
+    && workspacePayload.organization?.id === organizationId
+    && verifyWorkspaceExport(workspacePayload).valid
+    && operationsReport.sourceEvidence?.clientsSha256 === clientsArtifact.sha256
+    && Number.isInteger(operationsReport.sourceEvidence?.clientRows)
+    && operationsReport.sourceEvidence.clientRows >= 0
+    && operationsReport.sourceEvidence?.projectsSha256 === projectsArtifact.sha256
+    && Number.isInteger(operationsReport.sourceEvidence?.projectRows)
+    && operationsReport.sourceEvidence.projectRows >= 0
+    && operationsReport.workspaceEvidence?.artifactSha256 === workspaceArtifact.sha256
+    && operationsReport.workspaceEvidence?.recordsSha256 === workspacePayload.manifest?.recordsSha256
+    && countsMatch
+    && completedAt !== null
+    && exportedAt !== null
+    && evidenceCompletedAt !== null
+    && completedAt >= exportedAt
+    && completedAt <= evidenceCompletedAt;
+}
+
 export function evaluateBonsaiCutoverReadiness({ manifest = {}, manifestDirectory } = {}) {
   const parallel = manifest.parallelRun ?? {};
   const reconciliation = manifest.reconciliation ?? {};
@@ -229,6 +272,18 @@ export function evaluateBonsaiCutoverReadiness({ manifest = {}, manifestDirector
       }),
       'Parallel reconciliation is bound to the exact tenant revenue artifact and collection counts.',
       'Reconcile and record the exact tenant revenue artifact checksum, record checksum, and collection counts.',
+    ),
+    check(
+      'operations-reconciliation-binding',
+      operationsReconciliationIsBound({
+        artifacts: manifest.artifacts,
+        manifestDirectory,
+        organizationId: manifest.organizationId,
+        reconciliation,
+        evidenceCompletedAt,
+      }),
+      'Client and project reconciliation is bound to the exact Bonsai sources and tenant workspace export.',
+      'Reconcile the exact Bonsai client/project sources against the tenant workspace export and bind every checksum and collection count.',
     ),
     check(
       'recovery',
