@@ -120,7 +120,7 @@ export default function Invoices() {
     queryFn: () => api.getLineItemTemplates(),
   });
 
-  const { data: collectionSummary = { byCurrency: {}, unresolvedPaymentCount: 0 } } = useQuery({
+  const { data: collectionSummary = { byCurrency: {}, settlementByCurrency: {}, unresolvedPaymentCount: 0, settlementEvidencePendingCount: 0 } } = useQuery({
     queryKey: ['invoice-collection-summary'],
     queryFn: () => api.getInvoiceCollectionSummary(),
   });
@@ -891,10 +891,19 @@ function CollectionsDashboard({ stats, collectionSummary, invoices, onMarkPaid }
             </div>
             <p className="mt-1 text-xs text-muted-foreground">Recorded payments less successful refunds. This is not profit or net settlement.</p>
           </div>
-          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-300">
-            <p className="font-medium">Provider fees unavailable</p>
-            <p className="text-xs">Net settlement remains unavailable until Stripe fee evidence is reconciled.</p>
-          </div>
+            <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm">
+              <p className="font-medium">Verified Stripe charge settlement</p>
+              <div className="mt-1 grid grid-cols-2 gap-x-4 text-xs">
+                <span className="text-muted-foreground">Provider fees</span>
+                <CurrencyAmounts minor amounts={Object.fromEntries(Object.entries(collectionSummary.settlementByCurrency || {}).map(([currency, row]) => [currency, row.providerFeesMinor]))} />
+                <span className="text-muted-foreground">Net settlement</span>
+                <CurrencyAmounts minor amounts={Object.fromEntries(Object.entries(collectionSummary.settlementByCurrency || {}).map(([currency, row]) => [currency, row.netSettlementMinor]))} />
+              </div>
+              {collectionSummary.settlementEvidencePendingCount > 0 && (
+                <p className="mt-1 text-xs text-amber-600">{collectionSummary.settlementEvidencePendingCount} Stripe payment(s) still awaiting fee evidence.</p>
+              )}
+              <p className="mt-1 text-xs text-muted-foreground">Refunds and disputes are separate provider balance events.</p>
+            </div>
         </div>
         {collectionSummary.unresolvedPaymentCount > 0 && (
           <p className="mt-3 text-xs text-amber-600">{collectionSummary.unresolvedPaymentCount} legacy payment(s) excluded because exact currency/minor-unit evidence is unresolved.</p>

@@ -30,12 +30,18 @@ test('ledger summary reports gross refunds and net before fees without inventing
     {
       amountMinor: 10000,
       currency: 'CAD',
+      method: 'STRIPE',
+      settlementEvidenceStatus: 'VERIFIED',
+      settlementGrossMinor: 10000,
+      providerFeeMinor: 320,
+      settlementNetMinor: 9680,
+      settlementCurrency: 'CAD',
       refunds: [
         { amountMinor: 2500, currency: 'CAD', status: 'succeeded' },
         { amountMinor: 1000, currency: 'CAD', status: 'failed' },
       ],
     },
-    { amountMinor: 5000, currency: 'USD', refunds: [] },
+    { amountMinor: 5000, currency: 'USD', method: 'STRIPE', settlementEvidenceStatus: 'PENDING', refunds: [] },
   ]);
 
   assert.deepEqual(result.byCurrency.CAD, {
@@ -48,6 +54,13 @@ test('ledger summary reports gross refunds and net before fees without inventing
     paymentCount: 1,
   });
   assert.equal(result.byCurrency.USD.netCollectedBeforeFeesMinor, 5000);
+  assert.deepEqual(result.settlementByCurrency.CAD, {
+    grossSettlementMinor: 10000,
+    providerFeesMinor: 320,
+    netSettlementMinor: 9680,
+    paymentCount: 1,
+  });
+  assert.equal(result.settlementEvidencePendingCount, 1);
   assert.doesNotMatch(JSON.stringify(result), /profit/i);
 });
 
@@ -98,6 +111,8 @@ test('dashboard and collections UI never render mixed-currency dollar totals', (
 test('financial report copy distinguishes net before fees from net settlement', () => {
   const invoices = readFileSync('web/src/pages/Invoices.jsx', 'utf8');
   assert.match(invoices, /Net collected before fees/);
-  assert.match(invoices, /Provider fees unavailable/);
+  assert.match(invoices, /Verified Stripe charge settlement/);
+  assert.match(invoices, /Refunds and disputes are separate/);
+  assert.match(invoices, /still awaiting fee evidence/);
   assert.doesNotMatch(invoices, /Net Profit|Gross Profit/);
 });

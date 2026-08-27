@@ -1101,6 +1101,7 @@ model Invoice {
   checkoutAudits   InvoiceCheckoutAudit[]
   deliveryAttempts InvoiceDeliveryAttempt[]
   deliveryEvents   InvoiceDeliveryEvent[]
+  settlementEvents InvoiceSettlementEvent[]
   timeEntries      TimeEntry[]
   expenses         Expense[]
   // Soft delete
@@ -1184,11 +1185,48 @@ model InvoicePayment {
   paidAt        DateTime @default(now())
   invoiceId     String
   createdAt     DateTime @default(now())
+  settlementEvidenceStatus String @default("PENDING")
+  stripeChargeId String?
+  stripeBalanceTransactionId String? @unique
+  settlementGrossMinor Int?
+  providerFeeMinor Int?
+  settlementNetMinor Int?
+  settlementCurrency String?
+  settlementReconciledAt DateTime?
+  settlementReconciliationReason String?
 
   invoice Invoice         @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   refunds InvoiceRefund[]
+  settlementEvents InvoiceSettlementEvent[]
 
   @@map("invoice_payments")
+}
+
+model InvoiceSettlementEvent {
+  id                         String   @id @default(cuid())
+  invoiceId                  String
+  paymentId                  String
+  requestId                  String   @unique
+  status                     String
+  paymentIntentId            String
+  stripeChargeId             String?
+  stripeBalanceTransactionId String?
+  chargeAmountMinor          Int?
+  chargeCurrency             String?
+  settlementGrossMinor       Int?
+  providerFeeMinor           Int?
+  settlementNetMinor         Int?
+  settlementCurrency         String?
+  reasonCode                 String?
+  occurredAt                 DateTime @default(now())
+  createdAt                  DateTime @default(now())
+
+  invoice Invoice        @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  payment InvoicePayment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@index([invoiceId, occurredAt])
+  @@index([paymentId, occurredAt])
+  @@map("invoice_settlement_events")
 }
 
 model InvoiceRefund {

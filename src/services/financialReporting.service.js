@@ -65,7 +65,9 @@ function emptyCollectionCurrency() {
 
 export function buildCollectionSummary(payments = []) {
   const byCurrency = {};
+  const settlementByCurrency = {};
   let unresolvedPaymentCount = 0;
+  let settlementEvidencePendingCount = 0;
 
   for (const payment of payments) {
     if (!Number.isInteger(payment.amountMinor) || !SUPPORTED_CURRENCIES.has(payment.currency)) {
@@ -83,11 +85,32 @@ export function buildCollectionSummary(payments = []) {
     }
     summary.netCollectedBeforeFeesMinor = summary.grossPaidMinor - summary.successfulRefundsMinor;
     byCurrency[currency] = summary;
+
+    if (payment.settlementEvidenceStatus === 'VERIFIED') {
+      if (!/^[A-Z]{3}$/.test(payment.settlementCurrency || '')
+        || ![payment.settlementGrossMinor, payment.providerFeeMinor, payment.settlementNetMinor].every(Number.isInteger)
+        || payment.settlementGrossMinor - payment.providerFeeMinor !== payment.settlementNetMinor) {
+        throw new Error('Verified settlement evidence is incomplete or does not reconcile');
+      }
+      const row = settlementByCurrency[payment.settlementCurrency] || {
+        grossSettlementMinor: 0, providerFeesMinor: 0, netSettlementMinor: 0, paymentCount: 0,
+      };
+      row.grossSettlementMinor += payment.settlementGrossMinor;
+      row.providerFeesMinor += payment.providerFeeMinor;
+      row.netSettlementMinor += payment.settlementNetMinor;
+      row.paymentCount += 1;
+      settlementByCurrency[payment.settlementCurrency] = row;
+    } else if (payment.method === 'STRIPE') {
+      settlementEvidencePendingCount += 1;
+    }
   }
 
   return {
     byCurrency,
+    settlementByCurrency,
     unresolvedPaymentCount,
+    settlementEvidencePendingCount,
+    settlementEvidenceComplete: settlementEvidencePendingCount === 0,
     basis: 'RECORDED_PAYMENTS_LESS_SUCCESSFUL_REFUNDS_BEFORE_PROVIDER_FEES',
   };
 }

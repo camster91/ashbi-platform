@@ -164,6 +164,104 @@ export async function recordCompletedCheckout(prisma, event) {
   }
 }
 
+function providerId(value) {
+  return typeof value === 'string' ? value : value?.id || null;
+}
+
+function safeSettlementReason(error) {
+  if (error?.type === 'StripeConnectionError' || error?.code === 'ETIMEDOUT') return 'PROVIDER_UNREACHABLE';
+  return 'PROVIDER_READ_FAILED';
+}
+
+export async function reconcilePaymentSettlement(prisma, paymentId, requestId, {
+  stripeClient = getStripeClient(), now = new Date(),
+} = {}) {
+  if (!stripeClient) throw new Error('Stripe not configured');
+  if (typeof requestId !== 'string' || requestId.length < 1 || requestId.length > 200) {
+    throw new Error('Settlement reconciliation request identity is required and must be bounded');
+  }
+  const prior = await prisma.invoiceSettlementEvent.findUnique({ where: { requestId } });
+  if (prior) return { duplicate: true, status: prior.status, paymentId: prior.paymentId };
+
+  const payment = await prisma.invoicePayment.findUnique({
+    where: { id: paymentId }, include: { invoice: true },
+  });
+  if (!payment || payment.method !== 'STRIPE' || !payment.transactionId) {
+    throw new Error('Recorded Stripe payment evidence is incomplete');
+  }
+  if (!Number.isInteger(payment.amountMinor) || !SUPPORTED_CURRENCIES.has(payment.currency)) {
+    throw new Error('Stripe payment currency and amount evidence is incomplete');
+  }
+
+  let paymentIntent;
+  try {
+    paymentIntent = await stripeClient.paymentIntents.retrieve(payment.transactionId, {
+      expand: ['latest_charge.balance_transaction'],
+    });
+  } catch (error) {
+    const reasonCode = safeSettlementReason(error);
+    await prisma.$transaction(async (tx) => {
+      await tx.invoicePayment.update({ where: { id: payment.id }, data: {
+        settlementEvidenceStatus: 'OUTCOME_UNKNOWN', settlementReconciliationReason: reasonCode,
+      } });
+      await tx.invoiceSettlementEvent.create({ data: {
+        invoiceId: payment.invoiceId, paymentId: payment.id, requestId,
+        status: 'OUTCOME_UNKNOWN', paymentIntentId: payment.transactionId, reasonCode, occurredAt: now,
+      } });
+    });
+    return { duplicate: false, status: 'OUTCOME_UNKNOWN', paymentId: payment.id, reasonCode };
+  }
+
+  const charge = paymentIntent.latest_charge;
+  const balance = typeof charge === 'object' ? charge.balance_transaction : null;
+  const chargeId = providerId(charge);
+  if (!chargeId || typeof charge !== 'object') throw new Error('Stripe charge evidence is unavailable');
+  if (charge.amount !== payment.amountMinor || charge.currency?.toUpperCase() !== payment.currency) {
+    throw new Error('Stripe charge amount or currency does not match the recorded payment');
+  }
+  if (!balance || typeof balance !== 'object') {
+    await prisma.$transaction(async (tx) => {
+      await tx.invoicePayment.update({ where: { id: payment.id }, data: {
+        settlementEvidenceStatus: 'PENDING', stripeChargeId: chargeId,
+        settlementReconciliationReason: 'BALANCE_TRANSACTION_PENDING',
+      } });
+      await tx.invoiceSettlementEvent.create({ data: {
+        invoiceId: payment.invoiceId, paymentId: payment.id, requestId, status: 'PENDING',
+        paymentIntentId: payment.transactionId, stripeChargeId: chargeId,
+        chargeAmountMinor: charge.amount, chargeCurrency: payment.currency,
+        reasonCode: 'BALANCE_TRANSACTION_PENDING', occurredAt: now,
+      } });
+    });
+    return { duplicate: false, status: 'PENDING', paymentId: payment.id };
+  }
+  const settlementCurrency = balance.currency?.toUpperCase();
+  if (!balance.id || !/^[A-Z]{3}$/.test(settlementCurrency || '') || ![balance.amount, balance.fee, balance.net].every(Number.isInteger)) {
+    throw new Error('Stripe balance transaction evidence is invalid');
+  }
+  if (balance.amount - balance.fee !== balance.net) throw new Error('Stripe balance transaction does not reconcile');
+  if (payment.stripeBalanceTransactionId && payment.stripeBalanceTransactionId !== balance.id) {
+    throw new Error('Stripe settlement immutable evidence changed');
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.invoicePayment.update({ where: { id: payment.id }, data: {
+      settlementEvidenceStatus: 'VERIFIED', stripeChargeId: chargeId,
+      stripeBalanceTransactionId: balance.id, settlementGrossMinor: balance.amount,
+      providerFeeMinor: balance.fee, settlementNetMinor: balance.net,
+      settlementCurrency, settlementReconciledAt: now, settlementReconciliationReason: null,
+    } });
+    await tx.invoiceSettlementEvent.create({ data: {
+      invoiceId: payment.invoiceId, paymentId: payment.id, requestId, status: 'VERIFIED',
+      paymentIntentId: payment.transactionId, stripeChargeId: chargeId,
+      stripeBalanceTransactionId: balance.id, chargeAmountMinor: charge.amount,
+      chargeCurrency: payment.currency, settlementGrossMinor: balance.amount,
+      providerFeeMinor: balance.fee, settlementNetMinor: balance.net,
+      settlementCurrency, occurredAt: now,
+    } });
+  });
+  return { duplicate: false, status: 'VERIFIED', paymentId: payment.id, settlementCurrency };
+}
+
 const REFUND_EVENT_TYPES = new Set(['refund.created', 'refund.updated', 'refund.failed']);
 const REFUND_STATUSES = new Set(['pending', 'requires_action', 'succeeded', 'failed', 'canceled']);
 const INACTIVE_REFUND_STATUSES = ['failed', 'canceled'];

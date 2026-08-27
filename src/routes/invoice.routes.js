@@ -1,5 +1,5 @@
 // Invoice routes — full CRUD + send + PDF + payments + templates
-import { createPaymentLink } from '../services/stripe.service.js';
+import { createPaymentLink, reconcilePaymentSettlement } from '../services/stripe.service.js';
 import { generateInvoicePdf } from '../utils/generate-invoice-pdf.js';
 import { generateInvoiceNumber } from '../utils/invoice.js';
 import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
@@ -118,6 +118,12 @@ export default async function invoiceRoutes(fastify) {
       select: {
         amountMinor: true,
         currency: true,
+        method: true,
+        settlementEvidenceStatus: true,
+        settlementGrossMinor: true,
+        providerFeeMinor: true,
+        settlementNetMinor: true,
+        settlementCurrency: true,
         refunds: { select: { amountMinor: true, currency: true, status: true } },
       },
     });
@@ -517,6 +523,22 @@ export default async function invoiceRoutes(fastify) {
       },
       orderBy: { paidAt: 'desc' }
     });
+  });
+
+  // Provider read only; records exact Stripe balance evidence and never creates money movement.
+  fastify.post('/:id/payments/:paymentId/reconcile-settlement', {
+    onRequest: [fastify.adminOnly],
+  }, async (request, reply) => {
+    const payment = await request.prisma.invoicePayment.findFirst({
+      where: { id: request.params.paymentId, invoiceId: request.params.id },
+      select: { id: true },
+    });
+    if (!payment) return reply.status(404).send({ error: 'Invoice payment not found' });
+    return reconcilePaymentSettlement(
+      request.prisma,
+      payment.id,
+      request.headers['idempotency-key'] || randomUUID(),
+    );
   });
 
   // ─── POST /from-proposal/:proposalId — create from approved proposal ────────
