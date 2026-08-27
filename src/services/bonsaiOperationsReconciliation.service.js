@@ -25,14 +25,82 @@ function requireSha256(value, name) {
   return value.toLowerCase();
 }
 
+function isoDate(value) {
+  const date = new Date(String(value ?? '').trim());
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function durationMinutes(value) {
+  const match = /^(\d+):([0-5]\d):([0-5]\d)$/.exec(String(value ?? '').trim());
+  return match ? (Number(match[1]) * 60) + Number(match[2]) : null;
+}
+
+function decimal(value) {
+  const number = Number.parseFloat(String(value ?? '').trim());
+  return Number.isFinite(number) ? number : null;
+}
+
+function exactMoney(value) {
+  const raw = String(value ?? '').trim();
+  const valid = raw.includes(',')
+    ? /^-?\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?$/.test(raw)
+    : /^-?\d+(?:\.\d{1,2})?$/.test(raw);
+  if (!valid) return null;
+  const sign = raw.startsWith('-') ? -1 : 1;
+  const normalizedValue = raw.replace(/^-/, '').replace(/,/g, '');
+  const [whole, fraction = ''] = normalizedValue.split('.');
+  const minor = sign * ((Number(whole) * 100) + Number(fraction.padEnd(2, '0')));
+  return Number.isSafeInteger(minor) ? minor / 100 : null;
+}
+
+function expenseCategory(tags) {
+  const value = normalized(tags);
+  if (value.includes('advertising')) return 'MARKETING';
+  if (value.includes('professional services') || value.includes('subcontractors')) return 'SUBCONTRACTOR';
+  if (value.includes('work devices') || value.includes('software') || value.includes('subscriptions')) return 'SOFTWARE';
+  if (value.includes('business meals') || value.includes('client entertainment') || value.includes('flights') || value.includes('taxi') || value.includes('transportation')) return 'TRAVEL';
+  if (value.includes('electronics') || value.includes('furniture')) return 'SUPPLIES';
+  return 'OTHER';
+}
+
+function shouldSkipExpense(row) {
+  const name = normalized(row.name);
+  const tags = normalized(row.tags);
+  return tags.includes('personal') || name.includes('personal')
+    || name.includes('e-transfer sent cameron') || name.includes('e-transfer sent cam');
+}
+
+function groupBy(items, keyFor) {
+  const groups = new Map();
+  for (const item of items) {
+    const key = keyFor(item);
+    groups.set(key, [...(groups.get(key) ?? []), item]);
+  }
+  return groups;
+}
+
+function matchingUsers(users, ownerName) {
+  const owner = normalized(ownerName);
+  if (!owner) return [];
+  const exact = users.filter(user => normalized(user.name) === owner);
+  if (exact.length > 0) return exact;
+  const firstName = owner.includes('cameron') ? 'cameron'
+    : owner.includes('bianca') ? 'bianca' : owner.split(/\s+/)[0];
+  return users.filter(user => normalized(user.name).split(/\s+/).includes(firstName));
+}
+
 export function reconcileBonsaiOperations({
   organizationId,
   completedAt,
   bonsaiClientsSha256,
   bonsaiProjectsSha256,
+  bonsaiTimeEntriesSha256,
+  bonsaiExpensesSha256,
   workspaceArtifactSha256,
   bonsaiClientRows,
   bonsaiProjectRows,
+  bonsaiTimeEntryRows,
+  bonsaiExpenseRows,
   workspaceExport,
 }) {
   if (typeof organizationId !== 'string' || !organizationId.trim()) throw new TypeError('organizationId is required');
@@ -45,6 +113,10 @@ export function reconcileBonsaiOperations({
   if (Number.isNaN(exported.getTime())) throw new TypeError('workspace export must include a valid exportedAt');
   if (completed < exported) throw new TypeError('completedAt must not predate the workspace export');
   if (!Array.isArray(bonsaiClientRows) || !Array.isArray(bonsaiProjectRows)) throw new TypeError('Bonsai source rows must be arrays');
+  const includesOperatingLedger = workspaceExport.version === 3;
+  if (includesOperatingLedger && (!Array.isArray(bonsaiTimeEntryRows) || !Array.isArray(bonsaiExpenseRows))) {
+    throw new TypeError('Version 3 reconciliation requires Bonsai time-entry and expense rows');
+  }
   const clientRows = bonsaiClientRows.filter(row => !shouldSkipClient(row.Client));
   const projectRows = bonsaiProjectRows.filter(row => !shouldSkipClient(row.client_or_company_name) && normalized(row.title));
 
@@ -173,9 +245,135 @@ export function reconcileBonsaiOperations({
     }
   }
 
+  let matchedTimeEntries = 0;
+  let matchedExpenses = 0;
+  let relevantTimeRows = [];
+  let relevantExpenseRows = [];
+  if (includesOperatingLedger) {
+    relevantTimeRows = bonsaiTimeEntryRows.filter(row => !shouldSkipClient(row.client_name));
+    relevantExpenseRows = bonsaiExpenseRows.filter(row => !shouldSkipExpense(row));
+    const clientsByNormalizedName = groupBy(workspaceExport.records.clients, client => normalized(client.name));
+    const projectsByClientAndName = groupBy(workspaceExport.records.projects, (project) => {
+      const client = workspaceExport.records.clients.find(item => item.id === project.clientId);
+      return `${normalized(client?.name)}|${normalized(project.name)}`;
+    });
+    const importedTimeEntries = workspaceExport.records.timeEntries.filter(entry => entry.source === 'BONSAI_IMPORT');
+    const hubTimeGroups = groupBy(importedTimeEntries, entry => [
+      entry.projectId, entry.userId, isoDate(entry.date), Number(entry.duration),
+    ].join('|'));
+    const seenSourceTimeKeys = new Set();
+    const matchedHubTimeIds = new Set();
+
+    for (const row of relevantTimeRows) {
+      const invalidFields = [];
+      const projectMatches = projectsByClientAndName.get(`${normalized(row.client_name)}|${normalized(row.project_title)}`) ?? [];
+      const userMatches = matchingUsers(workspaceExport.records.users, row.owner_name);
+      const date = isoDate(row.date);
+      const duration = durationMinutes(row.formatted_time);
+      const rateRaw = String(row.rate ?? '').trim();
+      const parsedRate = rateRaw ? exactMoney(rateRaw) : null;
+      const expectedRate = parsedRate || null;
+      if (!normalized(row.project_title)) invalidFields.push('project_title');
+      if (projectMatches.length !== 1) invalidFields.push('project_identity');
+      if (!normalized(row.owner_name) || userMatches.length !== 1) invalidFields.push('owner_identity');
+      if (!date) invalidFields.push('date');
+      if (!Number.isInteger(duration) || duration <= 0) invalidFields.push('formatted_time');
+      if (rateRaw && parsedRate === null) invalidFields.push('rate');
+      if (invalidFields.length > 0) {
+        findings.push({
+          code: 'BONSAI_TIME_ENTRY_SOURCE_INVALID', projectName: String(row.project_title ?? '').trim(),
+          ownerName: String(row.owner_name ?? '').trim(), fields: invalidFields,
+        });
+        continue;
+      }
+      const key = [projectMatches[0].id, userMatches[0].id, date, duration].join('|');
+      if (seenSourceTimeKeys.has(key)) {
+        findings.push({ code: 'DUPLICATE_BONSAI_TIME_ENTRY_IDENTITY', projectName: String(row.project_title).trim(), ownerName: String(row.owner_name).trim(), date, duration });
+        continue;
+      }
+      seenSourceTimeKeys.add(key);
+      const hubMatches = hubTimeGroups.get(key) ?? [];
+      if (hubMatches.length === 0) {
+        findings.push({ code: 'BONSAI_TIME_ENTRY_MISSING_IN_HUB', projectName: String(row.project_title).trim(), ownerName: String(row.owner_name).trim(), date, duration });
+        continue;
+      }
+      if (hubMatches.length > 1) {
+        findings.push({ code: 'DUPLICATE_HUB_BONSAI_TIME_ENTRY_IDENTITY', hubTimeEntryIds: hubMatches.map(entry => entry.id).sort() });
+        continue;
+      }
+      const hub = hubMatches[0];
+      matchedHubTimeIds.add(hub.id);
+      const expectedDescription = String(row.notes ?? '').trim() || `${String(row.project_title).trim()} work`;
+      const mismatchedFields = [];
+      if (hub.description !== expectedDescription) mismatchedFields.push('description');
+      if (Boolean(hub.billable) !== (normalized(row.billing_status) === 'billed')) mismatchedFields.push('billable');
+      if ((decimal(hub.hourlyRate) || null) !== expectedRate) mismatchedFields.push('hourlyRate');
+      if (mismatchedFields.length > 0) {
+        findings.push({ code: 'TIME_ENTRY_FIELD_MISMATCH', hubTimeEntryId: hub.id, fields: mismatchedFields });
+        continue;
+      }
+      matchedTimeEntries += 1;
+    }
+    for (const entry of importedTimeEntries) {
+      if (!matchedHubTimeIds.has(entry.id)) findings.push({ code: 'HUB_BONSAI_TIME_ENTRY_MISSING_IN_SOURCE', hubTimeEntryId: entry.id });
+    }
+
+    const hubExpenseGroups = groupBy(workspaceExport.records.expenses, expense => [
+      normalized(expense.description), isoDate(expense.date), decimal(expense.amount)?.toFixed(2),
+      String(expense.currency ?? '').toUpperCase(), expense.clientId ?? '', expense.projectId ?? '',
+    ].join('|'));
+    const seenSourceExpenseKeys = new Set();
+    for (const row of relevantExpenseRows) {
+      const invalidFields = [];
+      const clientMatches = normalized(row.client) ? (clientsByNormalizedName.get(normalized(row.client)) ?? []) : [];
+      const projectMatches = normalized(row.project) && normalized(row.client)
+        ? (projectsByClientAndName.get(`${normalized(row.client)}|${normalized(row.project)}`) ?? []) : [];
+      const amount = exactMoney(row.amount_after_tax || row.amount_pre_tax);
+      const date = isoDate(row.date);
+      const currency = String(row.currency ?? '').trim().toUpperCase();
+      if (!normalized(row.name)) invalidFields.push('name');
+      if (amount === null || amount === 0) invalidFields.push('amount');
+      if (!date) invalidFields.push('date');
+      if (!['CAD', 'USD'].includes(currency)) invalidFields.push('currency');
+      if (normalized(row.client) && clientMatches.length !== 1) invalidFields.push('client_identity');
+      if (normalized(row.project) && projectMatches.length !== 1) invalidFields.push('project_identity');
+      if (invalidFields.length > 0) {
+        findings.push({ code: 'BONSAI_EXPENSE_SOURCE_INVALID', description: String(row.name ?? '').trim(), fields: invalidFields });
+        continue;
+      }
+      const clientId = clientMatches[0]?.id ?? '';
+      const projectId = projectMatches[0]?.id ?? '';
+      const key = [normalized(row.name), date, amount.toFixed(2), currency, clientId, projectId].join('|');
+      if (seenSourceExpenseKeys.has(key)) {
+        findings.push({ code: 'DUPLICATE_BONSAI_EXPENSE_IDENTITY', description: String(row.name).trim(), date, amount, currency });
+        continue;
+      }
+      seenSourceExpenseKeys.add(key);
+      const hubMatches = hubExpenseGroups.get(key) ?? [];
+      if (hubMatches.length === 0) {
+        findings.push({ code: 'BONSAI_EXPENSE_MISSING_IN_HUB', description: String(row.name).trim(), date, amount, currency });
+        continue;
+      }
+      if (hubMatches.length > 1) {
+        findings.push({ code: 'DUPLICATE_HUB_BONSAI_EXPENSE_IDENTITY', hubExpenseIds: hubMatches.map(expense => expense.id).sort() });
+        continue;
+      }
+      const hub = hubMatches[0];
+      const mismatchedFields = [];
+      if (hub.description !== String(row.name).trim()) mismatchedFields.push('description');
+      if (hub.category !== expenseCategory(row.tags)) mismatchedFields.push('category');
+      if (Boolean(hub.billable) !== (normalized(row.billable) === 'true')) mismatchedFields.push('billable');
+      if (mismatchedFields.length > 0) {
+        findings.push({ code: 'EXPENSE_FIELD_MISMATCH', hubExpenseId: hub.id, fields: mismatchedFields });
+        continue;
+      }
+      matchedExpenses += 1;
+    }
+  }
+
   return {
     format: 'ashbi-bonsai-operations-reconciliation',
-    version: 1,
+    version: includesOperatingLedger ? 2 : 1,
     complete: findings.length === 0,
     organizationId,
     completedAt: completed.toISOString(),
@@ -186,6 +384,12 @@ export function reconcileBonsaiOperations({
       sourceProjects: projectRows.length,
       hubBonsaiProjects: [...hubProjectGroups.values()].reduce((sum, projects) => sum + projects.length, 0),
       matchedProjects,
+      ...(includesOperatingLedger ? {
+        sourceTimeEntries: relevantTimeRows.length,
+        matchedTimeEntries,
+        sourceExpenses: relevantExpenseRows.length,
+        matchedExpenses,
+      } : {}),
     },
     findings,
     sourceEvidence: {
@@ -193,6 +397,12 @@ export function reconcileBonsaiOperations({
       clientRows: bonsaiClientRows.length,
       projectsSha256: requireSha256(bonsaiProjectsSha256, 'bonsaiProjectsSha256'),
       projectRows: bonsaiProjectRows.length,
+      ...(includesOperatingLedger ? {
+        timeEntriesSha256: requireSha256(bonsaiTimeEntriesSha256, 'bonsaiTimeEntriesSha256'),
+        timeEntryRows: bonsaiTimeEntryRows.length,
+        expensesSha256: requireSha256(bonsaiExpensesSha256, 'bonsaiExpensesSha256'),
+        expenseRows: bonsaiExpenseRows.length,
+      } : {}),
     },
     workspaceEvidence: {
       artifactSha256: requireSha256(workspaceArtifactSha256, 'workspaceArtifactSha256'),

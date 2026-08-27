@@ -48,6 +48,8 @@
     { "id": "bonsai-source-export", "path": "evidence/bonsai-source-export.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
     { "id": "bonsai-clients-csv", "path": "evidence/clients.csv", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
     { "id": "bonsai-projects-csv", "path": "evidence/projects.csv", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
+    { "id": "bonsai-time-entries-csv", "path": "evidence/time-entries.csv", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
+    { "id": "bonsai-expenses-csv", "path": "evidence/expenses.csv", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
     { "id": "bonsai-invoices-csv", "path": "evidence/invoices.csv", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
     { "id": "bonsai-import-dry-run", "path": "evidence/bonsai-import-dry-run.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },
     { "id": "bonsai-import-confirmed", "path": "evidence/bonsai-import-confirmed.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },

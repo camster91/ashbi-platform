@@ -16,6 +16,8 @@ const REQUIRED_ARTIFACTS = [
   'bonsai-source-export',
   'bonsai-clients-csv',
   'bonsai-projects-csv',
+  'bonsai-time-entries-csv',
+  'bonsai-expenses-csv',
   'bonsai-invoices-csv',
   'bonsai-import-dry-run',
   'bonsai-import-confirmed',
@@ -38,9 +40,13 @@ function fixture() {
   const bonsaiInvoicesContent = Buffer.from('invoice_number,status,currency,total_amount\nINV-001,paid,CAD,113.00\n');
   const bonsaiClientsContent = Buffer.from('Client,Contact Email\nAcme,owner@acme.ca\n');
   const bonsaiProjectsContent = Buffer.from('project_id,title,client_or_company_name,status\n123,Acme Website,Acme,active\n');
+  const bonsaiTimeEntriesContent = Buffer.from('client_name,project_title,owner_name,date,formatted_time\nAcme,Acme Website,Cameron,2026-08-01,01:00:00\n');
+  const bonsaiExpensesContent = Buffer.from('name,amount_after_tax,currency,date\nFigma,20.00,CAD,2026-08-02\n');
   const bonsaiInvoicesSha256 = crypto.createHash('sha256').update(bonsaiInvoicesContent).digest('hex');
   const bonsaiClientsSha256 = crypto.createHash('sha256').update(bonsaiClientsContent).digest('hex');
   const bonsaiProjectsSha256 = crypto.createHash('sha256').update(bonsaiProjectsContent).digest('hex');
+  const bonsaiTimeEntriesSha256 = crypto.createHash('sha256').update(bonsaiTimeEntriesContent).digest('hex');
+  const bonsaiExpensesSha256 = crypto.createHash('sha256').update(bonsaiExpensesContent).digest('hex');
   const emptyRecords = Object.fromEntries(REVENUE_EVIDENCE_COLLECTIONS.map(collection => [collection, []]));
   const revenueManifest = buildRevenueEvidenceManifest(emptyRecords);
   const revenuePayload = {
@@ -79,11 +85,13 @@ function fixture() {
     },
   };
   const operationsPayload = {
-    format: 'ashbi-bonsai-operations-reconciliation', version: 1, complete: true,
+    format: 'ashbi-bonsai-operations-reconciliation', version: 2, complete: true,
     organizationId: 'org-1', completedAt: '2026-08-15T19:00:00.000Z', unresolvedFindings: 0,
     sourceEvidence: {
       clientsSha256: bonsaiClientsSha256, clientRows: 1,
       projectsSha256: bonsaiProjectsSha256, projectRows: 1,
+      timeEntriesSha256: bonsaiTimeEntriesSha256, timeEntryRows: 1,
+      expensesSha256: bonsaiExpensesSha256, expenseRows: 1,
     },
     workspaceEvidence: {
       artifactSha256: workspaceArtifactSha256,
@@ -103,6 +111,10 @@ function fixture() {
           ? bonsaiClientsContent
           : id === 'bonsai-projects-csv'
             ? bonsaiProjectsContent
+            : id === 'bonsai-time-entries-csv'
+              ? bonsaiTimeEntriesContent
+              : id === 'bonsai-expenses-csv'
+                ? bonsaiExpensesContent
       : id === 'bonsai-invoices-csv'
         ? bonsaiInvoicesContent
         : Buffer.from(JSON.stringify(id === 'parallel-reconciliation'
@@ -322,6 +334,28 @@ test('cutover evaluator rejects legacy workspace evidence that omits time and ex
   fs.writeFileSync(operationsPath, operationsContent);
   operationsArtifact.sha256 = crypto.createHash('sha256').update(operationsContent).digest('hex');
 
+  try {
+    const report = evaluateBonsaiCutoverReadiness({ manifest, manifestDirectory: directory });
+    assert.equal(report.ready, false);
+    assert.equal(report.checks.find((check) => check.id === 'operations-reconciliation-binding').ok, false);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('cutover evaluator rejects an operating report that omits time and expense source binding', () => {
+  const { directory, manifest } = fixture();
+  const artifact = manifest.artifacts.find(item => item.id === 'operations-reconciliation');
+  const reportPath = path.join(directory, artifact.path);
+  const payload = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+  payload.version = 1;
+  delete payload.sourceEvidence.timeEntriesSha256;
+  delete payload.sourceEvidence.timeEntryRows;
+  delete payload.sourceEvidence.expensesSha256;
+  delete payload.sourceEvidence.expenseRows;
+  const content = Buffer.from(JSON.stringify(payload));
+  fs.writeFileSync(reportPath, content);
+  artifact.sha256 = crypto.createHash('sha256').update(content).digest('hex');
   try {
     const report = evaluateBonsaiCutoverReadiness({ manifest, manifestDirectory: directory });
     assert.equal(report.ready, false);

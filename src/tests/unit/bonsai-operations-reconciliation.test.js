@@ -22,6 +22,45 @@ function workspaceExport() {
   };
 }
 
+function operatingWorkspaceExport() {
+  const evidence = workspaceExport();
+  evidence.version = 3;
+  evidence.records.users = [{ id: 'user-1', name: 'Cameron Ashley' }];
+  evidence.records.timeEntries = [{
+    id: 'time-1', projectId: 'project-1', userId: 'user-1', taskId: null,
+    description: 'Build', duration: 60, date: '2026-08-01T00:00:00.000Z',
+    billable: true, hourlyRate: '100', source: 'BONSAI_IMPORT', invoiced: false,
+  }];
+  evidence.records.expenses = [{
+    id: 'expense-1', organizationId: 'org-1', clientId: 'client-1', projectId: 'project-1',
+    description: 'Figma', amount: '20', currency: 'CAD', category: 'SOFTWARE',
+    date: '2026-08-02T00:00:00.000Z', billable: false, invoiced: false,
+  }];
+  evidence.manifest = buildWorkspaceExportManifest(evidence.records, { version: 3 });
+  return evidence;
+}
+
+function operatingSourceInput(workspace = operatingWorkspaceExport()) {
+  return {
+    organizationId: 'org-1', completedAt: '2026-08-20T13:00:00.000Z',
+    bonsaiClientsSha256: 'a'.repeat(64), bonsaiProjectsSha256: 'b'.repeat(64),
+    bonsaiTimeEntriesSha256: 'd'.repeat(64), bonsaiExpensesSha256: 'e'.repeat(64),
+    workspaceArtifactSha256: 'c'.repeat(64),
+    bonsaiClientRows: [{ Client: 'Acme', 'Contact Email': 'owner@acme.ca' }],
+    bonsaiProjectRows: [{ project_id: '123', title: 'Acme Website', client_or_company_name: 'Acme', status: 'active' }],
+    bonsaiTimeEntryRows: [{
+      client_name: 'Acme', project_title: 'Acme Website', owner_name: 'Cameron',
+      date: '2026-08-01T00:00:00.000Z', formatted_time: '01:00:00', rate: '100',
+      billing_status: 'billed', notes: 'Build',
+    }],
+    bonsaiExpenseRows: [{
+      name: 'Figma', amount_after_tax: '20.00', currency: 'CAD', tags: 'software',
+      date: '2026-08-02T00:00:00.000Z', billable: 'false', client: 'Acme', project: 'Acme Website',
+    }],
+    workspaceExport: workspace,
+  };
+}
+
 test('Bonsai operations reconciliation binds exact client and project matches to Hub workspace evidence', () => {
   assert.equal(typeof reconciliation.reconcileBonsaiOperations, 'function');
   const hubEvidence = workspaceExport();
@@ -271,12 +310,119 @@ test('Bonsai operations reconciliation binds every version 3 workspace collectio
   const report = reconciliation.reconcileBonsaiOperations({
     organizationId: 'org-1', completedAt: '2026-08-20T13:00:00.000Z',
     bonsaiClientsSha256: 'a'.repeat(64), bonsaiProjectsSha256: 'b'.repeat(64),
+    bonsaiTimeEntriesSha256: 'd'.repeat(64), bonsaiExpensesSha256: 'e'.repeat(64),
     workspaceArtifactSha256: 'c'.repeat(64), bonsaiClientRows: [{ Client: 'Acme' }],
     bonsaiProjectRows: [{ project_id: '123', title: 'Acme Website', client_or_company_name: 'Acme', status: 'active' }],
+    bonsaiTimeEntryRows: [], bonsaiExpenseRows: [],
     workspaceExport: evidence,
   });
 
   assert.deepEqual(Object.keys(report.workspaceEvidence.collectionCounts), [
     'clients', 'contacts', 'projects', 'tasks', 'notes', 'milestones', 'users', 'timeEntries', 'expenses',
   ]);
+});
+
+test('Bonsai operations reconciliation matches version 3 time and expense source evidence', () => {
+  const report = reconciliation.reconcileBonsaiOperations(operatingSourceInput());
+
+  assert.equal(report.version, 2);
+  assert.equal(report.complete, true);
+  assert.deepEqual(report.findings, []);
+  assert.equal(report.summary.sourceTimeEntries, 1);
+  assert.equal(report.summary.matchedTimeEntries, 1);
+  assert.equal(report.summary.sourceExpenses, 1);
+  assert.equal(report.summary.matchedExpenses, 1);
+  assert.equal(report.sourceEvidence.timeEntriesSha256, 'd'.repeat(64));
+  assert.equal(report.sourceEvidence.timeEntryRows, 1);
+  assert.equal(report.sourceEvidence.expensesSha256, 'e'.repeat(64));
+  assert.equal(report.sourceEvidence.expenseRows, 1);
+});
+
+test('Bonsai operations reconciliation reports a time field difference without claiming its source is missing', () => {
+  const workspace = operatingWorkspaceExport();
+  workspace.records.timeEntries[0].description = 'Different description';
+  workspace.manifest = buildWorkspaceExportManifest(workspace.records, { version: 3 });
+
+  const report = reconciliation.reconcileBonsaiOperations(operatingSourceInput(workspace));
+
+  assert.deepEqual(report.findings, [{
+    code: 'TIME_ENTRY_FIELD_MISMATCH', hubTimeEntryId: 'time-1', fields: ['description'],
+  }]);
+});
+
+test('Bonsai operations reconciliation rejects a malformed expense amount instead of guessing', () => {
+  const input = operatingSourceInput();
+  input.bonsaiExpenseRows[0].amount_after_tax = '1,2,3.00';
+
+  const report = reconciliation.reconcileBonsaiOperations(input);
+
+  assert.deepEqual(report.findings, [{
+    code: 'BONSAI_EXPENSE_SOURCE_INVALID', description: 'Figma', fields: ['amount'],
+  }]);
+});
+
+test('Bonsai operations reconciliation rejects a malformed time-entry rate instead of guessing', () => {
+  const input = operatingSourceInput();
+  input.bonsaiTimeEntryRows[0].rate = '1,2,3.00';
+
+  const report = reconciliation.reconcileBonsaiOperations(input);
+
+  assert.deepEqual(report.findings, [{
+    code: 'BONSAI_TIME_ENTRY_SOURCE_INVALID', projectName: 'Acme Website', ownerName: 'Cameron', fields: ['rate'],
+  }, {
+    code: 'HUB_BONSAI_TIME_ENTRY_MISSING_IN_SOURCE', hubTimeEntryId: 'time-1',
+  }]);
+});
+
+test('Bonsai operations reconciliation preserves explicit expense exclusions and permits native Hub ledger rows', () => {
+  const input = operatingSourceInput();
+  input.bonsaiExpenseRows.push({
+    name: 'Personal purchase', amount_after_tax: '10.00', currency: 'CAD', tags: 'personal',
+    date: '2026-08-03T00:00:00.000Z', billable: 'false', client: '', project: '',
+  });
+  input.workspaceExport.records.expenses.push({
+    id: 'expense-native', organizationId: 'org-1', clientId: null, projectId: null,
+    description: 'Hub-native expense', amount: '5', currency: 'CAD', category: 'OTHER',
+    date: '2026-08-04T00:00:00.000Z', billable: false, invoiced: false,
+  });
+  input.workspaceExport.manifest = buildWorkspaceExportManifest(input.workspaceExport.records, { version: 3 });
+
+  const report = reconciliation.reconcileBonsaiOperations(input);
+
+  assert.equal(report.complete, true);
+  assert.equal(report.summary.sourceExpenses, 1);
+  assert.equal(report.sourceEvidence.expenseRows, 2);
+});
+
+test('Bonsai operations reconciliation CLI binds version 3 time and expense files', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ashbi-bonsai-ledger-'));
+  try {
+    const clientsPath = path.join(directory, 'clients.csv');
+    const projectsPath = path.join(directory, 'projects.csv');
+    const timeEntriesPath = path.join(directory, 'time-entries.csv');
+    const expensesPath = path.join(directory, 'expenses.csv');
+    const workspacePath = path.join(directory, 'workspace.json');
+    const outputPath = path.join(directory, 'operations.json');
+    fs.writeFileSync(clientsPath, 'Client,Contact Email\nAcme,owner@acme.ca\n');
+    fs.writeFileSync(projectsPath, 'project_id,title,client_or_company_name,status\n123,Acme Website,Acme,active\n');
+    fs.writeFileSync(timeEntriesPath, 'client_name,project_title,owner_name,date,formatted_time,rate,billing_status,notes\nAcme,Acme Website,Cameron,2026-08-01T00:00:00.000Z,01:00:00,100,billed,Build\n');
+    fs.writeFileSync(expensesPath, 'name,amount_after_tax,currency,tags,date,billable,client,project\nFigma,20.00,CAD,software,2026-08-02T00:00:00.000Z,false,Acme,Acme Website\n');
+    fs.writeFileSync(workspacePath, JSON.stringify(operatingWorkspaceExport()));
+
+    const result = spawnSync(process.execPath, [
+      'scripts/reconcile-bonsai-operations.js',
+      '--organization-id', 'org-1', '--bonsai-clients', clientsPath,
+      '--bonsai-projects', projectsPath, '--bonsai-time-entries', timeEntriesPath,
+      '--bonsai-expenses', expensesPath, '--workspace-export', workspacePath,
+      '--completed-at', '2026-08-20T13:00:00.000Z', '--output', outputPath,
+    ], { cwd: process.cwd(), encoding: 'utf8' });
+
+    assert.equal(result.status, 0, result.stderr);
+    const report = JSON.parse(fs.readFileSync(outputPath, 'utf8'));
+    assert.equal(report.version, 2);
+    assert.equal(report.summary.matchedTimeEntries, 1);
+    assert.equal(report.summary.matchedExpenses, 1);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
 });

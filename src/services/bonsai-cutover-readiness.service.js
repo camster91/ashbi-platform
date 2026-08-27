@@ -20,6 +20,8 @@ const REQUIRED_ARTIFACT_IDS = [
   'bonsai-source-export',
   'bonsai-clients-csv',
   'bonsai-projects-csv',
+  'bonsai-time-entries-csv',
+  'bonsai-expenses-csv',
   'bonsai-invoices-csv',
   'bonsai-import-dry-run',
   'bonsai-import-confirmed',
@@ -148,8 +150,11 @@ function operationsReconciliationIsBound({ artifacts, manifestDirectory, organiz
   const artifact = id => Array.isArray(artifacts) ? artifacts.find(item => item?.id === id) : null;
   const clientsArtifact = artifact('bonsai-clients-csv');
   const projectsArtifact = artifact('bonsai-projects-csv');
+  const timeEntriesArtifact = artifact('bonsai-time-entries-csv');
+  const expensesArtifact = artifact('bonsai-expenses-csv');
   const workspaceArtifact = artifact('workspace-export');
-  if (!operationsReport || !workspacePayload || !clientsArtifact || !projectsArtifact || !workspaceArtifact) return false;
+  if (!operationsReport || !workspacePayload || !clientsArtifact || !projectsArtifact
+    || !timeEntriesArtifact || !expensesArtifact || !workspaceArtifact) return false;
   const completedAt = timestamp(operationsReport.completedAt);
   const exportedAt = timestamp(workspacePayload.exportedAt);
   const countsMatch = workspaceExportCollections(workspacePayload.version).every(collection => (
@@ -158,7 +163,7 @@ function operationsReconciliationIsBound({ artifacts, manifestDirectory, organiz
         === workspacePayload.manifest?.collections?.[collection]?.count
   ));
   return operationsReport.format === 'ashbi-bonsai-operations-reconciliation'
-    && operationsReport.version === 1
+    && operationsReport.version === 2
     && operationsReport.complete === true
     && operationsReport.organizationId === organizationId
     && operationsReport.unresolvedFindings === reconciliation.unresolvedFindings
@@ -172,6 +177,12 @@ function operationsReconciliationIsBound({ artifacts, manifestDirectory, organiz
     && operationsReport.sourceEvidence?.projectsSha256 === projectsArtifact.sha256
     && Number.isInteger(operationsReport.sourceEvidence?.projectRows)
     && operationsReport.sourceEvidence.projectRows >= 0
+    && operationsReport.sourceEvidence?.timeEntriesSha256 === timeEntriesArtifact.sha256
+    && Number.isInteger(operationsReport.sourceEvidence?.timeEntryRows)
+    && operationsReport.sourceEvidence.timeEntryRows >= 0
+    && operationsReport.sourceEvidence?.expensesSha256 === expensesArtifact.sha256
+    && Number.isInteger(operationsReport.sourceEvidence?.expenseRows)
+    && operationsReport.sourceEvidence.expenseRows >= 0
     && operationsReport.workspaceEvidence?.artifactSha256 === workspaceArtifact.sha256
     && operationsReport.workspaceEvidence?.recordsSha256 === workspacePayload.manifest?.recordsSha256
     && countsMatch

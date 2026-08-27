@@ -1,6 +1,6 @@
 {
   "format": "ashbi-bonsai-operations-reconciliation",
-  "version": 1,
+  "version": 2,
   "complete": false,
   "organizationId": "REPLACE_WITH_ASHBI_ORGANIZATION_ID",
   "completedAt": null,
@@ -10,14 +10,22 @@
     "matchedClients": null,
     "sourceProjects": null,
     "hubBonsaiProjects": null,
-    "matchedProjects": null
+    "matchedProjects": null,
+    "sourceTimeEntries": null,
+    "matchedTimeEntries": null,
+    "sourceExpenses": null,
+    "matchedExpenses": null
   },
   "findings": [],
   "sourceEvidence": {
     "clientsSha256": "0000000000000000000000000000000000000000000000000000000000000000",
     "clientRows": null,
     "projectsSha256": "0000000000000000000000000000000000000000000000000000000000000000",
-    "projectRows": null
+    "projectRows": null,
+    "timeEntriesSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "timeEntryRows": null,
+    "expensesSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "expenseRows": null
   },
   "workspaceEvidence": {
     "artifactSha256": "0000000000000000000000000000000000000000000000000000000000000000",
