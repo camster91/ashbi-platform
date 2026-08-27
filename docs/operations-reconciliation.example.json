@@ -28,7 +28,10 @@
       "projects": null,
       "tasks": null,
       "notes": null,
-      "milestones": null
+      "milestones": null,
+      "users": null,
+      "timeEntries": null,
+      "expenses": null
     }
   }
 }

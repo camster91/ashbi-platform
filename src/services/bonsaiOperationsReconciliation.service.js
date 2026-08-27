@@ -1,4 +1,4 @@
-import { WORKSPACE_EXPORT_COLLECTIONS, verifyWorkspaceExport } from './workspace-export-integrity.service.js';
+import { verifyWorkspaceExport, workspaceExportCollections } from './workspace-export-integrity.service.js';
 
 const PROJECT_STATUS_MAP = Object.freeze({
   active: 'DESIGN_DEV',
@@ -197,7 +197,7 @@ export function reconcileBonsaiOperations({
     workspaceEvidence: {
       artifactSha256: requireSha256(workspaceArtifactSha256, 'workspaceArtifactSha256'),
       recordsSha256: workspaceExport.manifest.recordsSha256,
-      collectionCounts: Object.fromEntries(WORKSPACE_EXPORT_COLLECTIONS.map(collection => [
+      collectionCounts: Object.fromEntries(workspaceExportCollections(workspaceExport.version).map(collection => [
         collection,
         workspaceExport.manifest.collections[collection].count,
       ])),

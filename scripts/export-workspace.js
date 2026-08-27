@@ -41,13 +41,17 @@ async function main() {
     orderBy: { createdAt: 'asc' },
   });
   const projectIds = projects.map(({ id }) => id);
-  const [tasks, notes, milestones] = await Promise.all([
+  const [tasks, notes, milestones, timeEntries, expenses] = await Promise.all([
     prisma.task.findMany({ where: { projectId: { in: projectIds }, deletedAt: null }, select: { id: true, projectId: true, parentId: true, title: true, description: true, content: true, status: true, priority: true, category: true, tags: true, properties: true, dueDate: true, startDate: true, completedAt: true, position: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'asc' } }),
     prisma.note.findMany({ where: { projectId: { in: projectIds }, deletedAt: null }, select: { id: true, projectId: true, parentId: true, title: true, content: true, type: true, isPinned: true, tags: true, isTemplate: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'asc' } }),
     prisma.milestone.findMany({ where: { projectId: { in: projectIds } }, select: { id: true, projectId: true, name: true, description: true, dueDate: true, status: true, completedAt: true, color: true, createdAt: true, updatedAt: true }, orderBy: { createdAt: 'asc' } }),
+    prisma.timeEntry.findMany({ where: { projectId: { in: projectIds }, deletedAt: null }, select: { id: true, projectId: true, userId: true, taskId: true, description: true, duration: true, date: true, billable: true, hourlyRate: true, source: true, invoiced: true, createdAt: true, updatedAt: true }, orderBy: { date: 'asc' } }),
+    prisma.expense.findMany({ where: { organizationId, deletedAt: null }, select: { id: true, organizationId: true, clientId: true, projectId: true, description: true, amount: true, currency: true, category: true, date: true, billable: true, invoiced: true, createdAt: true, updatedAt: true }, orderBy: { date: 'asc' } }),
   ]);
-  const payload = { format: 'ashbi-workspace-export', version: 2, exportedAt: new Date().toISOString(), organization, records: { clients, contacts, projects, tasks, notes, milestones } };
-  payload.manifest = buildWorkspaceExportManifest(payload.records);
+  const userIds = [...new Set(timeEntries.map(({ userId }) => userId))];
+  const users = await prisma.user.findMany({ where: { id: { in: userIds }, organizationId }, select: { id: true, name: true }, orderBy: { name: 'asc' } });
+  const payload = { format: 'ashbi-workspace-export', version: 3, exportedAt: new Date().toISOString(), organization, records: { clients, contacts, projects, tasks, notes, milestones, users, timeEntries, expenses } };
+  payload.manifest = buildWorkspaceExportManifest(payload.records, { version: 3 });
   const serialized = `${JSON.stringify(payload, null, 2)}\n`;
   await fs.writeFile(target, serialized, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
   await fs.chmod(target, 0o600);

@@ -260,3 +260,23 @@ test('Bonsai operations reconciliation CLI creates a source-bound owner evidence
     fs.rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test('Bonsai operations reconciliation binds every version 3 workspace collection', () => {
+  const evidence = workspaceExport();
+  evidence.version = 3;
+  evidence.records.users = [];
+  evidence.records.timeEntries = [];
+  evidence.records.expenses = [];
+  evidence.manifest = buildWorkspaceExportManifest(evidence.records, { version: 3 });
+  const report = reconciliation.reconcileBonsaiOperations({
+    organizationId: 'org-1', completedAt: '2026-08-20T13:00:00.000Z',
+    bonsaiClientsSha256: 'a'.repeat(64), bonsaiProjectsSha256: 'b'.repeat(64),
+    workspaceArtifactSha256: 'c'.repeat(64), bonsaiClientRows: [{ Client: 'Acme' }],
+    bonsaiProjectRows: [{ project_id: '123', title: 'Acme Website', client_or_company_name: 'Acme', status: 'active' }],
+    workspaceExport: evidence,
+  });
+
+  assert.deepEqual(Object.keys(report.workspaceEvidence.collectionCounts), [
+    'clients', 'contacts', 'projects', 'tasks', 'notes', 'milestones', 'users', 'timeEntries', 'expenses',
+  ]);
+});

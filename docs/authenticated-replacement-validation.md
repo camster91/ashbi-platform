@@ -156,7 +156,11 @@ are approved.
 For an Ashbi workspace export, run the offline verifier before retaining the
 artifact: `node scripts/verify-workspace-export.js --input <workspace-export.json>`.
 It verifies the deterministic per-collection manifest and exported relationship
-references without connecting to the database.
+references without connecting to the database. Version 3 covers the bounded
+staff identities referenced by time entries, time entries, and organization-owned
+expenses; it excludes staff email/password/role and expense notes/receipts.
+Version 2 is accepted only to verify legacy recovery artifacts and is insufficient
+for Bonsai cutover evidence.
 
 ## Closure decision
 

@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { REVENUE_EVIDENCE_COLLECTIONS, verifyRevenueEvidenceExport } from './revenueEvidenceExport.service.js';
-import { WORKSPACE_EXPORT_COLLECTIONS, verifyWorkspaceExport } from './workspace-export-integrity.service.js';
+import { verifyWorkspaceExport, workspaceExportCollections } from './workspace-export-integrity.service.js';
 
 const REQUIRED_RECORD_TYPES = [
   'clients',
@@ -152,7 +152,7 @@ function operationsReconciliationIsBound({ artifacts, manifestDirectory, organiz
   if (!operationsReport || !workspacePayload || !clientsArtifact || !projectsArtifact || !workspaceArtifact) return false;
   const completedAt = timestamp(operationsReport.completedAt);
   const exportedAt = timestamp(workspacePayload.exportedAt);
-  const countsMatch = WORKSPACE_EXPORT_COLLECTIONS.every(collection => (
+  const countsMatch = workspaceExportCollections(workspacePayload.version).every(collection => (
     Number.isInteger(operationsReport.workspaceEvidence?.collectionCounts?.[collection])
       && operationsReport.workspaceEvidence.collectionCounts[collection]
         === workspacePayload.manifest?.collections?.[collection]?.count
@@ -164,6 +164,7 @@ function operationsReconciliationIsBound({ artifacts, manifestDirectory, organiz
     && operationsReport.unresolvedFindings === reconciliation.unresolvedFindings
     && operationsReport.unresolvedFindings === 0
     && workspacePayload.organization?.id === organizationId
+    && workspacePayload.version === 3
     && verifyWorkspaceExport(workspacePayload).valid
     && operationsReport.sourceEvidence?.clientsSha256 === clientsArtifact.sha256
     && Number.isInteger(operationsReport.sourceEvidence?.clientRows)

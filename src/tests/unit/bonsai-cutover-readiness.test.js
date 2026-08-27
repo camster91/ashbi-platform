@@ -6,7 +6,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { evaluateBonsaiCutoverReadiness } from '../../services/bonsai-cutover-readiness.service.js';
 import { buildRevenueEvidenceManifest, REVENUE_EVIDENCE_COLLECTIONS } from '../../services/revenueEvidenceExport.service.js';
-import { buildWorkspaceExportManifest, WORKSPACE_EXPORT_COLLECTIONS } from '../../services/workspace-export-integrity.service.js';
+import {
+  buildWorkspaceExportManifest,
+  WORKSPACE_EXPORT_COLLECTIONS,
+  WORKSPACE_EXPORT_V3_COLLECTIONS,
+} from '../../services/workspace-export-integrity.service.js';
 
 const REQUIRED_ARTIFACTS = [
   'bonsai-source-export',
@@ -49,10 +53,10 @@ function fixture() {
   };
   const revenueContent = Buffer.from(JSON.stringify(revenuePayload));
   const revenueArtifactSha256 = crypto.createHash('sha256').update(revenueContent).digest('hex');
-  const workspaceRecords = Object.fromEntries(WORKSPACE_EXPORT_COLLECTIONS.map(collection => [collection, []]));
-  const workspaceManifest = buildWorkspaceExportManifest(workspaceRecords);
+  const workspaceRecords = Object.fromEntries(WORKSPACE_EXPORT_V3_COLLECTIONS.map(collection => [collection, []]));
+  const workspaceManifest = buildWorkspaceExportManifest(workspaceRecords, { version: 3 });
   const workspacePayload = {
-    format: 'ashbi-workspace-export', version: 2, exportedAt: '2026-08-15T18:00:00.000Z',
+    format: 'ashbi-workspace-export', version: 3, exportedAt: '2026-08-15T18:00:00.000Z',
     organization: { id: 'org-1', name: 'Ashbi', slug: 'ashbi' }, records: workspaceRecords, manifest: workspaceManifest,
   };
   const workspaceContent = Buffer.from(JSON.stringify(workspacePayload));
@@ -84,7 +88,7 @@ function fixture() {
     workspaceEvidence: {
       artifactSha256: workspaceArtifactSha256,
       recordsSha256: workspaceManifest.recordsSha256,
-      collectionCounts: Object.fromEntries(WORKSPACE_EXPORT_COLLECTIONS.map(
+      collectionCounts: Object.fromEntries(WORKSPACE_EXPORT_V3_COLLECTIONS.map(
         collection => [collection, workspaceManifest.collections[collection].count],
       )),
     },
@@ -292,6 +296,41 @@ test('cutover evaluator binds operating reconciliation to the exact Bonsai clien
   }
 });
 
+test('cutover evaluator rejects legacy workspace evidence that omits time and expenses', () => {
+  const { directory, manifest } = fixture();
+  const workspaceArtifact = manifest.artifacts.find(item => item.id === 'workspace-export');
+  const workspacePath = path.join(directory, workspaceArtifact.path);
+  const workspacePayload = JSON.parse(fs.readFileSync(workspacePath, 'utf8'));
+  workspacePayload.version = 2;
+  workspacePayload.records = Object.fromEntries(WORKSPACE_EXPORT_COLLECTIONS.map(
+    collection => [collection, workspacePayload.records[collection]],
+  ));
+  workspacePayload.manifest = buildWorkspaceExportManifest(workspacePayload.records);
+  const workspaceContent = Buffer.from(JSON.stringify(workspacePayload));
+  fs.writeFileSync(workspacePath, workspaceContent);
+  workspaceArtifact.sha256 = crypto.createHash('sha256').update(workspaceContent).digest('hex');
+
+  const operationsArtifact = manifest.artifacts.find(item => item.id === 'operations-reconciliation');
+  const operationsPath = path.join(directory, operationsArtifact.path);
+  const operationsPayload = JSON.parse(fs.readFileSync(operationsPath, 'utf8'));
+  operationsPayload.workspaceEvidence.artifactSha256 = workspaceArtifact.sha256;
+  operationsPayload.workspaceEvidence.recordsSha256 = workspacePayload.manifest.recordsSha256;
+  operationsPayload.workspaceEvidence.collectionCounts = Object.fromEntries(WORKSPACE_EXPORT_COLLECTIONS.map(
+    collection => [collection, workspacePayload.manifest.collections[collection].count],
+  ));
+  const operationsContent = Buffer.from(JSON.stringify(operationsPayload));
+  fs.writeFileSync(operationsPath, operationsContent);
+  operationsArtifact.sha256 = crypto.createHash('sha256').update(operationsContent).digest('hex');
+
+  try {
+    const report = evaluateBonsaiCutoverReadiness({ manifest, manifestDirectory: directory });
+    assert.equal(report.ready, false);
+    assert.equal(report.checks.find((check) => check.id === 'operations-reconciliation-binding').ok, false);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('cutover evaluator never reads evidence outside the manifest directory', () => {
   const { directory, manifest } = fixture();
   manifest.artifacts[0].path = '../outside.json';
@@ -310,6 +349,7 @@ test('cutover command is read-only and package-addressable', () => {
   const migrationRunbook = fs.readFileSync(path.join(process.cwd(), 'docs', 'bonsai-migration.md'), 'utf8');
   const examplePath = path.join(process.cwd(), 'docs', 'bonsai-cutover-manifest.example.json');
   const reconciliationExamplePath = path.join(process.cwd(), 'docs', 'parallel-reconciliation.example.json');
+  const operationsExamplePath = path.join(process.cwd(), 'docs', 'operations-reconciliation.example.json');
   assert.doesNotMatch(script, /writeFile|appendFile|rmSync|unlink|fetch\(|prisma|stripe\.|mailgun\./i);
   assert.match(packageJson, /"check:bonsai-cutover": "node scripts\/check-bonsai-cutover-readiness\.mjs"/);
   assert.match(migrationRunbook, /npm run check:bonsai-cutover -- --manifest/);
@@ -320,4 +360,7 @@ test('cutover command is read-only and package-addressable', () => {
   const reconciliationExample = JSON.parse(fs.readFileSync(reconciliationExamplePath, 'utf8'));
   assert.equal(reconciliationExample.format, 'ashbi-parallel-reconciliation');
   assert.deepEqual(Object.keys(reconciliationExample.revenueEvidence.collectionCounts), REVENUE_EVIDENCE_COLLECTIONS);
+  const operationsExample = JSON.parse(fs.readFileSync(operationsExamplePath, 'utf8'));
+  assert.equal(operationsExample.format, 'ashbi-bonsai-operations-reconciliation');
+  assert.deepEqual(Object.keys(operationsExample.workspaceEvidence.collectionCounts), WORKSPACE_EXPORT_V3_COLLECTIONS);
 });

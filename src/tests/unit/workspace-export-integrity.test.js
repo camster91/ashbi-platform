@@ -52,3 +52,45 @@ test('workspace export verification rejects duplicate record identifiers', () =>
   assert.equal(result.valid, false);
   assert.deepEqual(result.findings, [{ code: 'DUPLICATE_RECORD_ID', collection: 'projects', id: 'project-1' }]);
 });
+
+test('workspace export version 3 verifies bounded staff time and expense relationships', () => {
+  const version3Records = {
+    ...records,
+    users: [{ id: 'user-1', name: 'Cameron' }],
+    timeEntries: [{ id: 'time-1', projectId: 'project-1', userId: 'user-1', taskId: 'task-1' }],
+    expenses: [{ id: 'expense-1', organizationId: 'org-1', clientId: 'client-1', projectId: 'project-1' }],
+  };
+  const payload = {
+    format: 'ashbi-workspace-export', version: 3, organization: { id: 'org-1' }, records: version3Records,
+    manifest: buildWorkspaceExportManifest(version3Records, { version: 3 }),
+  };
+
+  const result = verifyWorkspaceExport(payload);
+
+  assert.equal(result.valid, true);
+  assert.equal(result.manifest.collections.users.count, 1);
+  assert.equal(result.manifest.collections.timeEntries.count, 1);
+  assert.equal(result.manifest.collections.expenses.count, 1);
+});
+
+test('workspace export version 3 rejects cross-project time and expense relationships', () => {
+  const version3Records = {
+    ...records,
+    clients: [...records.clients, { id: 'client-2', name: 'Other' }],
+    projects: [...records.projects, { id: 'project-2', clientId: 'client-2' }],
+    tasks: [...records.tasks, { id: 'task-2', projectId: 'project-2', parentId: null }],
+    users: [{ id: 'user-1', name: 'Cameron' }],
+    timeEntries: [{ id: 'time-1', projectId: 'project-1', userId: 'user-1', taskId: 'task-2' }],
+    expenses: [{ id: 'expense-1', organizationId: 'org-1', clientId: 'client-1', projectId: 'project-2' }],
+  };
+  const result = verifyWorkspaceExport({
+    format: 'ashbi-workspace-export', version: 3, organization: { id: 'org-1' }, records: version3Records,
+    manifest: buildWorkspaceExportManifest(version3Records, { version: 3 }),
+  });
+
+  assert.equal(result.valid, false);
+  assert.deepEqual(result.findings, [
+    { code: 'TIME_ENTRY_TASK_PROJECT_MISMATCH', id: 'time-1', taskId: 'task-2', projectId: 'project-1' },
+    { code: 'EXPENSE_PROJECT_CLIENT_MISMATCH', id: 'expense-1', projectId: 'project-2', clientId: 'client-1' },
+  ]);
+});
