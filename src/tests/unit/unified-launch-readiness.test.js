@@ -8,6 +8,11 @@ import { spawnSync } from 'node:child_process';
 import { evaluateUnifiedLaunchReadiness } from '../../services/unifiedLaunchReadiness.service.js';
 
 const passingBonsai = { ready: true, checks: [{ id: 'all', ok: true }] };
+const organizationId = 'org-sandbox';
+
+function evaluate(options) {
+  return evaluateUnifiedLaunchReadiness({ ...options, bonsaiCutoverOrganizationId: organizationId });
+}
 
 function fixture() {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ashbi-unified-launch-'));
@@ -31,6 +36,7 @@ function fixture() {
   const hubDeployment = deployment('hub.ashbi.ca', 'https://hub.ashbi.ca', 'abcdef2');
   const journey = {
     format: 'ashbi-controlled-journey-evidence', version: 1, complete: true,
+    organizationId,
     environmentKind: 'sandbox', publicSiteRevision: publicDeployment.revision,
     hubRevision: hubDeployment.revision, currency: 'CAD', stripeMode: 'test', emailMode: 'sandbox',
     reconciliationPassed: true, duplicateWrites: 0, manualDatabaseCorrections: 0,
@@ -42,6 +48,7 @@ function fixture() {
   };
   const growth = {
     format: 'ashbi-growth-cadence-evidence', version: 1, complete: true,
+    organizationId,
     baseline: {
       startedAt: '2026-01-01T00:00:00.000Z', endedAt: '2026-02-01T00:00:00.000Z',
       sourceCoverageReviewed: true, currenciesSeparated: true, missingAttributionDisclosed: true,
@@ -81,7 +88,7 @@ function fixture() {
     fs.writeFileSync(path.join(directory, relativePath), content);
     return { id, path: relativePath, sha256: crypto.createHash('sha256').update(content).digest('hex') };
   });
-  const manifest = { schemaVersion: 1, evidenceCompletedAt: '2026-03-10T12:00:00.000Z', artifacts };
+  const manifest = { schemaVersion: 1, organizationId, evidenceCompletedAt: '2026-03-10T12:00:00.000Z', artifacts };
   function replace(id, payload) {
     const artifact = artifacts.find(item => item.id === id);
     const content = Buffer.from(JSON.stringify(payload));
@@ -94,7 +101,7 @@ function fixture() {
 test('unified launch evaluator passes only the complete evidence-bound company journey', () => {
   const { directory, manifest } = fixture();
   try {
-    const report = evaluateUnifiedLaunchReadiness({ manifest, manifestDirectory: directory, bonsaiCutoverReport: passingBonsai });
+    const report = evaluate({ manifest, manifestDirectory: directory, bonsaiCutoverReport: passingBonsai });
     assert.equal(report.ready, true);
     assert.equal(report.checks.length, 10);
     assert.equal(report.checks.every(item => item.ok), true);
@@ -108,7 +115,7 @@ test('unified launch evaluator rejects missing partner strategy approval', () =>
   payloads['strategy-approval'].approvals = payloads['strategy-approval'].approvals.slice(0, 1);
   replace('strategy-approval', payloads['strategy-approval']);
   try {
-    const report = evaluateUnifiedLaunchReadiness({ manifest, manifestDirectory: directory, bonsaiCutoverReport: passingBonsai });
+    const report = evaluate({ manifest, manifestDirectory: directory, bonsaiCutoverReport: passingBonsai });
     assert.equal(report.ready, false);
     assert.equal(report.checks.find(item => item.id === 'strategy-approval').ok, false);
   } finally {
@@ -132,7 +139,7 @@ test('unified launch evaluator independently rejects journey, Notion, Bonsai, gr
         mutate(payloads[artifactId]);
         replace(artifactId, payloads[artifactId]);
       }
-      const report = evaluateUnifiedLaunchReadiness({ manifest, manifestDirectory: directory, bonsaiCutoverReport });
+      const report = evaluate({ manifest, manifestDirectory: directory, bonsaiCutoverReport });
       assert.equal(report.ready, false, checkId);
       assert.equal(report.checks.find(item => item.id === checkId).ok, false, checkId);
     } finally {
@@ -141,14 +148,48 @@ test('unified launch evaluator independently rejects journey, Notion, Bonsai, gr
   }
 });
 
+test('unified launch evaluator rejects evidence from a different organization at every tenant-bound gate', () => {
+  const cases = [
+    ['controlled-journey', payload => { payload.organizationId = 'org-other'; }, 'controlled-journey'],
+    ['growth-cadence', payload => { payload.organizationId = 'org-other'; }, 'growth-cadence'],
+    ['notion-confirmed-import', payload => { payload.organization.id = 'org-other'; }, 'notion-migration'],
+  ];
+  for (const [artifactId, mutate, checkId] of cases) {
+    const { directory, manifest, payloads, replace } = fixture();
+    try {
+      mutate(payloads[artifactId]);
+      replace(artifactId, payloads[artifactId]);
+      const report = evaluate({ manifest, manifestDirectory: directory, bonsaiCutoverReport: passingBonsai });
+      assert.equal(report.ready, false, checkId);
+      assert.equal(report.checks.find(item => item.id === checkId).ok, false, checkId);
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  }
+
+  const { directory, manifest } = fixture();
+  try {
+    const report = evaluateUnifiedLaunchReadiness({
+      manifest,
+      manifestDirectory: directory,
+      bonsaiCutoverReport: passingBonsai,
+      bonsaiCutoverOrganizationId: 'org-other',
+    });
+    assert.equal(report.ready, false);
+    assert.equal(report.checks.find(item => item.id === 'bonsai-cutover').ok, false);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('unified launch evaluator rejects changed and escaping artifacts', () => {
   const { directory, manifest } = fixture();
   try {
     fs.appendFileSync(path.join(directory, manifest.artifacts[0].path), 'changed');
-    let report = evaluateUnifiedLaunchReadiness({ manifest, manifestDirectory: directory, bonsaiCutoverReport: passingBonsai });
+    let report = evaluate({ manifest, manifestDirectory: directory, bonsaiCutoverReport: passingBonsai });
     assert.equal(report.checks.find(item => item.id === 'artifact-integrity').ok, false);
     manifest.artifacts[0].path = '../outside.json';
-    report = evaluateUnifiedLaunchReadiness({ manifest, manifestDirectory: directory, bonsaiCutoverReport: passingBonsai });
+    report = evaluate({ manifest, manifestDirectory: directory, bonsaiCutoverReport: passingBonsai });
     assert.equal(report.checks.find(item => item.id === 'artifact-integrity').ok, false);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
@@ -167,7 +208,7 @@ test('unified launch evaluator rejects a checksum-valid symlink that escapes the
     fs.rmSync(target);
     fs.symlinkSync(outside, target, 'file');
     artifact.sha256 = crypto.createHash('sha256').update(content).digest('hex');
-    const report = evaluateUnifiedLaunchReadiness({ manifest, manifestDirectory: directory, bonsaiCutoverReport: passingBonsai });
+    const report = evaluate({ manifest, manifestDirectory: directory, bonsaiCutoverReport: passingBonsai });
     assert.equal(report.checks.find(item => item.id === 'artifact-integrity').ok, false);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });

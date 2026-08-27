@@ -118,6 +118,10 @@ export default function LeadInbox() {
     projectId: '',
     assigneeId: '',
     action: '',
+    sourceCoverageReviewed: false,
+    currenciesSeparated: false,
+    missingAttributionDisclosed: false,
+    externalActionState: 'NOT_REQUIRED',
     ...growthReviewDefaults(),
   }));
   const [growthTask, setGrowthTask] = useState(null);
@@ -251,6 +255,10 @@ export default function LeadInbox() {
       weekOf: growthReview.weekOf,
       action: growthReview.action.trim(),
       dueDate: new Date(growthReview.dueDate).toISOString(),
+      sourceCoverageReviewed: growthReview.sourceCoverageReviewed,
+      currenciesSeparated: growthReview.currenciesSeparated,
+      missingAttributionDisclosed: growthReview.missingAttributionDisclosed,
+      externalActionState: growthReview.externalActionState,
     }),
     onSuccess: (result) => {
       setGrowthTask(result.task);
@@ -276,14 +284,21 @@ export default function LeadInbox() {
     && (reviewStatus !== 'DISQUALIFIED' || Boolean(qualificationReasonCode));
   const growthWeekIsMonday = growthReview.weekOf
     && new Date(`${growthReview.weekOf}T00:00:00.000Z`).getUTCDay() === 1;
+  const growthWeekStart = growthReview.weekOf ? new Date(`${growthReview.weekOf}T00:00:00.000Z`) : null;
+  const growthDueDate = growthReview.dueDate ? new Date(growthReview.dueDate) : null;
+  const growthDueWithinWeek = Boolean(growthWeekStart && growthDueDate
+    && growthDueDate >= growthWeekStart
+    && growthDueDate < new Date(growthWeekStart.getTime() + 7 * 24 * 60 * 60 * 1000));
   const canCreateGrowthTask = Boolean(
     summary
     && growthReview.projectId
     && growthReview.assigneeId
     && growthWeekIsMonday
     && growthReview.action.trim().length >= 10
-    && growthReview.dueDate
-    && !Number.isNaN(new Date(growthReview.dueDate).getTime()),
+    && growthDueWithinWeek
+    && growthReview.sourceCoverageReviewed
+    && growthReview.currenciesSeparated
+    && growthReview.missingAttributionDisclosed,
   );
 
   return (
@@ -451,6 +466,30 @@ export default function LeadInbox() {
               <div className="sm:col-span-2">
                 <label htmlFor="growth-review-action" className="mb-1 block text-sm font-medium text-foreground">One acquisition action</label>
                 <textarea id="growth-review-action" rows={3} maxLength={500} value={growthReview.action} onChange={(event) => setGrowthReview((current) => ({ ...current, action: event.target.value }))} placeholder="Prepare one evidence-backed case study for approval" className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground" />
+              </div>
+              <fieldset className="space-y-3 sm:col-span-2">
+                <legend className="text-sm font-medium text-foreground">Review evidence</legend>
+                <label className="flex min-h-11 items-start gap-3 text-sm text-foreground">
+                  <input id="growth-review-source-coverage" type="checkbox" checked={growthReview.sourceCoverageReviewed} onChange={(event) => setGrowthReview((current) => ({ ...current, sourceCoverageReviewed: event.target.checked }))} className="mt-1 h-4 w-4" />
+                  <span>I reviewed source coverage against recorded evidence.</span>
+                </label>
+                <label className="flex min-h-11 items-start gap-3 text-sm text-foreground">
+                  <input id="growth-review-missing-attribution" type="checkbox" checked={growthReview.missingAttributionDisclosed} onChange={(event) => setGrowthReview((current) => ({ ...current, missingAttributionDisclosed: event.target.checked }))} className="mt-1 h-4 w-4" />
+                  <span>I preserved and disclosed missing attribution instead of guessing it.</span>
+                </label>
+                <label className="flex min-h-11 items-start gap-3 text-sm text-foreground">
+                  <input id="growth-review-currencies" type="checkbox" checked={growthReview.currenciesSeparated} onChange={(event) => setGrowthReview((current) => ({ ...current, currenciesSeparated: event.target.checked }))} className="mt-1 h-4 w-4" />
+                  <span>I reviewed monetary pipeline and revenue evidence without combining currencies.</span>
+                </label>
+              </fieldset>
+              <div className="sm:col-span-2">
+                <label htmlFor="growth-review-external-state" className="mb-1 block text-sm font-medium text-foreground">External action gate</label>
+                <select id="growth-review-external-state" value={growthReview.externalActionState} onChange={(event) => setGrowthReview((current) => ({ ...current, externalActionState: event.target.value }))} className="min-h-11 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground">
+                  <option value="NOT_REQUIRED">No external action required</option>
+                  <option value="PENDING">Approval still pending</option>
+                  <option value="APPROVED">Separately approved</option>
+                  <option value="DECLINED">Declined</option>
+                </select>
               </div>
               {(growthProjectsQuery.isError || growthTeamQuery.isError || growthTaskMutation.isError) && (
                 <p role="alert" className="sm:col-span-2 text-sm text-destructive">{growthTaskMutation.error?.message || growthProjectsQuery.error?.message || growthTeamQuery.error?.message}</p>

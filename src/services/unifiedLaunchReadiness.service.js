@@ -113,11 +113,12 @@ function deploymentIsValid(payload, { application, url, strategyVersion, evidenc
     && verifiedAt <= evidenceCompletedAt;
 }
 
-function journeyIsValid(payload, { publicRevision, hubRevision, evidenceCompletedAt }) {
+function journeyIsValid(payload, { organizationId, publicRevision, hubRevision, evidenceCompletedAt }) {
   const completedAt = timestamp(payload?.completedAt);
   return payload?.format === 'ashbi-controlled-journey-evidence'
     && payload?.version === 1
     && payload?.complete === true
+    && payload?.organizationId === organizationId
     && payload?.environmentKind === 'sandbox'
     && normalized(payload?.publicSiteRevision) === normalized(publicRevision)
     && normalized(payload?.hubRevision) === normalized(hubRevision)
@@ -132,8 +133,9 @@ function journeyIsValid(payload, { publicRevision, hubRevision, evidenceComplete
     && completedAt <= evidenceCompletedAt;
 }
 
-function growthCadenceIsValid(payload, evidenceCompletedAt) {
+function growthCadenceIsValid(payload, organizationId, evidenceCompletedAt) {
   if (payload?.format !== 'ashbi-growth-cadence-evidence' || payload?.version !== 1 || payload?.complete !== true) return false;
+  if (payload.organizationId !== organizationId) return false;
   const startedAt = timestamp(payload?.baseline?.startedAt);
   const endedAt = timestamp(payload?.baseline?.endedAt);
   if (startedAt === null || endedAt === null || endedAt - startedAt < 30 * 24 * 60 * 60 * 1000) return false;
@@ -162,7 +164,7 @@ function growthCadenceIsValid(payload, evidenceCompletedAt) {
   return true;
 }
 
-function notionEvidenceIsValid(confirmed, rerun, evidenceCompletedAt) {
+function notionEvidenceIsValid(confirmed, rerun, organizationId, evidenceCompletedAt) {
   const base = report => report?.format === 'ashbi-notion-markdown-import-report'
     && report?.version === 3
     && report?.complete === true
@@ -176,6 +178,7 @@ function notionEvidenceIsValid(confirmed, rerun, evidenceCompletedAt) {
     && base(rerun)
     && confirmed.mode === 'live'
     && rerun.mode === 'dry-run'
+    && confirmed.organization?.id === organizationId
     && confirmed.organization?.id === rerun.organization?.id
     && confirmed.project?.id === rerun.project?.id
     && confirmed.sourceFingerprint === rerun.sourceFingerprint
@@ -196,8 +199,14 @@ function finalApprovalIsValid(payload, evidenceCompletedAt) {
     && approvedAt >= evidenceCompletedAt;
 }
 
-export function evaluateUnifiedLaunchReadiness({ manifest = {}, manifestDirectory, bonsaiCutoverReport = {} } = {}) {
+export function evaluateUnifiedLaunchReadiness({
+  manifest = {},
+  manifestDirectory,
+  bonsaiCutoverReport = {},
+  bonsaiCutoverOrganizationId,
+} = {}) {
   const evidenceCompletedAt = timestamp(manifest.evidenceCompletedAt);
+  const organizationId = text(manifest.organizationId);
   const artifacts = artifactMap(manifest.artifacts);
   const artifactInventoryValid = REQUIRED_ARTIFACT_IDS.every(id => artifacts.has(id) && verifyArtifact(artifacts.get(id), manifestDirectory));
   const strategy = readJsonArtifact(artifacts, 'strategy-approval', manifestDirectory);
@@ -216,7 +225,7 @@ export function evaluateUnifiedLaunchReadiness({ manifest = {}, manifestDirector
     application: 'hub.ashbi.ca', url: 'https://hub.ashbi.ca', strategyVersion: strategy.strategyVersion, evidenceCompletedAt,
   });
   const checks = [
-    check('manifest-schema', manifest.schemaVersion === 1 && evidenceCompletedAt !== null,
+    check('manifest-schema', manifest.schemaVersion === 1 && organizationId !== '' && evidenceCompletedAt !== null,
       'The unified launch manifest has a valid schema and evidence timestamp.',
       'Provide schema version 1 and a valid evidence completion timestamp.'),
     check('artifact-integrity', artifactInventoryValid,
@@ -232,20 +241,21 @@ export function evaluateUnifiedLaunchReadiness({ manifest = {}, manifestDirector
       'The Hub is verified on the approved strategy revision with rollback evidence.',
       'The Hub deployment, strategy binding, smoke evidence, or rollback evidence is incomplete.'),
     check('controlled-journey', publicDeploymentValid && hubDeploymentValid && journeyIsValid(journey, {
-      publicRevision: publicDeployment?.revision, hubRevision: hubDeployment?.revision, evidenceCompletedAt,
+      organizationId, publicRevision: publicDeployment?.revision, hubRevision: hubDeployment?.revision, evidenceCompletedAt,
     }),
     'A complete sandbox inquiry-to-payment journey reconciled without duplicate writes or database correction.',
     'The controlled inquiry-to-payment journey is incomplete, unreconciled, or not bound to both deployed revisions.'),
-    check('notion-migration', evidenceCompletedAt !== null && notionEvidenceIsValid(notionConfirmed, notionRerun, evidenceCompletedAt),
+    check('notion-migration', evidenceCompletedAt !== null && notionEvidenceIsValid(notionConfirmed, notionRerun, organizationId, evidenceCompletedAt),
       'The confirmed Notion import and idempotent rerun reconcile to the same source and destination.',
       'Notion confirmed-import or idempotent-rerun evidence is incomplete or inconsistent.'),
-    check('bonsai-cutover', bonsaiCutoverReport?.ready === true
+    check('bonsai-cutover', bonsaiCutoverOrganizationId === organizationId
+      && bonsaiCutoverReport?.ready === true
       && Array.isArray(bonsaiCutoverReport?.checks)
       && bonsaiCutoverReport.checks.length > 0
       && bonsaiCutoverReport.checks.every(item => item.ok === true),
     'The nested Bonsai cutover manifest passes every operating, provider, recovery, and financial gate.',
     'The actual nested Bonsai cutover evaluation does not pass.'),
-    check('growth-cadence', evidenceCompletedAt !== null && growthCadenceIsValid(growth, evidenceCompletedAt),
+    check('growth-cadence', evidenceCompletedAt !== null && growthCadenceIsValid(growth, organizationId, evidenceCompletedAt),
       'A 30-day baseline and at least four consecutive weekly growth reviews are evidenced.',
       'The marketing baseline or repeatable weekly growth cadence is incomplete.'),
     check('final-launch-approval', evidenceCompletedAt !== null && finalApprovalIsValid(finalApproval, evidenceCompletedAt),

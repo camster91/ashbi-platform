@@ -25,9 +25,17 @@ The strategy artifact uses `format: "ashbi-strategy-approval"`, `version: 1`, `c
 
 Each deployment uses `format: "ashbi-deployment-evidence"`, `version: 1`, `complete: true`, the exact application and URL, a 7–40 character Git revision, a different rollback revision, the approved strategy version, `smokePassed: true`, `rollbackVerified: true`, and `verifiedAt`.
 
-The controlled journey uses `format: "ashbi-controlled-journey-evidence"`, `version: 1`, `complete: true`, `environmentKind: "sandbox"`, the exact public and Hub revisions, an explicit `CAD` or `USD` currency, `stripeMode: "test"`, `emailMode: "sandbox"`, `reconciliationPassed: true`, `duplicateWrites: 0`, `manualDatabaseCorrections: 0`, and the eight required `recordIds`.
+The manifest names one Ashbi organization. The controlled journey uses `format: "ashbi-controlled-journey-evidence"`, `version: 1`, `complete: true`, that exact `organizationId`, `environmentKind: "sandbox"`, the exact public and Hub revisions, an explicit `CAD` or `USD` currency, `stripeMode: "test"`, `emailMode: "sandbox"`, `reconciliationPassed: true`, `duplicateWrites: 0`, `manualDatabaseCorrections: 0`, and the eight required `recordIds`. The growth, Notion, and nested Bonsai evidence must bind the same organization.
 
 The cadence artifact uses `format: "ashbi-growth-cadence-evidence"`, `version: 1`, and `complete: true`. Its `baseline` records `startedAt`, `endedAt`, `sourceCoverageReviewed`, `currenciesSeparated`, and `missingAttributionDisclosed`. Every `weeklyReviews` entry records `weekStart`, `actionTaskId`, `ownerId`, `dueDate`, and `completedAt`.
+
+After four consecutive Monday-starting reviews are actually completed in the Hub, export their evidence directly instead of authoring this artifact:
+
+```text
+npm run export:growth-cadence-evidence -- --organization-id <id> --first-week <YYYY-MM-DD Monday> --output <owner-evidence-directory>/evidence/growth-cadence.json --confirm
+```
+
+The exporter is read-only against the Hub. It requires four consecutive completed tasks, due and completed within their own weeks, with the recorded source-coverage, currency-separation, missing-attribution, and external-action attestations. Older tasks without that evidence cannot be upgraded by inference.
 
 The final approval uses `format: "ashbi-unified-launch-approval"`, `version: 1`, `decision: "APPROVED"`, `scope: "UNIFIED_PLATFORM_PUBLIC_LAUNCH"`, `approver: "Cameron"`, `approvedAt`, and a non-empty evidence reference.
 
@@ -36,7 +44,7 @@ The final approval uses `format: "ashbi-unified-launch-approval"`, `version: 1`,
 Store the nine artifacts at the conventional paths shown in [unified-launch-manifest.example.json](unified-launch-manifest.example.json). Do not paste checksums by hand. After the evidence is complete, create a new owner-controlled manifest:
 
 ```text
-npm run prepare:unified-launch-manifest -- --evidence-dir <owner-evidence-directory> --evidence-completed-at <ISO> --output <owner-evidence-directory>/unified-launch-manifest.json
+npm run prepare:unified-launch-manifest -- --evidence-dir <owner-evidence-directory> --organization-id <id> --evidence-completed-at <ISO> --output <owner-evidence-directory>/unified-launch-manifest.json
 ```
 
 The preparation command reads but does not alter the evidence artifacts. It refuses missing files, paths or symlinks outside the evidence directory, duplicate files, future completion timestamps, outputs outside the evidence directory, and existing output files. It calculates every SHA-256 checksum and creates the manifest with owner-only permissions.

@@ -46,6 +46,7 @@
     "check:bonsai-cutover": "node scripts/check-bonsai-cutover-readiness.mjs",
     "prepare:unified-launch-manifest": "node scripts/prepare-unified-launch-manifest.mjs",
     "check:unified-launch": "node scripts/check-unified-launch-readiness.mjs",
+    "export:growth-cadence-evidence": "node scripts/export-growth-cadence-evidence.mjs",
     "verify:revenue-evidence": "node scripts/verify-revenue-evidence-export.js",
     "reconcile:bonsai-revenue": "node scripts/reconcile-bonsai-revenue.js",
     "reconcile:bonsai-operations": "node scripts/reconcile-bonsai-operations.js",

@@ -1447,6 +1447,10 @@ export const growthReviewTaskSchema = z.object({
   weekOf: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   action: z.string().trim().min(10).max(500),
   dueDate: z.string().datetime(),
+  sourceCoverageReviewed: z.literal(true),
+  currenciesSeparated: z.literal(true),
+  missingAttributionDisclosed: z.literal(true),
+  externalActionState: z.enum(['NOT_REQUIRED', 'PENDING', 'APPROVED', 'DECLINED']),
 }).strict().superRefine((value, context) => {
   const weekStart = new Date(`${value.weekOf}T00:00:00.000Z`);
   const [year, month, day] = value.weekOf.split('-').map(Number);
@@ -1458,8 +1462,10 @@ export const growthReviewTaskSchema = z.object({
     context.addIssue({ code: z.ZodIssueCode.custom, path: ['weekOf'], message: 'Week must start on Monday' });
     return;
   }
-  if (new Date(value.dueDate) < weekStart) {
-    context.addIssue({ code: z.ZodIssueCode.custom, path: ['dueDate'], message: 'Due date cannot precede the review week' });
+  const dueDate = new Date(value.dueDate);
+  const nextWeek = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+  if (dueDate < weekStart || dueDate >= nextWeek) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['dueDate'], message: 'Due date must fall inside the review week' });
   }
 });
 

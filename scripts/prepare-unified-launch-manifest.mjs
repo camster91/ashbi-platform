@@ -12,18 +12,19 @@ function option(name) {
 }
 
 const evidenceDirectory = option('--evidence-dir');
+const organizationId = option('--organization-id');
 const evidenceCompletedAt = option('--evidence-completed-at');
 const outputPath = option('--output');
 
-if (!evidenceDirectory || !evidenceCompletedAt || !outputPath) {
-  console.error('Usage: npm run prepare:unified-launch-manifest -- --evidence-dir <owner-evidence-directory> --evidence-completed-at <ISO> --output <new-manifest-inside-evidence-directory>');
+if (!evidenceDirectory || !organizationId || !evidenceCompletedAt || !outputPath) {
+  console.error('Usage: npm run prepare:unified-launch-manifest -- --evidence-dir <owner-evidence-directory> --organization-id <id> --evidence-completed-at <ISO> --output <new-manifest-inside-evidence-directory>');
   process.exitCode = 2;
 } else {
   let descriptor;
   let output;
   try {
     output = resolveNewUnifiedManifestOutput(evidenceDirectory, outputPath);
-    const manifest = buildUnifiedLaunchManifest({ evidenceDirectory, evidenceCompletedAt });
+    const manifest = buildUnifiedLaunchManifest({ evidenceDirectory, organizationId, evidenceCompletedAt });
     descriptor = fs.openSync(output, 'wx', 0o600);
     fs.writeFileSync(descriptor, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
     fs.chmodSync(output, 0o600);

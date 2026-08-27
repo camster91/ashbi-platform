@@ -15,13 +15,27 @@ const taskInclude = {
   assignee: { select: { id: true, name: true } },
 };
 
-function inputFingerprint({ projectId, assigneeId, weekOf, action, dueDate }) {
+function inputFingerprint({
+  projectId,
+  assigneeId,
+  weekOf,
+  action,
+  dueDate,
+  sourceCoverageReviewed,
+  currenciesSeparated,
+  missingAttributionDisclosed,
+  externalActionState,
+}) {
   return crypto.createHash('sha256').update(JSON.stringify([
     projectId,
     assigneeId,
     weekOf,
     action.trim(),
     new Date(dueDate).toISOString(),
+    sourceCoverageReviewed,
+    currenciesSeparated,
+    missingAttributionDisclosed,
+    externalActionState,
   ])).digest('hex');
 }
 
@@ -44,6 +58,7 @@ function strongest(groups = []) {
 function evidenceSnapshot(summary) {
   return {
     asOf: summary.asOf,
+    window: summary.window,
     total: summary.total,
     sourceMissing: summary.attribution.sourceMissing,
     overdueFollowUp: summary.followUp.overdue,
@@ -83,6 +98,10 @@ export async function createWeeklyGrowthReviewTask({
   weekOf,
   action,
   dueDate,
+  sourceCoverageReviewed,
+  currenciesSeparated,
+  missingAttributionDisclosed,
+  externalActionState,
   now = new Date(),
   summarize = summarizeLeadAcquisition,
 }) {
@@ -95,6 +114,10 @@ export async function createWeeklyGrowthReviewTask({
     weekOf,
     action: normalizedAction,
     dueDate: normalizedDueDate,
+    sourceCoverageReviewed,
+    currenciesSeparated,
+    missingAttributionDisclosed,
+    externalActionState,
   });
 
   const [project, assignee] = await Promise.all([
@@ -131,6 +154,12 @@ export async function createWeeklyGrowthReviewTask({
     evidence,
     actorUserId,
     capturedAt: now.toISOString(),
+    reviewAttestations: {
+      sourceCoverageReviewed,
+      currenciesSeparated,
+      missingAttributionDisclosed,
+      externalActionState,
+    },
     externalActionBoundary: 'Internal task only; outreach, publishing, advertising, and provider changes require separate approval.',
   };
   const data = {
@@ -139,6 +168,7 @@ export async function createWeeklyGrowthReviewTask({
       `Approved internal action: ${normalizedAction}`,
       evidenceLine('30-day evidence', evidence.thirtyDays),
       evidenceLine('90-day evidence', evidence.ninetyDays),
+      `Review attestations: source coverage reviewed; currencies separated; missing attribution disclosed; external action ${externalActionState}.`,
       'Internal task only. This record does not send outreach, publish content, change advertising, or call a provider.',
     ].join('\n\n'),
     status: 'PENDING',

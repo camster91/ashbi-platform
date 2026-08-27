@@ -22,17 +22,20 @@ function canonicalTimestamp(value, now) {
 
 export function buildUnifiedLaunchManifest({
   evidenceDirectory,
+  organizationId,
   evidenceCompletedAt,
   artifactPaths = UNIFIED_LAUNCH_CONVENTIONAL_PATHS,
   now = new Date(),
 } = {}) {
+  const organization = String(organizationId ?? '').trim();
+  if (!organization) throw new Error('Organization is required');
   const completedAt = canonicalTimestamp(evidenceCompletedAt, now);
   const artifacts = checksumContainedArtifacts({
     evidenceDirectory,
     requiredIds: UNIFIED_LAUNCH_ARTIFACT_IDS,
     artifactPaths,
   });
-  return { schemaVersion: 1, evidenceCompletedAt: completedAt, artifacts };
+  return { schemaVersion: 1, organizationId: organization, evidenceCompletedAt: completedAt, artifacts };
 }
 
 export function resolveNewUnifiedManifestOutput(evidenceDirectory, outputPath) {

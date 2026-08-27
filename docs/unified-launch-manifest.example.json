@@ -1,5 +1,6 @@
 {
   "schemaVersion": 1,
+  "organizationId": "REPLACE_WITH_ASHBI_ORGANIZATION_ID",
   "evidenceCompletedAt": null,
   "artifacts": [
     { "id": "strategy-approval", "path": "evidence/strategy-approval.json", "sha256": "0000000000000000000000000000000000000000000000000000000000000000" },

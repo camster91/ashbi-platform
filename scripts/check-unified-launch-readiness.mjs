@@ -25,7 +25,12 @@ try {
     manifest: nestedManifest,
     manifestDirectory: path.dirname(nestedPath),
   });
-  report = evaluateUnifiedLaunchReadiness({ manifest, manifestDirectory, bonsaiCutoverReport });
+  report = evaluateUnifiedLaunchReadiness({
+    manifest,
+    manifestDirectory,
+    bonsaiCutoverReport,
+    bonsaiCutoverOrganizationId: nestedManifest.organizationId,
+  });
 } catch {
   report = {
     ready: false,

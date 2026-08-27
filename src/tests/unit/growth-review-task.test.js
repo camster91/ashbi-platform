@@ -13,6 +13,10 @@ const input = {
   weekOf: '2026-08-24',
   action: 'Publish the reviewed packaging case study draft after approval.',
   dueDate: '2026-08-28T20:00:00.000Z',
+  sourceCoverageReviewed: true,
+  currenciesSeparated: true,
+  missingAttributionDisclosed: true,
+  externalActionState: 'PENDING',
 };
 
 function summary(days) {
@@ -87,13 +91,22 @@ test('growth review input requires a Monday, bounded action, owner, project, and
     action: input.action,
     dueDate: '2026-08-23T20:00:00.000Z',
   }).success, false);
+  assert.equal(schemas.growthReviewTaskSchema.safeParse(input).success, false);
+  const validRouteInput = { ...input };
+  delete validRouteInput.organizationId;
+  delete validRouteInput.actorUserId;
+  assert.equal(schemas.growthReviewTaskSchema.safeParse(validRouteInput).success, true);
   assert.equal(schemas.growthReviewTaskSchema.safeParse({
     projectId: input.projectId,
     assigneeId: input.assigneeId,
     weekOf: input.weekOf,
     action: input.action,
-    dueDate: input.dueDate,
-  }).success, true);
+    dueDate: '2026-08-31T00:00:00.000Z',
+    sourceCoverageReviewed: true,
+    currenciesSeparated: true,
+    missingAttributionDisclosed: true,
+    externalActionState: 'NOT_REQUIRED',
+  }).success, false);
 });
 
 test('weekly review creates one owned Hub task with 30-day and 90-day evidence', async () => {
@@ -128,6 +141,13 @@ test('weekly review creates one owned Hub task with 30-day and 90-day evidence',
   assert.equal(properties.action, input.action);
   assert.equal(properties.evidence.thirtyDays.total, 4);
   assert.equal(properties.evidence.ninetyDays.total, 9);
+  assert.deepEqual(properties.reviewAttestations, {
+    sourceCoverageReviewed: true,
+    currenciesSeparated: true,
+    missingAttributionDisclosed: true,
+    externalActionState: 'PENDING',
+  });
+  assert.equal(properties.evidence.thirtyDays.window.days, 30);
 });
 
 test('an exact replay returns the existing weekly task without another write', async () => {

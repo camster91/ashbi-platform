@@ -21,6 +21,11 @@ test('inquiry review creates one owned and dated task from the recorded evidence
   assert.match(page, /id="growth-review-week"/);
   assert.match(page, /id="growth-review-action"/);
   assert.match(page, /id="growth-review-due"/);
+  assert.match(page, /id="growth-review-source-coverage"/);
+  assert.match(page, /id="growth-review-missing-attribution"/);
+  assert.match(page, /id="growth-review-currencies"/);
+  assert.match(page, /id="growth-review-external-state"/);
+  assert.match(page, /sourceCoverageReviewed: growthReview\.sourceCoverageReviewed/);
   assert.match(page, /Create growth task/);
   assert.match(page, /Internal task only/);
   assert.match(page, /to=\{`\/task\/\$\{growthTask\.id\}`\}/);

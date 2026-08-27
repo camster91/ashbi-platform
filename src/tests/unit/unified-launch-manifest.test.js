@@ -25,6 +25,7 @@ test('manifest builder checksum-binds every conventional artifact in required or
   try {
     const manifest = buildUnifiedLaunchManifest({
       evidenceDirectory: directory,
+      organizationId: 'org-sandbox',
       evidenceCompletedAt: '2026-03-10T12:00:00Z',
       now: new Date('2026-03-11T00:00:00Z'),
     });
@@ -46,9 +47,13 @@ test('manifest builder rejects missing, duplicated, outside, and future evidence
   const outside = path.join(outsideDirectory, 'outside.json');
   fs.writeFileSync(outside, '{}');
   try {
-    fs.rmSync(path.join(directory, UNIFIED_LAUNCH_CONVENTIONAL_PATHS['growth-cadence']));
     assert.throws(() => buildUnifiedLaunchManifest({
       evidenceDirectory: directory, evidenceCompletedAt: '2026-03-10T12:00:00Z', now: new Date('2026-03-11T00:00:00Z'),
+    }), /Organization is required/);
+
+    fs.rmSync(path.join(directory, UNIFIED_LAUNCH_CONVENTIONAL_PATHS['growth-cadence']));
+    assert.throws(() => buildUnifiedLaunchManifest({
+      evidenceDirectory: directory, organizationId: 'org-sandbox', evidenceCompletedAt: '2026-03-10T12:00:00Z', now: new Date('2026-03-11T00:00:00Z'),
     }), /growth-cadence|ENOENT/);
     fs.writeFileSync(path.join(directory, UNIFIED_LAUNCH_CONVENTIONAL_PATHS['growth-cadence']), '{}');
 
@@ -56,24 +61,24 @@ test('manifest builder rejects missing, duplicated, outside, and future evidence
     fs.rmSync(linkedArtifact);
     fs.symlinkSync(outside, linkedArtifact, 'file');
     assert.throws(() => buildUnifiedLaunchManifest({
-      evidenceDirectory: directory, evidenceCompletedAt: '2026-03-10T12:00:00Z', now: new Date('2026-03-11T00:00:00Z'),
+      evidenceDirectory: directory, organizationId: 'org-sandbox', evidenceCompletedAt: '2026-03-10T12:00:00Z', now: new Date('2026-03-11T00:00:00Z'),
     }), /inside the evidence directory/);
     fs.rmSync(linkedArtifact);
     fs.writeFileSync(linkedArtifact, '{}');
 
     const duplicatePaths = { ...UNIFIED_LAUNCH_CONVENTIONAL_PATHS, 'growth-cadence': UNIFIED_LAUNCH_CONVENTIONAL_PATHS['controlled-journey'] };
     assert.throws(() => buildUnifiedLaunchManifest({
-      evidenceDirectory: directory, evidenceCompletedAt: '2026-03-10T12:00:00Z', artifactPaths: duplicatePaths,
+      evidenceDirectory: directory, organizationId: 'org-sandbox', evidenceCompletedAt: '2026-03-10T12:00:00Z', artifactPaths: duplicatePaths,
       now: new Date('2026-03-11T00:00:00Z'),
     }), /duplicates/);
 
     const outsidePaths = { ...UNIFIED_LAUNCH_CONVENTIONAL_PATHS, 'growth-cadence': path.relative(directory, outside) };
     assert.throws(() => buildUnifiedLaunchManifest({
-      evidenceDirectory: directory, evidenceCompletedAt: '2026-03-10T12:00:00Z', artifactPaths: outsidePaths,
+      evidenceDirectory: directory, organizationId: 'org-sandbox', evidenceCompletedAt: '2026-03-10T12:00:00Z', artifactPaths: outsidePaths,
       now: new Date('2026-03-11T00:00:00Z'),
     }), /inside the evidence directory/);
     assert.throws(() => buildUnifiedLaunchManifest({
-      evidenceDirectory: directory, evidenceCompletedAt: '2026-03-12T00:00:00Z', now: new Date('2026-03-11T00:00:00Z'),
+      evidenceDirectory: directory, organizationId: 'org-sandbox', evidenceCompletedAt: '2026-03-12T00:00:00Z', now: new Date('2026-03-11T00:00:00Z'),
     }), /future/);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
@@ -87,12 +92,13 @@ test('manifest preparation command creates one owner-controlled file and refuses
   try {
     const args = [
       'scripts/prepare-unified-launch-manifest.mjs', '--evidence-dir', directory,
-      '--evidence-completed-at', '2026-03-10T12:00:00Z', '--output', output,
+      '--organization-id', 'org-sandbox', '--evidence-completed-at', '2026-03-10T12:00:00Z', '--output', output,
     ];
     const first = spawnSync(process.execPath, args, { cwd: process.cwd(), encoding: 'utf8' });
     assert.equal(first.status, 0, first.stderr);
     assert.match(first.stdout, /9 checksum-bound artifacts/);
     const manifest = JSON.parse(fs.readFileSync(output, 'utf8'));
+    assert.equal(manifest.organizationId, 'org-sandbox');
     assert.equal(manifest.artifacts.length, 9);
     const second = spawnSync(process.execPath, args, { cwd: process.cwd(), encoding: 'utf8' });
     assert.equal(second.status, 1);
