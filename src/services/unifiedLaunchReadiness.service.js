@@ -41,10 +41,14 @@ function check(id, ok, passMessage, failMessage) {
 
 function containedPath(directory, relativePath) {
   if (!directory || !relativePath || path.isAbsolute(relativePath)) return null;
-  const base = path.resolve(directory);
-  const resolved = path.resolve(base, relativePath);
-  const relative = path.relative(base, resolved);
-  return relative && !relative.startsWith('..') && !path.isAbsolute(relative) ? resolved : null;
+  try {
+    const base = fs.realpathSync(path.resolve(directory));
+    const resolved = fs.realpathSync(path.resolve(base, relativePath));
+    const relative = path.relative(base, resolved);
+    return relative && !relative.startsWith('..') && !path.isAbsolute(relative) ? resolved : null;
+  } catch {
+    return null;
+  }
 }
 
 function artifactMap(artifacts) {

@@ -53,7 +53,13 @@ The confirmed import refuses to start without the reviewed report. It rolls back
 
 ## Machine-verified cutover gate
 
-Copy [bonsai-cutover-manifest.example.json](bonsai-cutover-manifest.example.json) into the owner-only evidence directory and replace every pending value with reviewed evidence. Keep every referenced artifact beneath that directory and record its SHA-256 checksum. Then run:
+Copy [bonsai-cutover-manifest.example.json](bonsai-cutover-manifest.example.json) to `cutover-manifest.draft.json` inside the owner-only evidence directory and replace every pending non-checksum value with reviewed evidence. Keep every referenced artifact beneath that directory; do not calculate or paste hashes manually. Prepare a new manifest from that draft:
+
+```text
+npm run prepare:bonsai-cutover-manifest -- --evidence-dir <owner-only-evidence-directory> --draft cutover-manifest.draft.json --output <owner-only-evidence-directory>/cutover-manifest.json
+```
+
+The preparation command requires the exact artifact inventory, resolves real file locations so symlinks cannot escape the evidence directory, calculates every SHA-256 checksum, preserves the draft approval state, creates an owner-only output, and refuses to overwrite prior evidence. It does not approve or perform an import, cutover, cancellation, billing action, or provider mutation. Then run:
 
 ```text
 npm run check:bonsai-cutover -- --manifest <owner-only-evidence-directory>/cutover-manifest.json

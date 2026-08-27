@@ -155,6 +155,26 @@ test('unified launch evaluator rejects changed and escaping artifacts', () => {
   }
 });
 
+test('unified launch evaluator rejects a checksum-valid symlink that escapes the evidence directory', () => {
+  const { directory, manifest } = fixture();
+  const outsideDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'ashbi-unified-outside-'));
+  try {
+    const artifact = manifest.artifacts.find(item => item.id === 'final-launch-approval');
+    const target = path.join(directory, artifact.path);
+    const outside = path.join(outsideDirectory, 'approval.json');
+    const content = Buffer.from(JSON.stringify({ approved: true }));
+    fs.writeFileSync(outside, content);
+    fs.rmSync(target);
+    fs.symlinkSync(outside, target, 'file');
+    artifact.sha256 = crypto.createHash('sha256').update(content).digest('hex');
+    const report = evaluateUnifiedLaunchReadiness({ manifest, manifestDirectory: directory, bonsaiCutoverReport: passingBonsai });
+    assert.equal(report.checks.find(item => item.id === 'artifact-integrity').ok, false);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+    fs.rmSync(outsideDirectory, { recursive: true, force: true });
+  }
+});
+
 test('unified launch command evaluates the actual nested Bonsai manifest and is package-addressable', () => {
   const { directory, manifest } = fixture();
   try {

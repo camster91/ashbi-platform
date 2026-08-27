@@ -1,8 +1,8 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import path from 'node:path';
 import { REVENUE_EVIDENCE_COLLECTIONS, verifyRevenueEvidenceExport } from './revenueEvidenceExport.service.js';
 import { verifyWorkspaceExport, workspaceExportCollections } from './workspace-export-integrity.service.js';
+import { resolveContainedEvidenceFile } from './evidenceManifest.service.js';
 
 const REQUIRED_RECORD_TYPES = [
   'clients',
@@ -60,13 +60,11 @@ function artifactInventoryIsComplete(artifacts) {
 
 function artifactsAreIntact(artifacts, manifestDirectory) {
   if (!artifactInventoryIsComplete(artifacts) || !manifestDirectory) return false;
-  const root = path.resolve(manifestDirectory);
   return REQUIRED_ARTIFACT_IDS.every((id) => {
     const artifact = artifacts.find((item) => item.id === id);
     if (!artifact || !/^[a-f0-9]{64}$/i.test(String(artifact.sha256 ?? ''))) return false;
-    const artifactPath = path.resolve(root, String(artifact.path ?? ''));
-    if (artifactPath !== root && !artifactPath.startsWith(`${root}${path.sep}`)) return false;
     try {
+      const artifactPath = resolveContainedEvidenceFile(manifestDirectory, artifact.path, id);
       const digest = crypto.createHash('sha256').update(fs.readFileSync(artifactPath)).digest('hex');
       return digest === artifact.sha256.toLowerCase();
     } catch {
@@ -79,10 +77,8 @@ function readContainedJsonArtifact(artifacts, id, manifestDirectory) {
   if (!Array.isArray(artifacts) || !manifestDirectory) return null;
   const artifact = artifacts.find(item => item?.id === id);
   if (!artifact) return null;
-  const root = path.resolve(manifestDirectory);
-  const artifactPath = path.resolve(root, String(artifact.path ?? ''));
-  if (artifactPath !== root && !artifactPath.startsWith(`${root}${path.sep}`)) return null;
   try {
+    const artifactPath = resolveContainedEvidenceFile(manifestDirectory, artifact.path, id);
     return JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
   } catch {
     return null;
@@ -401,3 +397,5 @@ export function evaluateBonsaiCutoverReadiness({ manifest = {}, manifestDirector
 
   return { ready: checks.every((item) => item.ok), checks };
 }
+
+export { REQUIRED_ARTIFACT_IDS as BONSAI_CUTOVER_ARTIFACT_IDS };

@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { evaluateBonsaiCutoverReadiness } from '../src/services/bonsai-cutover-readiness.service.js';
 import { evaluateUnifiedLaunchReadiness } from '../src/services/unifiedLaunchReadiness.service.js';
+import { resolveContainedEvidenceFile } from '../src/services/evidenceManifest.service.js';
 
 const index = process.argv.indexOf('--manifest');
 const manifestPath = index >= 0 ? process.argv[index + 1] : null;
@@ -13,17 +14,17 @@ try {
   const manifestDirectory = path.dirname(resolvedManifest);
   const manifest = JSON.parse(fs.readFileSync(resolvedManifest, 'utf8'));
   const nestedArtifact = manifest.artifacts?.find(item => item?.id === 'bonsai-cutover-manifest');
-  const nestedPath = nestedArtifact?.path && !path.isAbsolute(nestedArtifact.path)
-    ? path.resolve(manifestDirectory, nestedArtifact.path) : null;
-  const relative = nestedPath ? path.relative(manifestDirectory, nestedPath) : '..';
+  const nestedPath = resolveContainedEvidenceFile(
+    manifestDirectory,
+    nestedArtifact?.path,
+    'bonsai-cutover-manifest',
+  );
   let bonsaiCutoverReport = { ready: false, checks: [] };
-  if (nestedPath && relative && !relative.startsWith('..') && !path.isAbsolute(relative)) {
-    const nestedManifest = JSON.parse(fs.readFileSync(nestedPath, 'utf8'));
-    bonsaiCutoverReport = evaluateBonsaiCutoverReadiness({
-      manifest: nestedManifest,
-      manifestDirectory: path.dirname(nestedPath),
-    });
-  }
+  const nestedManifest = JSON.parse(fs.readFileSync(nestedPath, 'utf8'));
+  bonsaiCutoverReport = evaluateBonsaiCutoverReadiness({
+    manifest: nestedManifest,
+    manifestDirectory: path.dirname(nestedPath),
+  });
   report = evaluateUnifiedLaunchReadiness({ manifest, manifestDirectory, bonsaiCutoverReport });
 } catch {
   report = {

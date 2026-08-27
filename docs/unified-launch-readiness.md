@@ -33,7 +33,15 @@ The final approval uses `format: "ashbi-unified-launch-approval"`, `version: 1`,
 
 ## Run the gate
 
-Copy [unified-launch-manifest.example.json](unified-launch-manifest.example.json) into the evidence directory, replace every placeholder with retained evidence, and run:
+Store the nine artifacts at the conventional paths shown in [unified-launch-manifest.example.json](unified-launch-manifest.example.json). Do not paste checksums by hand. After the evidence is complete, create a new owner-controlled manifest:
+
+```text
+npm run prepare:unified-launch-manifest -- --evidence-dir <owner-evidence-directory> --evidence-completed-at <ISO> --output <owner-evidence-directory>/unified-launch-manifest.json
+```
+
+The preparation command reads but does not alter the evidence artifacts. It refuses missing files, paths or symlinks outside the evidence directory, duplicate files, future completion timestamps, outputs outside the evidence directory, and existing output files. It calculates every SHA-256 checksum and creates the manifest with owner-only permissions.
+
+Then run the verifier:
 
 ```text
 npm run check:unified-launch -- --manifest <owner-evidence-directory>/unified-launch-manifest.json
