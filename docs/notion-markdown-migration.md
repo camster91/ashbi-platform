@@ -41,6 +41,15 @@ npm run verify:notion-bonsai-mapping-decision -- <review.json> <decision.json>
 
 The pending record is checksum-bound to the review packet and both source snapshots. It cannot authorize owner assignments, source-only dispositions, migration writes, or financial cutover. After an explicit human decision, a separate immutable finalized record may be created with `--approve-all` or `--reject-all`, the approver, decision time, evidence reference, and `--confirm`. That command only records the decision; it still does not apply mappings or change an external system.
 
+Prepare source-backed owner decisions separately:
+
+```text
+npm run prepare:notion-bonsai-owner-decision -- --review <review.json> --prepared-at <ISO> --output <new-pending-owner-decision.json>
+npm run verify:notion-bonsai-owner-decision -- --review <review.json> --owner-decision <owner-decision.json>
+```
+
+This packet includes only Notion tasks with one exact or review-candidate Bonsai task carrying a named assignee. It distinguishes direct exact-task/project evidence from assignments conditional on the separately approved mapping packet. A batch approval cannot pass unless the conditional mappings are checksum-valid and approved. Unmatched Notion tasks, unassigned Bonsai tasks, project/account-owner defaults, and inferred creative/technical ownership remain outside the packet.
+
 ## Supported input
 
 - UTF-8 `.md` pages from a Notion export;
