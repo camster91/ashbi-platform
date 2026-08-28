@@ -20,6 +20,7 @@ export const CONTROLLED_JOURNEY_REQUIRED_MIGRATIONS = Object.freeze([
   '20260827020000_signed_contract_project_identity',
   '20260827021000_stripe_payment_mode_evidence',
   '20260828090000_report_generation_idempotency',
+  '20260828110000_migration_review_workflow',
 ]);
 
 const INSPECTION_ENVIRONMENT_CHECKS = new Set([

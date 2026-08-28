@@ -1,0 +1,206 @@
+import { useEffect, useMemo, useState } from 'react';
+import { Check, Download, FileJson, GitMerge, RefreshCw, X } from 'lucide-react';
+import QueryErrorState from '../components/QueryErrorState';
+import { Button, LoadingState } from '../components/ui';
+import { api } from '../lib/api';
+
+const decisionStyles = {
+  APPROVED: 'border-green-300 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-950/30 dark:text-green-300',
+  REJECTED: 'border-red-300 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300',
+  PENDING: 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300',
+};
+
+function downloadJson(value, name) {
+  const blob = new Blob([`${JSON.stringify(value, null, 2)}\n`], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = name;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+export default function MigrationReviews() {
+  const [packets, setPackets] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
+  const [actionError, setActionError] = useState('');
+  const [busyKey, setBusyKey] = useState('');
+  const [filter, setFilter] = useState('PENDING');
+  const [failedAction, setFailedAction] = useState(null);
+
+  const selected = packets.find(packet => packet.id === selectedId) ?? packets[0] ?? null;
+  const candidates = useMemo(() => {
+    const rows = selected?.candidates ?? [];
+    return filter ? rows.filter(candidate => candidate.decision === filter) : rows;
+  }, [selected, filter]);
+
+  const load = async () => {
+    setLoadError(null);
+    try {
+      const response = await api.getMigrationReviewPackets();
+      setPackets(response.packets ?? []);
+      setSelectedId(current => current ?? response.packets?.[0]?.id ?? null);
+    } catch (error) {
+      setLoadError(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const importBundle = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setBusyKey('import');
+    setActionError('');
+    try {
+      const parsed = JSON.parse(await file.text());
+      const payload = { ...parsed, requestId: parsed.requestId || crypto.randomUUID() };
+      const response = await api.importProjectLinkReview(payload);
+      await load();
+      setSelectedId(response.packet.id);
+    } catch (error) {
+      setActionError(error.message || 'The evidence bundle could not be imported.');
+    } finally {
+      setBusyKey('');
+    }
+  };
+
+  const runDecision = async (action) => {
+    setBusyKey(action.candidateId);
+    setActionError('');
+    try {
+      const response = await api.recordMigrationReviewDecision(action.packetId, action.candidateId, {
+        requestId: action.requestId,
+        decision: action.decision,
+        reviewNote: action.reviewNote ?? null,
+      });
+      setPackets(current => current.map(packet => packet.id === response.packet.id ? response.packet : packet));
+      setFailedAction(null);
+    } catch (error) {
+      setActionError(error.message || 'The decision could not be recorded.');
+      setFailedAction(action);
+    } finally {
+      setBusyKey('');
+    }
+  };
+
+  const decide = (candidate, decision) => runDecision({
+    packetId: selected.id,
+    candidateId: candidate.candidateId,
+    requestId: crypto.randomUUID(),
+    decision,
+    reviewNote: null,
+  });
+
+  const exportDecision = async () => {
+    setBusyKey('export');
+    setActionError('');
+    try {
+      const record = await api.exportMigrationReviewDecision(selected.id);
+      downloadJson(record, `project-link-decision-${selected.id}.json`);
+    } catch (error) {
+      setActionError(error.message || 'The decision record could not be exported.');
+    } finally {
+      setBusyKey('');
+    }
+  };
+
+  if (loading) return <LoadingState label="Loading migration reviews…" className="min-h-[50vh]" />;
+  if (loadError) return <QueryErrorState error={loadError} message="Migration reviews could not be loaded" onRetry={load} />;
+
+  return (
+    <div className="mx-auto max-w-7xl space-y-6">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2 text-primary"><GitMerge size={20} /><span className="text-sm font-semibold uppercase tracking-wide">Migration control</span></div>
+          <h1 className="mt-1 text-3xl font-bold text-foreground">Notion + Bonsai reviews</h1>
+          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+            Review evidence-bound project identities. Decisions stay inside the Hub and do not edit Notion, Bonsai, projects, tasks, owners, invoices, or payments.
+          </p>
+        </div>
+        <label className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground focus-within:ring-2 focus-within:ring-ring">
+          <FileJson size={16} /> {busyKey === 'import' ? 'Importing…' : 'Import verified bundle'}
+          <input type="file" accept="application/json,.json" className="sr-only" onChange={importBundle} disabled={Boolean(busyKey)} />
+        </label>
+      </header>
+
+      {actionError && (
+        <div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300">
+          <p>{actionError}</p>
+          {failedAction && <Button variant="outline" className="mt-3" onClick={() => runDecision(failedAction)} disabled={Boolean(busyKey)} leftIcon={<RefreshCw size={15} />}>Retry same request</Button>}
+        </div>
+      )}
+
+      {packets.length === 0 ? (
+        <section className="rounded-xl border border-dashed border-border bg-card p-10 text-center">
+          <FileJson className="mx-auto text-muted-foreground" size={38} />
+          <h2 className="mt-3 font-semibold text-foreground">No verified review packet imported</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Import the checksum-bound project-link review bundle. Importing it records evidence only.</p>
+        </section>
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-[18rem_1fr]">
+          <aside className="space-y-2">
+            {packets.map(packet => (
+              <button key={packet.id} type="button" onClick={() => setSelectedId(packet.id)} className={`w-full rounded-xl border p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected?.id === packet.id ? 'border-primary bg-primary/5' : 'border-border bg-card hover:bg-muted/40'}`}>
+                <p className="text-sm font-semibold text-foreground">Project identity review</p>
+                <p className="mt-1 text-xs text-muted-foreground">{new Date(packet.sourcePreparedAt).toLocaleString()}</p>
+                <p className="mt-3 text-xs text-muted-foreground">{packet.summary.approved} approved · {packet.summary.rejected} rejected · {packet.summary.pending} pending</p>
+              </button>
+            ))}
+          </aside>
+
+          <main className="space-y-4">
+            <section className="rounded-xl border border-border bg-card p-5">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-foreground">Logical project identities</h2>
+                  <p className="mt-1 break-all text-xs text-muted-foreground">Source SHA-256: {selected.sourceReviewSha256}</p>
+                </div>
+                <Button variant="outline" onClick={exportDecision} loading={busyKey === 'export'} leftIcon={<Download size={16} />}>Export decision record</Button>
+              </div>
+              <div className="mt-4 grid grid-cols-3 gap-3 text-center">
+                {['approved', 'rejected', 'pending'].map(key => <div key={key} className="rounded-lg bg-muted p-3"><p className="text-xl font-bold text-foreground">{selected.summary[key]}</p><p className="text-xs capitalize text-muted-foreground">{key}</p></div>)}
+              </div>
+            </section>
+
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Filter candidates by decision">
+              {[['PENDING', 'Pending'], ['APPROVED', 'Approved'], ['REJECTED', 'Rejected'], ['', 'All']].map(([value, label]) => (
+                <Button key={label} size="sm" variant={filter === value ? 'default' : 'outline'} onClick={() => setFilter(value)}>{label}</Button>
+              ))}
+            </div>
+
+            {candidates.length === 0 ? <p className="rounded-xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">No candidates match this filter.</p> : candidates.map(candidate => (
+              <article key={candidate.candidateId} className="rounded-xl border border-border bg-card p-5">
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                  <div className="min-w-0 space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${decisionStyles[candidate.decision]}`}>{candidate.decision}</span>
+                      <span className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground">{candidate.tier}</span>
+                      <span className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground">{candidate.risk} risk</span>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="rounded-lg border border-border p-3"><p className="text-xs font-semibold uppercase text-muted-foreground">Notion</p><p className="mt-1 font-medium text-foreground">{candidate.notionProject}</p><p className="text-xs text-muted-foreground">{candidate.notionStatus}</p></div>
+                      <div className="rounded-lg border border-border p-3"><p className="text-xs font-semibold uppercase text-muted-foreground">Bonsai</p><p className="mt-1 font-medium text-foreground">{candidate.bonsaiProject}</p><p className="text-xs text-muted-foreground">{candidate.bonsaiStatus}</p></div>
+                    </div>
+                    <p className="text-sm text-muted-foreground">{candidate.sourceEvidence}</p>
+                    <p className="text-xs text-muted-foreground">Recommendation: {candidate.recommendation?.replaceAll('_', ' ')} · {candidate.reasonCode?.replaceAll('_', ' ')}</p>
+                    {candidate.reviewedBy && <p className="text-xs text-muted-foreground">Last reviewed by {candidate.reviewedBy} on {new Date(candidate.decidedAt).toLocaleString()}</p>}
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    <Button onClick={() => decide(candidate, 'APPROVED')} loading={busyKey === candidate.candidateId} leftIcon={<Check size={16} />}>Approve identity</Button>
+                    <Button variant="destructive" onClick={() => decide(candidate, 'REJECTED')} disabled={Boolean(busyKey)} leftIcon={<X size={16} />}>Reject</Button>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </main>
+        </div>
+      )}
+    </div>
+  );
+}

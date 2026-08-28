@@ -35,7 +35,7 @@ const DIRECT_SCOPED_MODELS = new Set([
   'weeklydigest', 'tasktemplate', 'outreachsequence', 'emailtriageitem',
   'aicontext', 'ashconversation', 'projecttemplate', 'brandsettings',
   'pipelinestage', 'promptversion', 'credential', 'credentialaccessaudit',
-  'onboardingprogress', 'slackinstallation', 'slackchannelmapping', 'slackeventreceipt', 'googlecalendarconnection', 'notionimportrecord', 'operatingsourcerecord', 'aibridgeaction',
+  'onboardingprogress', 'slackinstallation', 'slackchannelmapping', 'slackeventreceipt', 'googlecalendarconnection', 'notionimportrecord', 'operatingsourcerecord', 'migrationreviewpacket', 'migrationreviewdecision', 'aibridgeaction',
   'lead', 'leadevent', 'expense'
 ]);
 
@@ -75,6 +75,7 @@ const DIRECT_PARENT_RELATIONS = {
   ],
   googlecalendarconnection: [{ relation: 'user', field: 'userId', model: 'user', delegate: 'user', required: true }],
   notionimportrecord: [{ relation: 'project', field: 'projectId', model: 'project', delegate: 'project', required: true }],
+  migrationreviewdecision: [{ relation: 'packet', field: 'packetId', model: 'migrationreviewpacket', delegate: 'migrationReviewPacket', required: true }],
   aibridgeaction: [{ relation: 'user', field: 'userId', model: 'user', delegate: 'user', required: true }],
   onboardingprogress: [{ relation: 'user', field: 'userId', model: 'user', delegate: 'user', required: true }],
   lead: [

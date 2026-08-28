@@ -60,6 +60,8 @@ model Organization {
   googleCalendarConnections GoogleCalendarConnection[]
   notionImportRecords       NotionImportRecord[]
   operatingSourceRecords    OperatingSourceRecord[]
+  migrationReviewPackets    MigrationReviewPacket[]
+  migrationReviewDecisions  MigrationReviewDecision[]
   aiBridgeActions           AiBridgeAction[]
   leads                     Lead[]
   leadEvents                LeadEvent[]
@@ -2120,6 +2122,57 @@ model OperatingSourceRecord {
   @@index([organizationId, entityType, destinationId])
   @@index([organizationId, outcome])
   @@map("operating_source_records")
+}
+
+// Human review state for evidence-bound Notion/Bonsai migration decisions.
+// These records never apply a source link or mutate either source system;
+// they preserve the bounded decision evidence used by a later migration plan.
+model MigrationReviewPacket {
+  id                    String   @id @default(cuid())
+  organizationId        String
+  kind                  String   // NOTION_BONSAI_PROJECT_LINK
+  importRequestId       String
+  sourceReviewSha256    String
+  mappingDecisionSha256 String
+  supplementalSha256    String?
+  sourcePreparedAt      DateTime
+  sourceReview          Json
+  mappingDecision       Json
+  supplementalEvidence  Json?
+  reviewBrief           Json
+  importedBy            String
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  organization Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  decisions    MigrationReviewDecision[]
+
+  @@unique([organizationId, importRequestId])
+  @@unique([organizationId, kind, sourceReviewSha256])
+  @@index([organizationId, createdAt])
+  @@map("migration_review_packets")
+}
+
+// Immutable candidate-level decisions. A later event may supersede an older
+// decision, while requestId makes each human action safe to retry exactly.
+model MigrationReviewDecision {
+  id             String   @id @default(cuid())
+  organizationId String
+  packetId       String
+  requestId      String
+  candidateId    String
+  decision       String   // APPROVED | REJECTED
+  reviewNote     String?
+  reviewedBy     String
+  decidedAt      DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  packet       MigrationReviewPacket @relation(fields: [packetId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, requestId])
+  @@index([organizationId, packetId, candidateId, decidedAt])
+  @@map("migration_review_decisions")
 }
 
 // Slack collaboration integration. Secrets are encrypted at rest; raw Slack

@@ -1845,3 +1845,28 @@ export const retainerGenerateInvoiceSchema = z.object({
 export const reportGenerationSchema = z.object({
   requestId: uuid,
 }).strict();
+
+const evidenceObject = z.record(z.string(), z.unknown());
+
+export const migrationReviewImportSchema = z.object({
+  format: z.literal('ashbi-hub-migration-review-import').optional(),
+  version: z.literal(1).optional(),
+  requestId: uuid,
+  review: evidenceObject,
+  reviewSha256: z.string().regex(/^[a-f0-9]{64}$/i),
+  mappingDecision: evidenceObject,
+  mappingDecisionSha256: z.string().regex(/^[a-f0-9]{64}$/i),
+  supplementalEvidence: evidenceObject.nullable().optional(),
+  supplementalEvidenceSha256: z.string().regex(/^[a-f0-9]{64}$/i).nullable().optional(),
+  reviewBrief: evidenceObject,
+}).strict().superRefine((value, context) => {
+  if (Boolean(value.supplementalEvidence) !== Boolean(value.supplementalEvidenceSha256)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['supplementalEvidenceSha256'], message: 'Supplemental evidence and checksum must be supplied together' });
+  }
+});
+
+export const migrationReviewDecisionSchema = z.object({
+  requestId: uuid,
+  decision: z.enum(['APPROVED', 'REJECTED']),
+  reviewNote: z.string().trim().max(2_000).nullable().optional(),
+}).strict();

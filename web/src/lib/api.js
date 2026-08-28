@@ -1150,6 +1150,18 @@ export const api = {
     return data.count ?? 0;
   },
 
+  // ===== MIGRATION REVIEWS =====
+  getMigrationReviewPackets: () =>
+    request('/migration-reviews'),
+  getMigrationReviewPacket: (id) =>
+    request(`/migration-reviews/${id}`),
+  importProjectLinkReview: (data) =>
+    request('/migration-reviews/project-links/import', { method: 'POST', body: data }),
+  recordMigrationReviewDecision: (packetId, candidateId, data) =>
+    request(`/migration-reviews/${packetId}/decisions/${encodeURIComponent(candidateId)}`, { method: 'POST', body: data }),
+  exportMigrationReviewDecision: (packetId) =>
+    request(`/migration-reviews/${packetId}/export`),
+
   // ===== PROJECT COMMUNICATIONS =====
   getProjectCommunications: (projectId, params = {}) => {
     const query = new URLSearchParams(params).toString();
