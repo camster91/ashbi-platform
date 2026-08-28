@@ -105,6 +105,7 @@ const invoiceSelect = {
     select: {
       id: true, invoiceId: true, amountMinor: true, currency: true, method: true,
       transactionId: true, paidAt: true, createdAt: true, settlementEvidenceStatus: true,
+      stripeLivemode: true,
       stripeChargeId: true, stripeBalanceTransactionId: true, settlementGrossMinor: true,
       providerFeeMinor: true, settlementNetMinor: true, settlementCurrency: true,
       settlementReconciledAt: true, settlementReconciliationReason: true,
@@ -204,6 +205,7 @@ export async function createRevenueEvidenceExport({ prisma, organizationId, expo
       records.payments.push(copy(payment, [
         'id', 'invoiceId', 'amountMinor', 'currency', 'method', 'transactionId', 'paidAt',
         'createdAt', 'settlementEvidenceStatus', 'stripeChargeId',
+        'stripeLivemode',
         'stripeBalanceTransactionId', 'settlementGrossMinor', 'providerFeeMinor',
         'settlementNetMinor', 'settlementCurrency', 'settlementReconciledAt',
         'settlementReconciliationReason',
@@ -352,6 +354,9 @@ export function verifyRevenueEvidenceExport(payload) {
       findings.push({ code: 'PAYMENT_EXACT_AMOUNT_UNRESOLVED', id: payment.id });
     }
     const settlementRequired = !NON_STRIPE_SETTLEMENT_METHODS.has(payment.method);
+    if (payment.method === 'STRIPE' && typeof payment.stripeLivemode !== 'boolean') {
+      findings.push({ code: 'PAYMENT_STRIPE_MODE_UNRESOLVED', id: payment.id });
+    }
     if (settlementRequired && payment.settlementEvidenceStatus !== 'VERIFIED') {
       findings.push({
         code: 'PAYMENT_SETTLEMENT_UNRESOLVED',

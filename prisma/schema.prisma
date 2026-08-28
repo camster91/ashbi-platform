@@ -257,6 +257,7 @@ model Project {
   risks          String       @default("[]") // JSON: identified risks
   defaultOwnerId String?
   clientId       String
+  sourceContractId String? @unique
   viewToken      String?      @unique @default(cuid())
 
   // Bonsai migration fields
@@ -278,6 +279,7 @@ model Project {
 
   // Relations
   client               Client                 @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  sourceContract       Contract?               @relation("ContractProject", fields: [sourceContractId], references: [id], onDelete: SetNull)
   threads              Thread[]
   tasks                Task[]
   chatMessages         ChatMessage[]
@@ -1033,6 +1035,7 @@ model Contract {
   updatedAt             DateTime  @updatedAt
 
   proposal  Proposal? @relation(fields: [proposalId], references: [id])
+  project   Project?  @relation("ContractProject")
   client    Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   createdBy User      @relation("ContractCreator", fields: [createdById], references: [id])
   // Soft delete
@@ -1200,6 +1203,7 @@ model InvoicePayment {
   invoiceId     String
   createdAt     DateTime @default(now())
   settlementEvidenceStatus String @default("PENDING")
+  stripeLivemode Boolean?
   stripeChargeId String?
   stripeBalanceTransactionId String? @unique
   settlementGrossMinor Int?

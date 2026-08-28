@@ -113,6 +113,7 @@ export async function handleWebhook(payload, signature) {
 
 export async function recordCompletedCheckout(prisma, event) {
   const session = event.data.object;
+  if (typeof event.livemode !== 'boolean') throw new Error('Stripe event mode evidence is missing');
   const invoiceId = session.metadata?.invoiceId;
   if (!invoiceId) throw new Error('Stripe invoice metadata is missing');
   const transactionId = session.payment_intent || session.id;
@@ -137,7 +138,10 @@ export async function recordCompletedCheckout(prisma, event) {
 
       if (transitioned.count === 0) {
         const prior = await tx.invoicePayment.findUnique({ where: { transactionId } });
-        if (prior?.invoiceId === invoiceId) return { duplicate: true, invoiceId };
+        if (prior?.invoiceId === invoiceId && prior.stripeLivemode === event.livemode) {
+          return { duplicate: true, invoiceId };
+        }
+        if (prior?.invoiceId === invoiceId) throw new Error('Stripe payment mode evidence changed');
         throw new Error('Invoice was already paid by another transaction');
       }
 
@@ -148,6 +152,7 @@ export async function recordCompletedCheckout(prisma, event) {
           amountMinor: session.amount_total,
           currency: invoice.currency,
           method: 'STRIPE',
+          stripeLivemode: event.livemode,
           transactionId,
           paidAt: new Date(event.created * 1000),
           notes: `Paid via Stripe Checkout event ${event.id}`,
@@ -158,7 +163,10 @@ export async function recordCompletedCheckout(prisma, event) {
   } catch (err) {
     if (err?.code === 'P2002') {
       const prior = await prisma.invoicePayment.findUnique({ where: { transactionId } });
-      if (prior?.invoiceId === invoiceId) return { duplicate: true, invoiceId };
+      if (prior?.invoiceId === invoiceId && prior.stripeLivemode === event.livemode) {
+        return { duplicate: true, invoiceId };
+      }
+      if (prior?.invoiceId === invoiceId) throw new Error('Stripe payment mode evidence changed');
     }
     throw err;
   }
@@ -210,6 +218,10 @@ export async function reconcilePaymentSettlement(prisma, paymentId, requestId, {
       } });
     });
     return { duplicate: false, status: 'OUTCOME_UNKNOWN', paymentId: payment.id, reasonCode };
+  }
+
+  if (typeof payment.stripeLivemode !== 'boolean' || paymentIntent.livemode !== payment.stripeLivemode) {
+    throw new Error('Stripe payment mode evidence does not match the provider');
   }
 
   const charge = paymentIntent.latest_charge;

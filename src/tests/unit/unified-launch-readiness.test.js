@@ -40,7 +40,17 @@ function fixture() {
     environmentKind: 'sandbox', publicSiteRevision: publicDeployment.revision,
     hubRevision: hubDeployment.revision, currency: 'CAD', stripeMode: 'test', emailMode: 'sandbox',
     reconciliationPassed: true, duplicateWrites: 0, manualDatabaseCorrections: 0,
+    providerEvidence: {
+      stripeLivemode: false, paymentSettlementStatus: 'VERIFIED',
+      emailProvider: 'MAILGUN', emailLifecycleStatus: 'RECIPIENT_SERVER_ACCEPTED',
+      acceptedEmailDeliveries: 1,
+    },
+    sandboxReadinessChecks: [{ id: 'sandbox-flag', ok: true }],
+    attestations: {
+      noManualDatabaseCorrections: true, attestedBy: 'Cameron', reference: 'sandbox-run-2026-03',
+    },
     completedAt: '2026-03-09T15:00:00.000Z',
+    generatedAt: '2026-03-09T15:05:00.000Z',
     recordIds: Object.fromEntries(
       ['lead', 'client', 'opportunity', 'proposal', 'contract', 'project', 'invoice', 'payment']
         .map(key => [key, `${key}-synthetic`]),
@@ -126,6 +136,7 @@ test('unified launch evaluator rejects missing partner strategy approval', () =>
 test('unified launch evaluator independently rejects journey, Notion, Bonsai, growth, and final approval gaps', () => {
   const cases = [
     ['controlled-journey', payload => { payload.duplicateWrites = 1; }, 'controlled-journey', passingBonsai],
+    ['controlled-journey', payload => { payload.completedAt = '2026-03-08T15:00:00.000Z'; }, 'controlled-journey', passingBonsai],
     ['notion-idempotent-rerun', payload => { payload.notes.planned = 1; }, 'notion-migration', passingBonsai],
     ['growth-cadence', payload => { payload.weeklyReviews.pop(); }, 'growth-cadence', passingBonsai],
     ['growth-cadence', payload => { payload.weeklyReviews[0].dueDate = '2026-01-12T17:00:00.000Z'; }, 'growth-cadence', passingBonsai],

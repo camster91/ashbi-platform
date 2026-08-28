@@ -10,6 +10,7 @@ function checkoutEvent(overrides = {}) {
   return {
     id: 'evt_123',
     created: 1_786_240_000,
+    livemode: false,
     data: {
       object: {
         id: 'cs_123',
@@ -73,6 +74,7 @@ test('Stripe checkout completion transitions an invoice and records payment exac
   assert.equal(state.payments[0].transactionId, 'pi_123');
   assert.equal(state.payments[0].amountMinor, 11300);
   assert.equal(state.payments[0].currency, 'CAD');
+  assert.equal(state.payments[0].stripeLivemode, false);
   assert.equal(state.invoice.stripeCheckoutReconciliationRequiredAt, null);
   assert.equal(state.invoice.stripeCheckoutReconciliationReason, null);
 });
@@ -142,6 +144,22 @@ test('Stripe completion rejects a stale checkout session without changing invoic
   );
   assert.equal(state.invoice.status, 'SENT');
   assert.equal(state.payments.length, 0);
+});
+
+test('Stripe completion rejects missing or changed signed mode evidence', async () => {
+  const missing = paymentHarness();
+  const missingMode = checkoutEvent();
+  delete missingMode.livemode;
+  await assert.rejects(recordCompletedCheckout(missing.prisma, missingMode), /mode evidence is missing/);
+  assert.equal(missing.state.payments.length, 0);
+
+  const changed = paymentHarness();
+  await recordCompletedCheckout(changed.prisma, checkoutEvent());
+  await assert.rejects(
+    recordCompletedCheckout(changed.prisma, { ...checkoutEvent(), livemode: true }),
+    /mode evidence changed/,
+  );
+  assert.equal(changed.state.payments.length, 1);
 });
 
 test('Stripe completion never turns a voided invoice back into paid', async () => {

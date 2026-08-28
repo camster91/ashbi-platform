@@ -25,7 +25,15 @@ The strategy artifact uses `format: "ashbi-strategy-approval"`, `version: 1`, `c
 
 Each deployment uses `format: "ashbi-deployment-evidence"`, `version: 1`, `complete: true`, the exact application and URL, a 7–40 character Git revision, a different rollback revision, the approved strategy version, `smokePassed: true`, `rollbackVerified: true`, and `verifiedAt`.
 
-The manifest names one Ashbi organization. The controlled journey uses `format: "ashbi-controlled-journey-evidence"`, `version: 1`, `complete: true`, that exact `organizationId`, `environmentKind: "sandbox"`, the exact public and Hub revisions, an explicit `CAD` or `USD` currency, `stripeMode: "test"`, `emailMode: "sandbox"`, `reconciliationPassed: true`, `duplicateWrites: 0`, `manualDatabaseCorrections: 0`, and the eight required `recordIds`. The growth, Notion, and nested Bonsai evidence must bind the same organization.
+The manifest names one Ashbi organization. The controlled journey uses `format: "ashbi-controlled-journey-evidence"`, `version: 1`, `complete: true`, that exact `organizationId`, `environmentKind: "sandbox"`, the exact public and Hub revisions, an explicit `CAD` or `USD` currency, `stripeMode: "test"`, `emailMode: "sandbox"`, `reconciliationPassed: true`, `duplicateWrites: 0`, `manualDatabaseCorrections: 0`, and the eight required `recordIds`. It also preserves passing sandbox-readiness checks, signed Stripe test-mode and verified-settlement evidence, sandbox email acceptance, and the bounded human no-manual-correction attestation. The growth, Notion, and nested Bonsai evidence must bind the same organization.
+
+After the controlled sandbox flow and provider reconciliation are complete, export the artifact directly from the Hub records:
+
+```text
+npm run export:controlled-journey-evidence -- --organization-id <id> --lead-id <synthetic-lead-id> --public-revision <git-sha> --hub-revision <git-sha> --attested-by <name> --attestation-reference <reference> --output <owner-evidence-directory>/evidence/controlled-journey.json --attest-no-manual-db-corrections --confirm
+```
+
+The command is read-only and refuses production-like configuration. It requires the full existing sandbox-readiness gate, one converted inquiry, one linked client and opportunity, one approved proposal, one signed contract, one contract-owned project, one paid project invoice, one signed Stripe test-mode payment with verified settlement, one accepted sandbox email, and exactly one source write at each replay-sensitive boundary. The contract-project and Stripe-mode migrations must be applied to the named sandbox first. The attestation flag records a human statement; it does not infer or retroactively repair database history.
 
 The cadence artifact uses `format: "ashbi-growth-cadence-evidence"`, `version: 1`, and `complete: true`. Its `baseline` records `startedAt`, `endedAt`, `sourceCoverageReviewed`, `currenciesSeparated`, and `missingAttributionDisclosed`. Every `weeklyReviews` entry records `weekStart`, `actionTaskId`, `ownerId`, `dueDate`, and `completedAt`.
 

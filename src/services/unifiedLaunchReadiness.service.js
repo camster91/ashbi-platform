@@ -113,8 +113,11 @@ function deploymentIsValid(payload, { application, url, strategyVersion, evidenc
     && verifiedAt <= evidenceCompletedAt;
 }
 
-function journeyIsValid(payload, { organizationId, publicRevision, hubRevision, evidenceCompletedAt }) {
+function journeyIsValid(payload, {
+  organizationId, publicRevision, hubRevision, deployedAt, evidenceCompletedAt,
+}) {
   const completedAt = timestamp(payload?.completedAt);
+  const generatedAt = timestamp(payload?.generatedAt);
   return payload?.format === 'ashbi-controlled-journey-evidence'
     && payload?.version === 1
     && payload?.complete === true
@@ -128,8 +131,23 @@ function journeyIsValid(payload, { organizationId, publicRevision, hubRevision, 
     && payload?.reconciliationPassed === true
     && payload?.duplicateWrites === 0
     && payload?.manualDatabaseCorrections === 0
+    && payload?.providerEvidence?.stripeLivemode === false
+    && payload?.providerEvidence?.paymentSettlementStatus === 'VERIFIED'
+    && payload?.providerEvidence?.emailProvider === 'MAILGUN'
+    && payload?.providerEvidence?.emailLifecycleStatus === 'RECIPIENT_SERVER_ACCEPTED'
+    && payload?.providerEvidence?.acceptedEmailDeliveries === 1
+    && Array.isArray(payload?.sandboxReadinessChecks)
+    && payload.sandboxReadinessChecks.length > 0
+    && payload.sandboxReadinessChecks.every(item => item?.ok === true)
+    && payload?.attestations?.noManualDatabaseCorrections === true
+    && text(payload?.attestations?.attestedBy).length >= 2
+    && text(payload?.attestations?.reference).length >= 8
     && REQUIRED_JOURNEY_RECORDS.every(key => text(payload?.recordIds?.[key]).length >= 3)
     && completedAt !== null
+    && generatedAt !== null
+    && completedAt >= deployedAt
+    && generatedAt >= completedAt
+    && generatedAt <= evidenceCompletedAt
     && completedAt <= evidenceCompletedAt;
 }
 
@@ -241,7 +259,11 @@ export function evaluateUnifiedLaunchReadiness({
       'The Hub is verified on the approved strategy revision with rollback evidence.',
       'The Hub deployment, strategy binding, smoke evidence, or rollback evidence is incomplete.'),
     check('controlled-journey', publicDeploymentValid && hubDeploymentValid && journeyIsValid(journey, {
-      organizationId, publicRevision: publicDeployment?.revision, hubRevision: hubDeployment?.revision, evidenceCompletedAt,
+      organizationId,
+      publicRevision: publicDeployment?.revision,
+      hubRevision: hubDeployment?.revision,
+      deployedAt: Math.max(timestamp(publicDeployment?.verifiedAt), timestamp(hubDeployment?.verifiedAt)),
+      evidenceCompletedAt,
     }),
     'A complete sandbox inquiry-to-payment journey reconciled without duplicate writes or database correction.',
     'The controlled inquiry-to-payment journey is incomplete, unreconciled, or not bound to both deployed revisions.'),

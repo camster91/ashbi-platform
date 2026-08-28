@@ -5,7 +5,7 @@ import { reconcilePaymentSettlement } from '../../services/stripe.service.js';
 
 function harness() {
   const state = {
-    payment: { id: 'pay-1', invoiceId: 'inv-1', method: 'STRIPE', transactionId: 'pi_1', amountMinor: 10000, currency: 'USD', invoice: { currency: 'USD' } },
+    payment: { id: 'pay-1', invoiceId: 'inv-1', method: 'STRIPE', stripeLivemode: false, transactionId: 'pi_1', amountMinor: 10000, currency: 'USD', invoice: { currency: 'USD' } },
     events: [],
   };
   const delegates = {
@@ -25,7 +25,7 @@ function provider(balance = { id: 'txn_1', amount: 13800, fee: 400, net: 13400, 
   const calls = [];
   return { calls, client: { paymentIntents: { retrieve: async (...args) => {
     calls.push(args);
-    return { id: 'pi_1', latest_charge: { id: 'ch_1', amount: 10000, currency: 'usd', balance_transaction: balance } };
+    return { id: 'pi_1', livemode: false, latest_charge: { id: 'ch_1', amount: 10000, currency: 'usd', balance_transaction: balance } };
   } } } };
 }
 
@@ -72,6 +72,19 @@ test('invalid Stripe arithmetic fails before ledger mutation', async () => {
   await assert.rejects(reconcilePaymentSettlement(prisma, 'pay-1', 'request-1', {
     stripeClient: provider({ id: 'txn_1', amount: 10000, fee: 300, net: 9999, currency: 'usd' }).client,
   }), /does not reconcile/);
+  assert.equal(state.events.length, 0);
+});
+
+test('settlement rejects a provider mode that differs from the signed checkout event', async () => {
+  const { state, prisma } = harness();
+  const stripeClient = { paymentIntents: { retrieve: async () => ({
+    id: 'pi_1', livemode: true,
+    latest_charge: { id: 'ch_1', amount: 10000, currency: 'usd', balance_transaction: null },
+  }) } };
+  await assert.rejects(
+    reconcilePaymentSettlement(prisma, 'pay-1', 'request-1', { stripeClient }),
+    /mode evidence does not match/,
+  );
   assert.equal(state.events.length, 0);
 });
 

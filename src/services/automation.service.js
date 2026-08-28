@@ -7,6 +7,7 @@ import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import crypto from 'crypto';
 import { resolveTenantOrganizationIds, runTenantJob } from '../jobs/tenant-iteration.js';
+import { ensureSignedContractProject } from './signedContractProject.service.js';
 
 // ==================== EMAIL HELPER ====================
 
@@ -212,33 +213,16 @@ export async function onContractSigned(contractId) {
   console.log(`[Automation] Contract signed: ${contractId}`);
 
   try {
-    const contract = await prisma.contract.findUnique({
-      where: { id: contractId },
-      include: {
-        client: { select: { id: true, name: true, organizationId: true } },
-        proposal: { select: { id: true, title: true, total: true } },
-        createdBy: { select: { id: true, name: true } }
-      }
+    const { contract, project, created } = await ensureSignedContractProject({
+      prisma,
+      contractId,
     });
-
-    if (!contract) {
-      console.error(`[Automation] Contract ${contractId} not found`);
-      return;
+    if (!created) {
+      console.log(`[Automation] Contract ${contractId} already owns project ${project.id}; side effects skipped`);
+      return { project, idempotent: true };
     }
 
-    // Action 1: Auto-create project linked to contract's client
-    const projectName = contract.proposal?.title || contract.title.replace('Contract: ', '');
-
-    const project = await prisma.project.create({
-      data: {
-        name: projectName,
-        description: `Auto-created from signed contract: ${contract.title}`,
-        status: 'STARTING_UP',
-        health: 'ON_TRACK',
-        clientId: contract.clientId,
-        organizationId: contract.client.organizationId,
-      }
-    });
+    const projectName = project.name;
 
     console.log(`[Automation] Project created: ${project.id} from contract ${contractId}`);
 
@@ -291,8 +275,11 @@ export async function onContractSigned(contractId) {
       contract.client.organizationId,
     );
 
+    return { project, idempotent: false };
+
   } catch (err) {
     console.error(`[Automation] onContractSigned failed:`, err);
+    return { error: err?.code || 'SIGNED_CONTRACT_AUTOMATION_FAILED' };
   }
 }
 

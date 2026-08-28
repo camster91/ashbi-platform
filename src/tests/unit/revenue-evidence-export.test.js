@@ -11,6 +11,8 @@ const records = {
   payments: [{
     id: 'payment-1',
     invoiceId: 'invoice-1',
+    method: 'STRIPE',
+    stripeLivemode: false,
     currency: 'CAD',
     amountMinor: 11300,
     settlementEvidenceStatus: 'VERIFIED',
@@ -114,6 +116,24 @@ test('revenue evidence keeps unresolved currency and settlement gaps visible', (
     { code: 'INVOICE_CURRENCY_UNRESOLVED', id: 'invoice-1', currency: 'UNASSIGNED' },
     { code: 'PAYMENT_EXACT_AMOUNT_UNRESOLVED', id: 'payment-1' },
     { code: 'PAYMENT_SETTLEMENT_UNRESOLVED', id: 'payment-1', status: 'PENDING' },
+  ]);
+});
+
+test('Stripe revenue evidence preserves whether the signed payment event was live or test mode', () => {
+  const unresolvedRecords = {
+    ...records,
+    payments: [{ ...records.payments[0], stripeLivemode: null }],
+  };
+  const result = revenueExport.verifyRevenueEvidenceExport({
+    format: 'ashbi-revenue-evidence-export',
+    version: 1,
+    organizationId: 'org-1',
+    records: unresolvedRecords,
+    manifest: revenueExport.buildRevenueEvidenceManifest(unresolvedRecords),
+  });
+  assert.equal(result.valid, false);
+  assert.deepEqual(result.findings, [
+    { code: 'PAYMENT_STRIPE_MODE_UNRESOLVED', id: 'payment-1' },
   ]);
 });
 
@@ -307,6 +327,7 @@ test('revenue evidence collection flattens tenant-scoped records without secret-
             id: 'payment-1', invoiceId: 'invoice-1', amount: 113, amountMinor: 11300, currency: 'CAD',
             method: 'STRIPE', transactionId: 'pi_1', paidAt: new Date('2026-08-05T00:00:00.000Z'),
             createdAt: new Date('2026-08-05T00:00:00.000Z'), settlementEvidenceStatus: 'VERIFIED',
+            stripeLivemode: false,
             stripeChargeId: 'ch_1', stripeBalanceTransactionId: 'txn_1', settlementGrossMinor: 11300,
             providerFeeMinor: 400, settlementNetMinor: 10900, settlementCurrency: 'CAD',
             settlementReconciledAt: new Date('2026-08-05T00:02:00.000Z'), settlementReconciliationReason: null,
