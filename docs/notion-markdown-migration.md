@@ -123,6 +123,15 @@ npm run verify:notion-bonsai-project-disposition-decision -- --review <native-pr
 
 Every Notion project, every Bonsai project, and every duplicate Bonsai title group receives an independent decision so a rejected exact or task-backed link cannot create an untracked source-only record. A project with any pending link candidate cannot be dispositioned until its link decision is finalized; an approved link must be cited as the exact resolution, while rejected or absent links allow evidence-backed migration, retention, or exclusion choices. Duplicate-title groups are classification findings only and require evidence to retain distinct records, manually map members, repair and recapture the source, or exclude the finding. No decision applies a link, consolidates a group, creates or changes a project, moves tasks, changes owners/lifecycle/financials, deletes a source record, migrates data, or authorizes cutover. The current checksum-valid owner-only version 2 packet has 238 pending decisions: all 25 Notion projects, all 203 Bonsai projects, and ten duplicate-title groups. Its SHA-256 is `88fa333e64eec123e0fb0a14c87f04ed66e42404db455bc1422c6026884b466c`. The earlier 204-candidate packet remains immutable historical evidence and is superseded because it did not cover records that could become source-only after a rejected exact or task-backed link.
 
+Prepare and verify a checksum-bound owner review brief before requesting project dispositions:
+
+```bash
+npm run prepare:notion-bonsai-project-disposition-review-brief -- --review <native-project-review.json> --project-link-decision <project-link-decision.json> --project-disposition-decision <pending-project-disposition-decision.json> --prepared-at <ISO> --output <new-review-brief.json>
+npm run verify:notion-bonsai-project-disposition-review-brief -- <native-project-review.json> <project-link-decision.json> <pending-project-disposition-decision.json> <review-brief.json>
+```
+
+The brief accepts only the complete, checksum-valid, fully pending disposition packet and its exact project-link generation. A project covered by a pending link stays blocked; an approved link becomes the exact proposed resolution; a source-only project is recommended for Hub migration with stable identity, lifecycle, import, and reconciliation prerequisites. A duplicate-title group is recommended to remain distinct only when every stable member belongs to a different nonblank client; a same-client repeated title stays manual until project-history or contract evidence proves whether the records are separate engagements. The current brief has 186 approval-ready recommendations—180 source-only migrations and six different-client groups retained as distinct—plus 48 source records blocked behind the 24 pending project links and four same-client duplicate groups in manual review. Its SHA-256 is `5ec0d3e1f1cc84d01ec2653fcce45b0065bbcadf2252a52c259e8758cd7fba41`. All 238 dispositions remain pending, and no source, link, project, duplicate group, task, owner, lifecycle, financial record, import, reconciliation, or cutover state was changed.
+
 ## Supported input
 
 - UTF-8 `.md` pages from a Notion export;
