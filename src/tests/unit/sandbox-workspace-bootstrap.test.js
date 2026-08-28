@@ -237,6 +237,8 @@ test('sandbox runbook documents dry run, exact confirmation, scope, and provider
 
   assert.match(runbook, /npm run bootstrap:sandbox-workspace(?! -- --confirm)/);
   assert.match(runbook, /npm run bootstrap:sandbox-workspace -- --confirm/);
+  assert.match(runbook, /ASHBI_SANDBOX_ORGANIZATION_ID/);
+  assert.match(runbook, /check:migration-sandbox-target/);
   assert.match(runbook, /organization, synthetic staff identity, synthetic client, primary contact, and one synthetic project/i);
   assert.match(runbook, /does not create a proposal, contract, invoice, payment link, payment, email, or provider call/i);
   assert.match(runbook, /Cameron.*action-time approval/i);
