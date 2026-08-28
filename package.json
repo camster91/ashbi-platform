@@ -53,6 +53,7 @@
     "reconcile:bonsai-revenue": "node scripts/reconcile-bonsai-revenue.js",
     "reconcile:bonsai-operations": "node scripts/reconcile-bonsai-operations.js",
     "reconcile:bonsai-tasks": "node scripts/reconcile-bonsai-tasks.js",
+    "verify:bonsai-task-snapshot": "node scripts/verify-bonsai-task-snapshot.mjs",
     "test:all": "node scripts/run-node-tests.mjs src/tests/unit src/tests/integration",
     "test:e2e:setup": "bash tests/e2e/setup.sh",
     "test:e2e:teardown": "bash tests/e2e/teardown.sh",

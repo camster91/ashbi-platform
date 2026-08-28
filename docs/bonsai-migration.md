@@ -18,6 +18,14 @@ The importer records each file's row count and SHA-256 digest. It produces one c
 
 Bonsai exposes two non-interchangeable task identities. Preserve the native `task_export` CSV for historical `task_…` identities, completed work, and parent/subtask relationships. Also capture current tasks through the authenticated Bonsai API into an immutable JSON snapshot using the contract in [bonsai-task-snapshot.example.json](bonsai-task-snapshot.example.json). The snapshot must cover `scope: "all"`, finish every pagination page, set `complete: true` only after the page count is verified, and include the API UUID, project ID, owner display name, dates, priority, and task status. The importer never guesses that a CSV task and API task are the same: displayed title/project overlaps, projectless rows, missing parents, and ambiguous project names remain findings. A missing native export or partial/active-only API snapshot is rejected.
 
+Immediately after capture, verify the immutable API snapshot before using or reviewing it:
+
+```text
+npm run verify:bonsai-task-snapshot -- <bonsai-tasks.json>
+```
+
+The verifier is read-only. It requires the all-scope completion marker, a valid capture timestamp, explicit connector pagination evidence ending with `has_more: false`, an exact task count, unique API UUIDs, and every material task field. It reports capture integrity separately from migration readiness: source rows with blank titles or no project remain preserved but block `migrationReady`. A passing report validates internal snapshot integrity; it does not replace the native task export, authenticate a manually edited file, or prove parity with the Hub.
+
 The Companies export is a mixed CRM connection population, not a client list. The importer accepts its observed `Name`, `Email`, `Domain`, and related profile columns only through `--connections-csv`. It promotes a connection to a client contact only when the row has an exact operational client name from the project/invoice sources or an exact invoice email. Unrelated leads, vendors, and domains remain outside the client import; a row that points to different clients by name and email, conflicting duplicate emails, or an ambiguous primary contact remains an unresolved finding. The untouched timestamped filename, row count, headers, and checksum remain in the source fingerprint. A legacy `clients.csv` is still understood for recovery of older evidence, but it is not the current Bonsai contract.
 
 ## Dry run
