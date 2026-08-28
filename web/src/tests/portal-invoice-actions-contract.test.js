@@ -16,4 +16,12 @@ describe('portal invoice payment accessibility contract', () => {
     expect(source).toContain('role="status" aria-live="polite"');
     expect(source).toContain('<p role="alert"');
   });
+
+  it('labels every amount with verified currency evidence and blocks unresolved checkout', () => {
+    expect(source).toContain("const verifiedCurrency = ['CAD', 'USD'].includes(invoice.currency) ? invoice.currency : null;");
+    expect(source).toContain("currencyDisplay: 'code'");
+    expect(source.match(/formatPortalAmount\(/g)?.length).toBeGreaterThanOrEqual(5);
+    expect(source).toContain('const showPayButton = paymentEligibleStatus && Boolean(verifiedCurrency);');
+    expect(source).toContain('Payment is unavailable because this invoice currency has not been verified.');
+  });
 });

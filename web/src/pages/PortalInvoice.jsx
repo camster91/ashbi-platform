@@ -4,7 +4,6 @@ import {
   Sparkles,
   CheckCircle,
   FileText,
-  DollarSign,
   Calendar,
   AlertCircle,
   Loader2,
@@ -22,6 +21,18 @@ const statusConfig = {
   PAID: { label: 'Paid', color: 'bg-green-100 text-green-700', icon: CheckCircle },
   CANCELLED: { label: 'Cancelled', color: 'bg-slate-100 text-slate-500', icon: FileText },
 };
+
+function formatPortalAmount(amount, currency) {
+  const value = Number(amount || 0);
+  if (!['CAD', 'USD'].includes(currency)) {
+    return `${value.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} currency unassigned`;
+  }
+  return new Intl.NumberFormat('en-CA', {
+    style: 'currency',
+    currency,
+    currencyDisplay: 'code',
+  }).format(value);
+}
 
 export default function PortalInvoice() {
   const { token } = useParams();
@@ -59,7 +70,9 @@ export default function PortalInvoice() {
 
   const status = statusConfig[invoice.status] || statusConfig.DRAFT;
   const StatusIcon = status.icon;
-  const showPayButton = invoice.status === 'SENT' || invoice.status === 'OVERDUE';
+  const verifiedCurrency = ['CAD', 'USD'].includes(invoice.currency) ? invoice.currency : null;
+  const paymentEligibleStatus = invoice.status === 'SENT' || invoice.status === 'OVERDUE';
+  const showPayButton = paymentEligibleStatus && Boolean(verifiedCurrency);
   const isPaid = invoice.status === 'PAID';
 
   const subtotal = invoice.lineItems?.reduce((sum, item) => {
@@ -161,8 +174,8 @@ export default function PortalInvoice() {
                     <tr key={i} className="hover:bg-slate-50/50">
                       <td className="px-6 py-4 text-sm text-slate-700">{item.description}</td>
                       <td className="px-6 py-4 text-sm text-slate-600 text-right">{qty}</td>
-                      <td className="px-6 py-4 text-sm text-slate-600 text-right">${rate.toFixed(2)}</td>
-                      <td className="px-6 py-4 text-sm font-medium text-slate-800 text-right">${amount.toFixed(2)}</td>
+                      <td className="px-6 py-4 text-sm text-slate-600 text-right">{formatPortalAmount(rate, invoice.currency)}</td>
+                      <td className="px-6 py-4 text-sm font-medium text-slate-800 text-right">{formatPortalAmount(amount, invoice.currency)}</td>
                     </tr>
                   );
                 })}
@@ -174,20 +187,17 @@ export default function PortalInvoice() {
           <div className="border-t border-slate-200 bg-slate-50 px-6 py-4 space-y-2">
             <div className="flex items-center justify-between text-sm">
               <span className="text-slate-500">Subtotal</span>
-              <span className="text-slate-700">${subtotal.toFixed(2)}</span>
+              <span className="text-slate-700">{formatPortalAmount(subtotal, invoice.currency)}</span>
             </div>
             {tax > 0 && (
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-500">Tax</span>
-                <span className="text-slate-700">${tax.toFixed(2)}</span>
+                <span className="text-slate-700">{formatPortalAmount(tax, invoice.currency)}</span>
               </div>
             )}
             <div className="flex items-center justify-between pt-2 border-t border-slate-200">
               <span className="text-sm font-semibold text-slate-700">Total</span>
-              <span className="text-xl font-bold text-slate-800 flex items-center gap-1">
-                <DollarSign className="w-5 h-5" />
-                {total.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-              </span>
+              <span className="text-xl font-bold text-slate-800">{formatPortalAmount(total, invoice.currency)}</span>
             </div>
           </div>
         </div>
@@ -213,7 +223,7 @@ export default function PortalInvoice() {
               ) : (
                 <CreditCard className="w-4 h-4" />
               )}
-              Pay Now - ${total.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              Pay Now - {formatPortalAmount(total, verifiedCurrency)}
             </button>
             {payMutation.isError && (
               <p role="alert" className="text-sm text-red-600 text-center mt-3">Payment initiation failed. Please try again.</p>
@@ -221,6 +231,14 @@ export default function PortalInvoice() {
             <p className="text-xs text-slate-400 text-center mt-3">
               Secure payment powered by Stripe
             </p>
+          </div>
+        )}
+
+        {paymentEligibleStatus && !verifiedCurrency && (
+          <div role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center">
+            <AlertCircle className="mx-auto mb-3 h-8 w-8 text-amber-600" />
+            <h2 className="font-semibold text-amber-900">Payment temporarily unavailable</h2>
+            <p className="mt-1 text-sm text-amber-800">Payment is unavailable because this invoice currency has not been verified. Please contact Ashbi Design before paying.</p>
           </div>
         )}
 
