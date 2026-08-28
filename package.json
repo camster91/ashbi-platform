@@ -91,6 +91,7 @@
     "verify:notion-bonsai-owner-decision": "node scripts/verify-notion-bonsai-owner-decision.mjs",
     "prepare:notion-operating-migration-plan": "node scripts/prepare-notion-operating-migration-plan.mjs",
     "execute:notion-operating-migration": "node scripts/execute-notion-operating-migration.mjs",
+    "reconcile:notion-operating-migration": "node scripts/reconcile-notion-operating-migration.mjs",
     "test:all": "node scripts/run-node-tests.mjs src/tests/unit src/tests/integration",
     "test:e2e:setup": "bash tests/e2e/setup.sh",
     "test:e2e:teardown": "bash tests/e2e/teardown.sh",

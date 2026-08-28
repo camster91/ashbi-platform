@@ -65,7 +65,7 @@ test('Bonsai manifest preparation command creates one file without changing its 
     ];
     const first = spawnSync(process.execPath, args, { cwd: process.cwd(), encoding: 'utf8' });
     assert.equal(first.status, 0, first.stderr);
-    assert.match(first.stdout, /25 checksum-bound artifacts/);
+    assert.match(first.stdout, /28 checksum-bound artifacts/);
     const manifest = JSON.parse(fs.readFileSync(output, 'utf8'));
     assert.equal(manifest.approval.decision, 'PENDING');
     const second = spawnSync(process.execPath, args, { cwd: process.cwd(), encoding: 'utf8' });

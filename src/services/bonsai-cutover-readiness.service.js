@@ -5,6 +5,8 @@ import { verifyWorkspaceExport, workspaceExportCollections } from './workspace-e
 import { resolveContainedEvidenceFile } from './evidenceManifest.service.js';
 import { fingerprintBonsaiPlan, fingerprintInputInventory } from './bonsai-import-evidence.service.js';
 import { verifyBonsaiProjectSnapshot } from './bonsaiProjectSnapshot.service.js';
+import { verifyNotionOperatingSnapshot } from './notionOperatingSnapshot.service.js';
+import { verifyNotionOperatingMigrationReconciliation } from './notionOperatingMigrationReconciliation.service.js';
 
 const REQUIRED_RECORD_TYPES = [
   'clients',
@@ -34,6 +36,9 @@ const REQUIRED_ARTIFACT_IDS = [
   'notion-source-export',
   'notion-import-dry-run',
   'notion-import-confirmed',
+  'notion-destination-inventory-before',
+  'notion-destination-inventory-after',
+  'notion-import-reconciliation',
   'parallel-reconciliation',
   'operations-reconciliation',
   'tasks-reconciliation',
@@ -287,6 +292,42 @@ function bonsaiImportEvidenceIsBound({ artifacts, manifestDirectory, organizatio
     && validInventory(dry) && validInventory(confirmed);
 }
 
+function notionImportEvidenceIsBound({ artifacts, manifestDirectory, organizationId, evidenceCompletedAt }) {
+  const source = readContainedJsonArtifact(artifacts, 'notion-source-export', manifestDirectory);
+  const plan = readContainedJsonArtifact(artifacts, 'notion-import-dry-run', manifestDirectory);
+  const result = readContainedJsonArtifact(artifacts, 'notion-import-confirmed', manifestDirectory);
+  const beforeInventory = readContainedJsonArtifact(artifacts, 'notion-destination-inventory-before', manifestDirectory);
+  const afterInventory = readContainedJsonArtifact(artifacts, 'notion-destination-inventory-after', manifestDirectory);
+  const reconciliation = readContainedJsonArtifact(artifacts, 'notion-import-reconciliation', manifestDirectory);
+  const bonsaiConfirmed = readContainedJsonArtifact(artifacts, 'bonsai-import-confirmed', manifestDirectory);
+  const artifact = id => Array.isArray(artifacts) ? artifacts.find(item => item?.id === id) : null;
+  const sourceArtifact = artifact('notion-source-export');
+  const planArtifact = artifact('notion-import-dry-run');
+  const resultArtifact = artifact('notion-import-confirmed');
+  const beforeArtifact = artifact('notion-destination-inventory-before');
+  const afterArtifact = artifact('notion-destination-inventory-after');
+  if (!source || !plan || !result || !beforeInventory || !afterInventory || !reconciliation || !bonsaiConfirmed
+    || !sourceArtifact || !planArtifact || !resultArtifact || !beforeArtifact || !afterArtifact
+    || !verifyNotionOperatingSnapshot(source).valid) return false;
+  const verification = verifyNotionOperatingMigrationReconciliation({
+    record: reconciliation,
+    organizationId,
+    notionSnapshotSha256: sourceArtifact.sha256,
+    beforeInventory, beforeInventorySha256: beforeArtifact.sha256,
+    afterInventory, afterInventorySha256: afterArtifact.sha256,
+    plan, planSha256: planArtifact.sha256,
+    result, resultSha256: resultArtifact.sha256,
+  });
+  const reconciledAt = timestamp(reconciliation.reconciledAt);
+  return verification.valid && verification.complete
+    && reconciliation.status === 'RECONCILED' && reconciliation.complete === true
+    && reconciliation.summary?.findings === 0
+    && reconciledAt !== null && evidenceCompletedAt !== null && reconciledAt <= evidenceCompletedAt
+    && result.sandboxTarget?.targetFingerprint === bonsaiConfirmed.sandboxTarget?.targetFingerprint
+    && text(result.authorization?.backupReference) !== ''
+    && text(result.authorization?.approvalReference) !== '';
+}
+
 function text(value) { return String(value ?? '').trim(); }
 
 export function evaluateBonsaiCutoverReadiness({ manifest = {}, manifestDirectory } = {}) {
@@ -410,6 +451,17 @@ export function evaluateBonsaiCutoverReadiness({ manifest = {}, manifestDirector
       bonsaiImportEvidenceIsBound({ artifacts: manifest.artifacts, manifestDirectory, organizationId: manifest.organizationId }),
       'The dry run and confirmed Bonsai import bind the exact source inventory and operating-source registry plan.',
       'Bind clean dry-run and confirmed imports to the exact source artifacts, tenant, sandbox target, and registry plan.',
+    ),
+    check(
+      'notion-import-binding',
+      notionImportEvidenceIsBound({
+        artifacts: manifest.artifacts,
+        manifestDirectory,
+        organizationId: manifest.organizationId,
+        evidenceCompletedAt,
+      }),
+      'The Notion plan, confirmed sandbox execution, and before/after reconciliation bind the exact tenant evidence.',
+      'Bind a READY Notion plan and completed sandbox result to exact before/after inventories and a zero-finding reconciliation.',
     ),
     check(
       'recovery',

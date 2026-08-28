@@ -12,6 +12,9 @@ import {
   WORKSPACE_EXPORT_V3_COLLECTIONS,
 } from '../../services/workspace-export-integrity.service.js';
 import { fingerprintBonsaiPlan, fingerprintInputInventory } from '../../services/bonsai-import-evidence.service.js';
+import { NOTION_OPERATING_SOURCE } from '../../services/notionOperatingSnapshot.service.js';
+import { buildOperatingDestinationInventory } from '../../services/operatingDestinationInventory.service.js';
+import { prepareNotionOperatingMigrationReconciliation } from '../../services/notionOperatingMigrationReconciliation.service.js';
 
 const REQUIRED_ARTIFACTS = [
   'bonsai-source-export',
@@ -29,6 +32,9 @@ const REQUIRED_ARTIFACTS = [
   'notion-source-export',
   'notion-import-dry-run',
   'notion-import-confirmed',
+  'notion-destination-inventory-before',
+  'notion-destination-inventory-after',
+  'notion-import-reconciliation',
   'parallel-reconciliation',
   'operations-reconciliation',
   'tasks-reconciliation',
@@ -170,6 +176,53 @@ function fixture() {
   });
   const importDryRunContent = Buffer.from(JSON.stringify(importReport('dry-run')));
   const importConfirmedContent = Buffer.from(JSON.stringify(importReport('live')));
+  const notionSnapshot = {
+    format: 'ashbi-notion-project-task-snapshot', version: 1, complete: true,
+    capturedAt: '2026-08-15T18:00:00.000Z', workspaceHub: { pageId: NOTION_OPERATING_SOURCE.hubPageId },
+    sources: {
+      projects: { databaseId: NOTION_OPERATING_SOURCE.projectsDatabaseId, dataSourceUrl: NOTION_OPERATING_SOURCE.projectsDataSourceUrl, hasMore: false, rows: 0 },
+      tasks: { databaseId: NOTION_OPERATING_SOURCE.tasksDatabaseId, dataSourceUrl: NOTION_OPERATING_SOURCE.tasksDataSourceUrl, hasMore: false, rows: 0 },
+    },
+    archivedSources: { projectsDataSourceUrl: NOTION_OPERATING_SOURCE.archivedProjectsDataSourceUrl, tasksDataSourceUrl: NOTION_OPERATING_SOURCE.archivedTasksDataSourceUrl },
+    projects: [], tasks: [],
+  };
+  const notionSnapshotContent = Buffer.from(JSON.stringify(notionSnapshot));
+  const notionSnapshotSha256 = crypto.createHash('sha256').update(notionSnapshotContent).digest('hex');
+  const beforeInventory = buildOperatingDestinationInventory({
+    organizationId: 'org-1', capturedAt: '2026-08-15T18:10:00.000Z', clients: [], projects: [], tasks: [], sourceRecords: [],
+  });
+  const beforeInventoryContent = Buffer.from(JSON.stringify(beforeInventory));
+  const beforeInventorySha256 = crypto.createHash('sha256').update(beforeInventoryContent).digest('hex');
+  const notionPlan = {
+    format: 'ashbi-notion-operating-migration-plan', version: 1, status: 'READY', preparedAt: '2026-08-15T18:15:00.000Z',
+    organizationId: 'org-1', actions: [], summary: { actions: 0 }, findings: [],
+    sourceEvidence: { notionSnapshotSha256, destinationInventorySha256: beforeInventorySha256 },
+  };
+  const notionPlanContent = Buffer.from(JSON.stringify(notionPlan));
+  const notionPlanSha256 = crypto.createHash('sha256').update(notionPlanContent).digest('hex');
+  const notionResult = {
+    format: 'ashbi-notion-operating-migration-result', version: 1, status: 'COMPLETED', complete: true,
+    organizationId: 'org-1', executedAt: '2026-08-15T18:20:00.000Z', planSha256: notionPlanSha256,
+    sandboxTarget: { environmentKind: 'sandbox', targetFingerprint: 'sandbox-target-1' },
+    authorization: { backupReference: 'backup-2026-08-15', approvalReference: 'approval-2026-08-15' },
+    result: { executedAt: '2026-08-15T18:20:00.000Z', actionsApplied: 0, projectsCreated: 0, tasksCreated: 0,
+      projectSourcesRegistered: 0, taskSourcesRegistered: 0, externalWritesPerformed: false,
+      notionOrBonsaiRecordsChanged: false, ownersOrFinancialRecordsChanged: false },
+  };
+  const notionResultContent = Buffer.from(JSON.stringify(notionResult));
+  const notionResultSha256 = crypto.createHash('sha256').update(notionResultContent).digest('hex');
+  const afterInventory = buildOperatingDestinationInventory({
+    organizationId: 'org-1', capturedAt: '2026-08-15T18:30:00.000Z', clients: [], projects: [], tasks: [], sourceRecords: [],
+  });
+  const afterInventoryContent = Buffer.from(JSON.stringify(afterInventory));
+  const afterInventorySha256 = crypto.createHash('sha256').update(afterInventoryContent).digest('hex');
+  const notionReconciliation = prepareNotionOperatingMigrationReconciliation({
+    organizationId: 'org-1', notionSnapshotSha256,
+    beforeInventory, beforeInventorySha256, afterInventory, afterInventorySha256,
+    plan: notionPlan, planSha256: notionPlanSha256, result: notionResult, resultSha256: notionResultSha256,
+    reconciledAt: '2026-08-15T19:00:00.000Z',
+  });
+  const notionReconciliationContent = Buffer.from(JSON.stringify(notionReconciliation));
   const artifacts = REQUIRED_ARTIFACTS.map((id) => {
     const relativePath = `${id}.json`;
     const content = id === 'revenue-evidence-export'
@@ -198,6 +251,18 @@ function fixture() {
           ? importDryRunContent
           : id === 'bonsai-import-confirmed'
             ? importConfirmedContent
+          : id === 'notion-source-export'
+            ? notionSnapshotContent
+          : id === 'notion-import-dry-run'
+            ? notionPlanContent
+          : id === 'notion-import-confirmed'
+            ? notionResultContent
+          : id === 'notion-destination-inventory-before'
+            ? beforeInventoryContent
+          : id === 'notion-destination-inventory-after'
+            ? afterInventoryContent
+          : id === 'notion-import-reconciliation'
+            ? notionReconciliationContent
         : Buffer.from(JSON.stringify(id === 'parallel-reconciliation'
           ? parallelPayload
           : id === 'operations-reconciliation'
@@ -274,6 +339,61 @@ test('cutover evaluator binds confirmed import evidence to the reviewed dry-run 
     assert.equal(report.checks.find(item => item.id === 'artifact-integrity').ok, true);
     assert.equal(report.checks.find(item => item.id === 'bonsai-import-binding').ok, false);
     assert.equal(report.ready, false);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('cutover evaluator rejects a Notion result from a different sandbox target', () => {
+  const { directory, manifest } = fixture();
+  try {
+    const artifact = manifest.artifacts.find(item => item.id === 'notion-import-confirmed');
+    const artifactPath = path.join(directory, artifact.path);
+    const payload = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
+    payload.sandboxTarget.targetFingerprint = 'sandbox-target-other';
+    const changed = Buffer.from(JSON.stringify(payload));
+    fs.writeFileSync(artifactPath, changed);
+    artifact.sha256 = crypto.createHash('sha256').update(changed).digest('hex');
+    const report = evaluateBonsaiCutoverReadiness({ manifest, manifestDirectory: directory });
+    assert.equal(report.checks.find(item => item.id === 'artifact-integrity').ok, true);
+    assert.equal(report.checks.find(item => item.id === 'notion-import-binding').ok, false);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('cutover evaluator rejects a cross-tenant Notion destination inventory', () => {
+  const { directory, manifest } = fixture();
+  try {
+    const artifact = manifest.artifacts.find(item => item.id === 'notion-destination-inventory-after');
+    const artifactPath = path.join(directory, artifact.path);
+    const payload = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
+    payload.organizationId = 'org-other';
+    const changed = Buffer.from(JSON.stringify(payload));
+    fs.writeFileSync(artifactPath, changed);
+    artifact.sha256 = crypto.createHash('sha256').update(changed).digest('hex');
+    const report = evaluateBonsaiCutoverReadiness({ manifest, manifestDirectory: directory });
+    assert.equal(report.checks.find(item => item.id === 'artifact-integrity').ok, true);
+    assert.equal(report.checks.find(item => item.id === 'notion-import-binding').ok, false);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('cutover evaluator rejects an incomplete or altered Notion reconciliation', () => {
+  const { directory, manifest } = fixture();
+  try {
+    const artifact = manifest.artifacts.find(item => item.id === 'notion-import-reconciliation');
+    const artifactPath = path.join(directory, artifact.path);
+    const payload = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
+    payload.complete = false;
+    payload.status = 'BLOCKED';
+    const changed = Buffer.from(JSON.stringify(payload));
+    fs.writeFileSync(artifactPath, changed);
+    artifact.sha256 = crypto.createHash('sha256').update(changed).digest('hex');
+    const report = evaluateBonsaiCutoverReadiness({ manifest, manifestDirectory: directory });
+    assert.equal(report.checks.find(item => item.id === 'artifact-integrity').ok, true);
+    assert.equal(report.checks.find(item => item.id === 'notion-import-binding').ok, false);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }
