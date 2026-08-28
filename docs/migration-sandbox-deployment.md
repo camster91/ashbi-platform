@@ -42,6 +42,8 @@ bash /opt/ashbi-platform-migration-sandbox/releases/deploy-vps-direct.sh \
 
 The deployment script applies and checks migrations on the sandbox database, starts distinct API/worker containers, binds the API only to `127.0.0.1:13002`, validates revision/image/database/Redis/worker health, and retains a sandbox-only rollback container. It never changes the production route or container names when the exact overrides above are used.
 
+The controller also fails closed before loading the image unless `--environment migration-sandbox` is paired with the exact sandbox root, API container, worker container, port, and network above. Conversely, those sandbox root/container/network identities are rejected under any other environment label. The runbook and executable controller are checked together by `npm run check:migration-sandbox-infrastructure`.
+
 ## Private validation and evidence
 
 Open a tunnel from Cameron's workstation and use `http://localhost:13002`:

@@ -8,6 +8,7 @@ function current() {
     composeText: fs.readFileSync('docker-compose.migration-sandbox.yml', 'utf8'),
     environmentTemplate: fs.readFileSync('docs/migration-sandbox.env.example', 'utf8'),
     runbookText: fs.readFileSync('docs/migration-sandbox-deployment.md', 'utf8'),
+    releaseScriptText: fs.readFileSync('scripts/deploy-vps-direct.sh', 'utf8'),
   };
 }
 
@@ -22,12 +23,14 @@ test('rejects host data ports, production targets, live keys, and missing deploy
   value.composeText += '\nports:\n  - "5432:5432"\ncontainer_name: ashbi-platform\n';
   value.environmentTemplate = value.environmentTemplate.replace('STRIPE_SECRET_KEY=', 'STRIPE_SECRET_KEY=sk_live_example');
   value.runbookText = value.runbookText.replace('--host-port 13002 --network ashbi-migration-sandbox', '--host-port 3002');
+  value.releaseScriptText = value.releaseScriptText.replace('MIGRATION_SANDBOX_PORT=13002', 'MIGRATION_SANDBOX_PORT=3002');
   const report = assessMigrationSandboxInfrastructure(value);
   assert.equal(report.ready, false);
   assert.ok(report.checks.some(item => item.id === 'no-datastore-host-ports' && !item.ok));
   assert.ok(report.checks.some(item => item.id === 'no-production-compose-targets' && !item.ok));
   assert.ok(report.checks.some(item => item.id === 'safe-environment-template' && !item.ok));
   assert.ok(report.checks.some(item => item.id === 'explicit-deployment-isolation' && !item.ok));
+  assert.ok(report.checks.some(item => item.id === 'release-controller-fail-closed' && !item.ok));
 });
 
 test('checker is read-only and package-addressable', () => {

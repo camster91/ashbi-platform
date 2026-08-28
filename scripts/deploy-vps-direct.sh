@@ -65,6 +65,25 @@ ARCHIVE=$(realpath -e "$ARCHIVE")
 [[ $WORKER_CONTAINER != "$CONTAINER" ]] || die 'worker container must differ from API container'
 [[ $ENVIRONMENT =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]+$ ]] || die 'invalid environment name'
 [[ $HOST_PORT =~ ^[0-9]+$ ]] && ((HOST_PORT >= 1024 && HOST_PORT <= 65535)) || die 'invalid host port'
+
+MIGRATION_SANDBOX_ROOT=/opt/ashbi-platform-migration-sandbox
+MIGRATION_SANDBOX_CONTAINER=ashbi-platform-migration-sandbox
+MIGRATION_SANDBOX_WORKER=ashbi-platform-migration-sandbox-worker
+MIGRATION_SANDBOX_PORT=13002
+MIGRATION_SANDBOX_NETWORK=ashbi-migration-sandbox
+
+if [[ $ENVIRONMENT == migration-sandbox ]]; then
+  [[ $ROOT_DIR == "$MIGRATION_SANDBOX_ROOT" ]] || die 'migration-sandbox requires its exact isolated root directory'
+  [[ $CONTAINER == "$MIGRATION_SANDBOX_CONTAINER" ]] || die 'migration-sandbox requires its exact isolated API container'
+  [[ $WORKER_CONTAINER == "$MIGRATION_SANDBOX_WORKER" ]] || die 'migration-sandbox requires its exact isolated worker container'
+  [[ $HOST_PORT == "$MIGRATION_SANDBOX_PORT" ]] || die 'migration-sandbox requires loopback host port 13002'
+  [[ $NETWORK == "$MIGRATION_SANDBOX_NETWORK" ]] || die 'migration-sandbox requires its exact isolated Docker network'
+else
+  [[ $ROOT_DIR != "$MIGRATION_SANDBOX_ROOT" ]] || die 'the migration-sandbox root requires environment migration-sandbox'
+  [[ $CONTAINER != "$MIGRATION_SANDBOX_CONTAINER" ]] || die 'the migration-sandbox API container requires environment migration-sandbox'
+  [[ $WORKER_CONTAINER != "$MIGRATION_SANDBOX_WORKER" ]] || die 'the migration-sandbox worker requires environment migration-sandbox'
+  [[ $NETWORK != "$MIGRATION_SANDBOX_NETWORK" ]] || die 'the migration-sandbox network requires environment migration-sandbox'
+fi
 ENV_FILE="$ROOT_DIR/.env"
 DATA_DIR="$ROOT_DIR/data"
 RELEASE_DIR="$ROOT_DIR/releases"

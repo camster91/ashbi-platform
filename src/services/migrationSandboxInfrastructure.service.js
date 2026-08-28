@@ -28,14 +28,33 @@ const REQUIRED_RUNBOOK_MARKERS = Object.freeze([
   'ssh -L 13002:127.0.0.1:13002 coolify',
 ]);
 
+const REQUIRED_RELEASE_GUARD_MARKERS = Object.freeze([
+  'MIGRATION_SANDBOX_ROOT=/opt/ashbi-platform-migration-sandbox',
+  'MIGRATION_SANDBOX_CONTAINER=ashbi-platform-migration-sandbox',
+  'MIGRATION_SANDBOX_WORKER=ashbi-platform-migration-sandbox-worker',
+  'MIGRATION_SANDBOX_PORT=13002',
+  'MIGRATION_SANDBOX_NETWORK=ashbi-migration-sandbox',
+  'if [[ $ENVIRONMENT == migration-sandbox ]]; then',
+  '[[ $ROOT_DIR == "$MIGRATION_SANDBOX_ROOT" ]]',
+  '[[ $CONTAINER == "$MIGRATION_SANDBOX_CONTAINER" ]]',
+  '[[ $WORKER_CONTAINER == "$MIGRATION_SANDBOX_WORKER" ]]',
+  '[[ $HOST_PORT == "$MIGRATION_SANDBOX_PORT" ]]',
+  '[[ $NETWORK == "$MIGRATION_SANDBOX_NETWORK" ]]',
+  '[[ $ROOT_DIR != "$MIGRATION_SANDBOX_ROOT" ]]',
+  '[[ $NETWORK != "$MIGRATION_SANDBOX_NETWORK" ]]',
+]);
+
 function check(id, ok, passMessage, failMessage) {
   return { id, ok: Boolean(ok), message: ok ? passMessage : failMessage };
 }
 
-export function assessMigrationSandboxInfrastructure({ composeText = '', environmentTemplate = '', runbookText = '' } = {}) {
+export function assessMigrationSandboxInfrastructure({ composeText = '', environmentTemplate = '', runbookText = '', releaseScriptText = '' } = {}) {
   const compose = String(composeText).replace(/\r\n/g, '\n');
   const environment = String(environmentTemplate).replace(/\r\n/g, '\n');
   const runbook = String(runbookText).replace(/\r\n/g, '\n');
+  const releaseScript = String(releaseScriptText).replace(/\r\n/g, '\n');
+  const releaseGuardIndex = releaseScript.indexOf('if [[ $ENVIRONMENT == migration-sandbox ]]');
+  const firstDockerMutationIndex = releaseScript.indexOf('docker load -i');
   const checks = [
     check('isolated-compose-identities', REQUIRED_COMPOSE_MARKERS.every(marker => compose.includes(marker)),
       'The data services, volumes, and network use migration-sandbox identities.',
@@ -57,6 +76,10 @@ export function assessMigrationSandboxInfrastructure({ composeText = '', environ
     check('explicit-deployment-isolation', REQUIRED_RUNBOOK_MARKERS.every(marker => runbook.includes(marker)),
       'The deployment procedure explicitly overrides root, containers, port, and network.',
       'Document every isolation override and loopback-only access path.'),
+    check('release-controller-fail-closed', REQUIRED_RELEASE_GUARD_MARKERS.every(marker => releaseScript.includes(marker))
+      && releaseGuardIndex >= 0 && firstDockerMutationIndex > releaseGuardIndex,
+    'The release controller enforces the exact sandbox identities before any Docker mutation.',
+    'Make the release controller reject missing or mixed sandbox identities before loading an image.'),
   ];
   return { ready: checks.every(item => item.ok), checks };
 }
