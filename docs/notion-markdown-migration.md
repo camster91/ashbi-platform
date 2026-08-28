@@ -24,6 +24,14 @@ npm run compare:notion-bonsai-tasks -- --notion <notion-projects-tasks.json> --b
 
 The comparator creates one owner-only report without changing either system. It accepts only internally valid source snapshots, matches only unique exact task titles, and preserves source-only tasks, project-title differences, lifecycle differences, and Bonsai source-review findings. It never treats the report as Hub parity or authorizes a merge.
 
+Turn the raw comparison into a bounded review packet before making mapping decisions:
+
+```text
+npm run prepare:notion-bonsai-task-review -- --notion <notion-projects-tasks.json> --bonsai <bonsai-tasks.json> --prepared-at <ISO> --output <new-review.json>
+```
+
+The packet keeps exact task links separate from project-alias candidates, near-title candidates, source-only tasks, and malformed/projectless Bonsai records. Near-title similarity is review evidence only and is never applied. Bonsai assignees are summarized as source evidence; they are not silently copied to Notion or the Hub. The command creates one owner-only file, refuses overwrite, and performs no external or database writes.
+
 ## Supported input
 
 - UTF-8 `.md` pages from a Notion export;

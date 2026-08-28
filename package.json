@@ -56,6 +56,7 @@
     "verify:bonsai-task-snapshot": "node scripts/verify-bonsai-task-snapshot.mjs",
     "verify:notion-operating-snapshot": "node scripts/verify-notion-operating-snapshot.mjs",
     "compare:notion-bonsai-tasks": "node scripts/compare-notion-bonsai-tasks.mjs",
+    "prepare:notion-bonsai-task-review": "node scripts/prepare-notion-bonsai-task-review.mjs",
     "test:all": "node scripts/run-node-tests.mjs src/tests/unit src/tests/integration",
     "test:e2e:setup": "bash tests/e2e/setup.sh",
     "test:e2e:teardown": "bash tests/e2e/teardown.sh",
