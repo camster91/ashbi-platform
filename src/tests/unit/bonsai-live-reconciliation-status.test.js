@@ -14,10 +14,12 @@ import { prepareNotionBonsaiNativeProjectLinkDecision } from '../../services/not
 import { prepareNotionBonsaiOwnerDecision } from '../../services/notionBonsaiOwnerDecision.service.js';
 import { prepareNotionBonsaiTaskLinkDecision } from '../../services/notionBonsaiTaskLinkDecision.service.js';
 import { prepareNotionBonsaiTaskDispositionDecision } from '../../services/notionBonsaiTaskDispositionDecision.service.js';
+import { prepareNotionBonsaiProjectDispositionDecision } from '../../services/notionBonsaiProjectDispositionDecision.service.js';
 
 const HASHES = {
   taskReview: 'a'.repeat(64), mappingDecision: 'b'.repeat(64), taskLinkDecision: '8'.repeat(64), taskDispositionDecision: '9'.repeat(64), ownerDecision: 'c'.repeat(64),
   nativeProjectReview: 'd'.repeat(64), projectLinkDecision: 'e'.repeat(64),
+  projectDispositionDecision: '0'.repeat(64),
   activeProjectTriage: 'f'.repeat(64), financialReview: '1'.repeat(64),
   notion: '2'.repeat(64), tasks: '3'.repeat(64), projects: '4'.repeat(64),
   groups: '5'.repeat(64), invoices: '6'.repeat(64), time: '7'.repeat(64),
@@ -68,6 +70,15 @@ function evidence() {
       evidence: 'EXACT_UNIQUE_PROJECT_TITLE', lifecycleMatch: true,
     }],
     taskEvidencedProjectCandidates: [], possibleTitlePairs: [],
+    unmatchedNotionProjects: [{ notionSourceId: 'https://app.notion.com/project2', project: 'Notion only', status: 'Active' }],
+    unmatchedBonsaiProjects: [
+      { bonsaiProjectId: 102, project: 'Bonsai only A', status: 'active', company: 'Client A', url: 'https://example.test/102' },
+      { bonsaiProjectId: 103, project: 'Bonsai only B', status: 'completed', company: 'Client B', url: 'https://example.test/103' },
+    ],
+    duplicateBonsaiTitles: [{ title: 'Repeated', projects: [
+      { id: 104, status: 'completed', company: 'Client C', url: 'https://example.test/104' },
+      { id: 105, status: 'archived', company: 'Client D', url: 'https://example.test/105' },
+    ] }],
     summary: {
       notionProjects: 2, bonsaiProjects: 3, exactProjectLinks: 1, taskEvidencedProjectCandidates: 0,
       lifecycleDifferences: 0, unmatchedNotionProjects: 1, unmatchedBonsaiProjects: 2,
@@ -81,6 +92,11 @@ function evidence() {
   const projectLinkDecision = prepareNotionBonsaiNativeProjectLinkDecision({
     review: nativeProjectReview, reviewSha256: HASHES.nativeProjectReview,
     preparedAt: '2026-08-28T01:04:00.000Z',
+  });
+  const projectDispositionDecision = prepareNotionBonsaiProjectDispositionDecision({
+    review: nativeProjectReview, reviewSha256: HASHES.nativeProjectReview,
+    projectLinkDecision, projectLinkDecisionSha256: HASHES.projectLinkDecision,
+    preparedAt: '2026-08-28T01:04:30.000Z',
   });
   const activeProjectTriage = {
     format: 'ashbi-bonsai-active-project-triage', version: 1, complete: false,
@@ -102,7 +118,7 @@ function evidence() {
       invoiceSnapshotSha256: HASHES.invoices, timeEntrySnapshotSha256: HASHES.time,
     },
   };
-  return { taskReview, mappingDecision, taskLinkDecision, taskDispositionDecision, ownerDecision, nativeProjectReview, projectLinkDecision, activeProjectTriage, financialReview };
+  return { taskReview, mappingDecision, taskLinkDecision, taskDispositionDecision, ownerDecision, nativeProjectReview, projectLinkDecision, projectDispositionDecision, activeProjectTriage, financialReview };
 }
 
 function options() {
@@ -115,6 +131,7 @@ function options() {
     ownerDecisionSha256: HASHES.ownerDecision,
     nativeProjectReviewSha256: HASHES.nativeProjectReview,
     projectLinkDecisionSha256: HASHES.projectLinkDecision,
+    projectDispositionDecisionSha256: HASHES.projectDispositionDecision,
     activeProjectTriageSha256: HASHES.activeProjectTriage,
     financialReviewSha256: HASHES.financialReview,
     preparedAt: '2026-08-28T01:07:00.000Z',
@@ -131,6 +148,7 @@ test('prepares one aligned, fail-closed reconciliation status without mutation a
   assert.equal(status.gates.taskIdentity.taskDispositionDecisionsPending, 3);
   assert.ok(status.findings.includes('TASK_DISPOSITION_DECISIONS_PENDING'));
   assert.equal(status.gates.projectIdentity.decisionsPending, 1);
+  assert.equal(status.gates.projectIdentity.projectDispositionDecisionsPending, 4);
   assert.equal(status.gates.financialSafety.projectlessTimeEntries, 1);
   assert.ok(status.findings.includes('TASK_LINK_DECISIONS_PENDING'));
   assert.equal(status.safeguards.externalWritesPerformed, false);
@@ -179,13 +197,20 @@ test('CLI creates a new status file and refuses overwrite', () => {
     input.projectLinkDecision = prepareNotionBonsaiNativeProjectLinkDecision({
       review: input.nativeProjectReview, reviewSha256: native.hash, preparedAt: '2026-08-28T01:04:00.000Z',
     });
+    const projectLink = write('projectLinkDecision', input.projectLinkDecision);
+    input.projectDispositionDecision = prepareNotionBonsaiProjectDispositionDecision({
+      review: input.nativeProjectReview, reviewSha256: native.hash,
+      projectLinkDecision: input.projectLinkDecision, projectLinkDecisionSha256: projectLink.hash,
+      preparedAt: '2026-08-28T01:04:30.000Z',
+    });
     input.activeProjectTriage.sourceEvidence.nativeProjectReviewSha256 = native.hash;
     const triage = write('activeProjectTriage', input.activeProjectTriage);
     input.financialReview.sourceEvidence.activeProjectTriageSha256 = triage.hash;
-    const names = ['taskReview', 'mappingDecision', 'taskLinkDecision', 'taskDispositionDecision', 'ownerDecision', 'nativeProjectReview', 'projectLinkDecision', 'activeProjectTriage', 'financialReview'];
+    const names = ['taskReview', 'mappingDecision', 'taskLinkDecision', 'taskDispositionDecision', 'ownerDecision', 'nativeProjectReview', 'projectLinkDecision', 'projectDispositionDecision', 'activeProjectTriage', 'financialReview'];
     const flags = {
       taskReview: '--task-review', mappingDecision: '--mapping-decision', taskLinkDecision: '--task-link-decision', taskDispositionDecision: '--task-disposition-decision', ownerDecision: '--owner-decision',
       nativeProjectReview: '--native-project-review', projectLinkDecision: '--project-link-decision',
+      projectDispositionDecision: '--project-disposition-decision',
       activeProjectTriage: '--active-project-triage', financialReview: '--financial-review',
     };
     const args = ['scripts/prepare-bonsai-live-reconciliation-status.mjs'];

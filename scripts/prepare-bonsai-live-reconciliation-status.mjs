@@ -14,13 +14,14 @@ function digest(bytes) {
 const keys = {
   taskReview: '--task-review', mappingDecision: '--mapping-decision', taskLinkDecision: '--task-link-decision', taskDispositionDecision: '--task-disposition-decision', ownerDecision: '--owner-decision',
   nativeProjectReview: '--native-project-review', projectLinkDecision: '--project-link-decision',
+  projectDispositionDecision: '--project-disposition-decision',
   activeProjectTriage: '--active-project-triage', financialReview: '--financial-review',
 };
 const paths = Object.fromEntries(Object.entries(keys).map(([key, flag]) => [key, option(flag)]));
 const outputPath = option('--output');
 const preparedAt = option('--prepared-at');
 if (Object.values(paths).some(value => !value) || !outputPath || !preparedAt) {
-  process.stderr.write('Usage: npm run prepare:bonsai-live-reconciliation-status -- --task-review <json> --mapping-decision <json> --task-link-decision <json> --task-disposition-decision <json> --owner-decision <json> --native-project-review <json> --project-link-decision <json> --active-project-triage <json> --financial-review <json> --prepared-at <ISO> --output <new-status.json>\n');
+  process.stderr.write('Usage: npm run prepare:bonsai-live-reconciliation-status -- --task-review <json> --mapping-decision <json> --task-link-decision <json> --task-disposition-decision <json> --owner-decision <json> --native-project-review <json> --project-link-decision <json> --project-disposition-decision <json> --active-project-triage <json> --financial-review <json> --prepared-at <ISO> --output <new-status.json>\n');
   process.exitCode = 2;
 } else {
   let output;

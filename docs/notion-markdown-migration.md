@@ -96,6 +96,15 @@ The packet separates exact unique titles, task-evidenced candidates, and similar
 
 The current owner-only 2026-08-28 UTC packet is valid and incomplete: all 24 decisions remain pending, comprising 12 exact-title, five task-evidenced, and seven suggestion-only candidates. It is bound to the refreshed task-review generation and has SHA-256 `98346551f2f7da832e944dec2bf333544c00307ac75ccd80bf06061a3245c75f`. The earlier packet remains immutable historical evidence and is superseded for current decisions.
 
+Prepare the source-only and duplicate-title project disposition packet only from that same native review and exact project-link decision generation:
+
+```bash
+npm run prepare:notion-bonsai-project-disposition-decision -- --review <native-project-review.json> --project-link-decision <project-link-decision.json> --prepared-at <ISO> --output <new-pending-project-disposition-decision.json>
+npm run verify:notion-bonsai-project-disposition-decision -- --review <native-project-review.json> --project-link-decision <project-link-decision.json> --project-disposition-decision <project-disposition-decision.json>
+```
+
+Every unmatched Notion project, unmatched Bonsai project, and duplicate Bonsai title group receives an independent decision. A source-only project with a pending suggestion cannot be dispositioned until that link decision is finalized; an approved link must be cited as the exact resolution, while rejected or absent links allow evidence-backed migration, retention, or exclusion choices. Duplicate-title groups are classification findings only and require evidence to retain distinct records, manually map members, repair and recapture the source, or exclude the finding. No decision applies a link, consolidates a group, creates or changes a project, moves tasks, changes owners/lifecycle/financials, deletes a source record, migrates data, or authorizes cutover. The current checksum-valid owner-only packet has 204 pending decisions: eight Notion-only projects, 186 Bonsai-only projects, and ten duplicate-title groups. Its SHA-256 is `ae2e53902ed457213cc493dfc85643535d351a909aa57b71875ae761906ad874`.
+
 ## Supported input
 
 - UTF-8 `.md` pages from a Notion export;

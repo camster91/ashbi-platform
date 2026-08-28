@@ -63,6 +63,8 @@
     "prepare:notion-bonsai-native-project-review": "node scripts/prepare-notion-bonsai-native-project-review.mjs",
     "prepare:notion-bonsai-native-project-link-decision": "node scripts/prepare-notion-bonsai-native-project-link-decision.mjs",
     "verify:notion-bonsai-native-project-link-decision": "node scripts/verify-notion-bonsai-native-project-link-decision.mjs",
+    "prepare:notion-bonsai-project-disposition-decision": "node scripts/prepare-notion-bonsai-project-disposition-decision.mjs",
+    "verify:notion-bonsai-project-disposition-decision": "node scripts/verify-notion-bonsai-project-disposition-decision.mjs",
     "prepare:bonsai-active-project-triage": "node scripts/prepare-bonsai-active-project-triage.mjs",
     "prepare:bonsai-active-project-financial-review": "node scripts/prepare-bonsai-active-project-financial-review.mjs",
     "prepare:bonsai-live-reconciliation-status": "node scripts/prepare-bonsai-live-reconciliation-status.mjs",
