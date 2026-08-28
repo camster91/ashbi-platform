@@ -81,6 +81,8 @@
     "verify:notion-bonsai-task-link-decision": "node scripts/verify-notion-bonsai-task-link-decision.mjs",
     "prepare:notion-bonsai-task-disposition-decision": "node scripts/prepare-notion-bonsai-task-disposition-decision.mjs",
     "verify:notion-bonsai-task-disposition-decision": "node scripts/verify-notion-bonsai-task-disposition-decision.mjs",
+    "prepare:notion-bonsai-task-disposition-review-brief": "node scripts/prepare-notion-bonsai-task-disposition-review-brief.mjs",
+    "verify:notion-bonsai-task-disposition-review-brief": "node scripts/verify-notion-bonsai-task-disposition-review-brief.mjs",
     "prepare:notion-bonsai-owner-decision": "node scripts/prepare-notion-bonsai-owner-decision.mjs",
     "verify:notion-bonsai-owner-decision": "node scripts/verify-notion-bonsai-owner-decision.mjs",
     "test:all": "node scripts/run-node-tests.mjs src/tests/unit src/tests/integration",

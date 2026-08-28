@@ -59,6 +59,15 @@ npm run verify:notion-bonsai-task-disposition-decision -- --review <review.json>
 
 The packet separates Notion-only, structurally valid Bonsai-only, and malformed/projectless Bonsai records. Each candidate must independently be marked for migration, source retention, evidence-backed exclusion, source repair and recapture, or evidence-backed manual mapping as allowed for that source kind. Every non-pending choice requires its own rationale and evidence reference plus the batch approver and timestamp. No choice deletes, repairs, creates, moves, or migrates a source record. The current owner-only packet is checksum-valid with all 48 decisions pending: 24 Notion-only, 19 Bonsai-only, and five Bonsai source-review records. Its SHA-256 is `aa406c72835d7f664fc63469752d5d16551bac74de3c8854b024d6cb59defc2c`.
 
+Prepare and verify a checksum-bound owner review brief before asking for those dispositions:
+
+```bash
+npm run prepare:notion-bonsai-task-disposition-review-brief -- --review <review.json> --task-disposition-decision <pending-task-disposition-decision.json> --prepared-at <ISO> --output <new-review-brief.json>
+npm run verify:notion-bonsai-task-disposition-review-brief -- <review.json> <pending-task-disposition-decision.json> <review-brief.json>
+```
+
+The brief accepts only a valid, fully pending decision packet bound to the same task review. It recommends migration for a structurally valid source-only task while retaining project, owner, confirmed-import, and reconciliation prerequisites; malformed or projectless Bonsai tasks are recommended for source repair, fresh complete recapture, and review regeneration. Unexpected structures stay in manual review. The current checksum-valid brief has all 48 candidates approval-ready: 43 recommended for Hub migration and five recommended for source repair and recapture. Its SHA-256 is `c9c662cbb2207f2eb3dff9cd685f1eaaa81f170a1ddb6824d01e0882ca0f0152`. Recommendations are not decisions: all 48 dispositions remain pending, and no task was created, changed, repaired, deleted, moved, completed, imported, or reconciled.
+
 Prepare source-backed owner decisions separately:
 
 ```text
