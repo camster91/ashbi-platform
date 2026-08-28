@@ -50,6 +50,15 @@ npm run verify:notion-bonsai-task-link-decision -- --review <review.json> --task
 
 The task-link packet includes every exact and near-title source pair, with separate direct-exact, project-dependent exact, and near-title tiers. Decisions are candidate-specific; there is no blanket approval flag. Approving a conditional candidate requires the checksum-valid mapping record containing that exact approved project alias or near-title dependency. A task-link decision means only that two source IDs identify one logical task. It does not apply a link, move or create a task, change task fields, assign an owner, delete a source record, migrate data, or authorize cutover. The current owner-only packet has 20 pending decisions: 13 direct exact, six project-dependent exact, and one near-title. Its SHA-256 is `bac0e909753889486be76cf7b547bab94873736abe7a7c8895933e8ab74c8aaf`.
 
+Prepare the source-only and malformed-task disposition packet separately:
+
+```bash
+npm run prepare:notion-bonsai-task-disposition-decision -- --review <review.json> --prepared-at <ISO> --output <new-pending-task-disposition-decision.json>
+npm run verify:notion-bonsai-task-disposition-decision -- --review <review.json> --task-disposition-decision <task-disposition-decision.json>
+```
+
+The packet separates Notion-only, structurally valid Bonsai-only, and malformed/projectless Bonsai records. Each candidate must independently be marked for migration, source retention, evidence-backed exclusion, source repair and recapture, or evidence-backed manual mapping as allowed for that source kind. Every non-pending choice requires its own rationale and evidence reference plus the batch approver and timestamp. No choice deletes, repairs, creates, moves, or migrates a source record. The current owner-only packet is checksum-valid with all 48 decisions pending: 24 Notion-only, 19 Bonsai-only, and five Bonsai source-review records. Its SHA-256 is `aa406c72835d7f664fc63469752d5d16551bac74de3c8854b024d6cb59defc2c`.
+
 Prepare source-backed owner decisions separately:
 
 ```text
