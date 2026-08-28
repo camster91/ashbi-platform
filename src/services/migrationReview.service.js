@@ -27,8 +27,15 @@ function isUniqueConflict(error) {
   return error?.code === 'P2002';
 }
 
+function evidenceFingerprint(sourceReviewSha256, mappingDecisionSha256, supplementalSha256 = null) {
+  return `${sourceReviewSha256}:${mappingDecisionSha256}:${supplementalSha256 ?? '-'}`;
+}
+
 function evidenceMatches(packet, input) {
   return packet.kind === PROJECT_LINK_KIND
+    && packet.evidenceFingerprint === evidenceFingerprint(
+      input.reviewSha256, input.mappingDecisionSha256, input.supplementalEvidenceSha256,
+    )
     && packet.sourceReviewSha256 === input.reviewSha256
     && packet.mappingDecisionSha256 === input.mappingDecisionSha256
     && (packet.supplementalSha256 ?? null) === (input.supplementalEvidenceSha256 ?? null)
@@ -53,6 +60,9 @@ function taskDependencyEvidence(input) {
 
 function taskEvidenceMatches(packet, input) {
   return packet.kind === TASK_DISPOSITION_KIND
+    && packet.evidenceFingerprint === evidenceFingerprint(
+      input.reviewSha256, input.dispositionDecisionSha256,
+    )
     && packet.sourceReviewSha256 === input.reviewSha256
     && packet.mappingDecisionSha256 === input.dispositionDecisionSha256
     && packet.supplementalSha256 === null
@@ -75,6 +85,9 @@ function projectDependencyEvidence(input) {
 
 function projectDispositionEvidenceMatches(packet, input) {
   return packet.kind === PROJECT_DISPOSITION_KIND
+    && packet.evidenceFingerprint === evidenceFingerprint(
+      input.reviewSha256, input.dispositionDecisionSha256, input.supplementalEvidenceSha256,
+    )
     && packet.sourceReviewSha256 === input.reviewSha256
     && packet.mappingDecisionSha256 === input.dispositionDecisionSha256
     && (packet.supplementalSha256 ?? null) === (input.supplementalEvidenceSha256 ?? null)
@@ -108,6 +121,7 @@ function packetView(packet) {
   return {
     id: packet.id,
     kind: packet.kind,
+    evidenceFingerprint: packet.evidenceFingerprint,
     sourceReviewSha256: packet.sourceReviewSha256,
     sourcePreparedAt: packet.sourcePreparedAt,
     importedBy: packet.importedBy,
@@ -131,6 +145,9 @@ function packetView(packet) {
 export async function importProjectLinkReviewPacket({ prismaClient, input, importedBy, now = new Date() }) {
   const packets = requireDelegate(prismaClient, 'migrationReviewPacket');
   if (!text(input?.requestId) || !text(importedBy)) throw new TypeError('requestId and importedBy are required');
+  const fingerprint = evidenceFingerprint(
+    input.reviewSha256, input.mappingDecisionSha256, input.supplementalEvidenceSha256,
+  );
 
   const verification = verifyNotionBonsaiNativeProjectLinkReviewBrief({
     review: input.review,
@@ -158,7 +175,7 @@ export async function importProjectLinkReviewPacket({ prismaClient, input, impor
   }
 
   const existingEvidence = await packets.findFirst({
-    where: { kind: PROJECT_LINK_KIND, sourceReviewSha256: input.reviewSha256 },
+    where: { kind: PROJECT_LINK_KIND, evidenceFingerprint: fingerprint },
     include: { decisions: { orderBy: [{ decidedAt: 'desc' }, { createdAt: 'desc' }] } },
   });
   if (existingEvidence) {
@@ -175,6 +192,7 @@ export async function importProjectLinkReviewPacket({ prismaClient, input, impor
     packet = await packets.create({
       data: {
         kind: PROJECT_LINK_KIND,
+        evidenceFingerprint: fingerprint,
         importRequestId: input.requestId,
         sourceReviewSha256: input.reviewSha256,
         mappingDecisionSha256: input.mappingDecisionSha256,
@@ -195,7 +213,7 @@ export async function importProjectLinkReviewPacket({ prismaClient, input, impor
       where: { importRequestId: input.requestId },
       include: { decisions: { orderBy: [{ decidedAt: 'desc' }, { createdAt: 'desc' }] } },
     }) ?? await packets.findFirst({
-      where: { kind: PROJECT_LINK_KIND, sourceReviewSha256: input.reviewSha256 },
+      where: { kind: PROJECT_LINK_KIND, evidenceFingerprint: fingerprint },
       include: { decisions: { orderBy: [{ decidedAt: 'desc' }, { createdAt: 'desc' }] } },
     });
     if (!winner || !evidenceMatches(winner, input)) {
@@ -211,6 +229,7 @@ export async function importProjectLinkReviewPacket({ prismaClient, input, impor
 export async function importTaskDispositionReviewPacket({ prismaClient, input, importedBy, now = new Date() }) {
   const packets = requireDelegate(prismaClient, 'migrationReviewPacket');
   if (!text(input?.requestId) || !text(importedBy)) throw new TypeError('requestId and importedBy are required');
+  const fingerprint = evidenceFingerprint(input.reviewSha256, input.dispositionDecisionSha256);
 
   const verification = verifyNotionBonsaiTaskDispositionReviewBrief({
     review: input.review,
@@ -240,7 +259,7 @@ export async function importTaskDispositionReviewPacket({ prismaClient, input, i
   }
 
   const existingEvidence = await packets.findFirst({
-    where: { kind: TASK_DISPOSITION_KIND, sourceReviewSha256: input.reviewSha256 },
+    where: { kind: TASK_DISPOSITION_KIND, evidenceFingerprint: fingerprint },
     include: { decisions: { orderBy: [{ decidedAt: 'desc' }, { createdAt: 'desc' }] } },
   });
   if (existingEvidence) {
@@ -257,6 +276,7 @@ export async function importTaskDispositionReviewPacket({ prismaClient, input, i
     packet = await packets.create({
       data: {
         kind: TASK_DISPOSITION_KIND,
+        evidenceFingerprint: fingerprint,
         importRequestId: input.requestId,
         sourceReviewSha256: input.reviewSha256,
         mappingDecisionSha256: input.dispositionDecisionSha256,
@@ -277,7 +297,7 @@ export async function importTaskDispositionReviewPacket({ prismaClient, input, i
       where: { importRequestId: input.requestId },
       include: { decisions: { orderBy: [{ decidedAt: 'desc' }, { createdAt: 'desc' }] } },
     }) ?? await packets.findFirst({
-      where: { kind: TASK_DISPOSITION_KIND, sourceReviewSha256: input.reviewSha256 },
+      where: { kind: TASK_DISPOSITION_KIND, evidenceFingerprint: fingerprint },
       include: { decisions: { orderBy: [{ decidedAt: 'desc' }, { createdAt: 'desc' }] } },
     });
     if (!winner || !taskEvidenceMatches(winner, input)) {
@@ -293,6 +313,9 @@ export async function importTaskDispositionReviewPacket({ prismaClient, input, i
 export async function importProjectDispositionReviewPacket({ prismaClient, input, importedBy, now = new Date() }) {
   const packets = requireDelegate(prismaClient, 'migrationReviewPacket');
   if (!text(input?.requestId) || !text(importedBy)) throw new TypeError('requestId and importedBy are required');
+  const fingerprint = evidenceFingerprint(
+    input.reviewSha256, input.dispositionDecisionSha256, input.supplementalEvidenceSha256,
+  );
 
   const verification = verifyNotionBonsaiProjectDispositionReviewBrief({
     review: input.review,
@@ -322,7 +345,7 @@ export async function importProjectDispositionReviewPacket({ prismaClient, input
   }
 
   const existingEvidence = await packets.findFirst({
-    where: { kind: PROJECT_DISPOSITION_KIND, sourceReviewSha256: input.reviewSha256 },
+    where: { kind: PROJECT_DISPOSITION_KIND, evidenceFingerprint: fingerprint },
     include: { decisions: { orderBy: [{ decidedAt: 'desc' }, { createdAt: 'desc' }] } },
   });
   if (existingEvidence) {
@@ -339,6 +362,7 @@ export async function importProjectDispositionReviewPacket({ prismaClient, input
     packet = await packets.create({
       data: {
         kind: PROJECT_DISPOSITION_KIND,
+        evidenceFingerprint: fingerprint,
         importRequestId: input.requestId,
         sourceReviewSha256: input.reviewSha256,
         mappingDecisionSha256: input.dispositionDecisionSha256,
@@ -359,7 +383,7 @@ export async function importProjectDispositionReviewPacket({ prismaClient, input
       where: { importRequestId: input.requestId },
       include: { decisions: { orderBy: [{ decidedAt: 'desc' }, { createdAt: 'desc' }] } },
     }) ?? await packets.findFirst({
-      where: { kind: PROJECT_DISPOSITION_KIND, sourceReviewSha256: input.reviewSha256 },
+      where: { kind: PROJECT_DISPOSITION_KIND, evidenceFingerprint: fingerprint },
       include: { decisions: { orderBy: [{ decidedAt: 'desc' }, { createdAt: 'desc' }] } },
     });
     if (!winner || !projectDispositionEvidenceMatches(winner, input)) {

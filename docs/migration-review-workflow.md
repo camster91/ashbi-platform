@@ -34,6 +34,8 @@ The command refuses invalid evidence and refuses to overwrite an existing output
 
 The database retains immutable decision events. A later decision supersedes the earlier candidate state without deleting its audit history. The exported record is generated from the latest event for each candidate and preserves all no-mutation safeguards required by the migration planner. For task dispositions, an approval records the exact recommended disposition; a rejection remains pending in the export until it receives a new evidence-backed disposition.
 
+Each imported packet is uniquely identified by its review kind plus a fingerprint of the source review, dependency decision, and optional supplemental evidence. Regenerating a project-disposition brief after project-link decisions therefore creates a new evidence generation alongside the prior pending generation. It never overwrites or silently reinterprets the earlier review history.
+
 ## Separate gates
 
 Importing evidence, approving a logical identity or task disposition, applying those decisions in an isolated sandbox, confirming a migration, running in parallel, reconciling operating and financial records, and retiring Bonsai are separate gates. Only evidence import and decision recording occur in this workflow.

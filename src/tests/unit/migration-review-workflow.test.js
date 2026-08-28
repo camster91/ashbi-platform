@@ -217,6 +217,19 @@ test('route and UI keep migration review admin-only, tenant-scoped, and separate
   assert.doesNotMatch(page, /Apply to Bonsai|Delete from Notion/);
 });
 
+test('packet identity permits new evidence generations and the database accepts every review kind', () => {
+  const schema = fs.readFileSync(new URL('../../../prisma/schema.prisma', import.meta.url), 'utf8');
+  const migration = fs.readFileSync(new URL('../../../prisma/migrations/20260828113000_migration_review_packet_generations/migration.sql', import.meta.url), 'utf8');
+  const service = fs.readFileSync(new URL('../../services/migrationReview.service.js', import.meta.url), 'utf8');
+  assert.match(schema, /evidenceFingerprint\s+String/);
+  assert.match(schema, /@@unique\(\[organizationId, kind, evidenceFingerprint\]\)/);
+  assert.doesNotMatch(schema, /@@unique\(\[organizationId, kind, sourceReviewSha256\]\)/);
+  assert.match(migration, /DROP INDEX "migration_review_packets_organizationId_kind_sourceReviewSha256_key"/);
+  assert.match(migration, /NOTION_BONSAI_TASK_DISPOSITION/);
+  assert.match(migration, /NOTION_BONSAI_PROJECT_DISPOSITION/);
+  assert.match(service, /where: \{ kind: PROJECT_DISPOSITION_KIND, evidenceFingerprint: fingerprint \}/);
+});
+
 test('bundle CLI verifies the exact source files and refuses overwrite', () => {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'hub-migration-review-'));
   try {

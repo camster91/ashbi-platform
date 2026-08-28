@@ -61,7 +61,12 @@ function review() {
   };
 }
 
-function input(requestId = '11111111-1111-4111-8111-111111111111', approveLink = true) {
+function input(
+  requestId = '11111111-1111-4111-8111-111111111111',
+  approveLink = true,
+  linkHash = LINK_HASH,
+  dispositionHash = DISPOSITION_HASH,
+) {
   const source = review();
   const pendingLink = prepareNotionBonsaiNativeProjectLinkDecision({
     review: source, reviewSha256: REVIEW_HASH, preparedAt: '2026-08-28T01:01:00.000Z',
@@ -79,16 +84,16 @@ function input(requestId = '11111111-1111-4111-8111-111111111111', approveLink =
     review: source,
     reviewSha256: REVIEW_HASH,
     projectLinkDecision,
-    projectLinkDecisionSha256: LINK_HASH,
+    projectLinkDecisionSha256: linkHash,
     preparedAt: '2026-08-28T01:03:00.000Z',
   });
   const reviewBrief = prepareNotionBonsaiProjectDispositionReviewBrief({
     review: source,
     reviewSha256: REVIEW_HASH,
     projectLinkDecision,
-    projectLinkDecisionSha256: LINK_HASH,
+    projectLinkDecisionSha256: linkHash,
     projectDispositionDecision: dispositionDecision,
-    projectDispositionDecisionSha256: DISPOSITION_HASH,
+    projectDispositionDecisionSha256: dispositionHash,
     preparedAt: '2026-08-28T01:04:00.000Z',
   });
   return {
@@ -98,9 +103,9 @@ function input(requestId = '11111111-1111-4111-8111-111111111111', approveLink =
     review: source,
     reviewSha256: REVIEW_HASH,
     projectLinkDecision,
-    projectLinkDecisionSha256: LINK_HASH,
+    projectLinkDecisionSha256: linkHash,
     dispositionDecision,
-    dispositionDecisionSha256: DISPOSITION_HASH,
+    dispositionDecisionSha256: dispositionHash,
     supplementalEvidence: null,
     supplementalEvidenceSha256: null,
     reviewBrief,
@@ -188,6 +193,24 @@ test('does not allow a project disposition blocked by a pending link to be appro
     decision: 'APPROVED',
     reviewedBy: 'cameron@ashbi.ca',
   }), /approval-ready/);
+});
+
+test('keeps a regenerated disposition packet alongside the prior source generation', async () => {
+  const prismaClient = fakePrisma();
+  const pending = input('55555555-5555-4555-8555-555555555555', false);
+  const regenerated = input(
+    '66666666-6666-4666-8666-666666666666',
+    true,
+    '1'.repeat(64),
+    '2'.repeat(64),
+  );
+  const first = await importProjectDispositionReviewPacket({ prismaClient, input: pending, importedBy: 'cameron@ashbi.ca' });
+  const second = await importProjectDispositionReviewPacket({ prismaClient, input: regenerated, importedBy: 'cameron@ashbi.ca' });
+  assert.equal(first.replayed, false);
+  assert.equal(second.replayed, false);
+  assert.equal(prismaClient.packets.length, 2);
+  assert.equal(first.packet.sourceReviewSha256, second.packet.sourceReviewSha256);
+  assert.notEqual(first.packet.evidenceFingerprint, second.packet.evidenceFingerprint);
 });
 
 test('project-disposition bundle CLI verifies exact files and refuses overwrite', () => {

@@ -2132,6 +2132,7 @@ model MigrationReviewPacket {
   organizationId        String
   kind                  String   // NOTION_BONSAI_PROJECT_LINK | NOTION_BONSAI_TASK_DISPOSITION | NOTION_BONSAI_PROJECT_DISPOSITION
   importRequestId       String
+  evidenceFingerprint   String
   sourceReviewSha256    String
   mappingDecisionSha256 String
   supplementalSha256    String?
@@ -2148,7 +2149,8 @@ model MigrationReviewPacket {
   decisions    MigrationReviewDecision[]
 
   @@unique([organizationId, importRequestId])
-  @@unique([organizationId, kind, sourceReviewSha256])
+  @@unique([organizationId, kind, evidenceFingerprint])
+  @@index([organizationId, kind, sourceReviewSha256])
   @@index([organizationId, createdAt])
   @@map("migration_review_packets")
 }
