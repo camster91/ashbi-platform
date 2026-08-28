@@ -1,0 +1,48 @@
+name: ashbi-migration-sandbox
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ashbi_sandbox
+      POSTGRES_USER: ashbi_sandbox
+      POSTGRES_PASSWORD: ${ASHBI_SANDBOX_DB_PASSWORD:?set ASHBI_SANDBOX_DB_PASSWORD}
+    volumes:
+      - ashbi-migration-sandbox-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ashbi_sandbox -d ashbi_sandbox"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks:
+      - ashbi-migration-sandbox
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${ASHBI_SANDBOX_REDIS_PASSWORD:?set ASHBI_SANDBOX_REDIS_PASSWORD}
+    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$${REDIS_PASSWORD}\""]
+    volumes:
+      - ashbi-migration-sandbox-redis:/data
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$${REDIS_PASSWORD}\" redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    networks:
+      - ashbi-migration-sandbox
+
+volumes:
+  ashbi-migration-sandbox-postgres:
+    name: ashbi-migration-sandbox-postgres
+  ashbi-migration-sandbox-redis:
+    name: ashbi-migration-sandbox-redis
+
+networks:
+  ashbi-migration-sandbox:
+    name: ashbi-migration-sandbox
+    driver: bridge
