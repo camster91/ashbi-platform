@@ -35,7 +35,7 @@ function pending() {
 test('prepares only source-backed owner candidates and exposes mapping dependencies', () => {
   const record = pending();
   assert.deepEqual(record.summary, {
-    total: 3, direct: 1, conditional: 2, approved: 0, pending: 3,
+    total: 3, direct: 1, conditional: 2, approved: 0, rejected: 0, pending: 3,
     byOwner: [{ ownerName: 'Bianca', taskCount: 1 }, { ownerName: 'Cameron', taskCount: 2 }],
   });
   assert.equal(record.complete, false);
@@ -43,7 +43,7 @@ test('prepares only source-backed owner candidates and exposes mapping dependenc
   assert.equal(verifyNotionBonsaiOwnerDecision({ review: review(), reviewSha256: REVIEW_HASH, record }).valid, true);
 });
 
-test('approval requires the exact completed mapping decision', () => {
+test('candidate approvals require their exact approved task identities', () => {
   const approvedMapping = prepareNotionBonsaiMappingDecision({
     review: review(), reviewSha256: REVIEW_HASH, preparedAt: '2026-08-28T01:01:00Z',
     decision: 'APPROVED', approver: 'Cameron', decidedAt: '2026-08-28T01:00:30Z', reference: 'mapping-approval-ref',
@@ -59,7 +59,8 @@ test('approval requires the exact completed mapping decision', () => {
   });
   const record = prepareNotionBonsaiOwnerDecision({
     review: review(), reviewSha256: REVIEW_HASH, preparedAt: '2026-08-28T01:02:00Z',
-    decision: 'APPROVED', mappingDecisionRecord: approvedMapping, mappingDecisionSha256: MAPPING_HASH,
+    decisions: pending().candidates.map(candidate => ({ candidateId: candidate.candidateId, decision: 'APPROVED' })),
+    mappingDecisionRecord: approvedMapping, mappingDecisionSha256: MAPPING_HASH,
     taskLinkDecisionRecord: approvedLinks, taskLinkDecisionSha256: TASK_LINK_HASH,
     approver: 'Cameron', decidedAt: '2026-08-28T01:01:30Z', reference: 'owner-approval-ref',
   });
@@ -73,17 +74,21 @@ test('approval requires the exact completed mapping decision', () => {
   assert.equal(record.safeguards.ownerAssignmentsApplied, false);
 });
 
-test('rejects a changed owner and cannot approve against a pending mapping decision', () => {
+test('rejects a changed owner and cannot approve without an approved task identity', () => {
   const changed = pending();
   changed.candidates[0].proposedOwner = 'Different Owner';
   const result = verifyNotionBonsaiOwnerDecision({ review: review(), reviewSha256: REVIEW_HASH, record: changed });
   assert.ok(result.findings.includes('CANDIDATE_SET_MISMATCH'));
-  const pendingMapping = prepareNotionBonsaiMappingDecision({ review: review(), reviewSha256: REVIEW_HASH, preparedAt: '2026-08-28T01:01:00Z' });
+  const alias = pending().candidates.find(candidate => candidate.mappingDependency === 'PROJECT_ALIAS_APPROVAL');
+  const pendingLinks = prepareNotionBonsaiTaskLinkDecision({
+    review: review(), reviewSha256: REVIEW_HASH, preparedAt: '2026-08-28T01:01:10Z',
+  });
   assert.throws(() => prepareNotionBonsaiOwnerDecision({
     review: review(), reviewSha256: REVIEW_HASH, preparedAt: '2026-08-28T01:02:00Z',
-    decision: 'APPROVED', mappingDecisionRecord: pendingMapping, mappingDecisionSha256: MAPPING_HASH,
+    decisions: [{ candidateId: alias.candidateId, decision: 'APPROVED' }],
+    taskLinkDecisionRecord: pendingLinks, taskLinkDecisionSha256: TASK_LINK_HASH,
     approver: 'Cameron', decidedAt: '2026-08-28T01:01:30Z', reference: 'owner-approval-ref',
-  }), /approved valid mapping decision/);
+  }), /approved valid task identity/);
 });
 
 test('cannot approve owners before the task identities are approved', () => {
@@ -96,10 +101,38 @@ test('cannot approve owners before the task identities are approved', () => {
   });
   assert.throws(() => prepareNotionBonsaiOwnerDecision({
     review: review(), reviewSha256: REVIEW_HASH, preparedAt: '2026-08-28T01:02:00Z',
-    decision: 'APPROVED', mappingDecisionRecord: approvedMapping, mappingDecisionSha256: MAPPING_HASH,
+    decisions: pending().candidates.map(candidate => ({ candidateId: candidate.candidateId, decision: 'APPROVED' })),
+    mappingDecisionRecord: approvedMapping, mappingDecisionSha256: MAPPING_HASH,
     taskLinkDecisionRecord: pendingLinks, taskLinkDecisionSha256: TASK_LINK_HASH,
     approver: 'Cameron', decidedAt: '2026-08-28T01:01:30Z', reference: 'owner-approval-ref',
-  }), /approved valid task-link decision/);
+  }), /approved valid task identity/);
+});
+
+test('records direct exact owner approvals while conditional candidates remain pending', () => {
+  const owner = pending();
+  const links = prepareNotionBonsaiTaskLinkDecision({
+    review: review(), reviewSha256: REVIEW_HASH, preparedAt: '2026-08-28T01:01:10Z',
+  });
+  const directLink = links.candidates.find(candidate => candidate.evidenceTier === 'DIRECT_EXACT');
+  const approvedLinks = prepareNotionBonsaiTaskLinkDecision({
+    review: review(), reviewSha256: REVIEW_HASH, preparedAt: '2026-08-28T01:01:20Z',
+    decisions: [{ candidateId: directLink.candidateId, decision: 'APPROVED' }],
+    approver: 'Cameron', decidedAt: '2026-08-28T01:01:15Z', reference: 'direct-task-link-ref',
+  });
+  const directOwner = owner.candidates.find(candidate => candidate.mappingDependency === null);
+  const record = prepareNotionBonsaiOwnerDecision({
+    review: review(), reviewSha256: REVIEW_HASH, preparedAt: '2026-08-28T01:02:00Z',
+    decisions: [{ candidateId: directOwner.candidateId, decision: 'APPROVED' }],
+    taskLinkDecisionRecord: approvedLinks, taskLinkDecisionSha256: TASK_LINK_HASH,
+    approver: 'Cameron', decidedAt: '2026-08-28T01:01:30Z', reference: 'owner-rule-direct-exact',
+  });
+  assert.equal(record.summary.approved, 1);
+  assert.equal(record.summary.pending, 2);
+  assert.equal(record.complete, false);
+  assert.equal(verifyNotionBonsaiOwnerDecision({
+    review: review(), reviewSha256: REVIEW_HASH, record,
+    taskLinkDecisionRecord: approvedLinks, taskLinkDecisionSha256: TASK_LINK_HASH,
+  }).valid, true);
 });
 
 test('CLI creates and verifies one immutable pending owner packet', () => {
@@ -115,6 +148,10 @@ test('CLI creates and verifies one immutable pending owner packet', () => {
     const verified = spawnSync(process.execPath, ['scripts/verify-notion-bonsai-owner-decision.mjs', '--review', reviewPath, '--owner-decision', outputPath], { encoding: 'utf8' });
     assert.equal(verified.status, 0, verified.stderr);
     assert.equal(spawnSync(process.execPath, args, { encoding: 'utf8' }).status, 2);
+    const decisionsPath = path.join(temp, 'decisions.json');
+    fs.writeFileSync(decisionsPath, JSON.stringify({ decisions: [] }));
+    const decidedPath = path.join(temp, 'decided.json');
+    assert.equal(spawnSync(process.execPath, [...args.slice(0, -1), decidedPath, '--decisions', decisionsPath], { encoding: 'utf8' }).status, 2);
   } finally {
     fs.rmSync(temp, { recursive: true, force: true });
   }
