@@ -18,7 +18,9 @@ describe('portal proposal actions accessibility contract', () => {
   });
 
   it('labels every client-facing amount with proposal currency evidence', () => {
-    expect(source).toContain("proposal.currency || 'currency unassigned'");
-    expect(source.match(/proposal\.currency \|\| 'currency unassigned'/g)?.length).toBeGreaterThanOrEqual(3);
+    expect(source).toContain("const verifiedCurrency = ['CAD', 'USD'].includes(proposal.currency)");
+    expect(source).toContain("currencyDisplay: 'code'");
+    expect(source.match(/formatProposalAmount\(/g)?.length).toBeGreaterThanOrEqual(5);
+    expect(source).toContain('Approval is unavailable because this proposal currency has not been verified.');
   });
 });

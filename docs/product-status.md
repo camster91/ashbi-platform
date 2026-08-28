@@ -41,6 +41,8 @@ The supported milestone is a controlled Ashbi agency-operations deployment: auth
 | Cross-repository issue/release operating system | Planning/tracking, not a product capability | [#292](https://github.com/camster91/ashbi-platform/issues/292) |
 | UX tracking and polished-release roadmap | Meta tracking; child evidence remains authoritative | [#323](https://github.com/camster91/ashbi-platform/issues/323), [#324](https://github.com/camster91/ashbi-platform/issues/324) |
 
+Client proposal evidence is now aligned with the public API contract: the portal renders the actual client, notes, sent and valid-until dates, authoritative subtotal, discount, total, and line items. Every amount carries verified CAD or USD evidence, while unresolved currency or expiry withholds approval and keeps decline available. This remains code-present local evidence, not provider or target-environment clearance.
+
 ## Authoritative engineering paths
 
 - Setup and checks: [README.md](../README.md), `.env.example`, and root/web package scripts.

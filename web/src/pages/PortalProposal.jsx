@@ -7,12 +7,24 @@ import {
   XCircle,
   FileText,
   User,
-  DollarSign,
   Loader2,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { cn, formatDate } from '../lib/utils';
 import LoadingState from '../components/ui/LoadingState';
+
+function formatProposalAmount(amount, currency) {
+  const value = Number(amount || 0);
+  if (!['CAD', 'USD'].includes(currency)) {
+    return `${value.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} currency unassigned`;
+  }
+
+  return new Intl.NumberFormat('en-CA', {
+    style: 'currency',
+    currency,
+    currencyDisplay: 'code',
+  }).format(value);
+}
 
 export default function PortalProposal() {
   const { token } = useParams();
@@ -69,7 +81,17 @@ export default function PortalProposal() {
     );
   }
 
+  const verifiedCurrency = ['CAD', 'USD'].includes(proposal.currency) ? proposal.currency : null;
   const alreadyResponded = proposal.status === 'APPROVED' || proposal.status === 'DECLINED';
+  const proposalExpired = Boolean(
+    proposal.validUntil && new Date(proposal.validUntil).getTime() < Date.now(),
+  );
+  const canApprove = Boolean(verifiedCurrency) && !proposalExpired;
+  const subtotal = Number(
+    proposal.subtotal ?? proposal.lineItems?.reduce((sum, item) => sum + Number(item.total || 0), 0) ?? 0,
+  );
+  const discount = Number(proposal.discount || 0);
+  const total = Number(proposal.total ?? subtotal - discount);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -116,15 +138,16 @@ export default function PortalProposal() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="text-xl font-bold text-slate-800">{proposal.title}</h2>
-              {proposal.clientName && (
+              {proposal.client?.name && (
                 <div className="flex items-center gap-2 mt-2 text-slate-500">
                   <User className="w-4 h-4" />
-                  <span className="text-sm">{proposal.clientName}</span>
+                  <span className="text-sm">{proposal.client.name}</span>
                 </div>
               )}
-              {proposal.createdAt && (
-                <p className="text-xs text-slate-400 mt-1">Created {formatDate(proposal.createdAt)}</p>
-              )}
+              <div className="mt-1 space-y-0.5 text-xs text-slate-400">
+                {proposal.sentAt && <p>Sent {formatDate(proposal.sentAt)}</p>}
+                {proposal.validUntil && <p>Valid until {formatDate(proposal.validUntil)}</p>}
+              </div>
             </div>
             {proposal.status && !completed && (
               <span className={cn(
@@ -139,8 +162,8 @@ export default function PortalProposal() {
             )}
           </div>
 
-          {proposal.description && (
-            <p className="text-slate-600 mt-4 leading-relaxed">{proposal.description}</p>
+          {proposal.notes && (
+            <p className="text-slate-600 mt-4 leading-relaxed">{proposal.notes}</p>
           )}
         </div>
 
@@ -165,10 +188,10 @@ export default function PortalProposal() {
                     <td className="px-6 py-4 text-sm text-slate-700">{item.description}</td>
                     <td className="px-6 py-4 text-sm text-slate-600 text-right">{item.quantity}</td>
                     <td className="px-6 py-4 text-sm text-slate-600 text-right">
-                      ${Number(item.rate || item.unitPrice || 0).toFixed(2)} {proposal.currency || 'currency unassigned'}
+                      {formatProposalAmount(item.unitPrice, verifiedCurrency)}
                     </td>
                     <td className="px-6 py-4 text-sm font-medium text-slate-800 text-right">
-                      ${Number(item.amount || item.total || (item.quantity * (item.rate || item.unitPrice || 0))).toFixed(2)} {proposal.currency || 'currency unassigned'}
+                      {formatProposalAmount(item.total, verifiedCurrency)}
                     </td>
                   </tr>
                 ))}
@@ -176,14 +199,22 @@ export default function PortalProposal() {
             </table>
           </div>
 
-          {/* Total */}
-          <div className="border-t border-slate-200 px-6 py-4 bg-slate-50">
-            <div className="flex items-center justify-between">
+          {/* Commercial totals */}
+          <div className="border-t border-slate-200 px-6 py-4 bg-slate-50 space-y-2">
+            <div className="flex items-center justify-between text-sm">
+              <span className="font-medium text-slate-600">Subtotal</span>
+              <span className="text-slate-700">{formatProposalAmount(subtotal, verifiedCurrency)}</span>
+            </div>
+            {discount > 0 && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="font-medium text-slate-600">Discount</span>
+                <span className="text-slate-700">−{formatProposalAmount(discount, verifiedCurrency)}</span>
+              </div>
+            )}
+            <div className="flex items-center justify-between border-t border-slate-200 pt-3">
               <span className="text-sm font-medium text-slate-600">Total</span>
-              <span className="text-xl font-bold text-slate-800 flex items-center gap-1">
-                <DollarSign className="w-5 h-5" />
-                {Number(proposal.total || proposal.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                {' '}{proposal.currency || 'currency unassigned'}
+              <span className="text-xl font-bold text-slate-800">
+                {formatProposalAmount(total, verifiedCurrency)}
               </span>
             </div>
           </div>
@@ -233,27 +264,41 @@ export default function PortalProposal() {
                 )}
               </div>
             ) : (
-              <div className="flex flex-col sm:flex-row items-center gap-3">
-                <button
-                  type="button"
-                  onClick={handleApprove}
-                  disabled={respondMutation.isPending}
-                  aria-busy={respondMutation.isPending}
-                  className="min-h-11 w-full sm:w-auto px-6 py-3 bg-slate-800 text-white text-sm font-semibold rounded-lg hover:bg-slate-900 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-800 focus-visible:ring-offset-2"
-                >
-                  {respondMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-                  <CheckCircle className="w-4 h-4" />
-                  Approve Proposal
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAction('decline')}
-                  disabled={respondMutation.isPending}
-                  className="min-h-11 w-full sm:w-auto px-6 py-3 border border-slate-200 text-slate-600 text-sm font-semibold rounded-lg hover:bg-slate-50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2"
-                >
-                  <XCircle className="w-4 h-4" />
-                  Decline
-                </button>
+              <div className="space-y-4">
+                {!verifiedCurrency && (
+                  <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                    Approval is unavailable because this proposal currency has not been verified. Please contact Ashbi Design before approving.
+                  </p>
+                )}
+                {proposalExpired && (
+                  <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                    This proposal expired on {formatDate(proposal.validUntil)} and can no longer be approved. Please contact Ashbi Design for an updated proposal.
+                  </p>
+                )}
+                <div className="flex flex-col sm:flex-row items-center gap-3">
+                  {canApprove && (
+                    <button
+                      type="button"
+                      onClick={handleApprove}
+                      disabled={respondMutation.isPending}
+                      aria-busy={respondMutation.isPending}
+                      className="min-h-11 w-full sm:w-auto px-6 py-3 bg-slate-800 text-white text-sm font-semibold rounded-lg hover:bg-slate-900 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-800 focus-visible:ring-offset-2"
+                    >
+                      {respondMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+                      <CheckCircle className="w-4 h-4" />
+                      Approve Proposal
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setAction('decline')}
+                    disabled={respondMutation.isPending}
+                    className="min-h-11 w-full sm:w-auto px-6 py-3 border border-slate-200 text-slate-600 text-sm font-semibold rounded-lg hover:bg-slate-50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 focus-visible:ring-offset-2"
+                  >
+                    <XCircle className="w-4 h-4" />
+                    Decline
+                  </button>
+                </div>
               </div>
             )}
           </div>
