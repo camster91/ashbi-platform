@@ -36,6 +36,8 @@ The database retains immutable decision events. A later decision supersedes the 
 
 Each imported packet is uniquely identified by its review kind plus a fingerprint of the source review, dependency decision, and optional supplemental evidence. Regenerating a project-disposition brief after project-link decisions therefore creates a new evidence generation alongside the prior pending generation. It never overwrites or silently reinterprets the earlier review history.
 
+The Hub orders generations by their evidence preparation time. Earlier generations remain available for inspection and export, but both the interface and API refuse new approvals or rejections after a newer generation exists for the same review kind and source snapshot.
+
 ## Separate gates
 
 Importing evidence, approving a logical identity or task disposition, applying those decisions in an isolated sandbox, confirming a migration, running in parallel, reconciling operating and financial records, and retiring Bonsai are separate gates. Only evidence import and decision recording occur in this workflow.

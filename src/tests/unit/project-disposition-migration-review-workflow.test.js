@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process';
 import {
   exportProjectDispositionDecision,
   importProjectDispositionReviewPacket,
+  listMigrationReviewPackets,
   PROJECT_DISPOSITION_KIND,
   recordMigrationReviewDecision,
 } from '../../services/migrationReview.service.js';
@@ -66,6 +67,7 @@ function input(
   approveLink = true,
   linkHash = LINK_HASH,
   dispositionHash = DISPOSITION_HASH,
+  briefPreparedAt = '2026-08-28T01:04:00.000Z',
 ) {
   const source = review();
   const pendingLink = prepareNotionBonsaiNativeProjectLinkDecision({
@@ -94,7 +96,7 @@ function input(
     projectLinkDecisionSha256: linkHash,
     projectDispositionDecision: dispositionDecision,
     projectDispositionDecisionSha256: dispositionHash,
-    preparedAt: '2026-08-28T01:04:00.000Z',
+    preparedAt: briefPreparedAt,
   });
   return {
     format: 'ashbi-hub-project-disposition-review-import',
@@ -203,6 +205,7 @@ test('keeps a regenerated disposition packet alongside the prior source generati
     true,
     '1'.repeat(64),
     '2'.repeat(64),
+    '2026-08-28T01:05:00.000Z',
   );
   const first = await importProjectDispositionReviewPacket({ prismaClient, input: pending, importedBy: 'cameron@ashbi.ca' });
   const second = await importProjectDispositionReviewPacket({ prismaClient, input: regenerated, importedBy: 'cameron@ashbi.ca' });
@@ -211,6 +214,21 @@ test('keeps a regenerated disposition packet alongside the prior source generati
   assert.equal(prismaClient.packets.length, 2);
   assert.equal(first.packet.sourceReviewSha256, second.packet.sourceReviewSha256);
   assert.notEqual(first.packet.evidenceFingerprint, second.packet.evidenceFingerprint);
+  const listed = await listMigrationReviewPackets({ prismaClient });
+  const earlier = listed.find(packet => packet.id === first.packet.id);
+  const current = listed.find(packet => packet.id === second.packet.id);
+  assert.equal(earlier.superseded, true);
+  assert.equal(earlier.generation, 1);
+  assert.equal(current.superseded, false);
+  assert.equal(current.generation, 2);
+  await assert.rejects(recordMigrationReviewDecision({
+    prismaClient,
+    packetId: first.packet.id,
+    candidateId: first.packet.candidates.find(item => item.recommendation === 'APPROVAL_READY').candidateId,
+    requestId: '77777777-7777-4777-8777-777777777777',
+    decision: 'REJECTED',
+    reviewedBy: 'cameron@ashbi.ca',
+  }), /superseded/);
 });
 
 test('project-disposition bundle CLI verifies exact files and refuses overwrite', () => {

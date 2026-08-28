@@ -105,7 +105,39 @@ function latestDecisions(decisions = []) {
   return byCandidate;
 }
 
-function packetView(packet) {
+function generationKey(packet) {
+  return `${packet.kind}:${packet.sourceReviewSha256}`;
+}
+
+function compareGeneration(left, right) {
+  const preparedDifference = new Date(left.sourcePreparedAt).getTime() - new Date(right.sourcePreparedAt).getTime();
+  if (preparedDifference !== 0) return preparedDifference;
+  const createdDifference = new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+  if (createdDifference !== 0) return createdDifference;
+  return String(left.id).localeCompare(String(right.id));
+}
+
+function generationMetadata(rows) {
+  const grouped = new Map();
+  for (const row of rows) {
+    const key = generationKey(row);
+    const group = grouped.get(key) ?? [];
+    group.push(row);
+    grouped.set(key, group);
+  }
+  const metadata = new Map();
+  for (const group of grouped.values()) {
+    const ordered = [...group].sort(compareGeneration);
+    ordered.forEach((row, index) => metadata.set(row.id, {
+      generation: index + 1,
+      generationCount: ordered.length,
+      superseded: index < ordered.length - 1,
+    }));
+  }
+  return metadata;
+}
+
+function packetView(packet, generation = { generation: 1, generationCount: 1, superseded: false }) {
   const candidates = Array.isArray(packet.reviewBrief?.candidates) ? packet.reviewBrief.candidates : [];
   const latest = latestDecisions(packet.decisions);
   const reviewedCandidates = candidates.map(candidate => ({
@@ -127,6 +159,7 @@ function packetView(packet) {
     importedBy: packet.importedBy,
     createdAt: packet.createdAt,
     updatedAt: packet.updatedAt,
+    ...generation,
     summary: { total: reviewedCandidates.length, approved, rejected, pending },
     complete: reviewedCandidates.length > 0 && pending === 0,
     candidates: reviewedCandidates,
@@ -402,7 +435,8 @@ export async function listMigrationReviewPackets({ prismaClient }) {
     orderBy: { createdAt: 'desc' },
     include: { decisions: { orderBy: [{ decidedAt: 'desc' }, { createdAt: 'desc' }] } },
   });
-  return rows.map(packetView);
+  const metadata = generationMetadata(rows);
+  return rows.map(packet => packetView(packet, metadata.get(packet.id)));
 }
 
 export async function getMigrationReviewPacket({ prismaClient, packetId }) {
@@ -411,7 +445,12 @@ export async function getMigrationReviewPacket({ prismaClient, packetId }) {
     where: { id: packetId },
     include: { decisions: { orderBy: [{ decidedAt: 'desc' }, { createdAt: 'desc' }] } },
   });
-  return packet ? packetView(packet) : null;
+  if (!packet) return null;
+  const generationRows = await packets.findMany({
+    where: { kind: packet.kind, sourceReviewSha256: packet.sourceReviewSha256 },
+    select: { id: true, kind: true, sourceReviewSha256: true, sourcePreparedAt: true, createdAt: true },
+  });
+  return packetView(packet, generationMetadata(generationRows).get(packet.id));
 }
 
 export async function recordMigrationReviewDecision({ prismaClient, packetId, candidateId, requestId, decision, reviewNote, reviewedBy, now = new Date() }) {
@@ -425,6 +464,16 @@ export async function recordMigrationReviewDecision({ prismaClient, packetId, ca
     include: { decisions: { orderBy: [{ decidedAt: 'desc' }, { createdAt: 'desc' }] } },
   });
   if (!packet) return null;
+  const generationRows = await packets.findMany({
+    where: { kind: packet.kind, sourceReviewSha256: packet.sourceReviewSha256 },
+    select: { id: true, kind: true, sourceReviewSha256: true, sourcePreparedAt: true, createdAt: true },
+  });
+  const generation = generationMetadata(generationRows).get(packet.id);
+  if (generation?.superseded) {
+    const error = new Error('This review packet has been superseded by a newer evidence generation');
+    error.statusCode = 409;
+    throw error;
+  }
   const candidate = packet.reviewBrief?.candidates?.find(item => item.candidateId === candidateId);
   if (!candidate) {
     const error = new Error('Candidate is not part of this evidence-bound review packet');
@@ -446,7 +495,7 @@ export async function recordMigrationReviewDecision({ prismaClient, packetId, ca
       error.statusCode = 409;
       throw error;
     }
-    return { replayed: true, decision: existing, packet: packetView(packet) };
+    return { replayed: true, decision: existing, packet: packetView(packet, generation) };
   }
 
   let created;
@@ -471,10 +520,10 @@ export async function recordMigrationReviewDecision({ prismaClient, packetId, ca
       throw conflict;
     }
     const updatedPacket = { ...packet, decisions: [winner, ...packet.decisions] };
-    return { replayed: true, decision: winner, packet: packetView(updatedPacket) };
+    return { replayed: true, decision: winner, packet: packetView(updatedPacket, generation) };
   }
   const updatedPacket = { ...packet, decisions: [created, ...packet.decisions] };
-  return { replayed: false, decision: created, packet: packetView(updatedPacket) };
+  return { replayed: false, decision: created, packet: packetView(updatedPacket, generation) };
 }
 
 export async function exportProjectLinkDecision({ prismaClient, packetId, now = new Date() }) {

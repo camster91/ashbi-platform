@@ -167,7 +167,8 @@ export default function MigrationReviews() {
             {packets.map(packet => (
               <button key={packet.id} type="button" onClick={() => setSelectedId(packet.id)} className={`w-full rounded-xl border p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected?.id === packet.id ? 'border-primary bg-primary/5' : 'border-border bg-card hover:bg-muted/40'}`}>
                 <p className="text-sm font-semibold text-foreground">{packetLabel(packet)}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{new Date(packet.sourcePreparedAt).toLocaleString()}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Generation {packet.generation} of {packet.generationCount} · {new Date(packet.sourcePreparedAt).toLocaleString()}</p>
+                {packet.superseded && <p className="mt-2 text-xs font-semibold text-amber-700 dark:text-amber-300">Superseded · read-only</p>}
                 <p className="mt-3 text-xs text-muted-foreground">{packet.summary.approved} approved · {packet.summary.rejected} rejected · {packet.summary.pending} pending</p>
               </button>
             ))}
@@ -178,6 +179,7 @@ export default function MigrationReviews() {
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-lg font-semibold text-foreground">{packetLabel(selected)}</h2>
+                  <p className="mt-1 text-xs font-medium text-muted-foreground">Generation {selected.generation} of {selected.generationCount}{selected.superseded ? ' · superseded and read-only' : ' · current generation'}</p>
                   <p className="mt-1 break-all text-xs text-muted-foreground">Source SHA-256: {selected.sourceReviewSha256}</p>
                 </div>
                 <Button variant="outline" onClick={exportDecision} loading={busyKey === 'export'} leftIcon={<Download size={16} />}>Export decision record</Button>
@@ -238,14 +240,16 @@ export default function MigrationReviews() {
                     <Button
                       onClick={() => decide(candidate, 'APPROVED')}
                       loading={busyKey === candidate.candidateId}
-                      disabled={Boolean(busyKey) || candidate.recommendation !== 'APPROVAL_READY'}
+                      disabled={Boolean(busyKey) || selected.superseded || candidate.recommendation !== 'APPROVAL_READY'}
                       leftIcon={<Check size={16} />}
                     >
-                      {candidate.recommendation !== 'APPROVAL_READY'
+                      {selected.superseded
+                        ? 'Superseded generation'
+                        : candidate.recommendation !== 'APPROVAL_READY'
                         ? 'Blocked by prerequisite'
                         : selected.kind === taskDispositionKind || selected.kind === projectDispositionKind ? 'Approve recommendation' : 'Approve identity'}
                     </Button>
-                    <Button variant="destructive" onClick={() => decide(candidate, 'REJECTED')} disabled={Boolean(busyKey)} leftIcon={<X size={16} />}>Reject</Button>
+                    <Button variant="destructive" onClick={() => decide(candidate, 'REJECTED')} disabled={Boolean(busyKey) || selected.superseded} leftIcon={<X size={16} />}>Reject</Button>
                   </div>
                 </div>
               </article>

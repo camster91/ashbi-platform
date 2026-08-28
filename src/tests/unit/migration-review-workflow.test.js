@@ -214,6 +214,7 @@ test('route and UI keep migration review admin-only, tenant-scoped, and separate
   assert.match(page, /do not edit Notion, Bonsai/);
   assert.match(page, /ashbi-hub-task-disposition-review-import/);
   assert.match(page, /ashbi-hub-project-disposition-review-import/);
+  assert.match(page, /Superseded generation/);
   assert.doesNotMatch(page, /Apply to Bonsai|Delete from Notion/);
 });
 
