@@ -44,9 +44,13 @@ test('prepares only source-backed owner candidates and exposes mapping dependenc
 });
 
 test('candidate approvals require their exact approved task identities', () => {
+  const mappingCandidates = prepareNotionBonsaiMappingDecision({
+    review: review(), reviewSha256: REVIEW_HASH, preparedAt: '2026-08-28T01:00:45Z',
+  });
   const approvedMapping = prepareNotionBonsaiMappingDecision({
     review: review(), reviewSha256: REVIEW_HASH, preparedAt: '2026-08-28T01:01:00Z',
-    decision: 'APPROVED', approver: 'Cameron', decidedAt: '2026-08-28T01:00:30Z', reference: 'mapping-approval-ref',
+    decisions: mappingCandidates.candidates.map(candidate => ({ candidateId: candidate.candidateId, decision: 'APPROVED' })),
+    approver: 'Cameron', decidedAt: '2026-08-28T01:00:30Z', reference: 'mapping-approval-ref',
   });
   const pendingLinks = prepareNotionBonsaiTaskLinkDecision({
     review: review(), reviewSha256: REVIEW_HASH, preparedAt: '2026-08-28T01:01:10Z',
@@ -92,9 +96,13 @@ test('rejects a changed owner and cannot approve without an approved task identi
 });
 
 test('cannot approve owners before the task identities are approved', () => {
+  const mappingCandidates = prepareNotionBonsaiMappingDecision({
+    review: review(), reviewSha256: REVIEW_HASH, preparedAt: '2026-08-28T01:00:45Z',
+  });
   const approvedMapping = prepareNotionBonsaiMappingDecision({
     review: review(), reviewSha256: REVIEW_HASH, preparedAt: '2026-08-28T01:01:00Z',
-    decision: 'APPROVED', approver: 'Cameron', decidedAt: '2026-08-28T01:00:30Z', reference: 'mapping-approval-ref',
+    decisions: mappingCandidates.candidates.map(candidate => ({ candidateId: candidate.candidateId, decision: 'APPROVED' })),
+    approver: 'Cameron', decidedAt: '2026-08-28T01:00:30Z', reference: 'mapping-approval-ref',
   });
   const pendingLinks = prepareNotionBonsaiTaskLinkDecision({
     review: review(), reviewSha256: REVIEW_HASH, preparedAt: '2026-08-28T01:01:10Z',

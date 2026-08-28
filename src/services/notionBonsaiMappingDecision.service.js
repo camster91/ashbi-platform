@@ -1,4 +1,5 @@
 const FORMAT = 'ashbi-notion-bonsai-mapping-decision';
+const VERSION = 2;
 const SCOPE = 'PROJECT_ALIASES_AND_NEAR_TITLE_LINK';
 const ALLOWED_DECISIONS = new Set(['PENDING', 'APPROVED', 'REJECTED']);
 
@@ -30,6 +31,7 @@ function reviewCandidates(review) {
 
   return [
     ...review.projectAliasCandidates.map(candidate => ({
+      candidateId: `mapping:project-alias:${text(candidate.notionProject)}=>${text(candidate.bonsaiProject)}`,
       kind: 'PROJECT_ALIAS',
       notionProject: text(candidate.notionProject),
       bonsaiProject: text(candidate.bonsaiProject),
@@ -42,6 +44,7 @@ function reviewCandidates(review) {
         : [],
     })),
     ...review.nearTitleCandidates.map(candidate => ({
+      candidateId: `mapping:near-title:${text(candidate.notionSourceId).split('/').pop()}:${text(candidate.bonsaiSourceId)}`,
       kind: 'NEAR_TITLE_TASK_LINK',
       notionSourceId: text(candidate.notionSourceId),
       bonsaiSourceId: text(candidate.bonsaiSourceId),
@@ -52,6 +55,22 @@ function reviewCandidates(review) {
       tokenDiceSimilarity: candidate.tokenDiceSimilarity,
     })),
   ];
+}
+
+function applyDecisions(candidates, decisions) {
+  if (!Array.isArray(decisions)) throw new TypeError('decisions must be an array');
+  const known = new Set(candidates.map(candidate => candidate.candidateId));
+  if (known.size !== candidates.length) throw new TypeError('Mapping candidates require unique identities');
+  const selected = new Map();
+  for (const item of decisions) {
+    const candidateId = text(item?.candidateId);
+    const decision = text(item?.decision);
+    if (!known.has(candidateId)) throw new TypeError(`Unknown mapping candidate: ${candidateId}`);
+    if (selected.has(candidateId)) throw new TypeError(`Duplicate mapping decision: ${candidateId}`);
+    if (!['APPROVED', 'REJECTED'].includes(decision)) throw new TypeError('Recorded mapping decisions must be APPROVED or REJECTED');
+    selected.set(candidateId, decision);
+  }
+  return candidates.map(candidate => ({ ...candidate, decision: selected.get(candidate.candidateId) ?? 'PENDING' }));
 }
 
 function canonicalCandidate(candidate) {
@@ -67,20 +86,23 @@ export function prepareNotionBonsaiMappingDecision({
   review,
   reviewSha256,
   preparedAt,
-  decision = 'PENDING',
+  decisions = [],
   approver = null,
   decidedAt = null,
   reference = null,
 }) {
-  if (!ALLOWED_DECISIONS.has(decision)) throw new TypeError('decision must be PENDING, APPROVED, or REJECTED');
   const reviewPreparedAt = timestamp(review?.preparedAt, 'review preparedAt');
   const prepared = timestamp(preparedAt, 'preparedAt');
   if (prepared < reviewPreparedAt) throw new TypeError('preparedAt must not predate the review packet');
 
-  const finalized = decision !== 'PENDING';
+  const candidates = applyDecisions(reviewCandidates(review), decisions);
+  const approved = candidates.filter(candidate => candidate.decision === 'APPROVED').length;
+  const rejected = candidates.filter(candidate => candidate.decision === 'REJECTED').length;
+  const pending = candidates.filter(candidate => candidate.decision === 'PENDING').length;
+  const decidedCount = approved + rejected;
   let decided = null;
-  if (finalized) {
-    if (!text(approver) || !text(reference)) throw new TypeError('Final decisions require an approver and reference');
+  if (decidedCount > 0) {
+    if (!text(approver) || !text(reference)) throw new TypeError('Recorded decisions require an approver and reference');
     decided = timestamp(decidedAt, 'decidedAt');
     if (decided < reviewPreparedAt || decided > prepared) {
       throw new TypeError('decidedAt must be after the review and no later than preparation');
@@ -89,14 +111,13 @@ export function prepareNotionBonsaiMappingDecision({
     throw new TypeError('Pending decisions cannot contain approval evidence');
   }
 
-  const candidates = reviewCandidates(review).map(candidate => ({ ...candidate, decision }));
   return {
     format: FORMAT,
-    version: 1,
+    version: VERSION,
     scope: SCOPE,
-    complete: finalized,
+    complete: pending === 0,
     preparedAt: new Date(prepared).toISOString(),
-    decisionEvidence: finalized ? {
+    decisionEvidence: decidedCount > 0 ? {
       approver: text(approver),
       decidedAt: new Date(decided).toISOString(),
       reference: text(reference),
@@ -104,9 +125,9 @@ export function prepareNotionBonsaiMappingDecision({
     candidates,
     summary: {
       total: candidates.length,
-      approved: decision === 'APPROVED' ? candidates.length : 0,
-      rejected: decision === 'REJECTED' ? candidates.length : 0,
-      pending: decision === 'PENDING' ? candidates.length : 0,
+      approved,
+      rejected,
+      pending,
     },
     safeguards: {
       externalWritesPerformed: false,
@@ -140,7 +161,7 @@ export function verifyNotionBonsaiMappingDecision({ review, reviewSha256, record
     findings.push('INVALID_REVIEW_CHECKSUM');
   }
 
-  if (record?.format !== FORMAT || record?.version !== 1 || record?.scope !== SCOPE) findings.push('INVALID_DECISION_SCHEMA');
+  if (record?.format !== FORMAT || record?.version !== VERSION || record?.scope !== SCOPE) findings.push('INVALID_DECISION_SCHEMA');
   if (record?.sourceEvidence?.reviewSha256 !== expectedReviewSha
     || record?.sourceEvidence?.reviewPreparedAt !== review?.preparedAt
     || record?.sourceEvidence?.notionSnapshotSha256 !== review?.sourceEvidence?.notionSnapshotSha256
@@ -169,7 +190,7 @@ export function verifyNotionBonsaiMappingDecision({ review, reviewSha256, record
   const preparedTime = Date.parse(String(record?.preparedAt ?? ''));
   if (!Number.isFinite(preparedTime) || !Number.isFinite(reviewTime) || preparedTime < reviewTime) findings.push('INVALID_PREPARATION_TIME');
 
-  if (complete) {
+  if (approved + rejected > 0) {
     const decidedTime = Date.parse(String(record?.decisionEvidence?.decidedAt ?? ''));
     if (!text(record?.decisionEvidence?.approver)
       || !text(record?.decisionEvidence?.reference)
@@ -195,4 +216,4 @@ export function verifyNotionBonsaiMappingDecision({ review, reviewSha256, record
   };
 }
 
-export { FORMAT as NOTION_BONSAI_MAPPING_DECISION_FORMAT, SCOPE as NOTION_BONSAI_MAPPING_DECISION_SCOPE };
+export { FORMAT as NOTION_BONSAI_MAPPING_DECISION_FORMAT, VERSION as NOTION_BONSAI_MAPPING_DECISION_VERSION, SCOPE as NOTION_BONSAI_MAPPING_DECISION_SCOPE };

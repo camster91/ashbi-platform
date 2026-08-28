@@ -88,7 +88,8 @@ test('requires the exact approved mapping before approving a conditional task li
   }), /approved mapping dependency/);
   const approvedMapping = prepareNotionBonsaiMappingDecision({
     review: review(), reviewSha256: REVIEW_HASH, preparedAt: '2026-08-28T01:05:00.000Z',
-    decision: 'APPROVED', approver: 'Cameron', decidedAt: '2026-08-28T01:04:30.000Z', reference: 'mapping-1',
+    decisions: pendingMapping.candidates.map(candidate => ({ candidateId: candidate.candidateId, decision: 'APPROVED' })),
+    approver: 'Cameron', decidedAt: '2026-08-28T01:04:30.000Z', reference: 'mapping-1',
   });
   const record = prepareNotionBonsaiTaskLinkDecision({
     review: review(), reviewSha256: REVIEW_HASH, preparedAt: '2026-08-28T01:06:00.000Z',

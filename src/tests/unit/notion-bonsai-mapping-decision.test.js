@@ -44,14 +44,16 @@ test('prepares a source-bound pending record with no mutation authority', () => 
   assert.equal(verifyNotionBonsaiMappingDecision({ review: review(), reviewSha256: HASH, record }).valid, true);
 });
 
-test('records an explicit batch approval without applying mappings', () => {
+test('records a candidate-specific approval without applying mappings', () => {
+  const candidate = pending().candidates[0];
   const record = prepareNotionBonsaiMappingDecision({
     review: review(), reviewSha256: HASH, preparedAt: '2026-08-28T01:05:00Z',
-    decision: 'APPROVED', approver: 'Cameron', decidedAt: '2026-08-28T01:04:00Z', reference: 'codex-user-approval-001',
+    decisions: [{ candidateId: candidate.candidateId, decision: 'APPROVED' }],
+    approver: 'Cameron', decidedAt: '2026-08-28T01:04:00Z', reference: 'codex-user-approval-001',
   });
   const result = verifyNotionBonsaiMappingDecision({ review: review(), reviewSha256: HASH, record });
-  assert.equal(record.complete, true);
-  assert.deepEqual(record.summary, { total: 2, approved: 2, rejected: 0, pending: 0 });
+  assert.equal(record.complete, false);
+  assert.deepEqual(record.summary, { total: 2, approved: 1, rejected: 0, pending: 1 });
   assert.equal(result.valid, true);
   assert.equal(record.safeguards.externalWritesPerformed, false);
 });
@@ -78,7 +80,9 @@ test('CLI creates a pending owner-only file, refuses overwrite, and requires con
     assert.equal(JSON.parse(fs.readFileSync(outputPath, 'utf8')).summary.pending, 2);
     const second = spawnSync(process.execPath, base, { encoding: 'utf8' });
     assert.equal(second.status, 2);
-    const unconfirmed = spawnSync(process.execPath, [...base.slice(0, -1), path.join(temp, 'approved.json'), '--approve-all'], { encoding: 'utf8' });
+    const decisionsPath = path.join(temp, 'decisions.json');
+    fs.writeFileSync(decisionsPath, JSON.stringify({ decisions: [] }));
+    const unconfirmed = spawnSync(process.execPath, [...base.slice(0, -1), path.join(temp, 'approved.json'), '--decisions', decisionsPath], { encoding: 'utf8' });
     assert.equal(unconfirmed.status, 2);
   } finally {
     fs.rmSync(temp, { recursive: true, force: true });

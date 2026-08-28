@@ -70,7 +70,7 @@ export function prepareBonsaiLiveReconciliationStatus({
   preparedAt,
 }) {
   requireFormat(taskReview, 'ashbi-notion-bonsai-task-review', 'task review');
-  requireFormat(mappingDecision, 'ashbi-notion-bonsai-mapping-decision', 'mapping decision');
+  requireFormat(mappingDecision, 'ashbi-notion-bonsai-mapping-decision', 'mapping decision', 2);
   requireFormat(taskLinkDecision, 'ashbi-notion-bonsai-task-link-decision', 'task-link decision');
   requireFormat(taskDispositionDecision, 'ashbi-notion-bonsai-task-disposition-decision', 'task-disposition decision');
   requireFormat(ownerDecision, 'ashbi-notion-bonsai-owner-decision', 'owner decision', 2);

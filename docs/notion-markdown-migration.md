@@ -39,7 +39,7 @@ npm run prepare:notion-bonsai-mapping-decision -- --review <review.json> --prepa
 npm run verify:notion-bonsai-mapping-decision -- <review.json> <decision.json>
 ```
 
-The pending record is checksum-bound to the review packet and both source snapshots. It cannot authorize owner assignments, source-only dispositions, migration writes, or financial cutover. After an explicit human decision, a separate immutable finalized record may be created with `--approve-all` or `--reject-all`, the approver, decision time, evidence reference, and `--confirm`. That command only records the decision; it still does not apply mappings or change an external system.
+The record is checksum-bound to the review packet and both source snapshots. Version 2 requires candidate-specific decisions, the approver, decision time, evidence reference, and `--confirm`; there is no blanket approval flag. Four project aliases supported by exact task pairs are approved, while the ROI Swift near-title task remains pending. The checksum-valid packet's SHA-256 is `b3e6db7122a96f30d14816729c5d9288c867238e08db242f56484d284ddacf00`. It cannot authorize owner assignments, source-only dispositions, migration writes, or financial cutover, and it does not apply mappings or change an external system.
 
 Record task identity independently from project mapping and ownership:
 
@@ -48,7 +48,7 @@ npm run prepare:notion-bonsai-task-link-decision -- --review <review.json> --pre
 npm run verify:notion-bonsai-task-link-decision -- --review <review.json> --task-link-decision <task-link-decision.json>
 ```
 
-The task-link packet includes every exact and near-title source pair, with separate direct-exact, project-dependent exact, and near-title tiers. Decisions are candidate-specific; there is no blanket approval flag. Approving a conditional candidate requires the checksum-valid mapping record containing that exact approved project alias or near-title dependency. A task-link decision means only that two source IDs identify one logical task. It does not apply a link, move or create a task, change task fields, assign an owner, delete a source record, migrate data, or authorize cutover. Cameron's owner-rule instruction is now recorded for all 13 low-risk direct-exact identities; six project-dependent exact candidates and one near-title candidate remain pending. The checksum-valid packet's SHA-256 is `62fdae16b7798f6bcb2ff8ba18906e289c3c8df46019bae63d00983125da2c1a`.
+The task-link packet includes every exact and near-title source pair, with separate direct-exact, project-dependent exact, and near-title tiers. Decisions are candidate-specific; there is no blanket approval flag. Approving a conditional candidate requires the checksum-valid mapping record containing that exact approved project alias or near-title dependency. A task-link decision means only that two source IDs identify one logical task. It does not apply a link, move or create a task, change task fields, assign an owner, delete a source record, migrate data, or authorize cutover. Cameron's owner-rule instruction is now recorded for all 19 exact identities: 13 direct and six supported by approved project aliases. The ROI Swift near-title candidate remains pending. The checksum-valid packet's SHA-256 is `c5e0fcb84046cce3c793e5adddbbd2a75914b6dffa47f138e8ff15c86e7469bc`.
 
 Prepare the source-only and malformed-task disposition packet separately:
 
@@ -66,7 +66,7 @@ npm run prepare:notion-bonsai-owner-decision -- --review <review.json> --prepare
 npm run verify:notion-bonsai-owner-decision -- --review <review.json> --owner-decision <owner-decision.json>
 ```
 
-This packet includes only Notion tasks with one exact or review-candidate Bonsai task carrying a named assignee. Version 2 records each owner decision independently and requires that candidate's exact task identity to be approved first; conditional identities must also carry their checksum-valid mapping evidence. Unmatched Notion tasks, unassigned Bonsai tasks, project/account-owner defaults, and inferred creative/technical ownership remain outside the packet. Cameron's owner rule is recorded for the 13 direct-exact candidates—12 Cameron and one Bianca—while the seven conditional candidates remain pending. The checksum-valid packet's SHA-256 is `05e59e52bddac0cbc7ca1af5eda4bbe182fb412112efb366b25bcfa29d80eb36`. Decisions are recorded only; no assignment has been applied to Notion, Bonsai, or the Hub.
+This packet includes only Notion tasks with one exact or review-candidate Bonsai task carrying a named assignee. Version 2 records each owner decision independently and requires that candidate's exact task identity to be approved first; conditional identities must also carry their checksum-valid mapping evidence. Unmatched Notion tasks, unassigned Bonsai tasks, project/account-owner defaults, and inferred creative/technical ownership remain outside the packet. Cameron's owner rule is recorded for 19 exact candidates—18 Cameron and one Bianca—while the ROI Swift near-title candidate remains pending. The checksum-valid packet's SHA-256 is `a8e030d00ce92bd124116a636aedabbc245b5bf1508e1ad3d27b2b4db94d0b37`. Decisions are recorded only; no assignment has been applied to Notion, Bonsai, or the Hub.
 
 Review projects separately from tasks:
 
