@@ -206,12 +206,14 @@ test('route and UI keep migration review admin-only, tenant-scoped, and separate
   assert.match(route, /fastify\.authenticate, fastify\.adminOnly/);
   assert.match(route, /prismaClient: request\.prisma/);
   assert.match(route, /task-dispositions\/import/);
+  assert.match(route, /project-dispositions\/import/);
   assert.doesNotMatch(route, /config\/db|fetch\(|axios|Bonsai/i);
   assert.match(proxy, /migrationreviewpacket/);
   assert.match(proxy, /migrationreviewdecision/);
   assert.match(app, /AdminRoute><MigrationReviews/);
   assert.match(page, /do not edit Notion, Bonsai/);
   assert.match(page, /ashbi-hub-task-disposition-review-import/);
+  assert.match(page, /ashbi-hub-project-disposition-review-import/);
   assert.doesNotMatch(page, /Apply to Bonsai|Delete from Notion/);
 });
 

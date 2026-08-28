@@ -11,9 +11,12 @@ const decisionStyles = {
 };
 
 const taskDispositionKind = 'NOTION_BONSAI_TASK_DISPOSITION';
+const projectDispositionKind = 'NOTION_BONSAI_PROJECT_DISPOSITION';
 
 function packetLabel(packet) {
-  return packet.kind === taskDispositionKind ? 'Task disposition review' : 'Project identity review';
+  if (packet.kind === taskDispositionKind) return 'Task disposition review';
+  if (packet.kind === projectDispositionKind) return 'Project disposition review';
+  return 'Project identity review';
 }
 
 function downloadJson(value, name) {
@@ -66,9 +69,14 @@ export default function MigrationReviews() {
     try {
       const parsed = JSON.parse(await file.text());
       const payload = { ...parsed, requestId: parsed.requestId || crypto.randomUUID() };
-      const response = parsed.format === 'ashbi-hub-task-disposition-review-import'
-        ? await api.importTaskDispositionReview(payload)
-        : await api.importProjectLinkReview(payload);
+      let response;
+      if (parsed.format === 'ashbi-hub-task-disposition-review-import') {
+        response = await api.importTaskDispositionReview(payload);
+      } else if (parsed.format === 'ashbi-hub-project-disposition-review-import') {
+        response = await api.importProjectDispositionReview(payload);
+      } else {
+        response = await api.importProjectLinkReview(payload);
+      }
       await load();
       setSelectedId(response.packet.id);
     } catch (error) {
@@ -110,7 +118,9 @@ export default function MigrationReviews() {
     setActionError('');
     try {
       const record = await api.exportMigrationReviewDecision(selected.id);
-      const prefix = selected.kind === taskDispositionKind ? 'task-disposition-decision' : 'project-link-decision';
+      const prefix = selected.kind === taskDispositionKind
+        ? 'task-disposition-decision'
+        : selected.kind === projectDispositionKind ? 'project-disposition-decision' : 'project-link-decision';
       downloadJson(record, `${prefix}-${selected.id}.json`);
     } catch (error) {
       setActionError(error.message || 'The decision record could not be exported.');
@@ -129,7 +139,7 @@ export default function MigrationReviews() {
           <div className="flex items-center gap-2 text-primary"><GitMerge size={20} /><span className="text-sm font-semibold uppercase tracking-wide">Migration control</span></div>
           <h1 className="mt-1 text-3xl font-bold text-foreground">Notion + Bonsai reviews</h1>
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            Review evidence-bound project identities and source-task dispositions. Decisions stay inside the Hub and do not edit Notion, Bonsai, projects, tasks, owners, invoices, or payments.
+            Review evidence-bound project identities plus project and task dispositions. Decisions stay inside the Hub and do not edit Notion, Bonsai, projects, tasks, owners, invoices, or payments.
           </p>
         </div>
         <label className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground focus-within:ring-2 focus-within:ring-ring">
@@ -149,7 +159,7 @@ export default function MigrationReviews() {
         <section className="rounded-xl border border-dashed border-border bg-card p-10 text-center">
           <FileJson className="mx-auto text-muted-foreground" size={38} />
           <h2 className="mt-3 font-semibold text-foreground">No verified review packet imported</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Import a checksum-bound project-link or task-disposition review bundle. Importing it records evidence only.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Import a checksum-bound project-link, project-disposition, or task-disposition review bundle. Importing it records evidence only.</p>
         </section>
       ) : (
         <div className="grid gap-6 lg:grid-cols-[18rem_1fr]">
@@ -201,6 +211,17 @@ export default function MigrationReviews() {
                         {candidate.owner && <p className="mt-1 text-xs text-muted-foreground">Recorded owner: {candidate.owner}</p>}
                         {candidate.sourceReviewFields?.length > 0 && <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">Repair fields: {candidate.sourceReviewFields.join(', ')}</p>}
                       </div>
+                    ) : selected.kind === projectDispositionKind ? (
+                      <div className="rounded-lg border border-border p-3">
+                        <p className="text-xs font-semibold uppercase text-muted-foreground">Source project</p>
+                        <p className="mt-1 font-medium text-foreground">{candidate.project}</p>
+                        <p className="text-xs text-muted-foreground">{candidate.company || 'No recorded client'} · {candidate.status || 'Duplicate title group'}</p>
+                        {candidate.duplicateMembers?.length > 0 && (
+                          <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+                            {candidate.duplicateMembers.map(member => <li key={member.bonsaiProjectId}>Bonsai {member.bonsaiProjectId} · {member.company || 'No client'} · {member.status}</li>)}
+                          </ul>
+                        )}
+                      </div>
                     ) : (
                       <div className="grid gap-3 md:grid-cols-2">
                         <div className="rounded-lg border border-border p-3"><p className="text-xs font-semibold uppercase text-muted-foreground">Notion</p><p className="mt-1 font-medium text-foreground">{candidate.notionProject}</p><p className="text-xs text-muted-foreground">{candidate.notionStatus}</p></div>
@@ -214,7 +235,16 @@ export default function MigrationReviews() {
                     {candidate.reviewedBy && <p className="text-xs text-muted-foreground">Last reviewed by {candidate.reviewedBy} on {new Date(candidate.decidedAt).toLocaleString()}</p>}
                   </div>
                   <div className="flex shrink-0 gap-2">
-                    <Button onClick={() => decide(candidate, 'APPROVED')} loading={busyKey === candidate.candidateId} leftIcon={<Check size={16} />}>{selected.kind === taskDispositionKind ? 'Approve recommendation' : 'Approve identity'}</Button>
+                    <Button
+                      onClick={() => decide(candidate, 'APPROVED')}
+                      loading={busyKey === candidate.candidateId}
+                      disabled={Boolean(busyKey) || candidate.recommendation !== 'APPROVAL_READY'}
+                      leftIcon={<Check size={16} />}
+                    >
+                      {candidate.recommendation !== 'APPROVAL_READY'
+                        ? 'Blocked by prerequisite'
+                        : selected.kind === taskDispositionKind || selected.kind === projectDispositionKind ? 'Approve recommendation' : 'Approve identity'}
+                    </Button>
                     <Button variant="destructive" onClick={() => decide(candidate, 'REJECTED')} disabled={Boolean(busyKey)} leftIcon={<X size={16} />}>Reject</Button>
                   </div>
                 </div>

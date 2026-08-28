@@ -1159,6 +1159,8 @@ export const api = {
     request('/migration-reviews/project-links/import', { method: 'POST', body: data }),
   importTaskDispositionReview: (data) =>
     request('/migration-reviews/task-dispositions/import', { method: 'POST', body: data }),
+  importProjectDispositionReview: (data) =>
+    request('/migration-reviews/project-dispositions/import', { method: 'POST', body: data }),
   recordMigrationReviewDecision: (packetId, candidateId, data) =>
     request(`/migration-reviews/${packetId}/decisions/${encodeURIComponent(candidateId)}`, { method: 'POST', body: data }),
   exportMigrationReviewDecision: (packetId) =>

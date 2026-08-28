@@ -1,6 +1,7 @@
 import {
   getMigrationReviewPacket,
   importProjectLinkReviewPacket,
+  importProjectDispositionReviewPacket,
   importTaskDispositionReviewPacket,
   listMigrationReviewPackets,
   recordMigrationReviewDecision,
@@ -9,6 +10,7 @@ import {
 import {
   migrationReviewDecisionSchema,
   migrationReviewImportSchema,
+  migrationProjectDispositionReviewImportSchema,
   migrationTaskDispositionReviewImportSchema,
   validateBody,
 } from '../validators/schemas.js';
@@ -63,6 +65,23 @@ export default async function migrationReviewRoutes(fastify) {
       return reply.status(result.replayed ? 200 : 201).send(result);
     } catch (error) {
       request.log.error({ error: error.message }, 'Task-disposition migration review import failed');
+      return sendError(reply, error);
+    }
+  });
+
+  fastify.post('/project-dispositions/import', {
+    ...adminOnly,
+    preHandler: [validateBody(migrationProjectDispositionReviewImportSchema)],
+  }, async (request, reply) => {
+    try {
+      const result = await importProjectDispositionReviewPacket({
+        prismaClient: request.prisma,
+        input: request.body,
+        importedBy: request.user.email,
+      });
+      return reply.status(result.replayed ? 200 : 201).send(result);
+    } catch (error) {
+      request.log.error({ error: error.message }, 'Project-disposition migration review import failed');
       return sendError(reply, error);
     }
   });
