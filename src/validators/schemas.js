@@ -1903,6 +1903,21 @@ export const migrationProjectDispositionReviewImportSchema = z.object({
   }
 });
 
+export const migrationFinancialExceptionReviewImportSchema = z.object({
+  format: z.literal('ashbi-hub-financial-exception-review-import').optional(),
+  version: z.literal(1).optional(),
+  requestId: uuid,
+  financialReview: evidenceObject,
+  financialReviewSha256: z.string().regex(/^[a-f0-9]{64}$/i),
+  invoiceSnapshot: evidenceObject,
+  invoiceSnapshotSha256: z.string().regex(/^[a-f0-9]{64}$/i),
+  timeEntrySnapshot: evidenceObject,
+  timeEntrySnapshotSha256: z.string().regex(/^[a-f0-9]{64}$/i),
+  dispositionDecision: evidenceObject,
+  dispositionDecisionSha256: z.string().regex(/^[a-f0-9]{64}$/i),
+  reviewBrief: evidenceObject,
+}).strict();
+
 export const migrationReviewDecisionSchema = z.object({
   requestId: uuid,
   decision: z.enum(['APPROVED', 'REJECTED']),

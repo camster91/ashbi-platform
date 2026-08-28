@@ -12,10 +12,12 @@ const decisionStyles = {
 
 const taskDispositionKind = 'NOTION_BONSAI_TASK_DISPOSITION';
 const projectDispositionKind = 'NOTION_BONSAI_PROJECT_DISPOSITION';
+const financialExceptionKind = 'BONSAI_FINANCIAL_EXCEPTION';
 
 function packetLabel(packet) {
   if (packet.kind === taskDispositionKind) return 'Task disposition review';
   if (packet.kind === projectDispositionKind) return 'Project disposition review';
+  if (packet.kind === financialExceptionKind) return 'Financial exception review';
   return 'Project identity review';
 }
 
@@ -74,6 +76,8 @@ export default function MigrationReviews() {
         response = await api.importTaskDispositionReview(payload);
       } else if (parsed.format === 'ashbi-hub-project-disposition-review-import') {
         response = await api.importProjectDispositionReview(payload);
+      } else if (parsed.format === 'ashbi-hub-financial-exception-review-import') {
+        response = await api.importFinancialExceptionReview(payload);
       } else {
         response = await api.importProjectLinkReview(payload);
       }
@@ -120,7 +124,9 @@ export default function MigrationReviews() {
       const record = await api.exportMigrationReviewDecision(selected.id);
       const prefix = selected.kind === taskDispositionKind
         ? 'task-disposition-decision'
-        : selected.kind === projectDispositionKind ? 'project-disposition-decision' : 'project-link-decision';
+        : selected.kind === projectDispositionKind
+        ? 'project-disposition-decision'
+        : selected.kind === financialExceptionKind ? 'financial-exception-decision' : 'project-link-decision';
       downloadJson(record, `${prefix}-${selected.id}.json`);
     } catch (error) {
       setActionError(error.message || 'The decision record could not be exported.');
@@ -139,7 +145,7 @@ export default function MigrationReviews() {
           <div className="flex items-center gap-2 text-primary"><GitMerge size={20} /><span className="text-sm font-semibold uppercase tracking-wide">Migration control</span></div>
           <h1 className="mt-1 text-3xl font-bold text-foreground">Notion + Bonsai reviews</h1>
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            Review evidence-bound project identities plus project and task dispositions. Decisions stay inside the Hub and do not edit Notion, Bonsai, projects, tasks, owners, invoices, or payments.
+            Review evidence-bound project identities, project and task dispositions, and financial exceptions. Decisions stay inside the Hub and do not edit Notion, Bonsai, projects, tasks, owners, invoices, payments, time entries, or contracts.
           </p>
         </div>
         <label className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground focus-within:ring-2 focus-within:ring-ring">
@@ -159,7 +165,7 @@ export default function MigrationReviews() {
         <section className="rounded-xl border border-dashed border-border bg-card p-10 text-center">
           <FileJson className="mx-auto text-muted-foreground" size={38} />
           <h2 className="mt-3 font-semibold text-foreground">No verified review packet imported</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Import a checksum-bound project-link, project-disposition, or task-disposition review bundle. Importing it records evidence only.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Import a checksum-bound project-link, project-disposition, task-disposition, or financial-exception review bundle. Importing it records evidence only.</p>
         </section>
       ) : (
         <div className="grid gap-6 lg:grid-cols-[18rem_1fr]">
@@ -204,6 +210,7 @@ export default function MigrationReviews() {
                       {candidate.tier && <span className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground">{candidate.tier}</span>}
                       {candidate.risk && <span className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground">{candidate.risk} risk</span>}
                       {candidate.sourceKind && <span className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground">{candidate.sourceKind.replaceAll('_', ' ')}</span>}
+                      {candidate.exceptionKind && <span className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground">{candidate.exceptionKind.replaceAll('_', ' ')}</span>}
                     </div>
                     {selected.kind === taskDispositionKind ? (
                       <div className="rounded-lg border border-border p-3">
@@ -223,6 +230,24 @@ export default function MigrationReviews() {
                             {candidate.duplicateMembers.map(member => <li key={member.bonsaiProjectId}>Bonsai {member.bonsaiProjectId} · {member.company || 'No client'} · {member.status}</li>)}
                           </ul>
                         )}
+                      </div>
+                    ) : selected.kind === financialExceptionKind ? (
+                      <div className="rounded-lg border border-border p-3">
+                        <p className="text-xs font-semibold uppercase text-muted-foreground">Source financial exception</p>
+                        {candidate.exceptionKind === 'NON_PAID_INVOICE' && <>
+                          <p className="mt-1 font-medium text-foreground">Invoice {candidate.invoiceNumber || candidate.sourceId}</p>
+                          <p className="text-xs text-muted-foreground">{candidate.company || 'No recorded client'} · {candidate.status} · {candidate.amount} {candidate.currency}</p>
+                          <p className="text-xs text-muted-foreground">Invoice date {candidate.date || 'not recorded'} · due {candidate.dueDate || 'not recorded'}</p>
+                        </>}
+                        {candidate.exceptionKind === 'UNBILLED_TIME_ENTRY' && <>
+                          <p className="mt-1 font-medium text-foreground">Unbilled time entry {candidate.sourceId}</p>
+                          <p className="text-xs text-muted-foreground">{candidate.seconds} seconds · {candidate.status} · {candidate.linkageState?.replaceAll('_', ' ')}</p>
+                          <p className="text-xs text-muted-foreground">Project {candidate.projectId || 'not linked'}</p>
+                        </>}
+                        {candidate.exceptionKind === 'ACTIVE_PROJECT_CONTRACT_GAP' && <>
+                          <p className="mt-1 font-medium text-foreground">{candidate.project}</p>
+                          <p className="text-xs text-muted-foreground">{candidate.company || 'No recorded client'} · {candidate.status || 'active'} · contract evidence required</p>
+                        </>}
                       </div>
                     ) : (
                       <div className="grid gap-3 md:grid-cols-2">
@@ -247,7 +272,7 @@ export default function MigrationReviews() {
                         ? 'Superseded generation'
                         : candidate.recommendation !== 'APPROVAL_READY'
                         ? 'Blocked by prerequisite'
-                        : selected.kind === taskDispositionKind || selected.kind === projectDispositionKind ? 'Approve recommendation' : 'Approve identity'}
+                        : selected.kind === taskDispositionKind || selected.kind === projectDispositionKind || selected.kind === financialExceptionKind ? 'Approve recommendation' : 'Approve identity'}
                     </Button>
                     <Button variant="destructive" onClick={() => decide(candidate, 'REJECTED')} disabled={Boolean(busyKey) || selected.superseded} leftIcon={<X size={16} />}>Reject</Button>
                   </div>
