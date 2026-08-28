@@ -59,6 +59,7 @@ model Organization {
   slackEventReceipts        SlackEventReceipt[]
   googleCalendarConnections GoogleCalendarConnection[]
   notionImportRecords       NotionImportRecord[]
+  operatingSourceRecords    OperatingSourceRecord[]
   aiBridgeActions           AiBridgeAction[]
   leads                     Lead[]
   leadEvents                LeadEvent[]
@@ -2090,6 +2091,34 @@ model NotionImportRecord {
   @@index([organizationId, projectId])
   @@index([noteId])
   @@map("notion_import_records")
+}
+
+// Durable source-to-destination identity evidence for operating-data
+// migrations. Source records from Notion and Bonsai remain independently
+// addressable even when an approved decision resolves them to one Hub record.
+// The polymorphic destination is deliberately represented by type + ID; import
+// services must verify the tenant-owned destination before creating a record.
+model OperatingSourceRecord {
+  id                  String    @id @default(cuid())
+  organizationId      String
+  sourceSystem        String // NOTION | BONSAI
+  entityType          String // PROJECT | TASK
+  sourceId            String
+  destinationId       String?
+  outcome             String // IMPORTED | LINKED | RETAINED_SOURCE | EXCLUDED | REPAIR_REQUIRED
+  sourceFingerprint   String
+  decisionCandidateId String?
+  decisionFingerprint String?
+  importedAt          DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, sourceSystem, entityType, sourceId])
+  @@index([organizationId, entityType, destinationId])
+  @@index([organizationId, outcome])
+  @@map("operating_source_records")
 }
 
 // Slack collaboration integration. Secrets are encrypted at rest; raw Slack

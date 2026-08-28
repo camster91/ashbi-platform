@@ -109,6 +109,8 @@ node scripts/import-bonsai-full.js --confirm --organization-id <sandbox-org-id> 
 
 The confirmed import refuses to start without the reviewed report. It rolls back if the sandbox target fingerprint, tenant, CSV fingerprint, destination plan, required inventory, or reconciliation findings differ from the approved dry run. Existing Hub clients, projects, and invoices are compared and never automatically overwritten. A matching record with different evidence is a manual reconciliation finding. This path is deliberately sandbox-only; production promotion remains a separate post-evidence and explicit cutover gate.
 
+The Bonsai import is only the first side of cross-source consolidation. Every imported Bonsai project and task must be registered under its immutable source ID in the tenant-scoped operating-source registry before the decision-aware Notion Projects and Tasks plan resolves approved links or proposes Notion-only records. A shared title is never a registry identity. The registry schema and fail-closed operating planner are code-present and unapplied; Bonsai registry writes, the confirmed atomic operating executor, and sandbox proof remain pending.
+
 ## Parallel-run exit
 
 1. Rerun the same export as a dry run and prove no duplicate creation.

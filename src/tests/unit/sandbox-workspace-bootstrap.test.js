@@ -143,6 +143,13 @@ test('confirmed bootstrap creates only the synthetic operating records and is re
   assert.equal(state.contact.isPrimary, true);
   assert.equal(state.project.organizationId, state.organization.id);
   assert.equal(state.project.clientId, state.client.id);
+  assert.deepEqual(first.recordIds, {
+    organizationId: state.organization.id,
+    staffUserId: state.staff.id,
+    clientId: state.client.id,
+    contactId: state.contact.id,
+    projectId: state.project.id,
+  });
   assert.equal(writes.some(({ model }) => /proposal|contract|invoice|payment/i.test(model)), false);
 
   writes.length = 0;
@@ -157,6 +164,7 @@ test('confirmed bootstrap creates only the synthetic operating records and is re
   assert.equal(replay.confirmed, true);
   assert.equal(writes.length, 0);
   assert.deepEqual(replay.actions.map((action) => action.operation), ['REUSE', 'REUSE', 'REUSE', 'REUSE', 'REUSE']);
+  assert.deepEqual(replay.recordIds, first.recordIds);
 });
 
 test('bootstrap fails closed on production configuration, unsafe slug, weak password, or record conflicts', async () => {

@@ -206,6 +206,18 @@ export async function bootstrapSandboxWorkspace({
     };
   }
 
-  await applyWorkspace({ prisma, snapshot, spec, password, hashPassword });
-  return { ready: true, confirmed: true, checks, actions };
+  const records = await applyWorkspace({ prisma, snapshot, spec, password, hashPassword });
+  return {
+    ready: true,
+    confirmed: true,
+    checks,
+    actions,
+    recordIds: {
+      organizationId: records.organization.id,
+      staffUserId: records.staff.id,
+      clientId: records.client.id,
+      contactId: records.contact.id,
+      projectId: records.project.id,
+    },
+  };
 }

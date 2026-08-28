@@ -8,7 +8,7 @@ Prepare the smallest reproducible Hub workspace needed for the controlled commer
 
 Complete every `ASHBI_SANDBOX_*` value in the target environment and use the same exact sandbox identifier for `ASHBI_SANDBOX_ENVIRONMENT_ID` and `ASHBI_SANDBOX_ORGANIZATION_SLUG`. The application URL and database name must visibly identify a sandbox, staging, test, or localhost target. Staff and client addresses must be reserved synthetic identities. Keep the synthetic staff password in the environment secret store; the report never prints it.
 
-`ASHBI_SANDBOX_ORGANIZATION_ID` is intentionally populated after the confirmed bootstrap. Record the exact created or reused organization ID from the authenticated sandbox result, then run `npm run check:migration-sandbox-target -- --organization-id <that-id>` before either Notion or Bonsai dry run. Do not copy an organization ID from production or infer it from the slug.
+`ASHBI_SANDBOX_ORGANIZATION_ID` is intentionally populated after the confirmed bootstrap. The confirmed report returns the five synthetic `recordIds`; record its exact `organizationId` in the sandbox secret store, then run `npm run check:migration-sandbox-target -- --organization-id <that-id>` before either Notion or Bonsai dry run. Do not copy an organization ID from production or infer it from the slug.
 
 Workspace preparation uses the target-isolation portion of `check:sandbox-readiness`: the explicit sandbox flag and identifier, non-production URL and database, and reserved synthetic identities. Stripe and Mailgun credentials are not required to prepare the workspace; they remain mandatory before the corresponding provider tests. A live, production, ambiguous, or conflicting target stops the bootstrap.
 
@@ -37,7 +37,7 @@ The confirmed command creates only the five planned operating records inside one
 - Deployed Git revision and exact sandbox environment identifier.
 - Redacted readiness and dry-run reports.
 - Backup reference and Cameron approval reference.
-- Confirmed bootstrap report and resulting record IDs from an authenticated staff view.
+- Owner-only confirmed bootstrap report containing the five synthetic record IDs, corroborated from an authenticated staff view.
 - A replay report showing five `REUSE` actions and no duplicate records.
 
 This proves only that the synthetic workspace exists. The proposal, contract, invoice email, Stripe checkout/webhook, reconciliation, export, restore, parallel-run, and financial cutover gates remain separate.
