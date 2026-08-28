@@ -2,7 +2,7 @@
 
 This is the repository's authoritative status map as of 2026-08-26. A feature is **code-present** when routes/UI/tests exist, **target-verified** only when target-environment evidence exists, **blocked** when an external decision/provider/human gate remains, and **deferred** when it is explicitly outside the current supported milestone. Code presence is never sufficient evidence for production, accessibility, legal, provider, or market-readiness claims.
 
-The active agency-replacement acceptance map is [replacement-readiness-matrix.md](replacement-readiness-matrix.md). The cross-system evidence contract for declaring the unified company platform launched is [unified-launch-readiness.md](unified-launch-readiness.md).
+The active agency-replacement acceptance map is [replacement-readiness-matrix.md](replacement-readiness-matrix.md). The cross-system evidence contract for declaring the unified company platform launched is [unified-launch-readiness.md](unified-launch-readiness.md). The current branch-to-production boundary and required isolated rehearsal are [unified-platform-deployment-candidate.md](unified-platform-deployment-candidate.md).
 
 ## Current supported milestone
 
