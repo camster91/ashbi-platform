@@ -26,6 +26,16 @@ npm run verify:bonsai-task-snapshot -- <bonsai-tasks.json>
 
 The verifier is read-only. It requires the all-scope completion marker, a valid capture timestamp, explicit connector pagination evidence ending with `has_more: false`, an exact task count, unique API UUIDs, and every material task field. It reports capture integrity separately from migration readiness: source rows with blank titles or no project remain preserved but block `migrationReady`. A passing report validates internal snapshot integrity; it does not replace the native task export, authenticate a manually edited file, or prove parity with the Hub.
 
+## Active project triage
+
+Before deciding that an active Bonsai project is current, redundant, or ready for closure, bind the verified native project and task snapshots to the current project-group snapshot and native Notion/Bonsai project review:
+
+```text
+npm run prepare:bonsai-active-project-triage -- --bonsai-projects <bonsai-projects.json> --bonsai-tasks <bonsai-tasks.json> --project-groups <bonsai-project-groups.json> --native-project-review <native-project-review.json> --prepared-at <ISO> --output <new-active-project-triage.json>
+```
+
+The triage packet classifies every active project as an exact-link review, task-evidenced link review, suggested-link review, active project with tasks but no Notion link, or active project without current task evidence. It preserves stable Bonsai IDs, project groups, current task UUIDs and states, duplicate-title evidence, and the strongest bounded Notion evidence. A project without current tasks is not called stale or closure-ready. Every record explicitly retains pending invoice, payment, contract, and time-entry checks, and the packet grants no authority to create, link, move, complete, archive, delete, or bill anything. The command creates one owner-only file and refuses overwrite.
+
 The Companies export is a mixed CRM connection population, not a client list. The importer accepts its observed `Name`, `Email`, `Domain`, and related profile columns only through `--connections-csv`. It promotes a connection to a client contact only when the row has an exact operational client name from the project/invoice sources or an exact invoice email. Unrelated leads, vendors, and domains remain outside the client import; a row that points to different clients by name and email, conflicting duplicate emails, or an ambiguous primary contact remains an unresolved finding. The untouched timestamped filename, row count, headers, and checksum remain in the source fingerprint. A legacy `clients.csv` is still understood for recovery of older evidence, but it is not the current Bonsai contract.
 
 ## Dry run

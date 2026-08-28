@@ -60,6 +60,7 @@
     "prepare:notion-bonsai-task-review": "node scripts/prepare-notion-bonsai-task-review.mjs",
     "prepare:notion-bonsai-project-review": "node scripts/prepare-notion-bonsai-project-review.mjs",
     "prepare:notion-bonsai-native-project-review": "node scripts/prepare-notion-bonsai-native-project-review.mjs",
+    "prepare:bonsai-active-project-triage": "node scripts/prepare-bonsai-active-project-triage.mjs",
     "prepare:notion-bonsai-mapping-decision": "node scripts/prepare-notion-bonsai-mapping-decision.mjs",
     "verify:notion-bonsai-mapping-decision": "node scripts/verify-notion-bonsai-mapping-decision.mjs",
     "prepare:notion-bonsai-owner-decision": "node scripts/prepare-notion-bonsai-owner-decision.mjs",
