@@ -4,6 +4,26 @@ Ashbi supports a **one-way, controlled import** of a selected Notion Markdown
 export into one existing Ashbi project. It is not a live Notion sync and does
 not authorize writing back to Notion.
 
+## Current Projects and Tasks inventory
+
+The selected Markdown import does not prove that Ashbi's operating Projects and Tasks were inventoried. Capture the current `Projects & Tasks` hub through the authenticated Notion connector and retain one immutable JSON snapshot containing the complete Projects and Tasks queries. The current source identities are deliberately distinct from the data sources titled `Archive — Projects (legacy automation)` and `Archive — Tasks (legacy automation)`.
+
+Verify the inventory before using it as migration evidence:
+
+```text
+npm run verify:notion-operating-snapshot -- <notion-projects-tasks.json>
+```
+
+The verifier is read-only. It binds the current hub, database and data-source identities; rejects the archived automation sources; requires complete query evidence; and verifies unique project/task identities, supported statuses, and exactly one existing project relation per task. This inventory does not write to Notion, replace the original Markdown export, prove Hub parity, or authorize a confirmed import.
+
+Before consolidating the two source systems, compare the checksummed Notion inventory with the complete Bonsai all-scope task snapshot:
+
+```text
+npm run compare:notion-bonsai-tasks -- --notion <notion-projects-tasks.json> --bonsai <bonsai-tasks.json> --completed-at <ISO> --output <new-comparison.json>
+```
+
+The comparator creates one owner-only report without changing either system. It accepts only internally valid source snapshots, matches only unique exact task titles, and preserves source-only tasks, project-title differences, lifecycle differences, and Bonsai source-review findings. It never treats the report as Hub parity or authorizes a merge.
+
 ## Supported input
 
 - UTF-8 `.md` pages from a Notion export;

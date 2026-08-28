@@ -54,6 +54,8 @@
     "reconcile:bonsai-operations": "node scripts/reconcile-bonsai-operations.js",
     "reconcile:bonsai-tasks": "node scripts/reconcile-bonsai-tasks.js",
     "verify:bonsai-task-snapshot": "node scripts/verify-bonsai-task-snapshot.mjs",
+    "verify:notion-operating-snapshot": "node scripts/verify-notion-operating-snapshot.mjs",
+    "compare:notion-bonsai-tasks": "node scripts/compare-notion-bonsai-tasks.mjs",
     "test:all": "node scripts/run-node-tests.mjs src/tests/unit src/tests/integration",
     "test:e2e:setup": "bash tests/e2e/setup.sh",
     "test:e2e:teardown": "bash tests/e2e/teardown.sh",
