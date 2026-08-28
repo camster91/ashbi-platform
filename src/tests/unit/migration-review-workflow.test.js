@@ -219,6 +219,11 @@ test('route and UI keep migration review admin-only, tenant-scoped, and separate
   assert.match(page, /ashbi-hub-financial-exception-review-import/);
   assert.match(page, /ashbi-hub-active-project-outcome-review-import/);
   assert.match(page, /Superseded generation/);
+  assert.match(page, /Select low\/medium approval-ready/);
+  assert.match(page, /Approve selected/);
+  assert.match(page, /<ConfirmDialog/);
+  assert.match(page, /recordMigrationReviewDecision/);
+  assert.doesNotMatch(page, /window\.confirm/);
   assert.doesNotMatch(page, /Apply to Bonsai|Delete from Notion/);
 });
 

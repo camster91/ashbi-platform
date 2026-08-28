@@ -69,7 +69,7 @@ npm run type-check                          PASS
 npm run lint                                PASS
 npm test                                    PASS, 947 backend unit tests
 npm run test:all                            PASS, 964 passed, 0 failed, 0 skipped
-npm test --prefix web                       PASS, 517 frontend tests
+npm test --prefix web                       PASS, 518 frontend tests
 npm run build                               PASS
 frontend budgets                            PASS
 Lighthouse CI                               PASS, 3 mobile and 3 desktop runs

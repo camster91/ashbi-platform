@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Check, Download, FileJson, GitMerge, RefreshCw, X } from 'lucide-react';
+import ConfirmDialog from '../components/ConfirmDialog';
 import QueryErrorState from '../components/QueryErrorState';
 import { Button, LoadingState } from '../components/ui';
 import { api } from '../lib/api';
@@ -42,12 +43,20 @@ export default function MigrationReviews() {
   const [busyKey, setBusyKey] = useState('');
   const [filter, setFilter] = useState('PENDING');
   const [failedAction, setFailedAction] = useState(null);
+  const [selectedCandidateIds, setSelectedCandidateIds] = useState([]);
+  const [batchConfirmationOpen, setBatchConfirmationOpen] = useState(false);
 
   const selected = packets.find(packet => packet.id === selectedId) ?? packets[0] ?? null;
   const candidates = useMemo(() => {
     const rows = selected?.candidates ?? [];
     return filter ? rows.filter(candidate => candidate.decision === filter) : rows;
   }, [selected, filter]);
+  const selectableCandidates = useMemo(() => candidates.filter(candidate => (
+    !selected?.superseded
+    && candidate.decision === 'PENDING'
+    && candidate.recommendation === 'APPROVAL_READY'
+    && candidate.risk !== 'HIGH'
+  )), [candidates, selected?.superseded]);
 
   const load = async () => {
     setLoadError(null);
@@ -63,6 +72,7 @@ export default function MigrationReviews() {
   };
 
   useEffect(() => { load(); }, []);
+  useEffect(() => { setSelectedCandidateIds([]); }, [selectedId, filter]);
 
   const importBundle = async (event) => {
     const file = event.target.files?.[0];
@@ -120,6 +130,66 @@ export default function MigrationReviews() {
     decision,
     reviewNote: null,
   });
+
+  const toggleCandidate = (candidateId) => {
+    setSelectedCandidateIds(current => current.includes(candidateId)
+      ? current.filter(id => id !== candidateId)
+      : [...current, candidateId]);
+  };
+
+  const toggleVisibleApprovalReady = () => {
+    const visibleIds = selectableCandidates.map(candidate => candidate.candidateId);
+    const allSelected = visibleIds.length > 0 && visibleIds.every(id => selectedCandidateIds.includes(id));
+    setSelectedCandidateIds(allSelected ? [] : visibleIds);
+  };
+
+  const approveSelected = async () => {
+    if (selectedCandidateIds.length === 0 || selected?.superseded) return;
+    setBatchConfirmationOpen(true);
+  };
+
+  const confirmSelectedApprovals = async () => {
+    const chosen = (selected?.candidates ?? []).filter(candidate => (
+      selectedCandidateIds.includes(candidate.candidateId)
+      && candidate.decision === 'PENDING'
+      && candidate.recommendation === 'APPROVAL_READY'
+      && candidate.risk !== 'HIGH'
+    ));
+    if (chosen.length === 0 || selected?.superseded) {
+      setBatchConfirmationOpen(false);
+      return;
+    }
+
+    setBusyKey('batch');
+    setActionError('');
+    setFailedAction(null);
+    let completed = 0;
+    let latestPacket = selected;
+    try {
+      for (const candidate of chosen) {
+        const response = await api.recordMigrationReviewDecision(selected.id, candidate.candidateId, {
+          requestId: crypto.randomUUID(),
+          decision: 'APPROVED',
+          reviewNote: null,
+        });
+        latestPacket = response.packet;
+        completed += 1;
+      }
+      setPackets(current => current.map(packet => packet.id === latestPacket.id ? latestPacket : packet));
+      setSelectedCandidateIds([]);
+      setBatchConfirmationOpen(false);
+    } catch (error) {
+      await load();
+      setSelectedCandidateIds([]);
+      setBatchConfirmationOpen(false);
+      setActionError(
+        `${completed} of ${chosen.length} decisions were recorded before the batch stopped. `
+        + `${error.message || 'The remaining decisions could not be recorded.'} Saved decisions remain immutable; review the refreshed pending list before retrying.`,
+      );
+    } finally {
+      setBusyKey('');
+    }
+  };
 
   const exportDecision = async () => {
     setBusyKey('export');
@@ -201,10 +271,27 @@ export default function MigrationReviews() {
               </div>
             </section>
 
-            <div className="flex flex-wrap gap-2" role="group" aria-label="Filter candidates by decision">
-              {[['PENDING', 'Pending'], ['APPROVED', 'Approved'], ['REJECTED', 'Rejected'], ['', 'All']].map(([value, label]) => (
-                <Button key={label} size="sm" variant={filter === value ? 'default' : 'outline'} onClick={() => setFilter(value)}>{label}</Button>
-              ))}
+            <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Filter candidates by decision">
+                {[['PENDING', 'Pending'], ['APPROVED', 'Approved'], ['REJECTED', 'Rejected'], ['', 'All']].map(([value, label]) => (
+                  <Button key={label} size="sm" variant={filter === value ? 'default' : 'outline'} onClick={() => setFilter(value)}>{label}</Button>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={toggleVisibleApprovalReady}
+                  disabled={Boolean(busyKey) || selectableCandidates.length === 0}
+                >
+                  {selectableCandidates.length > 0 && selectableCandidates.every(candidate => selectedCandidateIds.includes(candidate.candidateId))
+                    ? 'Clear selection'
+                    : 'Select low/medium approval-ready'}
+                </Button>
+                <Button size="sm" onClick={approveSelected} loading={busyKey === 'batch'} disabled={Boolean(busyKey) || selectedCandidateIds.length === 0} leftIcon={<Check size={15} />}>
+                  Approve selected ({selectedCandidateIds.length})
+                </Button>
+              </div>
             </div>
 
             {candidates.length === 0 ? <p className="rounded-xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">No candidates match this filter.</p> : candidates.map(candidate => (
@@ -212,6 +299,18 @@ export default function MigrationReviews() {
                 <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                   <div className="min-w-0 space-y-3">
                     <div className="flex flex-wrap items-center gap-2">
+                      {!selected.superseded && candidate.decision === 'PENDING' && candidate.recommendation === 'APPROVAL_READY' && candidate.risk !== 'HIGH' && (
+                        <label className="inline-flex min-h-8 cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-2.5 text-xs font-medium text-foreground">
+                          <input
+                            type="checkbox"
+                            checked={selectedCandidateIds.includes(candidate.candidateId)}
+                            onChange={() => toggleCandidate(candidate.candidateId)}
+                            disabled={Boolean(busyKey)}
+                            aria-label={`Select ${candidate.notionProject || candidate.project || candidate.title || candidate.candidateId}`}
+                          />
+                          Select
+                        </label>
+                      )}
                       <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${decisionStyles[candidate.decision]}`}>{candidate.decision}</span>
                       {candidate.tier && <span className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground">{candidate.tier}</span>}
                       {candidate.risk && <span className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground">{candidate.risk} risk</span>}
@@ -298,6 +397,16 @@ export default function MigrationReviews() {
           </main>
         </div>
       )}
+      <ConfirmDialog
+        isOpen={batchConfirmationOpen}
+        title={`Approve ${selectedCandidateIds.length} selected candidate${selectedCandidateIds.length === 1 ? '' : 's'}?`}
+        description="This records separate, immutable Hub review decisions only. High-risk suggestions remain excluded for individual review. It does not edit Notion or Bonsai, apply links, migrate records, change projects or finances, or authorize cutover."
+        confirmLabel={`Approve ${selectedCandidateIds.length}`}
+        onConfirm={confirmSelectedApprovals}
+        onCancel={() => setBatchConfirmationOpen(false)}
+        pending={busyKey === 'batch'}
+        destructive={false}
+      />
     </div>
   );
 }
