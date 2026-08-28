@@ -59,6 +59,39 @@ describe('mandatory release gates', () => {
     assert.ok(validateReleaseGates(root).some((failure) => failure.includes('type-check')));
   });
 
+  it('fails closed when the exact Prisma migration chain is not applied', () => {
+    const root = copyWorkflows();
+    const workflow = path.join(root, '.github', 'workflows', 'release-gates.yml');
+    fs.writeFileSync(
+      workflow,
+      fs.readFileSync(workflow, 'utf8').replace('npx prisma migrate deploy', 'echo migrations skipped'),
+    );
+    assert.ok(validateReleaseGates(root).some((failure) => failure.includes('exact Prisma migration chain')));
+  });
+
+  it('fails closed when migration-to-schema drift detection is removed', () => {
+    const root = copyWorkflows();
+    const workflow = path.join(root, '.github', 'workflows', 'release-gates.yml');
+    fs.writeFileSync(
+      workflow,
+      fs.readFileSync(workflow, 'utf8').replace(
+        'npx prisma migrate diff --exit-code --from-config-datasource --to-schema prisma/schema.prisma',
+        'echo migration drift skipped',
+      ),
+    );
+    assert.ok(validateReleaseGates(root).some((failure) => failure.includes('migration-to-schema drift')));
+  });
+
+  it('fails closed when the quality job bypasses migration history with db push', () => {
+    const root = copyWorkflows();
+    const workflow = path.join(root, '.github', 'workflows', 'release-gates.yml');
+    fs.writeFileSync(
+      workflow,
+      fs.readFileSync(workflow, 'utf8').replace('npx prisma migrate deploy', 'npx prisma migrate deploy\n          npx prisma db push'),
+    );
+    assert.ok(validateReleaseGates(root).some((failure) => failure.includes('bypasses migration history')));
+  });
+
   it('fails closed when a second deployment controller is introduced', () => {
     const root = copyWorkflows();
     const workflow = path.join(root, '.github', 'workflows', 'rogue-deploy.yml');

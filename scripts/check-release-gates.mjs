@@ -56,6 +56,16 @@ export function validateReleaseGates(root = process.cwd()) {
     failures.push('release-gates.yml does not enable dedicated-database policy integration tests');
   }
   const browserJob = release.split(/^  browser:/m)[1]?.split(/^  stack-e2e:/m)[0] ?? '';
+  const qualityJob = release.split(/^  quality:/m)[1]?.split(/^  browser:/m)[0] ?? '';
+  if (!qualityJob.includes('npx prisma migrate deploy')) {
+    failures.push('release-gates.yml quality job does not apply the exact Prisma migration chain');
+  }
+  if (!qualityJob.includes('npx prisma migrate diff --exit-code --from-config-datasource --to-schema prisma/schema.prisma')) {
+    failures.push('release-gates.yml quality job does not reject migration-to-schema drift');
+  }
+  if (qualityJob.includes('npx prisma db push')) {
+    failures.push('release-gates.yml quality job bypasses migration history with prisma db push');
+  }
   if (!browserJob.includes('npm run build')) failures.push('release-gates.yml browser job does not build the production frontend');
 
   if (!/uses:\s*\.\/\.github\/workflows\/release-gates\.yml/.test(ci)) {

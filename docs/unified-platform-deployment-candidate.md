@@ -5,12 +5,16 @@
 This candidate is the complete unified-company branch, not a narrow migration-review patch.
 
 - Remote base: `origin/main` at `6522707b0865ec66291471561cebab84e5c31762`
-- Candidate: `codex/unified-company-strategy` at `eb397a449ce65b7e5b2948496c3792d1eb0a7a12`
-- Difference: 103 commits, 346 changed files, and 22 Prisma migrations
+- Candidate branch: `codex/unified-company-strategy`; the last staged documentation baseline is `2dae6ac41b3ffdf08345a20ebba0d44947436132`
+- Baseline difference: 103 commits, 346 changed files, and 22 Prisma migrations. The exact immutable release SHA and refreshed diff counts must come from the approved release-gate run and deployment handoff.
 - First candidate migration: `20260826173000_public_client_acquisition_intake`
 - Latest candidate migration: `20260828123000_active_project_outcome_review_kind`
 
 The public frontend observed on 2026-08-28 UTC served `/assets/index-LKjUf49E.js` and did not contain the local `MigrationReviews` or `LaunchReadiness` chunks. Unauthenticated API responses are not route evidence because the organization-context guard responds before both known and intentionally unknown protected paths.
+
+## Pre-staging CI proof
+
+The canonical Required release-gates workflow must pass for the exact candidate SHA before staging. Its pgvector-backed quality job applies the repository migration history with `prisma migrate deploy`, rejects migration-to-schema drift with `prisma migrate diff --exit-code`, and is contract-checked against substituting `prisma db push`. A local contract pass proves the workflow definition, not the migration execution; the approved GitHub Actions run is the authoritative hosted result.
 
 ## Required staging sequence
 

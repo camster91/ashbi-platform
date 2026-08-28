@@ -45,10 +45,12 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npm ci --prefix web --no-audit --no-fund
-      - name: Generate Prisma client and test database
+      - name: Generate Prisma client and apply the exact migration chain
         run: |
           npx prisma generate
-          npx prisma db push
+          npx prisma migrate deploy
+      - name: Verify migration chain matches the Prisma schema
+        run: npx prisma migrate diff --exit-code --from-config-datasource --to-schema prisma/schema.prisma
       - name: Check package boundaries
         run: npm run check:boundaries
       - name: Type check
