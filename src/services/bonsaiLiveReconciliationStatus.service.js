@@ -4,6 +4,7 @@ import { verifyNotionBonsaiOwnerDecision } from './notionBonsaiOwnerDecision.ser
 import { verifyNotionBonsaiTaskLinkDecision } from './notionBonsaiTaskLinkDecision.service.js';
 import { verifyNotionBonsaiTaskDispositionDecision } from './notionBonsaiTaskDispositionDecision.service.js';
 import { verifyNotionBonsaiProjectDispositionDecision } from './notionBonsaiProjectDispositionDecision.service.js';
+import { verifyBonsaiActiveProjectDispositionDecision } from './bonsaiActiveProjectDispositionDecision.service.js';
 
 const FORMAT = 'ashbi-bonsai-live-reconciliation-status';
 
@@ -22,8 +23,8 @@ function timestamp(value, name) {
   return parsed;
 }
 
-function requireFormat(document, format, name) {
-  if (document?.format !== format || document?.version !== 1) throw new TypeError(`A supported ${name} is required`);
+function requireFormat(document, format, name, version = 1) {
+  if (document?.format !== format || document?.version !== version) throw new TypeError(`A supported ${name} is required`);
 }
 
 function sameHash(actual, expected, name) {
@@ -47,6 +48,7 @@ export function prepareBonsaiLiveReconciliationStatus({
   projectDispositionDecision,
   activeProjectTriage,
   financialReview,
+  activeProjectDispositionDecision,
   taskReviewSha256,
   mappingDecisionSha256,
   taskLinkDecisionSha256,
@@ -57,6 +59,7 @@ export function prepareBonsaiLiveReconciliationStatus({
   projectDispositionDecisionSha256,
   activeProjectTriageSha256,
   financialReviewSha256,
+  activeProjectDispositionDecisionSha256,
   preparedAt,
 }) {
   requireFormat(taskReview, 'ashbi-notion-bonsai-task-review', 'task review');
@@ -66,9 +69,10 @@ export function prepareBonsaiLiveReconciliationStatus({
   requireFormat(ownerDecision, 'ashbi-notion-bonsai-owner-decision', 'owner decision');
   requireFormat(nativeProjectReview, 'ashbi-notion-bonsai-native-project-review', 'native project review');
   requireFormat(projectLinkDecision, 'ashbi-notion-bonsai-native-project-link-decision', 'project-link decision');
-  requireFormat(projectDispositionDecision, 'ashbi-notion-bonsai-project-disposition-decision', 'project-disposition decision');
+  requireFormat(projectDispositionDecision, 'ashbi-notion-bonsai-project-disposition-decision', 'project-disposition decision', 2);
   requireFormat(activeProjectTriage, 'ashbi-bonsai-active-project-triage', 'active project triage');
   requireFormat(financialReview, 'ashbi-bonsai-active-project-financial-review', 'active project financial review');
+  requireFormat(activeProjectDispositionDecision, 'ashbi-bonsai-active-project-disposition-decision', 'active project disposition decision');
 
   const hashes = {
     taskReviewSha256: sha256(taskReviewSha256, 'taskReviewSha256'),
@@ -81,6 +85,7 @@ export function prepareBonsaiLiveReconciliationStatus({
     projectDispositionDecisionSha256: sha256(projectDispositionDecisionSha256, 'projectDispositionDecisionSha256'),
     activeProjectTriageSha256: sha256(activeProjectTriageSha256, 'activeProjectTriageSha256'),
     financialReviewSha256: sha256(financialReviewSha256, 'financialReviewSha256'),
+    activeProjectDispositionDecisionSha256: sha256(activeProjectDispositionDecisionSha256, 'activeProjectDispositionDecisionSha256'),
   };
   sameHash(mappingDecision.sourceEvidence?.reviewSha256, hashes.taskReviewSha256, 'Mapping decision');
   sameHash(taskLinkDecision.sourceEvidence?.reviewSha256, hashes.taskReviewSha256, 'Task-link decision');
@@ -92,6 +97,9 @@ export function prepareBonsaiLiveReconciliationStatus({
   sameHash(projectDispositionDecision.sourceEvidence?.projectLinkDecisionSha256, hashes.projectLinkDecisionSha256, 'Project-disposition link decision');
   sameHash(activeProjectTriage.sourceEvidence?.nativeProjectReviewSha256, hashes.nativeProjectReviewSha256, 'Active project triage');
   sameHash(financialReview.sourceEvidence?.activeProjectTriageSha256, hashes.activeProjectTriageSha256, 'Financial review');
+  sameHash(activeProjectDispositionDecision.sourceEvidence?.activeProjectTriageSha256, hashes.activeProjectTriageSha256, 'Active project disposition triage');
+  sameHash(activeProjectDispositionDecision.sourceEvidence?.financialReviewSha256, hashes.financialReviewSha256, 'Active project disposition financial review');
+  sameHash(activeProjectDispositionDecision.sourceEvidence?.projectDispositionDecisionSha256, hashes.projectDispositionDecisionSha256, 'Active project disposition source decision');
   sameHash(taskReview.sourceEvidence?.notionSnapshotSha256, nativeProjectReview.sourceEvidence?.notionSnapshotSha256, 'Notion source');
   sameHash(taskReview.sourceEvidence?.bonsaiSnapshotSha256, activeProjectTriage.sourceEvidence?.bonsaiTaskSnapshotSha256, 'Bonsai task source');
   sameHash(nativeProjectReview.sourceEvidence?.bonsaiProjectSnapshotSha256, activeProjectTriage.sourceEvidence?.bonsaiProjectSnapshotSha256, 'Bonsai project source');
@@ -116,7 +124,15 @@ export function prepareBonsaiLiveReconciliationStatus({
     projectLinkDecision, projectLinkDecisionSha256: hashes.projectLinkDecisionSha256,
     record: projectDispositionDecision,
   });
-  if (!mappingVerification.valid || !taskLinkVerification.valid || !taskDispositionVerification.valid || !ownerVerification.valid || !projectLinkVerification.valid || !projectDispositionVerification.valid) {
+  const activeProjectDispositionVerification = verifyBonsaiActiveProjectDispositionDecision({
+    triage: activeProjectTriage, triageSha256: hashes.activeProjectTriageSha256,
+    financialReview, financialReviewSha256: hashes.financialReviewSha256,
+    nativeProjectReview, nativeProjectReviewSha256: hashes.nativeProjectReviewSha256,
+    projectLinkDecision, projectLinkDecisionSha256: hashes.projectLinkDecisionSha256,
+    projectDispositionDecision, projectDispositionDecisionSha256: hashes.projectDispositionDecisionSha256,
+    record: activeProjectDispositionDecision,
+  });
+  if (!mappingVerification.valid || !taskLinkVerification.valid || !taskDispositionVerification.valid || !ownerVerification.valid || !projectLinkVerification.valid || !projectDispositionVerification.valid || !activeProjectDispositionVerification.valid) {
     const failed = [
       !mappingVerification.valid ? `mapping:${mappingVerification.findings.join(',')}` : null,
       !taskLinkVerification.valid ? `task-link:${taskLinkVerification.findings.join(',')}` : null,
@@ -124,12 +140,13 @@ export function prepareBonsaiLiveReconciliationStatus({
       !ownerVerification.valid ? `owner:${ownerVerification.findings.join(',')}` : null,
       !projectLinkVerification.valid ? `project-link:${projectLinkVerification.findings.join(',')}` : null,
       !projectDispositionVerification.valid ? `project-disposition:${projectDispositionVerification.findings.join(',')}` : null,
+      !activeProjectDispositionVerification.valid ? `active-project-disposition:${activeProjectDispositionVerification.findings.join(',')}` : null,
     ].filter(Boolean).join(';');
     throw new TypeError(`A decision artifact failed source-bound verification (${failed})`);
   }
 
   const prepared = timestamp(preparedAt, 'preparedAt');
-  const sourceTimes = [taskReview, mappingDecision, taskLinkDecision, taskDispositionDecision, ownerDecision, nativeProjectReview, projectLinkDecision, projectDispositionDecision, activeProjectTriage, financialReview]
+  const sourceTimes = [taskReview, mappingDecision, taskLinkDecision, taskDispositionDecision, ownerDecision, nativeProjectReview, projectLinkDecision, projectDispositionDecision, activeProjectTriage, financialReview, activeProjectDispositionDecision]
     .map((document, index) => timestamp(document?.preparedAt, `source preparedAt ${index}`));
   if (sourceTimes.some(value => prepared < value)) throw new TypeError('preparedAt must not predate source evidence');
 
@@ -153,7 +170,7 @@ export function prepareBonsaiLiveReconciliationStatus({
   if (projectLinkVerification.pending > 0) findings.push('PROJECT_LINK_DECISIONS_PENDING');
   if (taskDispositionVerification.pending > 0) findings.push('TASK_DISPOSITION_DECISIONS_PENDING');
   if (projectDispositionVerification.pending > 0) findings.push('PROJECT_DISPOSITION_DECISIONS_PENDING');
-  if (activeProjects > closureAuthorizedProjects) findings.push('ACTIVE_PROJECT_DISPOSITIONS_PENDING');
+  if (activeProjectDispositionVerification.pending > 0) findings.push('ACTIVE_PROJECT_DISPOSITIONS_PENDING');
   if (projectsWithNonPaidInvoices > 0) findings.push('NON_PAID_INVOICE_RECORDS_REQUIRE_REVIEW');
   if (projectsWithUnbilledTime > 0) findings.push('UNBILLED_TIME_REQUIRES_REVIEW');
   if (projectlessTimeEntries > 0) findings.push('PROJECTLESS_TIME_ENTRY_REQUIRES_REVIEW');
@@ -187,7 +204,8 @@ export function prepareBonsaiLiveReconciliationStatus({
         unmatchedNotionProjects, unmatchedBonsaiProjects, duplicateBonsaiTitles,
       },
       activeProjectDisposition: {
-        state: 'BLOCKED', activeProjects, closureAuthorizedProjects,
+        state: 'BLOCKED', activeProjects, decisionsPending: activeProjectDispositionVerification.pending,
+        closureAuthorizedProjects,
       },
       financialSafety: {
         state: 'BLOCKED', projectsWithNonPaidInvoices, projectsWithUnbilledTime,

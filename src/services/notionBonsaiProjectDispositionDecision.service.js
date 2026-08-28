@@ -1,11 +1,12 @@
 import { verifyNotionBonsaiNativeProjectLinkDecision } from './notionBonsaiNativeProjectLinkDecision.service.js';
 
 const FORMAT = 'ashbi-notion-bonsai-project-disposition-decision';
-const SCOPE = 'SOURCE_ONLY_AND_DUPLICATE_PROJECT_DISPOSITIONS';
+const VERSION = 2;
+const SCOPE = 'ALL_SOURCE_PROJECT_AND_DUPLICATE_TITLE_DISPOSITIONS';
 
 const ALLOWED = {
-  NOTION_ONLY: new Set(['PENDING', 'RESOLVED_BY_APPROVED_LINK', 'MIGRATE_TO_HUB', 'RETAIN_NOTION_ONLY', 'EXCLUDE_WITH_EVIDENCE']),
-  BONSAI_ONLY: new Set(['PENDING', 'RESOLVED_BY_APPROVED_LINK', 'MIGRATE_TO_HUB', 'RETAIN_BONSAI_ONLY', 'EXCLUDE_WITH_EVIDENCE']),
+  NOTION_PROJECT: new Set(['PENDING', 'RESOLVED_BY_APPROVED_LINK', 'MIGRATE_TO_HUB', 'RETAIN_NOTION_SOURCE', 'EXCLUDE_WITH_EVIDENCE']),
+  BONSAI_PROJECT: new Set(['PENDING', 'RESOLVED_BY_APPROVED_LINK', 'MIGRATE_TO_HUB', 'RETAIN_BONSAI_SOURCE', 'EXCLUDE_WITH_EVIDENCE']),
   BONSAI_DUPLICATE_TITLE_GROUP: new Set(['PENDING', 'RETAIN_DISTINCT_WITH_EVIDENCE', 'MANUALLY_MAP_MEMBERS_WITH_EVIDENCE', 'REPAIR_SOURCE_AND_RECAPTURE', 'EXCLUDE_GROUP_FINDING_WITH_EVIDENCE']),
 };
 
@@ -49,19 +50,30 @@ function reviewCandidates(review, linkCandidates) {
     .filter(candidate => String(candidate?.[field]) === String(value))
     .map(candidate => candidate.candidateId)
     .sort();
+  const notionProjects = new Map(review.unmatchedNotionProjects.map(item => [String(item.notionSourceId), item]));
+  const bonsaiProjects = new Map(review.unmatchedBonsaiProjects.map(item => [String(item.bonsaiProjectId), item]));
+  for (const link of linkCandidates) {
+    if (!notionProjects.has(String(link.notionSourceId))) notionProjects.set(String(link.notionSourceId), {
+      notionSourceId: link.notionSourceId, project: link.notionProject, status: link.notionStatus,
+    });
+    if (!bonsaiProjects.has(String(link.bonsaiProjectId))) bonsaiProjects.set(String(link.bonsaiProjectId), {
+      bonsaiProjectId: link.bonsaiProjectId, project: link.bonsaiProject, status: link.bonsaiStatus,
+      company: null, url: null,
+    });
+  }
   const candidates = [
-    ...review.unmatchedNotionProjects.map(item => {
+    ...[...notionProjects.values()].map(item => {
       const id = sourceId(item.notionSourceId, 'notionSourceId');
       return {
-        candidateId: candidateId('NOTION_ONLY', id), sourceKind: 'NOTION_ONLY', notionSourceId: id,
+        candidateId: candidateId('NOTION_PROJECT', id), sourceKind: 'NOTION_PROJECT', notionSourceId: id,
         bonsaiProjectId: null, project: text(item.project), status: text(item.status), company: null, url: null,
         linkedCandidateIds: linksFor('notionSourceId', id), duplicateMemberProjectIds: [],
       };
     }),
-    ...review.unmatchedBonsaiProjects.map(item => {
+    ...[...bonsaiProjects.values()].map(item => {
       const id = sourceId(item.bonsaiProjectId, 'bonsaiProjectId');
       return {
-        candidateId: candidateId('BONSAI_ONLY', id), sourceKind: 'BONSAI_ONLY', notionSourceId: null,
+        candidateId: candidateId('BONSAI_PROJECT', id), sourceKind: 'BONSAI_PROJECT', notionSourceId: null,
         bonsaiProjectId: id, project: text(item.project), status: text(item.status), company: text(item.company),
         url: text(item.url), linkedCandidateIds: linksFor('bonsaiProjectId', id), duplicateMemberProjectIds: [],
       };
@@ -81,6 +93,10 @@ function reviewCandidates(review, linkCandidates) {
       };
     }),
   ].sort((left, right) => left.candidateId.localeCompare(right.candidateId));
+  if (Number(review?.summary?.notionProjects) !== notionProjects.size
+    || Number(review?.summary?.bonsaiProjects) !== bonsaiProjects.size) {
+    throw new TypeError('Project disposition candidates do not cover the complete source inventories');
+  }
   if (!candidates.length || new Set(candidates.map(item => item.candidateId)).size !== candidates.length) {
     throw new TypeError('Project disposition candidates require unique source identities');
   }
@@ -181,7 +197,7 @@ export function prepareNotionBonsaiProjectDispositionDecision({
     throw new TypeError('A fully pending packet cannot contain decision evidence');
   }
   return {
-    format: FORMAT, version: 1, scope: SCOPE, complete: totals.pending === 0,
+    format: FORMAT, version: VERSION, scope: SCOPE, complete: totals.pending === 0,
     preparedAt: new Date(prepared).toISOString(), decisionEvidence: evidence, candidates, summary: totals,
     safeguards: {
       externalWritesPerformed: false, sourceRecordsDeleted: false, projectsCreatedOrChanged: false,
@@ -212,7 +228,7 @@ export function verifyNotionBonsaiProjectDispositionDecision(options) {
     expected = reviewCandidates(options.review, linkCandidates);
   } catch { findings.push('INVALID_SOURCE_EVIDENCE'); }
   const { record } = options;
-  if (record?.format !== FORMAT || record?.version !== 1 || record?.scope !== SCOPE) findings.push('INVALID_DECISION_SCHEMA');
+  if (record?.format !== FORMAT || record?.version !== VERSION || record?.scope !== SCOPE) findings.push('INVALID_DECISION_SCHEMA');
   if (record?.sourceEvidence?.reviewSha256 !== reviewHash
     || record?.sourceEvidence?.projectLinkDecisionSha256 !== linkHash
     || record?.sourceEvidence?.reviewPreparedAt !== options.review?.preparedAt

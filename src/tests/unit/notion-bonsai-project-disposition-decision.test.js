@@ -28,6 +28,7 @@ function review() {
       { id: 102, status: 'completed', company: 'Client A', url: 'https://example.test/project/102' },
       { id: 103, status: 'archived', company: 'Client B', url: 'https://example.test/project/103' },
     ] }],
+    summary: { notionProjects: 1, bonsaiProjects: 1 },
     sourceEvidence: {
       notionSnapshotSha256: 'c'.repeat(64), bonsaiProjectSnapshotSha256: 'd'.repeat(64), taskReviewSha256: 'e'.repeat(64),
     },
@@ -56,7 +57,7 @@ test('prepares all source-only projects and duplicate-title groups without mutat
   const record = pending();
   assert.deepEqual(record.summary, {
     total: 3, pending: 3, decided: 0,
-    bySourceKind: { NOTION_ONLY: 1, BONSAI_ONLY: 1, BONSAI_DUPLICATE_TITLE_GROUP: 1 },
+    bySourceKind: { NOTION_PROJECT: 1, BONSAI_PROJECT: 1, BONSAI_DUPLICATE_TITLE_GROUP: 1 },
     byDisposition: { PENDING: 3 },
   });
   assert.equal(record.safeguards.projectsCreatedOrChanged, false);
@@ -68,7 +69,7 @@ test('prepares all source-only projects and duplicate-title groups without mutat
 });
 
 test('blocks source-only dispositions while a related project-link decision is pending', () => {
-  const candidate = pending().candidates.find(item => item.sourceKind === 'NOTION_ONLY');
+  const candidate = pending().candidates.find(item => item.sourceKind === 'NOTION_PROJECT');
   assert.throws(() => prepareNotionBonsaiProjectDispositionDecision({
     review: review(), reviewSha256: REVIEW_HASH, projectLinkDecision: linkDecision(), projectLinkDecisionSha256: LINK_HASH,
     preparedAt: '2026-08-28T01:04:00.000Z',
@@ -82,15 +83,15 @@ test('records evidence-backed source dispositions only after related links are r
     review: review(), reviewSha256: REVIEW_HASH, projectLinkDecision: rejected, projectLinkDecisionSha256: LINK_HASH,
     preparedAt: '2026-08-28T01:03:00.000Z',
   });
-  const notion = base.candidates.find(item => item.sourceKind === 'NOTION_ONLY');
-  const bonsai = base.candidates.find(item => item.sourceKind === 'BONSAI_ONLY');
+  const notion = base.candidates.find(item => item.sourceKind === 'NOTION_PROJECT');
+  const bonsai = base.candidates.find(item => item.sourceKind === 'BONSAI_PROJECT');
   const group = base.candidates.find(item => item.sourceKind === 'BONSAI_DUPLICATE_TITLE_GROUP');
   const record = prepareNotionBonsaiProjectDispositionDecision({
     review: review(), reviewSha256: REVIEW_HASH, projectLinkDecision: rejected, projectLinkDecisionSha256: LINK_HASH,
     preparedAt: '2026-08-28T01:04:00.000Z', approver: 'Cameron', decidedAt: '2026-08-28T01:03:30.000Z', reference: 'batch-1',
     decisions: [
       { candidateId: notion.candidateId, disposition: 'MIGRATE_TO_HUB', rationale: 'Current work', reference: 'row-1' },
-      { candidateId: bonsai.candidateId, disposition: 'RETAIN_BONSAI_ONLY', rationale: 'Historical record', reference: 'row-2' },
+      { candidateId: bonsai.candidateId, disposition: 'RETAIN_BONSAI_SOURCE', rationale: 'Historical record', reference: 'row-2' },
       { candidateId: group.candidateId, disposition: 'RETAIN_DISTINCT_WITH_EVIDENCE', rationale: 'Different clients', reference: 'row-3' },
     ],
   });
@@ -107,7 +108,7 @@ test('requires the exact approved project-link candidate as the disposition reso
     review: review(), reviewSha256: REVIEW_HASH, projectLinkDecision: approved, projectLinkDecisionSha256: LINK_HASH,
     preparedAt: '2026-08-28T01:03:00.000Z',
   });
-  const notion = base.candidates.find(item => item.sourceKind === 'NOTION_ONLY');
+  const notion = base.candidates.find(item => item.sourceKind === 'NOTION_PROJECT');
   assert.throws(() => prepareNotionBonsaiProjectDispositionDecision({
     review: review(), reviewSha256: REVIEW_HASH, projectLinkDecision: approved, projectLinkDecisionSha256: LINK_HASH,
     preparedAt: '2026-08-28T01:04:00.000Z',
