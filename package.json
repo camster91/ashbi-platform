@@ -50,6 +50,7 @@
     "check:unified-launch": "node scripts/check-unified-launch-readiness.mjs",
     "export:growth-cadence-evidence": "node scripts/export-growth-cadence-evidence.mjs",
     "export:controlled-journey-evidence": "node scripts/export-controlled-journey-evidence.mjs",
+    "export:operating-destination-inventory": "node scripts/export-operating-destination-inventory.mjs",
     "verify:revenue-evidence": "node scripts/verify-revenue-evidence-export.js",
     "reconcile:bonsai-revenue": "node scripts/reconcile-bonsai-revenue.js",
     "reconcile:bonsai-operations": "node scripts/reconcile-bonsai-operations.js",

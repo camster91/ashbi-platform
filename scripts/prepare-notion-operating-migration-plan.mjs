@@ -35,11 +35,11 @@ if (required.length || !preparedAt) {
     const projectReview = readArtifact(paths.projectReview);
     const projectLink = readArtifact(paths.projectLink);
     const projectDisposition = readArtifact(paths.projectDisposition);
-    const inventory = readArtifact(paths.inventory).value;
+    const inventory = readArtifact(paths.inventory);
     const bindingsDocument = readArtifact(paths.bindings).value;
     const mapping = paths.mapping ? readArtifact(paths.mapping) : null;
     const plan = prepareNotionOperatingMigrationPlan({
-      organizationId: inventory.organizationId,
+      organizationId: inventory.value.organizationId,
       notionSnapshot: notion.value, notionSnapshotSha256: notion.sha256,
       taskReview: taskReview.value, taskReviewSha256: taskReview.sha256,
       taskLinkDecision: taskLink.value, taskLinkDecisionSha256: taskLink.sha256,
@@ -48,8 +48,7 @@ if (required.length || !preparedAt) {
       projectLinkDecision: projectLink.value, projectLinkDecisionSha256: projectLink.sha256,
       projectDispositionDecision: projectDisposition.value, projectDispositionDecisionSha256: projectDisposition.sha256,
       mappingDecision: mapping?.value ?? null, mappingDecisionSha256: mapping?.sha256 ?? null,
-      existingSourceRecords: inventory.sourceRecords, destinationClients: inventory.clients,
-      destinationProjects: inventory.projects, destinationTasks: inventory.tasks,
+      destinationInventory: inventory.value, destinationInventorySha256: inventory.sha256,
       notionProjectBindings: bindingsDocument.bindings ?? bindingsDocument,
       preparedAt,
     });

@@ -3,13 +3,12 @@ import { verifyNotionBonsaiNativeProjectLinkDecision } from './notionBonsaiNativ
 import { verifyNotionBonsaiProjectDispositionDecision } from './notionBonsaiProjectDispositionDecision.service.js';
 import { verifyNotionBonsaiTaskLinkDecision } from './notionBonsaiTaskLinkDecision.service.js';
 import { verifyNotionBonsaiTaskDispositionDecision } from './notionBonsaiTaskDispositionDecision.service.js';
+import { verifyOperatingDestinationInventory } from './operatingDestinationInventory.service.js';
 
 const FORMAT = 'ashbi-notion-operating-migration-plan';
 const VERSION = 1;
 const PROJECT_STATUSES = new Set(['STARTING_UP', 'DESIGN_DEV', 'ADDING_CONTENT', 'FINALIZING', 'LAUNCHED', 'ON_HOLD', 'CANCELLED']);
 const TASK_STATUS = Object.freeze({ 'To do': 'PENDING', Doing: 'IN_PROGRESS', Review: 'IN_PROGRESS', Done: 'COMPLETED' });
-const TASK_STATUSES = new Set(Object.values(TASK_STATUS));
-const REGISTRY_OUTCOMES = new Set(['IMPORTED', 'LINKED', 'RETAINED_SOURCE', 'EXCLUDED', 'REPAIR_REQUIRED']);
 
 function text(value) { return String(value ?? '').trim(); }
 function hash(value) { return /^[a-f0-9]{64}$/i.test(String(value ?? '')) ? String(value).toLowerCase() : null; }
@@ -79,48 +78,22 @@ function decisionVerification(options, findings) {
     taskReviewSha256: hash(options.taskReviewSha256),
     taskLinkDecisionSha256: hash(options.taskLinkDecisionSha256),
     taskDispositionDecisionSha256: hash(options.taskDispositionDecisionSha256),
+    destinationInventorySha256: hash(options.destinationInventorySha256),
   };
   for (const [name, value] of Object.entries(hashes)) if (!value) uniqueFinding(findings, 'INVALID_ARTIFACT_CHECKSUM', { artifact: name });
   return hashes;
 }
 
 function inventory(options, findings) {
-  const organizationId = text(options.organizationId);
-  if (!organizationId) uniqueFinding(findings, 'ORGANIZATION_ID_REQUIRED');
-  const records = new Map();
-  for (const record of Array.isArray(options.existingSourceRecords) ? options.existingSourceRecords : []) {
-    const recordKey = key(record?.sourceSystem, record?.entityType, record?.sourceId);
-    if (records.has(recordKey)) uniqueFinding(findings, 'DUPLICATE_SOURCE_REGISTRY_RECORD', { sourceKey: recordKey });
-    if (record?.organizationId !== organizationId || !['NOTION', 'BONSAI'].includes(record?.sourceSystem)
-      || !['PROJECT', 'TASK'].includes(record?.entityType) || !text(record?.sourceId)
-      || !REGISTRY_OUTCOMES.has(record?.outcome) || !hash(record?.sourceFingerprint)) {
-      uniqueFinding(findings, 'INVALID_SOURCE_REGISTRY_RECORD', { sourceKey: recordKey });
-    }
-    records.set(recordKey, record);
-  }
-  const clients = new Map();
-  for (const client of Array.isArray(options.destinationClients) ? options.destinationClients : []) {
-    if (!text(client?.id) || client?.organizationId !== organizationId || clients.has(client.id)) {
-      uniqueFinding(findings, 'INVALID_DESTINATION_CLIENT', { destinationId: text(client?.id) || null });
-    }
-    clients.set(client.id, client);
-  }
-  const projects = new Map();
-  for (const project of Array.isArray(options.destinationProjects) ? options.destinationProjects : []) {
-    if (!text(project?.id) || project?.organizationId !== organizationId || !clients.has(project?.clientId)
-      || !text(project?.name) || !PROJECT_STATUSES.has(project?.status) || projects.has(project.id)) {
-      uniqueFinding(findings, 'INVALID_DESTINATION_PROJECT', { destinationId: text(project?.id) || null });
-    }
-    projects.set(project.id, project);
-  }
-  const tasks = new Map();
-  for (const task of Array.isArray(options.destinationTasks) ? options.destinationTasks : []) {
-    if (!text(task?.id) || task?.organizationId !== organizationId || !projects.has(task?.projectId)
-      || !text(task?.title) || !TASK_STATUSES.has(task?.status) || tasks.has(task.id)) {
-      uniqueFinding(findings, 'INVALID_DESTINATION_TASK', { destinationId: text(task?.id) || null });
-    }
-    tasks.set(task.id, task);
-  }
+  const verification = verifyOperatingDestinationInventory(options.destinationInventory);
+  if (!verification.valid) uniqueFinding(findings, 'INVALID_DESTINATION_INVENTORY', { findings: verification.findings });
+  const organizationId = text(options.destinationInventory?.organizationId);
+  if (!organizationId || text(options.organizationId) !== organizationId) uniqueFinding(findings, 'DESTINATION_INVENTORY_ORGANIZATION_MISMATCH');
+  const records = new Map((options.destinationInventory?.sourceRecords ?? [])
+    .map(record => [key(record?.sourceSystem, record?.entityType, record?.sourceId), record]));
+  const clients = new Map((options.destinationInventory?.clients ?? []).map(client => [client.id, client]));
+  const projects = new Map((options.destinationInventory?.projects ?? []).map(project => [project.id, project]));
+  const tasks = new Map((options.destinationInventory?.tasks ?? []).map(task => [task.id, task]));
   return { organizationId, records, clients, projects, tasks };
 }
 

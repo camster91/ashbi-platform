@@ -8,11 +8,13 @@ import { prepareNotionBonsaiNativeProjectReview } from '../../services/notionBon
 import { prepareNotionBonsaiNativeProjectLinkDecision } from '../../services/notionBonsaiNativeProjectLinkDecision.service.js';
 import { prepareNotionBonsaiProjectDispositionDecision } from '../../services/notionBonsaiProjectDispositionDecision.service.js';
 import { prepareNotionOperatingMigrationPlan, verifyNotionOperatingMigrationPlan } from '../../services/notionOperatingMigrationPlan.service.js';
+import { buildOperatingDestinationInventory } from '../../services/operatingDestinationInventory.service.js';
 
 const HASH = Object.freeze({
   notion: '1'.repeat(64), bonsaiTasks: '2'.repeat(64), bonsaiProjects: '3'.repeat(64),
   taskReview: '4'.repeat(64), taskLink: '5'.repeat(64), taskDisposition: '6'.repeat(64),
   projectReview: '7'.repeat(64), projectLink: '8'.repeat(64), projectDisposition: '9'.repeat(64),
+  inventory: 'a'.repeat(64),
 });
 const ORG = 'org-sandbox';
 const LINKED_PROJECT = 'https://app.notion.com/11111111111111111111111111111111';
@@ -105,19 +107,36 @@ function packets({ approved = true } = {}) {
 
 function input(options = {}) {
   const packet = packets(options);
+  const destinationInventory = buildOperatingDestinationInventory({
+    organizationId: ORG,
+    capturedAt: '2026-08-28T00:19:30.000Z',
+    sourceRecords: [
+      { organizationId: ORG, sourceSystem: 'BONSAI', entityType: 'PROJECT', sourceId: '101', destinationId: 'project-client', outcome: 'IMPORTED', sourceFingerprint: HASH.bonsaiProjects },
+      { organizationId: ORG, sourceSystem: 'BONSAI', entityType: 'TASK', sourceId: BONSAI_TASK, destinationId: 'task-client', outcome: 'IMPORTED', sourceFingerprint: HASH.bonsaiTasks },
+    ],
+    clients: [{ id: 'client-client', organizationId: ORG }, { id: 'client-ashbi', organizationId: ORG }],
+    projects: [{ id: 'project-client', organizationId: ORG, clientId: 'client-client', name: 'Client Website', status: 'DESIGN_DEV' }],
+    tasks: [{ id: 'task-client', organizationId: ORG, projectId: 'project-client', title: 'Review homepage', status: 'PENDING' }],
+  });
   return { ...packet, organizationId: ORG, notionSnapshotSha256: HASH.notion,
     taskReviewSha256: HASH.taskReview, taskLinkDecisionSha256: HASH.taskLink,
     taskDispositionDecisionSha256: HASH.taskDisposition, nativeProjectReviewSha256: HASH.projectReview,
     projectLinkDecisionSha256: HASH.projectLink, projectDispositionDecisionSha256: HASH.projectDisposition,
+    destinationInventory, destinationInventorySha256: HASH.inventory,
     preparedAt: '2026-08-28T00:20:00.000Z', notionProjectBindings: { [INTERNAL_PROJECT]: { clientId: 'client-ashbi', status: 'STARTING_UP' } },
-    existingSourceRecords: [
-      { organizationId: ORG, sourceSystem: 'BONSAI', entityType: 'PROJECT', sourceId: '101', destinationId: 'project-client', outcome: 'IMPORTED', sourceFingerprint: HASH.bonsaiProjects },
-      { organizationId: ORG, sourceSystem: 'BONSAI', entityType: 'TASK', sourceId: BONSAI_TASK, destinationId: 'task-client', outcome: 'IMPORTED', sourceFingerprint: HASH.bonsaiTasks },
-    ],
-    destinationClients: [{ id: 'client-client', organizationId: ORG }, { id: 'client-ashbi', organizationId: ORG }],
-    destinationProjects: [{ id: 'project-client', organizationId: ORG, clientId: 'client-client', name: 'Client Website', status: 'DESIGN_DEV' }],
-    destinationTasks: [{ id: 'task-client', organizationId: ORG, projectId: 'project-client', title: 'Review homepage', status: 'PENDING' }],
   };
+}
+
+function rebuildInventory(value) {
+  const inventory = value.destinationInventory;
+  value.destinationInventory = buildOperatingDestinationInventory({
+    organizationId: inventory.organizationId,
+    capturedAt: inventory.capturedAt,
+    clients: inventory.clients,
+    projects: inventory.projects,
+    tasks: inventory.tasks,
+    sourceRecords: inventory.sourceRecords,
+  });
 }
 
 test('blocks the plan while source identity and disposition decisions remain pending', () => {
@@ -152,8 +171,9 @@ test('requires an explicit client and Hub lifecycle for every Notion-only projec
 
 test('rejects a linked task whose proven Bonsai destination belongs to another project', () => {
   const value = input();
-  value.destinationProjects.push({ id: 'project-wrong', organizationId: ORG, clientId: 'client-client', name: 'Wrong', status: 'DESIGN_DEV' });
-  value.destinationTasks[0].projectId = 'project-wrong';
+  value.destinationInventory.projects.push({ id: 'project-wrong', organizationId: ORG, clientId: 'client-client', name: 'Wrong', status: 'DESIGN_DEV' });
+  value.destinationInventory.tasks[0].projectId = 'project-wrong';
+  rebuildInventory(value);
   const plan = prepareNotionOperatingMigrationPlan(value);
   assert.equal(plan.status, 'BLOCKED');
   assert.equal(plan.actions.length, 0);
@@ -162,17 +182,27 @@ test('rejects a linked task whose proven Bonsai destination belongs to another p
 
 test('an exact rerun reuses all four destination records and plans no writes', () => {
   const value = input();
-  value.destinationProjects.push({ id: 'project-ashbi', organizationId: ORG, clientId: 'client-ashbi', name: 'Ashbi Growth', status: 'STARTING_UP' });
-  value.destinationTasks.push({ id: 'task-ashbi', organizationId: ORG, projectId: 'project-ashbi', title: 'Publish service page', status: 'PENDING' });
-  value.existingSourceRecords.push(
-    { organizationId: ORG, sourceSystem: 'NOTION', entityType: 'PROJECT', sourceId: LINKED_PROJECT, destinationId: 'project-client', outcome: 'LINKED', sourceFingerprint: HASH.notion },
-    { organizationId: ORG, sourceSystem: 'NOTION', entityType: 'PROJECT', sourceId: INTERNAL_PROJECT, destinationId: 'project-ashbi', outcome: 'IMPORTED', sourceFingerprint: HASH.notion },
-    { organizationId: ORG, sourceSystem: 'NOTION', entityType: 'TASK', sourceId: LINKED_TASK, destinationId: 'task-client', outcome: 'LINKED', sourceFingerprint: HASH.notion },
-    { organizationId: ORG, sourceSystem: 'NOTION', entityType: 'TASK', sourceId: INTERNAL_TASK, destinationId: 'task-ashbi', outcome: 'IMPORTED', sourceFingerprint: HASH.notion },
+  value.destinationInventory.projects.push({ id: 'project-ashbi', organizationId: ORG, clientId: 'client-ashbi', name: 'Ashbi Growth', status: 'STARTING_UP' });
+  value.destinationInventory.tasks.push({ id: 'task-ashbi', organizationId: ORG, projectId: 'project-ashbi', title: 'Publish service page', status: 'PENDING' });
+  value.destinationInventory.sourceRecords.push(
+    { organizationId: ORG, sourceSystem: 'NOTION', entityType: 'PROJECT', sourceId: LINKED_PROJECT, destinationId: 'project-client', outcome: 'LINKED', sourceFingerprint: HASH.notion, decisionCandidateId: null, decisionFingerprint: null },
+    { organizationId: ORG, sourceSystem: 'NOTION', entityType: 'PROJECT', sourceId: INTERNAL_PROJECT, destinationId: 'project-ashbi', outcome: 'IMPORTED', sourceFingerprint: HASH.notion, decisionCandidateId: null, decisionFingerprint: null },
+    { organizationId: ORG, sourceSystem: 'NOTION', entityType: 'TASK', sourceId: LINKED_TASK, destinationId: 'task-client', outcome: 'LINKED', sourceFingerprint: HASH.notion, decisionCandidateId: null, decisionFingerprint: null },
+    { organizationId: ORG, sourceSystem: 'NOTION', entityType: 'TASK', sourceId: INTERNAL_TASK, destinationId: 'task-ashbi', outcome: 'IMPORTED', sourceFingerprint: HASH.notion, decisionCandidateId: null, decisionFingerprint: null },
   );
+  rebuildInventory(value);
   const plan = prepareNotionOperatingMigrationPlan(value);
   assert.equal(plan.status, 'READY', JSON.stringify(plan.findings));
   assert.equal(plan.actions.length, 0);
+});
+
+test('rejects manually assembled or privacy-expanded destination evidence', () => {
+  const value = input();
+  value.destinationInventory.clients[0].email = 'private@example.test';
+  const plan = prepareNotionOperatingMigrationPlan(value);
+  assert.equal(plan.status, 'BLOCKED');
+  assert.equal(plan.actions.length, 0);
+  assert.ok(plan.findings.some(item => item.code === 'INVALID_DESTINATION_INVENTORY'));
 });
 
 test('verification recomputes the exact plan and rejects a changed destination', () => {
