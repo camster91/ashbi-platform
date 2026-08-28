@@ -15,19 +15,23 @@ function digest(bytes) {
 const reviewPath = option('--review');
 const recordPath = option('--owner-decision');
 const mappingPath = option('--mapping-decision');
+const taskLinkPath = option('--task-link-decision');
 if (!reviewPath || !recordPath) {
-  process.stderr.write('Usage: npm run verify:notion-bonsai-owner-decision -- --review <review.json> --owner-decision <owner.json> [--mapping-decision <approved.json>]\n');
+  process.stderr.write('Usage: npm run verify:notion-bonsai-owner-decision -- --review <review.json> --owner-decision <owner.json> [--mapping-decision <approved.json> --task-link-decision <approved.json>]\n');
   process.exitCode = 2;
 } else {
   try {
     const reviewBytes = fs.readFileSync(path.resolve(reviewPath));
     const mappingBytes = mappingPath ? fs.readFileSync(path.resolve(mappingPath)) : null;
+    const taskLinkBytes = taskLinkPath ? fs.readFileSync(path.resolve(taskLinkPath)) : null;
     const result = verifyNotionBonsaiOwnerDecision({
       review: JSON.parse(reviewBytes.toString('utf8')),
       reviewSha256: digest(reviewBytes),
       record: JSON.parse(fs.readFileSync(path.resolve(recordPath), 'utf8')),
       mappingDecisionRecord: mappingBytes ? JSON.parse(mappingBytes.toString('utf8')) : null,
       mappingDecisionSha256: mappingBytes ? digest(mappingBytes) : null,
+      taskLinkDecisionRecord: taskLinkBytes ? JSON.parse(taskLinkBytes.toString('utf8')) : null,
+      taskLinkDecisionSha256: taskLinkBytes ? digest(taskLinkBytes) : null,
     });
     process.stdout.write(result.valid
       ? `Owner decision record is valid with ${result.pending} pending decision(s).\n`

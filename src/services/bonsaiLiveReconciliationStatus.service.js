@@ -1,6 +1,7 @@
 import { verifyNotionBonsaiMappingDecision } from './notionBonsaiMappingDecision.service.js';
 import { verifyNotionBonsaiNativeProjectLinkDecision } from './notionBonsaiNativeProjectLinkDecision.service.js';
 import { verifyNotionBonsaiOwnerDecision } from './notionBonsaiOwnerDecision.service.js';
+import { verifyNotionBonsaiTaskLinkDecision } from './notionBonsaiTaskLinkDecision.service.js';
 
 const FORMAT = 'ashbi-bonsai-live-reconciliation-status';
 
@@ -36,6 +37,7 @@ function summaryNumber(document, field, name) {
 export function prepareBonsaiLiveReconciliationStatus({
   taskReview,
   mappingDecision,
+  taskLinkDecision,
   ownerDecision,
   nativeProjectReview,
   projectLinkDecision,
@@ -43,6 +45,7 @@ export function prepareBonsaiLiveReconciliationStatus({
   financialReview,
   taskReviewSha256,
   mappingDecisionSha256,
+  taskLinkDecisionSha256,
   ownerDecisionSha256,
   nativeProjectReviewSha256,
   projectLinkDecisionSha256,
@@ -52,6 +55,7 @@ export function prepareBonsaiLiveReconciliationStatus({
 }) {
   requireFormat(taskReview, 'ashbi-notion-bonsai-task-review', 'task review');
   requireFormat(mappingDecision, 'ashbi-notion-bonsai-mapping-decision', 'mapping decision');
+  requireFormat(taskLinkDecision, 'ashbi-notion-bonsai-task-link-decision', 'task-link decision');
   requireFormat(ownerDecision, 'ashbi-notion-bonsai-owner-decision', 'owner decision');
   requireFormat(nativeProjectReview, 'ashbi-notion-bonsai-native-project-review', 'native project review');
   requireFormat(projectLinkDecision, 'ashbi-notion-bonsai-native-project-link-decision', 'project-link decision');
@@ -61,6 +65,7 @@ export function prepareBonsaiLiveReconciliationStatus({
   const hashes = {
     taskReviewSha256: sha256(taskReviewSha256, 'taskReviewSha256'),
     mappingDecisionSha256: sha256(mappingDecisionSha256, 'mappingDecisionSha256'),
+    taskLinkDecisionSha256: sha256(taskLinkDecisionSha256, 'taskLinkDecisionSha256'),
     ownerDecisionSha256: sha256(ownerDecisionSha256, 'ownerDecisionSha256'),
     nativeProjectReviewSha256: sha256(nativeProjectReviewSha256, 'nativeProjectReviewSha256'),
     projectLinkDecisionSha256: sha256(projectLinkDecisionSha256, 'projectLinkDecisionSha256'),
@@ -68,6 +73,7 @@ export function prepareBonsaiLiveReconciliationStatus({
     financialReviewSha256: sha256(financialReviewSha256, 'financialReviewSha256'),
   };
   sameHash(mappingDecision.sourceEvidence?.reviewSha256, hashes.taskReviewSha256, 'Mapping decision');
+  sameHash(taskLinkDecision.sourceEvidence?.reviewSha256, hashes.taskReviewSha256, 'Task-link decision');
   sameHash(ownerDecision.sourceEvidence?.reviewSha256, hashes.taskReviewSha256, 'Owner decision');
   sameHash(nativeProjectReview.sourceEvidence?.taskReviewSha256, hashes.taskReviewSha256, 'Native project review');
   sameHash(projectLinkDecision.sourceEvidence?.reviewSha256, hashes.nativeProjectReviewSha256, 'Project-link decision');
@@ -83,12 +89,16 @@ export function prepareBonsaiLiveReconciliationStatus({
   const ownerVerification = verifyNotionBonsaiOwnerDecision({
     review: taskReview, reviewSha256: hashes.taskReviewSha256, record: ownerDecision,
   });
+  const taskLinkVerification = verifyNotionBonsaiTaskLinkDecision({
+    review: taskReview, reviewSha256: hashes.taskReviewSha256, record: taskLinkDecision,
+  });
   const projectLinkVerification = verifyNotionBonsaiNativeProjectLinkDecision({
     review: nativeProjectReview, reviewSha256: hashes.nativeProjectReviewSha256, record: projectLinkDecision,
   });
-  if (!mappingVerification.valid || !ownerVerification.valid || !projectLinkVerification.valid) {
+  if (!mappingVerification.valid || !taskLinkVerification.valid || !ownerVerification.valid || !projectLinkVerification.valid) {
     const failed = [
       !mappingVerification.valid ? `mapping:${mappingVerification.findings.join(',')}` : null,
+      !taskLinkVerification.valid ? `task-link:${taskLinkVerification.findings.join(',')}` : null,
       !ownerVerification.valid ? `owner:${ownerVerification.findings.join(',')}` : null,
       !projectLinkVerification.valid ? `project-link:${projectLinkVerification.findings.join(',')}` : null,
     ].filter(Boolean).join(';');
@@ -96,12 +106,11 @@ export function prepareBonsaiLiveReconciliationStatus({
   }
 
   const prepared = timestamp(preparedAt, 'preparedAt');
-  const sourceTimes = [taskReview, mappingDecision, ownerDecision, nativeProjectReview, projectLinkDecision, activeProjectTriage, financialReview]
+  const sourceTimes = [taskReview, mappingDecision, taskLinkDecision, ownerDecision, nativeProjectReview, projectLinkDecision, activeProjectTriage, financialReview]
     .map((document, index) => timestamp(document?.preparedAt, `source preparedAt ${index}`));
   if (sourceTimes.some(value => prepared < value)) throw new TypeError('preparedAt must not predate source evidence');
 
   const sourceReviewTasks = summaryNumber(taskReview, 'bonsaiSourceReview', 'Task review');
-  const exactTaskLinks = summaryNumber(taskReview, 'exactTaskLinks', 'Task review');
   const notionOnlyTasks = summaryNumber(taskReview, 'notionOnly', 'Task review');
   const bonsaiOnlyTasks = summaryNumber(taskReview, 'bonsaiOnly', 'Task review');
   const unmatchedNotionProjects = summaryNumber(nativeProjectReview, 'unmatchedNotionProjects', 'Native project review');
@@ -115,7 +124,7 @@ export function prepareBonsaiLiveReconciliationStatus({
 
   const findings = [];
   if (sourceReviewTasks > 0) findings.push('BONSAI_TASK_SOURCE_REVIEW_REQUIRED');
-  if (exactTaskLinks > 0) findings.push('EXACT_TASK_LINK_DECISION_RECORD_MISSING');
+  if (taskLinkVerification.pending > 0) findings.push('TASK_LINK_DECISIONS_PENDING');
   if (mappingVerification.pending > 0) findings.push('TASK_MAPPING_DECISIONS_PENDING');
   if (ownerVerification.pending > 0) findings.push('TASK_OWNER_DECISIONS_PENDING');
   if (projectLinkVerification.pending > 0) findings.push('PROJECT_LINK_DECISIONS_PENDING');
@@ -143,7 +152,8 @@ export function prepareBonsaiLiveReconciliationStatus({
     gates: {
       sourceGeneration: { state: 'PASS', findingCount: 0 },
       taskIdentity: {
-        state: 'BLOCKED', exactTaskLinksWithoutDecisionRecord: exactTaskLinks,
+        state: 'BLOCKED', exactTaskLinksWithoutDecisionRecord: 0,
+        taskLinkDecisionsPending: taskLinkVerification.pending,
         mappingDecisionsPending: mappingVerification.pending, sourceReviewTasks,
         notionOnlyTasks, bonsaiOnlyTasks,
       },

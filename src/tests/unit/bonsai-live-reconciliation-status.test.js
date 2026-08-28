@@ -12,9 +12,10 @@ import {
 import { prepareNotionBonsaiMappingDecision } from '../../services/notionBonsaiMappingDecision.service.js';
 import { prepareNotionBonsaiNativeProjectLinkDecision } from '../../services/notionBonsaiNativeProjectLinkDecision.service.js';
 import { prepareNotionBonsaiOwnerDecision } from '../../services/notionBonsaiOwnerDecision.service.js';
+import { prepareNotionBonsaiTaskLinkDecision } from '../../services/notionBonsaiTaskLinkDecision.service.js';
 
 const HASHES = {
-  taskReview: 'a'.repeat(64), mappingDecision: 'b'.repeat(64), ownerDecision: 'c'.repeat(64),
+  taskReview: 'a'.repeat(64), mappingDecision: 'b'.repeat(64), taskLinkDecision: '8'.repeat(64), ownerDecision: 'c'.repeat(64),
   nativeProjectReview: 'd'.repeat(64), projectLinkDecision: 'e'.repeat(64),
   activeProjectTriage: 'f'.repeat(64), financialReview: '1'.repeat(64),
   notion: '2'.repeat(64), tasks: '3'.repeat(64), projects: '4'.repeat(64),
@@ -47,6 +48,9 @@ function evidence() {
   });
   const ownerDecision = prepareNotionBonsaiOwnerDecision({
     review: taskReview, reviewSha256: HASHES.taskReview, preparedAt: '2026-08-28T01:02:00.000Z',
+  });
+  const taskLinkDecision = prepareNotionBonsaiTaskLinkDecision({
+    review: taskReview, reviewSha256: HASHES.taskReview, preparedAt: '2026-08-28T01:02:30.000Z',
   });
   const nativeProjectReview = {
     format: 'ashbi-notion-bonsai-native-project-review', version: 1, complete: false,
@@ -91,7 +95,7 @@ function evidence() {
       invoiceSnapshotSha256: HASHES.invoices, timeEntrySnapshotSha256: HASHES.time,
     },
   };
-  return { taskReview, mappingDecision, ownerDecision, nativeProjectReview, projectLinkDecision, activeProjectTriage, financialReview };
+  return { taskReview, mappingDecision, taskLinkDecision, ownerDecision, nativeProjectReview, projectLinkDecision, activeProjectTriage, financialReview };
 }
 
 function options() {
@@ -99,6 +103,7 @@ function options() {
     ...evidence(),
     taskReviewSha256: HASHES.taskReview,
     mappingDecisionSha256: HASHES.mappingDecision,
+    taskLinkDecisionSha256: HASHES.taskLinkDecision,
     ownerDecisionSha256: HASHES.ownerDecision,
     nativeProjectReviewSha256: HASHES.nativeProjectReview,
     projectLinkDecisionSha256: HASHES.projectLinkDecision,
@@ -113,10 +118,11 @@ test('prepares one aligned, fail-closed reconciliation status without mutation a
   assert.equal(status.sourceGenerationAligned, true);
   assert.equal(status.readyForMigration, false);
   assert.equal(status.readyForBonsaiRetirement, false);
-  assert.equal(status.gates.taskIdentity.exactTaskLinksWithoutDecisionRecord, 1);
+  assert.equal(status.gates.taskIdentity.exactTaskLinksWithoutDecisionRecord, 0);
+  assert.equal(status.gates.taskIdentity.taskLinkDecisionsPending, 1);
   assert.equal(status.gates.projectIdentity.decisionsPending, 1);
   assert.equal(status.gates.financialSafety.projectlessTimeEntries, 1);
-  assert.ok(status.findings.includes('EXACT_TASK_LINK_DECISION_RECORD_MISSING'));
+  assert.ok(status.findings.includes('TASK_LINK_DECISIONS_PENDING'));
   assert.equal(status.safeguards.externalWritesPerformed, false);
   assert.equal(status.safeguards.bonsaiRetirementAuthorized, false);
 });
@@ -152,6 +158,9 @@ test('CLI creates a new status file and refuses overwrite', () => {
     input.ownerDecision = prepareNotionBonsaiOwnerDecision({
       review: input.taskReview, reviewSha256: task.hash, preparedAt: '2026-08-28T01:02:00.000Z',
     });
+    input.taskLinkDecision = prepareNotionBonsaiTaskLinkDecision({
+      review: input.taskReview, reviewSha256: task.hash, preparedAt: '2026-08-28T01:02:30.000Z',
+    });
     input.nativeProjectReview.sourceEvidence.taskReviewSha256 = task.hash;
     const native = write('nativeProjectReview', input.nativeProjectReview);
     input.projectLinkDecision = prepareNotionBonsaiNativeProjectLinkDecision({
@@ -160,9 +169,9 @@ test('CLI creates a new status file and refuses overwrite', () => {
     input.activeProjectTriage.sourceEvidence.nativeProjectReviewSha256 = native.hash;
     const triage = write('activeProjectTriage', input.activeProjectTriage);
     input.financialReview.sourceEvidence.activeProjectTriageSha256 = triage.hash;
-    const names = ['taskReview', 'mappingDecision', 'ownerDecision', 'nativeProjectReview', 'projectLinkDecision', 'activeProjectTriage', 'financialReview'];
+    const names = ['taskReview', 'mappingDecision', 'taskLinkDecision', 'ownerDecision', 'nativeProjectReview', 'projectLinkDecision', 'activeProjectTriage', 'financialReview'];
     const flags = {
-      taskReview: '--task-review', mappingDecision: '--mapping-decision', ownerDecision: '--owner-decision',
+      taskReview: '--task-review', mappingDecision: '--mapping-decision', taskLinkDecision: '--task-link-decision', ownerDecision: '--owner-decision',
       nativeProjectReview: '--native-project-review', projectLinkDecision: '--project-link-decision',
       activeProjectTriage: '--active-project-triage', financialReview: '--financial-review',
     };

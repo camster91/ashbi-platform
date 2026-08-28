@@ -19,12 +19,13 @@ const outputPath = option('--output');
 const approveAll = process.argv.includes('--approve-all');
 const confirm = process.argv.includes('--confirm');
 const mappingPath = option('--mapping-decision');
+const taskLinkPath = option('--task-link-decision');
 const approver = option('--approver');
 const decidedAt = option('--decided-at');
 const reference = option('--reference');
 
 if (!reviewPath || !preparedAt || !outputPath) {
-  process.stderr.write('Usage: npm run prepare:notion-bonsai-owner-decision -- --review <review.json> --prepared-at <ISO> --output <new-owner-decision.json> [--approve-all --mapping-decision <approved.json> --approver <name> --decided-at <ISO> --reference <evidence> --confirm]\n');
+  process.stderr.write('Usage: npm run prepare:notion-bonsai-owner-decision -- --review <review.json> --prepared-at <ISO> --output <new-owner-decision.json> [--approve-all --mapping-decision <approved.json> --task-link-decision <approved.json> --approver <name> --decided-at <ISO> --reference <evidence> --confirm]\n');
   process.exitCode = 2;
 } else if (approveAll && !confirm) {
   process.stderr.write('A finalized owner decision requires --confirm.\n');
@@ -34,6 +35,7 @@ if (!reviewPath || !preparedAt || !outputPath) {
   try {
     const reviewBytes = fs.readFileSync(path.resolve(reviewPath));
     const mappingBytes = mappingPath ? fs.readFileSync(path.resolve(mappingPath)) : null;
+    const taskLinkBytes = taskLinkPath ? fs.readFileSync(path.resolve(taskLinkPath)) : null;
     const record = prepareNotionBonsaiOwnerDecision({
       review: JSON.parse(reviewBytes.toString('utf8')),
       reviewSha256: digest(reviewBytes),
@@ -41,6 +43,8 @@ if (!reviewPath || !preparedAt || !outputPath) {
       decision: approveAll ? 'APPROVED' : 'PENDING',
       mappingDecisionRecord: mappingBytes ? JSON.parse(mappingBytes.toString('utf8')) : null,
       mappingDecisionSha256: mappingBytes ? digest(mappingBytes) : null,
+      taskLinkDecisionRecord: taskLinkBytes ? JSON.parse(taskLinkBytes.toString('utf8')) : null,
+      taskLinkDecisionSha256: taskLinkBytes ? digest(taskLinkBytes) : null,
       approver,
       decidedAt,
       reference,

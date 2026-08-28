@@ -41,6 +41,15 @@ npm run verify:notion-bonsai-mapping-decision -- <review.json> <decision.json>
 
 The pending record is checksum-bound to the review packet and both source snapshots. It cannot authorize owner assignments, source-only dispositions, migration writes, or financial cutover. After an explicit human decision, a separate immutable finalized record may be created with `--approve-all` or `--reject-all`, the approver, decision time, evidence reference, and `--confirm`. That command only records the decision; it still does not apply mappings or change an external system.
 
+Record task identity independently from project mapping and ownership:
+
+```text
+npm run prepare:notion-bonsai-task-link-decision -- --review <review.json> --prepared-at <ISO> --output <new-pending-task-link-decision.json>
+npm run verify:notion-bonsai-task-link-decision -- --review <review.json> --task-link-decision <task-link-decision.json>
+```
+
+The task-link packet includes every exact and near-title source pair, with separate direct-exact, project-dependent exact, and near-title tiers. Decisions are candidate-specific; there is no blanket approval flag. Approving a conditional candidate requires the checksum-valid mapping record containing that exact approved project alias or near-title dependency. A task-link decision means only that two source IDs identify one logical task. It does not apply a link, move or create a task, change task fields, assign an owner, delete a source record, migrate data, or authorize cutover. The current owner-only packet has 20 pending decisions: 13 direct exact, six project-dependent exact, and one near-title. Its SHA-256 is `bac0e909753889486be76cf7b547bab94873736abe7a7c8895933e8ab74c8aaf`.
+
 Prepare source-backed owner decisions separately:
 
 ```text
@@ -48,7 +57,7 @@ npm run prepare:notion-bonsai-owner-decision -- --review <review.json> --prepare
 npm run verify:notion-bonsai-owner-decision -- --review <review.json> --owner-decision <owner-decision.json>
 ```
 
-This packet includes only Notion tasks with one exact or review-candidate Bonsai task carrying a named assignee. It distinguishes direct exact-task/project evidence from assignments conditional on the separately approved mapping packet. A batch approval cannot pass unless the conditional mappings are checksum-valid and approved. Unmatched Notion tasks, unassigned Bonsai tasks, project/account-owner defaults, and inferred creative/technical ownership remain outside the packet.
+This packet includes only Notion tasks with one exact or review-candidate Bonsai task carrying a named assignee. It distinguishes direct exact-task/project evidence from assignments conditional on the separately approved mapping packet. A batch owner approval cannot pass until the exact task-link packet is checksum-valid and fully approved; conditional links must also have their mapping dependencies approved. Unmatched Notion tasks, unassigned Bonsai tasks, project/account-owner defaults, and inferred creative/technical ownership remain outside the packet. The current pending owner packet has SHA-256 `4305596ab4dcc0ffe447e61330052de6ca692ee96f5e360ff9fd1e7290b200ae`.
 
 Review projects separately from tasks:
 

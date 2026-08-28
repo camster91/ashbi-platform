@@ -9,9 +9,11 @@ import {
   verifyNotionBonsaiOwnerDecision,
 } from '../../services/notionBonsaiOwnerDecision.service.js';
 import { prepareNotionBonsaiMappingDecision } from '../../services/notionBonsaiMappingDecision.service.js';
+import { prepareNotionBonsaiTaskLinkDecision } from '../../services/notionBonsaiTaskLinkDecision.service.js';
 
 const REVIEW_HASH = 'a'.repeat(64);
 const MAPPING_HASH = 'd'.repeat(64);
+const TASK_LINK_HASH = 'e'.repeat(64);
 
 function review() {
   return {
@@ -46,14 +48,25 @@ test('approval requires the exact completed mapping decision', () => {
     review: review(), reviewSha256: REVIEW_HASH, preparedAt: '2026-08-28T01:01:00Z',
     decision: 'APPROVED', approver: 'Cameron', decidedAt: '2026-08-28T01:00:30Z', reference: 'mapping-approval-ref',
   });
+  const pendingLinks = prepareNotionBonsaiTaskLinkDecision({
+    review: review(), reviewSha256: REVIEW_HASH, preparedAt: '2026-08-28T01:01:10Z',
+  });
+  const approvedLinks = prepareNotionBonsaiTaskLinkDecision({
+    review: review(), reviewSha256: REVIEW_HASH, preparedAt: '2026-08-28T01:01:20Z',
+    decisions: pendingLinks.candidates.map(candidate => ({ candidateId: candidate.candidateId, decision: 'APPROVED' })),
+    mappingDecision: approvedMapping, mappingDecisionSha256: MAPPING_HASH,
+    approver: 'Cameron', decidedAt: '2026-08-28T01:01:15Z', reference: 'task-link-approval-ref',
+  });
   const record = prepareNotionBonsaiOwnerDecision({
     review: review(), reviewSha256: REVIEW_HASH, preparedAt: '2026-08-28T01:02:00Z',
     decision: 'APPROVED', mappingDecisionRecord: approvedMapping, mappingDecisionSha256: MAPPING_HASH,
+    taskLinkDecisionRecord: approvedLinks, taskLinkDecisionSha256: TASK_LINK_HASH,
     approver: 'Cameron', decidedAt: '2026-08-28T01:01:30Z', reference: 'owner-approval-ref',
   });
   const result = verifyNotionBonsaiOwnerDecision({
     review: review(), reviewSha256: REVIEW_HASH, record,
     mappingDecisionRecord: approvedMapping, mappingDecisionSha256: MAPPING_HASH,
+    taskLinkDecisionRecord: approvedLinks, taskLinkDecisionSha256: TASK_LINK_HASH,
   });
   assert.equal(result.valid, true);
   assert.equal(result.approved, 3);
@@ -71,6 +84,22 @@ test('rejects a changed owner and cannot approve against a pending mapping decis
     decision: 'APPROVED', mappingDecisionRecord: pendingMapping, mappingDecisionSha256: MAPPING_HASH,
     approver: 'Cameron', decidedAt: '2026-08-28T01:01:30Z', reference: 'owner-approval-ref',
   }), /approved valid mapping decision/);
+});
+
+test('cannot approve owners before the task identities are approved', () => {
+  const approvedMapping = prepareNotionBonsaiMappingDecision({
+    review: review(), reviewSha256: REVIEW_HASH, preparedAt: '2026-08-28T01:01:00Z',
+    decision: 'APPROVED', approver: 'Cameron', decidedAt: '2026-08-28T01:00:30Z', reference: 'mapping-approval-ref',
+  });
+  const pendingLinks = prepareNotionBonsaiTaskLinkDecision({
+    review: review(), reviewSha256: REVIEW_HASH, preparedAt: '2026-08-28T01:01:10Z',
+  });
+  assert.throws(() => prepareNotionBonsaiOwnerDecision({
+    review: review(), reviewSha256: REVIEW_HASH, preparedAt: '2026-08-28T01:02:00Z',
+    decision: 'APPROVED', mappingDecisionRecord: approvedMapping, mappingDecisionSha256: MAPPING_HASH,
+    taskLinkDecisionRecord: pendingLinks, taskLinkDecisionSha256: TASK_LINK_HASH,
+    approver: 'Cameron', decidedAt: '2026-08-28T01:01:30Z', reference: 'owner-approval-ref',
+  }), /approved valid task-link decision/);
 });
 
 test('CLI creates and verifies one immutable pending owner packet', () => {

@@ -1,4 +1,5 @@
 import { verifyNotionBonsaiMappingDecision } from './notionBonsaiMappingDecision.service.js';
+import { verifyNotionBonsaiTaskLinkDecision } from './notionBonsaiTaskLinkDecision.service.js';
 
 const FORMAT = 'ashbi-notion-bonsai-owner-decision';
 const SCOPE = 'SOURCE_BACKED_NOTION_TASK_OWNERS';
@@ -87,6 +88,8 @@ export function prepareNotionBonsaiOwnerDecision({
   decision = 'PENDING',
   mappingDecisionRecord = null,
   mappingDecisionSha256 = null,
+  taskLinkDecisionRecord = null,
+  taskLinkDecisionSha256 = null,
   approver = null,
   decidedAt = null,
   reference = null,
@@ -99,6 +102,7 @@ export function prepareNotionBonsaiOwnerDecision({
   const candidates = sourceBackedCandidates(review);
   const conditional = candidates.some(candidate => candidate.mappingDependency !== null);
   let mappingSha = null;
+  let taskLinkSha = null;
   let decisionEvidence = null;
   if (decision === 'APPROVED') {
     if (!text(approver) || !text(reference)) throw new TypeError('Approval requires an approver and reference');
@@ -116,8 +120,21 @@ export function prepareNotionBonsaiOwnerDecision({
         throw new TypeError('Every conditional owner candidate requires an approved valid mapping decision');
       }
     }
+    taskLinkSha = sha256(taskLinkDecisionSha256, 'taskLinkDecisionSha256');
+    const taskLinkResult = verifyNotionBonsaiTaskLinkDecision({
+      review,
+      reviewSha256,
+      record: taskLinkDecisionRecord,
+      mappingDecision: conditional ? mappingDecisionRecord : null,
+      mappingDecisionSha256: conditional ? mappingDecisionSha256 : null,
+    });
+    if (!taskLinkResult.valid || !taskLinkResult.complete || taskLinkResult.pending !== 0
+      || taskLinkResult.rejected !== 0 || taskLinkResult.approved !== taskLinkDecisionRecord?.candidates?.length) {
+      throw new TypeError('Every owner approval requires an approved valid task-link decision');
+    }
     decisionEvidence = { approver: text(approver), decidedAt: new Date(decided).toISOString(), reference: text(reference) };
   } else if (mappingDecisionRecord !== null || mappingDecisionSha256 !== null
+    || taskLinkDecisionRecord !== null || taskLinkDecisionSha256 !== null
     || approver !== null || decidedAt !== null || reference !== null) {
     throw new TypeError('Pending owner decisions cannot contain approval evidence');
   }
@@ -145,6 +162,7 @@ export function prepareNotionBonsaiOwnerDecision({
       notionSnapshotSha256: sha256(review?.sourceEvidence?.notionSnapshotSha256, 'notionSnapshotSha256'),
       bonsaiSnapshotSha256: sha256(review?.sourceEvidence?.bonsaiSnapshotSha256, 'bonsaiSnapshotSha256'),
       mappingDecisionSha256: mappingSha,
+      taskLinkDecisionSha256: taskLinkSha,
     },
   };
 }
@@ -155,6 +173,8 @@ export function verifyNotionBonsaiOwnerDecision({
   record,
   mappingDecisionRecord = null,
   mappingDecisionSha256 = null,
+  taskLinkDecisionRecord = null,
+  taskLinkDecisionSha256 = null,
 }) {
   const findings = [];
   let expected = [];
@@ -209,7 +229,26 @@ export function verifyNotionBonsaiOwnerDecision({
       || mappingResult.rejected !== 0 || mappingResult.approved !== mappingDecisionRecord?.candidates?.length) {
       findings.push('MAPPING_DECISION_DEPENDENCY_FAILED');
     }
-  } else if (record?.decisionEvidence !== null || record?.sourceEvidence?.mappingDecisionSha256 !== null) {
+    let actualTaskLinkSha;
+    try {
+      actualTaskLinkSha = sha256(taskLinkDecisionSha256, 'taskLinkDecisionSha256');
+    } catch {
+      findings.push('INVALID_TASK_LINK_DECISION_CHECKSUM');
+    }
+    const taskLinkResult = verifyNotionBonsaiTaskLinkDecision({
+      review,
+      reviewSha256,
+      record: taskLinkDecisionRecord,
+      mappingDecision: mappingDecisionRecord,
+      mappingDecisionSha256,
+    });
+    if (record?.sourceEvidence?.taskLinkDecisionSha256 !== actualTaskLinkSha
+      || !taskLinkResult.valid || !taskLinkResult.complete || taskLinkResult.pending !== 0
+      || taskLinkResult.rejected !== 0 || taskLinkResult.approved !== taskLinkDecisionRecord?.candidates?.length) {
+      findings.push('TASK_LINK_DECISION_DEPENDENCY_FAILED');
+    }
+  } else if (record?.decisionEvidence !== null || record?.sourceEvidence?.mappingDecisionSha256 !== null
+    || (record?.sourceEvidence?.taskLinkDecisionSha256 ?? null) !== null) {
     findings.push('UNEXPECTED_APPROVAL_EVIDENCE');
   }
 
