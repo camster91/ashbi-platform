@@ -35,7 +35,7 @@ function fixture() {
   const publicDeployment = deployment('ashbi.ca', 'https://ashbi.ca', 'abcdef1');
   const hubDeployment = deployment('hub.ashbi.ca', 'https://hub.ashbi.ca', 'abcdef2');
   const journey = {
-    format: 'ashbi-controlled-journey-evidence', version: 1, complete: true,
+    format: 'ashbi-controlled-journey-evidence', version: 2, complete: true,
     organizationId,
     environmentKind: 'sandbox', publicSiteRevision: publicDeployment.revision,
     hubRevision: hubDeployment.revision, currency: 'CAD', stripeMode: 'test', emailMode: 'sandbox',
@@ -52,7 +52,7 @@ function fixture() {
     completedAt: '2026-03-09T15:00:00.000Z',
     generatedAt: '2026-03-09T15:05:00.000Z',
     recordIds: Object.fromEntries(
-      ['lead', 'client', 'opportunity', 'proposal', 'contract', 'project', 'invoice', 'payment']
+      ['lead', 'client', 'opportunity', 'proposal', 'contract', 'project', 'task', 'invoice', 'payment', 'report']
         .map(key => [key, `${key}-synthetic`]),
     ),
   };
@@ -136,6 +136,8 @@ test('unified launch evaluator rejects missing partner strategy approval', () =>
 test('unified launch evaluator independently rejects journey, Notion, Bonsai, growth, and final approval gaps', () => {
   const cases = [
     ['controlled-journey', payload => { payload.duplicateWrites = 1; }, 'controlled-journey', passingBonsai],
+    ['controlled-journey', payload => { delete payload.recordIds.task; }, 'controlled-journey', passingBonsai],
+    ['controlled-journey', payload => { delete payload.recordIds.report; }, 'controlled-journey', passingBonsai],
     ['controlled-journey', payload => { payload.completedAt = '2026-03-08T15:00:00.000Z'; }, 'controlled-journey', passingBonsai],
     ['notion-idempotent-rerun', payload => { payload.notes.planned = 1; }, 'notion-migration', passingBonsai],
     ['growth-cadence', payload => { payload.weeklyReviews.pop(); }, 'growth-cadence', passingBonsai],

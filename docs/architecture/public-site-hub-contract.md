@@ -87,4 +87,4 @@ Live keys, charges, refunds, subscriptions, tax configuration, provider connecti
 
 ## Release gate
 
-No surface is called unified until a controlled inquiry can be traced through the correct Hub tenant, opportunity, proposal, contract, project, invoice, test payment, and ledger entry without duplicate records or manual database correction.
+No surface is called unified until a controlled inquiry can be traced through the correct Hub tenant, opportunity, proposal, contract, project, completed delivery task, invoice, test payment, post-delivery client report, and ledger entry without duplicate records or manual database correction.

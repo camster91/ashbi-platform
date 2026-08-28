@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { buildControlledJourneyEvidence } from '../../services/controlledJourneyEvidence.service.js';
+import {
+  buildControlledJourneyEvidence,
+  readControlledJourneySnapshot,
+} from '../../services/controlledJourneyEvidence.service.js';
 
 function readiness() {
   return { ready: true, checks: [{ id: 'sandbox-flag', ok: true }, { id: 'stripe-restricted-test-key', ok: true }] };
@@ -27,6 +30,10 @@ function snapshot() {
       id: 'project-1', clientId: 'client-1', organizationId: 'org-1',
       sourceContractId: 'contract-1', createdAt: new Date('2026-08-27T12:01:00.000Z'),
     },
+    task: {
+      id: 'task-1', title: 'Deliver the synthetic engagement', projectId: 'project-1',
+      status: 'COMPLETED', completedAt: new Date('2026-08-27T12:08:00.000Z'),
+    },
     invoice: {
       id: 'invoice-1', proposalId: 'proposal-1', clientId: 'client-1', projectId: 'project-1',
       status: 'PAID', currency: 'CAD', total: 113, paidAt: new Date('2026-08-27T12:10:00.000Z'),
@@ -44,8 +51,14 @@ function snapshot() {
       providerFeeMinor: 400, settlementNetMinor: 10900, settlementCurrency: 'CAD',
       settlementReconciledAt: new Date('2026-08-27T12:15:00.000Z'),
     },
+    report: {
+      id: 'report-1', clientId: 'client-1', subject: 'Synthetic engagement report',
+      body: 'The controlled engagement and payment are complete.',
+      generatedAt: new Date('2026-08-27T12:20:00.000Z'),
+    },
     sourceCounts: {
-      inquiryEvents: 1, lead: 1, proposal: 1, contract: 1, project: 1, invoice: 1, payment: 1,
+      inquiryEvents: 1, lead: 1, proposal: 1, contract: 1, project: 1, task: 1,
+      invoice: 1, payment: 1, report: 1,
     },
   };
 }
@@ -77,7 +90,8 @@ test('controlled journey evidence is derived from one reconciled organization-bo
   assert.equal(evidence.manualDatabaseCorrections, 0);
   assert.deepEqual(evidence.recordIds, {
     lead: 'lead-1', client: 'client-1', opportunity: 'deal-1', proposal: 'proposal-1',
-    contract: 'contract-1', project: 'project-1', invoice: 'invoice-1', payment: 'payment-1',
+    contract: 'contract-1', project: 'project-1', task: 'task-1', invoice: 'invoice-1',
+    payment: 'payment-1', report: 'report-1',
   });
 });
 
@@ -87,7 +101,9 @@ test('controlled journey evidence rejects duplicate, cross-tenant, live, unlinke
     value => { value.project.organizationId = 'org-other'; },
     value => { value.payment.stripeLivemode = true; },
     value => { value.proposal.projectId = 'project-other'; },
+    value => { value.task.status = 'PENDING'; },
     value => { value.payment.settlementEvidenceStatus = 'PENDING'; },
+    value => { value.report.generatedAt = new Date('2026-08-27T12:14:00.000Z'); },
     value => { value.invoice.deliveryAttempts = []; },
     value => { value.invoice.deliveryAttempts.push({ ...value.invoice.deliveryAttempts[0] }); },
   ];
@@ -105,6 +121,44 @@ test('controlled journey evidence requires passing sandbox checks and bounded hu
   }), /attestation/);
 });
 
+test('controlled journey snapshot reads the completed project task and post-delivery client report in tenant scope', async () => {
+  const value = snapshot();
+  const calls = {};
+  const prisma = {
+    lead: { findFirst: async args => { calls.lead = args; return value.lead; } },
+    client: { findFirst: async args => { calls.client = args; return value.client; } },
+    pipelineDeal: { findFirst: async args => { calls.deal = args; return { ...value.deal, stage: { organizationId: 'org-1' } }; } },
+    proposal: {
+      findFirst: async args => { calls.proposal = args; return value.proposal; },
+      count: async () => 1,
+    },
+    contract: {
+      findFirst: async args => { calls.contract = args; return value.contract; },
+      count: async () => 1,
+    },
+    project: {
+      findFirst: async args => { calls.project = args; return value.project; },
+      count: async () => 1,
+    },
+    task: { findMany: async args => { calls.task = args; return [value.task]; } },
+    invoice: {
+      findFirst: async args => { calls.invoice = args; return value.invoice; },
+      count: async () => 1,
+    },
+    invoicePayment: { findMany: async args => { calls.payment = args; return [value.payment]; } },
+    report: { findMany: async args => { calls.report = args; return [value.report]; } },
+    leadEvent: { count: async () => 1 },
+  };
+  const result = await readControlledJourneySnapshot({ prisma, organizationId: 'org-1', leadId: 'lead-1' });
+  assert.equal(result.task.id, 'task-1');
+  assert.equal(result.report.id, 'report-1');
+  assert.equal(result.sourceCounts.task, 1);
+  assert.equal(result.sourceCounts.report, 1);
+  assert.deepEqual(calls.lead.where, { id: 'lead-1', organizationId: 'org-1' });
+  assert.deepEqual(calls.task.where, { projectId: 'project-1', deletedAt: null });
+  assert.deepEqual(calls.report.where, { clientId: 'client-1' });
+});
+
 test('controlled journey exporter is tenant-scoped, read-only, explicit, and package-addressable', () => {
   const script = fs.readFileSync('scripts/export-controlled-journey-evidence.mjs', 'utf8');
   const service = fs.readFileSync('src/services/controlledJourneyEvidence.service.js', 'utf8');
@@ -114,6 +168,8 @@ test('controlled journey exporter is tenant-scoped, read-only, explicit, and pac
   assert.match(script, /fs\.openSync\(output, 'wx', 0o600\)/);
   assert.match(service, /organizationId: organization/);
   assert.match(service, /stage: \{ organizationId: organization \}/);
+  assert.match(service, /prisma\.task\.findMany/);
+  assert.match(service, /prisma\.report\.findMany/);
   assert.doesNotMatch(service, /prisma\.[a-zA-Z]+\.(?:create|update|delete|upsert)/);
   assert.equal(
     packageJson.scripts['export:controlled-journey-evidence'],

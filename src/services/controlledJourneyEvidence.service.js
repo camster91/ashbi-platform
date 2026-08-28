@@ -1,4 +1,7 @@
 const CURRENCIES = new Set(['CAD', 'USD']);
+const SOURCE_COUNT_KEYS = Object.freeze([
+  'inquiryEvents', 'lead', 'proposal', 'contract', 'project', 'task', 'invoice', 'payment', 'report',
+]);
 
 function text(value) {
   return String(value ?? '').trim();
@@ -32,7 +35,9 @@ function requireRecord(record, label) {
 
 function validateCounts(counts) {
   const entries = Object.entries(counts ?? {});
-  if (entries.length !== 7 || entries.some(([, count]) => count !== 1)) {
+  if (entries.length !== SOURCE_COUNT_KEYS.length
+    || SOURCE_COUNT_KEYS.some(key => counts?.[key] !== 1)
+    || entries.some(([, count]) => count !== 1)) {
     throw new Error('The controlled journey has missing or duplicate source writes');
   }
 }
@@ -55,8 +60,10 @@ export function buildControlledJourneyEvidence({
   const proposal = requireRecord(snapshot?.proposal, 'Proposal');
   const contract = requireRecord(snapshot?.contract, 'Contract');
   const project = requireRecord(snapshot?.project, 'Project');
+  const task = requireRecord(snapshot?.task, 'Task');
   const invoice = requireRecord(snapshot?.invoice, 'Invoice');
   const payment = requireRecord(snapshot?.payment, 'Payment');
+  const report = requireRecord(snapshot?.report, 'Report');
   validateCounts(snapshot?.sourceCounts);
 
   if (sandboxReadiness?.ready !== true
@@ -92,6 +99,10 @@ export function buildControlledJourneyEvidence({
     || proposal.projectId !== project.id) {
     throw new Error('Signed-contract project evidence is incomplete');
   }
+  if (task.projectId !== project.id || task.status !== 'COMPLETED' || !text(task.title)
+    || !task.completedAt) {
+    throw new Error('Completed project task evidence is incomplete');
+  }
   if (invoice.proposalId !== proposal.id || invoice.clientId !== client.id || invoice.projectId !== project.id
     || invoice.status !== 'PAID' || invoice.currency !== deal.currency) {
     throw new Error('Project invoice evidence is incomplete or currency-inconsistent');
@@ -110,6 +121,13 @@ export function buildControlledJourneyEvidence({
     || !/^[A-Z]{3}$/.test(payment.settlementCurrency ?? '')) {
     throw new Error('Stripe settlement evidence does not reconcile');
   }
+  const taskCompletedAt = timestamp(task.completedAt, 'Task completion time');
+  const settlementReconciledAt = timestamp(payment.settlementReconciledAt, 'Settlement reconciliation time');
+  const reportGeneratedAt = timestamp(report.generatedAt, 'Report generation time');
+  if (report.clientId !== client.id || !text(report.subject) || !text(report.body)
+    || reportGeneratedAt < Math.max(taskCompletedAt, settlementReconciledAt)) {
+    throw new Error('Post-delivery client report evidence is incomplete');
+  }
   const acceptedDeliveries = (Array.isArray(invoice.deliveryAttempts) ? invoice.deliveryAttempts : []).filter(attempt => (
     attempt.provider === 'MAILGUN'
     && attempt.providerLifecycleStatus === 'RECIPIENT_SERVER_ACCEPTED'
@@ -121,15 +139,17 @@ export function buildControlledJourneyEvidence({
   const completedAt = Math.max(
     timestamp(contract.signedAt, 'Contract signature time'),
     timestamp(project.createdAt, 'Project creation time'),
+    taskCompletedAt,
     timestamp(invoice.paidAt, 'Invoice payment time'),
-    timestamp(payment.settlementReconciledAt, 'Settlement reconciliation time'),
+    settlementReconciledAt,
+    reportGeneratedAt,
     timestamp(delivery.recipientServerAcceptedAt, 'Email acceptance time'),
   );
   if (completedAt > generated) throw new Error('Journey completion cannot be in the future');
 
   return {
     format: 'ashbi-controlled-journey-evidence',
-    version: 1,
+    version: 2,
     complete: true,
     organizationId: organization,
     environmentKind: 'sandbox',
@@ -148,8 +168,10 @@ export function buildControlledJourneyEvidence({
       proposal: proposal.id,
       contract: contract.id,
       project: project.id,
+      task: task.id,
       invoice: invoice.id,
       payment: payment.id,
+      report: report.id,
     },
     providerEvidence: {
       stripeLivemode: false,
@@ -210,6 +232,11 @@ export async function readControlledJourneySnapshot({ prisma, organizationId, le
     select: { id: true, clientId: true, organizationId: true, sourceContractId: true, createdAt: true },
   });
   requireRecord(project, 'Project');
+  const tasks = await prisma.task.findMany({
+    where: { projectId: project.id, deletedAt: null },
+    select: { id: true, title: true, status: true, projectId: true, completedAt: true },
+    orderBy: [{ completedAt: 'asc' }, { id: 'asc' }],
+  });
   const invoice = await prisma.invoice.findFirst({
     where: {
       proposalId: proposal?.id, clientId: client?.id, projectId: project?.id, deletedAt: null,
@@ -235,6 +262,11 @@ export async function readControlledJourneySnapshot({ prisma, organizationId, le
       settlementCurrency: true, settlementReconciledAt: true,
     },
   });
+  const reports = await prisma.report.findMany({
+    where: { clientId: client.id },
+    select: { id: true, clientId: true, subject: true, body: true, generatedAt: true },
+    orderBy: [{ generatedAt: 'asc' }, { id: 'asc' }],
+  });
   const [inquiryEvents, proposalCount, contractCount, projectCount, invoiceCount] = await Promise.all([
     prisma.leadEvent.count({ where: { leadId: lead.id, organizationId: organization, eventName: 'inquiry_submitted' } }),
     prisma.proposal.count({ where: { dealId: deal?.id, deletedAt: null } }),
@@ -249,16 +281,20 @@ export async function readControlledJourneySnapshot({ prisma, organizationId, le
     proposal,
     contract,
     project,
+    task: tasks[0] ?? null,
     invoice,
     payment: payments[0] ?? null,
+    report: reports[0] ?? null,
     sourceCounts: {
       inquiryEvents,
       lead: 1,
       proposal: proposalCount,
       contract: contractCount,
       project: projectCount,
+      task: tasks.length,
       invoice: invoiceCount,
       payment: payments.length,
+      report: reports.length,
     },
   };
 }

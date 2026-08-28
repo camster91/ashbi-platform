@@ -60,7 +60,7 @@ function recordChainReasonCode(error) {
   if (/email/.test(message)) return 'EMAIL_EVIDENCE_INCOMPLETE';
   if (/currency/.test(message)) return 'CURRENCY_EVIDENCE_INCOMPLETE';
   if (/organization/.test(message)) return 'TENANT_BINDING_INCOMPLETE';
-  for (const entity of ['lead', 'client', 'opportunity', 'proposal', 'contract', 'project', 'invoice', 'payment']) {
+  for (const entity of ['lead', 'client', 'opportunity', 'proposal', 'contract', 'project', 'task', 'invoice', 'payment', 'report']) {
     if (message.includes(entity)) return `${entity.toUpperCase()}_EVIDENCE_INCOMPLETE`;
   }
   return 'RECORD_CHAIN_INCOMPLETE';

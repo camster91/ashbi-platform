@@ -19,7 +19,7 @@ const REQUIRED_STRATEGY_DECISIONS = Object.freeze([
 ]);
 
 const REQUIRED_JOURNEY_RECORDS = Object.freeze([
-  'lead', 'client', 'opportunity', 'proposal', 'contract', 'project', 'invoice', 'payment',
+  'lead', 'client', 'opportunity', 'proposal', 'contract', 'project', 'task', 'invoice', 'payment', 'report',
 ]);
 
 function timestamp(value) {
@@ -119,7 +119,7 @@ function journeyIsValid(payload, {
   const completedAt = timestamp(payload?.completedAt);
   const generatedAt = timestamp(payload?.generatedAt);
   return payload?.format === 'ashbi-controlled-journey-evidence'
-    && payload?.version === 1
+    && payload?.version === 2
     && payload?.complete === true
     && payload?.organizationId === organizationId
     && payload?.environmentKind === 'sandbox'
@@ -265,8 +265,8 @@ export function evaluateUnifiedLaunchReadiness({
       deployedAt: Math.max(timestamp(publicDeployment?.verifiedAt), timestamp(hubDeployment?.verifiedAt)),
       evidenceCompletedAt,
     }),
-    'A complete sandbox inquiry-to-payment journey reconciled without duplicate writes or database correction.',
-    'The controlled inquiry-to-payment journey is incomplete, unreconciled, or not bound to both deployed revisions.'),
+    'A complete sandbox inquiry-to-payment, delivery-task, and reporting journey reconciled without duplicate writes or database correction.',
+    'The controlled inquiry-to-payment, delivery-task, or reporting journey is incomplete, unreconciled, or not bound to both deployed revisions.'),
     check('notion-migration', evidenceCompletedAt !== null && notionEvidenceIsValid(notionConfirmed, notionRerun, organizationId, evidenceCompletedAt),
       'The confirmed Notion import and idempotent rerun reconcile to the same source and destination.',
       'Notion confirmed-import or idempotent-rerun evidence is incomplete or inconsistent.'),
