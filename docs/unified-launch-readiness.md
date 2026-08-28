@@ -27,6 +27,14 @@ Each deployment uses `format: "ashbi-deployment-evidence"`, `version: 1`, `compl
 
 The manifest names one Ashbi organization. The controlled journey uses `format: "ashbi-controlled-journey-evidence"`, `version: 1`, `complete: true`, that exact `organizationId`, `environmentKind: "sandbox"`, the exact public and Hub revisions, an explicit `CAD` or `USD` currency, `stripeMode: "test"`, `emailMode: "sandbox"`, `reconciliationPassed: true`, `duplicateWrites: 0`, `manualDatabaseCorrections: 0`, and the eight required `recordIds`. It also preserves passing sandbox-readiness checks, signed Stripe test-mode and verified-settlement evidence, sandbox email acceptance, and the bounded human no-manual-correction attestation. The growth, Notion, and nested Bonsai evidence must bind the same organization.
 
+Run the sanitized preflight before changing the sandbox and again after the full synthetic journey:
+
+```text
+npm run check:controlled-journey-readiness -- --organization-id <id> --lead-id <synthetic-lead-id> --public-revision <git-sha> --hub-revision <git-sha> --attested-by <name> --attestation-reference <reference>
+```
+
+The first run may omit the lead and final attestation inputs; those checks will remain visibly pending while the command still inspects migrations and bounded synthetic identities when the target is unambiguously non-production. The final run must return `ready: true`. Reports contain check IDs, safe messages, and missing migration names only; they never print URLs, database credentials, provider secrets, emails, or supplied record identifiers. The command has no confirmation mode and no write path.
+
 After the controlled sandbox flow and provider reconciliation are complete, export the artifact directly from the Hub records:
 
 ```text

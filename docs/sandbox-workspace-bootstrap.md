@@ -39,3 +39,7 @@ The confirmed command creates only the five planned operating records inside one
 - A replay report showing five `REUSE` actions and no duplicate records.
 
 This proves only that the synthetic workspace exists. The proposal, contract, invoice email, Stripe checkout/webhook, reconciliation, export, restore, parallel-run, and financial cutover gates remain separate.
+
+## Controlled journey preflight
+
+After the dry-run workspace exists, use the read-only controlled-journey preflight documented in [unified-launch-readiness.md](unified-launch-readiness.md). It can inspect the named sandbox migrations, organization, owner, and synthetic client before a lead exists. After the journey, rerun it with the synthetic lead, exact deployed revisions, human attester, and final attestation reference. Do not run the evidence exporter until every preflight check passes.
