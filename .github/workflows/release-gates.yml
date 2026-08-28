@@ -51,6 +51,8 @@ jobs:
           npx prisma migrate deploy
       - name: Verify migration chain matches the Prisma schema
         run: npx prisma migrate diff --exit-code --from-config-datasource --to-schema prisma/schema.prisma
+      - name: Reject high-severity production dependency advisories
+        run: npm run check:security-audit
       - name: Check package boundaries
         run: npm run check:boundaries
       - name: Type check

@@ -8,6 +8,7 @@ deploy workflows invoke the same reusable workflow and declare
 The canonical gate owns these blocking checks:
 
 - package-boundary validation;
+- high-severity production dependency audits for both backend and frontend lockfiles;
 - backend and frontend type/lint checks;
 - backend unit and integration tests against PostgreSQL with pgvector;
 - frontend unit tests;

@@ -59,6 +59,42 @@ describe('mandatory release gates', () => {
     assert.ok(validateReleaseGates(root).some((failure) => failure.includes('type-check')));
   });
 
+  it('fails closed when the production dependency audit is removed', () => {
+    const root = copyWorkflows();
+    const workflow = path.join(root, '.github', 'workflows', 'release-gates.yml');
+    fs.writeFileSync(
+      workflow,
+      fs.readFileSync(workflow, 'utf8').replace('npm run check:security-audit', 'echo dependency audit skipped'),
+    );
+    assert.ok(validateReleaseGates(root).some((failure) => failure.includes('check:security-audit')));
+  });
+
+  it('fails closed when the frontend production dependency graph is omitted from the audit', () => {
+    const root = copyWorkflows();
+    const packageJson = path.join(root, 'package.json');
+    fs.writeFileSync(
+      packageJson,
+      fs.readFileSync(packageJson, 'utf8').replace(
+        ' && npm --prefix web audit --omit=dev --audit-level=high',
+        '',
+      ),
+    );
+    assert.ok(validateReleaseGates(root).some((failure) => failure.includes('frontend production advisories')));
+  });
+
+  it('fails closed when the backend production dependency graph is omitted from the audit', () => {
+    const root = copyWorkflows();
+    const packageJson = path.join(root, 'package.json');
+    fs.writeFileSync(
+      packageJson,
+      fs.readFileSync(packageJson, 'utf8').replace(
+        'npm audit --omit=dev --audit-level=high && ',
+        '',
+      ),
+    );
+    assert.ok(validateReleaseGates(root).some((failure) => failure.includes('backend production advisories')));
+  });
+
   it('fails closed when the exact Prisma migration chain is not applied', () => {
     const root = copyWorkflows();
     const workflow = path.join(root, '.github', 'workflows', 'release-gates.yml');

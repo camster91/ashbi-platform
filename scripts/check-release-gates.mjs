@@ -14,6 +14,7 @@ export function validateReleaseGates(root = process.cwd()) {
   const directDeploy = fs.readFileSync(path.join(root, 'scripts', 'deploy-vps-direct.sh'), 'utf8');
   const dockerfile = fs.readFileSync(path.join(root, 'Dockerfile'), 'utf8');
   const packageJson = fs.readFileSync(path.join(root, 'package.json'), 'utf8');
+  const packageScripts = JSON.parse(packageJson).scripts ?? {};
   const worker = fs.readFileSync(path.join(root, 'src', 'jobs', 'worker.js'), 'utf8');
   const workerHealth = fs.readFileSync(path.join(root, 'scripts', 'worker-health.mjs'), 'utf8');
   const productionSmoke = fs.readFileSync(path.join(root, 'scripts', 'smoke-production-health.mjs'), 'utf8');
@@ -35,6 +36,7 @@ export function validateReleaseGates(root = process.cwd()) {
 
   const commands = [
     'npm run type-check',
+    'npm run check:security-audit',
     'npm run lint',
     'npm --prefix web run lint',
     'npm test',
@@ -67,6 +69,13 @@ export function validateReleaseGates(root = process.cwd()) {
     failures.push('release-gates.yml quality job bypasses migration history with prisma db push');
   }
   if (!browserJob.includes('npm run build')) failures.push('release-gates.yml browser job does not build the production frontend');
+  const securityAudit = packageScripts['check:security-audit'] ?? '';
+  if (!securityAudit.includes('npm audit --omit=dev --audit-level=high')) {
+    failures.push('check:security-audit does not reject high-severity backend production advisories');
+  }
+  if (!securityAudit.includes('npm --prefix web audit --omit=dev --audit-level=high')) {
+    failures.push('check:security-audit does not reject high-severity frontend production advisories');
+  }
 
   if (!/uses:\s*\.\/\.github\/workflows\/release-gates\.yml/.test(ci)) {
     failures.push('ci.yml does not invoke the canonical release gates');
