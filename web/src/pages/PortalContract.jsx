@@ -184,6 +184,7 @@ export default function PortalContract() {
   }
 
   const alreadySigned = contract.status === 'SIGNED' || contract.signedAt;
+  const canSign = contract.status === 'SENT' && !alreadySigned;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -215,9 +216,9 @@ export default function PortalContract() {
                 : `Signed on ${formatDate(new Date())}`
               }
             </p>
-            {(contract.signerName || signerName) && (
+            {(contract.clientSigName || signerName) && (
               <p className="text-green-600 text-sm mt-1">
-                by {contract.signerName || signerName}
+                by {contract.clientSigName || signerName}
               </p>
             )}
           </div>
@@ -225,21 +226,31 @@ export default function PortalContract() {
 
         {/* Contract Content */}
         <div className="bg-white rounded-xl border border-slate-200 p-8">
-          {contract.clientName && (
-            <p className="text-sm text-slate-500 mb-4">
-              Prepared for: <span className="font-medium text-slate-700">{contract.clientName}</span>
-            </p>
-          )}
+          <div className="mb-6 space-y-1 text-sm text-slate-500">
+            {contract.client?.name && (
+              <p>
+                Prepared for: <span className="font-medium text-slate-700">{contract.client.name}</span>
+              </p>
+            )}
+            {contract.createdAt && <p>Prepared {formatDate(contract.createdAt)}</p>}
+            {contract.proposal?.title && <p>Related proposal: {contract.proposal.title}</p>}
+          </div>
           <div
             className="prose prose-slate max-w-none prose-headings:font-bold prose-h1:text-2xl prose-h2:text-xl prose-p:text-slate-600 prose-li:text-slate-600"
             dangerouslySetInnerHTML={{
-              __html: safeHtml(contract.content || contract.htmlContent || '', { mode: 'strict' }),
+              __html: safeHtml(contract.content || '', { mode: 'strict' }),
             }}
           />
         </div>
 
+        {!signed && !alreadySigned && !canSign && (
+          <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            This contract is not currently available for signature. Please contact Ashbi Design for a current signing link.
+          </p>
+        )}
+
         {/* Signature Area */}
-        {!signed && !alreadySigned && (
+        {!signed && canSign && (
           <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-5">
             <h3 className="text-sm font-medium text-slate-500 uppercase tracking-wider">Sign This Contract</h3>
 
@@ -331,7 +342,7 @@ export default function PortalContract() {
             )}
 
             <p className="text-xs text-slate-400 text-center">
-              By signing, you agree to the terms outlined in this contract. This constitutes a legally binding electronic signature.
+              By signing, you confirm your agreement to the terms displayed above and consent to use of an electronic signature.
             </p>
           </div>
         )}

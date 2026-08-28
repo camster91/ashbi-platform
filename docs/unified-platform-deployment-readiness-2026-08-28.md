@@ -43,7 +43,7 @@
 - Raw HTML and multipart email parsing regression tests: pass.
 - Backend unit suite: 947 passed.
 - Backend unit and integration suite against the isolated PostgreSQL/pgvector rehearsal database: 964 passed, zero skipped, zero failures.
-- Frontend suite: 528 passed.
+- Frontend suite: 531 passed.
 - Backend/frontend lint and backend type check: pass.
 - Production build and frontend performance budgets: pass.
 - Lighthouse: three mobile and three desktop runs pass configured thresholds.

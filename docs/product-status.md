@@ -43,6 +43,8 @@ The supported milestone is a controlled Ashbi agency-operations deployment: auth
 
 Client proposal evidence is now aligned with the public API contract: the portal renders the actual client, notes, sent and valid-until dates, authoritative subtotal, discount, total, and line items. Every amount carries verified CAD or USD evidence, while unresolved currency or expiry withholds approval and keeps decline available. This remains code-present local evidence, not provider or target-environment clearance.
 
+Client contract evidence is also aligned with the public API contract: the signing portal renders the actual client, immutable sanitized contract content, preparation date, related proposal, and recorded signer. Signing controls appear only for the explicit `SENT` state; unexpected non-sent records fail closed with contact guidance. This remains code-present local evidence and does not satisfy the pending e-sign, retention, provider, or target-browser gates.
+
 ## Authoritative engineering paths
 
 - Setup and checks: [README.md](../README.md), `.env.example`, and root/web package scripts.
