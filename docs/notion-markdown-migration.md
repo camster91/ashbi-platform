@@ -50,6 +50,14 @@ npm run verify:notion-bonsai-owner-decision -- --review <review.json> --owner-de
 
 This packet includes only Notion tasks with one exact or review-candidate Bonsai task carrying a named assignee. It distinguishes direct exact-task/project evidence from assignments conditional on the separately approved mapping packet. A batch approval cannot pass unless the conditional mappings are checksum-valid and approved. Unmatched Notion tasks, unassigned Bonsai tasks, project/account-owner defaults, and inferred creative/technical ownership remain outside the packet.
 
+Review projects separately from tasks:
+
+```text
+npm run prepare:notion-bonsai-project-review -- --notion <notion-projects-tasks.json> --bonsai <bonsai-tasks.json> --prepared-at <ISO> --output <new-project-review.json>
+```
+
+The complete Bonsai task snapshot can prove only the distinct project titles referenced by those tasks. This owner-only report therefore separates exact project titles, aliases supported by shared exact tasks, near-title task evidence, unmatched titles, and similarity-only suggestions while explicitly marking the Bonsai project inventory incomplete. A native complete Bonsai projects export is still required before project parity can be claimed. The command refuses overwrite and performs no external or database writes.
+
 ## Supported input
 
 - UTF-8 `.md` pages from a Notion export;

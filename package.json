@@ -57,6 +57,7 @@
     "verify:notion-operating-snapshot": "node scripts/verify-notion-operating-snapshot.mjs",
     "compare:notion-bonsai-tasks": "node scripts/compare-notion-bonsai-tasks.mjs",
     "prepare:notion-bonsai-task-review": "node scripts/prepare-notion-bonsai-task-review.mjs",
+    "prepare:notion-bonsai-project-review": "node scripts/prepare-notion-bonsai-project-review.mjs",
     "prepare:notion-bonsai-mapping-decision": "node scripts/prepare-notion-bonsai-mapping-decision.mjs",
     "verify:notion-bonsai-mapping-decision": "node scripts/verify-notion-bonsai-mapping-decision.mjs",
     "prepare:notion-bonsai-owner-decision": "node scripts/prepare-notion-bonsai-owner-decision.mjs",
