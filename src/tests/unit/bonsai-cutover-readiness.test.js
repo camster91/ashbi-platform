@@ -11,16 +11,19 @@ import {
   WORKSPACE_EXPORT_COLLECTIONS,
   WORKSPACE_EXPORT_V3_COLLECTIONS,
 } from '../../services/workspace-export-integrity.service.js';
+import { fingerprintBonsaiPlan, fingerprintInputInventory } from '../../services/bonsai-import-evidence.service.js';
 
 const REQUIRED_ARTIFACTS = [
   'bonsai-source-export',
   'bonsai-connections-csv',
   'bonsai-projects-csv',
+  'bonsai-projects-json',
   'bonsai-tasks-json',
   'bonsai-tasks-csv',
   'bonsai-time-entries-csv',
   'bonsai-expenses-csv',
   'bonsai-invoices-csv',
+  'bonsai-addresses-csv',
   'bonsai-import-dry-run',
   'bonsai-import-confirmed',
   'notion-source-export',
@@ -48,9 +51,21 @@ function fixture() {
     capturedAt: '2026-08-15T18:15:00.000Z', tasks: [],
   };
   const bonsaiTasksContent = Buffer.from(JSON.stringify(bonsaiTasksPayload));
+  const bonsaiProjectsSnapshotContent = Buffer.from(JSON.stringify({
+    format: 'bonsai-project-snapshot', version: 1, scope: 'all', complete: true,
+    capturedAt: '2026-08-15T18:10:00.000Z',
+    captureEvidence: { connector: 'bonsai', operation: 'list_projects', pageSize: 100, allStatusPagesFetched: 1,
+      allStatusFinalHasMore: false, projectCount: 1, lifecyclePartitionComplete: true,
+      lifecycleQueries: [{ status: 'active', pagesFetched: 1, finalHasMore: false, projectCount: 1 },
+        { status: 'completed', pagesFetched: 1, finalHasMore: false, projectCount: 0 },
+        { status: 'archived', pagesFetched: 1, finalHasMore: false, projectCount: 0 }] },
+    projects: [{ id: 123, title: 'Acme Website', status: 'active', public_url_token: 'acmewebsite', number: 'P-123',
+      board_group_id: null, company_name: 'Acme', url: 'https://app.hellobonsai.com/projects/acmewebsite' }],
+  }));
   const bonsaiHistoricalTasksContent = Buffer.from('Task Name,Project,Company,Assignee,Status,Task ID,Created,Task Type,Parent Task ID\n');
   const bonsaiTimeEntriesContent = Buffer.from('client_name,project_title,owner_name,date,formatted_time\nAcme,Acme Website,Cameron,2026-08-01,01:00:00\n');
   const bonsaiExpensesContent = Buffer.from('name,amount_after_tax,currency,date\nFigma,20.00,CAD,2026-08-02\n');
+  const bonsaiAddressesContent = Buffer.from('Client,Address\nAcme,1 Main Street\n');
   const bonsaiInvoicesSha256 = crypto.createHash('sha256').update(bonsaiInvoicesContent).digest('hex');
   const bonsaiConnectionsSha256 = crypto.createHash('sha256').update(bonsaiConnectionsContent).digest('hex');
   const bonsaiProjectsSha256 = crypto.createHash('sha256').update(bonsaiProjectsContent).digest('hex');
@@ -58,6 +73,8 @@ function fixture() {
   const bonsaiHistoricalTasksSha256 = crypto.createHash('sha256').update(bonsaiHistoricalTasksContent).digest('hex');
   const bonsaiTimeEntriesSha256 = crypto.createHash('sha256').update(bonsaiTimeEntriesContent).digest('hex');
   const bonsaiExpensesSha256 = crypto.createHash('sha256').update(bonsaiExpensesContent).digest('hex');
+  const bonsaiAddressesSha256 = crypto.createHash('sha256').update(bonsaiAddressesContent).digest('hex');
+  const bonsaiProjectsSnapshotSha256 = crypto.createHash('sha256').update(bonsaiProjectsSnapshotContent).digest('hex');
   const emptyRecords = Object.fromEntries(REVENUE_EVIDENCE_COLLECTIONS.map(collection => [collection, []]));
   const revenueManifest = buildRevenueEvidenceManifest(emptyRecords);
   const revenuePayload = {
@@ -131,6 +148,28 @@ function fixture() {
       )),
     },
   };
+  const importInventory = [
+    { filename: 'connection_export.csv', kind: 'connections', present: true, rows: 1, sha256: bonsaiConnectionsSha256 },
+    { filename: 'projects.csv', kind: 'projects.csv', present: true, rows: 1, sha256: bonsaiProjectsSha256 },
+    { filename: 'bonsai-projects.json', kind: 'bonsai-projects.json', present: true, rows: 1, sha256: bonsaiProjectsSnapshotSha256 },
+    { filename: 'task-export.csv', kind: 'task-history', present: true, rows: 0, sha256: bonsaiHistoricalTasksSha256 },
+    { filename: 'bonsai-tasks.json', kind: 'bonsai-tasks.json', present: true, rows: 0, sha256: bonsaiTasksSha256 },
+    { filename: 'invoices.csv', kind: 'invoices.csv', present: true, rows: 1, sha256: bonsaiInvoicesSha256 },
+    { filename: 'time-entries.csv', kind: 'time-entries.csv', present: true, rows: 1, sha256: bonsaiTimeEntriesSha256 },
+    { filename: 'expenses.csv', kind: 'expenses.csv', present: true, rows: 1, sha256: bonsaiExpensesSha256 },
+    { filename: 'addresses.csv', kind: 'addresses.csv', present: true, rows: 1, sha256: bonsaiAddressesSha256 },
+  ];
+  const importStats = { errors: [], operatingSourceRecords: { created: 2, existing: 0, conflicts: 0 } };
+  const importSourceFingerprint = fingerprintInputInventory(importInventory);
+  const importPlanFingerprint = fingerprintBonsaiPlan({ sourceFingerprint: importSourceFingerprint, stats: importStats });
+  const importReport = mode => ({
+    mode, complete: true, organization: { id: 'org-1', name: 'Ashbi' },
+    sandboxTarget: { environmentKind: 'sandbox', targetFingerprint: 'sandbox-target-1' },
+    inputInventory: importInventory, sourceFingerprint: importSourceFingerprint,
+    planFingerprint: importPlanFingerprint, stats: importStats,
+  });
+  const importDryRunContent = Buffer.from(JSON.stringify(importReport('dry-run')));
+  const importConfirmedContent = Buffer.from(JSON.stringify(importReport('live')));
   const artifacts = REQUIRED_ARTIFACTS.map((id) => {
     const relativePath = `${id}.json`;
     const content = id === 'revenue-evidence-export'
@@ -141,6 +180,8 @@ function fixture() {
           ? bonsaiConnectionsContent
           : id === 'bonsai-projects-csv'
             ? bonsaiProjectsContent
+            : id === 'bonsai-projects-json'
+              ? bonsaiProjectsSnapshotContent
             : id === 'bonsai-tasks-json'
               ? bonsaiTasksContent
               : id === 'bonsai-tasks-csv'
@@ -148,9 +189,15 @@ function fixture() {
             : id === 'bonsai-time-entries-csv'
               ? bonsaiTimeEntriesContent
               : id === 'bonsai-expenses-csv'
-                ? bonsaiExpensesContent
+              ? bonsaiExpensesContent
+              : id === 'bonsai-addresses-csv'
+                ? bonsaiAddressesContent
       : id === 'bonsai-invoices-csv'
         ? bonsaiInvoicesContent
+        : id === 'bonsai-import-dry-run'
+          ? importDryRunContent
+          : id === 'bonsai-import-confirmed'
+            ? importConfirmedContent
         : Buffer.from(JSON.stringify(id === 'parallel-reconciliation'
           ? parallelPayload
           : id === 'operations-reconciliation'
@@ -208,6 +255,25 @@ test('cutover evaluator passes a complete untampered manifest after the agreed p
     const report = evaluateBonsaiCutoverReadiness({ manifest, manifestDirectory: directory });
     assert.equal(report.ready, true);
     assert.equal(report.checks.every((check) => check.ok), true);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('cutover evaluator binds confirmed import evidence to the reviewed dry-run plan', () => {
+  const { directory, manifest } = fixture();
+  try {
+    const artifact = manifest.artifacts.find(item => item.id === 'bonsai-import-confirmed');
+    const artifactPath = path.join(directory, artifact.path);
+    const payload = JSON.parse(fs.readFileSync(artifactPath, 'utf8'));
+    payload.planFingerprint = 'f'.repeat(64);
+    const changed = Buffer.from(JSON.stringify(payload));
+    fs.writeFileSync(artifactPath, changed);
+    artifact.sha256 = crypto.createHash('sha256').update(changed).digest('hex');
+    const report = evaluateBonsaiCutoverReadiness({ manifest, manifestDirectory: directory });
+    assert.equal(report.checks.find(item => item.id === 'artifact-integrity').ok, true);
+    assert.equal(report.checks.find(item => item.id === 'bonsai-import-binding').ok, false);
+    assert.equal(report.ready, false);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }

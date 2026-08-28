@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import { REVENUE_EVIDENCE_COLLECTIONS, verifyRevenueEvidenceExport } from './revenueEvidenceExport.service.js';
 import { verifyWorkspaceExport, workspaceExportCollections } from './workspace-export-integrity.service.js';
 import { resolveContainedEvidenceFile } from './evidenceManifest.service.js';
+import { fingerprintBonsaiPlan, fingerprintInputInventory } from './bonsai-import-evidence.service.js';
+import { verifyBonsaiProjectSnapshot } from './bonsaiProjectSnapshot.service.js';
 
 const REQUIRED_RECORD_TYPES = [
   'clients',
@@ -20,11 +22,13 @@ const REQUIRED_ARTIFACT_IDS = [
   'bonsai-source-export',
   'bonsai-connections-csv',
   'bonsai-projects-csv',
+  'bonsai-projects-json',
   'bonsai-tasks-json',
   'bonsai-tasks-csv',
   'bonsai-time-entries-csv',
   'bonsai-expenses-csv',
   'bonsai-invoices-csv',
+  'bonsai-addresses-csv',
   'bonsai-import-dry-run',
   'bonsai-import-confirmed',
   'notion-source-export',
@@ -244,6 +248,47 @@ function taskReconciliationIsBound({ artifacts, manifestDirectory, organizationI
     && completedAt <= evidenceCompletedAt;
 }
 
+function bonsaiImportEvidenceIsBound({ artifacts, manifestDirectory, organizationId }) {
+  const dry = readContainedJsonArtifact(artifacts, 'bonsai-import-dry-run', manifestDirectory);
+  const confirmed = readContainedJsonArtifact(artifacts, 'bonsai-import-confirmed', manifestDirectory);
+  const projectSnapshot = readContainedJsonArtifact(artifacts, 'bonsai-projects-json', manifestDirectory);
+  const artifact = id => Array.isArray(artifacts) ? artifacts.find(item => item?.id === id) : null;
+  const bindings = [
+    ['connections', 'bonsai-connections-csv'], ['projects.csv', 'bonsai-projects-csv'],
+    ['bonsai-projects.json', 'bonsai-projects-json'], ['task-history', 'bonsai-tasks-csv'],
+    ['bonsai-tasks.json', 'bonsai-tasks-json'], ['invoices.csv', 'bonsai-invoices-csv'],
+    ['time-entries.csv', 'bonsai-time-entries-csv'], ['expenses.csv', 'bonsai-expenses-csv'],
+    ['addresses.csv', 'bonsai-addresses-csv'],
+  ];
+  if (!dry || !confirmed || !projectSnapshot || !verifyBonsaiProjectSnapshot(projectSnapshot).valid) return false;
+  const validInventory = report => {
+    const inventory = Array.isArray(report?.inputInventory) ? report.inputInventory : [];
+    if (inventory.length !== bindings.length || !inventory.every(item => item?.present === true)) return false;
+    if (report.sourceFingerprint !== fingerprintInputInventory(inventory)
+      || report.planFingerprint !== fingerprintBonsaiPlan({ sourceFingerprint: report.sourceFingerprint, stats: report.stats })) return false;
+    return bindings.every(([kind, artifactId]) => {
+      const item = inventory.find(candidate => candidate?.kind === kind);
+      const sourceArtifact = artifact(artifactId);
+      return item && sourceArtifact && item.sha256 === sourceArtifact.sha256 && Number.isInteger(item.rows) && item.rows >= 0;
+    });
+  };
+  return dry.mode === 'dry-run' && confirmed.mode === 'live'
+    && dry.complete === true && confirmed.complete === true
+    && dry.organization?.id === organizationId && confirmed.organization?.id === organizationId
+    && dry.sandboxTarget?.environmentKind === 'sandbox' && confirmed.sandboxTarget?.environmentKind === 'sandbox'
+    && text(dry.sandboxTarget?.targetFingerprint) !== ''
+    && dry.sandboxTarget.targetFingerprint === confirmed.sandboxTarget.targetFingerprint
+    && Array.isArray(dry.stats?.errors) && dry.stats.errors.length === 0
+    && Array.isArray(confirmed.stats?.errors) && confirmed.stats.errors.length === 0
+    && dry.stats?.operatingSourceRecords?.conflicts === 0
+    && confirmed.stats?.operatingSourceRecords?.conflicts === 0
+    && dry.sourceFingerprint === confirmed.sourceFingerprint
+    && dry.planFingerprint === confirmed.planFingerprint
+    && validInventory(dry) && validInventory(confirmed);
+}
+
+function text(value) { return String(value ?? '').trim(); }
+
 export function evaluateBonsaiCutoverReadiness({ manifest = {}, manifestDirectory } = {}) {
   const parallel = manifest.parallelRun ?? {};
   const reconciliation = manifest.reconciliation ?? {};
@@ -359,6 +404,12 @@ export function evaluateBonsaiCutoverReadiness({ manifest = {}, manifestDirector
       }),
       'Task reconciliation is bound to a complete all-scope Bonsai snapshot and the exact tenant workspace export.',
       'Reconcile a complete all-scope Bonsai task snapshot against the exact tenant workspace export.',
+    ),
+    check(
+      'bonsai-import-binding',
+      bonsaiImportEvidenceIsBound({ artifacts: manifest.artifacts, manifestDirectory, organizationId: manifest.organizationId }),
+      'The dry run and confirmed Bonsai import bind the exact source inventory and operating-source registry plan.',
+      'Bind clean dry-run and confirmed imports to the exact source artifacts, tenant, sandbox target, and registry plan.',
     ),
     check(
       'recovery',

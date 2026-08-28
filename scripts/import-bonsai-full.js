@@ -7,8 +7,8 @@
  * from Bonsai CSV exports plus a complete authenticated task snapshot.
  *
  * Usage:
- *   node scripts/import-bonsai-full.js --dry-run --organization-id <id> --connections-csv ./connection_export.csv --projects-csv ./project_export.csv --tasks-csv ./task_export.csv --tasks-json ./tasks.json --invoices-csv ./invoice_export.csv --time-entries-csv ./time_export.csv --expenses-csv ./expense_export.csv --addresses-csv ./addresses.csv --summary-file ./reconciliation.json
- *   node scripts/import-bonsai-full.js --confirm --organization-id <id> --connections-csv ./connection_export.csv --projects-csv ./project_export.csv --tasks-csv ./task_export.csv --tasks-json ./tasks.json --invoices-csv ./invoice_export.csv --time-entries-csv ./time_export.csv --expenses-csv ./expense_export.csv --addresses-csv ./addresses.csv --approved-summary ./reviewed-dry-run.json --summary-file ./live-reconciliation.json
+ *   node scripts/import-bonsai-full.js --dry-run --organization-id <id> --connections-csv ./connection_export.csv --projects-csv ./project_export.csv --projects-json ./projects.json --tasks-csv ./task_export.csv --tasks-json ./tasks.json --invoices-csv ./invoice_export.csv --time-entries-csv ./time_export.csv --expenses-csv ./expense_export.csv --addresses-csv ./addresses.csv --summary-file ./reconciliation.json
+ *   node scripts/import-bonsai-full.js --confirm --organization-id <id> --connections-csv ./connection_export.csv --projects-csv ./project_export.csv --projects-json ./projects.json --tasks-csv ./task_export.csv --tasks-json ./tasks.json --invoices-csv ./invoice_export.csv --time-entries-csv ./time_export.csv --expenses-csv ./expense_export.csv --addresses-csv ./addresses.csv --approved-summary ./reviewed-dry-run.json --summary-file ./live-reconciliation.json
  *
  * Reconciliation-first and replay-safe. Existing Hub records are matched but
  * never automatically overwritten. Natural/source identities are checked on:
@@ -35,6 +35,7 @@ import { parseBonsaiMoney, parseBonsaiDecimal } from '../src/services/bonsaiCsvV
 import { mapBonsaiConnections } from '../src/services/bonsaiConnectionMapper.service.js';
 import { mapBonsaiHistoricalTasks } from '../src/services/bonsaiHistoricalTaskMapper.service.js';
 import { assessMigrationSandboxTarget } from '../src/services/migrationSandboxTarget.service.js';
+import { assessBonsaiOperatingSourceRecord, verifyBonsaiProjectCsvSnapshotBinding } from '../src/services/bonsaiOperatingSourceRegistry.service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const prisma = new PrismaClient({
@@ -53,6 +54,7 @@ const SUMMARY_FILE = readOption('--summary-file');
 const APPROVED_SUMMARY_FILE = readOption('--approved-summary');
 const ORGANIZATION_ID = readOption('--organization-id', process.env.IMPORT_ORGANIZATION_ID);
 const TASK_SNAPSHOT_FILE = readOption('--tasks-json', process.env.BONSAI_TASK_SNAPSHOT);
+const PROJECT_SNAPSHOT_FILE = readOption('--projects-json', process.env.BONSAI_PROJECT_SNAPSHOT);
 const TASK_EXPORT_FILE = readOption('--tasks-csv', process.env.BONSAI_TASK_EXPORT);
 const CONNECTIONS_CSV_FILE = readOption('--connections-csv', process.env.BONSAI_CONNECTIONS_CSV);
 const PROJECTS_CSV_FILE = readOption('--projects-csv', process.env.BONSAI_PROJECTS_CSV);
@@ -83,6 +85,10 @@ if (!SUMMARY_FILE) {
 }
 if (!TASK_SNAPSHOT_FILE) {
   console.error('Refusing import without --tasks-json pointing to a complete all-scope Bonsai task snapshot.');
+  process.exit(2);
+}
+if (!PROJECT_SNAPSHOT_FILE) {
+  console.error('Refusing import without --projects-json pointing to a complete all-scope Bonsai project snapshot.');
   process.exit(2);
 }
 if (!TASK_EXPORT_FILE) {
@@ -271,6 +277,7 @@ const stats = {
   timeEntries: { created: 0, existing: 0, skipped: 0 },
   expenses: { created: 0, skipped: 0 },
   owners: { mappedToImporter: 0 },
+  operatingSourceRecords: { created: 0, existing: 0, conflicts: 0 },
   errors: []
 };
 const inputInventory = [];
@@ -321,9 +328,25 @@ async function runImport(prisma) {
   }
   const tasksRaw = taskSnapshot.tasks;
   inputInventory.push({
-    filename: 'bonsai-tasks.json', path: taskSnapshotPath, present: true, rows: tasksRaw.length,
+    filename: 'bonsai-tasks.json', kind: 'bonsai-tasks.json', path: taskSnapshotPath, present: true, rows: tasksRaw.length,
     sha256: crypto.createHash('sha256').update(taskSnapshotBytes).digest('hex'), headers: [],
   });
+  const taskSnapshotSha256 = inputInventory.find(file => file.kind === 'bonsai-tasks.json').sha256;
+  const projectSnapshotPath = path.resolve(PROJECT_SNAPSHOT_FILE);
+  const projectSnapshotBytes = fs.readFileSync(projectSnapshotPath);
+  const projectSnapshot = JSON.parse(projectSnapshotBytes.toString('utf8'));
+  const projectSnapshotSha256 = crypto.createHash('sha256').update(projectSnapshotBytes).digest('hex');
+  const projectBinding = verifyBonsaiProjectCsvSnapshotBinding({
+    snapshot: projectSnapshot, snapshotSha256: projectSnapshotSha256, projectRows: projectsRaw,
+  });
+  inputInventory.push({
+    filename: 'bonsai-projects.json', kind: 'bonsai-projects.json', path: projectSnapshotPath, present: true,
+    rows: Array.isArray(projectSnapshot?.projects) ? projectSnapshot.projects.length : 0,
+    sha256: projectSnapshotSha256, headers: [],
+  });
+  for (const finding of projectBinding.findings) {
+    stats.errors.push(`Bonsai project snapshot: ${finding.code}${finding.sourceId ? ` (${finding.sourceId})` : ''}`);
+  }
 
   const connectionInventory = inputInventory.find(file => file.kind === 'connections');
   const usesConnectionExport = connectionInventory?.headers?.includes('Name')
@@ -332,6 +355,7 @@ async function runImport(prisma) {
   console.log(`  ${inputInventory.find(file => file.kind === 'projects.csv')?.filename || 'projects.csv'}: ${projectsRaw.length} rows`);
   console.log(`  ${path.basename(TASK_EXPORT_FILE)}: ${historicalTasksRaw.length} historical rows`);
   console.log(`  bonsai-tasks.json: ${tasksRaw.length} rows`);
+  console.log(`  bonsai-projects.json: ${projectBinding.snapshotProjects} rows`);
   console.log(`  ${inputInventory.find(file => file.kind === 'invoices.csv')?.filename || 'invoices.csv'}: ${invoicesRaw.length} rows`);
   console.log(`  ${inputInventory.find(file => file.kind === 'time-entries.csv')?.filename || 'time-entries.csv'}: ${timeEntriesRaw.length} rows`);
   console.log(`  ${inputInventory.find(file => file.kind === 'expenses.csv')?.filename || 'expenses.csv'}: ${expensesRaw.length} rows`);
@@ -355,6 +379,33 @@ async function runImport(prisma) {
   ]);
   if (missingTaskHistoryHeaders.length > 0) {
     stats.errors.push(`${taskHistoryInventory?.filename || 'tasks.csv'}: missing required CSV columns (${missingTaskHistoryHeaders.join(', ')})`);
+  }
+  const historicalTaskSourceFingerprint = taskHistoryInventory?.sha256 || null;
+
+  async function registerOperatingSource(entityType, sourceId, destinationId, sourceFingerprint) {
+    const where = {
+      organizationId_sourceSystem_entityType_sourceId: {
+        organizationId: ORGANIZATION_ID, sourceSystem: 'BONSAI', entityType, sourceId: String(sourceId),
+      },
+    };
+    const existingRecord = await prisma.operatingSourceRecord.findUnique({ where });
+    const assessment = assessBonsaiOperatingSourceRecord({
+      organizationId: ORGANIZATION_ID, entityType, sourceId: String(sourceId),
+      destinationId, sourceFingerprint, existingRecord,
+    });
+    if (!assessment.ready) {
+      stats.operatingSourceRecords.conflicts++;
+      stats.errors.push(`${entityType} ${sourceId}: operating source registry conflict (${assessment.findings.join(', ')})`);
+      return;
+    }
+    if (assessment.operation === 'REUSE') {
+      stats.operatingSourceRecords.existing++;
+      return;
+    }
+    if (!DRY_RUN) {
+      await prisma.operatingSourceRecord.create({ data: { ...assessment.record, importedAt: new Date() } });
+    }
+    stats.operatingSourceRecords.created++;
   }
   for (const [filename, expected] of Object.entries(requiredHeaders)) {
     const inventory = inputInventory.find(file => file.kind === filename || file.filename === filename);
@@ -716,6 +767,7 @@ async function runImport(prisma) {
         endDate,
         completedAt: proj.status === 'completed' ? endDate : null,
       };
+      let destinationId;
 
       if (existing) {
         const differences = sourceDifferences(projectData, existing, [
@@ -726,21 +778,25 @@ async function runImport(prisma) {
         }
         projectIdMap.set(bonsaiId, existing.id);
         registerProjectLookup(clientName, title, existing.id);
+        destinationId = existing.id;
         stats.projects.existing++;
       } else {
         if (!DRY_RUN) {
           const created = await prisma.project.create({ data: { ...projectData, organizationId: ORGANIZATION_ID } });
           projectIdMap.set(bonsaiId, created.id);
           registerProjectLookup(clientName, title, created.id);
+          destinationId = created.id;
         }
         stats.projects.created++;
         if (DRY_RUN) {
           const dryProjectId = `dry-project-${bonsaiId}`;
           projectIdMap.set(bonsaiId, dryProjectId);
           registerProjectLookup(clientName, title, dryProjectId);
+          destinationId = dryProjectId;
         }
         if (DRY_RUN) console.log(`  [would create] ${title} → ${clientName} (${status})`);
       }
+      await registerOperatingSource('PROJECT', bonsaiId, destinationId, projectSnapshotSha256);
     } catch (err) {
       stats.errors.push(`Project "${title}": ${err.message}`);
     }
@@ -865,10 +921,16 @@ async function runImport(prisma) {
       if (differences.length > 0) {
         stats.errors.push(`Task "${title}": Existing Hub record differs in ${differences.join(', ')}; manual reconciliation required`);
       }
+      await registerOperatingSource('TASK', sourceId, existing.id, taskSnapshotSha256);
       stats.tasks.existing++;
       continue;
     }
-    if (!DRY_RUN) await prisma.task.create({ data: taskData });
+    let taskDestinationId = `dry-task-${sourceId}`;
+    if (!DRY_RUN) {
+      const created = await prisma.task.create({ data: taskData });
+      taskDestinationId = created.id;
+    }
+    await registerOperatingSource('TASK', sourceId, taskDestinationId, taskSnapshotSha256);
     stats.tasks.created++;
     if (DRY_RUN && stats.tasks.created <= 10) console.log(`  [would create] ${title}`);
   }
@@ -943,6 +1005,7 @@ async function runImport(prisma) {
       }
       historicalTaskIdMap.set(source.sourceId, existing.id);
       historicalTaskRecords.set(source.sourceId, existing);
+      await registerOperatingSource('TASK', source.sourceId, existing.id, historicalTaskSourceFingerprint);
       stats.historicalTasks.existing++;
       continue;
     }
@@ -952,6 +1015,7 @@ async function runImport(prisma) {
     } else {
       historicalTaskIdMap.set(source.sourceId, `dry-historical-task-${source.sourceId}`);
     }
+    await registerOperatingSource('TASK', source.sourceId, historicalTaskIdMap.get(source.sourceId), historicalTaskSourceFingerprint);
     stats.historicalTasks.created++;
   }
 
@@ -1378,6 +1442,7 @@ async function runImport(prisma) {
   console.log(`  Projects:     ${stats.projects.created} new, ${stats.projects.existing} matched, ${stats.projects.skipped} skipped`);
   console.log(`  Tasks:        ${stats.tasks.created} new, ${stats.tasks.existing} matched, ${stats.tasks.skipped} skipped`);
   console.log(`  Task History: ${stats.historicalTasks.created} new, ${stats.historicalTasks.existing} matched, ${stats.historicalTasks.skipped} blocked, ${stats.historicalTasks.parentsLinked} parents linked`);
+  console.log(`  Source IDs:   ${stats.operatingSourceRecords.created} new, ${stats.operatingSourceRecords.existing} existing, ${stats.operatingSourceRecords.conflicts} conflicts`);
   console.log(`  Invoices:     ${stats.invoices.created} new, ${stats.invoices.existing} existing, ${stats.invoices.skipped} skipped`);
   console.log(`  Line Items:   ${stats.lineItems.created} new`);
   console.log(`  Time Entries: ${stats.timeEntries.created} new, ${stats.timeEntries.existing} existing, ${stats.timeEntries.skipped} skipped`);

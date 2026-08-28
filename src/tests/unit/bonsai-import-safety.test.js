@@ -14,6 +14,7 @@ test('Bonsai full importer requires an explicit tenant and scopes imported recor
   assert.match(source, /--tasks-csv/);
   assert.match(source, /--connections-csv/);
   assert.match(source, /--projects-csv/);
+  assert.match(source, /--projects-json/);
   assert.match(source, /--invoices-csv/);
   assert.match(source, /--time-entries-csv/);
   assert.match(source, /--expenses-csv/);
@@ -27,6 +28,9 @@ test('Bonsai full importer requires an explicit tenant and scopes imported recor
   assert.match(source, /Organization not found/);
   assert.match(source, /assessMigrationSandboxTarget/);
   assert.match(source, /sandboxTarget\.targetFingerprint/);
+  assert.match(source, /verifyBonsaiProjectCsvSnapshotBinding/);
+  assert.match(source, /registerOperatingSource\('PROJECT'/);
+  assert.match(source, /registerOperatingSource\('TASK'/);
   assert.doesNotMatch(source, /password:\s*'imported-no-login'/);
   assert.match(source, /mappedToImporter/);
 });
@@ -34,6 +38,8 @@ test('Bonsai full importer requires an explicit tenant and scopes imported recor
 test('confirmed Bonsai imports are atomic and reject unresolved reconciliation errors', async () => {
   const source = await readFile(fullImporter, 'utf8');
   assert.match(source, /prisma\.\$transaction\(/);
+  assert.match(source, /prisma\.operatingSourceRecord\.create/);
+  assert.match(source, /assessBonsaiOperatingSourceRecord/);
   assert.match(source, /Live import cannot complete with unresolved reconciliation findings/);
   assert.match(source, /if \(!DRY_RUN && stats\.errors\.length > 0\)/);
   assert.match(source, /requireMutationAuthorization: CONFIRM_LIVE/);
