@@ -5,6 +5,7 @@ import { verifyNotionBonsaiTaskLinkDecision } from './notionBonsaiTaskLinkDecisi
 import { verifyNotionBonsaiTaskDispositionDecision } from './notionBonsaiTaskDispositionDecision.service.js';
 import { verifyNotionBonsaiProjectDispositionDecision } from './notionBonsaiProjectDispositionDecision.service.js';
 import { verifyBonsaiActiveProjectDispositionDecision } from './bonsaiActiveProjectDispositionDecision.service.js';
+import { verifyBonsaiFinancialExceptionDecision } from './bonsaiFinancialExceptionDecision.service.js';
 
 const FORMAT = 'ashbi-bonsai-live-reconciliation-status';
 
@@ -49,6 +50,9 @@ export function prepareBonsaiLiveReconciliationStatus({
   activeProjectTriage,
   financialReview,
   activeProjectDispositionDecision,
+  invoiceSnapshot,
+  timeEntrySnapshot,
+  financialExceptionDecision,
   taskReviewSha256,
   mappingDecisionSha256,
   taskLinkDecisionSha256,
@@ -60,6 +64,9 @@ export function prepareBonsaiLiveReconciliationStatus({
   activeProjectTriageSha256,
   financialReviewSha256,
   activeProjectDispositionDecisionSha256,
+  invoiceSnapshotSha256,
+  timeEntrySnapshotSha256,
+  financialExceptionDecisionSha256,
   preparedAt,
 }) {
   requireFormat(taskReview, 'ashbi-notion-bonsai-task-review', 'task review');
@@ -73,6 +80,9 @@ export function prepareBonsaiLiveReconciliationStatus({
   requireFormat(activeProjectTriage, 'ashbi-bonsai-active-project-triage', 'active project triage');
   requireFormat(financialReview, 'ashbi-bonsai-active-project-financial-review', 'active project financial review');
   requireFormat(activeProjectDispositionDecision, 'ashbi-bonsai-active-project-disposition-decision', 'active project disposition decision');
+  requireFormat(invoiceSnapshot, 'bonsai-invoice-index-snapshot', 'invoice index');
+  requireFormat(timeEntrySnapshot, 'bonsai-time-entry-index-snapshot', 'time-entry index');
+  requireFormat(financialExceptionDecision, 'ashbi-bonsai-financial-exception-decision', 'financial exception decision');
 
   const hashes = {
     taskReviewSha256: sha256(taskReviewSha256, 'taskReviewSha256'),
@@ -86,6 +96,9 @@ export function prepareBonsaiLiveReconciliationStatus({
     activeProjectTriageSha256: sha256(activeProjectTriageSha256, 'activeProjectTriageSha256'),
     financialReviewSha256: sha256(financialReviewSha256, 'financialReviewSha256'),
     activeProjectDispositionDecisionSha256: sha256(activeProjectDispositionDecisionSha256, 'activeProjectDispositionDecisionSha256'),
+    invoiceSnapshotSha256: sha256(invoiceSnapshotSha256, 'invoiceSnapshotSha256'),
+    timeEntrySnapshotSha256: sha256(timeEntrySnapshotSha256, 'timeEntrySnapshotSha256'),
+    financialExceptionDecisionSha256: sha256(financialExceptionDecisionSha256, 'financialExceptionDecisionSha256'),
   };
   sameHash(mappingDecision.sourceEvidence?.reviewSha256, hashes.taskReviewSha256, 'Mapping decision');
   sameHash(taskLinkDecision.sourceEvidence?.reviewSha256, hashes.taskReviewSha256, 'Task-link decision');
@@ -100,6 +113,11 @@ export function prepareBonsaiLiveReconciliationStatus({
   sameHash(activeProjectDispositionDecision.sourceEvidence?.activeProjectTriageSha256, hashes.activeProjectTriageSha256, 'Active project disposition triage');
   sameHash(activeProjectDispositionDecision.sourceEvidence?.financialReviewSha256, hashes.financialReviewSha256, 'Active project disposition financial review');
   sameHash(activeProjectDispositionDecision.sourceEvidence?.projectDispositionDecisionSha256, hashes.projectDispositionDecisionSha256, 'Active project disposition source decision');
+  sameHash(financialReview.sourceEvidence?.invoiceSnapshotSha256, hashes.invoiceSnapshotSha256, 'Financial review invoice index');
+  sameHash(financialReview.sourceEvidence?.timeEntrySnapshotSha256, hashes.timeEntrySnapshotSha256, 'Financial review time-entry index');
+  sameHash(financialExceptionDecision.sourceEvidence?.financialReviewSha256, hashes.financialReviewSha256, 'Financial exception review');
+  sameHash(financialExceptionDecision.sourceEvidence?.invoiceSnapshotSha256, hashes.invoiceSnapshotSha256, 'Financial exception invoice index');
+  sameHash(financialExceptionDecision.sourceEvidence?.timeEntrySnapshotSha256, hashes.timeEntrySnapshotSha256, 'Financial exception time-entry index');
   sameHash(taskReview.sourceEvidence?.notionSnapshotSha256, nativeProjectReview.sourceEvidence?.notionSnapshotSha256, 'Notion source');
   sameHash(taskReview.sourceEvidence?.bonsaiSnapshotSha256, activeProjectTriage.sourceEvidence?.bonsaiTaskSnapshotSha256, 'Bonsai task source');
   sameHash(nativeProjectReview.sourceEvidence?.bonsaiProjectSnapshotSha256, activeProjectTriage.sourceEvidence?.bonsaiProjectSnapshotSha256, 'Bonsai project source');
@@ -132,7 +150,13 @@ export function prepareBonsaiLiveReconciliationStatus({
     projectDispositionDecision, projectDispositionDecisionSha256: hashes.projectDispositionDecisionSha256,
     record: activeProjectDispositionDecision,
   });
-  if (!mappingVerification.valid || !taskLinkVerification.valid || !taskDispositionVerification.valid || !ownerVerification.valid || !projectLinkVerification.valid || !projectDispositionVerification.valid || !activeProjectDispositionVerification.valid) {
+  const financialExceptionVerification = verifyBonsaiFinancialExceptionDecision({
+    financialReview, financialReviewSha256: hashes.financialReviewSha256,
+    invoiceSnapshot, invoiceSnapshotSha256: hashes.invoiceSnapshotSha256,
+    timeEntrySnapshot, timeEntrySnapshotSha256: hashes.timeEntrySnapshotSha256,
+    record: financialExceptionDecision,
+  });
+  if (!mappingVerification.valid || !taskLinkVerification.valid || !taskDispositionVerification.valid || !ownerVerification.valid || !projectLinkVerification.valid || !projectDispositionVerification.valid || !activeProjectDispositionVerification.valid || !financialExceptionVerification.valid) {
     const failed = [
       !mappingVerification.valid ? `mapping:${mappingVerification.findings.join(',')}` : null,
       !taskLinkVerification.valid ? `task-link:${taskLinkVerification.findings.join(',')}` : null,
@@ -141,6 +165,7 @@ export function prepareBonsaiLiveReconciliationStatus({
       !projectLinkVerification.valid ? `project-link:${projectLinkVerification.findings.join(',')}` : null,
       !projectDispositionVerification.valid ? `project-disposition:${projectDispositionVerification.findings.join(',')}` : null,
       !activeProjectDispositionVerification.valid ? `active-project-disposition:${activeProjectDispositionVerification.findings.join(',')}` : null,
+      !financialExceptionVerification.valid ? `financial-exception:${financialExceptionVerification.findings.join(',')}` : null,
     ].filter(Boolean).join(';');
     throw new TypeError(`A decision artifact failed source-bound verification (${failed})`);
   }
@@ -148,6 +173,9 @@ export function prepareBonsaiLiveReconciliationStatus({
   const prepared = timestamp(preparedAt, 'preparedAt');
   const sourceTimes = [taskReview, mappingDecision, taskLinkDecision, taskDispositionDecision, ownerDecision, nativeProjectReview, projectLinkDecision, projectDispositionDecision, activeProjectTriage, financialReview, activeProjectDispositionDecision]
     .map((document, index) => timestamp(document?.preparedAt, `source preparedAt ${index}`));
+  sourceTimes.push(timestamp(invoiceSnapshot?.capturedAt, 'invoice capturedAt'));
+  sourceTimes.push(timestamp(timeEntrySnapshot?.capturedAt, 'time-entry capturedAt'));
+  sourceTimes.push(timestamp(financialExceptionDecision?.preparedAt, 'financial exception preparedAt'));
   if (sourceTimes.some(value => prepared < value)) throw new TypeError('preparedAt must not predate source evidence');
 
   const sourceReviewTasks = summaryNumber(taskReview, 'bonsaiSourceReview', 'Task review');
@@ -171,11 +199,9 @@ export function prepareBonsaiLiveReconciliationStatus({
   if (taskDispositionVerification.pending > 0) findings.push('TASK_DISPOSITION_DECISIONS_PENDING');
   if (projectDispositionVerification.pending > 0) findings.push('PROJECT_DISPOSITION_DECISIONS_PENDING');
   if (activeProjectDispositionVerification.pending > 0) findings.push('ACTIVE_PROJECT_DISPOSITIONS_PENDING');
-  if (projectsWithNonPaidInvoices > 0) findings.push('NON_PAID_INVOICE_RECORDS_REQUIRE_REVIEW');
-  if (projectsWithUnbilledTime > 0) findings.push('UNBILLED_TIME_REQUIRES_REVIEW');
-  if (projectlessTimeEntries > 0) findings.push('PROJECTLESS_TIME_ENTRY_REQUIRES_REVIEW');
+  if (financialExceptionVerification.pending > 0) findings.push('FINANCIAL_EXCEPTION_DECISIONS_PENDING');
+  if (financialExceptionVerification.actionRequired > 0) findings.push('FINANCIAL_EXCEPTION_ACTIONS_PENDING');
   findings.push('DIRECT_PAYMENT_EVIDENCE_MISSING');
-  findings.push('COMPLETE_CONTRACT_EVIDENCE_MISSING');
   findings.push('PARALLEL_RUN_AND_BACKUP_EVIDENCE_MISSING');
   findings.push('FINANCIAL_CUTOVER_APPROVAL_MISSING');
 
@@ -209,7 +235,10 @@ export function prepareBonsaiLiveReconciliationStatus({
       },
       financialSafety: {
         state: 'BLOCKED', projectsWithNonPaidInvoices, projectsWithUnbilledTime,
-        projectlessTimeEntries, directPaymentEvidenceComplete: false, contractEvidenceComplete: false,
+        projectlessTimeEntries, exceptionDecisionsPending: financialExceptionVerification.pending,
+        exceptionActionsPending: financialExceptionVerification.actionRequired,
+        contractEvidenceGaps: financialExceptionVerification.byExceptionKind.ACTIVE_PROJECT_CONTRACT_GAP,
+        directPaymentEvidenceComplete: false, contractEvidenceComplete: financialExceptionVerification.complete,
       },
       retirement: {
         state: 'BLOCKED', backupEvidenceComplete: false, parallelRunComplete: false,
@@ -232,8 +261,8 @@ export function prepareBonsaiLiveReconciliationStatus({
       bonsaiTaskSnapshotSha256: text(taskReview.sourceEvidence.bonsaiSnapshotSha256).toLowerCase(),
       bonsaiProjectSnapshotSha256: text(nativeProjectReview.sourceEvidence.bonsaiProjectSnapshotSha256).toLowerCase(),
       projectGroupSnapshotSha256: text(activeProjectTriage.sourceEvidence.projectGroupSnapshotSha256).toLowerCase(),
-      invoiceSnapshotSha256: text(financialReview.sourceEvidence.invoiceSnapshotSha256).toLowerCase(),
-      timeEntrySnapshotSha256: text(financialReview.sourceEvidence.timeEntrySnapshotSha256).toLowerCase(),
+      invoiceSnapshotSha256: hashes.invoiceSnapshotSha256,
+      timeEntrySnapshotSha256: hashes.timeEntrySnapshotSha256,
     },
   };
 }

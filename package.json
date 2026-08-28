@@ -69,6 +69,8 @@
     "prepare:bonsai-active-project-financial-review": "node scripts/prepare-bonsai-active-project-financial-review.mjs",
     "prepare:bonsai-active-project-disposition-decision": "node scripts/prepare-bonsai-active-project-disposition-decision.mjs",
     "verify:bonsai-active-project-disposition-decision": "node scripts/verify-bonsai-active-project-disposition-decision.mjs",
+    "prepare:bonsai-financial-exception-decision": "node scripts/prepare-bonsai-financial-exception-decision.mjs",
+    "verify:bonsai-financial-exception-decision": "node scripts/verify-bonsai-financial-exception-decision.mjs",
     "prepare:bonsai-live-reconciliation-status": "node scripts/prepare-bonsai-live-reconciliation-status.mjs",
     "verify:bonsai-live-reconciliation-status": "node scripts/verify-bonsai-live-reconciliation-status.mjs",
     "prepare:notion-bonsai-mapping-decision": "node scripts/prepare-notion-bonsai-mapping-decision.mjs",

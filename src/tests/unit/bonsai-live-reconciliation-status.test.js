@@ -16,6 +16,7 @@ import { prepareNotionBonsaiTaskLinkDecision } from '../../services/notionBonsai
 import { prepareNotionBonsaiTaskDispositionDecision } from '../../services/notionBonsaiTaskDispositionDecision.service.js';
 import { prepareNotionBonsaiProjectDispositionDecision } from '../../services/notionBonsaiProjectDispositionDecision.service.js';
 import { prepareBonsaiActiveProjectDispositionDecision } from '../../services/bonsaiActiveProjectDispositionDecision.service.js';
+import { prepareBonsaiFinancialExceptionDecision } from '../../services/bonsaiFinancialExceptionDecision.service.js';
 
 const HASHES = {
   taskReview: 'a'.repeat(64), mappingDecision: 'b'.repeat(64), taskLinkDecision: '8'.repeat(64), taskDispositionDecision: '9'.repeat(64), ownerDecision: 'c'.repeat(64),
@@ -23,6 +24,7 @@ const HASHES = {
   projectDispositionDecision: '0'.repeat(64),
   activeProjectTriage: 'f'.repeat(64), financialReview: '1'.repeat(64),
   activeProjectDispositionDecision: '7'.repeat(64),
+  financialExceptionDecision: '6'.repeat(64),
   notion: '2'.repeat(64), tasks: '3'.repeat(64), projects: '4'.repeat(64),
   groups: '5'.repeat(64), invoices: '6'.repeat(64), time: '7'.repeat(64),
 };
@@ -136,6 +138,26 @@ function evidence() {
       invoiceSnapshotSha256: HASHES.invoices, timeEntrySnapshotSha256: HASHES.time,
     },
   };
+  const invoiceSnapshot = {
+    format: 'bonsai-invoice-index-snapshot', version: 1, scope: 'all', complete: true,
+    capturedAt: '2026-08-28T01:00:00.000Z',
+    captureEvidence: { connector: 'bonsai', operation: 'list_invoices', pageSize: 100, pagesFetched: 1, finalHasMore: false, invoiceCount: 2 },
+    privacy: { omittedFields: ['client_email', 'public_url_token', 'url', 'invoice_items', 'title'] },
+    invoices: [
+      { id: 1, invoice_number: '1', status: 'overdue', currency: 'CAD', issued_date: '2026-08-01', due_date: '2026-08-15', subtotal: '100.0', tax_amount: '0.0', discount_amount: null, total_amount: '100.0', company_id: 1, client_name: 'Client', project_id: 101, created_at: '2026-08-01T00:00:00.000Z' },
+      { id: 2, invoice_number: '2', status: 'paid', currency: 'CAD', issued_date: '2026-08-01', due_date: '2026-08-15', subtotal: '50.0', tax_amount: '0.0', discount_amount: null, total_amount: '50.0', company_id: 1, client_name: 'Client', project_id: 101, created_at: '2026-08-01T00:00:00.000Z' },
+    ],
+  };
+  const timeEntrySnapshot = {
+    format: 'bonsai-time-entry-index-snapshot', version: 1, scope: 'all', complete: true,
+    capturedAt: '2026-08-28T01:00:00.000Z',
+    captureEvidence: { connector: 'bonsai', operation: 'list_time_entries', pageSize: 100, pagesFetched: 1, finalHasMore: false, timeEntryCount: 2, billingFieldsVisible: true },
+    privacy: { omittedFields: ['notes'] },
+    time_entries: [
+      { key: 'time-1', seconds: 3600, date: '2026-08-01', rate: '50.0', non_billable: false, billable_amount: '50.0', status: 'unbilled', billing_status: 'unbilled', currency: 'CAD', task_uuid: null, owner_member_id: 1, project_id: null, created_at: '2026-08-01T00:00:00.000Z' },
+      { key: 'time-2', seconds: 3600, date: '2026-08-01', rate: '50.0', non_billable: false, billable_amount: '50.0', status: 'billed', billing_status: 'billed', currency: 'CAD', task_uuid: null, owner_member_id: 1, project_id: 101, created_at: '2026-08-01T00:00:00.000Z' },
+    ],
+  };
   const activeProjectDispositionDecision = prepareBonsaiActiveProjectDispositionDecision({
     triage: activeProjectTriage, triageSha256: HASHES.activeProjectTriage,
     financialReview, financialReviewSha256: HASHES.financialReview,
@@ -144,7 +166,13 @@ function evidence() {
     projectDispositionDecision, projectDispositionDecisionSha256: HASHES.projectDispositionDecision,
     preparedAt: '2026-08-28T01:06:30.000Z',
   });
-  return { taskReview, mappingDecision, taskLinkDecision, taskDispositionDecision, ownerDecision, nativeProjectReview, projectLinkDecision, projectDispositionDecision, activeProjectTriage, financialReview, activeProjectDispositionDecision };
+  const financialExceptionDecision = prepareBonsaiFinancialExceptionDecision({
+    financialReview, financialReviewSha256: HASHES.financialReview,
+    invoiceSnapshot, invoiceSnapshotSha256: HASHES.invoices,
+    timeEntrySnapshot, timeEntrySnapshotSha256: HASHES.time,
+    preparedAt: '2026-08-28T01:06:40.000Z',
+  });
+  return { taskReview, mappingDecision, taskLinkDecision, taskDispositionDecision, ownerDecision, nativeProjectReview, projectLinkDecision, projectDispositionDecision, activeProjectTriage, financialReview, activeProjectDispositionDecision, invoiceSnapshot, timeEntrySnapshot, financialExceptionDecision };
 }
 
 function options() {
@@ -161,6 +189,9 @@ function options() {
     activeProjectTriageSha256: HASHES.activeProjectTriage,
     financialReviewSha256: HASHES.financialReview,
     activeProjectDispositionDecisionSha256: HASHES.activeProjectDispositionDecision,
+    invoiceSnapshotSha256: HASHES.invoices,
+    timeEntrySnapshotSha256: HASHES.time,
+    financialExceptionDecisionSha256: HASHES.financialExceptionDecision,
     preparedAt: '2026-08-28T01:07:00.000Z',
   };
 }
@@ -178,6 +209,9 @@ test('prepares one aligned, fail-closed reconciliation status without mutation a
   assert.equal(status.gates.projectIdentity.projectDispositionDecisionsPending, 6);
   assert.equal(status.gates.activeProjectDisposition.decisionsPending, 3);
   assert.equal(status.gates.financialSafety.projectlessTimeEntries, 1);
+  assert.equal(status.gates.financialSafety.exceptionDecisionsPending, 5);
+  assert.equal(status.gates.financialSafety.contractEvidenceGaps, 3);
+  assert.ok(status.findings.includes('FINANCIAL_EXCEPTION_DECISIONS_PENDING'));
   assert.ok(status.findings.includes('TASK_LINK_DECISIONS_PENDING'));
   assert.equal(status.safeguards.externalWritesPerformed, false);
   assert.equal(status.safeguards.bonsaiRetirementAuthorized, false);
@@ -235,6 +269,10 @@ test('CLI creates a new status file and refuses overwrite', () => {
     input.activeProjectTriage.sourceEvidence.nativeProjectReviewSha256 = native.hash;
     const triage = write('activeProjectTriage', input.activeProjectTriage);
     input.financialReview.sourceEvidence.activeProjectTriageSha256 = triage.hash;
+    const invoice = write('invoiceSnapshot', input.invoiceSnapshot);
+    const timeEntry = write('timeEntrySnapshot', input.timeEntrySnapshot);
+    input.financialReview.sourceEvidence.invoiceSnapshotSha256 = invoice.hash;
+    input.financialReview.sourceEvidence.timeEntrySnapshotSha256 = timeEntry.hash;
     const financial = write('financialReview', input.financialReview);
     input.activeProjectDispositionDecision = prepareBonsaiActiveProjectDispositionDecision({
       triage: input.activeProjectTriage, triageSha256: triage.hash,
@@ -244,13 +282,21 @@ test('CLI creates a new status file and refuses overwrite', () => {
       projectDispositionDecision: input.projectDispositionDecision, projectDispositionDecisionSha256: projectDisposition.hash,
       preparedAt: '2026-08-28T01:06:30.000Z',
     });
-    const names = ['taskReview', 'mappingDecision', 'taskLinkDecision', 'taskDispositionDecision', 'ownerDecision', 'nativeProjectReview', 'projectLinkDecision', 'projectDispositionDecision', 'activeProjectTriage', 'financialReview', 'activeProjectDispositionDecision'];
+    input.financialExceptionDecision = prepareBonsaiFinancialExceptionDecision({
+      financialReview: input.financialReview, financialReviewSha256: financial.hash,
+      invoiceSnapshot: input.invoiceSnapshot, invoiceSnapshotSha256: invoice.hash,
+      timeEntrySnapshot: input.timeEntrySnapshot, timeEntrySnapshotSha256: timeEntry.hash,
+      preparedAt: '2026-08-28T01:06:40.000Z',
+    });
+    const names = ['taskReview', 'mappingDecision', 'taskLinkDecision', 'taskDispositionDecision', 'ownerDecision', 'nativeProjectReview', 'projectLinkDecision', 'projectDispositionDecision', 'activeProjectTriage', 'financialReview', 'activeProjectDispositionDecision', 'invoiceSnapshot', 'timeEntrySnapshot', 'financialExceptionDecision'];
     const flags = {
       taskReview: '--task-review', mappingDecision: '--mapping-decision', taskLinkDecision: '--task-link-decision', taskDispositionDecision: '--task-disposition-decision', ownerDecision: '--owner-decision',
       nativeProjectReview: '--native-project-review', projectLinkDecision: '--project-link-decision',
       projectDispositionDecision: '--project-disposition-decision',
       activeProjectTriage: '--active-project-triage', financialReview: '--financial-review',
       activeProjectDispositionDecision: '--active-project-disposition-decision',
+      invoiceSnapshot: '--invoice-index', timeEntrySnapshot: '--time-entry-index',
+      financialExceptionDecision: '--financial-exception-decision',
     };
     const args = ['scripts/prepare-bonsai-live-reconciliation-status.mjs'];
     for (const name of names) {

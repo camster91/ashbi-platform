@@ -17,11 +17,13 @@ const keys = {
   projectDispositionDecision: '--project-disposition-decision',
   activeProjectTriage: '--active-project-triage', financialReview: '--financial-review',
   activeProjectDispositionDecision: '--active-project-disposition-decision',
+  invoiceSnapshot: '--invoice-index', timeEntrySnapshot: '--time-entry-index',
+  financialExceptionDecision: '--financial-exception-decision',
 };
 const paths = Object.fromEntries(Object.entries(keys).map(([key, flag]) => [key, option(flag)]));
 const recordPath = option('--status');
 if (Object.values(paths).some(value => !value) || !recordPath) {
-  process.stderr.write('Usage: npm run verify:bonsai-live-reconciliation-status -- --task-review <json> --mapping-decision <json> --task-link-decision <json> --task-disposition-decision <json> --owner-decision <json> --native-project-review <json> --project-link-decision <json> --project-disposition-decision <json> --active-project-triage <json> --financial-review <json> --active-project-disposition-decision <json> --status <json>\n');
+  process.stderr.write('Usage: npm run verify:bonsai-live-reconciliation-status -- --task-review <json> --mapping-decision <json> --task-link-decision <json> --task-disposition-decision <json> --owner-decision <json> --native-project-review <json> --project-link-decision <json> --project-disposition-decision <json> --active-project-triage <json> --financial-review <json> --active-project-disposition-decision <json> --invoice-index <json> --time-entry-index <json> --financial-exception-decision <json> --status <json>\n');
   process.exitCode = 2;
 } else {
   try {
