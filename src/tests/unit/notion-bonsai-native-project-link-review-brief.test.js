@@ -58,6 +58,42 @@ function mappingDecision() {
   };
 }
 
+function supplementalEvidence() {
+  return {
+    format: 'ashbi-notion-bonsai-project-link-live-evidence',
+    version: 1,
+    scope: 'LOGICAL_PROJECT_IDENTITY_ONLY',
+    preparedAt: '2026-08-28T01:27:00.000Z',
+    candidates: [{
+      candidateId: 'project-link:suggested:suggestion1:103',
+      conclusion: 'SAME_LOGICAL_PROJECT',
+      inference: true,
+      notionSourceId: 'https://app.notion.com/suggestion1',
+      notionProject: 'Suggested',
+      notionStatus: 'Active',
+      notionSourceObservedAt: '2026-08-28T01:26:00.000Z',
+      bonsaiProjectId: '103',
+      bonsaiProject: 'Suggested Website',
+      bonsaiStatus: 'active',
+      bonsaiCompany: 'Suggested',
+      bonsaiTitleSearchResultCount: 1,
+      signals: [
+        { type: 'EXACT_CLIENT_AND_BOUNDED_PROJECT_SCOPE', value: 'Suggested website' },
+        { type: 'BONSAI_FINANCIAL_PROJECT_HISTORY', value: 'Invoice 100 resolves to project 103' },
+      ],
+    }],
+    safeguards: {
+      externalWritesPerformed: false,
+      projectLinkDecisionsRecorded: false,
+      projectLinksApplied: false,
+      lifecycleChangesAuthorized: false,
+      financialChangesAuthorized: false,
+      paymentSettlementEvidenceComplete: false,
+      migrationOrCutoverAuthorized: false,
+    },
+  };
+}
+
 function brief() {
   return prepareNotionBonsaiNativeProjectLinkReviewBrief({
     review: review(),
@@ -108,6 +144,45 @@ test('accepts an approved evidence-backed near-title mapping without pretending 
   });
   assert.equal(record.candidates[1].recommendation, 'APPROVAL_READY');
   assert.equal(record.candidates[1].sourceEvidence, 'NEAR_TITLE_SHARED_TASK');
+});
+
+test('promotes a suggestion only when checksum-bound live evidence binds the exact candidate', () => {
+  const record = prepareNotionBonsaiNativeProjectLinkReviewBrief({
+    review: review(), reviewSha256: REVIEW_HASH, mappingDecision: mappingDecision(),
+    mappingDecisionSha256: MAPPING_HASH, supplementalEvidence: supplementalEvidence(),
+    supplementalEvidenceSha256: 'f'.repeat(64), preparedAt: '2026-08-28T01:30:00.000Z',
+  });
+  assert.equal(record.complete, true);
+  assert.equal(record.summary.approvalReady, 3);
+  assert.equal(record.candidates[2].reasonCode, 'CHECKSUM_BOUND_LIVE_SOURCE_IDENTITY_EVIDENCE');
+  assert.equal(record.candidates[2].supportingEvidenceCandidateId, record.candidates[2].candidateId);
+  assert.equal(record.sourceEvidence.supplementalEvidenceSha256, 'f'.repeat(64));
+});
+
+test('rejects supplemental evidence that changes identity or weakens safeguards', () => {
+  const changed = supplementalEvidence();
+  changed.candidates[0].bonsaiProjectId = '999';
+  assert.throws(() => prepareNotionBonsaiNativeProjectLinkReviewBrief({
+    review: review(), reviewSha256: REVIEW_HASH, mappingDecision: mappingDecision(),
+    mappingDecisionSha256: MAPPING_HASH, supplementalEvidence: changed,
+    supplementalEvidenceSha256: 'f'.repeat(64), preparedAt: '2026-08-28T01:30:00.000Z',
+  }), /does not bind/);
+
+  const unsafe = supplementalEvidence();
+  unsafe.safeguards.financialChangesAuthorized = true;
+  assert.throws(() => prepareNotionBonsaiNativeProjectLinkReviewBrief({
+    review: review(), reviewSha256: REVIEW_HASH, mappingDecision: mappingDecision(),
+    mappingDecisionSha256: MAPPING_HASH, supplementalEvidence: unsafe,
+    supplementalEvidenceSha256: 'f'.repeat(64), preparedAt: '2026-08-28T01:30:00.000Z',
+  }), /safeguards/);
+
+  const future = supplementalEvidence();
+  future.candidates[0].notionSourceObservedAt = '2026-08-28T01:28:00.000Z';
+  assert.throws(() => prepareNotionBonsaiNativeProjectLinkReviewBrief({
+    review: review(), reviewSha256: REVIEW_HASH, mappingDecision: mappingDecision(),
+    mappingDecisionSha256: MAPPING_HASH, supplementalEvidence: future,
+    supplementalEvidenceSha256: 'f'.repeat(64), preparedAt: '2026-08-28T01:30:00.000Z',
+  }), /cannot postdate/);
 });
 
 test('rejects mixed task-review generations and detects changed recommendations', () => {

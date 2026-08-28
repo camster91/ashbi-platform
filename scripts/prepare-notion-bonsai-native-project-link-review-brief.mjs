@@ -15,22 +15,30 @@ function digest(bytes) {
 
 const reviewPath = option('--review');
 const mappingDecisionPath = option('--mapping-decision');
+const supplementalEvidencePath = option('--supplemental-evidence');
 const preparedAt = option('--prepared-at');
 const outputPath = option('--output');
 
 if (!reviewPath || !mappingDecisionPath || !preparedAt || !outputPath) {
-  process.stderr.write('Usage: npm run prepare:notion-bonsai-native-project-link-review-brief -- --review <review.json> --mapping-decision <mapping.json> --prepared-at <ISO> --output <new-brief.json>\n');
+  process.stderr.write('Usage: npm run prepare:notion-bonsai-native-project-link-review-brief -- --review <review.json> --mapping-decision <mapping.json> [--supplemental-evidence <live-evidence.json>] --prepared-at <ISO> --output <new-brief.json>\n');
   process.exitCode = 2;
 } else {
   let output;
   try {
     const reviewBytes = fs.readFileSync(path.resolve(reviewPath));
     const mappingDecisionBytes = fs.readFileSync(path.resolve(mappingDecisionPath));
+    const supplementalEvidenceBytes = supplementalEvidencePath
+      ? fs.readFileSync(path.resolve(supplementalEvidencePath))
+      : null;
     const record = prepareNotionBonsaiNativeProjectLinkReviewBrief({
       review: JSON.parse(reviewBytes.toString('utf8')),
       reviewSha256: digest(reviewBytes),
       mappingDecision: JSON.parse(mappingDecisionBytes.toString('utf8')),
       mappingDecisionSha256: digest(mappingDecisionBytes),
+      supplementalEvidence: supplementalEvidenceBytes
+        ? JSON.parse(supplementalEvidenceBytes.toString('utf8'))
+        : null,
+      supplementalEvidenceSha256: supplementalEvidenceBytes ? digest(supplementalEvidenceBytes) : null,
       preparedAt,
     });
     output = fs.openSync(path.resolve(outputPath), 'wx', 0o600);

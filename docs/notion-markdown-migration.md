@@ -99,11 +99,11 @@ The current owner-only 2026-08-28 UTC packet is valid and incomplete: all 24 dec
 Prepare and verify a checksum-bound owner review brief before asking for project-link decisions:
 
 ```bash
-npm run prepare:notion-bonsai-native-project-link-review-brief -- --review <native-project-review.json> --mapping-decision <mapping-decision.json> --prepared-at <ISO> --output <new-review-brief.json>
-npm run verify:notion-bonsai-native-project-link-review-brief -- <native-project-review.json> <mapping-decision.json> <review-brief.json>
+npm run prepare:notion-bonsai-native-project-link-review-brief -- --review <native-project-review.json> --mapping-decision <mapping-decision.json> [--supplemental-evidence <live-evidence.json>] --prepared-at <ISO> --output <new-review-brief.json>
+npm run verify:notion-bonsai-native-project-link-review-brief -- <native-project-review.json> <mapping-decision.json> <review-brief.json> [live-evidence.json]
 ```
 
-The brief may recommend approval only for a unique exact-title project with matching lifecycle or a task-evidenced project pair already covered by an approved candidate-specific mapping. Similarity-only candidates always remain manual review. A recommendation is not an approval and cannot record or apply a project link, change lifecycle or financial data, migrate records, or authorize cutover. The current checksum-valid brief separates 17 approval-ready candidates—12 exact-title and five task-evidenced—from seven manual similarity-only candidates. Its SHA-256 is `74bb4b6b171f0d276e9f25cda42d064d492f36fde5bf40aa0993e5a5bd06b331`.
+The brief may recommend approval for a unique exact-title project with matching lifecycle, a task-evidenced project pair already covered by an approved candidate-specific mapping, or a suggestion whose exact source IDs are bound by sanitized live evidence containing at least two distinct project-identity signals. Without that checksum-bound supplemental evidence, similarity-only candidates remain manual review. Invoice status or history may support project identity but is explicitly not payment-settlement evidence. A recommendation is not an approval and cannot record or apply a project link, change lifecycle or financial data, migrate records, or authorize cutover. The current live evidence packet has SHA-256 `50b53b13f75be3ab7125dedf4527a0f426384549fabb2ff02542f26bc762a7f6`; the resulting checksum-valid brief has all 24 candidates approval-ready—12 exact-title, five task-evidenced, and seven live-evidence-backed suggestions—with SHA-256 `2b995d6557d6c60a38951c1e8b06250ea2d8e1f9669e8e4abdd1e4d3575d76cd`. All 24 project-link decisions remain pending.
 
 Prepare the source-only and duplicate-title project disposition packet only from that same native review and exact project-link decision generation:
 
