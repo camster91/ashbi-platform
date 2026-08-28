@@ -6,6 +6,8 @@ import { prepareNotionBonsaiTaskDispositionDecision } from '../src/services/noti
 function option(name) { const index = process.argv.indexOf(name); return index >= 0 ? process.argv[index + 1] : null; }
 function digest(bytes) { return crypto.createHash('sha256').update(bytes).digest('hex'); }
 const reviewPath = option('--review');
+const taskLinkDecisionPath = option('--task-link-decision');
+const mappingDecisionPath = option('--mapping-decision');
 const decisionsPath = option('--decisions');
 const outputPath = option('--output');
 const preparedAt = option('--prepared-at');
@@ -13,8 +15,8 @@ const confirm = process.argv.includes('--confirm');
 const approver = option('--approver');
 const decidedAt = option('--decided-at');
 const reference = option('--reference');
-if (!reviewPath || !outputPath || !preparedAt) {
-  process.stderr.write('Usage: npm run prepare:notion-bonsai-task-disposition-decision -- --review <review.json> --prepared-at <ISO> --output <new-decision.json> [--decisions <json> --approver <name> --decided-at <ISO> --reference <evidence> --confirm]\n');
+if (!reviewPath || !taskLinkDecisionPath || !outputPath || !preparedAt) {
+  process.stderr.write('Usage: npm run prepare:notion-bonsai-task-disposition-decision -- --review <review.json> --task-link-decision <task-link-decision.json> [--mapping-decision <mapping-decision.json>] --prepared-at <ISO> --output <new-decision.json> [--decisions <json> --approver <name> --decided-at <ISO> --reference <evidence> --confirm]\n');
   process.exitCode = 2;
 } else if (decisionsPath && !confirm) {
   process.stderr.write('Recording task dispositions requires --confirm.\n');
@@ -26,9 +28,16 @@ if (!reviewPath || !outputPath || !preparedAt) {
   let output;
   try {
     const reviewBytes = fs.readFileSync(path.resolve(reviewPath));
+    const taskLinkDecisionBytes = fs.readFileSync(path.resolve(taskLinkDecisionPath));
+    const mappingDecisionBytes = mappingDecisionPath ? fs.readFileSync(path.resolve(mappingDecisionPath)) : null;
     const input = decisionsPath ? JSON.parse(fs.readFileSync(path.resolve(decisionsPath), 'utf8')) : { decisions: [] };
     const record = prepareNotionBonsaiTaskDispositionDecision({
-      review: JSON.parse(reviewBytes.toString('utf8')), reviewSha256: digest(reviewBytes), preparedAt,
+      review: JSON.parse(reviewBytes.toString('utf8')), reviewSha256: digest(reviewBytes),
+      taskLinkDecision: JSON.parse(taskLinkDecisionBytes.toString('utf8')),
+      taskLinkDecisionSha256: digest(taskLinkDecisionBytes),
+      mappingDecision: mappingDecisionBytes ? JSON.parse(mappingDecisionBytes.toString('utf8')) : null,
+      mappingDecisionSha256: mappingDecisionBytes ? digest(mappingDecisionBytes) : null,
+      preparedAt,
       decisions: input.decisions, approver, decidedAt, reference,
     });
     output = fs.openSync(path.resolve(outputPath), 'wx', 0o600);

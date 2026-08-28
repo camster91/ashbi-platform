@@ -72,7 +72,7 @@ export function prepareBonsaiLiveReconciliationStatus({
   requireFormat(taskReview, 'ashbi-notion-bonsai-task-review', 'task review');
   requireFormat(mappingDecision, 'ashbi-notion-bonsai-mapping-decision', 'mapping decision', 2);
   requireFormat(taskLinkDecision, 'ashbi-notion-bonsai-task-link-decision', 'task-link decision');
-  requireFormat(taskDispositionDecision, 'ashbi-notion-bonsai-task-disposition-decision', 'task-disposition decision');
+  requireFormat(taskDispositionDecision, 'ashbi-notion-bonsai-task-disposition-decision', 'task-disposition decision', 2);
   requireFormat(ownerDecision, 'ashbi-notion-bonsai-owner-decision', 'owner decision', 2);
   requireFormat(nativeProjectReview, 'ashbi-notion-bonsai-native-project-review', 'native project review');
   requireFormat(projectLinkDecision, 'ashbi-notion-bonsai-native-project-link-decision', 'project-link decision');
@@ -103,8 +103,10 @@ export function prepareBonsaiLiveReconciliationStatus({
   sameHash(mappingDecision.sourceEvidence?.reviewSha256, hashes.taskReviewSha256, 'Mapping decision');
   sameHash(taskLinkDecision.sourceEvidence?.reviewSha256, hashes.taskReviewSha256, 'Task-link decision');
   sameHash(taskDispositionDecision.sourceEvidence?.reviewSha256, hashes.taskReviewSha256, 'Task-disposition decision');
+  sameHash(taskDispositionDecision.sourceEvidence?.taskLinkDecisionSha256, hashes.taskLinkDecisionSha256, 'Task-disposition task-link decision');
   sameHash(ownerDecision.sourceEvidence?.reviewSha256, hashes.taskReviewSha256, 'Owner decision');
   if (taskLinkDecision.sourceEvidence?.mappingDecisionSha256) sameHash(taskLinkDecision.sourceEvidence.mappingDecisionSha256, hashes.mappingDecisionSha256, 'Task-link mapping decision');
+  if (taskDispositionDecision.sourceEvidence?.mappingDecisionSha256) sameHash(taskDispositionDecision.sourceEvidence.mappingDecisionSha256, hashes.mappingDecisionSha256, 'Task-disposition mapping decision');
   if (ownerDecision.sourceEvidence?.mappingDecisionSha256) sameHash(ownerDecision.sourceEvidence.mappingDecisionSha256, hashes.mappingDecisionSha256, 'Owner mapping decision');
   if (ownerDecision.sourceEvidence?.taskLinkDecisionSha256) sameHash(ownerDecision.sourceEvidence.taskLinkDecisionSha256, hashes.taskLinkDecisionSha256, 'Owner task-link decision');
   sameHash(nativeProjectReview.sourceEvidence?.taskReviewSha256, hashes.taskReviewSha256, 'Native project review');
@@ -141,7 +143,11 @@ export function prepareBonsaiLiveReconciliationStatus({
     mappingDecisionSha256: taskLinkDecision.sourceEvidence?.mappingDecisionSha256 ? hashes.mappingDecisionSha256 : null,
   });
   const taskDispositionVerification = verifyNotionBonsaiTaskDispositionDecision({
-    review: taskReview, reviewSha256: hashes.taskReviewSha256, record: taskDispositionDecision,
+    review: taskReview, reviewSha256: hashes.taskReviewSha256,
+    taskLinkDecision, taskLinkDecisionSha256: hashes.taskLinkDecisionSha256,
+    mappingDecision: taskLinkDecision.sourceEvidence?.mappingDecisionSha256 ? mappingDecision : null,
+    mappingDecisionSha256: taskLinkDecision.sourceEvidence?.mappingDecisionSha256 ? hashes.mappingDecisionSha256 : null,
+    record: taskDispositionDecision,
   });
   const projectLinkVerification = verifyNotionBonsaiNativeProjectLinkDecision({
     review: nativeProjectReview, reviewSha256: hashes.nativeProjectReviewSha256, record: projectLinkDecision,

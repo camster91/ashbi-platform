@@ -5,18 +5,24 @@ import path from 'node:path';
 import { verifyNotionBonsaiTaskDispositionReviewBrief } from '../src/services/notionBonsaiTaskDispositionReviewBrief.service.js';
 
 function digest(bytes) { return crypto.createHash('sha256').update(bytes).digest('hex'); }
-const [reviewPath, decisionPath, briefPath] = process.argv.slice(2);
+const [reviewPath, taskLinkDecisionPath, decisionPath, briefPath, mappingDecisionPath] = process.argv.slice(2);
 
-if (!reviewPath || !decisionPath || !briefPath) {
-  process.stderr.write('Usage: npm run verify:notion-bonsai-task-disposition-review-brief -- <review.json> <pending-decision.json> <brief.json>\n');
+if (!reviewPath || !taskLinkDecisionPath || !decisionPath || !briefPath) {
+  process.stderr.write('Usage: npm run verify:notion-bonsai-task-disposition-review-brief -- <review.json> <task-link-decision.json> <pending-decision.json> <brief.json> [mapping-decision.json]\n');
   process.exitCode = 2;
 } else {
   try {
     const reviewBytes = fs.readFileSync(path.resolve(reviewPath));
+    const taskLinkDecisionBytes = fs.readFileSync(path.resolve(taskLinkDecisionPath));
+    const mappingDecisionBytes = mappingDecisionPath ? fs.readFileSync(path.resolve(mappingDecisionPath)) : null;
     const decisionBytes = fs.readFileSync(path.resolve(decisionPath));
     const result = verifyNotionBonsaiTaskDispositionReviewBrief({
       review: JSON.parse(reviewBytes.toString('utf8')),
       reviewSha256: digest(reviewBytes),
+      taskLinkDecision: JSON.parse(taskLinkDecisionBytes.toString('utf8')),
+      taskLinkDecisionSha256: digest(taskLinkDecisionBytes),
+      mappingDecision: mappingDecisionBytes ? JSON.parse(mappingDecisionBytes.toString('utf8')) : null,
+      mappingDecisionSha256: mappingDecisionBytes ? digest(mappingDecisionBytes) : null,
       decision: JSON.parse(decisionBytes.toString('utf8')),
       decisionSha256: digest(decisionBytes),
       record: JSON.parse(fs.readFileSync(path.resolve(briefPath), 'utf8')),

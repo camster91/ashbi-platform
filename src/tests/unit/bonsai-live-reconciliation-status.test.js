@@ -63,7 +63,9 @@ function evidence() {
     review: taskReview, reviewSha256: HASHES.taskReview, preparedAt: '2026-08-28T01:02:30.000Z',
   });
   const taskDispositionDecision = prepareNotionBonsaiTaskDispositionDecision({
-    review: taskReview, reviewSha256: HASHES.taskReview, preparedAt: '2026-08-28T01:02:45.000Z',
+    review: taskReview, reviewSha256: HASHES.taskReview,
+    taskLinkDecision, taskLinkDecisionSha256: HASHES.taskLinkDecision,
+    preparedAt: '2026-08-28T01:02:45.000Z',
   });
   const nativeProjectReview = {
     format: 'ashbi-notion-bonsai-native-project-review', version: 1, complete: false,
@@ -203,7 +205,7 @@ test('prepares one aligned, fail-closed reconciliation status without mutation a
   assert.equal(status.readyForBonsaiRetirement, false);
   assert.equal(status.gates.taskIdentity.exactTaskLinksWithoutDecisionRecord, 0);
   assert.equal(status.gates.taskIdentity.taskLinkDecisionsPending, 1);
-  assert.equal(status.gates.taskIdentity.taskDispositionDecisionsPending, 3);
+  assert.equal(status.gates.taskIdentity.taskDispositionDecisionsPending, 5);
   assert.ok(status.findings.includes('TASK_DISPOSITION_DECISIONS_PENDING'));
   assert.equal(status.gates.projectIdentity.decisionsPending, 1);
   assert.equal(status.gates.projectIdentity.projectDispositionDecisionsPending, 6);
@@ -251,8 +253,11 @@ test('CLI creates a new status file and refuses overwrite', () => {
     input.taskLinkDecision = prepareNotionBonsaiTaskLinkDecision({
       review: input.taskReview, reviewSha256: task.hash, preparedAt: '2026-08-28T01:02:30.000Z',
     });
+    const taskLink = write('taskLinkDecision', input.taskLinkDecision);
     input.taskDispositionDecision = prepareNotionBonsaiTaskDispositionDecision({
-      review: input.taskReview, reviewSha256: task.hash, preparedAt: '2026-08-28T01:02:45.000Z',
+      review: input.taskReview, reviewSha256: task.hash,
+      taskLinkDecision: input.taskLinkDecision, taskLinkDecisionSha256: taskLink.hash,
+      preparedAt: '2026-08-28T01:02:45.000Z',
     });
     input.nativeProjectReview.sourceEvidence.taskReviewSha256 = task.hash;
     const native = write('nativeProjectReview', input.nativeProjectReview);
