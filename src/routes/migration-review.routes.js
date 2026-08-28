@@ -3,6 +3,7 @@ import {
   importProjectLinkReviewPacket,
   importProjectDispositionReviewPacket,
   importFinancialExceptionReviewPacket,
+  importActiveProjectOutcomeReviewPacket,
   importTaskDispositionReviewPacket,
   listMigrationReviewPackets,
   recordMigrationReviewDecision,
@@ -13,6 +14,7 @@ import {
   migrationReviewImportSchema,
   migrationProjectDispositionReviewImportSchema,
   migrationFinancialExceptionReviewImportSchema,
+  migrationActiveProjectOutcomeReviewImportSchema,
   migrationTaskDispositionReviewImportSchema,
   validateBody,
 } from '../validators/schemas.js';
@@ -101,6 +103,23 @@ export default async function migrationReviewRoutes(fastify) {
       return reply.status(result.replayed ? 200 : 201).send(result);
     } catch (error) {
       request.log.error({ error: error.message }, 'Financial-exception migration review import failed');
+      return sendError(reply, error);
+    }
+  });
+
+  fastify.post('/active-project-outcomes/import', {
+    ...adminOnly,
+    preHandler: [validateBody(migrationActiveProjectOutcomeReviewImportSchema)],
+  }, async (request, reply) => {
+    try {
+      const result = await importActiveProjectOutcomeReviewPacket({
+        prismaClient: request.prisma,
+        input: request.body,
+        importedBy: request.user.email,
+      });
+      return reply.status(result.replayed ? 200 : 201).send(result);
+    } catch (error) {
+      request.log.error({ error: error.message }, 'Active-project outcome migration review import failed');
       return sendError(reply, error);
     }
   });

@@ -1,6 +1,6 @@
 # Hub migration review workflow
 
-The Hub migration review page records bounded human decisions about project identities, source dispositions, and evidence-preserving financial-exception recommendations. It does not apply project links, create or move tasks, repair a source, assign owners, change lifecycle status, edit financial records, bill or collect, attest to a contract, contact clients, authorize migration, or authorize Bonsai cutover.
+The Hub migration review page records bounded human decisions about project identities, source dispositions, active-project outcomes, and evidence-preserving financial-exception recommendations. It does not apply project links, create or move tasks, repair a source, assign owners, change lifecycle status, close or archive a project, edit financial records, bill or collect, attest to a contract, contact clients, authorize migration, or authorize Bonsai cutover.
 
 ## Prepare a verified import bundle
 
@@ -28,12 +28,18 @@ For the checksum-bound financial-exception brief:
 npm run prepare:financial-exception-migration-review-bundle -- --financial-review <financial-review.json> --invoice-snapshot <invoice-index.json> --time-entry-snapshot <time-entry-index.json> --financial-exception-decision <pending-financial-decision.json> --review-brief <financial-review-brief.json> --output <new-financial-review-bundle.json>
 ```
 
+For the checksum-bound active-project outcome brief:
+
+```powershell
+npm run prepare:active-project-outcome-migration-review-bundle -- --active-project-triage <triage.json> --financial-review <financial-review.json> --native-project-review <native-project-review.json> --project-link-decision <project-link.json> --project-disposition-decision <project-disposition.json> --active-project-disposition-decision <pending-active-project.json> --review-brief <active-project-review-brief.json> --output <new-active-project-review-bundle.json>
+```
+
 The command refuses invalid evidence and refuses to overwrite an existing output. The resulting bundle includes a unique import request ID so retrying the same upload cannot create a duplicate packet.
 
 ## Review in the Hub
 
 1. Sign in as an Ashbi administrator and open **Migration Reviews**.
-2. Import the verified project-link, project-disposition, task-disposition, or financial-exception bundle.
+2. Import the verified project-link, project-disposition, task-disposition, active-project-outcome, or financial-exception bundle.
 3. Compare the exact source identities, recommendation, prerequisites, and evidence for each candidate.
 4. Approve or reject the bounded recommendation. Every click has a unique request ID; a failed request can be retried without creating a second action.
 5. Export the decision record. It remains incomplete until every candidate has a current decision.
@@ -43,6 +49,8 @@ The database retains immutable decision events. A later decision supersedes the 
 Each imported packet is uniquely identified by its review kind plus a fingerprint of the source review, dependency decision, and optional supplemental evidence. Regenerating a project-disposition brief after project-link decisions therefore creates a new evidence generation alongside the prior pending generation. It never overwrites or silently reinterprets the earlier review history.
 
 The Hub orders generations by their evidence preparation time. Earlier generations remain available for inspection and export, but both the interface and API refuse new approvals or rejections after a newer generation exists for the same review kind and source snapshot.
+
+Active-project outcomes stay blocked until their project-link and source-project disposition dependencies are decided. A regenerated packet may then recommend only the compatible migrate-active, retain-active, or evidence-backed exclusion outcome. The workflow never recommends closure; financial clearance and closure remain separate evidence gates.
 
 ## Separate gates
 

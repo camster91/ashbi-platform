@@ -13,11 +13,13 @@ const decisionStyles = {
 const taskDispositionKind = 'NOTION_BONSAI_TASK_DISPOSITION';
 const projectDispositionKind = 'NOTION_BONSAI_PROJECT_DISPOSITION';
 const financialExceptionKind = 'BONSAI_FINANCIAL_EXCEPTION';
+const activeProjectOutcomeKind = 'BONSAI_ACTIVE_PROJECT_OUTCOME';
 
 function packetLabel(packet) {
   if (packet.kind === taskDispositionKind) return 'Task disposition review';
   if (packet.kind === projectDispositionKind) return 'Project disposition review';
   if (packet.kind === financialExceptionKind) return 'Financial exception review';
+  if (packet.kind === activeProjectOutcomeKind) return 'Active project outcome review';
   return 'Project identity review';
 }
 
@@ -78,6 +80,8 @@ export default function MigrationReviews() {
         response = await api.importProjectDispositionReview(payload);
       } else if (parsed.format === 'ashbi-hub-financial-exception-review-import') {
         response = await api.importFinancialExceptionReview(payload);
+      } else if (parsed.format === 'ashbi-hub-active-project-outcome-review-import') {
+        response = await api.importActiveProjectOutcomeReview(payload);
       } else {
         response = await api.importProjectLinkReview(payload);
       }
@@ -126,7 +130,9 @@ export default function MigrationReviews() {
         ? 'task-disposition-decision'
         : selected.kind === projectDispositionKind
         ? 'project-disposition-decision'
-        : selected.kind === financialExceptionKind ? 'financial-exception-decision' : 'project-link-decision';
+        : selected.kind === financialExceptionKind
+        ? 'financial-exception-decision'
+        : selected.kind === activeProjectOutcomeKind ? 'active-project-outcome-decision' : 'project-link-decision';
       downloadJson(record, `${prefix}-${selected.id}.json`);
     } catch (error) {
       setActionError(error.message || 'The decision record could not be exported.');
@@ -145,7 +151,7 @@ export default function MigrationReviews() {
           <div className="flex items-center gap-2 text-primary"><GitMerge size={20} /><span className="text-sm font-semibold uppercase tracking-wide">Migration control</span></div>
           <h1 className="mt-1 text-3xl font-bold text-foreground">Notion + Bonsai reviews</h1>
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            Review evidence-bound project identities, project and task dispositions, and financial exceptions. Decisions stay inside the Hub and do not edit Notion, Bonsai, projects, tasks, owners, invoices, payments, time entries, or contracts.
+            Review evidence-bound project identities, project and task dispositions, active-project outcomes, and financial exceptions. Decisions stay inside the Hub and do not edit Notion, Bonsai, projects, tasks, owners, invoices, payments, time entries, or contracts—and never close or archive a project.
           </p>
         </div>
         <label className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground focus-within:ring-2 focus-within:ring-ring">
@@ -165,7 +171,7 @@ export default function MigrationReviews() {
         <section className="rounded-xl border border-dashed border-border bg-card p-10 text-center">
           <FileJson className="mx-auto text-muted-foreground" size={38} />
           <h2 className="mt-3 font-semibold text-foreground">No verified review packet imported</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Import a checksum-bound project-link, project-disposition, task-disposition, or financial-exception review bundle. Importing it records evidence only.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Import a checksum-bound project-link, project-disposition, task-disposition, active-project-outcome, or financial-exception review bundle. Importing it records evidence only.</p>
         </section>
       ) : (
         <div className="grid gap-6 lg:grid-cols-[18rem_1fr]">
@@ -231,6 +237,15 @@ export default function MigrationReviews() {
                           </ul>
                         )}
                       </div>
+                    ) : selected.kind === activeProjectOutcomeKind ? (
+                      <div className="rounded-lg border border-border p-3">
+                        <p className="text-xs font-semibold uppercase text-muted-foreground">Active Bonsai project</p>
+                        <p className="mt-1 font-medium text-foreground">{candidate.project}</p>
+                        <p className="text-xs text-muted-foreground">{candidate.company || 'No recorded client'} · {candidate.projectGroup?.name || 'No group'} · {candidate.taskCount} current task(s)</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{candidate.triageBucket?.replaceAll('_', ' ')}</p>
+                        <p className="mt-2 text-xs text-muted-foreground">Invoices: {candidate.financialEvidence?.invoiceCount ?? 0} total / {candidate.financialEvidence?.nonPaidInvoiceCount ?? 0} non-paid · time: {candidate.financialEvidence?.timeEntryCount ?? 0} total / {candidate.financialEvidence?.unbilledEntryCount ?? 0} unbilled</p>
+                        {candidate.financialEvidence?.attentionReasons?.length > 0 && <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">Financial review: {candidate.financialEvidence.attentionReasons.join(' · ').replaceAll('_', ' ')}</p>}
+                      </div>
                     ) : selected.kind === financialExceptionKind ? (
                       <div className="rounded-lg border border-border p-3">
                         <p className="text-xs font-semibold uppercase text-muted-foreground">Source financial exception</p>
@@ -258,6 +273,7 @@ export default function MigrationReviews() {
                     {candidate.sourceEvidence && <p className="text-sm text-muted-foreground">{candidate.sourceEvidence}</p>}
                     <p className="text-xs text-muted-foreground">Recommendation: {candidate.recommendation?.replaceAll('_', ' ')} · {candidate.reasonCode?.replaceAll('_', ' ')}</p>
                     {candidate.recommendedDisposition && <p className="text-xs font-medium text-foreground">Proposed disposition: {candidate.recommendedDisposition.replaceAll('_', ' ')}</p>}
+                    {candidate.recommendedOutcome && <p className="text-xs font-medium text-foreground">Proposed active outcome: {candidate.recommendedOutcome.replaceAll('_', ' ')}</p>}
                     {candidate.prerequisites?.length > 0 && <p className="text-xs text-muted-foreground">Prerequisites: {candidate.prerequisites.join(' · ').replaceAll('_', ' ')}</p>}
                     {candidate.reviewedBy && <p className="text-xs text-muted-foreground">Last reviewed by {candidate.reviewedBy} on {new Date(candidate.decidedAt).toLocaleString()}</p>}
                   </div>
@@ -272,7 +288,7 @@ export default function MigrationReviews() {
                         ? 'Superseded generation'
                         : candidate.recommendation !== 'APPROVAL_READY'
                         ? 'Blocked by prerequisite'
-                        : selected.kind === taskDispositionKind || selected.kind === projectDispositionKind || selected.kind === financialExceptionKind ? 'Approve recommendation' : 'Approve identity'}
+                        : selected.kind === taskDispositionKind || selected.kind === projectDispositionKind || selected.kind === financialExceptionKind || selected.kind === activeProjectOutcomeKind ? 'Approve recommendation' : 'Approve identity'}
                     </Button>
                     <Button variant="destructive" onClick={() => decide(candidate, 'REJECTED')} disabled={Boolean(busyKey) || selected.superseded} leftIcon={<X size={16} />}>Reject</Button>
                   </div>

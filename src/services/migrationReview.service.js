@@ -6,11 +6,14 @@ import { verifyNotionBonsaiProjectDispositionReviewBrief } from './notionBonsaiP
 import { prepareNotionBonsaiProjectDispositionDecision } from './notionBonsaiProjectDispositionDecision.service.js';
 import { verifyBonsaiFinancialExceptionReviewBrief } from './bonsaiFinancialExceptionReviewBrief.service.js';
 import { prepareBonsaiFinancialExceptionDecision } from './bonsaiFinancialExceptionDecision.service.js';
+import { verifyBonsaiActiveProjectOutcomeReviewBrief } from './bonsaiActiveProjectOutcomeReviewBrief.service.js';
+import { prepareBonsaiActiveProjectDispositionDecision } from './bonsaiActiveProjectDispositionDecision.service.js';
 
 const PROJECT_LINK_KIND = 'NOTION_BONSAI_PROJECT_LINK';
 const TASK_DISPOSITION_KIND = 'NOTION_BONSAI_TASK_DISPOSITION';
 const PROJECT_DISPOSITION_KIND = 'NOTION_BONSAI_PROJECT_DISPOSITION';
 const FINANCIAL_EXCEPTION_KIND = 'BONSAI_FINANCIAL_EXCEPTION';
+const ACTIVE_PROJECT_OUTCOME_KIND = 'BONSAI_ACTIVE_PROJECT_OUTCOME';
 const DECISIONS = new Set(['APPROVED', 'REJECTED']);
 
 function text(value) {
@@ -127,6 +130,37 @@ function financialExceptionEvidenceMatches(packet, input) {
     && canonical(packet.reviewBrief) === canonical(input.reviewBrief);
 }
 
+function activeProjectDependencyEvidence(input) {
+  return {
+    format: 'ashbi-hub-active-project-outcome-review-dependencies',
+    version: 1,
+    financialReview: input.financialReview,
+    financialReviewSha256: input.financialReviewSha256,
+    nativeProjectReview: input.nativeProjectReview,
+    nativeProjectReviewSha256: input.nativeProjectReviewSha256,
+    projectLinkDecision: input.projectLinkDecision,
+    projectLinkDecisionSha256: input.projectLinkDecisionSha256,
+    projectDispositionDecision: input.projectDispositionDecision,
+    projectDispositionDecisionSha256: input.projectDispositionDecisionSha256,
+    dispositionDecision: input.dispositionDecision,
+    dispositionDecisionSha256: input.dispositionDecisionSha256,
+  };
+}
+
+function activeProjectOutcomeEvidenceMatches(packet, input) {
+  return packet.kind === ACTIVE_PROJECT_OUTCOME_KIND
+    && packet.evidenceFingerprint === evidenceFingerprint(
+      input.triageSha256, input.dispositionDecisionSha256, input.projectDispositionDecisionSha256,
+    )
+    && packet.sourceReviewSha256 === input.triageSha256
+    && packet.mappingDecisionSha256 === input.dispositionDecisionSha256
+    && packet.supplementalSha256 === input.projectDispositionDecisionSha256
+    && canonical(packet.sourceReview) === canonical(input.triage)
+    && canonical(packet.mappingDecision) === canonical(activeProjectDependencyEvidence(input))
+    && packet.supplementalEvidence === null
+    && canonical(packet.reviewBrief) === canonical(input.reviewBrief);
+}
+
 function latestDecisions(decisions = []) {
   const byCandidate = new Map();
   for (const decision of decisions) {
@@ -202,6 +236,8 @@ function packetView(packet, generation = { generation: 1, generationCount: 1, su
       sourceRepairsApplied: false,
       financialDispositionsApplied: false,
       billingOrCollectionAuthorized: false,
+      activeProjectOutcomesApplied: false,
+      projectsClosedOrArchived: false,
       migrationOrCutoverAuthorized: false,
     },
   };
@@ -543,6 +579,94 @@ export async function importFinancialExceptionReviewPacket({ prismaClient, input
   return { replayed: false, packet: packetView(packet) };
 }
 
+export async function importActiveProjectOutcomeReviewPacket({ prismaClient, input, importedBy, now = new Date() }) {
+  const packets = requireDelegate(prismaClient, 'migrationReviewPacket');
+  if (!text(input?.requestId) || !text(importedBy)) throw new TypeError('requestId and importedBy are required');
+  const fingerprint = evidenceFingerprint(
+    input.triageSha256, input.dispositionDecisionSha256, input.projectDispositionDecisionSha256,
+  );
+  const verification = verifyBonsaiActiveProjectOutcomeReviewBrief({
+    triage: input.triage,
+    triageSha256: input.triageSha256,
+    financialReview: input.financialReview,
+    financialReviewSha256: input.financialReviewSha256,
+    nativeProjectReview: input.nativeProjectReview,
+    nativeProjectReviewSha256: input.nativeProjectReviewSha256,
+    projectLinkDecision: input.projectLinkDecision,
+    projectLinkDecisionSha256: input.projectLinkDecisionSha256,
+    projectDispositionDecision: input.projectDispositionDecision,
+    projectDispositionDecisionSha256: input.projectDispositionDecisionSha256,
+    decision: input.dispositionDecision,
+    decisionSha256: input.dispositionDecisionSha256,
+    record: input.reviewBrief,
+  });
+  if (!verification.valid) {
+    const error = new Error(`Active-project outcome review evidence is invalid: ${verification.findings.join(', ')}`);
+    error.statusCode = 422;
+    throw error;
+  }
+
+  const existingRequest = await packets.findFirst({ where: { importRequestId: input.requestId }, include: { decisions: true } });
+  if (existingRequest) {
+    if (!activeProjectOutcomeEvidenceMatches(existingRequest, input)) {
+      const error = new Error('This import request ID is already bound to different evidence');
+      error.statusCode = 409;
+      throw error;
+    }
+    return { replayed: true, packet: packetView(existingRequest) };
+  }
+  const existingEvidence = await packets.findFirst({
+    where: { kind: ACTIVE_PROJECT_OUTCOME_KIND, evidenceFingerprint: fingerprint },
+    include: { decisions: { orderBy: [{ decidedAt: 'desc' }, { createdAt: 'desc' }] } },
+  });
+  if (existingEvidence) {
+    if (!activeProjectOutcomeEvidenceMatches(existingEvidence, input)) {
+      const error = new Error('The evidence fingerprint is already bound to different active-project evidence');
+      error.statusCode = 409;
+      throw error;
+    }
+    return { replayed: true, packet: packetView(existingEvidence) };
+  }
+
+  let packet;
+  try {
+    packet = await packets.create({
+      data: {
+        kind: ACTIVE_PROJECT_OUTCOME_KIND,
+        importRequestId: input.requestId,
+        evidenceFingerprint: fingerprint,
+        sourceReviewSha256: input.triageSha256,
+        mappingDecisionSha256: input.dispositionDecisionSha256,
+        supplementalSha256: input.projectDispositionDecisionSha256,
+        sourcePreparedAt: new Date(input.reviewBrief.preparedAt),
+        sourceReview: input.triage,
+        mappingDecision: activeProjectDependencyEvidence(input),
+        supplementalEvidence: null,
+        reviewBrief: input.reviewBrief,
+        importedBy,
+        createdAt: now,
+      },
+      include: { decisions: true },
+    });
+  } catch (error) {
+    if (!isUniqueConflict(error)) throw error;
+    const winner = await packets.findFirst({
+      where: { importRequestId: input.requestId },
+      include: { decisions: { orderBy: [{ decidedAt: 'desc' }, { createdAt: 'desc' }] } },
+    }) ?? await packets.findFirst({
+      where: { kind: ACTIVE_PROJECT_OUTCOME_KIND, evidenceFingerprint: fingerprint },
+      include: { decisions: { orderBy: [{ decidedAt: 'desc' }, { createdAt: 'desc' }] } },
+    });
+    if (!winner || !activeProjectOutcomeEvidenceMatches(winner, input)) {
+      const conflict = new Error('Concurrent import resolved to different evidence');
+      conflict.statusCode = 409;
+      throw conflict;
+    }
+    return { replayed: true, packet: packetView(winner) };
+  }
+  return { replayed: false, packet: packetView(packet) };
+}
+
 export async function listMigrationReviewPackets({ prismaClient }) {
   const packets = requireDelegate(prismaClient, 'migrationReviewPacket');
   const rows = await packets.findMany({
@@ -816,6 +940,63 @@ export async function exportFinancialExceptionDecision({ prismaClient, packetId,
   });
 }
 
+export async function exportActiveProjectOutcomeDecision({ prismaClient, packetId, now = new Date() }) {
+  const packets = requireDelegate(prismaClient, 'migrationReviewPacket');
+  const packet = await packets.findFirst({
+    where: { id: packetId },
+    include: { decisions: { orderBy: [{ decidedAt: 'desc' }, { createdAt: 'desc' }] } },
+  });
+  if (!packet) return null;
+  if (packet.kind !== ACTIVE_PROJECT_OUTCOME_KIND) {
+    const error = new Error('Migration review packet is not an active-project outcome review');
+    error.statusCode = 422;
+    throw error;
+  }
+  const dependencies = packet.mappingDecision;
+  const latest = latestDecisions(packet.decisions);
+  const approvedRows = [...latest.values()].filter(item => item.decision === 'APPROVED');
+  const approvedByCandidate = new Map(approvedRows.map(item => [item.candidateId, item]));
+  const recommendations = packet.reviewBrief.candidates.filter(candidate => approvedByCandidate.has(candidate.candidateId));
+  const sourceTimes = [
+    now.getTime(),
+    Date.parse(packet.sourceReview.preparedAt),
+    Date.parse(dependencies.financialReview.preparedAt),
+    Date.parse(dependencies.nativeProjectReview.preparedAt),
+    Date.parse(dependencies.projectLinkDecision.preparedAt),
+    Date.parse(dependencies.projectDispositionDecision.preparedAt),
+    Date.parse(dependencies.dispositionDecision.preparedAt),
+    ...approvedRows.map(item => new Date(item.decidedAt).getTime()),
+  ];
+  const preparedAt = new Date(Math.max(...sourceTimes)).toISOString();
+  const decidedAt = approvedRows.length
+    ? new Date(Math.max(...approvedRows.map(item => new Date(item.decidedAt).getTime()))).toISOString()
+    : null;
+  const reviewers = [...new Set(approvedRows.map(item => item.reviewedBy))].sort().join(', ');
+  return prepareBonsaiActiveProjectDispositionDecision({
+    triage: packet.sourceReview,
+    triageSha256: packet.sourceReviewSha256,
+    financialReview: dependencies.financialReview,
+    financialReviewSha256: dependencies.financialReviewSha256,
+    nativeProjectReview: dependencies.nativeProjectReview,
+    nativeProjectReviewSha256: dependencies.nativeProjectReviewSha256,
+    projectLinkDecision: dependencies.projectLinkDecision,
+    projectLinkDecisionSha256: dependencies.projectLinkDecisionSha256,
+    projectDispositionDecision: dependencies.projectDispositionDecision,
+    projectDispositionDecisionSha256: dependencies.projectDispositionDecisionSha256,
+    preparedAt,
+    decisions: recommendations.map(candidate => ({
+      candidateId: candidate.candidateId,
+      outcome: candidate.recommendedOutcome,
+      rationale: approvedByCandidate.get(candidate.candidateId)?.reviewNote
+        || `Approved evidence recommendation: ${candidate.reasonCode}`,
+      reference: `hub-migration-review:${packet.id}:${candidate.candidateId}`,
+    })),
+    approver: approvedRows.length ? reviewers : null,
+    decidedAt,
+    reference: approvedRows.length ? `hub-migration-review:${packet.id}` : null,
+  });
+}
+
 export async function exportMigrationReviewDecision(options) {
   const packets = requireDelegate(options.prismaClient, 'migrationReviewPacket');
   const packet = await packets.findFirst({ where: { id: options.packetId }, include: { decisions: true } });
@@ -823,7 +1004,11 @@ export async function exportMigrationReviewDecision(options) {
   if (packet.kind === TASK_DISPOSITION_KIND) return exportTaskDispositionDecision(options);
   if (packet.kind === PROJECT_DISPOSITION_KIND) return exportProjectDispositionDecision(options);
   if (packet.kind === FINANCIAL_EXCEPTION_KIND) return exportFinancialExceptionDecision(options);
+  if (packet.kind === ACTIVE_PROJECT_OUTCOME_KIND) return exportActiveProjectOutcomeDecision(options);
   return exportProjectLinkDecision(options);
 }
 
-export { PROJECT_LINK_KIND, TASK_DISPOSITION_KIND, PROJECT_DISPOSITION_KIND, FINANCIAL_EXCEPTION_KIND };
+export {
+  PROJECT_LINK_KIND, TASK_DISPOSITION_KIND, PROJECT_DISPOSITION_KIND,
+  FINANCIAL_EXCEPTION_KIND, ACTIVE_PROJECT_OUTCOME_KIND,
+};

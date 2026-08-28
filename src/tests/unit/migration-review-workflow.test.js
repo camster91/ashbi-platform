@@ -208,6 +208,7 @@ test('route and UI keep migration review admin-only, tenant-scoped, and separate
   assert.match(route, /task-dispositions\/import/);
   assert.match(route, /project-dispositions\/import/);
   assert.match(route, /financial-exceptions\/import/);
+  assert.match(route, /active-project-outcomes\/import/);
   assert.doesNotMatch(route, /config\/db|fetch\(|axios|Bonsai/i);
   assert.match(proxy, /migrationreviewpacket/);
   assert.match(proxy, /migrationreviewdecision/);
@@ -216,6 +217,7 @@ test('route and UI keep migration review admin-only, tenant-scoped, and separate
   assert.match(page, /ashbi-hub-task-disposition-review-import/);
   assert.match(page, /ashbi-hub-project-disposition-review-import/);
   assert.match(page, /ashbi-hub-financial-exception-review-import/);
+  assert.match(page, /ashbi-hub-active-project-outcome-review-import/);
   assert.match(page, /Superseded generation/);
   assert.doesNotMatch(page, /Apply to Bonsai|Delete from Notion/);
 });
@@ -224,6 +226,7 @@ test('packet identity permits new evidence generations and the database accepts 
   const schema = fs.readFileSync(new URL('../../../prisma/schema.prisma', import.meta.url), 'utf8');
   const migration = fs.readFileSync(new URL('../../../prisma/migrations/20260828113000_migration_review_packet_generations/migration.sql', import.meta.url), 'utf8');
   const financialMigration = fs.readFileSync(new URL('../../../prisma/migrations/20260828120000_financial_exception_review_kind/migration.sql', import.meta.url), 'utf8');
+  const activeProjectMigration = fs.readFileSync(new URL('../../../prisma/migrations/20260828123000_active_project_outcome_review_kind/migration.sql', import.meta.url), 'utf8');
   const service = fs.readFileSync(new URL('../../services/migrationReview.service.js', import.meta.url), 'utf8');
   assert.match(schema, /evidenceFingerprint\s+String/);
   assert.match(schema, /@@unique\(\[organizationId, kind, evidenceFingerprint\]\)/);
@@ -232,6 +235,7 @@ test('packet identity permits new evidence generations and the database accepts 
   assert.match(migration, /NOTION_BONSAI_TASK_DISPOSITION/);
   assert.match(migration, /NOTION_BONSAI_PROJECT_DISPOSITION/);
   assert.match(financialMigration, /BONSAI_FINANCIAL_EXCEPTION/);
+  assert.match(activeProjectMigration, /BONSAI_ACTIVE_PROJECT_OUTCOME/);
   assert.match(service, /where: \{ kind: PROJECT_DISPOSITION_KIND, evidenceFingerprint: fingerprint \}/);
 });
 
