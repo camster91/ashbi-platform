@@ -51,6 +51,7 @@ The supported milestone is a controlled Ashbi agency-operations deployment: auth
 - Runtime objectives, telemetry privacy, escalation, and drills: [observability-and-slos.md](observability-and-slos.md).
 - Security headers, upload policy, soft deletion, credential vault, and session revocation: the corresponding files under `docs/` and `docs/security/`.
 - Connected provider/AI permissions, approval, and audit boundaries: [connected-workflow-contract.md](connected-workflow-contract.md).
+- Migration review: the admin workflow now accepts checksum-verified project-identity and all-source task-disposition bundles. The current evidence set includes an 88-candidate task bundle with zero blocked or manual-review candidates; it remains unimported until a target Hub environment is approved and available. Decision recording does not apply links, task changes, source repairs, imports, payments, or cutover.
 - Target-environment dogfood, provider, migration, revenue, media, and recovery evidence: [authenticated-replacement-validation.md](authenticated-replacement-validation.md).
 
 ## Required verification matrix

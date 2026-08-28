@@ -1,7 +1,10 @@
 import { verifyNotionBonsaiNativeProjectLinkReviewBrief } from './notionBonsaiNativeProjectLinkReviewBrief.service.js';
 import { prepareNotionBonsaiNativeProjectLinkDecision } from './notionBonsaiNativeProjectLinkDecision.service.js';
+import { verifyNotionBonsaiTaskDispositionReviewBrief } from './notionBonsaiTaskDispositionReviewBrief.service.js';
+import { prepareNotionBonsaiTaskDispositionDecision } from './notionBonsaiTaskDispositionDecision.service.js';
 
 const PROJECT_LINK_KIND = 'NOTION_BONSAI_PROJECT_LINK';
+const TASK_DISPOSITION_KIND = 'NOTION_BONSAI_TASK_DISPOSITION';
 const DECISIONS = new Set(['APPROVED', 'REJECTED']);
 
 function text(value) {
@@ -29,6 +32,30 @@ function evidenceMatches(packet, input) {
     && canonical(packet.sourceReview) === canonical(input.review)
     && canonical(packet.mappingDecision) === canonical(input.mappingDecision)
     && canonical(packet.supplementalEvidence ?? null) === canonical(input.supplementalEvidence ?? null)
+    && canonical(packet.reviewBrief) === canonical(input.reviewBrief);
+}
+
+function taskDependencyEvidence(input) {
+  return {
+    format: 'ashbi-hub-task-disposition-review-dependencies',
+    version: 1,
+    taskLinkDecision: input.taskLinkDecision,
+    taskLinkDecisionSha256: input.taskLinkDecisionSha256,
+    mappingDecision: input.mappingDecision ?? null,
+    mappingDecisionSha256: input.mappingDecisionSha256 ?? null,
+    dispositionDecision: input.dispositionDecision,
+    dispositionDecisionSha256: input.dispositionDecisionSha256,
+  };
+}
+
+function taskEvidenceMatches(packet, input) {
+  return packet.kind === TASK_DISPOSITION_KIND
+    && packet.sourceReviewSha256 === input.reviewSha256
+    && packet.mappingDecisionSha256 === input.dispositionDecisionSha256
+    && packet.supplementalSha256 === null
+    && canonical(packet.sourceReview) === canonical(input.review)
+    && canonical(packet.mappingDecision) === canonical(taskDependencyEvidence(input))
+    && packet.supplementalEvidence === null
     && canonical(packet.reviewBrief) === canonical(input.reviewBrief);
 }
 
@@ -67,6 +94,8 @@ function packetView(packet) {
     safeguards: {
       externalWritesPerformed: false,
       projectLinksApplied: false,
+      taskDispositionsApplied: false,
+      sourceRepairsApplied: false,
       migrationOrCutoverAuthorized: false,
     },
   };
@@ -152,6 +181,88 @@ export async function importProjectLinkReviewPacket({ prismaClient, input, impor
   return { replayed: false, packet: packetView(packet) };
 }
 
+export async function importTaskDispositionReviewPacket({ prismaClient, input, importedBy, now = new Date() }) {
+  const packets = requireDelegate(prismaClient, 'migrationReviewPacket');
+  if (!text(input?.requestId) || !text(importedBy)) throw new TypeError('requestId and importedBy are required');
+
+  const verification = verifyNotionBonsaiTaskDispositionReviewBrief({
+    review: input.review,
+    reviewSha256: input.reviewSha256,
+    taskLinkDecision: input.taskLinkDecision,
+    taskLinkDecisionSha256: input.taskLinkDecisionSha256,
+    mappingDecision: input.mappingDecision ?? null,
+    mappingDecisionSha256: input.mappingDecisionSha256 ?? null,
+    decision: input.dispositionDecision,
+    decisionSha256: input.dispositionDecisionSha256,
+    record: input.reviewBrief,
+  });
+  if (!verification.valid) {
+    const error = new Error(`Task-disposition review evidence is invalid: ${verification.findings.join(', ')}`);
+    error.statusCode = 422;
+    throw error;
+  }
+
+  const existingRequest = await packets.findFirst({ where: { importRequestId: input.requestId }, include: { decisions: true } });
+  if (existingRequest) {
+    if (!taskEvidenceMatches(existingRequest, input)) {
+      const error = new Error('This import request ID is already bound to different evidence');
+      error.statusCode = 409;
+      throw error;
+    }
+    return { replayed: true, packet: packetView(existingRequest) };
+  }
+
+  const existingEvidence = await packets.findFirst({
+    where: { kind: TASK_DISPOSITION_KIND, sourceReviewSha256: input.reviewSha256 },
+    include: { decisions: { orderBy: [{ decidedAt: 'desc' }, { createdAt: 'desc' }] } },
+  });
+  if (existingEvidence) {
+    if (!taskEvidenceMatches(existingEvidence, input)) {
+      const error = new Error('The source review checksum is already bound to different evidence');
+      error.statusCode = 409;
+      throw error;
+    }
+    return { replayed: true, packet: packetView(existingEvidence) };
+  }
+
+  let packet;
+  try {
+    packet = await packets.create({
+      data: {
+        kind: TASK_DISPOSITION_KIND,
+        importRequestId: input.requestId,
+        sourceReviewSha256: input.reviewSha256,
+        mappingDecisionSha256: input.dispositionDecisionSha256,
+        supplementalSha256: null,
+        sourcePreparedAt: new Date(input.reviewBrief.preparedAt),
+        sourceReview: input.review,
+        mappingDecision: taskDependencyEvidence(input),
+        supplementalEvidence: null,
+        reviewBrief: input.reviewBrief,
+        importedBy,
+        createdAt: now,
+      },
+      include: { decisions: true },
+    });
+  } catch (error) {
+    if (!isUniqueConflict(error)) throw error;
+    const winner = await packets.findFirst({
+      where: { importRequestId: input.requestId },
+      include: { decisions: { orderBy: [{ decidedAt: 'desc' }, { createdAt: 'desc' }] } },
+    }) ?? await packets.findFirst({
+      where: { kind: TASK_DISPOSITION_KIND, sourceReviewSha256: input.reviewSha256 },
+      include: { decisions: { orderBy: [{ decidedAt: 'desc' }, { createdAt: 'desc' }] } },
+    });
+    if (!winner || !taskEvidenceMatches(winner, input)) {
+      const conflict = new Error('Concurrent import resolved to different evidence');
+      conflict.statusCode = 409;
+      throw conflict;
+    }
+    return { replayed: true, packet: packetView(winner) };
+  }
+  return { replayed: false, packet: packetView(packet) };
+}
+
 export async function listMigrationReviewPackets({ prismaClient }) {
   const packets = requireDelegate(prismaClient, 'migrationReviewPacket');
   const rows = await packets.findMany({
@@ -185,6 +296,11 @@ export async function recordMigrationReviewDecision({ prismaClient, packetId, ca
   if (!candidate) {
     const error = new Error('Candidate is not part of this evidence-bound review packet');
     error.statusCode = 404;
+    throw error;
+  }
+  if (decision === 'APPROVED' && candidate.recommendation !== 'APPROVAL_READY') {
+    const error = new Error('Only an approval-ready recommendation can be approved');
+    error.statusCode = 422;
     throw error;
   }
 
@@ -253,4 +369,64 @@ export async function exportProjectLinkDecision({ prismaClient, packetId, now = 
   });
 }
 
-export { PROJECT_LINK_KIND };
+export async function exportTaskDispositionDecision({ prismaClient, packetId, now = new Date() }) {
+  const packets = requireDelegate(prismaClient, 'migrationReviewPacket');
+  const packet = await packets.findFirst({
+    where: { id: packetId },
+    include: { decisions: { orderBy: [{ decidedAt: 'desc' }, { createdAt: 'desc' }] } },
+  });
+  if (!packet) return null;
+  if (packet.kind !== TASK_DISPOSITION_KIND) {
+    const error = new Error('Migration review packet is not a task-disposition review');
+    error.statusCode = 422;
+    throw error;
+  }
+  const dependencies = packet.mappingDecision;
+  const latest = latestDecisions(packet.decisions);
+  const approvedRows = [...latest.values()].filter(item => item.decision === 'APPROVED');
+  const approvedByCandidate = new Map(approvedRows.map(item => [item.candidateId, item]));
+  const recommendations = packet.reviewBrief.candidates.filter(candidate => approvedByCandidate.has(candidate.candidateId));
+  const sourceTimes = [
+    now.getTime(),
+    Date.parse(packet.sourceReview.preparedAt),
+    Date.parse(dependencies.taskLinkDecision.preparedAt),
+    Date.parse(dependencies.dispositionDecision.preparedAt),
+    ...approvedRows.map(item => new Date(item.decidedAt).getTime()),
+  ];
+  const preparedAt = new Date(Math.max(...sourceTimes)).toISOString();
+  const decidedAt = approvedRows.length
+    ? new Date(Math.max(...approvedRows.map(item => new Date(item.decidedAt).getTime()))).toISOString()
+    : null;
+  const reviewers = [...new Set(approvedRows.map(item => item.reviewedBy))].sort().join(', ');
+  return prepareNotionBonsaiTaskDispositionDecision({
+    review: packet.sourceReview,
+    reviewSha256: packet.sourceReviewSha256,
+    taskLinkDecision: dependencies.taskLinkDecision,
+    taskLinkDecisionSha256: dependencies.taskLinkDecisionSha256,
+    mappingDecision: dependencies.mappingDecision,
+    mappingDecisionSha256: dependencies.mappingDecisionSha256,
+    preparedAt,
+    decisions: recommendations.map(candidate => ({
+      candidateId: candidate.candidateId,
+      disposition: candidate.recommendedDisposition,
+      rationale: approvedByCandidate.get(candidate.candidateId)?.reviewNote
+        || `Approved evidence recommendation: ${candidate.reasonCode}`,
+      reference: `hub-migration-review:${packet.id}:${candidate.candidateId}`,
+      taskLinkCandidateId: candidate.taskLinkCandidateId,
+    })),
+    approver: approvedRows.length ? reviewers : null,
+    decidedAt,
+    reference: approvedRows.length ? `hub-migration-review:${packet.id}` : null,
+  });
+}
+
+export async function exportMigrationReviewDecision(options) {
+  const packets = requireDelegate(options.prismaClient, 'migrationReviewPacket');
+  const packet = await packets.findFirst({ where: { id: options.packetId }, include: { decisions: true } });
+  if (!packet) return null;
+  return packet.kind === TASK_DISPOSITION_KIND
+    ? exportTaskDispositionDecision(options)
+    : exportProjectLinkDecision(options);
+}
+
+export { PROJECT_LINK_KIND, TASK_DISPOSITION_KIND };

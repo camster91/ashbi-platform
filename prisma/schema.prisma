@@ -2130,14 +2130,14 @@ model OperatingSourceRecord {
 model MigrationReviewPacket {
   id                    String   @id @default(cuid())
   organizationId        String
-  kind                  String   // NOTION_BONSAI_PROJECT_LINK
+  kind                  String   // NOTION_BONSAI_PROJECT_LINK | NOTION_BONSAI_TASK_DISPOSITION
   importRequestId       String
   sourceReviewSha256    String
   mappingDecisionSha256 String
   supplementalSha256    String?
   sourcePreparedAt      DateTime
   sourceReview          Json
-  mappingDecision       Json
+  mappingDecision       Json     // Project mapping decision or evidence dependency envelope
   supplementalEvidence  Json?
   reviewBrief           Json
   importedBy            String

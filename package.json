@@ -66,6 +66,7 @@
     "prepare:notion-bonsai-native-project-review": "node scripts/prepare-notion-bonsai-native-project-review.mjs",
     "prepare:notion-bonsai-native-project-link-review-brief": "node scripts/prepare-notion-bonsai-native-project-link-review-brief.mjs",
     "prepare:migration-review-bundle": "node scripts/prepare-migration-review-bundle.mjs",
+    "prepare:task-disposition-migration-review-bundle": "node scripts/prepare-task-disposition-migration-review-bundle.mjs",
     "verify:notion-bonsai-native-project-link-review-brief": "node scripts/verify-notion-bonsai-native-project-link-review-brief.mjs",
     "prepare:notion-bonsai-native-project-link-decision": "node scripts/prepare-notion-bonsai-native-project-link-decision.mjs",
     "verify:notion-bonsai-native-project-link-decision": "node scripts/verify-notion-bonsai-native-project-link-decision.mjs",

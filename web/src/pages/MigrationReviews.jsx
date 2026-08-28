@@ -10,6 +10,12 @@ const decisionStyles = {
   PENDING: 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300',
 };
 
+const taskDispositionKind = 'NOTION_BONSAI_TASK_DISPOSITION';
+
+function packetLabel(packet) {
+  return packet.kind === taskDispositionKind ? 'Task disposition review' : 'Project identity review';
+}
+
 function downloadJson(value, name) {
   const blob = new Blob([`${JSON.stringify(value, null, 2)}\n`], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -60,7 +66,9 @@ export default function MigrationReviews() {
     try {
       const parsed = JSON.parse(await file.text());
       const payload = { ...parsed, requestId: parsed.requestId || crypto.randomUUID() };
-      const response = await api.importProjectLinkReview(payload);
+      const response = parsed.format === 'ashbi-hub-task-disposition-review-import'
+        ? await api.importTaskDispositionReview(payload)
+        : await api.importProjectLinkReview(payload);
       await load();
       setSelectedId(response.packet.id);
     } catch (error) {
@@ -102,7 +110,8 @@ export default function MigrationReviews() {
     setActionError('');
     try {
       const record = await api.exportMigrationReviewDecision(selected.id);
-      downloadJson(record, `project-link-decision-${selected.id}.json`);
+      const prefix = selected.kind === taskDispositionKind ? 'task-disposition-decision' : 'project-link-decision';
+      downloadJson(record, `${prefix}-${selected.id}.json`);
     } catch (error) {
       setActionError(error.message || 'The decision record could not be exported.');
     } finally {
@@ -120,7 +129,7 @@ export default function MigrationReviews() {
           <div className="flex items-center gap-2 text-primary"><GitMerge size={20} /><span className="text-sm font-semibold uppercase tracking-wide">Migration control</span></div>
           <h1 className="mt-1 text-3xl font-bold text-foreground">Notion + Bonsai reviews</h1>
           <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            Review evidence-bound project identities. Decisions stay inside the Hub and do not edit Notion, Bonsai, projects, tasks, owners, invoices, or payments.
+            Review evidence-bound project identities and source-task dispositions. Decisions stay inside the Hub and do not edit Notion, Bonsai, projects, tasks, owners, invoices, or payments.
           </p>
         </div>
         <label className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground focus-within:ring-2 focus-within:ring-ring">
@@ -140,14 +149,14 @@ export default function MigrationReviews() {
         <section className="rounded-xl border border-dashed border-border bg-card p-10 text-center">
           <FileJson className="mx-auto text-muted-foreground" size={38} />
           <h2 className="mt-3 font-semibold text-foreground">No verified review packet imported</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Import the checksum-bound project-link review bundle. Importing it records evidence only.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Import a checksum-bound project-link or task-disposition review bundle. Importing it records evidence only.</p>
         </section>
       ) : (
         <div className="grid gap-6 lg:grid-cols-[18rem_1fr]">
           <aside className="space-y-2">
             {packets.map(packet => (
               <button key={packet.id} type="button" onClick={() => setSelectedId(packet.id)} className={`w-full rounded-xl border p-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${selected?.id === packet.id ? 'border-primary bg-primary/5' : 'border-border bg-card hover:bg-muted/40'}`}>
-                <p className="text-sm font-semibold text-foreground">Project identity review</p>
+                <p className="text-sm font-semibold text-foreground">{packetLabel(packet)}</p>
                 <p className="mt-1 text-xs text-muted-foreground">{new Date(packet.sourcePreparedAt).toLocaleString()}</p>
                 <p className="mt-3 text-xs text-muted-foreground">{packet.summary.approved} approved · {packet.summary.rejected} rejected · {packet.summary.pending} pending</p>
               </button>
@@ -158,7 +167,7 @@ export default function MigrationReviews() {
             <section className="rounded-xl border border-border bg-card p-5">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h2 className="text-lg font-semibold text-foreground">Logical project identities</h2>
+                  <h2 className="text-lg font-semibold text-foreground">{packetLabel(selected)}</h2>
                   <p className="mt-1 break-all text-xs text-muted-foreground">Source SHA-256: {selected.sourceReviewSha256}</p>
                 </div>
                 <Button variant="outline" onClick={exportDecision} loading={busyKey === 'export'} leftIcon={<Download size={16} />}>Export decision record</Button>
@@ -180,19 +189,32 @@ export default function MigrationReviews() {
                   <div className="min-w-0 space-y-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${decisionStyles[candidate.decision]}`}>{candidate.decision}</span>
-                      <span className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground">{candidate.tier}</span>
-                      <span className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground">{candidate.risk} risk</span>
+                      {candidate.tier && <span className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground">{candidate.tier}</span>}
+                      {candidate.risk && <span className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground">{candidate.risk} risk</span>}
+                      {candidate.sourceKind && <span className="rounded-full border border-border bg-muted px-2.5 py-1 text-xs text-muted-foreground">{candidate.sourceKind.replaceAll('_', ' ')}</span>}
                     </div>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <div className="rounded-lg border border-border p-3"><p className="text-xs font-semibold uppercase text-muted-foreground">Notion</p><p className="mt-1 font-medium text-foreground">{candidate.notionProject}</p><p className="text-xs text-muted-foreground">{candidate.notionStatus}</p></div>
-                      <div className="rounded-lg border border-border p-3"><p className="text-xs font-semibold uppercase text-muted-foreground">Bonsai</p><p className="mt-1 font-medium text-foreground">{candidate.bonsaiProject}</p><p className="text-xs text-muted-foreground">{candidate.bonsaiStatus}</p></div>
-                    </div>
-                    <p className="text-sm text-muted-foreground">{candidate.sourceEvidence}</p>
+                    {selected.kind === taskDispositionKind ? (
+                      <div className="rounded-lg border border-border p-3">
+                        <p className="text-xs font-semibold uppercase text-muted-foreground">Source task</p>
+                        <p className="mt-1 font-medium text-foreground">{candidate.title}</p>
+                        <p className="text-xs text-muted-foreground">{candidate.project} · {candidate.lifecycleState}</p>
+                        {candidate.owner && <p className="mt-1 text-xs text-muted-foreground">Recorded owner: {candidate.owner}</p>}
+                        {candidate.sourceReviewFields?.length > 0 && <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">Repair fields: {candidate.sourceReviewFields.join(', ')}</p>}
+                      </div>
+                    ) : (
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <div className="rounded-lg border border-border p-3"><p className="text-xs font-semibold uppercase text-muted-foreground">Notion</p><p className="mt-1 font-medium text-foreground">{candidate.notionProject}</p><p className="text-xs text-muted-foreground">{candidate.notionStatus}</p></div>
+                        <div className="rounded-lg border border-border p-3"><p className="text-xs font-semibold uppercase text-muted-foreground">Bonsai</p><p className="mt-1 font-medium text-foreground">{candidate.bonsaiProject}</p><p className="text-xs text-muted-foreground">{candidate.bonsaiStatus}</p></div>
+                      </div>
+                    )}
+                    {candidate.sourceEvidence && <p className="text-sm text-muted-foreground">{candidate.sourceEvidence}</p>}
                     <p className="text-xs text-muted-foreground">Recommendation: {candidate.recommendation?.replaceAll('_', ' ')} · {candidate.reasonCode?.replaceAll('_', ' ')}</p>
+                    {candidate.recommendedDisposition && <p className="text-xs font-medium text-foreground">Proposed disposition: {candidate.recommendedDisposition.replaceAll('_', ' ')}</p>}
+                    {candidate.prerequisites?.length > 0 && <p className="text-xs text-muted-foreground">Prerequisites: {candidate.prerequisites.join(' · ').replaceAll('_', ' ')}</p>}
                     {candidate.reviewedBy && <p className="text-xs text-muted-foreground">Last reviewed by {candidate.reviewedBy} on {new Date(candidate.decidedAt).toLocaleString()}</p>}
                   </div>
                   <div className="flex shrink-0 gap-2">
-                    <Button onClick={() => decide(candidate, 'APPROVED')} loading={busyKey === candidate.candidateId} leftIcon={<Check size={16} />}>Approve identity</Button>
+                    <Button onClick={() => decide(candidate, 'APPROVED')} loading={busyKey === candidate.candidateId} leftIcon={<Check size={16} />}>{selected.kind === taskDispositionKind ? 'Approve recommendation' : 'Approve identity'}</Button>
                     <Button variant="destructive" onClick={() => decide(candidate, 'REJECTED')} disabled={Boolean(busyKey)} leftIcon={<X size={16} />}>Reject</Button>
                   </div>
                 </div>

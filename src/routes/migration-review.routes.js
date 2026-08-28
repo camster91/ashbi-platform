@@ -1,13 +1,15 @@
 import {
   getMigrationReviewPacket,
   importProjectLinkReviewPacket,
+  importTaskDispositionReviewPacket,
   listMigrationReviewPackets,
   recordMigrationReviewDecision,
-  exportProjectLinkDecision,
+  exportMigrationReviewDecision,
 } from '../services/migrationReview.service.js';
 import {
   migrationReviewDecisionSchema,
   migrationReviewImportSchema,
+  migrationTaskDispositionReviewImportSchema,
   validateBody,
 } from '../validators/schemas.js';
 
@@ -48,6 +50,23 @@ export default async function migrationReviewRoutes(fastify) {
     }
   });
 
+  fastify.post('/task-dispositions/import', {
+    ...adminOnly,
+    preHandler: [validateBody(migrationTaskDispositionReviewImportSchema)],
+  }, async (request, reply) => {
+    try {
+      const result = await importTaskDispositionReviewPacket({
+        prismaClient: request.prisma,
+        input: request.body,
+        importedBy: request.user.email,
+      });
+      return reply.status(result.replayed ? 200 : 201).send(result);
+    } catch (error) {
+      request.log.error({ error: error.message }, 'Task-disposition migration review import failed');
+      return sendError(reply, error);
+    }
+  });
+
   fastify.post('/:id/decisions/:candidateId', {
     ...adminOnly,
     preHandler: [validateBody(migrationReviewDecisionSchema)],
@@ -72,9 +91,9 @@ export default async function migrationReviewRoutes(fastify) {
 
   fastify.get('/:id/export', adminOnly, async (request, reply) => {
     try {
-      const record = await exportProjectLinkDecision({ prismaClient: request.prisma, packetId: request.params.id });
+      const record = await exportMigrationReviewDecision({ prismaClient: request.prisma, packetId: request.params.id });
       if (!record) return reply.status(404).send({ error: 'Migration review packet not found' });
-      reply.header('Content-Disposition', `attachment; filename="project-link-decision-${request.params.id}.json"`);
+      reply.header('Content-Disposition', `attachment; filename="migration-review-decision-${request.params.id}.json"`);
       return record;
     } catch (error) {
       request.log.error({ error: error.message }, 'Migration review export failed');

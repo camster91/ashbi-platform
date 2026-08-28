@@ -1865,6 +1865,25 @@ export const migrationReviewImportSchema = z.object({
   }
 });
 
+export const migrationTaskDispositionReviewImportSchema = z.object({
+  format: z.literal('ashbi-hub-task-disposition-review-import').optional(),
+  version: z.literal(1).optional(),
+  requestId: uuid,
+  review: evidenceObject,
+  reviewSha256: z.string().regex(/^[a-f0-9]{64}$/i),
+  taskLinkDecision: evidenceObject,
+  taskLinkDecisionSha256: z.string().regex(/^[a-f0-9]{64}$/i),
+  mappingDecision: evidenceObject.nullable().optional(),
+  mappingDecisionSha256: z.string().regex(/^[a-f0-9]{64}$/i).nullable().optional(),
+  dispositionDecision: evidenceObject,
+  dispositionDecisionSha256: z.string().regex(/^[a-f0-9]{64}$/i),
+  reviewBrief: evidenceObject,
+}).strict().superRefine((value, context) => {
+  if (Boolean(value.mappingDecision) !== Boolean(value.mappingDecisionSha256)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ['mappingDecisionSha256'], message: 'Mapping evidence and checksum must be supplied together' });
+  }
+});
+
 export const migrationReviewDecisionSchema = z.object({
   requestId: uuid,
   decision: z.enum(['APPROVED', 'REJECTED']),
