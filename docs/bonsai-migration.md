@@ -36,6 +36,15 @@ npm run prepare:bonsai-active-project-triage -- --bonsai-projects <bonsai-projec
 
 The triage packet classifies every active project as an exact-link review, task-evidenced link review, suggested-link review, active project with tasks but no Notion link, or active project without current task evidence. It preserves stable Bonsai IDs, project groups, current task UUIDs and states, duplicate-title evidence, and the strongest bounded Notion evidence. A project without current tasks is not called stale or closure-ready. Every record explicitly retains pending invoice, payment, contract, and time-entry checks, and the packet grants no authority to create, link, move, complete, archive, delete, or bill anything. The command creates one owner-only file and refuses overwrite.
 
+Capture a sanitized, complete invoice and time-entry index before resolving the financial gates. The retained index excludes client email, invoice access tokens/URLs, invoice line descriptions, invoice titles, and time-entry notes. Verify both files, then enrich the exact active-project triage packet:
+
+```text
+npm run verify:bonsai-financial-index -- <bonsai-invoice-index.json> <bonsai-time-entry-index.json>
+npm run prepare:bonsai-active-project-financial-review -- --active-project-triage <triage.json> --invoice-index <bonsai-invoice-index.json> --time-entry-index <bonsai-time-entry-index.json> --prepared-at <ISO> --output <new-financial-review.json>
+```
+
+The verifier requires complete pagination, unique source identities, valid dates/currencies/amounts, visible time billing fields, and the declared privacy omissions. Projectless financial rows remain linkage blockers without invalidating an otherwise complete capture. The review separates totals by currency, preserves invoice statuses, exposes unbilled time by project, and reports source evidence outside active projects. Invoice status is not treated as direct payment or settlement proof. A complete contract source is still required. Therefore every project remains closure-blocked, even when all observed invoices are paid and no unbilled time is present. The commands perform no provider, invoice, payment, time, contract, project, or Hub mutation.
+
 The Companies export is a mixed CRM connection population, not a client list. The importer accepts its observed `Name`, `Email`, `Domain`, and related profile columns only through `--connections-csv`. It promotes a connection to a client contact only when the row has an exact operational client name from the project/invoice sources or an exact invoice email. Unrelated leads, vendors, and domains remain outside the client import; a row that points to different clients by name and email, conflicting duplicate emails, or an ambiguous primary contact remains an unresolved finding. The untouched timestamped filename, row count, headers, and checksum remain in the source fingerprint. A legacy `clients.csv` is still understood for recovery of older evidence, but it is not the current Bonsai contract.
 
 ## Dry run
