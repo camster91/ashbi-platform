@@ -57,6 +57,8 @@
     "verify:notion-operating-snapshot": "node scripts/verify-notion-operating-snapshot.mjs",
     "compare:notion-bonsai-tasks": "node scripts/compare-notion-bonsai-tasks.mjs",
     "prepare:notion-bonsai-task-review": "node scripts/prepare-notion-bonsai-task-review.mjs",
+    "prepare:notion-bonsai-mapping-decision": "node scripts/prepare-notion-bonsai-mapping-decision.mjs",
+    "verify:notion-bonsai-mapping-decision": "node scripts/verify-notion-bonsai-mapping-decision.mjs",
     "test:all": "node scripts/run-node-tests.mjs src/tests/unit src/tests/integration",
     "test:e2e:setup": "bash tests/e2e/setup.sh",
     "test:e2e:teardown": "bash tests/e2e/teardown.sh",

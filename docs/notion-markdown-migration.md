@@ -32,6 +32,15 @@ npm run prepare:notion-bonsai-task-review -- --notion <notion-projects-tasks.jso
 
 The packet keeps exact task links separate from project-alias candidates, near-title candidates, source-only tasks, and malformed/projectless Bonsai records. Near-title similarity is review evidence only and is never applied. Bonsai assignees are summarized as source evidence; they are not silently copied to Notion or the Hub. The command creates one owner-only file, refuses overwrite, and performs no external or database writes.
 
+Prepare the pending project-alias and near-title decision batch from that exact packet:
+
+```text
+npm run prepare:notion-bonsai-mapping-decision -- --review <review.json> --prepared-at <ISO> --output <new-pending-decision.json>
+npm run verify:notion-bonsai-mapping-decision -- <review.json> <decision.json>
+```
+
+The pending record is checksum-bound to the review packet and both source snapshots. It cannot authorize owner assignments, source-only dispositions, migration writes, or financial cutover. After an explicit human decision, a separate immutable finalized record may be created with `--approve-all` or `--reject-all`, the approver, decision time, evidence reference, and `--confirm`. That command only records the decision; it still does not apply mappings or change an external system.
+
 ## Supported input
 
 - UTF-8 `.md` pages from a Notion export;
