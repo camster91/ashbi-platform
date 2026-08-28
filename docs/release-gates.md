@@ -1,9 +1,12 @@
 # Required release gates
 
 `.github/workflows/release-gates.yml` is the canonical release contract. Pull
-requests invoke it through `Required release gates`; production and staging
-deploy workflows invoke the same reusable workflow and declare
-`needs: release-gates`, so deployment cannot begin after a failed gate.
+requests and approved manual workflow dispatches invoke it through `Required
+release gates`. GitHub Actions does not deploy staging or production; the sole
+deployment controller is `scripts/deploy-vps-direct.sh`. Before any manual VPS
+deployment, the operator must retain the passing Required release-gates run URL,
+its exact full commit SHA, and the immutable deployment artifact identifiers.
+An Actions environment setting does not gate the direct-VPS script by itself.
 
 The canonical gate owns these blocking checks:
 
@@ -20,13 +23,18 @@ The canonical gate owns these blocking checks:
 and any `continue-on-error: true` in a workflow. Its unit test also injects
 representative failures and proves the contract fails closed.
 
-Repository administrators must protect `main` and require these three checks
-(the exact names emitted by the first pull-request run):
+As verified through the GitHub API on 2026-08-28, `main` is protected, requires
+the branch to be current, enforces the policy for administrators, requires
+conversation resolution, blocks force-push and deletion, and requires these
+three checks:
 
 1. `Required release gates / Type, lint, unit, integration, and build`
 2. `Required release gates / Browser and accessibility smoke`
 3. `Required release gates / Full-stack E2E smoke`
 
-The `production` and `staging` GitHub environments must restrict deployment to
-`main`. Production should require an authorized reviewer. These settings live
-outside Git and must be verified in GitHub after this workflow change merges.
+The `production` and `staging` GitHub environments currently restrict deployment
+to protected branches. Neither has a required reviewer, and no current workflow
+references either environment. If an Actions deployment controller is ever
+introduced, production must gain an authorized reviewer and the workflow must
+use that environment. For the current direct-VPS controller, the signed-off
+deployment handoff is the human approval boundary.
