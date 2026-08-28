@@ -69,6 +69,11 @@ export function assertApprovedNotionDryRun(approved, current) {
   if (approved.organization?.id !== current.organizationId || approved.project?.id !== current.projectId) {
     throw new Error('Approved Notion report destination does not match');
   }
+  if (approved.sandboxTarget?.environmentKind !== 'sandbox'
+    || !approved.sandboxTarget?.targetFingerprint
+    || approved.sandboxTarget.targetFingerprint !== current.targetFingerprint) {
+    throw new Error('Approved Notion report sandbox target does not match');
+  }
   if (approved.complete !== true || approved.errors?.length !== 0) {
     throw new Error('Approved Notion dry run is incomplete or has unresolved findings');
   }

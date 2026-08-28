@@ -51,10 +51,12 @@ test('confirmed Notion import requires exact approved source, plan, tenant, and 
   };
   const sourceFingerprint = 'source';
   const planFingerprint = fingerprintNotionPlan({ sourceFingerprint, report });
-  const approved = { ...report, sourceFingerprint, planFingerprint };
-  const current = { organizationId: 'org-a', projectId: 'project-a', sourceFingerprint, planFingerprint };
+  const sandboxTarget = { environmentKind: 'sandbox', targetFingerprint: 'target-a' };
+  const approved = { ...report, sandboxTarget, sourceFingerprint, planFingerprint };
+  const current = { organizationId: 'org-a', projectId: 'project-a', sourceFingerprint, planFingerprint, targetFingerprint: 'target-a' };
   assert.equal(assertApprovedNotionDryRun(approved, current), true);
   assert.throws(() => assertApprovedNotionDryRun(approved, { ...current, projectId: 'other' }), /destination/i);
   assert.throws(() => assertApprovedNotionDryRun(approved, { ...current, sourceFingerprint: 'changed' }), /export changed/i);
   assert.throws(() => assertApprovedNotionDryRun(approved, { ...current, planFingerprint: 'changed' }), /plan changed/i);
+  assert.throws(() => assertApprovedNotionDryRun(approved, { ...current, targetFingerprint: 'target-b' }), /sandbox target/i);
 });

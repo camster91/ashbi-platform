@@ -82,6 +82,17 @@ The Companies export is a mixed CRM connection population, not a client list. Th
 
 ## Dry run
 
+Both the dry run and confirmed import require `ASHBI_SANDBOX=true`, an explicit sandbox-labelled `ASHBI_SANDBOX_ENVIRONMENT_ID`, `APP_URL`, and `DATABASE_URL`, plus `ASHBI_SANDBOX_ORGANIZATION_ID` exactly matching `--organization-id`. The report retains only a redacted target fingerprint; database credentials, hosts, URLs, and identifiers are not printed by this gate. The fingerprint binds the reviewed dry run to the exact application, database, environment, and organization target while allowing credential rotation. The confirmed run additionally requires a verified `ASHBI_SANDBOX_BACKUP_REFERENCE` and Cameron's exact action-time `ASHBI_SANDBOX_APPROVAL_REFERENCE`.
+
+Preflight the destination without opening a database connection or reading migration sources:
+
+```text
+npm run check:migration-sandbox-target -- --organization-id <sandbox-org-id>
+npm run check:migration-sandbox-target -- --organization-id <sandbox-org-id> --confirm
+```
+
+The first command checks dry-run isolation. The second also checks the backup and action-time approval references required for a confirmed mutation. Both output only generic checks and the redacted fingerprint.
+
 ```text
 node scripts/import-bonsai-full.js --dry-run --organization-id <sandbox-org-id> --connections-csv <connection-export.csv> --projects-csv <project-export.csv> --tasks-csv <task-export.csv> --tasks-json <bonsai-tasks.json> --invoices-csv <invoice-export.csv> --time-entries-csv <time-export.csv> --expenses-csv <expense-export.csv> --addresses-csv <addresses.csv> --summary-file <new-dry-run-report.json>
 ```
@@ -96,7 +107,7 @@ After an approved backup and human review of a clean dry run, use the exact unch
 node scripts/import-bonsai-full.js --confirm --organization-id <sandbox-org-id> --connections-csv <connection-export.csv> --projects-csv <project-export.csv> --tasks-csv <task-export.csv> --tasks-json <bonsai-tasks.json> --invoices-csv <invoice-export.csv> --time-entries-csv <time-export.csv> --expenses-csv <expense-export.csv> --addresses-csv <addresses.csv> --approved-summary <reviewed-dry-run-report.json> --summary-file <new-live-report.json>
 ```
 
-The confirmed import refuses to start without the reviewed report. It rolls back if the tenant, CSV fingerprint, destination plan, required inventory, or reconciliation findings differ from the approved dry run. Existing Hub clients, projects, and invoices are compared and never automatically overwritten. A matching record with different evidence is a manual reconciliation finding.
+The confirmed import refuses to start without the reviewed report. It rolls back if the sandbox target fingerprint, tenant, CSV fingerprint, destination plan, required inventory, or reconciliation findings differ from the approved dry run. Existing Hub clients, projects, and invoices are compared and never automatically overwritten. A matching record with different evidence is a manual reconciliation finding. This path is deliberately sandbox-only; production promotion remains a separate post-evidence and explicit cutover gate.
 
 ## Parallel-run exit
 

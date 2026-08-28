@@ -34,6 +34,7 @@ import { assertApprovedBonsaiDryRun, fingerprintBonsaiPlan, fingerprintInputInve
 import { parseBonsaiMoney, parseBonsaiDecimal } from '../src/services/bonsaiCsvValues.service.js';
 import { mapBonsaiConnections } from '../src/services/bonsaiConnectionMapper.service.js';
 import { mapBonsaiHistoricalTasks } from '../src/services/bonsaiHistoricalTaskMapper.service.js';
+import { assessMigrationSandboxTarget } from '../src/services/migrationSandboxTarget.service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const prisma = new PrismaClient({
@@ -86,6 +87,21 @@ if (!TASK_SNAPSHOT_FILE) {
 }
 if (!TASK_EXPORT_FILE) {
   console.error('Refusing import without --tasks-csv pointing to the native Bonsai historical task export.');
+  process.exit(2);
+}
+
+const sandboxTarget = assessMigrationSandboxTarget({
+  environment: process.env,
+  organizationId: ORGANIZATION_ID,
+  requireMutationAuthorization: CONFIRM_LIVE,
+});
+if (!sandboxTarget.ready) {
+  console.error(JSON.stringify({
+    ready: false,
+    environmentKind: sandboxTarget.environmentKind,
+    checks: sandboxTarget.checks,
+  }, null, 2));
+  console.error('Refusing Bonsai import because the selected destination is not a fully bound sandbox target.');
   process.exit(2);
 }
 
@@ -1343,7 +1359,12 @@ async function runImport(prisma) {
   const planFingerprint = fingerprintBonsaiPlan({ sourceFingerprint, stats });
   if (!DRY_RUN) {
     const approved = JSON.parse(fs.readFileSync(path.resolve(APPROVED_SUMMARY_FILE), 'utf8'));
-    assertApprovedBonsaiDryRun(approved, { organizationId: ORGANIZATION_ID, sourceFingerprint, planFingerprint });
+    assertApprovedBonsaiDryRun(approved, {
+      organizationId: ORGANIZATION_ID,
+      sourceFingerprint,
+      planFingerprint,
+      targetFingerprint: sandboxTarget.targetFingerprint,
+    });
   }
 
   // ============================================================
@@ -1376,6 +1397,10 @@ async function runImport(prisma) {
   const reconciliation = {
     generatedAt: new Date().toISOString(),
     mode: DRY_RUN ? 'dry-run' : 'live',
+    sandboxTarget: {
+      environmentKind: sandboxTarget.environmentKind,
+      targetFingerprint: sandboxTarget.targetFingerprint,
+    },
     organization: { id: organization.id, name: organization.name },
     csvDir: CSV_DIR,
     inputInventory,

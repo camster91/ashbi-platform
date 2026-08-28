@@ -25,6 +25,8 @@ test('Bonsai full importer requires an explicit tenant and scopes imported recor
   const expenseLookup = source.slice(source.indexOf('const existing = await prisma.expense.findFirst'), source.indexOf('await prisma.expense.create'));
   assert.match(expenseLookup, /organizationId: ORGANIZATION_ID/);
   assert.match(source, /Organization not found/);
+  assert.match(source, /assessMigrationSandboxTarget/);
+  assert.match(source, /sandboxTarget\.targetFingerprint/);
   assert.doesNotMatch(source, /password:\s*'imported-no-login'/);
   assert.match(source, /mappedToImporter/);
 });
@@ -34,6 +36,7 @@ test('confirmed Bonsai imports are atomic and reject unresolved reconciliation e
   assert.match(source, /prisma\.\$transaction\(/);
   assert.match(source, /Live import cannot complete with unresolved reconciliation findings/);
   assert.match(source, /if \(!DRY_RUN && stats\.errors\.length > 0\)/);
+  assert.match(source, /requireMutationAuthorization: CONFIRM_LIVE/);
 });
 
 test('Bonsai Connections export promotes only evidence-linked clients and preserves all mapped contacts', async () => {

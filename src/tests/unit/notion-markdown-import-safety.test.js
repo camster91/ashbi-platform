@@ -13,6 +13,9 @@ test('Notion Markdown importer is tenant-scoped and dry-run-first', async () => 
   assert.match(source, /fs\.open\(summaryTarget, 'wx', 0o600\)/);
   assert.match(source, /--approved-summary/);
   assert.match(source, /assertApprovedNotionDryRun/);
+  assert.match(source, /assessMigrationSandboxTarget/);
+  assert.match(source, /requireMutationAuthorization: !dryRun/);
+  assert.match(source, /sandboxTarget\.targetFingerprint/);
   assert.match(source, /sourceFingerprint/);
   assert.match(source, /planFingerprint/);
   assert.match(source, /state: 'RESERVED'/);

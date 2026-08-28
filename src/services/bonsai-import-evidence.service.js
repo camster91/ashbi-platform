@@ -31,6 +31,11 @@ export function missingRequiredCsvHeaders(actualHeaders = [], requiredHeaders = 
 export function assertApprovedBonsaiDryRun(approved, current) {
   if (!approved || approved.mode !== 'dry-run') throw new Error('Approved Bonsai evidence must be a dry-run report');
   if (approved.organization?.id !== current.organizationId) throw new Error('Approved Bonsai report organization does not match');
+  if (approved.sandboxTarget?.environmentKind !== 'sandbox'
+    || !approved.sandboxTarget?.targetFingerprint
+    || approved.sandboxTarget.targetFingerprint !== current.targetFingerprint) {
+    throw new Error('Approved Bonsai report sandbox target does not match');
+  }
   if (approved.complete !== true || approved.stats?.errors?.length !== 0) {
     throw new Error('Approved Bonsai dry run is incomplete or has unresolved findings');
   }

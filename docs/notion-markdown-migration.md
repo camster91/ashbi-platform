@@ -4,6 +4,10 @@ Ashbi supports a **one-way, controlled import** of a selected Notion Markdown
 export into one existing Ashbi project. It is not a live Notion sync and does
 not authorize writing back to Notion.
 
+The importer is sandbox-only. Both dry-run and confirmed execution require `ASHBI_SANDBOX=true`, explicit sandbox-labelled environment, application, and database targets, and `ASHBI_SANDBOX_ORGANIZATION_ID` exactly matching `--organization-id`. Reports bind the reviewed dry run to a redacted fingerprint of that environment, application, database, and organization without retaining credentials. Confirmation also requires a verified sandbox backup reference and Cameron's exact action-time approval reference. Production promotion remains a separate post-evidence gate.
+
+Use `npm run check:migration-sandbox-target -- --organization-id <sandbox-org-id>` before a dry run and repeat it with `--confirm` immediately before confirmation. This preflight does not connect to the database or read either migration source.
+
 ## Current Projects and Tasks inventory
 
 The selected Markdown import does not prove that Ashbi's operating Projects and Tasks were inventoried. Capture the current `Projects & Tasks` hub through the authenticated Notion connector and retain one immutable JSON snapshot containing the complete Projects and Tasks queries. The current source identities are deliberately distinct from the data sources titled `Archive — Projects (legacy automation)` and `Archive — Tasks (legacy automation)`.

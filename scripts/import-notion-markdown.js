@@ -11,6 +11,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { assertApprovedNotionDryRun, buildNotionMarkdownImportPlan, fingerprintNotionExport, fingerprintNotionPlan } from '../src/services/notion-markdown-import.service.js';
+import { assessMigrationSandboxTarget } from '../src/services/migrationSandboxTarget.service.js';
 
 const { PrismaClient } = prismaPkg;
 const option = (name) => { const index = process.argv.indexOf(name); return index >= 0 ? process.argv[index + 1] : null; };
@@ -27,6 +28,21 @@ if (!organizationId || !projectId || !inputDir || !summaryFile) {
 }
 if (!dryRun && !approvedSummaryFile) {
   console.error('Refusing confirmed Notion import without --approved-summary.');
+  process.exit(2);
+}
+
+const sandboxTarget = assessMigrationSandboxTarget({
+  environment: process.env,
+  organizationId,
+  requireMutationAuthorization: !dryRun,
+});
+if (!sandboxTarget.ready) {
+  console.error(JSON.stringify({
+    ready: false,
+    environmentKind: sandboxTarget.environmentKind,
+    checks: sandboxTarget.checks,
+  }, null, 2));
+  console.error('Refusing Notion import because the selected destination is not a fully bound sandbox target.');
   process.exit(2);
 }
 
@@ -97,6 +113,10 @@ async function main() {
     version: 3,
     generatedAt: new Date().toISOString(),
     mode: dryRun ? 'dry-run' : 'live',
+    sandboxTarget: {
+      environmentKind: sandboxTarget.environmentKind,
+      targetFingerprint: sandboxTarget.targetFingerprint,
+    },
     organization: { id: organization.id, name: organization.name },
     project: { id: project.id, name: project.name },
     input: { directory: resolvedInput, files: fileEvidence.length, markdownFiles: payloads.length, unsupportedFiles },
@@ -188,6 +208,7 @@ async function main() {
       const approved = JSON.parse(await fs.readFile(path.resolve(approvedSummaryFile), 'utf8'));
       assertApprovedNotionDryRun(approved, {
         organizationId, projectId, sourceFingerprint, planFingerprint: report.planFingerprint,
+        targetFingerprint: sandboxTarget.targetFingerprint,
       });
     });
   }

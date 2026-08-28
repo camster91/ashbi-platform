@@ -24,12 +24,14 @@ test('Bonsai CSV schema checks fail closed on renamed or missing columns', () =>
 test('confirmed import requires the exact clean dry-run source and tenant', () => {
   const sourceFingerprint = fingerprintInputInventory(inventory);
   const planFingerprint = fingerprintBonsaiPlan({ sourceFingerprint, stats: { errors: [] } });
-  const approved = { mode: 'dry-run', complete: true, organization: { id: 'org-a' }, stats: { errors: [] }, sourceFingerprint, planFingerprint };
-  const current = { organizationId: 'org-a', sourceFingerprint, planFingerprint };
+  const sandboxTarget = { environmentKind: 'sandbox', targetFingerprint: 'target-a' };
+  const approved = { mode: 'dry-run', complete: true, organization: { id: 'org-a' }, sandboxTarget, stats: { errors: [] }, sourceFingerprint, planFingerprint };
+  const current = { organizationId: 'org-a', sourceFingerprint, planFingerprint, targetFingerprint: 'target-a' };
   assert.equal(assertApprovedBonsaiDryRun(approved, current), true);
   assert.throws(() => assertApprovedBonsaiDryRun(approved, { ...current, organizationId: 'org-b' }), /organization/i);
   assert.throws(() => assertApprovedBonsaiDryRun(approved, { ...current, sourceFingerprint: 'changed' }), /source changed/i);
   assert.throws(() => assertApprovedBonsaiDryRun(approved, { ...current, planFingerprint: 'changed' }), /plan changed/i);
+  assert.throws(() => assertApprovedBonsaiDryRun(approved, { ...current, targetFingerprint: 'target-b' }), /sandbox target/i);
   assert.throws(() => assertApprovedBonsaiDryRun({ ...approved, stats: { errors: ['conflict'] } }, current), /unresolved/i);
 });
 
