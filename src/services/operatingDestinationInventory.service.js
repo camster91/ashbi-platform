@@ -161,4 +161,42 @@ export function buildOperatingDestinationInventory(input) {
   return record;
 }
 
+export async function captureOperatingDestinationInventory({ prisma, organizationId, capturedAt }) {
+  const tenant = text(organizationId);
+  if (!prisma || !tenant) throw new Error('A Prisma transaction and organization ID are required.');
+  const organization = await prisma.organization.findUnique({
+    where: { id: tenant },
+    select: { id: true },
+  });
+  if (!organization) throw new Error('The bound sandbox organization does not exist.');
+  const clients = await prisma.client.findMany({
+    where: { organizationId: tenant, deletedAt: null },
+    select: { id: true, organizationId: true },
+  });
+  const projects = await prisma.project.findMany({
+    where: { organizationId: tenant, deletedAt: null },
+    select: { id: true, organizationId: true, clientId: true, name: true, status: true },
+  });
+  const taskRows = await prisma.task.findMany({
+    where: { deletedAt: null, project: { organizationId: tenant, deletedAt: null } },
+    select: { id: true, projectId: true, title: true, status: true },
+  });
+  const sourceRecords = await prisma.operatingSourceRecord.findMany({
+    where: { organizationId: tenant },
+    select: {
+      organizationId: true, sourceSystem: true, entityType: true, sourceId: true,
+      destinationId: true, outcome: true, sourceFingerprint: true,
+      decisionCandidateId: true, decisionFingerprint: true,
+    },
+  });
+  return buildOperatingDestinationInventory({
+    organizationId: tenant,
+    capturedAt,
+    clients,
+    projects,
+    tasks: taskRows.map(row => ({ ...row, organizationId: tenant })),
+    sourceRecords,
+  });
+}
+
 export { FORMAT as OPERATING_DESTINATION_INVENTORY_FORMAT };

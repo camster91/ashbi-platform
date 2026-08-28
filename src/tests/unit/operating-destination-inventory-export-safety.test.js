@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import test from 'node:test';
 
 const source = fs.readFileSync('scripts/export-operating-destination-inventory.mjs', 'utf8');
+const service = fs.readFileSync('src/services/operatingDestinationInventory.service.js', 'utf8');
 
 test('destination inventory exporter is sandbox-bound and creates immutable owner-only evidence', () => {
   assert.match(source, /assessMigrationSandboxTarget/);
@@ -13,12 +14,13 @@ test('destination inventory exporter is sandbox-bound and creates immutable owne
 });
 
 test('destination inventory exporter uses tenant filters and bounded identity selects', () => {
-  assert.match(source, /where: \{ organizationId, deletedAt: null \}/);
-  assert.match(source, /project: \{ organizationId, deletedAt: null \}/);
-  assert.match(source, /select: \{ id: true, organizationId: true \}/);
-  assert.match(source, /select: \{ id: true, organizationId: true, clientId: true, name: true, status: true \}/);
-  assert.match(source, /select: \{ id: true, projectId: true, title: true, status: true \}/);
+  assert.match(source, /captureOperatingDestinationInventory/);
+  assert.match(service, /where: \{ organizationId: tenant, deletedAt: null \}/);
+  assert.match(service, /project: \{ organizationId: tenant, deletedAt: null \}/);
+  assert.match(service, /select: \{ id: true, organizationId: true \}/);
+  assert.match(service, /select: \{ id: true, organizationId: true, clientId: true, name: true, status: true \}/);
+  assert.match(service, /select: \{ id: true, projectId: true, title: true, status: true \}/);
   for (const forbidden of ['email: true', 'contactPerson: true', 'description: true', 'content: true', 'budget: true', 'credentials: true', 'invoice']) {
-    assert.doesNotMatch(source, new RegExp(forbidden));
+    assert.doesNotMatch(service, new RegExp(forbidden));
   }
 });
