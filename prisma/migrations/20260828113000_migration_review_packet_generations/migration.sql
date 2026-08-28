@@ -24,8 +24,8 @@ CHECK ("evidenceFingerprint" ~ '^[0-9a-f]{64}:[0-9a-f]{64}:(-|[0-9a-f]{64})$');
 
 DROP INDEX "migration_review_packets_organizationId_kind_sourceReviewSha256_key";
 
-CREATE UNIQUE INDEX "migration_review_packets_organizationId_kind_evidenceFingerprint_key"
+CREATE UNIQUE INDEX "migration_review_packets_organizationId_kind_evidenceFinger_key"
 ON "migration_review_packets"("organizationId", "kind", "evidenceFingerprint");
 
-CREATE INDEX "migration_review_packets_organizationId_kind_sourceReviewSha256_idx"
+CREATE INDEX "migration_review_packets_organizationId_kind_sourceReviewSh_idx"
 ON "migration_review_packets"("organizationId", "kind", "sourceReviewSha256");

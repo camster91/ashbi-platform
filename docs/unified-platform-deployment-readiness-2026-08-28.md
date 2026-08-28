@@ -21,7 +21,7 @@
 | Performance | Warning | Local frontend budgets and three mobile plus three desktop Lighthouse runs pass; the candidate is not deployed for target performance evidence. |
 | SEO/public acquisition | Warning | Public acquisition contracts and local routes exist; Ashbi.ca-to-Hub target configuration and a controlled real target inquiry remain pending. |
 | Core functionality | Fail | Local unit, integration, frontend, build, and migration-review checks pass, but the target commercial and delivery journey has not run. |
-| Infrastructure and recovery | Fail | Rollback and backup controls are code-present; no named isolated staging target, complete pgvector migration run, target backup/restore rehearsal, or immutable candidate deployment exists. |
+| Infrastructure and recovery | Fail | The complete local PostgreSQL 16/pgvector chain now applies with zero drift, but no named isolated staging target, target backup/restore rehearsal, immutable candidate deployment, or target rollback proof exists. |
 | Analytics and growth | Fail | Attribution and weekly-review workflows are code-present; the required 30-day baseline and four consecutive completed reviews do not exist. |
 | Migration and cutover | Fail | Notion and Bonsai evidence remains pending, unimported, and unresolved; no parallel run or cutover approval exists. |
 
@@ -41,13 +41,14 @@
 - Prisma schema validation and client generation: pass with the patched dependency graph.
 - Recursive Deepmerge trigger: handled without stack exhaustion.
 - Raw HTML and multipart email parsing regression tests: pass.
-- Backend unit suite: 940 passed.
-- Backend combined suite on the patched graph: 950 passed, four environment-dependent skips, zero failures; the subsequently added email-parser and release-contract tests pass separately.
+- Backend unit suite: 947 passed.
+- Backend unit and integration suite against the isolated PostgreSQL/pgvector rehearsal database: 964 passed, zero skipped, zero failures.
 - Frontend suite: 517 passed.
 - Backend/frontend lint and backend type check: pass.
 - Production build and frontend performance budgets: pass.
 - Lighthouse: three mobile and three desktop runs pass configured thresholds.
 - Release-gate contract: pass locally, including exact Prisma migration deploy, schema-drift rejection, and both production lockfile audits.
+- Complete local migration execution: all 39 committed migrations, including the 22 candidate migrations, applied on PostgreSQL 16.14 with pgvector 0.8.3; zero unsuccessful rows and no migration-to-schema drift. See [the migration rehearsal](unified-platform-migration-rehearsal-2026-08-28.md).
 
 Local proof does not establish hosted CI, target deployment, target migration, provider delivery, production payment, accessibility, or reconciliation success.
 

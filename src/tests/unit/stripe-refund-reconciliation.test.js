@@ -282,6 +282,18 @@ test('refund persistence is currency-safe, tenant-scoped, and its event history 
   assert.match(migration, /Invoice refund event rows are append-only/);
 });
 
+test('refund migration stores the signed provider status on each append-only event', () => {
+  const migration = readFileSync(
+    'prisma/migrations/20260827007000_stripe_refund_reconciliation/migration.sql',
+    'utf8',
+  );
+  const refundTable = migration.match(/CREATE TABLE "invoice_refunds" \([\s\S]*?\n\);/)?.[0] || '';
+  const eventTable = migration.match(/CREATE TABLE "invoice_refund_events" \([\s\S]*?\n\);/)?.[0] || '';
+
+  assert.doesNotMatch(refundTable, /"signedStatus" TEXT NOT NULL/);
+  assert.match(eventTable, /"signedStatus" TEXT NOT NULL/);
+});
+
 test('the canonical signed Stripe webhook handles current refund lifecycle events', () => {
   const webhookRoutes = readFileSync('src/routes/webhook.routes.js', 'utf8');
   assert.match(webhookRoutes, /reconcileRefundEvent/);

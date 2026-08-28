@@ -21,10 +21,10 @@ CREATE TABLE "operating_source_records" (
     CONSTRAINT "operating_source_records_decisionFingerprint_check" CHECK ("decisionFingerprint" IS NULL OR "decisionFingerprint" ~ '^[0-9a-f]{64}$')
 );
 
-CREATE UNIQUE INDEX "operating_source_records_organizationId_sourceSystem_entityType_sourceId_key"
+CREATE UNIQUE INDEX "operating_source_records_organizationId_sourceSystem_entity_key"
 ON "operating_source_records"("organizationId", "sourceSystem", "entityType", "sourceId");
 
-CREATE INDEX "operating_source_records_organizationId_entityType_destinationId_idx"
+CREATE INDEX "operating_source_records_organizationId_entityType_destinat_idx"
 ON "operating_source_records"("organizationId", "entityType", "destinationId");
 
 CREATE INDEX "operating_source_records_organizationId_outcome_idx"

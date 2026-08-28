@@ -63,6 +63,9 @@ test('real database enforces one soft-delete policy across every classified mode
     await seedPair('task',
       { projectId: activeProject.id, title: `Active task ${suffix}` },
       { projectId: activeProject.id, title: `Deleted task ${suffix}` });
+    await seedPair('milestone',
+      { projectId: activeProject.id, name: `Active milestone ${suffix}`, dueDate: new Date() },
+      { projectId: activeProject.id, name: `Deleted milestone ${suffix}`, dueDate: new Date() });
     await seedPair('note',
       { projectId: activeProject.id, authorId: user.id, title: `Active note ${suffix}`, content: 'active' },
       { projectId: activeProject.id, authorId: user.id, title: `Deleted note ${suffix}`, content: 'deleted' });
@@ -138,7 +141,7 @@ test('real database enforces one soft-delete policy across every classified mode
   } finally {
     if (raw) {
       const deleteIds = async (model) => ids[model]?.length && raw[model].deleteMany({ where: { id: { in: ids[model] } } });
-      for (const model of ['timeEntry', 'note', 'task', 'expense', 'estimate', 'invoice', 'contract', 'proposal', 'retainerPlan']) {
+      for (const model of ['timeEntry', 'note', 'task', 'milestone', 'expense', 'estimate', 'invoice', 'contract', 'proposal', 'retainerPlan']) {
         await deleteIds(model);
       }
       await deleteIds('project');

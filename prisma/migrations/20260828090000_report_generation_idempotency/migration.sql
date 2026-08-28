@@ -1,3 +1,3 @@
-ALTER TABLE "reports" ADD COLUMN "request_id" TEXT;
+ALTER TABLE "reports" ADD COLUMN "requestId" TEXT;
 
-CREATE UNIQUE INDEX "reports_request_id_key" ON "reports"("request_id");
+CREATE UNIQUE INDEX "reports_requestId_key" ON "reports"("requestId");

@@ -46,7 +46,7 @@ CREATE INDEX "migration_review_packets_organizationId_createdAt_idx"
 ON "migration_review_packets"("organizationId", "createdAt");
 CREATE UNIQUE INDEX "migration_review_decisions_organizationId_requestId_key"
 ON "migration_review_decisions"("organizationId", "requestId");
-CREATE INDEX "migration_review_decisions_organizationId_packetId_candidateId_decidedAt_idx"
+CREATE INDEX "migration_review_decisions_organizationId_packetId_candidat_idx"
 ON "migration_review_decisions"("organizationId", "packetId", "candidateId", "decidedAt");
 
 ALTER TABLE "migration_review_packets"

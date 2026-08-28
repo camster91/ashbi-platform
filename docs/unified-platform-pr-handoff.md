@@ -47,7 +47,8 @@ Exact PR head: `{{PR_HEAD_SHA}}`
 - [x] Target environment is named: isolated Ashbi Hub staging is required but not yet provisioned.
 - [x] Local source validation and remaining target-environment gates are recorded in `docs/unified-platform-deployment-readiness-2026-08-28.md`.
 - [ ] Required hosted checks pass for this exact PR head.
-- [ ] The complete migration chain and zero-drift check pass against isolated PostgreSQL with pgvector.
+- [x] The complete 39-migration chain, including all 22 candidate migrations, and zero-drift check pass against isolated local PostgreSQL 16 with pgvector 0.8.3.
+- [ ] The complete migration chain and zero-drift check pass on the named isolated staging target.
 - [ ] Authenticated staff/client and synthetic acquisition-to-Stripe-test-payment journeys pass in staging.
 - [ ] Approved Notion/Bonsai bundles are imported only in sandbox and reconcile with zero unresolved findings.
 - [ ] Parallel-run, backup/restore, financial reconciliation, and Cameron's post-evidence cutover approval are attached before any Bonsai retirement.
@@ -66,8 +67,8 @@ npx prisma validate                         PASS
 npx prisma generate                         PASS
 npm run type-check                          PASS
 npm run lint                                PASS
-npm test                                    PASS, 942 backend unit tests
-npm run test:all                            PASS, 950 passed and 4 environment skips
+npm test                                    PASS, 947 backend unit tests
+npm run test:all                            PASS, 964 passed, 0 failed, 0 skipped
 npm test --prefix web                       PASS, 517 frontend tests
 npm run build                               PASS
 frontend budgets                            PASS
@@ -75,11 +76,12 @@ Lighthouse CI                               PASS, 3 mobile and 3 desktop runs
 release-gate contract                       PASS locally
 ```
 
-The full combined suite ran before the last focused email/release tests were added; the current complete backend unit suite passes with 942 tests. Hosted Required release gates have not run. Local proof does not establish target deployment, complete pgvector migration execution, provider delivery, production payment, accessibility, or reconciliation success.
+The current full backend unit/integration suite passes with 964 tests against the isolated PostgreSQL/pgvector rehearsal database. All 39 migrations apply and the exact drift command reports no difference. Hosted Required release gates have not run. Local proof does not establish target deployment, target migration execution, provider delivery, production payment, accessibility, or reconciliation success.
 
 Manual checks and evidence:
 
 - Source and governance audit: `docs/unified-platform-deployment-readiness-2026-08-28.md`
+- Complete local pgvector migration rehearsal: `docs/unified-platform-migration-rehearsal-2026-08-28.md`
 - Canonical capability status: `docs/product-status.md`
 - Launch evidence contract: `docs/unified-launch-readiness.md`
 - Replacement evidence contract: `docs/replacement-readiness-matrix.md`
