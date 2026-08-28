@@ -9,11 +9,12 @@ function digest(bytes) { return crypto.createHash('sha256').update(bytes).digest
 const reviewPath = option('--review');
 const projectLinkDecisionPath = option('--project-link-decision');
 const projectDispositionDecisionPath = option('--project-disposition-decision');
+const supplementalEvidencePath = option('--supplemental-evidence');
 const preparedAt = option('--prepared-at');
 const outputPath = option('--output');
 
 if (!reviewPath || !projectLinkDecisionPath || !projectDispositionDecisionPath || !preparedAt || !outputPath) {
-  process.stderr.write('Usage: npm run prepare:notion-bonsai-project-disposition-review-brief -- --review <review.json> --project-link-decision <link-decision.json> --project-disposition-decision <pending-disposition.json> --prepared-at <ISO> --output <new-brief.json>\n');
+  process.stderr.write('Usage: npm run prepare:notion-bonsai-project-disposition-review-brief -- --review <review.json> --project-link-decision <link-decision.json> --project-disposition-decision <pending-disposition.json> [--supplemental-evidence <live-evidence.json>] --prepared-at <ISO> --output <new-brief.json>\n');
   process.exitCode = 2;
 } else {
   let output;
@@ -21,6 +22,9 @@ if (!reviewPath || !projectLinkDecisionPath || !projectDispositionDecisionPath |
     const reviewBytes = fs.readFileSync(path.resolve(reviewPath));
     const linkBytes = fs.readFileSync(path.resolve(projectLinkDecisionPath));
     const dispositionBytes = fs.readFileSync(path.resolve(projectDispositionDecisionPath));
+    const supplementalEvidenceBytes = supplementalEvidencePath
+      ? fs.readFileSync(path.resolve(supplementalEvidencePath))
+      : null;
     const record = prepareNotionBonsaiProjectDispositionReviewBrief({
       review: JSON.parse(reviewBytes.toString('utf8')),
       reviewSha256: digest(reviewBytes),
@@ -28,6 +32,10 @@ if (!reviewPath || !projectLinkDecisionPath || !projectDispositionDecisionPath |
       projectLinkDecisionSha256: digest(linkBytes),
       projectDispositionDecision: JSON.parse(dispositionBytes.toString('utf8')),
       projectDispositionDecisionSha256: digest(dispositionBytes),
+      supplementalEvidence: supplementalEvidenceBytes
+        ? JSON.parse(supplementalEvidenceBytes.toString('utf8'))
+        : null,
+      supplementalEvidenceSha256: supplementalEvidenceBytes ? digest(supplementalEvidenceBytes) : null,
       preparedAt,
     });
     output = fs.openSync(path.resolve(outputPath), 'wx', 0o600);
