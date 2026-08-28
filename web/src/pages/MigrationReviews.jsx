@@ -11,6 +11,7 @@ const decisionStyles = {
   PENDING: 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300',
 };
 
+const projectLinkKind = 'NOTION_BONSAI_PROJECT_LINK';
 const taskDispositionKind = 'NOTION_BONSAI_TASK_DISPOSITION';
 const projectDispositionKind = 'NOTION_BONSAI_PROJECT_DISPOSITION';
 const financialExceptionKind = 'BONSAI_FINANCIAL_EXCEPTION';
@@ -51,12 +52,16 @@ export default function MigrationReviews() {
     const rows = selected?.candidates ?? [];
     return filter ? rows.filter(candidate => candidate.decision === filter) : rows;
   }, [selected, filter]);
-  const selectableCandidates = useMemo(() => candidates.filter(candidate => (
-    !selected?.superseded
-    && candidate.decision === 'PENDING'
-    && candidate.recommendation === 'APPROVAL_READY'
-    && candidate.risk !== 'HIGH'
-  )), [candidates, selected?.superseded]);
+  const selectableCandidates = useMemo(() => (
+    selected?.kind === projectLinkKind
+      ? candidates.filter(candidate => (
+        !selected.superseded
+        && candidate.decision === 'PENDING'
+        && candidate.recommendation === 'APPROVAL_READY'
+        && candidate.risk !== 'HIGH'
+      ))
+      : []
+  ), [candidates, selected?.kind, selected?.superseded]);
 
   const load = async () => {
     setLoadError(null);
@@ -144,11 +149,16 @@ export default function MigrationReviews() {
   };
 
   const approveSelected = async () => {
-    if (selectedCandidateIds.length === 0 || selected?.superseded) return;
+    if (selected?.kind !== projectLinkKind || selectedCandidateIds.length === 0 || selected.superseded) return;
     setBatchConfirmationOpen(true);
   };
 
   const confirmSelectedApprovals = async () => {
+    if (selected?.kind !== projectLinkKind) {
+      setSelectedCandidateIds([]);
+      setBatchConfirmationOpen(false);
+      return;
+    }
     const chosen = (selected?.candidates ?? []).filter(candidate => (
       selectedCandidateIds.includes(candidate.candidateId)
       && candidate.decision === 'PENDING'
@@ -277,21 +287,23 @@ export default function MigrationReviews() {
                   <Button key={label} size="sm" variant={filter === value ? 'default' : 'outline'} onClick={() => setFilter(value)}>{label}</Button>
                 ))}
               </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={toggleVisibleApprovalReady}
-                  disabled={Boolean(busyKey) || selectableCandidates.length === 0}
-                >
-                  {selectableCandidates.length > 0 && selectableCandidates.every(candidate => selectedCandidateIds.includes(candidate.candidateId))
-                    ? 'Clear selection'
-                    : 'Select low/medium approval-ready'}
-                </Button>
-                <Button size="sm" onClick={approveSelected} loading={busyKey === 'batch'} disabled={Boolean(busyKey) || selectedCandidateIds.length === 0} leftIcon={<Check size={15} />}>
-                  Approve selected ({selectedCandidateIds.length})
-                </Button>
-              </div>
+              {selected.kind === projectLinkKind && (
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={toggleVisibleApprovalReady}
+                    disabled={Boolean(busyKey) || selectableCandidates.length === 0}
+                  >
+                    {selectableCandidates.length > 0 && selectableCandidates.every(candidate => selectedCandidateIds.includes(candidate.candidateId))
+                      ? 'Clear selection'
+                      : 'Select low/medium approval-ready'}
+                  </Button>
+                  <Button size="sm" onClick={approveSelected} loading={busyKey === 'batch'} disabled={Boolean(busyKey) || selectedCandidateIds.length === 0} leftIcon={<Check size={15} />}>
+                    Approve selected ({selectedCandidateIds.length})
+                  </Button>
+                </div>
+              )}
             </div>
 
             {candidates.length === 0 ? <p className="rounded-xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">No candidates match this filter.</p> : candidates.map(candidate => (
@@ -299,7 +311,7 @@ export default function MigrationReviews() {
                 <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                   <div className="min-w-0 space-y-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      {!selected.superseded && candidate.decision === 'PENDING' && candidate.recommendation === 'APPROVAL_READY' && candidate.risk !== 'HIGH' && (
+                      {selected.kind === projectLinkKind && !selected.superseded && candidate.decision === 'PENDING' && candidate.recommendation === 'APPROVAL_READY' && candidate.risk !== 'HIGH' && (
                         <label className="inline-flex min-h-8 cursor-pointer items-center gap-2 rounded-md border border-border bg-background px-2.5 text-xs font-medium text-foreground">
                           <input
                             type="checkbox"

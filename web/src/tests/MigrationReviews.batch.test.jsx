@@ -94,4 +94,58 @@ describe('Migration review batch approvals', () => {
       { selector: 'p' },
     )).toBeInTheDocument();
   });
+
+  it.each([
+    {
+      kind: 'NOTION_BONSAI_TASK_DISPOSITION',
+      heading: 'Task disposition review',
+      candidate: { candidateId: 'task-disposition:1', title: 'Example task', project: 'Example project' },
+    },
+    {
+      kind: 'NOTION_BONSAI_PROJECT_DISPOSITION',
+      heading: 'Project disposition review',
+      candidate: { candidateId: 'project-disposition:1', project: 'Example project', company: 'Example Client' },
+    },
+    {
+      kind: 'BONSAI_ACTIVE_PROJECT_OUTCOME',
+      heading: 'Active project outcome review',
+      candidate: { candidateId: 'active-project-outcome:1', project: 'Example project', company: 'Example Client', taskCount: 1 },
+    },
+    {
+      kind: 'BONSAI_FINANCIAL_EXCEPTION',
+      heading: 'Financial exception review',
+      candidate: {
+        candidateId: 'financial-exception:invoice:1',
+        exceptionKind: 'NON_PAID_INVOICE',
+        sourceId: 'invoice-1',
+        invoiceNumber: 'INV-001',
+        company: 'Example Client',
+        status: 'draft',
+        amount: 100,
+        currency: 'CAD',
+      },
+    },
+  ])('does not offer batch approval for $heading', async ({ kind, heading, candidate }) => {
+    const packet = {
+      ...reviewPacket(),
+      id: `${kind.toLowerCase()}-packet-1`,
+      kind,
+      candidates: [{
+        ...candidate,
+        decision: 'PENDING',
+        recommendation: 'APPROVAL_READY',
+        reasonCode: 'EVIDENCE_REVIEW_READY',
+      }],
+      summary: { approved: 0, rejected: 0, pending: 1 },
+    };
+    api.getMigrationReviewPackets.mockResolvedValue({ packets: [packet] });
+
+    render(<MigrationReviews />);
+
+    await screen.findByRole('heading', { name: heading });
+    expect(screen.queryByRole('button', { name: 'Select low/medium approval-ready' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Approve selected (0)' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Approve recommendation' })).toBeEnabled();
+  });
 });
