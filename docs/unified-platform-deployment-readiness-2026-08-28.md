@@ -41,8 +41,8 @@
 - Prisma schema validation and client generation: pass with the patched dependency graph.
 - Recursive Deepmerge trigger: handled without stack exhaustion.
 - Raw HTML and multipart email parsing regression tests: pass.
-- Backend unit suite at the current candidate: 948 passed.
-- Current attached backend unit/integration run: 961 passed, four dedicated-database cases skipped because `TENANT_INTEGRATION_DATABASE_URL` is not configured, zero failures. The earlier isolated PostgreSQL/pgvector candidate proof remains 964 passed with zero skipped; the current exact SHA still requires the isolated-database rerun.
+- Backend unit suite at the current candidate: 949 passed.
+- Current attached backend unit/integration run: 962 passed, four dedicated-database cases skipped because `TENANT_INTEGRATION_DATABASE_URL` is not configured, zero failures. The earlier isolated PostgreSQL/pgvector candidate proof remains 964 passed with zero skipped; the current exact SHA still requires the isolated-database rerun.
 - Frontend suite: 531 passed.
 - Backend/frontend lint and backend type check: pass.
 - Production build and frontend performance budgets: pass.

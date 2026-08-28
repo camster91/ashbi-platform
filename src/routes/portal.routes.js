@@ -169,21 +169,29 @@ export default async function portalRoutes(fastify) {
       return reply.status(409).send({ error: 'Proposal currency must be reviewed before approval' });
     }
 
-    const updated = await request.prisma.proposal.update({
-      where: { id: proposal.id },
+    const approvedAt = new Date();
+    const updated = await request.prisma.proposal.updateMany({
+      where: {
+        id: proposal.id,
+        status: { in: ['SENT', 'VIEWED'] },
+        publicAccessRevokedAt: null,
+      },
       data: {
         status: 'APPROVED',
-        approvedAt: new Date(),
-        publicAccessRevokedAt: new Date(),
+        approvedAt,
+        publicAccessRevokedAt: approvedAt,
       }
     });
+    if (updated.count !== 1) {
+      return reply.status(409).send({ error: 'Proposal is no longer awaiting approval' });
+    }
 
     // Trigger automation: proposal approved
     onProposalApproved(proposal.id).catch(err =>
       console.error('[Portal] Automation trigger failed:', err)
     );
 
-    return { success: true, status: 'APPROVED', approvedAt: updated.approvedAt };
+    return { success: true, status: 'APPROVED', approvedAt };
   });
 
   // Decline proposal
