@@ -1841,3 +1841,7 @@ export const retainerGenerateInvoiceSchema = z.object({
   daysUntilDue: z.number().int().positive().max(180).default(30),
   resetHours: z.boolean().default(false),
 });
+
+export const reportGenerationSchema = z.object({
+  requestId: uuid,
+}).strict();

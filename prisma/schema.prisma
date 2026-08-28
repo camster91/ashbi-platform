@@ -894,6 +894,7 @@ model RetainerPlan {
 
 model Report {
   id          String    @id @default(cuid())
+  requestId   String?   @unique
   type        String    @default("WEEKLY")
   subject     String
   body        String

@@ -2,12 +2,13 @@
 
 import env from '../config/env.js';
 import { onboardClient } from '../services/onboarding.service.js';
-import { generateWeeklyReport } from '../services/weeklyReport.service.js';
+import { createWeeklyReportOnce } from '../services/reportGeneration.service.js';
 import { weeklyDigestQueue } from '../jobs/queue.js';
 import { sendWebhookNotification } from '../utils/webhook.js';
 import { safeEqual } from '../utils/crypto.js';
 import { createScopedPrisma } from '../utils/prisma-tenant-proxy.js';
 import { enterRequestContext } from '../utils/request-context.js';
+import { validateBody, reportGenerationSchema } from '../validators/schemas.js';
 
 // Ultra-fast in-memory cache for AI requests
 const aiCache = {
@@ -698,31 +699,33 @@ export default async function botRoutes(fastify) {
   // ==================== REPORTS ====================
 
   // POST /reports/generate/:clientId — generate weekly report
-  fastify.post('/reports/generate/:clientId', { preHandler: requireBotAuth }, async (request, reply) => {
+  fastify.post('/reports/generate/:clientId', {
+    preHandler: [requireBotAuth, validateBody(reportGenerationSchema)],
+  }, async (request, reply) => {
     try {
-      const report = await generateWeeklyReport(request.params.clientId);
-
-      const saved = await fastify.prisma.report.create({
-        data: {
-          type: 'WEEKLY',
-          subject: report.subject,
-          body: report.body,
-          clientId: report.clientId
-        }
+      const result = await createWeeklyReportOnce({
+        prisma: request.prisma,
+        clientId: request.params.clientId,
+        requestId: request.body?.requestId,
       });
-
-      return { ...report, reportId: saved.id };
+      return reply.status(result.reused ? 200 : 201).send({
+        ...result.report,
+        reportId: result.report.id,
+        reused: result.reused,
+      });
     } catch (err) {
-      if (err.message === 'Client not found') {
+      if (err?.code === 'CLIENT_NOT_FOUND') {
         return reply.status(404).send({ error: 'Client not found' });
       }
-      throw err;
+      if (err instanceof TypeError) return reply.status(400).send({ error: err.message });
+      request.log.error({ code: err?.code ?? 'REPORT_GENERATION_FAILED' }, 'Bot report generation failed');
+      return reply.status(502).send({ error: 'Report generation failed without creating a report' });
     }
   });
 
   // GET /reports/pending — reports generated but not yet sent
-  fastify.get('/reports/pending', { preHandler: requireBotAuth }, async () => {
-    const reports = await fastify.prisma.report.findMany({
+  fastify.get('/reports/pending', { preHandler: requireBotAuth }, async (request) => {
+    const reports = await request.prisma.report.findMany({
       where: { sentAt: null },
       orderBy: { generatedAt: 'desc' },
       include: { client: { select: { name: true } } }

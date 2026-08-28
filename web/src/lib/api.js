@@ -262,6 +262,16 @@ export const api = {
   addClientNote: (clientId, content) =>
     request(`/clients/${clientId}/notes`, { method: 'POST', body: { content } }),
 
+  // Client reports
+  getReports: (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    return request(`/reports${query ? `?${query}` : ''}`);
+  },
+  getReport: (id) =>
+    request(`/reports/${id}`),
+  generateWeeklyReport: (clientId, requestId) =>
+    request(`/reports/generate/${clientId}`, { method: 'POST', body: { requestId } }),
+
   // Projects
   getProjects: (params = {}) => {
     const query = new URLSearchParams(params).toString();

@@ -3,13 +3,13 @@
 import aiClient from '../ai/client.js';
 import prisma from '../config/db.js';
 
-export async function generateWeeklyReport(clientId) {
-  const sevenDaysAgo = new Date();
+export async function generateWeeklyReport(clientId, { prismaClient = prisma, now = new Date() } = {}) {
+  const sevenDaysAgo = new Date(now);
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
   // Fetch client with projects
-  const client = await prisma.client.findUnique({
-    where: { id: clientId },
+  const client = await prismaClient.client.findFirst({
+    where: { id: clientId, deletedAt: null },
     include: {
       projects: {
         where: { status: 'ACTIVE' },

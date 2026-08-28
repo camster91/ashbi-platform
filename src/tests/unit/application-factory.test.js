@@ -122,8 +122,8 @@ test('project collaboration routes are owned by an ordered domain registrar', as
 test('client work-management routes are owned by an ordered domain registrar', async () => {
   const factory = fs.readFileSync(new URL('../../index.js', import.meta.url), 'utf8');
   const registrar = fs.readFileSync(new URL('../../domains/client-delivery/register-work-management-routes.js', import.meta.url), 'utf8');
-  const routeNames = ['client', 'project', 'task'];
-  const expectedPrefixes = ['/api/clients', '/api/projects', '/api/tasks'];
+  const routeNames = ['client', 'project', 'task', 'report'];
+  const expectedPrefixes = ['/api/clients', '/api/projects', '/api/tasks', '/api/reports'];
 
   assert.match(factory, /registerWorkManagementRoutes\(fastify\)/);
   for (const route of routeNames) {

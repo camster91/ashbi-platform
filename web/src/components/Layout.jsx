@@ -169,6 +169,7 @@ export default function Layout({ children }) {
     { name: 'Estimates', href: '/estimates', icon: ClipboardList },
     { name: 'Contracts', href: '/contracts', icon: ScrollText },
     { name: 'Expenses', href: '/expenses', icon: Wallet },
+    { name: 'Reports', href: '/reports', icon: PieChart },
     { name: 'Schedule', href: '/schedule', icon: Calendar },
     { name: 'Docs', href: '/docs', icon: BookOpen },
   ];
