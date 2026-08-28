@@ -45,6 +45,7 @@ import {
   Bell,
   MessageSquare,
   GitMerge,
+  Rocket,
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { Download, Sun, Moon, Command } from 'lucide-react';
@@ -182,6 +183,7 @@ export default function Layout({ children }) {
     { name: 'Rate Cards', href: '/rate-cards', icon: CreditCard },
     { name: 'Credentials', href: '/credentials', icon: Key },
     { name: 'Migration Reviews', href: '/migration-reviews', icon: GitMerge },
+    { name: 'Launch Readiness', href: '/launch-readiness', icon: Rocket },
     { name: 'Settings', href: '/settings', icon: Settings },
     { name: 'Trash', href: '/trash', icon: X },
   ] : [];

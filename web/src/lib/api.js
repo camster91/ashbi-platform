@@ -1162,6 +1162,10 @@ export const api = {
   exportMigrationReviewDecision: (packetId) =>
     request(`/migration-reviews/${packetId}/export`),
 
+  // ===== UNIFIED LAUNCH READINESS =====
+  getUnifiedLaunchReadiness: () =>
+    request('/launch-readiness'),
+
   // ===== PROJECT COMMUNICATIONS =====
   getProjectCommunications: (projectId, params = {}) => {
     const query = new URLSearchParams(params).toString();

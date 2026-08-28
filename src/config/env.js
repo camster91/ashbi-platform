@@ -22,6 +22,9 @@ const env = {
     .split(',')
     .map(origin => origin.trim())
     .filter(Boolean),
+  // Owner-controlled, checksum-bound evidence package. The admin readiness
+  // page reports only sanitized gate results and never returns this path.
+  unifiedLaunchManifestPath: process.env.UNIFIED_LAUNCH_MANIFEST_PATH,
 
   // Auth
   jwtSecret: process.env.JWT_SECRET,

@@ -71,4 +71,6 @@ Then run the verifier:
 npm run check:unified-launch -- --manifest <owner-evidence-directory>/unified-launch-manifest.json
 ```
 
+To expose the same sanitized result to organization administrators inside the Hub, mount the owner-controlled evidence directory read-only and set `UNIFIED_LAUNCH_MANIFEST_PATH` to the manifest file. The admin-only `/launch-readiness` screen returns only the evaluator's check IDs and safe messages; it never returns the configured path or artifact contents. Leaving the variable blank keeps the screen visibly gated.
+
 `ready: true` is necessary evidence for the full objective, but it still performs no release or cancellation. Production/DNS, public publishing, provider credentials, Stripe live mode, financial automation, and Bonsai cancellation remain exact action-time approvals.

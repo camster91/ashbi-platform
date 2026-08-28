@@ -41,6 +41,7 @@ const Team = lazy(() => import('./pages/Team'));
 const GlobalSearch = lazy(() => import('./pages/GlobalSearch'));
 const ApprovalQueue = lazy(() => import('./pages/ApprovalQueue'));
 const MigrationReviews = lazy(() => import('./pages/MigrationReviews'));
+const LaunchReadiness = lazy(() => import('./pages/LaunchReadiness'));
 const TaskPage = lazy(() => import('./pages/TaskPage'));
 const TaskKanban = lazy(() => import('./pages/TaskKanban'));
 const TimeTracking = lazy(() => import('./pages/TimeTracking'));
@@ -213,6 +214,7 @@ function AppRoutes() {
                                     <Route path="/search" element={<GlobalSearch />} />
                   <Route path="/approvals" element={<AdminRoute><ApprovalQueue /></AdminRoute>} />
                   <Route path="/migration-reviews" element={<AdminRoute><MigrationReviews /></AdminRoute>} />
+                  <Route path="/launch-readiness" element={<AdminRoute><LaunchReadiness /></AdminRoute>} />
                   <Route path="/proposals" element={<Proposals />} />
                   <Route path="/proposal/:id" element={<ProposalDetail />} />
                   <Route path="/contracts" element={<Contracts />} />
