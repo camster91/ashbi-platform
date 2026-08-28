@@ -75,11 +75,16 @@ export default function PortalInvoice() {
   const showPayButton = paymentEligibleStatus && Boolean(verifiedCurrency);
   const isPaid = invoice.status === 'PAID';
 
-  const subtotal = invoice.lineItems?.reduce((sum, item) => {
+  const calculatedSubtotal = invoice.lineItems?.reduce((sum, item) => {
     return sum + Number(item.amount || item.total || (item.quantity * (item.rate || item.unitPrice || 0)));
   }, 0) || 0;
-  const tax = Number(invoice.tax || 0);
-  const total = Number(invoice.total || invoice.amount || (subtotal + tax));
+  const subtotal = Number(invoice.subtotal ?? calculatedSubtotal);
+  const discount = Number(invoice.discountAmount ?? 0);
+  const tax = Number(invoice.tax ?? 0);
+  const total = Number(invoice.total ?? (subtotal - discount + tax));
+  const taxLabel = invoice.taxType
+    ? `${invoice.taxType}${invoice.taxRate != null ? ` (${Number(invoice.taxRate)}%)` : ''}`
+    : 'Tax';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -116,22 +121,23 @@ export default function PortalInvoice() {
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-bold text-slate-800">
-                  {invoice.invoiceNumber || invoice.number || `INV-${invoice.id}`}
+                  {invoice.invoiceNumber || `Invoice ${invoice.id}`}
                 </h2>
                 <span className={cn('px-2.5 py-0.5 rounded-full text-xs font-semibold inline-flex items-center gap-1', status.color)}>
                   <StatusIcon className="w-3 h-3" />
                   {status.label}
                 </span>
               </div>
-              {invoice.clientName && (
-                <p className="text-sm text-slate-500 mt-1">For: {invoice.clientName}</p>
+              {invoice.title && <p className="mt-1 text-sm font-medium text-slate-700">{invoice.title}</p>}
+              {invoice.client?.name && (
+                <p className="mt-1 text-sm text-slate-500">For: {invoice.client.name}</p>
               )}
             </div>
             <div className="text-right text-sm space-y-1">
               {invoice.issueDate && (
                 <div className="flex items-center gap-1.5 text-slate-500 justify-end">
                   <Calendar className="w-3.5 h-3.5" />
-                  <span>Issued: {formatDate(invoice.issueDate || invoice.createdAt)}</span>
+                  <span>Issued: {formatDate(invoice.issueDate)}</span>
                 </div>
               )}
               {invoice.dueDate && (
@@ -146,9 +152,9 @@ export default function PortalInvoice() {
             </div>
           </div>
 
-          {invoice.description && (
+          {invoice.notes && (
             <p className="text-slate-600 mt-4 text-sm leading-relaxed border-t border-slate-100 pt-4">
-              {invoice.description}
+              {invoice.notes}
             </p>
           )}
         </div>
@@ -189,9 +195,15 @@ export default function PortalInvoice() {
               <span className="text-slate-500">Subtotal</span>
               <span className="text-slate-700">{formatPortalAmount(subtotal, invoice.currency)}</span>
             </div>
+            {discount > 0 && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-500">Discount</span>
+                <span className="text-slate-700">−{formatPortalAmount(discount, invoice.currency)}</span>
+              </div>
+            )}
             {tax > 0 && (
               <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-500">Tax</span>
+                <span className="text-slate-500">{taxLabel}</span>
                 <span className="text-slate-700">{formatPortalAmount(tax, invoice.currency)}</span>
               </div>
             )}
