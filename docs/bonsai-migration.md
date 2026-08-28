@@ -36,6 +36,8 @@ npm run prepare:bonsai-active-project-triage -- --bonsai-projects <bonsai-projec
 
 The triage packet classifies every active project as an exact-link review, task-evidenced link review, suggested-link review, active project with tasks but no Notion link, or active project without current task evidence. It preserves stable Bonsai IDs, project groups, current task UUIDs and states, duplicate-title evidence, and the strongest bounded Notion evidence. A project without current tasks is not called stale or closure-ready. Every record explicitly retains pending invoice, payment, contract, and time-entry checks, and the packet grants no authority to create, link, move, complete, archive, delete, or bill anything. The command creates one owner-only file and refuses overwrite.
 
+Project identity approval is a separate gate from active-project disposition. Prepare and verify the native project-link packet from the exact native review as documented in [notion-markdown-migration.md](notion-markdown-migration.md). Its low-, medium-, and high-risk tiers cannot authorize project closure, task movement, owner assignment, billing changes, data migration, or Bonsai cutover. Similarity-only suggestions require explicit candidate IDs and cannot be blanket-approved.
+
 Capture a sanitized, complete invoice and time-entry index before resolving the financial gates. The retained index excludes client email, invoice access tokens/URLs, invoice line descriptions, invoice titles, and time-entry notes. Verify both files, then enrich the exact active-project triage packet:
 
 ```text

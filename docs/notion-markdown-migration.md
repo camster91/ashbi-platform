@@ -67,6 +67,17 @@ npm run prepare:notion-bonsai-native-project-review -- --notion <notion-projects
 
 The native snapshot verifier requires complete all-status pagination, a complete active/completed/archived partition, unique stable IDs and public tokens, valid project records, and client identity evidence. The native review resolves only unique exact titles and previously captured task evidence; it keeps lifecycle differences, duplicate Bonsai titles, source-only projects, and one strongest lifecycle-compatible similarity suggestion per unmatched Notion project as review items. Similarity never creates a link. Both commands are read-only with respect to Notion, Bonsai, and the Hub; the review command creates one owner-only file and refuses overwrite.
 
+Turn the native project review into a tiered, checksum-bound identity decision packet:
+
+```text
+npm run prepare:notion-bonsai-native-project-link-decision -- --review <native-project-review.json> --prepared-at <ISO> --output <new-pending-link-decision.json>
+npm run verify:notion-bonsai-native-project-link-decision -- <native-project-review.json> <link-decision.json>
+```
+
+The packet separates exact unique titles, task-evidenced candidates, and similarity-only suggestions. Every candidate has a stable Notion source URL, Bonsai project ID, evidence tier, risk tier, and independent decision. Recording decisions requires a JSON manifest naming each candidate ID, `--confirm`, an approver, decision time, and evidence reference; there is deliberately no blanket approve-all flag. Approval means only that the two source IDs represent the same logical project. It does not create or apply a link, move tasks, assign owners, change lifecycle, delete source records, affect invoices/payments/contracts/time, migrate data, or authorize cutover.
+
+The owner-only 2026-08-28 UTC packet currently retained with the source evidence is valid and incomplete: all 24 decisions remain pending, comprising 12 exact-title, five task-evidenced, and seven suggestion-only candidates. Its SHA-256 is `297b70852badf6f4045d17ac8dd65e8d2e43badbfb4eadfdecf78b04aed47e5a`.
+
 ## Supported input
 
 - UTF-8 `.md` pages from a Notion export;
