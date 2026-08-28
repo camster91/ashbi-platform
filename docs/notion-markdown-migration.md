@@ -96,6 +96,15 @@ The packet separates exact unique titles, task-evidenced candidates, and similar
 
 The current owner-only 2026-08-28 UTC packet is valid and incomplete: all 24 decisions remain pending, comprising 12 exact-title, five task-evidenced, and seven suggestion-only candidates. It is bound to the refreshed task-review generation and has SHA-256 `98346551f2f7da832e944dec2bf333544c00307ac75ccd80bf06061a3245c75f`. The earlier packet remains immutable historical evidence and is superseded for current decisions.
 
+Prepare and verify a checksum-bound owner review brief before asking for project-link decisions:
+
+```bash
+npm run prepare:notion-bonsai-native-project-link-review-brief -- --review <native-project-review.json> --mapping-decision <mapping-decision.json> --prepared-at <ISO> --output <new-review-brief.json>
+npm run verify:notion-bonsai-native-project-link-review-brief -- <native-project-review.json> <mapping-decision.json> <review-brief.json>
+```
+
+The brief may recommend approval only for a unique exact-title project with matching lifecycle or a task-evidenced project pair already covered by an approved candidate-specific mapping. Similarity-only candidates always remain manual review. A recommendation is not an approval and cannot record or apply a project link, change lifecycle or financial data, migrate records, or authorize cutover. The current checksum-valid brief separates 17 approval-ready candidates—12 exact-title and five task-evidenced—from seven manual similarity-only candidates. Its SHA-256 is `74bb4b6b171f0d276e9f25cda42d064d492f36fde5bf40aa0993e5a5bd06b331`.
+
 Prepare the source-only and duplicate-title project disposition packet only from that same native review and exact project-link decision generation:
 
 ```bash
