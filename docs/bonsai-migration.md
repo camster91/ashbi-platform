@@ -47,6 +47,19 @@ npm run prepare:bonsai-active-project-financial-review -- --active-project-triag
 
 The verifier requires complete pagination, unique source identities, valid dates/currencies/amounts, visible time billing fields, and the declared privacy omissions. Projectless financial rows remain linkage blockers without invalidating an otherwise complete capture. The review separates totals by currency, preserves invoice statuses, exposes unbilled time by project, and reports source evidence outside active projects. Invoice status is not treated as direct payment or settlement proof. A complete contract source is still required. Therefore every project remains closure-blocked, even when all observed invoices are paid and no unbilled time is present. The commands perform no provider, invoice, payment, time, contract, project, or Hub mutation.
 
+## Live reconciliation status
+
+After every source refresh, regenerate all downstream reviews and decisions before claiming the evidence is current. Then checksum-bind the aligned task review, task mapping decision, owner decision, native project review, project-link decision, active triage, and financial review:
+
+```text
+npm run prepare:bonsai-live-reconciliation-status -- --task-review <task-review.json> --mapping-decision <mapping-decision.json> --owner-decision <owner-decision.json> --native-project-review <native-project-review.json> --project-link-decision <project-link-decision.json> --active-project-triage <triage.json> --financial-review <financial-review.json> --prepared-at <ISO> --output <new-live-status.json>
+npm run verify:bonsai-live-reconciliation-status -- --task-review <task-review.json> --mapping-decision <mapping-decision.json> --owner-decision <owner-decision.json> --native-project-review <native-project-review.json> --project-link-decision <project-link-decision.json> --active-project-triage <triage.json> --financial-review <financial-review.json> --status <live-status.json>
+```
+
+The command fails if any downstream artifact is bound to another Notion task, Bonsai task, Bonsai project, project-group, invoice, or time-entry generation. It reports migration and Bonsai-retirement readiness separately and keeps missing task-link decisions, owner decisions, project identities, source-only dispositions, duplicate titles, active-project dispositions, financial evidence, backup/parallel-run evidence, and final cutover approval explicit. It performs no external write and cannot authorize migration or retirement.
+
+The current 2026-08-28 UTC status is source-generation aligned but not migration- or retirement-ready. It contains 16 blocking findings and has SHA-256 `7b5b3f58371631380ff4957a6465fb5b3a827e7ca154939d7356a197af7c55d6`. In particular, the 19 exact task links still need a dedicated identity-decision record; title evidence is not approval.
+
 The Companies export is a mixed CRM connection population, not a client list. The importer accepts its observed `Name`, `Email`, `Domain`, and related profile columns only through `--connections-csv`. It promotes a connection to a client contact only when the row has an exact operational client name from the project/invoice sources or an exact invoice email. Unrelated leads, vendors, and domains remain outside the client import; a row that points to different clients by name and email, conflicting duplicate emails, or an ambiguous primary contact remains an unresolved finding. The untouched timestamped filename, row count, headers, and checksum remain in the source fingerprint. A legacy `clients.csv` is still understood for recovery of older evidence, but it is not the current Bonsai contract.
 
 ## Dry run

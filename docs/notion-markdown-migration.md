@@ -76,7 +76,7 @@ npm run verify:notion-bonsai-native-project-link-decision -- <native-project-rev
 
 The packet separates exact unique titles, task-evidenced candidates, and similarity-only suggestions. Every candidate has a stable Notion source URL, Bonsai project ID, evidence tier, risk tier, and independent decision. Recording decisions requires a JSON manifest naming each candidate ID, `--confirm`, an approver, decision time, and evidence reference; there is deliberately no blanket approve-all flag. Approval means only that the two source IDs represent the same logical project. It does not create or apply a link, move tasks, assign owners, change lifecycle, delete source records, affect invoices/payments/contracts/time, migrate data, or authorize cutover.
 
-The owner-only 2026-08-28 UTC packet currently retained with the source evidence is valid and incomplete: all 24 decisions remain pending, comprising 12 exact-title, five task-evidenced, and seven suggestion-only candidates. Its SHA-256 is `297b70852badf6f4045d17ac8dd65e8d2e43badbfb4eadfdecf78b04aed47e5a`.
+The current owner-only 2026-08-28 UTC packet is valid and incomplete: all 24 decisions remain pending, comprising 12 exact-title, five task-evidenced, and seven suggestion-only candidates. It is bound to the refreshed task-review generation and has SHA-256 `98346551f2f7da832e944dec2bf333544c00307ac75ccd80bf06061a3245c75f`. The earlier packet remains immutable historical evidence and is superseded for current decisions.
 
 ## Supported input
 
