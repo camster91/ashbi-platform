@@ -56,7 +56,16 @@ Review projects separately from tasks:
 npm run prepare:notion-bonsai-project-review -- --notion <notion-projects-tasks.json> --bonsai <bonsai-tasks.json> --prepared-at <ISO> --output <new-project-review.json>
 ```
 
-The complete Bonsai task snapshot can prove only the distinct project titles referenced by those tasks. This owner-only report therefore separates exact project titles, aliases supported by shared exact tasks, near-title task evidence, unmatched titles, and similarity-only suggestions while explicitly marking the Bonsai project inventory incomplete. A native complete Bonsai projects export is still required before project parity can be claimed. The command refuses overwrite and performs no external or database writes.
+The complete Bonsai task snapshot can prove only the distinct project titles referenced by those tasks. This preliminary owner-only report therefore separates exact project titles, aliases supported by shared exact tasks, near-title task evidence, unmatched titles, and similarity-only suggestions while explicitly marking its Bonsai project inventory incomplete.
+
+Capture and verify the native all-status project inventory, then bind it to the same Notion and task-review evidence:
+
+```text
+npm run verify:bonsai-project-snapshot -- <bonsai-projects.json>
+npm run prepare:notion-bonsai-native-project-review -- --notion <notion-projects-tasks.json> --bonsai-projects <bonsai-projects.json> --task-review <task-review.json> --prepared-at <ISO> --output <new-native-project-review.json>
+```
+
+The native snapshot verifier requires complete all-status pagination, a complete active/completed/archived partition, unique stable IDs and public tokens, valid project records, and client identity evidence. The native review resolves only unique exact titles and previously captured task evidence; it keeps lifecycle differences, duplicate Bonsai titles, source-only projects, and one strongest lifecycle-compatible similarity suggestion per unmatched Notion project as review items. Similarity never creates a link. Both commands are read-only with respect to Notion, Bonsai, and the Hub; the review command creates one owner-only file and refuses overwrite.
 
 ## Supported input
 
