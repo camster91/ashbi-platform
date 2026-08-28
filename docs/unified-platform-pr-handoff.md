@@ -67,8 +67,8 @@ npx prisma validate                         PASS
 npx prisma generate                         PASS
 npm run type-check                          PASS
 npm run lint                                PASS
-npm test                                    PASS, 947 backend unit tests
-npm run test:all                            PASS, 964 passed, 0 failed, 0 skipped
+npm test                                    PASS, 948 backend unit tests
+npm run test:all                            PASS, 961 passed, 0 failed, 4 dedicated-database tests skipped; exact-SHA isolated rerun pending
 npm test --prefix web                       PASS, 531 frontend tests
 npm run build                               PASS
 frontend budgets                            PASS
@@ -76,7 +76,7 @@ Lighthouse CI                               PASS, 3 mobile and 3 desktop runs
 release-gate contract                       PASS locally
 ```
 
-The current full backend unit/integration suite passes with 964 tests against the isolated PostgreSQL/pgvector rehearsal database. All 39 migrations apply and the exact drift command reports no difference. Hosted Required release gates have not run. Local proof does not establish target deployment, target migration execution, provider delivery, production payment, accessibility, or reconciliation success.
+The prior isolated PostgreSQL/pgvector candidate passed 964 backend unit/integration tests with no skips, applied all 39 migrations, and reported no schema drift. The current candidate adds one passing non-database proposal-approval test; its attached combined run passes 961 tests with four dedicated-database cases skipped because `TENANT_INTEGRATION_DATABASE_URL` is absent. The current exact SHA therefore still needs the isolated-database rerun. Hosted Required release gates have not run. Local proof does not establish target deployment, target migration execution, provider delivery, production payment, accessibility, or reconciliation success.
 
 Manual checks and evidence:
 

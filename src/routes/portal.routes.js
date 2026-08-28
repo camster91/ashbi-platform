@@ -165,6 +165,9 @@ export default async function portalRoutes(fastify) {
     if (proposal.validUntil && new Date(proposal.validUntil) < new Date()) {
       return reply.status(400).send({ error: 'Proposal has expired' });
     }
+    if (!['CAD', 'USD'].includes(proposal.currency)) {
+      return reply.status(409).send({ error: 'Proposal currency must be reviewed before approval' });
+    }
 
     const updated = await request.prisma.proposal.update({
       where: { id: proposal.id },
