@@ -83,6 +83,7 @@ Manual checks and evidence:
 - Canonical capability status: `docs/product-status.md`
 - Launch evidence contract: `docs/unified-launch-readiness.md`
 - Replacement evidence contract: `docs/replacement-readiness-matrix.md`
+- Bonsai reconciliation decision order: `docs/bonsai-reconciliation-decision-order-2026-08-28.md`
 - Deployment and rollback: `docs/deployment-and-rollback.md`
 
 ## Risk gates
