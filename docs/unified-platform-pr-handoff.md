@@ -1,10 +1,15 @@
 # Pull request handoff: Ashbi unified platform candidate
 
-**Prepared:** 2026-08-28  
-**Repository:** `camster91/ashbi-platform` (private)  
-**Base:** `main` at `6522707b0865ec66291471561cebab84e5c31762`  
-**Head branch:** `codex/unified-company-strategy`  
-**Prepared-from head:** `144784d0ca1ab82eddcfacb7e5fcba756afaf574`  
+**Prepared:** 2026-08-28
+
+**Repository:** `camster91/ashbi-platform` (private)
+
+**Base:** `main` at `6522707b0865ec66291471561cebab84e5c31762`
+
+**Head branch:** `codex/unified-company-strategy`
+
+**Prepared-from head:** `144784d0ca1ab82eddcfacb7e5fcba756afaf574`
+
 **External action status:** Not authorized. Do not open, merge, deploy, import, bill, email, or retire a provider from this handoff alone.
 
 This file makes the candidate reviewable without claiming that it is launch-ready. At pull-request creation time, replace `{{PR_HEAD_SHA}}` below with the exact output of `git rev-parse HEAD`, confirm the base has not moved unexpectedly, and retain the resulting private Actions run URLs.
