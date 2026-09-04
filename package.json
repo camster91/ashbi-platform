@@ -55,7 +55,11 @@
     "db:adopt-baseline": "node scripts/adopt-prisma-baseline.mjs",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
-    "db:push": "prisma db push"
+    "db:push": "prisma db push",
+    "verify:quick": "npm run check:boundaries && npm run type-check && npm run lint && npm --prefix web run lint && npm test && npm --prefix web test",
+    "verify": "npm run verify:quick && npm run test:integration && npm run build",
+    "verify:browser": "npm run test:browser && npm run test:public-routes && npm run test:pwa-offline",
+    "verify:release": "npm run verify && npm run test:lighthouse && npm run check:release-gates"
   },
   "prisma": {
     "seed": "node prisma/seed.js"
