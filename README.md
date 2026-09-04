@@ -40,9 +40,12 @@ ashbi-platform/
 
 ## Development
 
-Prerequisites: Node.js 20+ (the production image currently uses 22), PostgreSQL 16 with pgvector, and Redis 7+. The backend does not implicitly load `.env`; export it into each backend/worker shell. Prisma reads it through `prisma.config.ts`.
+Prerequisites: Node.js 22 (matching CI, `.nvmrc`, and the production image), PostgreSQL 16 with pgvector, and Redis 7+. The backend does not implicitly load `.env`; export it into each backend/worker shell. Prisma reads it through `prisma.config.ts`.
 
 ```bash
+# Select the supported runtime when using nvm
+nvm use
+
 # Install locked dependencies
 npm ci
 npm ci --prefix web
@@ -68,14 +71,20 @@ The API defaults to `http://localhost:3000`; Vite serves `http://localhost:5173`
 Run the supported gates with:
 
 ```bash
-npm run lint
-npm run type-check
-npm test
-npm run test:integration
-npm test --prefix web -- --run
-npm run build
-npm run check:release-gates
+npm run verify:quick    # boundaries, typecheck, backend/frontend lint and unit tests
+npm run verify          # normal merge-level source gate, including integration and build
+npm run verify:browser  # browser, public-route and PWA/offline checks
+npm run verify:release  # verify plus Lighthouse and release-policy checks
 ```
+
+The full-stack WordPress/Hub smoke remains a separate environment-specific gate:
+`npm run test:e2e:setup`, `npm run test:e2e`, then
+`npm run test:e2e:teardown`. Browser runtimes are installed once with
+`npx playwright install --with-deps chromium firefox webkit`.
+
+Before migrations or database commands, confirm `DATABASE_URL` points to a
+disposable local database. `db:push` is never a shared/staging/production
+migration command.
 
 ### Dependency and build ownership
 
