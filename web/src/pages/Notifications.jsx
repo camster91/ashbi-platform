@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Bell, Check, CheckCheck } from 'lucide-react';
 import { api } from '../lib/api';
-import { EmptyState, LoadingState } from '../components/ui';
+import { EmptyState, ListPageSkeleton } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
 
 export default function Notifications() {
@@ -58,9 +58,7 @@ export default function Notifications() {
       )}
 
       {isLoading ? (
-        <div className="flex justify-center py-12">
-          <LoadingState label="Loading notifications…" compact />
-        </div>
+        <ListPageSkeleton rows={5} label="Loading notifications" />
       ) : isError ? (
         <QueryErrorState
           error={error}

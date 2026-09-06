@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { FolderOpen, ChevronRight, Plus, Clock, User, Tag } from 'lucide-react';
 import { api } from '../lib/api';
-import { EmptyState, LoadingState } from '../components/ui';
+import { EmptyState, KanbanPageSkeleton } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
 import { getHealthColor, getProjectStatusColor, getProjectStatusLabel, cn } from '../lib/utils';
 import CreateProjectModal from '../components/CreateProjectModal';
@@ -194,11 +194,7 @@ export default function Projects() {
   });
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <LoadingState label="Loading projects…" compact />
-      </div>
-    );
+    return <KanbanPageSkeleton label="Loading projects" />;
   }
 
   if (isError) {
@@ -213,7 +209,7 @@ export default function Projects() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -223,10 +219,11 @@ export default function Projects() {
           </p>
         </div>
         <button
+          type="button"
           onClick={openCreateModal}
-          className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 flex items-center gap-2 transition-colors"
+          className="min-h-11 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 flex items-center gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-4 h-4" aria-hidden="true" />
           New Project
         </button>
       </div>
