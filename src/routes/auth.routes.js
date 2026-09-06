@@ -5,7 +5,7 @@ import bcrypt from 'bcrypt';
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import env from '../config/env.js';
-import { isCurrentUserSession, revokeUserSessions, sessionCookieMaxAge, signUserSession } from '../auth/session.js';
+import { isCurrentUserSession, revokeUserSessions, sessionCookieOptions, signUserSession } from '../auth/session.js';
 import {
   validateBody,
   schemas,
@@ -64,13 +64,7 @@ export default async function authRoutes(fastify) {
       const { user, token } = await fastify.auth.login({ email, password });
 
       reply
-        .setCookie('token', token, {
-          path: '/',
-          httpOnly: true,
-          secure: env.isProduction,
-          sameSite: env.isProduction ? 'strict' : 'lax',
-          maxAge: sessionCookieMaxAge()
-        })
+        .setCookie('token', token, sessionCookieOptions({ includeMaxAge: true }))
         .send({ user });
     } catch (err) {
       return reply.status(401).send({ error: 'Invalid credentials' });
@@ -91,7 +85,7 @@ export default async function authRoutes(fastify) {
       // Logout is idempotent: always clear the browser cookie.
     }
     reply
-      .clearCookie('token', { path: '/', httpOnly: true, secure: process.env.NODE_ENV === 'production' && !request.headers.host?.includes('localhost'), sameSite: 'lax' })
+      .clearCookie('token', sessionCookieOptions())
       .send({ success: true });
   });
 
@@ -305,13 +299,7 @@ export default async function authRoutes(fastify) {
     const jwtToken = signUserSession(fastify.jwt, user);
 
     reply
-      .setCookie('token', jwtToken, {
-        path: '/',
-        httpOnly: true,
-        secure: env.isProduction,
-        sameSite: env.isProduction ? 'strict' : 'lax',
-        maxAge: sessionCookieMaxAge()
-      })
+      .setCookie('token', jwtToken, sessionCookieOptions({ includeMaxAge: true }))
       .send({
         user: {
           id: user.id,
@@ -353,13 +341,7 @@ export default async function authRoutes(fastify) {
     const token = signUserSession(fastify.jwt, user);
 
     reply
-      .setCookie('token', token, {
-        path: '/',
-        httpOnly: true,
-        secure: env.isProduction,
-        sameSite: env.isProduction ? 'strict' : 'lax',
-        maxAge: sessionCookieMaxAge()
-      })
+      .setCookie('token', token, sessionCookieOptions({ includeMaxAge: true }))
       .send({
         user: {
           id: user.id,

@@ -7,6 +7,20 @@ export function sessionCookieMaxAge(value = env.jwtExpiresIn) {
   return Number(match[1]) * multipliers[match[2]];
 }
 
+/** Shared cookie attributes for login setCookie and logout clearCookie. */
+export function sessionCookieOptions({ includeMaxAge = false } = {}) {
+  const options = {
+    path: '/',
+    httpOnly: true,
+    secure: env.isProduction,
+    sameSite: env.isProduction ? 'strict' : 'lax',
+  };
+  if (includeMaxAge) {
+    options.maxAge = sessionCookieMaxAge();
+  }
+  return options;
+}
+
 export function signUserSession(jwt, user, extraClaims = {}) {
   return jwt.sign({
     id: user.id,
