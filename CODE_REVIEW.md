@@ -1,5 +1,13 @@
 # Code Review — ashbi-platform
 
+> **Historical snapshot (May 2026).** This file is retained for audit context
+> only. Do **not** use it as the current risk register or agent TODO list.
+> Several findings below have been remediated (for example, Zod/`validateBody`
+> coverage across most mutation routes, frontend/backend dependency split, and
+> the AGENTS.md “known bugs”). For live product readiness, use
+> [`docs/product-status.md`](docs/product-status.md). For cloud setup, use
+> [`AGENTS.md`](AGENTS.md).
+
 **Date:** May 1, 2026
 **Reviewer:** Pi AI
 **Scope:** Full-stack (Fastify backend + React/Vite frontend + Prisma + Docker)
@@ -10,7 +18,7 @@
 
 Ashbi Platform is an ambitious agency management hub with 90+ route files, 30+ frontend pages, AI integrations, and a PostgreSQL + Redis + Socket.IO stack. The codebase shows strong feature velocity but has several systemic issues around **auth consistency, test coverage, dependency bloat, and input validation** that should be addressed before the next production deploy.
 
-**Risk Level:** 🟡 Medium — fixable, but the auth gaps and zero validation on many routes need immediate attention.
+**Risk Level (as of May 2026):** 🟡 Medium — fixable, but the auth gaps and zero validation on many routes need immediate attention. **Currency:** treat this section as historical; re-verify against current code before acting.
 
 ---
 
