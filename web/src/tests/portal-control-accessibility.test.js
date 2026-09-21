@@ -28,8 +28,13 @@ describe('critical portal and shell control semantics', () => {
   it('names chat fields, send actions, delete actions, and connection status', () => {
     expect(portal).toContain('<label htmlFor="client-portal-email"');
     expect(portal).toContain('id="client-portal-login-error" role="alert"');
-    expect(portal.match(/aria-label="Message to project team"/g)).toHaveLength(2);
-    expect(portal.match(/aria-label="Send message"/g)).toHaveLength(2);
+    // The chat composer is a single shared PortalChatComposer component rendered
+    // from both the project-detail panel and the Chat tab, so its labels appear
+    // once in source. Count the render sites, not the literals, so a future
+    // de-duplication cannot quietly drop a surface.
+    expect(portal.match(/<PortalChatComposer\b/g)).toHaveLength(2);
+    expect(portal.match(/aria-label="Message to project team"/g)).toHaveLength(1);
+    expect(portal.match(/aria-label="Send message"/g)).toHaveLength(1);
     expect(portal.match(/aria-label={`Delete \${doc\.originalName}`}/g)).toHaveLength(2);
     expect(portal.match(/role="status" aria-live="polite"/g).length).toBeGreaterThanOrEqual(2);
     expect(portal).toContain('aria-label="Project for chat"');
