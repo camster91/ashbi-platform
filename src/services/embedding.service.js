@@ -103,6 +103,11 @@ export async function searchSimilar(query, limit = 5, clientId = null, organizat
     ? prisma.sql`AND ce."clientId" = ${clientId}`
     : prisma.sql``;
 
+  // Bind the vector as a single parameter fragment instead of splicing it into
+  // the statement text. `::vector` is applied to the bound value, so the
+  // embedding never becomes part of the SQL string.
+  const vector = prisma.sql`${queryEmbedding}::vector`;
+
   const results = await prisma.$queryRaw`
     SELECT
       ce.id,
@@ -111,12 +116,12 @@ export async function searchSimilar(query, limit = 5, clientId = null, organizat
       ce.content,
       ce.metadata,
       c.name as "clientName",
-      1 - (ce.embedding <=> ${queryEmbedding}::vector) as similarity
+      1 - (ce.embedding <=> ${vector}) as similarity
     FROM "client_embeddings" ce
     JOIN clients c ON c.id = ce."clientId"
     WHERE ${tenantClause}
     ${clientClause}
-    ORDER BY ce.embedding <=> ${queryEmbedding}::vector
+    ORDER BY ce.embedding <=> ${vector}
     LIMIT ${limit}
   `;
 

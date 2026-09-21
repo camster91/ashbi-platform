@@ -299,11 +299,15 @@ Write a helpful, professional reply that addresses the client's needs. Be concis
   fastify.post('/sync-now', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
-    const { exec } = await import('child_process');
+    // SECURITY: run the sync script with execFile (no shell) instead of exec.
+    // The previous shell string interpolated the resolved script path, so any
+    // future change that let a caller influence the path or arguments would
+    // have been a command-injection vector. execFile passes argv directly.
+    const { execFile } = await import('child_process');
     const scriptPath = path.resolve(__dirname, '../../scripts/gmail-sync.js');
-    
+
     return new Promise((resolve) => {
-      const child = exec(`node ${scriptPath}`, { timeout: 120000 }, (error, stdout, stderr) => {
+      execFile(process.execPath, [scriptPath], { timeout: 120000 }, (error, stdout, stderr) => {
         if (error) {
           resolve({ success: false, error: 'Command failed', output: stderr });
         } else {
