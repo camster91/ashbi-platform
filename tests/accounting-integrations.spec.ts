@@ -26,12 +26,18 @@ test('accounting providers are truthful, unavailable, and responsive', async ({ 
 
   await page.goto('/settings');
 
-  await expect(page.getByRole('heading', { name: 'Accounting Integrations' })).toBeVisible();
-  await expect(page.getByText('QuickBooks Online')).toBeVisible();
-  await expect(page.getByText('Xero', { exact: true })).toBeVisible();
-  await expect(page.getByText('Unavailable')).toHaveCount(2);
-  await expect(page.getByRole('button', { name: /connect|sync|disconnect/i })).toHaveCount(0);
-  await expect(page.getByText(/connected|sync started|last synced/i)).toHaveCount(0);
+  // Scope every assertion to the Accounting Integrations region so valid
+  // integrations elsewhere on Settings (Google Calendar, Slack) cannot fail
+  // this gate, while a connect/sync control appearing inside the accounting
+  // section itself still fails it.
+  const accountingSection = page.getByRole('region', { name: 'Accounting Integrations' });
+  await expect(accountingSection).toBeVisible();
+  await expect(accountingSection.getByRole('heading', { name: 'Accounting Integrations' })).toBeVisible();
+  await expect(accountingSection.getByText('QuickBooks Online')).toBeVisible();
+  await expect(accountingSection.getByText('Xero', { exact: true })).toBeVisible();
+  await expect(accountingSection.getByText('Unavailable')).toHaveCount(2);
+  await expect(accountingSection.getByRole('button', { name: /connect|sync|disconnect/i })).toHaveCount(0);
+  await expect(accountingSection.getByText(/connected|sync started|last synced/i)).toHaveCount(0);
 
   const hasHorizontalOverflow = await page.evaluate(() => (
     document.documentElement.scrollWidth > document.documentElement.clientWidth
