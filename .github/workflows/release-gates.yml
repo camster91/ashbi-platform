@@ -45,6 +45,12 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npm ci --prefix web --no-audit --no-fund
+      - name: Audit production dependency graph
+        # Fail the release on any high-severity advisory in the production
+        # (non-dev) dependency graph, before tests and build spend time.
+        run: |
+          npm audit --omit=dev --audit-level=high
+          npm --prefix web audit --omit=dev --audit-level=high
       - name: Generate Prisma client and test database
         run: |
           npx prisma generate
