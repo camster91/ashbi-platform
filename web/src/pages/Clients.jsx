@@ -23,7 +23,7 @@ import {
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
 import { useToast } from '../hooks/useToast';
-import { Button, Card, EmptyState, LoadingState } from '../components/ui';
+import { Button, Card, EmptyState, TablePageSkeleton } from '../components/ui';
 import CreateClientModal from '../components/CreateClientModal';
 import QueryErrorState from '../components/QueryErrorState';
 
@@ -142,11 +142,7 @@ export default function Clients() {
   }
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <LoadingState label="Loading clients…" compact />
-      </div>
-    );
+    return <TablePageSkeleton rows={8} showStats label="Loading clients" />;
   }
 
   return (

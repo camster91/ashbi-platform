@@ -1,12 +1,46 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Circle, ExternalLink, ListChecks } from 'lucide-react';
+import {
+  Check,
+  Circle,
+  ExternalLink,
+  ListChecks,
+  LayoutDashboard,
+  Inbox,
+  Sparkles,
+  ChevronRight,
+  ChevronLeft,
+} from 'lucide-react';
 import { api } from '../lib/api';
 import Modal from './Modal';
 import { Button } from './ui';
 
 const QUERY_KEY = ['onboarding-progress'];
+
+const FEATURE_INTRO_STEPS = [
+  {
+    id: 'command-center',
+    icon: LayoutDashboard,
+    title: 'Your agency command center',
+    description:
+      'Ashbi Hub brings clients, projects, proposals, and invoices into one calm workspace. Start each day on the dashboard to see what needs attention.',
+  },
+  {
+    id: 'inbox',
+    icon: Inbox,
+    title: 'Never miss a client message',
+    description:
+      'The Smart Inbox surfaces urgent threads, sentiment, and AI summaries so you can triage in seconds—not scroll through email.',
+  },
+  {
+    id: 'quick-create',
+    icon: Sparkles,
+    title: 'Create anything in seconds',
+    description:
+      'Press ⌘K (or Ctrl+K) to jump to clients, projects, invoices, and more. It is the fastest way to move work forward.',
+  },
+];
 
 function taskStatus(task) {
   if (task.completed) return 'Completed';
@@ -21,6 +55,7 @@ export default function OnboardingTour() {
   const previousPath = useRef(location.pathname);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState('');
+  const [introStep, setIntroStep] = useState(0);
 
   const progressQuery = useQuery({
     queryKey: QUERY_KEY,
@@ -49,6 +84,7 @@ export default function OnboardingTour() {
   useEffect(() => {
     const handleRestart = () => {
       queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+      setIntroStep(0);
       setOpen(true);
     };
     window.addEventListener('ashbi:onboarding-restart', handleRestart);
@@ -75,6 +111,9 @@ export default function OnboardingTour() {
   const resolvedCount = progress.completedCount || 0;
   const totalCount = progress.totalCount || 0;
   const isEligible = progress.state === 'eligible';
+  const feature = FEATURE_INTRO_STEPS[introStep];
+  const FeatureIcon = feature.icon;
+  const isLastIntroStep = introStep === FEATURE_INTRO_STEPS.length - 1;
 
   return (
     <>
@@ -93,29 +132,55 @@ export default function OnboardingTour() {
       <Modal
         isOpen={open}
         onClose={() => setOpen(false)}
-        title={isEligible ? 'Get started with Ashbi' : 'Your getting-started checklist'}
+        title={isEligible ? 'Welcome to Ashbi Hub' : 'Your getting-started checklist'}
         size="lg"
       >
         <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            {isEligible
-              ? 'These tasks are matched to your account role. Progress is saved to your account and follows you across devices.'
-              : `${resolvedCount} of ${totalCount} tasks resolved. A task completes only after Ashbi verifies the successful action.`}
-          </p>
+          {isEligible ? (
+            <>
+              <div className="flex gap-1.5" aria-hidden="true">
+                {FEATURE_INTRO_STEPS.map((step, idx) => (
+                  <div
+                    key={step.id}
+                    className={`h-1 flex-1 rounded-full transition-colors ${
+                      idx <= introStep ? 'bg-primary' : 'bg-muted'
+                    }`}
+                  />
+                ))}
+              </div>
 
-          <div
-            role="progressbar"
-            aria-label="Onboarding progress"
-            aria-valuemin={0}
-            aria-valuemax={totalCount}
-            aria-valuenow={resolvedCount}
-            className="h-2 overflow-hidden rounded-full bg-muted"
-          >
-            <div
-              className="h-full bg-primary motion-reduce:transition-none"
-              style={{ width: `${totalCount ? (resolvedCount / totalCount) * 100 : 0}%` }}
-            />
-          </div>
+              <div className="rounded-2xl border border-border bg-muted/30 p-6">
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
+                  <FeatureIcon className="h-6 w-6 text-primary" aria-hidden="true" />
+                </div>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                  Step {introStep + 1} of {FEATURE_INTRO_STEPS.length}
+                </p>
+                <h3 className="font-heading text-xl text-foreground">{feature.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{feature.description}</p>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                {resolvedCount} of {totalCount} tasks resolved. A task completes only after Ashbi verifies the successful action.
+              </p>
+
+              <div
+                role="progressbar"
+                aria-label="Onboarding progress"
+                aria-valuemin={0}
+                aria-valuemax={totalCount}
+                aria-valuenow={resolvedCount}
+                className="h-2 overflow-hidden rounded-full bg-muted"
+              >
+                <div
+                  className="h-full bg-primary motion-reduce:transition-none"
+                  style={{ width: `${totalCount ? (resolvedCount / totalCount) * 100 : 0}%` }}
+                />
+              </div>
+            </>
+          )}
 
           {!isEligible && (
             <ol className="max-h-[52vh] space-y-3 overflow-y-auto pr-1" aria-label="Getting-started tasks">
@@ -167,18 +232,29 @@ export default function OnboardingTour() {
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
             <Button variant="ghost" onClick={() => setOpen(false)}>Not now</Button>
             <div className="flex flex-wrap gap-2">
+              {isEligible && introStep > 0 && (
+                <Button variant="outline" size="sm" onClick={() => setIntroStep((s) => s - 1)}>
+                  <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" /> Back
+                </Button>
+              )}
               <Button
                 variant="outline"
                 disabled={run.isPending}
                 onClick={() => run.mutate({ type: 'skip-all' })}
               >
-                Skip onboarding
+                {isEligible ? 'Skip tour' : 'Skip onboarding'}
               </Button>
-              {isEligible && (
-                <Button disabled={run.isPending} onClick={() => run.mutate({ type: 'start' })}>
-                  {run.isPending ? 'Saving…' : 'Start checklist'}
-                </Button>
-              )}
+              {isEligible ? (
+                isLastIntroStep ? (
+                  <Button disabled={run.isPending} onClick={() => run.mutate({ type: 'start' })}>
+                    {run.isPending ? 'Saving…' : 'Start checklist'} <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                  </Button>
+                ) : (
+                  <Button onClick={() => setIntroStep((s) => s + 1)}>
+                    Next <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                  </Button>
+                )
+              ) : null}
             </div>
           </div>
         </div>

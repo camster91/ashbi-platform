@@ -234,6 +234,26 @@
   100% { background-position: 200% 0; }
 }
 
+/* Staggered list entrance — purely decorative */
+.stagger-children > * {
+  opacity: 0;
+  animation: slideUp 0.35s ease-out forwards;
+}
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 40ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 80ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 120ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 160ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 200ms; }
+.stagger-children > *:nth-child(7) { animation-delay: 240ms; }
+.stagger-children > *:nth-child(8) { animation-delay: 280ms; }
+.stagger-children > *:nth-child(n+9) { animation-delay: 300ms; }
+
+/* iOS safe area helper used by mobile bottom nav / toasts */
+.safe-area-inset-bottom {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+
 /*
  * Shared motion contract: no interaction or status depends on movement.
  * Reduced-motion users receive immediate/static entrance, hover, loading,
@@ -257,6 +277,12 @@
   .animate-scale-in {
     opacity: 1;
     transform: none;
+  }
+
+  .stagger-children > * {
+    opacity: 1;
+    transform: none;
+    animation: none !important;
   }
 
   .hover-lift:hover,
