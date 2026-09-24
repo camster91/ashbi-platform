@@ -11,11 +11,12 @@ function hashPassword(password) {
   return bcrypt.hashSync(password, 12)
 }
 
-async function createUserOrSkip(email, password, name, role, options = {}) {
+async function createUserOrSkip(organizationId, email, password, name, role, options = {}) {
   const existing = await prisma.user.findUnique({ where: { email } })
   if (existing) return existing
   return prisma.user.create({
     data: {
+      organizationId,
       email,
       name,
       password: hashPassword(password),
@@ -34,20 +35,28 @@ async function main() {
     process.exit(1)
   }
 
+  // Users require an organization. Use the same default organization that
+  // local login assigns to ownerless accounts (src/auth/providers/local.provider.js).
+  const organization = await prisma.organization.upsert({
+    where: { slug: 'ashbi-agency' },
+    create: { name: 'Ashbi Agency', slug: 'ashbi-agency' },
+    update: {}
+  })
+
   const admin = await createUserOrSkip(
-    'cameron@ashbi.ca', adminPass, 'Cameron', 'ADMIN',
+    organization.id, 'cameron@ashbi.ca', adminPass, 'Cameron', 'ADMIN',
     { hourlyRate: 50, skills: JSON.stringify(['management', 'design', 'development']), capacity: 100 }
   )
   console.log('Created admin:', admin.email)
 
   const bianca = await createUserOrSkip(
-    'bianca@ashbi.ca', adminPass, 'Bianca', 'TEAM',
+    organization.id, 'bianca@ashbi.ca', adminPass, 'Bianca', 'TEAM',
     { hourlyRate: 50, skills: JSON.stringify(['design', 'ui', 'branding']), capacity: 100 }
   )
   console.log('Created team member:', bianca.email)
 
   const numan = await createUserOrSkip(
-    'numan@ashbi.ca', adminPass, 'Numan', 'CONTRACTOR',
+    organization.id, 'numan@ashbi.ca', adminPass, 'Numan', 'CONTRACTOR',
     { hourlyRate: 50, skills: JSON.stringify(['development', 'fullstack']), capacity: 80 }
   )
   console.log('Created contractor:', numan.email)
