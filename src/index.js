@@ -38,6 +38,8 @@ import botRoutes from './routes/bot.routes.js';
 import onboardingRoutes from './routes/onboarding.routes.js';
 import retainerRoutes from './routes/retainer.routes.js';
 import leadRoutes from './routes/leads.routes.js';
+import clientAcquisitionRoutes from './routes/client-acquisition.routes.js';
+import { clientAcquisitionCorsOptions, loadClientAcquisitionConfig } from './services/client-acquisition.contract.js';
 import credentialRoutes from './routes/credential.routes.js';
 import portalRoutes from './routes/portal.routes.js';
 import templateRoutes from './routes/template.routes.js';
@@ -126,7 +128,19 @@ fastify.addHook('onSend', async (_request, reply, payload) => {
   return payload;
 });
 await fastify.register(compress, { global: true });
-await fastify.register(cors, { origin: env.isDev ? ['http://localhost:3000', 'http://localhost:5173'] : env.corsOrigins, credentials: true });
+const appCorsOptions = { origin: env.isDev ? ['http://localhost:3000', 'http://localhost:5173'] : env.corsOrigins, credentials: true };
+await fastify.register(cors, {
+  // The public ashbi.ca inquiry API gets its own allowlist and never accepts
+  // credentialed (cookie) requests; everything else keeps the app policy.
+  delegator: (request, callback) => {
+    const url = request.raw?.url || request.url || '';
+    if (/^\/api\/client-acquisition\/(?:config|intake)(?:[/?]|$)/.test(url)) {
+      callback(null, clientAcquisitionCorsOptions(loadClientAcquisitionConfig()));
+      return;
+    }
+    callback(null, appCorsOptions);
+  },
+});
 await fastify.register(cookie);
 await fastify.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } });
 await fastify.register(rateLimit, {
@@ -253,6 +267,7 @@ await fastify.register(templateRoutes, { prefix: '/api/templates' });
 await fastify.register(portalRoutes, { prefix: '/api/portal' });
 await fastify.register(credentialRoutes, { prefix: '/api/credentials' });
 await fastify.register(leadRoutes, { prefix: '/api/leads' });
+await fastify.register(clientAcquisitionRoutes, { prefix: '/api/client-acquisition' });
 await fastify.register(retainerRoutes, { prefix: '/api/retainers' });
 await fastify.register(onboardingRoutes, { prefix: '/api/onboarding' });
 await fastify.register(botRoutes, { prefix: '/api/bot' });

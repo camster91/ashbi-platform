@@ -60,6 +60,7 @@ model Organization {
   googleCalendarConnections GoogleCalendarConnection[]
   notionImportRecords NotionImportRecord[]
   aiBridgeActions AiBridgeAction[]
+  publicInquiries PublicInquiry[]
 
   @@map("organizations")
 }
@@ -111,6 +112,7 @@ model User {
   onboardingProgress OnboardingProgress?
   googleCalendarConnection GoogleCalendarConnection?
   aiBridgeActions        AiBridgeAction[]
+  ownedPublicInquiries   PublicInquiry[] @relation("PublicInquiryOwner")
 
   @@index([organizationId])
   @@map("users")
@@ -2105,4 +2107,40 @@ model WPBridgeNonce {
   @@index([organizationId, createdAt])
   @@index([createdAt])
   @@map("wp_bridge_nonces")
+}
+
+// Public ashbi.ca inquiry accepted through /api/client-acquisition/intake.
+// Acceptance records the inquiry only; it never creates a client, proposal,
+// invoice, payment, booking, or outbound message. See
+// docs/client-acquisition-intake.md for the contract and retention policy.
+model PublicInquiry {
+  id               String    @id @default(cuid())
+  organizationId   String
+  ownerId          String?
+  idempotencyKey   String
+  payloadHash      String
+  name             String
+  email            String
+  company          String?
+  phone            String?
+  serviceLine      String
+  businessContext  String
+  requestedOutcome String
+  timing           String?
+  budgetBand       String?
+  budgetCurrency   String?
+  privacyVersion   String
+  consentedAt      DateTime
+  attribution      Json?
+  status           String    @default("NEW") // NEW, REVIEWED, ARCHIVED
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owner        User?        @relation("PublicInquiryOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, idempotencyKey])
+  @@index([organizationId, createdAt])
+  @@index([ownerId])
+  @@map("public_inquiries")
 }
