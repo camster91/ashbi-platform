@@ -19,6 +19,9 @@ export default defineConfig({
   // Keep Playwright from importing Vitest's `*.test.mjs` integration suite.
   // Browser tests use the conventional `*.spec.ts` suffix.
   testMatch: '**/*.spec.ts',
+  // These need the production preview build (service workers, route chunks)
+  // and run through playwright.pwa.config.ts / playwright.public.config.ts.
+  testIgnore: ['**/pwa-offline.spec.ts', '**/public-route-deep-links.spec.ts'],
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
