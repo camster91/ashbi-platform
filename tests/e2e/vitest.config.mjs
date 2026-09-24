@@ -1,15 +1,13 @@
 // tests/e2e/vitest.config.mjs
 //
-// Vitest config for the magic-login end-to-end smoke. Single worker
-// because the 14 steps mutate shared Postgres + wp-env state.
+// Vitest config for the full-stack smoke. Single worker because the
+// steps share one seeded database and admin session.
 
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
     include: ['tests/e2e/**/*.test.mjs'],
-    // 14 steps share state (wp_sites row, JWT, magic-login token,
-    // active transient). Parallel workers would race on the same rows.
     fileParallelism: false,
     pool: 'forks',
     isolate: false,

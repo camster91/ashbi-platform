@@ -157,8 +157,6 @@ jobs:
         env:
           CI: true
           HUB_BASE: http://localhost:3001
-          WP_BASE: http://localhost:8888
-          SHARED_SECRET: test-e2e-secret-12345
       - name: Upload E2E output
         if: always()
         uses: actions/upload-artifact@v4

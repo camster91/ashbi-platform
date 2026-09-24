@@ -1,19 +1,15 @@
 # tests/e2e/docker-compose.test.yml
 #
-# Hub stack for the magic-login end-to-end smoke test.
+# Hub stack for the full-stack end-to-end smoke test.
 #
 # Services:
 #   postgres  — fresh DB per test run (no volume)
 #   redis     — required for BullMQ queues and the /api/health readiness
 #               check (database + redis + worker heartbeat must all be ok).
-#   migrate   — one-shot `npx prisma db push` against the test DB.
-#               Prisma 7 reads the URL from prisma.config.ts datasource
-#               block, but `dotenv/config` only sets vars present in .env
-#               — it doesn't synthesize them. Compose sets the env var
-#               but doesn't write the .env file. So we materialize the
-#               URL into /app/.env via the entrypoint before invoking
-#               db push. --url flag is also passed as a belt-and-suspenders
-#               override.
+#   migrate   — one-shot `npx prisma migrate deploy` against the test DB.
+#               Prisma 7 reads the URL through prisma.config.ts, which only
+#               sees vars present in .env, so the entrypoint materializes
+#               DATABASE_URL into /app/.env first.
 #   seed      — one-shot `node prisma/seed.js` after migrate completes.
 #               Creates cameron@ashbi.ca with the role ADMIN so the test
 #               can log in via /api/auth/login.
@@ -23,7 +19,6 @@
 #               postgres (healthy) + redis (healthy) + migrate (succeeded)
 #               + seed (succeeded).
 #
-# WP_BRIDGE_SECRET matches ashbi_secret_key in tests/e2e/wp-env/setup-plugin.sh.
 # ADMIN_SEED_PASSWORD matches ADMIN_PASSWORD the test logs in with.
 #
 # Usage:
@@ -123,8 +118,6 @@ services:
       context: ../..
       dockerfile: Dockerfile
     restart: unless-stopped
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
         condition: service_healthy
@@ -144,10 +137,6 @@ services:
       JWT_SECRET: test-jwt-secret-do-not-use-in-prod
       ADMIN_EMAIL: cameron@ashbi.ca
       ADMIN_PASSWORD: TestPass123!
-      WP_BRIDGE_SECRET: test-e2e-secret-12345
-      MAGIC_LOGIN_AUDIT_MAX: 500
-      MAGIC_LOGIN_RATE_LIMIT_PER_HOUR: 5
-      FLEET_DIGEST_ENABLED: "false"
     ports:
       - "${HOST_PORT:-3001}:3000"
     healthcheck:
