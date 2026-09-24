@@ -52,9 +52,11 @@ jobs:
           npm audit --omit=dev --audit-level=high
           npm --prefix web audit --omit=dev --audit-level=high
       - name: Generate Prisma client and test database
+        # Apply the committed migration chain (not db push) so database-level
+        # guarantees such as the note-hierarchy cycle trigger exist in tests.
         run: |
           npx prisma generate
-          npx prisma db push
+          npx prisma migrate deploy
       - name: Check package boundaries
         run: npm run check:boundaries
       - name: Type check
