@@ -438,7 +438,8 @@ export default async function authRoutes(fastify) {
         if (env.isProduction) {
           return reply.status(503).send({ error: 'Email service not configured. Please contact support to reset your password.' });
         } else {
-          console.log(`[auth] Dev mode — reset link: ${resetLink}`);
+          // Authentication action links are credentials. Never write them to logs;
+          // Local testing must use an approved sandbox email provider.
         }
       }
 
@@ -566,7 +567,8 @@ export default async function authRoutes(fastify) {
       }
     } else {
       console.warn('[auth] Mailgun not configured — invitation email not sent');
-      console.log(`[auth] Dev mode — invite link: ${inviteLink}`);
+      // The authenticated admin response below is the only non-email recovery
+      // path. Never copy the invitation credential into application logs.
     }
 
     return {
