@@ -11,7 +11,7 @@ describe('dashboard production contract', () => {
     expect(dashboard).not.toContain('ASHBI_FALLBACK');
     expect(dashboard).not.toMatch(/SSCA|Numan|TotalETO|Wellington Quarters/);
 
-    for (const collection of ['atRiskProjects', 'latest', 'wpSiteAlerts', 'overdueTasks']) {
+    for (const collection of ['atRiskProjects', 'latest', 'overdueTasks']) {
       expect(dashboard).toContain(`${collection}?.length || 0`);
     }
   });

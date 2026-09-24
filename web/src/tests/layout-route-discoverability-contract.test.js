@@ -21,7 +21,6 @@ describe('shell route discoverability contract', () => {
     expect(layout).toContain("{ name: 'Approvals', href: '/approvals'");
     expect(layout).toContain("{ name: 'Retainers', href: '/retainers'");
     expect(layout).toContain("{ name: 'Invoice Chaser', href: '/invoice-chaser'");
-    expect(layout).toContain("{ name: 'WP Sites', href: '/wp-sites'");
 
     for (const path of [
       '/assets',
@@ -31,7 +30,6 @@ describe('shell route discoverability contract', () => {
       '/approvals',
       '/retainers',
       '/invoice-chaser',
-      '/wp-sites',
     ]) {
       expect(app).toContain(`path="${path}"`);
     }

@@ -58,7 +58,6 @@ import timeSessionRoutes from './routes/time-sessions.routes.js';
 import semanticSearchRoutes from './routes/semantic-search.routes.js';
 import creativeBriefRoutes from './routes/creative-brief.routes.js';
 import assetLibraryRoutes from './routes/asset-library.routes.js';
-import wpBridgeRoutes from './routes/wp-bridge.routes.js';
 import apiKeyRoutes, { authenticateApiKey } from './routes/api-key.routes.js';
 import aiBridgeRoutes from './routes/ai-bridge.routes.js';
 import estimateRoutes from './routes/estimate.routes.js';
@@ -166,18 +165,6 @@ fastify.addHook('onRequest', async (request, reply) => {
     request.url === '/api/health' ||
     request.url === '/api/live'
   ) return;
-  // Plugin-originated bridge writes authenticate with a provisioned per-site
-  // HMAC and database-backed nonce in their route preHandler. Human bridge
-  // reads and admin operations continue through JWT/session validation.
-  if (
-    (request.method === 'PUT' && request.url === '/api/wp-bridge') ||
-    (request.method === 'POST' && [
-      '/api/wp-bridge/backup',
-      '/api/wp-bridge/report',
-      '/api/wp-bridge/alert',
-      '/api/wp-bridge/hours'
-    ].includes(request.url))
-  ) return;
   let jwtVerified = false;
   try {
     await request.jwtVerify();
@@ -252,7 +239,6 @@ await fastify.register(timeSessionRoutes, { prefix: '/api/time-sessions' });
 await fastify.register(semanticSearchRoutes, { prefix: '/api/semantic-search' });
 await fastify.register(creativeBriefRoutes, { prefix: '/api/creative-brief' });
 await fastify.register(assetLibraryRoutes, { prefix: '/api/asset-library' });
-await fastify.register(wpBridgeRoutes, { prefix: '/api/wp-bridge' });
 await fastify.register(automationRoutes, { prefix: '/api/automations' });
 await fastify.register(expenseRoutes, { prefix: '/api/expenses' });
 await fastify.register(commandCenterRoutes, { prefix: '/api/command-center' });

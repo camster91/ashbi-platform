@@ -817,7 +817,6 @@ export default function Settings() {
               { label: 'Approvals', href: '/approvals', desc: 'Pending automation and content approvals' },
               { label: 'Retainers', href: '/retainers', desc: 'Recurring client retainers' },
               { label: 'Invoice Chaser', href: '/invoice-chaser', desc: 'Overdue invoice follow-ups' },
-              { label: 'WP Sites', href: '/wp-sites', desc: 'WordPress site fleet' },
               { label: 'Reports (planned)', desc: 'P&L and team utilization will appear after the finance workflow is approved.' },
             ].map(({ label, href, desc }) => (
               href ? <a

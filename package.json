@@ -34,7 +34,6 @@
     "audit:password-hashes": "node scripts/audit-password-hashes.mjs",
     "audit:uploads": "node scripts/audit-uploads.mjs",
     "quarantine:uploads": "node scripts/audit-uploads.mjs --quarantine",
-    "audit:wp-bridge-ownership": "node scripts/audit-wp-bridge-ownership.mjs",
     "audit:credential-access": "node scripts/review-credential-access.mjs",
     "rotate:credential-keys": "node scripts/rotate-credential-keys.mjs",
     "drill:credential-rotation": "node scripts/drill-credential-rotation.mjs",

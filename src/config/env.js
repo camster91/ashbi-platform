@@ -108,13 +108,6 @@ const env = {
   botSecret: process.env.BOT_SECRET,
   botOrganizationId: process.env.BOT_ORGANIZATION_ID,
 
-  // WP Bridge
-  wpBridgeSecret: process.env.WP_BRIDGE_SECRET,
-
-  // Slack incoming webhook for the WP-bridge daily fleet digest.
-  // Empty / unset disables the digest (the manual POST endpoint will
-  // return 503 with code SLACK_WEBHOOK_MISSING).
-  slackWebhookUrl: process.env.SLACK_WEBHOOK_URL,
   // Slack Events API signing secret. The event route fails closed while this
   // is absent; it is intentionally distinct from an outgoing webhook URL.
   slackSigningSecret: process.env.SLACK_SIGNING_SECRET,
@@ -177,11 +170,6 @@ if (!env.isDev) {
     MAILGUN_SIGNING_KEY: 'your-mailgun-signing-key',
     STRIPE_SECRET_KEY: 'your-stripe-secret-key',
     STRIPE_WEBHOOK_SECRET: 'your-stripe-webhook-secret',
-    // PR-D: WP_BRIDGE_SECRET was previously accepted with the placeholder
-    // value. The WordPress plugin uses the same secret to sign HMAC-SHA256
-    // payloads, so a copy-paste deploy would authenticate against a
-    // publicly-known shared secret. Refuse to start until it's replaced.
-    WP_BRIDGE_SECRET: 'your-wp-bridge-shared-secret',
     BOT_SECRET: 'your-bot-secret',
     COOLIFY_TOKEN: 'your-coolify-api-token',
     SHOPIFY_CLIENT_SECRET: 'your-shopify-client-secret',
@@ -192,7 +180,6 @@ if (!env.isDev) {
     OLLAMA_API_KEY: 'your-ollama-cloud-api-key',
     OPENCLAW_API_KEY: 'your-openclaw-api-key',
     HUNTER_API_KEY: 'your-hunter-api-key',
-    ASHBI_WP_APP_PASSWORD: 'your-wordpress-app-password',
     NOTION_TOKEN: 'your-notion-integration-token',
   };
   const placeholderHits = Object.entries(placeholders)

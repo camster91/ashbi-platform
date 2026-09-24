@@ -77,7 +77,7 @@ npm run verify:browser  # browser, public-route and PWA/offline checks
 npm run verify:release  # verify plus Lighthouse and release-policy checks
 ```
 
-The full-stack WordPress/Hub smoke remains a separate environment-specific gate:
+The full-stack smoke (Postgres, Redis, worker and API in Docker) runs with:
 `npm run test:e2e:setup`, `npm run test:e2e`, then
 `npm run test:e2e:teardown`. Browser runtimes are installed once with
 `npx playwright install --with-deps chromium firefox webkit`.
