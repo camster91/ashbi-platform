@@ -89,3 +89,30 @@ test('missing, invalid, or stale backups degrade health without taking dependenc
   assert.equal('archive' in staleReport.checks.backup, false);
   assert.equal('sha256' in staleReport.checks.backup, false);
 });
+
+test('unavailable dependencies explain themselves without leaking credentials', async () => {
+  const dependencies = healthyDependencies();
+  dependencies.db.$queryRawUnsafe = async () => {
+    throw new Error(
+      "Can't reach database server at postgresql://ashbi:hunter2@db.internal:5432/ashbi"
+    );
+  };
+  const report = await checkRuntimeHealth({ ...dependencies, revision: 'release-1' });
+  assert.equal(report.checks.database.status, 'unavailable');
+  assert.match(report.checks.database.detail, /Can't reach database server/);
+  assert.equal(report.checks.database.detail.includes('hunter2'), false);
+  assert.equal(report.checks.database.detail.includes('postgresql://'), false);
+  assert.match(report.checks.database.detail, /\[redacted\]/);
+});
+
+test('health reasons stay short and never expose key-shaped values', async () => {
+  const dependencies = healthyDependencies();
+  dependencies.redis.ping = async () => {
+    throw new Error(`auth failed token=super-secret-value ${'x'.repeat(400)}`);
+  };
+  const report = await checkRuntimeHealth({ ...dependencies, revision: 'release-1' });
+  const detail = report.checks.redis.detail;
+  assert.equal(report.checks.redis.status, 'unavailable');
+  assert.equal(detail.includes('super-secret-value'), false);
+  assert.ok(detail.length <= 220, `detail too long: ${detail.length}`);
+});
