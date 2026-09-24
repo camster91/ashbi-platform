@@ -43,28 +43,31 @@ Body (JSON, max 16 KB, unknown keys rejected):
 
 | Field | Rule |
 |---|---|
-| `idempotencyKey` | 16–128 chars, `[A-Za-z0-9_-]` |
+| `idempotencyKey` | 16–128 chars, `[A-Za-z0-9_:-]` (ashbi.ca sends `ashbi_ca:<uuid>`) |
 | `name` | required, ≤ 200 |
 | `email` | required, valid, ≤ 254 (stored lower-cased) |
 | `company` | optional, ≤ 200 |
-| `phone` | optional, 5–40 chars of digits, spaces, `()+.-` |
-| `serviceLine` | must be in the configured allowlist |
+| `phone` | optional, ≤ 40 |
+| `serviceLine` | must be in the configured allowlist (ashbi.ca slugs: `brand_packaging`, `web_commerce`, `custom_platform`, `ai_automation`, `managed_support`, `unknown`) |
 | `businessContext`, `requestedOutcome` | required, ≤ 5000 each |
-| `timing` | optional: `asap`, `1-3-months`, `3-6-months`, `exploring` |
-| `budgetBand` | optional: `under-5k`, `5k-15k`, `15k-50k`, `50k-plus`, `not-sure` |
-| `budgetCurrency` | `CAD` or `USD`; required with an amount band, forbidden with `not-sure` or no band |
+| `timing` | optional: `urgent_30_days`, `one_to_three_months`, `three_to_six_months`, `exploring` |
+| `budgetBand` | optional: `under_5k`, `5k_10k`, `10k_25k`, `25k_plus`, `not_sure`, `prefer_not_to_say` |
+| `budgetCurrency` | `CAD` or `USD`; required with any budget band, forbidden without one |
 | `consent` | must be `true` |
 | `privacyVersion` | must equal the active version |
-| `attribution` | optional object: `landingPage`, `referrer` (http(s) URLs ≤ 500), `source`, `medium`, `campaign` (≤ 100, `[\w .:+-]`), `clickId` (≤ 200, `[\w.-]`) |
+| `attribution` | optional object: `landingPage` (same-site path, ≤ 500), `referrer` (http(s) URL, ≤ 500), `source`, `medium`, `campaign` (≤ 100), `clickId` (≤ 200) |
 | `website` | honeypot; must be absent or empty |
 
-The referrer is stored as origin + path only (query and fragment stripped);
-the landing page keeps its query so campaign parameters survive. Credentials
-and fragments are removed from both.
+The referrer is stored as origin + path only; its query string, fragment and
+any credentials are stripped. Control characters are removed from all free text.
 
-> The timing and budget enumerations must match
-> `ashbi-redesign/src/lib/hub-inquiry-contract.ts`. Confirm them there before
-> enabling production intake.
+These rules mirror `ashbi-redesign/src/lib/hub-inquiry-contract.ts`
+(`createHubInquiryPayload`). They were verified by running that function's
+real output through `intakeSchema` on 2026-09-24. Change both together.
+
+> ashbi-redesign's `docs/hub-inquiry-integration.md` records that the Hub
+> integration was **paused** on 2026-09-03. This API stays disabled until the
+> five `CLIENT_ACQUISITION_*` variables are set, and setting them needs a fresh decision.
 
 Responses:
 

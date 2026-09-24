@@ -25,7 +25,7 @@ test('public intake persists one tenant-owned inquiry idempotently against a rea
     CLIENT_ACQUISITION_ORGANIZATION_ID: ids.orgA,
     CLIENT_ACQUISITION_OWNER_ID: ids.owner,
     CLIENT_ACQUISITION_PRIVACY_VERSION: 'v1',
-    CLIENT_ACQUISITION_SERVICE_LINES: 'web-design',
+    CLIENT_ACQUISITION_SERVICE_LINES: 'web_commerce',
     CLIENT_ACQUISITION_ALLOWED_ORIGINS: 'https://ashbi.ca',
   });
   const app = Fastify();
@@ -48,7 +48,7 @@ test('public intake persists one tenant-owned inquiry idempotently against a rea
       idempotencyKey: `idem-${suffix}`,
       name: 'Jordan Rivera',
       email: 'jordan@example.com',
-      serviceLine: 'web-design',
+      serviceLine: 'web_commerce',
       businessContext: 'Handmade furniture.',
       requestedOutcome: 'A faster storefront.',
       consent: true,

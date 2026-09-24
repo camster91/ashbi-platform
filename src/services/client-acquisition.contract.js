@@ -9,11 +9,11 @@ import { z } from 'zod';
 
 // Enumerations shared with ashbi-redesign/src/lib/hub-inquiry-contract.ts.
 // Keep these in lockstep with that file; a mismatch rejects real inquiries.
-export const TIMING_OPTIONS = Object.freeze(['asap', '1-3-months', '3-6-months', 'exploring']);
-export const BUDGET_BANDS = Object.freeze(['under-5k', '5k-15k', '15k-50k', '50k-plus', 'not-sure']);
+// The service-line allowlist itself comes from CLIENT_ACQUISITION_SERVICE_LINES
+// and should be a subset of HUB_SERVICE_LINES in that file.
+export const TIMING_OPTIONS = Object.freeze(['urgent_30_days', 'one_to_three_months', 'three_to_six_months', 'exploring']);
+export const BUDGET_BANDS = Object.freeze(['under_5k', '5k_10k', '10k_25k', '25k_plus', 'not_sure', 'prefer_not_to_say']);
 export const BUDGET_CURRENCIES = Object.freeze(['CAD', 'USD']);
-// A band without an amount does not need a currency.
-const CURRENCYLESS_BUDGET_BANDS = new Set(['not-sure']);
 
 export const INTAKE_BODY_LIMIT_BYTES = 16 * 1024;
 
@@ -78,9 +78,7 @@ const text = (max) => z.string()
   .pipe(z.string().min(1).max(max));
 const optionalText = (max) => z.union([z.literal(''), z.null(), text(max)]).optional()
   .transform((value) => (value ? value : null));
-const token = z.string().trim().max(100).regex(/^[\w .:+-]*$/, 'Unsupported characters');
-
-function sanitizeUrl(value, { keepQuery }) {
+function sanitizeReferrer(value) {
   let url;
   try {
     url = new URL(value);
@@ -91,29 +89,31 @@ function sanitizeUrl(value, { keepQuery }) {
   url.username = '';
   url.password = '';
   url.hash = '';
-  if (!keepQuery) url.search = '';
+  // Referrers can carry third-party query strings (tokens, emails).
+  url.search = '';
   return url.toString();
 }
 
+// Campaign values are copied verbatim from utm_* / click-id query parameters,
+// so only length and control characters are constrained.
 const attributionSchema = z.object({
-  landingPage: z.string().max(500).optional(),
+  // Same-site path only, exactly as ashbi.ca's landingPath() produces it.
+  landingPage: z.string().max(500).regex(/^\/(?!\/)[^?#]*$/, 'Must be a site path').optional(),
   referrer: z.string().max(500).optional(),
-  source: token.optional(),
-  medium: token.optional(),
-  campaign: token.optional(),
-  clickId: z.string().trim().max(200).regex(/^[\w.-]*$/, 'Unsupported characters').optional(),
+  source: text(100).optional(),
+  medium: text(100).optional(),
+  campaign: text(100).optional(),
+  clickId: text(200).optional(),
 }).strict().transform((value, ctx) => {
   const result = {};
-  for (const key of ['landingPage', 'referrer']) {
-    if (!value[key]) continue;
-    // Referrers can carry third-party query strings (tokens, emails). Keep only
-    // origin + path; the landing page keeps its own campaign query.
-    const cleaned = sanitizeUrl(value[key], { keepQuery: key === 'landingPage' });
+  if (value.landingPage) result.landingPage = value.landingPage;
+  if (value.referrer) {
+    const cleaned = sanitizeReferrer(value.referrer);
     if (!cleaned) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [key], message: 'Must be an http(s) URL' });
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['referrer'], message: 'Must be an http(s) URL' });
       return z.NEVER;
     }
-    result[key] = cleaned;
+    result.referrer = cleaned;
   }
   for (const key of ['source', 'medium', 'campaign', 'clickId']) {
     if (value[key]) result[key] = value[key];
@@ -122,12 +122,12 @@ const attributionSchema = z.object({
 });
 
 export const intakeSchema = z.object({
-  idempotencyKey: z.string().trim().min(16).max(128).regex(/^[\w-]+$/, 'Unsupported characters'),
+  // ashbi.ca sends `ashbi_ca:<uuid>`.
+  idempotencyKey: z.string().trim().min(16).max(128).regex(/^[\w:-]+$/, 'Unsupported characters'),
   name: text(200),
   email: z.string().trim().max(254).email().transform((value) => value.toLowerCase()),
   company: optionalText(200),
-  phone: z.union([z.literal(''), z.null(), z.string().trim().max(40).regex(/^[\d\s()+.-]{5,40}$/, 'Invalid phone')])
-    .optional().transform((value) => (value ? value : null)),
+  phone: optionalText(40),
   serviceLine: z.string().trim().min(1).max(100),
   businessContext: text(5000),
   requestedOutcome: text(5000),
@@ -140,12 +140,13 @@ export const intakeSchema = z.object({
   // Honeypot. Humans never see this field, so any value marks automation.
   website: z.string().max(500).optional(),
 }).strict().superRefine((value, ctx) => {
-  const needsCurrency = value.budgetBand && !CURRENCYLESS_BUDGET_BANDS.has(value.budgetBand);
+  // ashbi.ca sends a currency (default CAD) whenever any budget band is chosen.
+  const needsCurrency = Boolean(value.budgetBand);
   if (needsCurrency && !value.budgetCurrency) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['budgetCurrency'], message: 'Required for this budget band' });
   }
   if (!needsCurrency && value.budgetCurrency) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['budgetCurrency'], message: 'Only allowed with a budget amount' });
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['budgetCurrency'], message: 'Only allowed with a budget band' });
   }
 });
 

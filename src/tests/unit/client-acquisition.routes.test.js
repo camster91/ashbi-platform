@@ -15,30 +15,32 @@ const env = {
   CLIENT_ACQUISITION_ORGANIZATION_ID: 'org-1',
   CLIENT_ACQUISITION_OWNER_ID: 'owner-1',
   CLIENT_ACQUISITION_PRIVACY_VERSION: '2026-09-01',
-  CLIENT_ACQUISITION_SERVICE_LINES: 'web-design, brand-strategy',
+  CLIENT_ACQUISITION_SERVICE_LINES: 'web_commerce, brand_packaging',
   CLIENT_ACQUISITION_ALLOWED_ORIGINS: 'https://ashbi.ca,https://www.ashbi.ca',
 };
 const enabledConfig = loadClientAcquisitionConfig(env);
 
 function validInquiry(overrides = {}) {
   return {
-    idempotencyKey: 'key-0123456789abcdef',
+    idempotencyKey: 'ashbi_ca:6f1c2a4e-9b7d-4e2a-8c1f-3d5e7a9b0c2d',
     name: 'Jordan Rivera',
     email: 'Jordan@Example.com',
     company: 'Rivera Co',
-    serviceLine: 'web-design',
+    serviceLine: 'web_commerce',
     businessContext: 'We sell handmade furniture online.',
     requestedOutcome: 'A faster storefront.',
-    timing: '1-3-months',
-    budgetBand: '15k-50k',
+    timing: 'one_to_three_months',
+    budgetBand: '10k_25k',
     budgetCurrency: 'CAD',
     consent: true,
     privacyVersion: '2026-09-01',
     attribution: {
-      landingPage: 'https://ashbi.ca/services?utm_source=newsletter',
+      landingPage: '/contact/',
       referrer: 'https://news.example.com/article?token=secret#frag',
       source: 'newsletter',
       medium: 'email',
+      campaign: 'fall/2026 launch',
+      clickId: 'Cj0KCQjw-abc_123',
     },
     ...overrides,
   };
@@ -108,7 +110,7 @@ test('config returns the active privacy version and service lines without identi
   t.after(() => app.close());
   const response = await app.inject({ method: 'GET', url: '/api/client-acquisition/config' });
   assert.equal(response.statusCode, 200);
-  assert.deepEqual(response.json(), { enabled: true, privacyVersion: '2026-09-01', serviceLines: ['web-design', 'brand-strategy'] });
+  assert.deepEqual(response.json(), { enabled: true, privacyVersion: '2026-09-01', serviceLines: ['web_commerce', 'brand_packaging'] });
   assert.doesNotMatch(response.body, /org-1|owner-1|ashbi\.ca/);
   assert.equal(response.headers['cache-control'], 'no-store');
 });
@@ -138,10 +140,12 @@ test('a valid inquiry creates one organization-owned record for the configured o
   assert.equal(row.privacyVersion, '2026-09-01');
   assert.ok(row.consentedAt instanceof Date);
   assert.deepEqual(row.attribution, {
-    landingPage: 'https://ashbi.ca/services?utm_source=newsletter',
+    landingPage: '/contact/',
     referrer: 'https://news.example.com/article',
     source: 'newsletter',
     medium: 'email',
+    campaign: 'fall/2026 launch',
+    clickId: 'Cj0KCQjw-abc_123',
   });
   assert.equal(prisma.notifications.length, 1);
   assert.equal(prisma.notifications[0].userId, 'owner-1');
@@ -211,11 +215,13 @@ test('invalid inquiries fail safely without storing anything', async (t) => {
     [{ name: 'x'.repeat(201) }, 'name'],
     [{ budgetCurrency: 'EUR' }, 'budgetCurrency'],
     [{ budgetCurrency: undefined }, 'budgetCurrency'],
-    [{ budgetBand: 'not-sure' }, 'budgetCurrency'],
+    [{ budgetBand: undefined }, 'budgetCurrency'],
     [{ timing: 'yesterday' }, 'timing'],
     [{ budgetBand: 'a-million' }, 'budgetBand'],
     [{ attribution: { referrer: 'javascript:alert(1)' } }, 'attribution.referrer'],
-    [{ attribution: { source: '<script>' } }, 'attribution.source'],
+    [{ attribution: { landingPage: 'https://evil.example/' } }, 'attribution.landingPage'],
+    [{ attribution: { landingPage: '//evil.example/' } }, 'attribution.landingPage'],
+    [{ attribution: { source: 'x'.repeat(101) } }, 'attribution.source'],
     [{ attribution: { tracker: 'unexpected' } }, 'attribution'],
     [{ organizationId: 'org-2' }, '(body)'],
     [{ idempotencyKey: 'short' }, 'idempotencyKey'],
@@ -229,9 +235,27 @@ test('invalid inquiries fail safely without storing anything', async (t) => {
   assert.equal(prisma.rows.length, 0);
 });
 
-test('an unknown budget band with no amount needs no currency', () => {
-  const parsed = intakeSchema.parse(validInquiry({ budgetBand: 'not-sure', budgetCurrency: undefined }));
-  assert.equal(parsed.budgetCurrency, null);
+test('accepts every timing and budget value ashbi.ca can send', () => {
+  for (const timing of ['urgent_30_days', 'one_to_three_months', 'three_to_six_months', 'exploring']) {
+    assert.equal(intakeSchema.parse(validInquiry({ timing })).timing, timing);
+  }
+  // The form sends its currency select (default CAD) with every band, including
+  // the bands without an amount.
+  for (const budgetBand of ['under_5k', '5k_10k', '10k_25k', '25k_plus', 'not_sure', 'prefer_not_to_say']) {
+    assert.equal(intakeSchema.parse(validInquiry({ budgetBand, budgetCurrency: 'CAD' })).budgetBand, budgetBand);
+  }
+  const noBudget = intakeSchema.parse(validInquiry({ budgetBand: undefined, budgetCurrency: undefined, timing: undefined }));
+  assert.equal(noBudget.budgetBand, null);
+  assert.equal(noBudget.budgetCurrency, null);
+});
+
+test('accepts a minimal ashbi.ca payload with only required fields', () => {
+  // JSON.stringify drops the undefined optionals createHubInquiryPayload leaves.
+  const minimal = JSON.parse(JSON.stringify(validInquiry({
+    company: undefined, phone: undefined, timing: undefined, budgetBand: undefined, budgetCurrency: undefined,
+    website: undefined, attribution: { landingPage: '/contact/' },
+  })));
+  assert.equal(intakeSchema.safeParse(minimal).success, true);
 });
 
 test('oversized bodies are rejected before parsing', async (t) => {
