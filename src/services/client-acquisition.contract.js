@@ -76,8 +76,11 @@ function stripControlCharacters(value) {
 const text = (max) => z.string()
   .transform((value) => stripControlCharacters(value).trim())
   .pipe(z.string().min(1).max(max));
-const optionalText = (max) => z.union([z.literal(''), z.null(), text(max)]).optional()
-  .transform((value) => (value ? value : null));
+// Blank or whitespace-only optional values are stored as null.
+const optionalText = (max) => z.preprocess(
+  (value) => (typeof value === 'string' ? stripControlCharacters(value).trim() || null : value),
+  z.string().max(max).nullable().optional(),
+).transform((value) => value ?? null);
 function sanitizeReferrer(value) {
   let url;
   try {

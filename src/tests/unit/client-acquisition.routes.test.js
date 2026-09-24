@@ -326,3 +326,9 @@ test('free text drops control characters but keeps line breaks', () => {
   assert.equal(parsed.name, 'Jordan Rivera');
   assert.equal(parsed.businessContext, 'Line one\nLine two');
 });
+
+test('blank optional fields are stored as null', () => {
+  const parsed = intakeSchema.parse(validInquiry({ company: '   ', phone: '' }));
+  assert.equal(parsed.company, null);
+  assert.equal(parsed.phone, null);
+});

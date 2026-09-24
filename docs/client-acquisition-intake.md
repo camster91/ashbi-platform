@@ -87,6 +87,13 @@ Responses:
 A retry of an already-accepted key is answered as a replay even if the privacy
 version changed afterwards.
 
+> **Before enabling behind a reverse proxy:** the Fastify app does not set
+> `trustProxy`, so behind Traefik/Coolify every visitor shares the proxy's IP
+> and the 10-per-10-minutes intake limit applies site-wide. The same is true of
+> the existing login rate limit. Configure `trustProxy` for the deployed proxy
+> hop first (an app-wide change that also affects auth rate limits and recorded
+> signer IPs).
+
 ## CORS
 
 Only `/config` and `/intake` use this policy: the configured origins, methods
