@@ -139,8 +139,7 @@ export default async function estimateRoutes(fastify) {
     });
 
     // Send estimate email with magic link to client
-    const portalUrl = `${process.env.FRONTEND_URL || 'https://hub.ashbi.ca'}/portal/estimate/${estimate.viewToken}`;
-    const env = fastify.utils.getEnvConfig ? fastify.utils.getEnvConfig() : { mailgunApiKey: null, mailgunDomain: null };
+    const portalUrl = `${env.hubUrl}/portal/estimate/${estimate.viewToken}`;
 
     if (env.mailgunApiKey && env.mailgunDomain && estimate.client?.email) {
       try {
@@ -173,7 +172,8 @@ export default async function estimateRoutes(fastify) {
       }
     } else {
       console.warn('[estimate] Mailgun not configured or no client email — estimate email not sent');
-      console.log(`[estimate] Dev mode — estimate link: ${portalUrl}`);
+      // The view token lets anyone approve or decline the estimate. Never write
+      // it to logs; staff can recover it from the authenticated response below.
     }
 
     return updated;
