@@ -93,8 +93,16 @@ while [ "$(date +%s)" -lt "$DEADLINE" ]; do
   fi
   sleep 2
 done
-curl -fsS "$HUB_URL/api/health" >/dev/null \
-  || fail "hub never became healthy at $HUB_URL (see: docker logs ashbi-e2e-hub-1)"
+if ! curl -fsS "$HUB_URL/api/health" >/dev/null 2>&1; then
+  log "last /api/health report:"
+  curl -sS "$HUB_URL/api/health" >&2 || true
+  printf '\n' >&2
+  for svc in hub worker; do
+    log "docker logs ashbi-e2e-${svc}-1 (tail):"
+    docker logs --tail 80 "ashbi-e2e-${svc}-1" >&2 2>&1 || true
+  done
+  fail "hub never became healthy at $HUB_URL"
+fi
 
 # ---------------------------------------------------------------------------
 # 4. Verify the admin user from seed can actually log in.
