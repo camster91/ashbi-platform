@@ -3,6 +3,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import env from '../config/env.js';
 import { validateBody, gmailDraftReplySchema, gmailSendSchema } from '../validators/schemas.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -12,20 +13,20 @@ const GMAIL_API = 'https://www.googleapis.com/gmail/v1/users/me';
 // ==================== TOKEN MANAGEMENT ====================
 
 function getTokensPath() {
-  return process.env.GMAIL_TOKENS_PATH
+  return env.gmailTokensPath
     || path.resolve(__dirname, '../../config/google-tokens.json');
 }
 
 function loadTokens() {
-  if (process.env.GMAIL_TOKENS_JSON) {
-    return JSON.parse(process.env.GMAIL_TOKENS_JSON);
+  if (env.gmailTokensJson) {
+    return JSON.parse(env.gmailTokensJson);
   }
   const raw = fs.readFileSync(getTokensPath(), 'utf-8');
   return JSON.parse(raw);
 }
 
 function saveTokens(tokens) {
-  if (process.env.GMAIL_TOKENS_JSON) return;
+  if (env.gmailTokensJson) return;
   fs.writeFileSync(getTokensPath(), JSON.stringify(tokens, null, 4), 'utf-8');
 }
 

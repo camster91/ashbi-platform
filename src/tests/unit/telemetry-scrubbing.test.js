@@ -37,6 +37,40 @@ test('tracing is opt-in and never exits ahead of application shutdown', () => {
   assert.doesNotMatch(tracing, /process\.exit\(/);
   assert.match(tracing, /process\.env\.APP_REVISION/);
   assert.match(tracing, /ATTR_DEPLOYMENT_ENVIRONMENT_NAME/);
+  assert.doesNotMatch(tracing, /import logger from '\.\/utils\/logger\.js';/);
+  assert.match(tracing, /await import\('\.\/utils\/logger\.js'\)/);
+});
+
+
+test('authentication action links are never written to application logs', () => {
+  const authRoutes = fs.readFileSync(new URL('../../routes/auth.routes.js', import.meta.url), 'utf8');
+  const logCalls = authRoutes.match(/(?:(?:request|fastify)\.log|console|logger)\.(?:log|info|warn|error)\([\s\S]*?\);/g) || [];
+
+  for (const logCall of logCalls) {
+    assert.doesNotMatch(
+      logCall,
+      /\b(?:resetLink|inviteLink|resetToken|token)\b|\?token=/,
+      `Authentication credential found in log call: ${logCall}`
+    );
+  }
+});
+
+
+test('email delivery failures log only non-sensitive error metadata', () => {
+  for (const routePath of ['proposal.routes.js', 'contract.routes.js']) {
+    const route = fs.readFileSync(new URL(`../../routes/${routePath}`, import.meta.url), 'utf8');
+
+    assert.doesNotMatch(
+      route,
+      /logger\.error\(\{\s*err\s*,\s*to\s*,\s*(?:proposalTitle|contractTitle)\s*\}/,
+      `${routePath} must not include client metadata in a delivery-error log`
+    );
+    assert.match(
+      route,
+      /logger\.error\(\{\s*errorName:\s*err\?\.name,\s*errorCode:\s*err\?\.code\s*\},\s*'\[(?:Proposal|Contract)\] Email send error'\)/,
+      `${routePath} must retain only non-sensitive delivery-error metadata`
+    );
+  }
 });
 
 test('authentication action links are never written to application logs', () => {

@@ -5,7 +5,8 @@ import bcrypt from 'bcrypt';
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import env from '../config/env.js';
-import { isCurrentUserSession, revokeUserSessions, sessionCookieMaxAge, signUserSession } from '../auth/session.js';
+import logger from '../utils/logger.js';
+import { isCurrentUserSession, revokeUserSessions, sessionCookieMaxAge, sessionCookieOptions, signUserSession } from '../auth/session.js';
 import {
   validateBody,
   schemas,
@@ -65,11 +66,8 @@ export default async function authRoutes(fastify) {
 
       reply
         .setCookie('token', token, {
-          path: '/',
-          httpOnly: true,
-          secure: env.isProduction,
-          sameSite: env.isProduction ? 'strict' : 'lax',
-          maxAge: sessionCookieMaxAge()
+          ...sessionCookieOptions(),
+          maxAge: sessionCookieMaxAge(),
         })
         .send({ user });
     } catch (err) {
@@ -91,7 +89,10 @@ export default async function authRoutes(fastify) {
       // Logout is idempotent: always clear the browser cookie.
     }
     reply
-      .clearCookie('token', { path: '/', httpOnly: true, secure: process.env.NODE_ENV === 'production' && !request.headers.host?.includes('localhost'), sameSite: 'lax' })
+      // Cookie-clear options must match the cookie-set options used in /login
+      // (name+path+secure+sameSite). If they diverge, the browser keeps the
+      // session cookie and the user appears to remain signed in.
+      .clearCookie('token', sessionCookieOptions())
       .send({ success: true });
   });
 
@@ -142,16 +143,16 @@ export default async function authRoutes(fastify) {
       // Fix: in production, refuse first-user registration if
       // ADMIN_INVITE_TOKEN is unset OR doesn't match. In dev, allow
       // it (the seed needs to work without ceremony).
-      if (!process.env.ADMIN_INVITE_TOKEN) {
-        if (process.env.NODE_ENV === 'production') {
+      if (!env.adminInviteToken) {
+        if (env.isProduction) {
           return reply.status(503).send({
             error: 'Server misconfigured: ADMIN_INVITE_TOKEN is required for first-user registration in production. Set it in your environment before deploying.'
           });
         }
         // dev / test: log warning, continue
-        console.warn('[auth] First user registration without ADMIN_INVITE_TOKEN (non-production env).');
+        logger.warn('[auth] First user registration without ADMIN_INVITE_TOKEN (non-production env).');
       } else {
-        if (!adminInviteToken || adminInviteToken !== process.env.ADMIN_INVITE_TOKEN) {
+        if (!adminInviteToken || adminInviteToken !== env.adminInviteToken) {
           return reply.status(403).send({ error: 'Invalid admin invite token. Provide the correct ADMIN_INVITE_TOKEN to register as first admin.' });
         }
       }
@@ -306,12 +307,9 @@ export default async function authRoutes(fastify) {
 
     reply
       .setCookie('token', jwtToken, {
-        path: '/',
-        httpOnly: true,
-        secure: env.isProduction,
-        sameSite: env.isProduction ? 'strict' : 'lax',
-        maxAge: sessionCookieMaxAge()
-      })
+          ...sessionCookieOptions(),
+          maxAge: sessionCookieMaxAge(),
+        })
       .send({
         user: {
           id: user.id,
@@ -354,12 +352,9 @@ export default async function authRoutes(fastify) {
 
     reply
       .setCookie('token', token, {
-        path: '/',
-        httpOnly: true,
-        secure: env.isProduction,
-        sameSite: env.isProduction ? 'strict' : 'lax',
-        maxAge: sessionCookieMaxAge()
-      })
+          ...sessionCookieOptions(),
+          maxAge: sessionCookieMaxAge(),
+        })
       .send({
         user: {
           id: user.id,
@@ -425,16 +420,16 @@ export default async function authRoutes(fastify) {
               </div>
             `
           });
-          console.log(`[auth] Password reset email sent to ${email}`);
+          logger.info({ email }, '[auth] Password reset email sent');
         } catch (mailErr) {
-          console.error('[auth] Failed to send reset email:', mailErr.message || mailErr);
+          logger.error({ err: mailErr }, '[auth] Failed to send reset email');
           // In production, surface the error so the user knows email delivery failed
           if (env.isProduction) {
             return reply.status(503).send({ error: 'Failed to send reset email. Please try again or contact support.' });
           }
         }
       } else {
-        console.warn('[auth] Mailgun not configured — password reset email not sent');
+        logger.warn('[auth] Mailgun not configured — password reset email not sent');
         if (env.isProduction) {
           return reply.status(503).send({ error: 'Email service not configured. Please contact support to reset your password.' });
         } else {
@@ -445,7 +440,7 @@ export default async function authRoutes(fastify) {
 
       return { success: true };
     } catch (err) {
-      console.error('Forgot password error:', err);
+      logger.error({ err }, 'Forgot password error');
       return reply.status(500).send({ error: 'Failed to process password reset request' });
     }
   });
@@ -483,7 +478,7 @@ export default async function authRoutes(fastify) {
 
       return { success: true };
     } catch (err) {
-      console.error('Reset password error:', err);
+      logger.error({ err }, 'Reset password error');
       return reply.status(500).send({ error: 'Failed to reset password' });
     }
   });
@@ -537,7 +532,7 @@ export default async function authRoutes(fastify) {
     });
 
     // Send invitation email via Mailgun
-    const inviteLink = `${process.env.HUB_URL || 'https://hub.ashbi.ca'}/client/invite?token=${token}`;
+    const inviteLink = `${env.hubUrl}/client/invite?token=${token}`;
 
     if (env.mailgunApiKey && env.mailgunDomain) {
       try {
@@ -561,12 +556,12 @@ export default async function authRoutes(fastify) {
             </div>
           `
         });
-        console.log(`[auth] Client invitation email sent to ${email}`);
+        logger.info({ email }, '[auth] Client invitation email sent');
       } catch (mailErr) {
-        console.error('[auth] Failed to send invitation email:', mailErr.message || mailErr);
+        logger.error({ err: mailErr }, '[auth] Failed to send invitation email');
       }
     } else {
-      console.warn('[auth] Mailgun not configured — invitation email not sent');
+      logger.warn('[auth] Mailgun not configured — invitation email not sent');
       // The authenticated admin response below is the only non-email recovery
       // path. Never copy the invitation credential into application logs.
     }

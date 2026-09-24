@@ -1,5 +1,14 @@
 import env from '../config/env.js';
 
+export function sessionCookieOptions(isProduction = env.isProduction) {
+  return {
+    path: '/',
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'strict' : 'lax',
+  };
+}
+
 export function sessionCookieMaxAge(value = env.jwtExpiresIn) {
   const match = /^(\d+)([smhd])$/.exec(value);
   if (!match) throw new Error('JWT_EXPIRES_IN must use s, m, h, or d (for example, 7d)');
