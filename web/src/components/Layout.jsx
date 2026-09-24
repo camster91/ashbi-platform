@@ -626,7 +626,7 @@ export default function Layout({ children }) {
           onClick={() => setMoreMenuOpen(false)}
           aria-label="Close menu"
          />
-                    <div className="absolute bottom-full right-2 mb-4 w-64 bg-card/90 backdrop-blur-xl border border-border/40 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-300" role="menu">
+                    <div className="absolute bottom-full right-2 mb-4 w-64 max-h-[calc(100dvh-7rem)] overflow-y-auto overscroll-contain bg-card/90 backdrop-blur-xl border border-border/40 rounded-2xl shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-4 duration-300" role="menu">
                       {/* Quick Actions */}
                       <div className="px-4 py-3 border-b border-border/40">
                         <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Quick Actions</p>
@@ -656,7 +656,7 @@ export default function Layout({ children }) {
                       <div className="px-4 py-3 border-t border-border/40">
                         <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Finance & Docs</p>
                       </div>
-                      <div className="py-2 max-h-40 overflow-y-auto">
+                      <div className="py-2">
                         {financeNav.map((item) => (
                           <Link
                             key={item.name}
