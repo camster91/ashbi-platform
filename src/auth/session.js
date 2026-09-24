@@ -1,19 +1,29 @@
 import env from '../config/env.js';
 
-export function sessionCookieOptions(isProduction = env.isProduction) {
-  return {
-    path: '/',
-    httpOnly: true,
-    secure: isProduction,
-    sameSite: isProduction ? 'strict' : 'lax',
-  };
-}
-
 export function sessionCookieMaxAge(value = env.jwtExpiresIn) {
   const match = /^(\d+)([smhd])$/.exec(value);
   if (!match) throw new Error('JWT_EXPIRES_IN must use s, m, h, or d (for example, 7d)');
   const multipliers = { s: 1, m: 60, h: 3600, d: 86400 };
   return Number(match[1]) * multipliers[match[2]];
+}
+
+/**
+ * Shared cookie attributes for login setCookie and logout clearCookie.
+ * Accepts a boolean `isProduction` (legacy form) or `{ isProduction, includeMaxAge }`.
+ */
+export function sessionCookieOptions(options = {}) {
+  const { isProduction = env.isProduction, includeMaxAge = false } =
+    typeof options === 'boolean' ? { isProduction: options } : options;
+  const cookie = {
+    path: '/',
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'strict' : 'lax',
+  };
+  if (includeMaxAge) {
+    cookie.maxAge = sessionCookieMaxAge();
+  }
+  return cookie;
 }
 
 export function signUserSession(jwt, user, extraClaims = {}) {

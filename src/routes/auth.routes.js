@@ -6,7 +6,7 @@ import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import env from '../config/env.js';
 import logger from '../utils/logger.js';
-import { isCurrentUserSession, revokeUserSessions, sessionCookieMaxAge, sessionCookieOptions, signUserSession } from '../auth/session.js';
+import { isCurrentUserSession, revokeUserSessions, sessionCookieOptions, signUserSession } from '../auth/session.js';
 import {
   validateBody,
   schemas,
@@ -65,10 +65,7 @@ export default async function authRoutes(fastify) {
       const { user, token } = await fastify.auth.login({ email, password });
 
       reply
-        .setCookie('token', token, {
-          ...sessionCookieOptions(),
-          maxAge: sessionCookieMaxAge(),
-        })
+        .setCookie('token', token, sessionCookieOptions({ includeMaxAge: true }))
         .send({ user });
     } catch (err) {
       return reply.status(401).send({ error: 'Invalid credentials' });
@@ -306,10 +303,7 @@ export default async function authRoutes(fastify) {
     const jwtToken = signUserSession(fastify.jwt, user);
 
     reply
-      .setCookie('token', jwtToken, {
-          ...sessionCookieOptions(),
-          maxAge: sessionCookieMaxAge(),
-        })
+      .setCookie('token', jwtToken, sessionCookieOptions({ includeMaxAge: true }))
       .send({
         user: {
           id: user.id,
@@ -351,10 +345,7 @@ export default async function authRoutes(fastify) {
     const token = signUserSession(fastify.jwt, user);
 
     reply
-      .setCookie('token', token, {
-          ...sessionCookieOptions(),
-          maxAge: sessionCookieMaxAge(),
-        })
+      .setCookie('token', token, sessionCookieOptions({ includeMaxAge: true }))
       .send({
         user: {
           id: user.id,

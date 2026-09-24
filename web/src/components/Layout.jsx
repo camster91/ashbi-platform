@@ -44,6 +44,12 @@ import {
   Phone,
   Bell,
   MessageSquare,
+  Globe,
+  Image,
+  LayoutTemplate,
+  Folders,
+  ListChecks,
+  Repeat,
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { Download, Sun, Moon, Command } from 'lucide-react';
@@ -172,8 +178,20 @@ export default function Layout({ children }) {
     { name: 'Docs', href: '/docs', icon: BookOpen },
   ];
 
+  // Tools — staff workflows that were route-registered but easy to miss
+  const toolsNav = [
+    { name: 'Assets', href: '/assets', icon: Image },
+    { name: 'Project Planner', href: '/project-planner', icon: LayoutTemplate },
+    { name: 'Templates', href: '/project-templates', icon: Folders },
+    { name: 'Semantic Search', href: '/semantic-search', icon: Search },
+  ];
+
   // Admin — collapsible section, only visible to admins
   const adminNav = isAdmin ? [
+    { name: 'Approvals', href: '/approvals', icon: ListChecks },
+    { name: 'Retainers', href: '/retainers', icon: Repeat },
+    { name: 'Invoice Chaser', href: '/invoice-chaser', icon: Send },
+    { name: 'WP Sites', href: '/wp-sites', icon: Globe },
     { name: 'Team', href: '/team', icon: UserCog },
     { name: 'Timesheets', href: '/timesheets', icon: Clock },
     { name: 'Rate Cards', href: '/rate-cards', icon: CreditCard },
@@ -362,6 +380,7 @@ export default function Layout({ children }) {
 
             <div className="border-t border-white/10 pt-2 space-y-1">
               {renderCollapsibleSection('finance', 'Finance & Docs', financeNav)}
+              {renderCollapsibleSection('tools', 'Tools', toolsNav)}
               {adminNav.length > 0 && renderCollapsibleSection('admin', 'Admin', adminNav)}
             </div>
 
@@ -629,6 +648,48 @@ export default function Layout({ children }) {
                               <action.icon className="w-4 h-4 text-muted-foreground" />
                             </div>
                             <span className="font-medium text-foreground">{action.label}</span>
+                          </Link>
+                        ))}
+                      </div>
+
+                      {/* Finance & Docs */}
+                      <div className="px-4 py-3 border-t border-border/40">
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Finance & Docs</p>
+                      </div>
+                      <div className="py-2 max-h-40 overflow-y-auto">
+                        {financeNav.map((item) => (
+                          <Link
+                            key={item.name}
+                            to={item.href}
+                            onClick={() => setMoreMenuOpen(false)}
+                            className="min-h-11 flex items-center gap-4 px-5 py-3 text-sm hover:bg-primary/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            role="menuitem"
+                          >
+                            <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
+                              <item.icon className="w-4 h-4 text-muted-foreground" />
+                            </div>
+                            <span className="font-medium text-foreground">{item.name}</span>
+                          </Link>
+                        ))}
+                      </div>
+
+                      {/* Tools */}
+                      <div className="px-4 py-3 border-t border-border/40">
+                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Tools</p>
+                      </div>
+                      <div className="py-2">
+                        {toolsNav.map((item) => (
+                          <Link
+                            key={item.name}
+                            to={item.href}
+                            onClick={() => setMoreMenuOpen(false)}
+                            className="min-h-11 flex items-center gap-4 px-5 py-3 text-sm hover:bg-primary/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            role="menuitem"
+                          >
+                            <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center">
+                              <item.icon className="w-4 h-4 text-muted-foreground" />
+                            </div>
+                            <span className="font-medium text-foreground">{item.name}</span>
                           </Link>
                         ))}
                       </div>
