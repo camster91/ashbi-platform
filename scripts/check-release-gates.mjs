@@ -47,6 +47,8 @@ export function validateReleaseGates(root = process.cwd()) {
     'npm run test:lighthouse',
     'npm run test:public-routes',
     'npm run test:pwa-offline',
+    'npm audit --omit=dev --audit-level=high',
+    'npm --prefix web audit --omit=dev --audit-level=high',
   ];
   for (const command of commands) {
     if (!release.includes(command)) failures.push(`release-gates.yml is missing ${command}`);
