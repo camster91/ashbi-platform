@@ -201,7 +201,14 @@ function OnboardingPreferences() {
   );
 }
 
+export function toModelNames(models) {
+  if (!models) return [];
+  const values = Array.isArray(models) ? models : Object.values(models);
+  return values.filter((name) => typeof name === 'string' && name.length > 0);
+}
+
 function AIModelSection() {
+  const queryClient = useQueryClient();
   const [saved, setSaved] = useState(false);
 
   const {
@@ -237,19 +244,27 @@ function AIModelSection() {
   const mutation = useMutation({
     mutationFn: (model) => api.setAIProvider('ollama', model),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ai-provider'] });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     },
   });
 
-  const models = modelData?.models || aiData?.ollamaModels || {};
+  const canManage = aiData?.canManage === true;
 
-  // Group models by family
+  // The API returns model names, either as an array (live list) or as the
+  // values of the OLLAMA_MODELS map. Key every card by its real model name so
+  // the value we save is a model the provider can use.
+  const modelNames = [...new Set([
+    ...toModelNames(modelData?.models),
+    ...toModelNames(aiData?.ollamaModels),
+    ...(aiData?.ollamaModel ? [aiData.ollamaModel] : []),
+  ])];
   const families = {};
-  Object.entries(models).forEach(([key, val]) => {
-    const family = val.family || 'Other';
+  modelNames.forEach((name) => {
+    const family = name.split(':')[0] || 'Other';
     if (!families[family]) families[family] = [];
-    families[family].push({ key, ...val });
+    families[family].push({ key: name, label: name, tags: [] });
   });
 
   return (
@@ -273,6 +288,8 @@ function AIModelSection() {
                   <button
                     key={key}
                     onClick={() => setSelectedModel(key)}
+                    disabled={!canManage}
+                    aria-pressed={selectedModel === key}
                     className={`p-3 rounded-lg border text-left transition-all ${
                       selectedModel === key
                         ? 'border-primary bg-primary/5 ring-1 ring-primary'
@@ -295,6 +312,7 @@ function AIModelSection() {
               </div>
             </div>
           ))}
+          {canManage ? (
           <div className="flex items-center gap-3 pt-1">
             <Button
               onClick={() => mutation.mutate(selectedModel)}
@@ -306,10 +324,20 @@ function AIModelSection() {
             </Button>
             {saved && (
               <span className="text-sm text-green-600 flex items-center gap-1">
-                <CheckCircle className="w-4 h-4" /> Saved — restart may be needed
+                <CheckCircle className="w-4 h-4" /> Saved for this server until it restarts
+              </span>
+            )}
+            {mutation.isError && (
+              <span role="alert" className="text-sm text-destructive">
+                {mutation.error?.message || 'Failed to change the AI model'}
               </span>
             )}
           </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              The AI model is shared by every workspace on this deployment, so only a platform operator can change it.
+            </p>
+          )}
           <p className="text-xs text-muted-foreground">
             Current: <span className="font-mono font-medium">{aiData?.ollamaModel || '—'}</span>
           </p>

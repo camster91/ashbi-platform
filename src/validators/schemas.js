@@ -654,7 +654,7 @@ export const templateRenderSchema = z.object({
 export const aiProviderSwitchSchema = z.object({
   provider: z.enum(['claude', 'gemini', 'ollama']),
   // Ollama model name — provider-side validated, but cap to prevent abuse
-  model: z.string().min(1).max(100).optional(),
+  model: z.string().min(1).max(100).regex(/^[\w.:/-]+$/, 'Invalid model name').optional(),
 });
 
 // ── Proposals (Bonsai replacement) ──────────────────────────────────────────

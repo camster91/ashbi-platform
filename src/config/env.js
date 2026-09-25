@@ -25,6 +25,13 @@ const env = {
   ollamaBaseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
   ollamaModel: process.env.OLLAMA_MODEL || 'gemma4:31b',
   aiProvider: process.env.AI_PROVIDER || 'ollama', // 'claude', 'gemini', or 'ollama'
+  // The AI provider is one process-wide setting shared by every organization,
+  // so only these deployment operators (user ids, which cannot be claimed by
+  // registering a look-alike email) may switch it at runtime.
+  platformOperatorUserIds: (process.env.PLATFORM_OPERATOR_USER_IDS || '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean),
   aiModel: 'gemma4:31b',
 
   // Kilo AI (alternative AI gateway)

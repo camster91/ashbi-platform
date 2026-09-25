@@ -10,6 +10,18 @@ import {
   templateRenderSchema,
   aiProviderSwitchSchema,
 } from '../validators/schemas.js';
+import env from '../config/env.js';
+
+// Re-read the account so a demoted or deactivated operator loses the right
+// immediately, not when their session token expires.
+async function isPlatformOperator(prisma, user) {
+  if (!user?.id || !env.platformOperatorUserIds.includes(user.id)) return false;
+  const account = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { role: true, isActive: true },
+  });
+  return account?.role === 'ADMIN' && account.isActive === true;
+}
 
 export default async function settingsRoutes(fastify) {
   // ==================== ASSIGNMENT RULES ====================
@@ -257,34 +269,45 @@ export default async function settingsRoutes(fastify) {
   // Get current AI provider + available Ollama cloud models
   fastify.get('/ai-provider', {
     onRequest: [fastify.authenticate]
-  }, async () => {
-    const { getProviderName } = await import('../ai/providers/index.js');
+  }, async (request) => {
+    const { getProviderName, getOllamaModel } = await import('../ai/providers/index.js');
     const { OLLAMA_MODELS } = await import('../ai/providers/ollama.js');
-    const env = (await import('../config/env.js')).default;
     return {
       provider: getProviderName(),
       available: ['claude', 'gemini', 'ollama'],
-      ollamaModel: env.ollamaModel,
+      ollamaModel: getOllamaModel(),
       ollamaModels: OLLAMA_MODELS,
+      canManage: await isPlatformOperator(request.prisma, request.user),
     };
   });
 
-  // Switch AI provider at runtime (admin only)
+  // Switch AI provider at runtime. The provider is shared by every
+  // organization on this deployment, so an organization admin must not be
+  // able to change it for other tenants: only platform operators may.
   fastify.post('/ai-provider', {
     onRequest: [fastify.adminOnly],
     preHandler: validateBody(aiProviderSwitchSchema),
   }, async (request, reply) => {
+    if (!(await isPlatformOperator(request.prisma, request.user))) {
+      return reply.status(403).send({
+        error: 'The AI provider is shared by every workspace on this deployment and can only be changed by a platform operator.',
+      });
+    }
     const { provider, model } = request.body;
-    if (!provider || !['claude', 'gemini', 'ollama'].includes(provider)) {
-      return reply.status(400).send({ error: 'Invalid provider. Use "claude", "gemini", or "ollama".' });
+    const { setProvider, getProviderName, getOllamaModel } = await import('../ai/providers/index.js');
+    if (provider === 'ollama' && model && model !== getOllamaModel()) {
+      const { default: OllamaProvider, OLLAMA_MODELS } = await import('../ai/providers/ollama.js');
+      const known = new Set([...Object.values(OLLAMA_MODELS), ...await OllamaProvider.listCloudModels(env.ollamaApiKey)]);
+      if (!known.has(model)) {
+        return reply.status(400).send({ error: `Unknown Ollama model: ${model}` });
+      }
     }
-    const { setProvider, getProviderName } = await import('../ai/providers/index.js');
-    setProvider(provider);
-    // Allow overriding the Ollama model at runtime
-    if (provider === 'ollama' && model) {
-      process.env.OLLAMA_MODEL = model;
-    }
-    return { provider: getProviderName(), message: `AI provider switched to ${provider}` };
+    setProvider(provider, { model });
+    return {
+      provider: getProviderName(),
+      ollamaModel: getOllamaModel(),
+      message: `AI provider switched to ${provider}`,
+    };
   });
 
   // List available Ollama cloud models (fetched live from ollama.com)
@@ -292,7 +315,6 @@ export default async function settingsRoutes(fastify) {
     onRequest: [fastify.authenticate]
   }, async () => {
     const { default: OllamaProvider, OLLAMA_MODELS } = await import('../ai/providers/ollama.js');
-    const env = (await import('../config/env.js')).default;
     const models = await OllamaProvider.listCloudModels(env.ollamaApiKey);
     return { models, known: OLLAMA_MODELS };
   });
