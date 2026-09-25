@@ -126,3 +126,9 @@ test('ICE servers are only served to signed-in users and are not cached', async 
   assert.equal(signedIn.headers['cache-control'], 'no-store');
   assert.deepEqual(signedIn.json().iceServers, [{ urls: 'turn:turn.example.com:3478', username: 'u', credential: 'c' }]);
 });
+
+test('a failing socket lookup drops the signal instead of rejecting', async () => {
+  const caller = fakeSocket('alice', ['project:p1']);
+  registerCallSignalling({ in: () => ({ fetchSockets: async () => { throw new Error('adapter timeout'); } }) }, caller);
+  await assert.doesNotReject(caller.trigger('call:signal', { projectId: 'p1', callId: 'c1', to: 'bob', signal: OFFER }));
+});

@@ -67,6 +67,16 @@ export default function ProjectMedia({ projectId }) {
     setCallState('idle');
   }, [projectId, socket, stopLocalTracks]);
 
+  // Drop the current peer but stay in the call, waiting for a participant.
+  const releasePeer = useCallback(() => {
+    peerRef.current?.close();
+    peerRef.current = null;
+    remoteUserRef.current = null;
+    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+    setRemoteParticipant(false);
+    if (callIdRef.current) setCallState('waiting');
+  }, []);
+
   const ensurePeer = useCallback((remoteUser) => {
     if (peerRef.current) return peerRef.current;
     remoteUserRef.current = remoteUser;
@@ -84,10 +94,13 @@ export default function ProjectMedia({ projectId }) {
     };
     peer.onconnectionstatechange = () => {
       if (['failed', 'disconnected', 'closed'].includes(peer.connectionState)) setRemoteParticipant(false);
+      // The other side vanished without a hangup (closed tab, lost network):
+      // release the 1:1 binding so they, or someone else, can join again.
+      if (['failed', 'closed'].includes(peer.connectionState) && peerRef.current === peer) releasePeer();
     };
     peerRef.current = peer;
     return peer;
-  }, [projectId, socket]);
+  }, [projectId, releasePeer, socket]);
 
   const joinCall = useCallback(async () => {
     setCallError('');
@@ -141,7 +154,12 @@ export default function ProjectMedia({ projectId }) {
     if (!socket || !projectId) return undefined;
     socket.emit('join-project', projectId);
     const onPresence = async ({ projectId: incomingProject, callId, userId, state }) => {
-      if (incomingProject !== projectId || state !== 'joined' || !userId || !callIdRef.current || callId === callIdRef.current) return;
+      if (incomingProject !== projectId || !userId || !callIdRef.current || callId === callIdRef.current) return;
+      if (state === 'left') {
+        if (remoteUserRef.current === userId) releasePeer();
+        return;
+      }
+      if (state !== 'joined') return;
       // Already in a call with someone: ignore further participants.
       if (peerRef.current || remoteUserRef.current) return;
       try {
@@ -175,7 +193,7 @@ export default function ProjectMedia({ projectId }) {
       socket.off('call:signal', onSignal);
       leaveCall();
     };
-  }, [ensurePeer, leaveCall, projectId, socket]);
+  }, [ensurePeer, leaveCall, projectId, releasePeer, socket]);
 
   const shareCallScreen = async () => {
     try {

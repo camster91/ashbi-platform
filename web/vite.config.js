@@ -11,9 +11,13 @@ import path from 'path';
 const PRELOADED_ROUTE_CHUNKS = ['src/pages/Login.jsx'];
 
 export function routeChunkPreloadPlugin(modules = PRELOADED_ROUTE_CHUNKS) {
+  let base = '/';
   return {
     name: 'ashbi-route-chunk-preload',
     apply: 'build',
+    configResolved(config) {
+      base = config.base || '/';
+    },
     transformIndexHtml: {
       order: 'post',
       handler(_html, ctx) {
@@ -30,7 +34,7 @@ export function routeChunkPreloadPlugin(modules = PRELOADED_ROUTE_CHUNKS) {
         }
         return [...files].map((file) => ({
           tag: 'link',
-          attrs: { rel: 'modulepreload', crossorigin: true, href: `/${file}` },
+          attrs: { rel: 'modulepreload', crossorigin: true, href: `${base.endsWith('/') ? base : `${base}/`}${file}` },
           injectTo: 'head',
         }));
       },

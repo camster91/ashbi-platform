@@ -35,8 +35,15 @@ export function registerCallSignalling(io, socket) {
     if (JSON.stringify(signal).length > MAX_SIGNAL_BYTES) return;
 
     // Deliver only to the addressed participant, and only to their sockets
-    // that are authorized for this project (joined via join-project).
-    const recipients = await io.in(`user:${to}`).fetchSockets();
+    // that are authorized for this project (joined via join-project). With the
+    // in-memory adapter this resolves in order, so an offer still reaches the
+    // callee before its ICE candidates.
+    let recipients;
+    try {
+      recipients = await io.in(`user:${to}`).fetchSockets();
+    } catch {
+      return; // A dropped signal fails the call visibly; never crash the server.
+    }
     const message = { projectId, callId: boundedCallId(callId), from: socket.userId, signal };
     for (const recipient of recipients) {
       if (recipient.rooms.has(projectRoom(projectId))) recipient.emit('call:signal', message);

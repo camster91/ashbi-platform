@@ -29,6 +29,9 @@ describe('project media collaboration contract', () => {
     for (const emit of emits) expect(emit).toMatch(/\bto: /);
     expect(media).toContain('remoteUserRef.current !== from');
     expect(media).toContain('api.getIceServers()');
+    // A participant who leaves or disconnects without a hangup releases the binding.
+    expect(media).toContain("if (remoteUserRef.current === userId) releasePeer();");
+    expect(media).toContain("['failed', 'closed'].includes(peer.connectionState) && peerRef.current === peer");
     expect(media).not.toContain("iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }");
   });
 

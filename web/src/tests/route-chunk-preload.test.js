@@ -33,3 +33,12 @@ describe('login route chunk preload', () => {
     expect(routeChunkPreloadPlugin().apply).toBe('build');
   });
 });
+
+describe('login route chunk preload with a non-root base', () => {
+  it('prefixes preload links with the configured base path', () => {
+    const plugin = routeChunkPreloadPlugin();
+    plugin.configResolved({ base: '/hub/' });
+    const tags = plugin.transformIndexHtml.handler('<html></html>', { bundle });
+    expect(tags.map((tag) => tag.attrs.href)).toEqual(['/hub/assets/Login.js', '/hub/assets/useTranslation.js']);
+  });
+});
