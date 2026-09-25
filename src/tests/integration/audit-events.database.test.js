@@ -10,6 +10,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { createScopedPrisma } from '../../utils/prisma-tenant-proxy.js';
 import { recordAuditEvent } from '../../services/audit-event.service.js';
 import auditEventRoutes from '../../routes/audit-event.routes.js';
+import { purgeFixtureAuditEvents } from '../helpers/audit-cleanup.js';
 
 const databaseUrl = process.env.TENANT_INTEGRATION_DATABASE_URL;
 const APPEND_ONLY = /append-only/i;
@@ -87,18 +88,12 @@ test('audit events cannot be altered or removed and stay inside their tenant', {
     assert.deepEqual(response.json().events.map((event) => event.id), [forged.id]);
   } finally {
     await app?.close();
-    // Test-only cleanup: a superuser may suspend triggers for its own
-    // transaction. Without that privilege the rows (and their disposable
-    // organizations) are left behind, which is the append-only contract.
-    try {
-      await raw.$transaction(async (tx) => {
-        await tx.$executeRawUnsafe('SET LOCAL session_replication_role = replica');
-        await tx.$executeRawUnsafe('DELETE FROM "audit_events" WHERE "organizationId" IN ($1, $2)', orgA, orgB);
-        await tx.$executeRawUnsafe('DELETE FROM "clients" WHERE "organizationId" IN ($1, $2)', orgA, orgB);
-        await tx.$executeRawUnsafe('DELETE FROM "organizations" WHERE "id" IN ($1, $2)', orgA, orgB);
-      });
-    } catch {
-      // Intentionally ignored; see above.
+    // Shared test-only teardown (see src/tests/helpers/audit-cleanup.js);
+    // organizations are then deleted with foreign keys enforced.
+    if (await purgeFixtureAuditEvents(raw, { ids: [orgA, orgB] })) {
+      assert.equal(await raw.auditEvent.count({ where: { organizationId: { in: [orgA, orgB] } } }), 0);
+      await raw.client.deleteMany({ where: { organizationId: { in: [orgA, orgB] } } });
+      await raw.organization.deleteMany({ where: { id: { in: [orgA, orgB] } } });
     }
     await raw.$disconnect();
   }

@@ -7,6 +7,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import clientAcquisitionRoutes from '../../routes/client-acquisition.routes.js';
 import { loadClientAcquisitionConfig } from '../../services/client-acquisition.contract.js';
 import { createScopedPrisma } from '../../utils/prisma-tenant-proxy.js';
+import { purgeFixtureAuditEvents } from '../helpers/audit-cleanup.js';
 
 const databaseUrl = process.env.TENANT_INTEGRATION_DATABASE_URL;
 
@@ -78,6 +79,7 @@ test('public intake persists one tenant-owned inquiry idempotently against a rea
     assert.equal((await raw.publicInquiry.findFirst({ where: { organizationId: ids.orgA } })).ownerId, null);
 
     // Retention: deleting the organization cascades to its inquiries.
+    await purgeFixtureAuditEvents(raw, { ids: [ids.orgA] });
     await raw.organization.delete({ where: { id: ids.orgA } });
     assert.equal(await raw.publicInquiry.count({ where: { organizationId: ids.orgA } }), 0);
   } finally {
@@ -85,6 +87,7 @@ test('public intake persists one tenant-owned inquiry idempotently against a rea
     await raw.notification.deleteMany({ where: { userId: { in: [ids.owner, ids.other] } } });
     await raw.publicInquiry.deleteMany({ where: { organizationId: { in: [ids.orgA, ids.orgB] } } });
     await raw.user.deleteMany({ where: { id: { in: [ids.owner, ids.other] } } });
+    await purgeFixtureAuditEvents(raw, { ids: [ids.orgA, ids.orgB] });
     await raw.organization.deleteMany({ where: { id: { in: [ids.orgA, ids.orgB] } } });
     await raw.$disconnect();
   }

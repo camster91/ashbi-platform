@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import prismaPkg from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { createScopedPrisma } from '../../utils/prisma-tenant-proxy.js';
+import { purgeFixtureAuditEvents } from '../helpers/audit-cleanup.js';
 
 const databaseUrl = process.env.TENANT_INTEGRATION_DATABASE_URL;
 
@@ -73,6 +74,7 @@ test('wiki hierarchy and templates remain isolated between two real tenants', {
     await raw.user.deleteMany({ where: { id: { in: [ids.userA, ids.userB] } } });
     await raw.project.deleteMany({ where: { id: { in: [ids.projectA, ids.projectB] } } });
     await raw.client.deleteMany({ where: { id: { in: [ids.clientA, ids.clientB] } } });
+    await purgeFixtureAuditEvents(raw, { ids: [ids.orgA, ids.orgB] });
     await raw.organization.deleteMany({ where: { id: { in: [ids.orgA, ids.orgB] } } });
     await raw.$disconnect();
   }

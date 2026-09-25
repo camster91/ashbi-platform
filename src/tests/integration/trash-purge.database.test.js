@@ -5,6 +5,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { permanentlyDeleteTrashedItem, restoreTrashedItem } from '../../services/trash-purge.service.js';
 import { softDelete } from '../../services/trash.service.js';
 import { createScopedPrisma } from '../../utils/prisma-tenant-proxy.js';
+import { purgeFixtureAuditEvents } from '../helpers/audit-cleanup.js';
 
 const { PrismaClient } = prismaPkg;
 const databaseUrl = process.env.TENANT_INTEGRATION_DATABASE_URL;
@@ -84,6 +85,7 @@ test('real database permanent purge physically removes a soft-deleted record and
     if (projectId) await raw.project.deleteMany({ where: { id: projectId } });
     if (clientId) await raw.client.deleteMany({ where: { id: clientId } });
     if (userId) await raw.user.deleteMany({ where: { id: userId } });
+    await purgeFixtureAuditEvents(raw, { ids: [organizationId] });
     if (organizationId) await raw.organization.deleteMany({ where: { id: organizationId } });
     await raw.$disconnect();
   }

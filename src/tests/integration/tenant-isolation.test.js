@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import prismaPkg from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { createScopedPrisma } from '../../utils/prisma-tenant-proxy.js';
+import { purgeFixtureAuditEvents } from '../helpers/audit-cleanup.js';
 
 const databaseUrl = process.env.TENANT_INTEGRATION_DATABASE_URL;
 
@@ -59,6 +60,7 @@ test('two organizations remain isolated across CRUD, bulk, upsert, and nested wr
     await prisma.template.deleteMany({ where: { organizationId: { in: [ids.orgA, ids.orgB] } } });
     await prisma.project.deleteMany({ where: { organizationId: { in: [ids.orgA, ids.orgB] } } });
     await prisma.client.deleteMany({ where: { organizationId: { in: [ids.orgA, ids.orgB] } } });
+    await purgeFixtureAuditEvents(prisma, { ids: [ids.orgA, ids.orgB] });
     await prisma.organization.deleteMany({ where: { id: { in: [ids.orgA, ids.orgB] } } });
     await prisma.$disconnect();
   }
