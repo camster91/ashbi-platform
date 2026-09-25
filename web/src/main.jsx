@@ -67,12 +67,21 @@ function ApiErrorHandler({ children }) {
   return children;
 }
 
+// Tag fatal errors with the reference shown on the fatal screen so support can
+// find the matching event. No-op when Sentry is not configured.
+function reportFatalError(error, errorInfo, errorType, reference) {
+  sentry?.then((Sentry) => Sentry.captureException(error, {
+    tags: { errorReference: reference, errorType },
+    contexts: errorInfo?.componentStack ? { react: { componentStack: errorInfo.componentStack } } : undefined,
+  })).catch(() => {});
+}
+
 preloadInitialRoute(window.location.pathname).finally(() => {
   ReactDOM.createRoot(document.getElementById('root')).render(
     <React.StrictMode>
       <BrowserRouter>
         <ApiErrorHandler>
-          <ErrorBoundary>
+          <ErrorBoundary onError={reportFatalError}>
             <App />
           </ErrorBoundary>
         </ApiErrorHandler>
