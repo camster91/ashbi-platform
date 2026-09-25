@@ -110,6 +110,8 @@ Production has one controller: the immutable direct-VPS procedure in [docs/deplo
 
 Backend construction, process lifecycle, dependency direction, and the incremental route-domain plan are documented in [docs/backend-application-boundaries.md](docs/backend-application-boundaries.md).
 
+Two generated references are kept in sync by CI: [docs/data-dictionary.md](docs/data-dictionary.md) lists every Prisma model with its table, tenant scoping, soft-delete support and fields (`npm run docs:data-dictionary`, checked by `npm run check:data-dictionary`), and [docs/api-access-matrix.md](docs/api-access-matrix.md) lists every API route with its auth guard (regenerate with `UPDATE_ACCESS_MATRIX=1 npm test`; `npm test` fails when it is stale or when an unguarded route is not on the documented public allowlist).
+
 ## Features
 
 ### Code-present core

@@ -17,6 +17,51 @@ import { enterRequestContext } from '../utils/request-context.js';
 import { prisma } from '../config/db.js';
 
 /**
+ * Whether an /api URL bypasses the tenant guard and gets the raw Prisma client.
+ * Routes under these prefixes must scope their own queries (see the API access
+ * matrix test, which lists every signed-in route that relies on that).
+ *
+ * @param {string} url
+ * @returns {boolean}
+ */
+export function isTenancyExemptUrl(url) {
+  // Exempt Auth, Health, Public Portal, and Webhooks from strict isolation.
+  //
+  // Webhooks (Stripe, email inbound) authenticate via HMAC, not JWT —
+  // they have no `request.user.organizationId`. Without this exemption
+  // every webhook POST fails with 403 ORG_CONTEXT_REQUIRED before the
+  // HMAC verify ever runs. Routes still verify signatures themselves.
+  return (
+    url.startsWith('/api/auth') ||
+    url.startsWith('/api/webhooks') ||
+    url.startsWith('/api/portal') ||
+    // Bot API authenticates via BOT_SECRET bearer (not a JWT with org context);
+    // client portal authenticates via its own CLIENT-role JWT and scopes every
+    // query by clientId. Both must bypass the org guard (which would 403 before
+    // their own auth runs), same as the webhook/portal exemptions above.
+    url.startsWith('/api/bot') ||
+    url.startsWith('/api/client-portal') ||
+    url.startsWith('/api/client-acquisition/config') ||
+    url.startsWith('/api/client-acquisition/intake') ||
+    // Public, capability-token-based client flows (no JWT / org context).
+    // These are scoped by an unguessable viewToken/signToken in the URL, not
+    // by tenant. Without these exemptions the tenancy guard 403s before the
+    // token lookup runs, breaking client proposal/contract/estimate/invoice
+    // review links and the Mailgun HITL webhook.
+    url.startsWith('/api/proposals/client') ||
+    url.startsWith('/api/contracts/sign') ||
+    url.startsWith('/api/estimates/view') ||
+    url.startsWith('/api/invoices/client') ||
+    url.startsWith('/api/invoices/stripe-webhook') ||
+    url.startsWith('/api/mailgun') ||
+    url.startsWith('/api/slack/events') ||
+    url.startsWith('/api/slack/oauth/callback') ||
+    url === '/api/health' ||
+    url === '/api/live'
+  );
+}
+
+/**
  * Enterprise Multi-Tenancy Middleware
  *
  * Ensures that every request is scoped to a specific organization.
@@ -33,41 +78,7 @@ export async function tenancyMiddleware(request, reply) {
     return;
   }
 
-  // Exempt Auth, Health, Public Portal, and Webhooks from strict isolation.
-  //
-  // Webhooks (Stripe, email inbound) authenticate via HMAC, not JWT —
-  // they have no `request.user.organizationId`. Without this exemption
-  // every webhook POST fails with 403 ORG_CONTEXT_REQUIRED before the
-  // HMAC verify ever runs. Routes still verify signatures themselves.
-  if (
-    request.url.startsWith('/api/auth') ||
-    request.url.startsWith('/api/webhooks') ||
-    request.url.startsWith('/api/portal') ||
-    // Bot API authenticates via BOT_SECRET bearer (not a JWT with org context);
-    // client portal authenticates via its own CLIENT-role JWT and scopes every
-    // query by clientId. Both must bypass the org guard (which would 403 before
-    // their own auth runs), same as the webhook/portal exemptions above.
-    request.url.startsWith('/api/bot') ||
-    request.url.startsWith('/api/client-portal') ||
-    request.url.startsWith('/api/client-acquisition/config') ||
-    request.url.startsWith('/api/client-acquisition/intake') ||
-    // Public, capability-token-based client flows (no JWT / org context).
-    // These are scoped by an unguessable viewToken/signToken in the URL, not
-    // by tenant. Without these exemptions the tenancy guard 403s before the
-    // token lookup runs, breaking client proposal/contract/estimate/invoice
-    // review links and the Mailgun HITL + lead-intake webhooks.
-    request.url.startsWith('/api/proposals/client') ||
-    request.url.startsWith('/api/contracts/sign') ||
-    request.url.startsWith('/api/estimates/view') ||
-    request.url.startsWith('/api/invoices/client') ||
-    request.url.startsWith('/api/invoices/stripe-webhook') ||
-    request.url.startsWith('/api/mailgun') ||
-    request.url.startsWith('/api/slack/events') ||
-    request.url.startsWith('/api/slack/oauth/callback') ||
-    request.url.startsWith('/api/leads/leads/intake') ||
-    request.url === '/api/health' ||
-    request.url === '/api/live'
-  ) {
+  if (isTenancyExemptUrl(request.url)) {
     request.prisma = prisma; // Use global for auth/portal/health/public routes
     enterRequestContext({ prisma, organizationId: null });
     return;

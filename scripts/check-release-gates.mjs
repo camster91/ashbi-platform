@@ -37,6 +37,7 @@ export function validateReleaseGates(root = process.cwd()) {
     'npm run check:secrets',
     'npm run check:release-gates',
     'npm run check:schema-drift',
+    'npm run check:data-dictionary',
     'npm run type-check',
     'npm run lint',
     'npm --prefix web run lint',

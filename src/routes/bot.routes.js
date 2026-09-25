@@ -36,11 +36,16 @@ export default async function botRoutes(fastify) {
   const BOT_SECRET = env.botSecret;
   const BOT_ORG_ID = env.botOrganizationId;
 
+  // An unset secret must never authenticate: comparing against
+  // `Bearer ${undefined}` would accept the literal header "Bearer undefined".
+  function hasBotSecret(request) {
+    const auth = request.headers.authorization;
+    return Boolean(BOT_SECRET) && typeof auth === 'string' && safeEqual(auth, `Bearer ${BOT_SECRET}`);
+  }
+
   // Scope all authenticated bot traffic to a single service org when configured.
   fastify.addHook('preHandler', async (request) => {
-    if (!BOT_ORG_ID || !BOT_SECRET) return;
-    const auth = request.headers.authorization;
-    if (!auth || !safeEqual(auth, `Bearer ${BOT_SECRET}`)) return;
+    if (!BOT_ORG_ID || !hasBotSecret(request)) return;
     const scoped = createScopedPrisma(fastify.prisma, BOT_ORG_ID);
     request.prisma = scoped;
     request.organizationId = BOT_ORG_ID;
@@ -49,8 +54,7 @@ export default async function botRoutes(fastify) {
 
   // Middleware to validate bot bearer token
   function requireBotAuth(request, reply, done) {
-    const auth = request.headers.authorization;
-    if (!auth || !safeEqual(auth, `Bearer ${BOT_SECRET}`)) {
+    if (!hasBotSecret(request)) {
       reply.status(401).send({ error: 'Unauthorized' });
       return;
     }
@@ -63,8 +67,7 @@ export default async function botRoutes(fastify) {
 
   // POST /auth — validate bot secret, return JWT
   fastify.post('/auth', async (request, reply) => {
-    const auth = request.headers.authorization;
-    if (!auth || !safeEqual(auth, `Bearer ${BOT_SECRET}`)) {
+    if (!hasBotSecret(request)) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
 

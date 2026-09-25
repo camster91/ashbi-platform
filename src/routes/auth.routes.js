@@ -632,10 +632,13 @@ export default async function authRoutes(fastify) {
     const { clientId } = request.params;
     const { email } = request.body;
 
-    // Verify client exists
-    const client = await request.prisma.client.findUnique({
-      where: { id: clientId }
-    });
+    // /api/auth is tenancy-exempt, so request.prisma is unscoped here: the
+    // client must belong to the inviting admin's own organization.
+    const client = request.user.organizationId
+      ? await request.prisma.client.findFirst({
+        where: { id: clientId, organizationId: request.user.organizationId }
+      })
+      : null;
 
     if (!client) {
       return reply.status(404).send({ error: 'Client not found' });

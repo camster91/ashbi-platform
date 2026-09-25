@@ -33,6 +33,8 @@
     "check:release-gates": "node scripts/check-release-gates.mjs",
     "check:secrets": "node scripts/check-secrets.mjs .",
     "check:schema-drift": "prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code",
+    "docs:data-dictionary": "node scripts/generate-data-dictionary.mjs",
+    "check:data-dictionary": "node scripts/generate-data-dictionary.mjs --check",
     "audit:password-hashes": "node scripts/audit-password-hashes.mjs",
     "audit:uploads": "node scripts/audit-uploads.mjs",
     "quarantine:uploads": "node scripts/audit-uploads.mjs --quarantine",

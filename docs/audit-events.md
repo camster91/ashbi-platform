@@ -12,6 +12,13 @@ actions; mutable presentation records are not sufficient evidence").
 - Reader: `GET /api/audit-events` (admin only), shown in the web app under
   **Settings → Activity log**.
 
+Related #412 references, both generated and checked for drift:
+
+- [data-dictionary.md](data-dictionary.md): every model, its table, tenant
+  scoping, soft-delete support and fields, generated from `prisma/schema.prisma`.
+- [api-access-matrix.md](api-access-matrix.md): every API route and the auth
+  guard it runs, with the reason each public route is public.
+
 ## Guarantees
 
 | Guarantee | How it is enforced |
