@@ -67,7 +67,7 @@ function matches(row, where) {
 }
 
 function fakePrisma(users) {
-  const db = { users, notifications: [] };
+  const db = { users, notifications: [], auditEvents: [] };
   db.client = {
     user: {
       findUnique: async ({ where }) => {
@@ -90,6 +90,7 @@ function fakePrisma(users) {
     },
     organization: { upsert: async () => ({ id: 'org-1' }) },
     notification: { create: async ({ data }) => { db.notifications.push(data); return data; } },
+    auditEvent: { create: async ({ data }) => { db.auditEvents.push(data); return data; } },
   };
   return db;
 }
@@ -579,5 +580,55 @@ describe('MFA hardening follow-ups', () => {
     assert.ok(renewed, 'recovery-code use revokes other sessions but reissues this one');
     assert.equal(await isCurrentUserSession(db.client, app.jwt.verify(renewed.value)), true);
     assert.equal(db.users[0].mfaRecoveryCodes.length, 9);
+  });
+});
+
+describe('MFA audit trail (#412)', () => {
+  it('records enable, failed code and disable as tenant-owned audit events without secrets', async (t) => {
+    const db = fakePrisma([makeUser()]);
+    const app = await buildApp(t, db);
+    const { secret } = await enroll(app, db);
+
+    const login = await passwordLogin(app);
+    const wrong = await app.inject({ method: 'POST', url: '/login/mfa', payload: { challengeToken: login.json().challengeToken, code: wrongCode(secret) } });
+    assert.equal(wrong.statusCode, 401);
+    // The failed-code event is written without delaying the response.
+    await new Promise((resolve) => setImmediate(resolve));
+
+    db.users[0].mfaLastUsedStep = totpStep() - 2;
+    const cookies = sessionCookie(app, db.users[0]);
+    const disabled = await app.inject({ method: 'POST', url: '/mfa/disable', cookies, payload: { password: PASSWORD, code: totp(secret) } });
+    assert.equal(disabled.statusCode, 200, disabled.body);
+
+    const actions = db.auditEvents.map((event) => event.action);
+    assert.deepEqual(actions, ['auth.mfa_enabled', 'auth.mfa_failed', 'auth.mfa_disabled']);
+    for (const event of db.auditEvents) {
+      assert.equal(event.organizationId, 'org-1');
+      assert.equal(event.entityId, 'user-1');
+      assert.equal(event.actorUserId, 'user-1');
+      assert.equal(event.actorType, 'USER');
+      assert.ok(!JSON.stringify(event).includes(secret), 'no TOTP secret in audit rows');
+    }
+    assert.deepEqual(db.auditEvents[0].metadata, { recoveryCodesIssued: 10 });
+    assert.deepEqual(db.auditEvents[1].metadata, { reason: 'invalid' });
+    assert.deepEqual(db.auditEvents[2].metadata, { method: 'totp' });
+  });
+
+  it('attributes an admin reset to the acting admin', async (t) => {
+    const admin = makeUser({ id: 'admin-1', email: 'admin@agency.test' });
+    const member = makeUser({ id: 'member-1', email: 'member@agency.test', role: 'TEAM', mfaEnabled: true, mfaSecret: 'x' });
+    const db = fakePrisma([admin, member]);
+    const app = await buildApp(t, db);
+    const cookies = sessionCookie(app, admin);
+
+    const reset = await app.inject({ method: 'POST', url: '/mfa/admin/users/member-1/reset', cookies, payload: { password: PASSWORD } });
+    assert.equal(reset.statusCode, 200, reset.body);
+
+    const event = db.auditEvents.find((row) => row.action === 'auth.mfa_reset');
+    assert.ok(event, 'reset is audited');
+    assert.equal(event.actorUserId, 'admin-1');
+    assert.equal(event.entityId, 'member-1');
+    assert.equal(event.organizationId, 'org-1');
+    assert.deepEqual(event.metadata, { wasEnabled: true });
   });
 });

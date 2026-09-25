@@ -7,6 +7,7 @@
 import bcrypt from 'bcrypt';
 import logger from '../utils/logger.js';
 import { sessionCookieOptions, signUserSession } from '../auth/session.js';
+import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import {
   claimTotpCode,
   generateRecoveryCodes,
@@ -48,9 +49,30 @@ const MFA_EVENTS = {
   },
 };
 
-/** Durable, secret-free record of an MFA change: an in-app notification plus a structured log line. */
-async function recordMfaEvent(prisma, request, userId, event, extra = {}) {
+const MFA_AUDIT_ACTIONS = {
+  enabled: { action: 'auth.mfa_enabled', metadata: (extra) => ({ recoveryCodesIssued: extra.recoveryCodesIssued }) },
+  disabled: { action: 'auth.mfa_disabled', metadata: (extra) => ({ method: extra.method }) },
+  admin_reset: { action: 'auth.mfa_reset', metadata: (extra) => ({ wasEnabled: extra.wasEnabled }) },
+  recovery_code_used: { action: 'auth.mfa_recovery_code_used', metadata: (extra) => ({ remaining: extra.remaining }) },
+};
+
+/**
+ * Durable, secret-free record of an MFA change: an in-app notification, a
+ * structured log line and an append-only audit event (#412). An admin reset
+ * is attributed to the acting admin; every other change to the account owner.
+ */
+async function recordMfaEvent(prisma, request, user, event, extra = {}) {
+  const userId = user.id;
   logger.info({ userId, event: `mfa.${event}`, ip: request.ip, ...extra }, '[auth] MFA security event');
+  const audit = MFA_AUDIT_ACTIONS[event];
+  await recordRequestAuditEvent(prisma, request, {
+    organizationId: user.organizationId,
+    actorUserId: extra.actorUserId ?? userId,
+    actorType: 'USER',
+    action: audit.action,
+    entityId: userId,
+    metadata: audit.metadata(extra),
+  });
   const copy = MFA_EVENTS[event];
   try {
     await prisma.notification.create({
@@ -175,7 +197,7 @@ export default async function mfaRoutes(fastify) {
       select: { sessionVersion: true },
     });
     reissueSession(reply, user, updated.sessionVersion);
-    await recordMfaEvent(request.prisma, request, user.id, 'enabled');
+    await recordMfaEvent(request.prisma, request, user, 'enabled', { recoveryCodesIssued: codes.length });
     reply.header('Cache-Control', 'no-store');
     return { enabled: true, recoveryCodes: codes };
   });
@@ -212,7 +234,7 @@ export default async function mfaRoutes(fastify) {
       select: { sessionVersion: true },
     });
     reissueSession(reply, user, updated.sessionVersion);
-    await recordMfaEvent(request.prisma, request, user.id, 'disabled', { method: factor.method });
+    await recordMfaEvent(request.prisma, request, user, 'disabled', { method: factor.method });
     return { enabled: false };
   });
 
@@ -235,11 +257,23 @@ export default async function mfaRoutes(fastify) {
     }
 
     const factor = await verifySecondFactor(request.prisma, user, { code, recoveryCode });
-    if (!factor.ok) return secondFactorFailure(reply, factor);
+    if (!factor.ok) {
+      // Bounded by the per-account attempt budget: at most a handful of these
+      // per lockout window, however many requests an attacker sends.
+      void recordRequestAuditEvent(request.prisma, request, {
+        organizationId: user.organizationId,
+        actorUserId: user.id,
+        actorType: 'USER',
+        action: 'auth.mfa_failed',
+        entityId: user.id,
+        metadata: { reason: factor.reason },
+      });
+      return secondFactorFailure(reply, factor);
+    }
 
     reissueSession(reply, user, factor.sessionVersion);
     if (factor.method === 'recovery_code') {
-      await recordMfaEvent(request.prisma, request, user.id, 'recovery_code_used', { remaining: factor.recoveryCodesRemaining });
+      await recordMfaEvent(request.prisma, request, user, 'recovery_code_used', { remaining: factor.recoveryCodesRemaining });
     }
     return {
       user: publicUser(user),
@@ -304,7 +338,7 @@ export default async function mfaRoutes(fastify) {
         sessionVersion: { increment: 1 },
       },
     });
-    await recordMfaEvent(request.prisma, request, target.id, 'admin_reset', { actorUserId: admin.id, wasEnabled });
+    await recordMfaEvent(request.prisma, request, target, 'admin_reset', { actorUserId: admin.id, wasEnabled });
     return { reset: true, userId: target.id };
   });
 }
