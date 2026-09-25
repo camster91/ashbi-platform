@@ -19,10 +19,11 @@ const { socket, apiMock } = vi.hoisted(() => {
     emit(event, ...args) {
       socket.emitted.push({ event, args });
       const ack = args[args.length - 1];
-      if (typeof ack === 'function') ack({ joined: true });
+      if (typeof ack === 'function' && event === 'join-project') ack(socket.joinResult);
     },
     trigger(event, payload) { return Promise.all((handlers.get(event) || []).map((handler) => handler(payload))); },
-    reset() { handlers.clear(); socket.emitted = []; socket.connected = true; },
+    joinResult: { joined: true },
+    reset() { handlers.clear(); socket.emitted = []; socket.connected = true; socket.joinResult = { joined: true }; },
   };
   const apiMock = {
     getAttachments: async () => [],
@@ -38,6 +39,13 @@ vi.mock('../hooks/useSocket', () => ({ useSocket: () => ({ socket }) }));
 const { default: ProjectMedia } = await import('../components/project/ProjectMedia');
 
 const PROJECT = 'p1';
+
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
+}
 const REMOTE = 'bob';
 
 class FakeTrack {
@@ -62,6 +70,7 @@ class FakeStream {
 
 class FakePeer {
   static instances = [];
+  static holdNext = {};
   constructor(config) {
     this.config = config;
     this.connectionState = 'new';
@@ -69,12 +78,19 @@ class FakePeer {
     this.signalingState = 'stable';
     this.currentRemoteDescription = null;
     this.senders = [];
-    this.createOffer = vi.fn(async (options) => ({ type: 'offer', sdp: options?.iceRestart ? 'restart-offer' : 'offer' }));
+    this.createOffer = vi.fn(async (options) => {
+      const held = FakePeer.holdNext.createOffer;
+      FakePeer.holdNext.createOffer = null;
+      return held || { type: 'offer', sdp: options?.iceRestart ? 'restart-offer' : 'offer' };
+    });
     this.createAnswer = vi.fn(async () => ({ type: 'answer', sdp: 'answer' }));
     this.setLocalDescription = vi.fn(async (description) => {
       this.signalingState = description.type === 'offer' ? 'have-local-offer' : 'stable';
     });
     this.setRemoteDescription = vi.fn(async (description) => {
+      const held = FakePeer.holdNext.setRemoteDescription;
+      FakePeer.holdNext.setRemoteDescription = null;
+      if (held) await held;
       this.signalingState = description.type === 'offer' ? 'have-remote-offer' : 'stable';
       this.currentRemoteDescription = description;
     });
@@ -121,7 +137,8 @@ async function connectAsOfferer() {
   await joinCall();
   await receive('call:presence', { callId: 'remote-call', userId: REMOTE, state: 'joined' });
   const peer = FakePeer.instances[0];
-  await receive('call:signal', { callId: 'remote-call', from: REMOTE, signal: { type: 'answer', sdp: { type: 'answer', sdp: 'a' } } });
+  await receive('call:signal', { callId: 'remote-call', from: REMOTE, signal: { type: 'answer', sdp: { type: 'answer', sdp: 'a' }, seq: offersSent()[0].signal.seq } });
+  expect(peer.setRemoteDescription).toHaveBeenCalledTimes(1);
   await act(async () => { peer.setConnectionState('connected'); });
   expect(screen.getByText('Call connected')).toBeInTheDocument();
   return peer;
@@ -139,6 +156,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   socket.reset();
   FakePeer.instances = [];
+  FakePeer.holdNext = {};
   devices = [
     { kind: 'audioinput', deviceId: 'default', label: 'Default microphone' },
     { kind: 'audioinput', deviceId: 'usb-mic', label: 'USB microphone' },
@@ -216,7 +234,8 @@ describe('ICE restart and reconnection', () => {
     expect(peer.createOffer).toHaveBeenLastCalledWith({ iceRestart: true });
 
     // A successful restart resets the attempt budget.
-    await receive('call:signal', { callId: 'remote-call', from: REMOTE, signal: { type: 'answer', sdp: { type: 'answer', sdp: 'a2' } } });
+    await receive('call:signal', { callId: 'remote-call', from: REMOTE, signal: { type: 'answer', sdp: { type: 'answer', sdp: 'a2' }, seq: offersSent()[1].signal.seq } });
+    expect(peer.setRemoteDescription).toHaveBeenCalledTimes(2);
     await act(async () => { peer.setConnectionState('connected'); });
     await flush(ICE_RESTART_TIMEOUT_MS * 5);
     expect(offersSent()).toHaveLength(2);
@@ -404,5 +423,174 @@ describe('screen recording duration limit', () => {
     expect(upload).toHaveBeenCalledWith(expect.any(File), 'PROJECT', PROJECT);
     expect(screen.getByText('Recording reached the 15-minute limit, so it stopped and is being uploaded.')).toBeInTheDocument();
     expect(screen.queryByRole('timer')).not.toBeInTheDocument();
+  });
+});
+
+const answersSent = () => signals().filter((message) => message.signal.type === 'answer');
+
+describe('negotiation edge cases', () => {
+  it('treats an offer arriving while ours is still being created as glare (polite side yields)', async () => {
+    await joinCall();
+    const pending = deferred();
+    FakePeer.holdNext.createOffer = pending.promise;
+    const presence = socket.trigger('call:presence', { projectId: PROJECT, callId: 'z-remote', userId: REMOTE, state: 'joined' });
+    await flush();
+    const peer = FakePeer.instances[0];
+    expect(peer.signalingState).toBe('stable'); // Still creating the offer.
+    const incoming = socket.trigger('call:signal', { projectId: PROJECT, callId: 'z-remote', from: REMOTE, signal: { type: 'offer', sdp: { type: 'offer', sdp: 'o' }, seq: 1 } });
+    await flush();
+    await act(async () => { pending.resolve({ type: 'offer', sdp: 'late' }); await presence; await incoming; });
+    await flush();
+    // Our late offer is abandoned, neither applied nor sent; the remote one is answered.
+    expect(peer.setLocalDescription).not.toHaveBeenCalledWith({ type: 'offer', sdp: 'late' });
+    expect(offersSent()).toHaveLength(0);
+    expect(answersSent()).toHaveLength(1);
+    expect(answersSent()[0].signal.seq).toBe(1);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('ignores an offer arriving while the impolite side is still creating its own', async () => {
+    await joinCall();
+    const pending = deferred();
+    FakePeer.holdNext.createOffer = pending.promise;
+    const presence = socket.trigger('call:presence', { projectId: PROJECT, callId: 'a-remote', userId: REMOTE, state: 'joined' });
+    await flush();
+    const peer = FakePeer.instances[0];
+    await receive('call:signal', { callId: 'a-remote', from: REMOTE, signal: { type: 'offer', sdp: { type: 'offer', sdp: 'o' } } });
+    expect(peer.setRemoteDescription).not.toHaveBeenCalled();
+    await act(async () => { pending.resolve({ type: 'offer', sdp: 'mine' }); await presence; });
+    await flush();
+    expect(offersSent()).toHaveLength(1);
+    expect(answersSent()).toHaveLength(0);
+  });
+
+  it('drops an answer to a superseded restart offer', async () => {
+    const peer = await connectAsOfferer();
+    await act(async () => { peer.setIceConnectionState('failed'); });
+    await flush();
+    await flush(ICE_RESTART_TIMEOUT_MS);
+    const [, firstRestart, secondRestart] = offersSent();
+    expect(secondRestart.signal.seq).toBeGreaterThan(firstRestart.signal.seq);
+    await receive('call:signal', { callId: 'remote-call', from: REMOTE, signal: { type: 'answer', sdp: { type: 'answer', sdp: 'stale' }, seq: firstRestart.signal.seq } });
+    expect(peer.setRemoteDescription).toHaveBeenCalledTimes(1);
+    await receive('call:signal', { callId: 'remote-call', from: REMOTE, signal: { type: 'answer', sdp: { type: 'answer', sdp: 'fresh' }, seq: secondRestart.signal.seq } });
+    expect(peer.setRemoteDescription).toHaveBeenCalledTimes(2);
+    expect(peer.setRemoteDescription).toHaveBeenLastCalledWith(expect.objectContaining({ sdp: 'fresh' }));
+  });
+
+  it('stays quiet when the user leaves mid-negotiation', async () => {
+    await joinCall();
+    const pending = deferred();
+    FakePeer.holdNext.setRemoteDescription = pending.promise;
+    const incoming = socket.trigger('call:signal', { projectId: PROJECT, callId: 'remote-call', from: REMOTE, signal: { type: 'offer', sdp: { type: 'offer', sdp: 'o' } } });
+    await flush();
+    fireEvent.click(screen.getByRole('button', { name: 'Leave project audio and video call' }));
+    await act(async () => { pending.reject(new Error('InvalidStateError: closed')); await incoming; });
+    await flush();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(answersSent()).toHaveLength(0);
+  });
+
+  it('re-subscribes quality polling to a rebuilt peer', async () => {
+    const first = await connectAsAnswerer();
+    await flush(STATS_INTERVAL_MS);
+    expect(first.getStats).toHaveBeenCalledTimes(1);
+    await receive('call:signal', { callId: 'remote-call-2', from: REMOTE, signal: { type: 'offer', sdp: { type: 'offer', sdp: 'new' } } });
+    const second = FakePeer.instances[1];
+    await flush(STATS_INTERVAL_MS);
+    expect(second.getStats).toHaveBeenCalledTimes(1);
+    expect(first.getStats).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('joining', () => {
+  it('shows an accessible error and releases media when the room join is refused', async () => {
+    socket.joinResult = { joined: false };
+    render(<ProjectMedia projectId={PROJECT} />);
+    await flush();
+    fireEvent.click(screen.getByRole('button', { name: 'Join project audio and video call' }));
+    await flush();
+    expect(screen.getByRole('alert')).toHaveTextContent('You do not have access to calls in this project.');
+    const stream = await mediaDevices.getUserMedia.mock.results[0].value;
+    expect(stream.getTracks().every((track) => track.stop.mock.calls.length > 0)).toBe(true);
+    expect(socket.emitted.some(({ event }) => event === 'call:presence')).toBe(false);
+    expect(screen.getByRole('button', { name: 'Join project audio and video call' })).toBeEnabled();
+  });
+
+  it('ignores a double click while joining and never opens a second stream', async () => {
+    const pending = deferred();
+    mediaDevices.getUserMedia.mockImplementationOnce(() => pending.promise);
+    render(<ProjectMedia projectId={PROJECT} />);
+    await flush();
+    const join = screen.getByRole('button', { name: 'Join project audio and video call' });
+    fireEvent.click(join);
+    fireEvent.click(join);
+    await flush();
+    expect(join).toBeDisabled();
+    expect(join).toHaveTextContent('Joining…');
+    expect(mediaDevices.getUserMedia).toHaveBeenCalledTimes(1);
+    await act(async () => { pending.resolve(new FakeStream([new FakeTrack('audio', 'usb-mic'), new FakeTrack('video', 'cam-1')])); });
+    await flush();
+    expect(mediaDevices.getUserMedia).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('Waiting for another project member to join…')).toBeInTheDocument();
+  });
+
+  it('stops media acquired by a join that was abandoned by unmounting', async () => {
+    const pending = deferred();
+    mediaDevices.getUserMedia.mockImplementationOnce(() => pending.promise);
+    const view = render(<ProjectMedia projectId={PROJECT} />);
+    await flush();
+    fireEvent.click(screen.getByRole('button', { name: 'Join project audio and video call' }));
+    view.unmount();
+    const tracks = [new FakeTrack('audio', 'usb-mic'), new FakeTrack('video', 'cam-1')];
+    await act(async () => { pending.resolve(new FakeStream(tracks)); });
+    await flush();
+    expect(tracks.every((track) => track.stop.mock.calls.length > 0)).toBe(true);
+  });
+});
+
+describe('overlapping device switches', () => {
+  it('serializes switches of one kind and leaves no orphaned track', async () => {
+    devices.push({ kind: 'videoinput', deviceId: 'cam-2', label: 'Camera two' }, { kind: 'videoinput', deviceId: 'cam-3', label: 'Camera three' });
+    const peer = await connectAsOfferer();
+    const videoSender = peer.senders.find((sender) => sender.track.kind === 'video');
+    const firstPending = deferred();
+    const created = [];
+    mediaDevices.getUserMedia.mockImplementationOnce(() => firstPending.promise);
+    mediaDevices.getUserMedia.mockImplementation(async (constraints) => {
+      const track = new FakeTrack('video', constraints.video.deviceId.exact);
+      created.push(track);
+      return new FakeStream([track]);
+    });
+
+    fireEvent.change(screen.getByLabelText('Camera'), { target: { value: 'cam-2' } });
+    fireEvent.change(screen.getByLabelText('Camera'), { target: { value: 'cam-3' } });
+    await flush();
+    // The second switch waits for the first instead of racing it.
+    expect(mediaDevices.getUserMedia).toHaveBeenCalledTimes(2);
+
+    const cam2 = new FakeTrack('video', 'cam-2');
+    await act(async () => { firstPending.resolve(new FakeStream([cam2])); });
+    await flush();
+
+    expect(videoSender.replaceTrack.mock.calls.map(([track]) => track.deviceId)).toEqual(['cam-2', 'cam-3']);
+    expect(videoSender.track.deviceId).toBe('cam-3');
+    expect(cam2.stop).toHaveBeenCalled();
+    expect(created[0].stop).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Camera')).toHaveValue('cam-3');
+  });
+
+  it('stops the new track if the call ends while a switch is in flight', async () => {
+    await connectAsOfferer();
+    const pending = deferred();
+    mediaDevices.getUserMedia.mockImplementationOnce(() => pending.promise);
+    fireEvent.change(screen.getByLabelText('Microphone'), { target: { value: 'default' } });
+    await flush();
+    fireEvent.click(screen.getByRole('button', { name: 'Leave project audio and video call' }));
+    const orphan = new FakeTrack('audio', 'default');
+    await act(async () => { pending.resolve(new FakeStream([orphan])); });
+    await flush();
+    expect(orphan.stop).toHaveBeenCalled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

@@ -28,10 +28,11 @@ function makeCallId() {
 
 // Join the project room and wait for the server to authorize it, so signals
 // sent right after a (re)connect are not dropped for arriving before the join.
+// Resolves true/false from the server's ack, or null if no ack arrives.
 function joinProjectRoom(socket, projectId) {
   return new Promise((resolve) => {
-    const timer = setTimeout(resolve, JOIN_ACK_TIMEOUT_MS);
-    socket.emit('join-project', projectId, () => { clearTimeout(timer); resolve(); });
+    const timer = setTimeout(() => resolve(null), JOIN_ACK_TIMEOUT_MS);
+    socket.emit('join-project', projectId, (result) => { clearTimeout(timer); resolve(result?.joined !== false); });
   });
 }
 
@@ -81,6 +82,19 @@ export default function ProjectMedia({ projectId }) {
   const disconnectTimerRef = useRef(null);
   const restartTimerRef = useRef(null);
   const answererTimerRef = useRef(null);
+  // Perfect-negotiation style glare detection: an offer counts as "ours" from
+  // createOffer until it is sent, not only once signalingState changes.
+  const makingOfferRef = useRef(false);
+  const offerInFlightRef = useRef(null);
+  // Every (re)offer carries a sequence number the answer echoes, so an answer
+  // to a superseded restart offer is dropped.
+  const offerSeqRef = useRef(0);
+  // Bumped by leaveCall so an in-flight join stops and releases its media.
+  const joinAttemptRef = useRef(0);
+  const joiningRef = useRef(false);
+  const deviceSwitchQueueRef = useRef({});
+  // Re-subscribes stats polling when the peer is rebuilt.
+  const [peerGeneration, setPeerGeneration] = useState(0);
 
   const refreshRecordings = useCallback(async () => {
     try {
@@ -117,6 +131,8 @@ export default function ProjectMedia({ projectId }) {
       if (remoteUser) socket.emit('call:signal', { projectId, callId, to: remoteUser, signal: { type: 'hangup' } });
       socket.emit('call:presence', { projectId, callId, state: 'left' });
     }
+    joinAttemptRef.current += 1;
+    joiningRef.current = false;
     resetRecovery();
     peerRef.current?.close();
     peerRef.current = null;
@@ -148,6 +164,27 @@ export default function ProjectMedia({ projectId }) {
     if (callIdRef.current) setCallState('waiting');
   }, [resetRecovery]);
 
+  // Create, apply and send one offer. Resolves true once sent, false if the
+  // peer was replaced or a colliding remote offer won meanwhile.
+  const sendOffer = useCallback((peer, createOffer, extra = {}) => {
+    const run = (async () => {
+      makingOfferRef.current = true;
+      try {
+        const offer = await createOffer();
+        if (peerRef.current !== peer || !isOffererRef.current) return false;
+        await peer.setLocalDescription(offer);
+        if (peerRef.current !== peer || !isOffererRef.current) return false;
+        offerSeqRef.current += 1;
+        socket.emit('call:signal', { projectId, callId: callIdRef.current, to: remoteUserRef.current, signal: { type: 'offer', sdp: offer, seq: offerSeqRef.current, ...extra } });
+        return true;
+      } finally {
+        makingOfferRef.current = false;
+      }
+    })();
+    offerInFlightRef.current = run;
+    return run;
+  }, [projectId, socket]);
+
   const performIceRestart = useCallback(async (peer) => {
     if (peerRef.current !== peer || !remoteUserRef.current) return;
     // Signals sent while the socket is down would be dropped by the server;
@@ -155,14 +192,11 @@ export default function ProjectMedia({ projectId }) {
     if (!socket?.connected) { pendingRestartRef.current = true; return; }
     pendingRestartRef.current = false;
     try {
-      const offer = await peer.createOffer({ iceRestart: true });
-      if (peerRef.current !== peer) return;
-      await peer.setLocalDescription(offer);
-      socket.emit('call:signal', { projectId, callId: callIdRef.current, to: remoteUserRef.current, signal: { type: 'offer', sdp: offer, renegotiate: true } });
+      await sendOffer(peer, () => peer.createOffer({ iceRestart: true }), { renegotiate: true });
     } catch {
       // The attempt timer moves on to the next bounded attempt.
     }
-  }, [projectId, socket]);
+  }, [sendOffer, socket]);
 
   const recoverPeer = useCallback((peer) => {
     if (peerRef.current !== peer) return;
@@ -236,6 +270,7 @@ export default function ProjectMedia({ projectId }) {
       if (peer.iceConnectionState === 'failed' && peerRef.current === peer) recoverPeer(peer);
     };
     peerRef.current = peer;
+    setPeerGeneration((generation) => generation + 1);
     return peer;
   }, [projectId, recoverPeer, releasePeer, resetRecovery, socket]);
 
@@ -253,56 +288,95 @@ export default function ProjectMedia({ projectId }) {
 
   // Swap the local mic or camera in place: replaceTrack keeps the negotiated
   // session, so no renegotiation (or remote glitch beyond the switch) occurs.
-  const switchDevice = useCallback(async (kind, deviceId) => {
-    const stream = localStreamRef.current;
+  // Switches of one kind run one at a time (a devicechange fallback and a user
+  // selection can overlap), and the current track is re-read after the await.
+  const switchDevice = useCallback((kind, deviceId) => {
     const isAudio = kind === 'audioinput';
-    const oldTrack = isAudio ? stream?.getAudioTracks()[0] : stream?.getVideoTracks()[0];
-    if (!stream || !oldTrack || !deviceId) return false;
-    try {
-      const media = await navigator.mediaDevices.getUserMedia(isAudio
-        ? { audio: { deviceId: { exact: deviceId } }, video: false }
-        : { video: { deviceId: { exact: deviceId } }, audio: false });
-      const newTrack = isAudio ? media.getAudioTracks()[0] : media.getVideoTracks()[0];
-      if (!newTrack) return false;
-      if (localStreamRef.current !== stream) { newTrack.stop(); return false; }
-      newTrack.enabled = oldTrack.enabled;
-      // While screen sharing, the video sender carries the screen; the new
-      // camera is picked up again when the share ends.
-      const sender = peerRef.current?.getSenders().find((item) => item.track === oldTrack);
-      if (sender) await sender.replaceTrack(newTrack);
-      stream.removeTrack(oldTrack);
-      stream.addTrack(newTrack);
-      oldTrack.stop();
-      const activeId = trackDeviceId(newTrack) || deviceId;
-      if (isAudio) setActiveMicId(activeId);
-      else setActiveCameraId(activeId);
-      return true;
-    } catch {
-      setCallError(isAudio ? 'Could not switch to that microphone.' : 'Could not switch to that camera.');
-      return false;
-    }
+    const currentTrack = (stream) => (isAudio ? stream?.getAudioTracks()[0] : stream?.getVideoTracks()[0]);
+    const run = async () => {
+      const stream = localStreamRef.current;
+      const before = currentTrack(stream);
+      if (!stream || !before || !deviceId) return false;
+      if (before.readyState !== 'ended' && trackDeviceId(before) === deviceId) return true;
+      let newTrack = null;
+      try {
+        const media = await navigator.mediaDevices.getUserMedia(isAudio
+          ? { audio: { deviceId: { exact: deviceId } }, video: false }
+          : { video: { deviceId: { exact: deviceId } }, audio: false });
+        media.getTracks().forEach((track) => { if (track !== currentTrack(media)) track.stop(); });
+        newTrack = currentTrack(media);
+        if (!newTrack) return false;
+        const oldTrack = currentTrack(localStreamRef.current);
+        if (localStreamRef.current !== stream || !oldTrack) { newTrack.stop(); return false; }
+        newTrack.enabled = oldTrack.enabled;
+        // While screen sharing, the video sender carries the screen; the new
+        // camera is picked up again when the share ends.
+        const sender = peerRef.current?.getSenders().find((item) => item.track === oldTrack);
+        if (sender) await sender.replaceTrack(newTrack);
+        if (localStreamRef.current !== stream) { newTrack.stop(); return false; }
+        stream.removeTrack(oldTrack);
+        stream.addTrack(newTrack);
+        oldTrack.stop();
+        const activeId = trackDeviceId(newTrack) || deviceId;
+        if (isAudio) setActiveMicId(activeId);
+        else setActiveCameraId(activeId);
+        return true;
+      } catch {
+        newTrack?.stop();
+        if (localStreamRef.current === stream) setCallError(isAudio ? 'Could not switch to that microphone.' : 'Could not switch to that camera.');
+        return false;
+      }
+    };
+    const queue = deviceSwitchQueueRef.current;
+    const result = (queue[kind] || Promise.resolve()).then(run);
+    queue[kind] = result.catch(() => false);
+    return result;
   }, []);
 
   const joinCall = useCallback(async () => {
+    // One join at a time: a double click must not open a second media stream.
+    if (joiningRef.current || callIdRef.current) return;
     setCallError('');
     if (!socket?.connected) return setCallError('Realtime connection is unavailable. Reconnect and try again.');
     if (!navigator.mediaDevices?.getUserMedia || !globalThis.RTCPeerConnection) {
       return setCallError('This browser does not support secure audio/video calls.');
     }
+    joiningRef.current = true;
+    const attempt = ++joinAttemptRef.current;
+    setCallState('joining');
+    let stream;
+    const abandoned = () => {
+      if (joinAttemptRef.current === attempt) return false;
+      // leaveCall (or unmount) ran meanwhile: release what this join acquired.
+      stream?.getTracks().forEach((track) => track.stop());
+      return true;
+    };
     try {
-      let stream;
       try {
         stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       } catch (error) {
         if (!['NotAllowedError', 'NotFoundError', 'OverconstrainedError'].includes(error.name)) throw error;
+        if (abandoned()) return;
         stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
         setCallError('Camera is unavailable, so you joined with audio only. You can continue the call or enable a camera in your browser settings.');
       }
+      if (abandoned()) return;
       try {
         const { iceServers } = await api.getIceServers();
         if (Array.isArray(iceServers) && iceServers.length) iceServersRef.current = iceServers;
       } catch {
         // Fall back to public STUN; the call can still connect on open networks.
+      }
+      if (abandoned()) return;
+      const joined = await joinProjectRoom(socket, projectId);
+      if (abandoned()) return;
+      if (joined !== true) {
+        stream.getTracks().forEach((track) => track.stop());
+        setCallError(joined === false
+          ? 'You do not have access to calls in this project.'
+          : 'Could not reach the call service. Check your connection and try again.');
+        setCallState('idle');
+        return;
       }
       localStreamRef.current = stream;
       if (localVideoRef.current) localVideoRef.current.srcObject = stream;
@@ -313,13 +387,16 @@ export default function ProjectMedia({ projectId }) {
       refreshDevices();
       const callId = makeCallId();
       callIdRef.current = callId;
-      await joinProjectRoom(socket, projectId);
-      if (callIdRef.current !== callId) return;
       socket.emit('call:presence', { projectId, callId, state: 'joined' });
       setCallState('waiting');
     } catch (error) {
+      if (abandoned()) return;
       setCallError(error.name === 'NotAllowedError' ? 'Camera and microphone access was not granted.' : 'Could not start your camera and microphone.');
+      stream?.getTracks().forEach((track) => track.stop());
       stopLocalTracks();
+      setCallState('idle');
+    } finally {
+      if (joinAttemptRef.current === attempt) joiningRef.current = false;
     }
   }, [projectId, refreshDevices, socket, stopLocalTracks]);
 
@@ -347,62 +424,82 @@ export default function ProjectMedia({ projectId }) {
       if (state !== 'joined') return;
       // Already in a call with someone: ignore further participants.
       if (peerRef.current || remoteUserRef.current) return;
+      const peer = ensurePeer(userId);
+      isOffererRef.current = true;
       try {
-        const peer = ensurePeer(userId);
-        isOffererRef.current = true;
-        const offer = await peer.createOffer();
-        await peer.setLocalDescription(offer);
-        socket.emit('call:signal', { projectId, callId: callIdRef.current, to: userId, signal: { type: 'offer', sdp: offer } });
-      } catch { setCallError('Could not connect the call.'); }
+        await sendOffer(peer, () => peer.createOffer());
+      } catch {
+        // Quiet if the user left or the peer was replaced meanwhile.
+        if (peerRef.current === peer) setCallError('Could not connect the call.');
+      }
     };
     const onSignal = async ({ projectId: incomingProject, callId, from, signal }) => {
       if (incomingProject !== projectId || !from || !callIdRef.current || callId === callIdRef.current) return;
       // Only the bound participant may negotiate; an offer may bind a new one.
       if (remoteUserRef.current && remoteUserRef.current !== from) return;
       if (!remoteUserRef.current && signal.type !== 'offer') return;
+      if (signal.type === 'hangup') return leaveCall();
+      if (signal.type === 'ice') {
+        // A candidate for a superseded or ignored offer is harmless to drop.
+        if (signal.candidate) await peerRef.current?.addIceCandidate(new RTCIceCandidate(signal.candidate)).catch(() => {});
+        return;
+      }
+      if (signal.type !== 'offer' && (signal.type !== 'answer' || !peerRef.current)) return;
+      // A fresh (non-renegotiation) offer on an established peer means the
+      // other side rebuilt its connection: start a new peer for it.
+      if (signal.type === 'offer' && !signal.renegotiate && peerRef.current?.currentRemoteDescription) {
+        const stale = peerRef.current;
+        peerRef.current = null;
+        resetRecovery();
+        stale.close();
+      }
+      const fresh = !peerRef.current;
+      const peer = ensurePeer(from);
+      // After every await: if the user left or the peer was replaced, stop
+      // quietly instead of reporting a negotiation failure.
+      const gone = () => peerRef.current !== peer;
       try {
-        if (signal.type === 'hangup') return leaveCall();
-        if (signal.type === 'ice') {
-          // A candidate for a superseded or ignored offer is harmless to drop.
-          if (signal.candidate) await peerRef.current?.addIceCandidate(new RTCIceCandidate(signal.candidate)).catch(() => {});
-          return;
-        }
-        // A fresh (non-renegotiation) offer on an established peer means the
-        // other side rebuilt its connection: start a new peer for it.
-        if (signal.type === 'offer' && !signal.renegotiate && peerRef.current?.currentRemoteDescription) {
-          const stale = peerRef.current;
-          peerRef.current = null;
-          resetRecovery();
-          stale.close();
-        }
-        const fresh = !peerRef.current;
-        const peer = ensurePeer(from);
         if (signal.type === 'offer') {
           if (fresh) isOffererRef.current = false;
-          if (peer.signalingState !== 'stable') {
+          if (makingOfferRef.current || peer.signalingState !== 'stable') {
             // Glare: both sides offered at once. The side with the lower call
             // id yields and answers; the other ignores the incoming offer.
             if (callIdRef.current > callId) return;
-            await peer.setLocalDescription({ type: 'rollback' });
             isOffererRef.current = false;
+            await offerInFlightRef.current?.catch(() => {});
+            if (gone()) return;
+            if (peer.signalingState !== 'stable') await peer.setLocalDescription({ type: 'rollback' });
+            if (gone()) return;
           }
           await peer.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+          if (gone()) return;
           const answer = await peer.createAnswer();
+          if (gone()) return;
           await peer.setLocalDescription(answer);
-          socket.emit('call:signal', { projectId, callId: callIdRef.current, to: from, signal: { type: 'answer', sdp: answer } });
-        } else if (signal.type === 'answer') {
-          // Ignore a stale answer (e.g. to a restart offer already superseded).
-          if (peer.signalingState !== 'have-local-offer') return;
+          if (gone()) return;
+          socket.emit('call:signal', { projectId, callId: callIdRef.current, to: from, signal: { type: 'answer', sdp: answer, seq: signal.seq } });
+        } else {
+          // Only the answer to our latest (re)offer counts; an answer to a
+          // superseded restart offer would corrupt the negotiation.
+          if (peer.signalingState !== 'have-local-offer' || signal.seq !== offerSeqRef.current) return;
           await peer.setRemoteDescription(new RTCSessionDescription(signal.sdp));
         }
-      } catch { setCallError('The call negotiation failed. Leave and try again.'); }
+      } catch {
+        if (!gone()) setCallError('The call negotiation failed. Leave and try again.');
+      }
     };
     // A brief network blip reconnects the socket with fresh rooms: rejoin the
     // project, re-announce presence, and finish any restart that was waiting.
     const onConnect = async () => {
-      await joinProjectRoom(socket, projectId);
+      const joined = await joinProjectRoom(socket, projectId);
       setSignallingOffline(false);
       if (!callIdRef.current) return;
+      if (joined === false) {
+        // Access was revoked while offline: end the call rather than hang.
+        leaveCall();
+        setCallError('You no longer have access to calls in this project, so the call ended.');
+        return;
+      }
       socket.emit('call:presence', { projectId, callId: callIdRef.current, state: 'joined' });
       if (pendingRestartRef.current && peerRef.current) performIceRestart(peerRef.current);
     };
@@ -418,10 +515,10 @@ export default function ProjectMedia({ projectId }) {
       socket.off('disconnect', onDisconnect);
       leaveCall();
     };
-  }, [ensurePeer, leaveCall, performIceRestart, projectId, releasePeer, resetRecovery, socket]);
+  }, [ensurePeer, leaveCall, performIceRestart, projectId, releasePeer, resetRecovery, sendOffer, socket]);
 
   // If the active mic or camera is unplugged, fall back to the default device.
-  const inCall = callState !== 'idle';
+  const inCall = callState !== 'idle' && callState !== 'joining';
   useEffect(() => {
     const mediaDevices = navigator.mediaDevices;
     if (!inCall || !mediaDevices?.addEventListener) return undefined;
@@ -464,7 +561,7 @@ export default function ProjectMedia({ projectId }) {
       }
     }, STATS_INTERVAL_MS);
     return () => { cancelled = true; clearInterval(timer); };
-  }, [callState]);
+  }, [callState, peerGeneration]);
 
   const shareCallScreen = async () => {
     try {
@@ -554,13 +651,13 @@ export default function ProjectMedia({ projectId }) {
       <div className="flex flex-wrap items-center gap-2">
         {recording && <p role="timer" aria-label={`Recording time left: ${formatDuration(recordingRemainingMs)}`} className="text-sm tabular-nums text-muted-foreground">{formatDuration(recordingRemainingMs)} left</p>}
         <button type="button" onClick={recording ? stopRecording : startRecording} disabled={uploading} className="min-h-11 inline-flex items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium hover:bg-muted disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label={recording ? 'Stop and upload screen recording' : 'Record a project screen share'}><MonitorUp className="w-4 h-4" />{recording ? 'Stop recording' : uploading ? 'Uploading…' : 'Record screen'}</button>
-        {callState === 'idle' ? <button type="button" onClick={joinCall} className="min-h-11 inline-flex items-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Join project audio and video call"><Phone className="w-4 h-4" /> Join call</button> : <button type="button" onClick={leaveCall} className="min-h-11 inline-flex items-center gap-2 rounded-lg bg-destructive px-3 text-sm font-medium text-destructive-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Leave project audio and video call"><PhoneOff className="w-4 h-4" /> Leave call</button>}
+        {!inCall ? <button type="button" onClick={joinCall} disabled={callState === 'joining'} aria-busy={callState === 'joining'} className="min-h-11 inline-flex items-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Join project audio and video call"><Phone className="w-4 h-4" /> {callState === 'joining' ? 'Joining…' : 'Join call'}</button> : <button type="button" onClick={leaveCall} className="min-h-11 inline-flex items-center gap-2 rounded-lg bg-destructive px-3 text-sm font-medium text-destructive-foreground hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Leave project audio and video call"><PhoneOff className="w-4 h-4" /> Leave call</button>}
       </div>
     </div>
     <div className="p-5 space-y-4">
       {(recordingError || callError) && <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{recordingError || callError}</p>}
       {recordingNotice && <p role="status" className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm">{recordingNotice}</p>}
-      {callState !== 'idle' && <div className="rounded-lg border border-border bg-muted/30 p-3">
+      {inCall && <div className="rounded-lg border border-border bg-muted/30 p-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <p className="text-sm font-medium">{callStatusText}</p>
