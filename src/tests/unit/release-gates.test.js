@@ -59,6 +59,13 @@ describe('mandatory release gates', () => {
     assert.ok(validateReleaseGates(root).some((failure) => failure.includes('type-check')));
   });
 
+  it('fails closed when the secret leak scan is removed from the required job', () => {
+    const root = copyWorkflows();
+    const workflow = path.join(root, '.github', 'workflows', 'release-gates.yml');
+    fs.writeFileSync(workflow, fs.readFileSync(workflow, 'utf8').replace('npm run check:secrets', 'echo skipped'));
+    assert.ok(validateReleaseGates(root).some((failure) => failure.includes('check:secrets')));
+  });
+
   it('fails closed when a second deployment controller is introduced', () => {
     const root = copyWorkflows();
     const workflow = path.join(root, '.github', 'workflows', 'rogue-deploy.yml');

@@ -41,6 +41,12 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             web/package-lock.json
+      - name: Secret leak scan
+        # Runs offline against the checkout before dependencies are installed,
+        # so node_modules cannot mask or slow the scan. Fails on any finding.
+        run: npm run check:secrets
+      - name: Release gate contract
+        run: npm run check:release-gates
       - name: Install locked dependencies
         run: |
           npm ci --no-audit --no-fund
