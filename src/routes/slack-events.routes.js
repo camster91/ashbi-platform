@@ -2,6 +2,44 @@ import env from '../config/env.js';
 import { verifySlackEventRequest } from '../security/slack-events-auth.js';
 
 /**
+ * True when a Slack event was produced by a bot or app (including this
+ * installation's own bot user) rather than a person.
+ */
+export function isBotAuthoredEvent(event, botUserId) {
+  if (!event || typeof event !== 'object') return false;
+  if (typeof event.bot_id === 'string' && event.bot_id) return true;
+  if (event.subtype === 'bot_message') return true;
+  if (event.bot_profile && typeof event.bot_profile === 'object') return true;
+  return Boolean(botUserId) && event.user === botUserId;
+}
+
+// app_uninstalled and tokens_revoked arrive through the same signed request
+// path as every other event. Once Slack says the bot token is gone, keep the
+// installation from looking usable: mark it disconnected and drop the dead
+// ciphertext. Repeated deliveries match nothing and are a no-op.
+async function handleInstallationRevoked(prisma, teamId, event, reply) {
+  if (event.type === 'tokens_revoked') {
+    const revokedBots = Array.isArray(event.tokens?.bot) ? event.tokens.bot.filter((id) => typeof id === 'string') : [];
+    if (revokedBots.length === 0) {
+      // Only user OAuth tokens were revoked; the Hub stores none of those.
+      return reply.status(202).send({ ok: true, ignored: true });
+    }
+    const installation = await prisma.slackInstallation.findFirst({
+      where: { teamId }, select: { id: true, botUserId: true },
+    });
+    if (!installation) return reply.status(202).send({ ok: true, ignored: true });
+    if (installation.botUserId && !revokedBots.includes(installation.botUserId)) {
+      return reply.status(202).send({ ok: true, ignored: true });
+    }
+  }
+  const result = await prisma.slackInstallation.updateMany({
+    where: { teamId, status: { not: 'DISCONNECTED' } },
+    data: { status: 'DISCONNECTED', botTokenEncrypted: null, disconnectedAt: new Date() },
+  });
+  return reply.status(200).send({ ok: true, revoked: result.count > 0 });
+}
+
+/**
  * Slack Events API receiver. This endpoint is public only because Slack signs
  * every delivery; tenant ownership is derived from the active installation,
  * never from a caller-supplied organization identifier.
@@ -34,12 +72,23 @@ export default async function slackEventRoutes(fastify, options = {}) {
     }
 
     const event = body.event ?? {};
+
+    if (event.type === 'app_uninstalled' || event.type === 'tokens_revoked') {
+      return handleInstallationRevoked(fastify.prisma, body.team_id, event, reply);
+    }
+
     const channelId = typeof event.channel === 'string' ? event.channel : null;
     const installation = await fastify.prisma.slackInstallation.findFirst({
       where: { teamId: body.team_id, status: 'ACTIVE' },
-      select: { id: true, organizationId: true },
+      select: { id: true, organizationId: true, botUserId: true },
     });
     if (!installation || !channelId) return reply.status(202).send({ ok: true, ignored: true });
+    // The Hub posts into mapped channels itself; Slack then echoes those
+    // posts back as message events. Importing them would duplicate the
+    // Hub's own messages and can loop, so drop anything authored by a bot.
+    if (isBotAuthoredEvent(event, installation.botUserId)) {
+      return reply.status(202).send({ ok: true, ignored: true });
+    }
 
     const mapping = await fastify.prisma.slackChannelMapping.findFirst({
       where: { installationId: installation.id, channelId, inboundEnabled: true },

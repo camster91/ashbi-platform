@@ -1,6 +1,7 @@
-import { encrypt } from '../utils/crypto.js';
+import { decrypt, encrypt } from '../utils/crypto.js';
 import { validateBody, slackInstallationSchema, slackChannelMappingSchema } from '../validators/schemas.js';
 import env from '../config/env.js';
+import { revokeSlackToken } from '../services/slack-outbound.service.js';
 
 const SLACK_BOT_SCOPES = ['channels:history', 'chat:write'];
 
@@ -22,6 +23,8 @@ function validSlackId(value) {
 
 export default async function slackAdminRoutes(fastify, options = {}) {
   const encryptSecret = options.encryptSecret ?? encrypt;
+  const decryptSecret = options.decryptSecret ?? decrypt;
+  const revokeToken = options.revokeSlackToken ?? revokeSlackToken;
   const fetchImpl = options.fetchImpl ?? fetch;
   const slackClientId = options.slackClientId ?? env.slackClientId;
   const slackClientSecret = options.slackClientSecret ?? env.slackClientSecret;
@@ -159,10 +162,28 @@ export default async function slackAdminRoutes(fastify, options = {}) {
   fastify.post('/installations/:installationId/disconnect', adminOnly, async (request, reply) => {
     const installation = await request.prisma.slackInstallation.findFirst({ where: { id: request.params.installationId } });
     if (!installation) return reply.status(404).send({ error: 'Slack installation not found' });
+
+    // Revoke the bot token with Slack first so it cannot be used even if a
+    // copy survives elsewhere. This is best-effort: Slack being unreachable
+    // must never keep a workspace connected that an administrator removed.
+    // Only an error code is logged; the token itself never reaches logs.
+    let tokenRevoked = false;
+    if (installation.botTokenEncrypted) {
+      try {
+        await revokeToken({ botToken: decryptSecret(installation.botTokenEncrypted), fetchImpl });
+        tokenRevoked = true;
+      } catch (error) {
+        request.log.warn({
+          installationId: installation.id,
+          code: typeof error?.message === 'string' && /^SLACK_[A-Z0-9_]+$/.test(error.message) ? error.message : 'SLACK_REVOKE_FAILED',
+        }, 'Slack token revocation failed; disconnecting locally');
+      }
+    }
+
     await request.prisma.slackInstallation.update({
       where: { id: installation.id },
       data: { status: 'DISCONNECTED', botTokenEncrypted: null, disconnectedAt: new Date() },
     });
-    return { success: true };
+    return { success: true, tokenRevoked };
   });
 }
