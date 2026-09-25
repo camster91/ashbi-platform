@@ -39,6 +39,19 @@ async function downloadPortalInvoice(token, invoice) {
   URL.revokeObjectURL(blobUrl);
 }
 
+async function downloadPortalContract(token, contract) {
+  const response = await portalFetch(`/api/client-portal/contracts/${contract.id}/pdf`, token);
+  if (!response.ok) throw new Error(`Contract download failed (${response.status})`);
+  const blobUrl = URL.createObjectURL(await response.blob());
+  const anchor = document.createElement('a');
+  anchor.href = blobUrl;
+  anchor.download = `${(contract.title || 'contract').replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(blobUrl);
+}
+
 async function deletePortalDocument(token, documentId) {
   const response = await portalFetch(`/api/client-portal/documents/${documentId}`, token, {
     method: 'DELETE',
@@ -1137,10 +1150,26 @@ function InvoicesTab({ invoices, token }) {
   );
 }
 
-function ContractsTab({ contracts }) {
+function ContractsTab({ contracts, token }) {
+  const [downloadError, setDownloadError] = useState('');
+  const [downloadingId, setDownloadingId] = useState(null);
+
+  async function downloadPdf(contract) {
+    setDownloadError('');
+    setDownloadingId(contract.id);
+    try {
+      await downloadPortalContract(token, contract);
+    } catch {
+      setDownloadError('The signed contract could not be downloaded. Refresh your session and try again.');
+    } finally {
+      setDownloadingId(null);
+    }
+  }
+
   return (
     <div className="cp-space-y-4">
       <h2 className="cp-page-title">Contracts</h2>
+      {downloadError && <p className="cp-error" role="alert">{downloadError}</p>}
       {contracts.length === 0 ? (
         <div className="cp-card" style={{ padding: '3rem', textAlign: 'center' }}>
           <p className="cp-text-muted">No contracts are currently available.</p>
@@ -1155,11 +1184,26 @@ function ContractsTab({ contracts }) {
                   {contract.status === 'SIGNED' ? `Signed ${fmtDate(contract.signedAt)}` : 'Awaiting your signature'}
                 </p>
               </div>
-              {contract.canReview ? (
-                <a className="cp-btn-primary" href={`/portal/contract/${contract.signToken}`}>Review and sign</a>
-              ) : (
-                <span className={`cp-badge ${contract.status === 'SIGNED' ? 'cp-badge--green' : 'cp-badge--muted'}`}>{contract.status}</span>
-              )}
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                {contract.canReview ? (
+                  <a className="cp-btn-primary" href={`/portal/contract/${contract.signToken}`}>Review and sign</a>
+                ) : (
+                  <span className={`cp-badge ${contract.status === 'SIGNED' ? 'cp-badge--green' : 'cp-badge--muted'}`}>{contract.status}</span>
+                )}
+                {contract.canDownload && (
+                  <button
+                    type="button"
+                    aria-label={`Download signed contract PDF: ${contract.title}`}
+                    onClick={() => downloadPdf(contract)}
+                    disabled={downloadingId === contract.id}
+                    aria-busy={downloadingId === contract.id || undefined}
+                    className="cp-btn-secondary"
+                    style={{ fontSize: '0.8rem' }}
+                  >
+                    {Icons.download} {downloadingId === contract.id ? 'Preparing…' : 'Download PDF'}
+                  </button>
+                )}
+              </div>
             </article>
           ))}
         </div>
@@ -1559,7 +1603,7 @@ function PortalDashboard({ token }) {
           />
         )}
         {activeTab === 'invoices' && <InvoicesTab invoices={invoices} token={token} />}
-        {activeTab === 'contracts' && <ContractsTab contracts={contracts} />}
+        {activeTab === 'contracts' && <ContractsTab contracts={contracts} token={token} />}
         {activeTab === 'documents' && <DocumentsTab projects={projects} token={token} />}
         {activeTab === 'chat' && <ChatTab projects={projects} token={token} />}
       </main>

@@ -1,6 +1,7 @@
 // Client Portal Routes — passwordless magic-link auth + full portal experience
 
 import { generateInvoicePdf } from '../utils/generate-invoice-pdf.js';
+import { contractPdfFilename, generateContractPdf } from '../utils/generate-contract-pdf.js';
 import env from '../config/env.js';
 import path from 'path';
 import fs from 'fs/promises';
@@ -743,8 +744,37 @@ export default async function clientPortalRoutes(fastify) {
         ...contract,
         signToken: canReview ? contract.signToken : null,
         canReview,
+        canDownload: contract.status === 'SIGNED',
       };
     });
+  });
+
+  // GET /api/client-portal/contracts/:id/pdf
+  // Signed contracts only, and only the authenticated client's own. Anything
+  // else (another client's contract, unsigned, voided, deleted) is a 404 so the
+  // route does not reveal whether a contract id exists.
+  fastify.get('/contracts/:id/pdf', { preHandler: clientAuth }, async (request, reply) => {
+    const { clientId } = request.clientUser;
+    const contract = await request.prisma.contract.findFirst({
+      where: { id: request.params.id, clientId, deletedAt: null, status: 'SIGNED' },
+      include: { client: { select: { name: true } } },
+    });
+    if (!contract || contract.clientId !== clientId) {
+      return reply.status(404).send({ error: 'Contract not found' });
+    }
+
+    try {
+      const pdfBuffer = await generateContractPdf(contract);
+      return reply
+        .header('Content-Type', 'application/pdf')
+        .header('Content-Disposition', `attachment; filename="${contractPdfFilename(contract)}.pdf"`)
+        .header('Cache-Control', 'private, no-store')
+        .header('Content-Length', pdfBuffer.length)
+        .send(pdfBuffer);
+    } catch (err) {
+      fastify.log.error({ err }, 'Client portal contract PDF generation failed');
+      return reply.status(500).send({ error: 'Failed to generate contract PDF' });
+    }
   });
 
   // GET /api/client-portal/invoices
