@@ -2,6 +2,7 @@
 import crypto from 'crypto';
 import Stripe from 'stripe';
 import env from '../config/env.js';
+import { recordAuditEvent } from './audit-event.service.js';
 
 let stripe = null;
 
@@ -206,6 +207,55 @@ export async function recordCompletedCheckout(prisma, event) {
     }
     throw err;
   }
+}
+
+/**
+ * Audit a newly settled Checkout (not a replayed delivery). Webhooks carry no
+ * tenant context, so the owner is resolved from the invoice. Never throws.
+ * @param {any} prisma
+ * @param {any} request Fastify request (correlation id + network prefix)
+ * @param {any} event Verified Stripe event
+ * @param {{ duplicate: boolean, invoiceId: string } | undefined} result
+ */
+export async function recordCheckoutAuditEvents(prisma, request, event, result) {
+  if (!result || result.duplicate) return;
+  const session = event?.data?.object || {};
+  const transactionId = session.payment_intent || session.id;
+  let payment = null;
+  try {
+    payment = await prisma.invoicePayment.findUnique({
+      where: { transactionId },
+      select: { id: true, amount: true },
+    });
+  } catch {
+    payment = null;
+  }
+  const shared = {
+    ownerInvoiceId: result.invoiceId,
+    actorType: 'WEBHOOK',
+    actorUserId: null,
+    requestId: request?.id ?? null,
+    ip: null,
+  };
+  await recordAuditEvent(prisma, {
+    ...shared,
+    action: 'invoice.paid',
+    entityId: result.invoiceId,
+    metadata: { toStatus: 'PAID', method: 'STRIPE', stripeEventId: event?.id, currency: session.currency },
+  });
+  await recordAuditEvent(prisma, {
+    ...shared,
+    action: 'payment.recorded',
+    entityId: payment?.id ?? null,
+    metadata: {
+      invoiceId: result.invoiceId,
+      amount: payment?.amount,
+      method: 'STRIPE',
+      source: 'stripe_checkout',
+      stripeEventId: event?.id,
+      currency: session.currency,
+    },
+  });
 }
 
 // Fields that forget a stored Checkout session so the next payment request

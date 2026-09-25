@@ -1,11 +1,12 @@
 // Invoice routes — full CRUD + send + PDF + payments + templates
-import { CLEARED_CHECKOUT_FIELDS, checkoutPersistenceData, createPaymentLink, ensureCheckoutSession, handleWebhook, recordCompletedCheckout } from '../services/stripe.service.js';
+import { CLEARED_CHECKOUT_FIELDS, checkoutPersistenceData, createPaymentLink, ensureCheckoutSession, handleWebhook, recordCheckoutAuditEvents, recordCompletedCheckout } from '../services/stripe.service.js';
 import { generateInvoicePdf } from '../utils/generate-invoice-pdf.js';
 import { deliveryFieldsFromSend, withDeliveryState } from '../services/mailgun-delivery.service.js';
 import { generateInvoiceNumber } from '../utils/invoice.js';
 import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
 import { validateBody, createInvoiceSchema, updateInvoiceSchema, markInvoicePaidSchema, sendInvoiceSchema, lineItemTemplateCreateSchema, invoiceBulkIdsSchema, invoiceBulkArchiveSchema, bulkMarkPaidSchema } from '../validators/schemas.js';
 import { sendInvoiceDeliveryEmail } from '../services/email.service.js';
+import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 
 const HST_RATE = 13; // Ontario HST
 const VOID_UNDO_WINDOW_MS = 10_000;
@@ -30,6 +31,21 @@ export default async function invoiceRoutes(fastify) {
       total: parseFloat(((parseFloat(li.quantity) || 1) * (parseFloat(li.unitPrice) || 0)).toFixed(2)),
       position: li.position ?? idx,
     }));
+  }
+
+  // A manual payment both settles the invoice and adds a ledger row; both are
+  // audited so either can be found from its own entity id.
+  async function recordPaymentAudit(request, { invoice, paymentId, amount, method, bulk }) {
+    await recordRequestAuditEvent(fastify.prisma, request, {
+      action: 'invoice.paid',
+      entityId: invoice.id,
+      metadata: { fromStatus: invoice.status, toStatus: 'PAID', method, bulk, total: invoice.total, currency: invoice.currency },
+    });
+    await recordRequestAuditEvent(fastify.prisma, request, {
+      action: 'payment.recorded',
+      entityId: paymentId ?? null,
+      metadata: { invoiceId: invoice.id, amount, method, source: 'manual', bulk, currency: invoice.currency },
+    });
   }
 
   function flagOverdue(inv) {
@@ -412,6 +428,19 @@ export default async function invoiceRoutes(fastify) {
       }
     });
 
+    await recordRequestAuditEvent(fastify.prisma, request, {
+      action: 'invoice.sent',
+      entityId: updated.id,
+      metadata: {
+        fromStatus: invoice.status,
+        toStatus: 'SENT',
+        deliveryAccepted: emailSent,
+        paymentLinkAttached: Boolean(updateData.stripePaymentLink),
+        total: invoice.total,
+        currency: invoice.currency,
+      },
+    });
+
     return { ...flagOverdue(updated), emailSent };
   });
 
@@ -466,7 +495,7 @@ export default async function invoiceRoutes(fastify) {
         where: { id: request.params.id },
         data: { status: 'PAID', paidAt: paidDate, paymentMethod, paymentNotes: paymentNotes || null, transactionId: transactionId || null }
       });
-      await tx.invoicePayment.create({
+      const payment = await tx.invoicePayment.create({
         data: {
           invoiceId: request.params.id,
           amount: amount ?? invoice.total,
@@ -476,10 +505,14 @@ export default async function invoiceRoutes(fastify) {
           paidAt: paidDate,
         }
       });
-      return paidInvoice;
+      return { paidInvoice, payment };
     });
 
-    return updated;
+    await recordPaymentAudit(request, {
+      invoice, paymentId: updated.payment?.id, amount: amount ?? invoice.total, method: paymentMethod, bulk: false,
+    });
+
+    return updated.paidInvoice;
   });
 
   // ─── POST /:id/payment-link — generate or return Stripe payment link ───────
@@ -671,7 +704,8 @@ export default async function invoiceRoutes(fastify) {
       const event = await handleWebhook(request.rawBody || request.body, signature);
 
       if (event.type === 'checkout.session.completed') {
-        await recordCompletedCheckout(fastify.prisma, event);
+        const result = await recordCompletedCheckout(fastify.prisma, event);
+        await recordCheckoutAuditEvents(fastify.prisma, request, event, result);
       }
 
       return { received: true };
@@ -699,7 +733,7 @@ export default async function invoiceRoutes(fastify) {
       const invoice = await fastify.prisma.invoice.findUnique({ where: { id } });
       if (!invoice || invoice.status === 'PAID' || invoice.status === 'VOID') continue;
 
-      await fastify.prisma.$transaction([
+      const [, payment] = await fastify.prisma.$transaction([
         fastify.prisma.invoice.update({
           where: { id },
           data: { status: 'PAID', paidAt: paidDate, paymentMethod: method }
@@ -708,6 +742,7 @@ export default async function invoiceRoutes(fastify) {
           data: { invoiceId: id, amount: invoice.total, method, paidAt: paidDate }
         })
       ]);
+      await recordPaymentAudit(request, { invoice, paymentId: payment?.id, amount: invoice.total, method, bulk: true });
       updated++;
     }
 
@@ -735,6 +770,11 @@ export default async function invoiceRoutes(fastify) {
       await fastify.prisma.invoice.update({
         where: { id },
         data: { status: 'SENT', sentAt: new Date() }
+      });
+      await recordRequestAuditEvent(fastify.prisma, request, {
+        action: 'invoice.sent',
+        entityId: id,
+        metadata: { fromStatus: invoice.status, toStatus: 'SENT', bulk: true, deliveryAccepted: false, total: invoice.total, currency: invoice.currency },
       });
       sent++;
     }

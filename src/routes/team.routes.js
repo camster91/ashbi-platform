@@ -2,6 +2,7 @@
 
 import bcrypt from 'bcrypt';
 import { validateBody, teamInviteSchema, teamResetPasswordSchema, teamUpdateSchema } from '../validators/schemas.js';
+import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 
 async function hashPassword(password) {
   return bcrypt.hash(password, 12);
@@ -147,6 +148,12 @@ export default async function teamRoutes(fastify) {
     if (capacity !== undefined) data.capacity = capacity;
     if (isActive !== undefined) data.isActive = isActive;
 
+    // Read the prior access state only when it can change, so the audit
+    // trail records real transitions rather than every profile save.
+    const before = (role || isActive !== undefined)
+      ? await request.prisma.user.findUnique({ where: { id }, select: { role: true, isActive: true } })
+      : null;
+
     const member = await request.prisma.user.update({
       where: { id },
       data,
@@ -160,6 +167,21 @@ export default async function teamRoutes(fastify) {
         isActive: true
       }
     });
+
+    if (before && role && before.role !== member.role) {
+      await recordRequestAuditEvent(request.prisma, request, {
+        action: 'user.role_changed',
+        entityId: member.id,
+        metadata: { fromRole: before.role, toRole: member.role },
+      });
+    }
+    if (before && isActive !== undefined && before.isActive !== member.isActive) {
+      await recordRequestAuditEvent(request.prisma, request, {
+        action: member.isActive ? 'user.reactivated' : 'user.deactivated',
+        entityId: member.id,
+        metadata: { fromActive: before.isActive, toActive: member.isActive },
+      });
+    }
 
     return {
       ...member,
@@ -229,6 +251,12 @@ export default async function teamRoutes(fastify) {
     await request.prisma.user.update({
       where: { id },
       data: { password: await hashPassword(newPassword) }
+    });
+
+    await recordRequestAuditEvent(request.prisma, request, {
+      action: 'auth.password_changed',
+      entityId: id,
+      metadata: { method: 'admin_reset' },
     });
 
     return { success: true };

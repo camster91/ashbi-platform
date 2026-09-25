@@ -8,6 +8,7 @@ import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
 import bcrypt from 'bcrypt';
 import { isCurrentUserSession, revokeUserSessions, sessionCookieMaxAge, signUserSession } from '../auth/session.js';
+import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { validateBody, validateParams, clientPortalMessageSchema, requestAccessSchema, fileUpload, clientPortalTokenRedeemSchema, clientPortalRevisionResponseSchema, clientPortalFeedbackSchema } from '../validators/schemas.js';
 
 const PORTAL_BASE = env.hubUrl;
@@ -710,6 +711,15 @@ export default async function clientPortalRoutes(fastify) {
     }
 
     await request.prisma.attachment.delete({ where: { id: docId } });
+
+    await recordRequestAuditEvent(request.prisma, request, {
+      action: 'client_portal.document_deleted',
+      actorType: 'CLIENT',
+      actorUserId: request.clientUser.id ?? null,
+      organizationId: request.clientUser.organizationId,
+      entityId: docId,
+      metadata: { projectId: doc.entityId, clientId, mimeType: doc.mimeType, size: doc.size },
+    });
 
     return { success: true };
   });

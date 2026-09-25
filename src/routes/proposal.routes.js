@@ -13,6 +13,7 @@ import {
   proposalBulkIdsSchema,
 } from '../validators/schemas.js';
 import { clampTake } from '../utils/query-limits.js';
+import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
 import { deliveryFieldsFromSend, mailgunTrackingFields, withDeliveryState } from '../services/mailgun-delivery.service.js';
 
@@ -549,6 +550,18 @@ export default async function proposalRoutes(fastify) {
         approvedAt: new Date(),
         publicAccessRevokedAt: new Date(),
       }
+    });
+
+    // Public capability-link action: the actor is the client holding the link,
+    // not a signed-in user, and the tenant comes from the proposal's client.
+    await recordRequestAuditEvent(request.prisma, request, {
+      action: 'proposal.approved',
+      actorType: 'CLIENT',
+      actorUserId: null,
+      organizationId: null,
+      ownerClientId: proposal.clientId,
+      entityId: proposal.id,
+      metadata: { fromStatus: proposal.status, toStatus: 'APPROVED', total: proposal.total, via: 'public_link' },
     });
 
     return { status: updated.status, approvedAt: updated.approvedAt };
