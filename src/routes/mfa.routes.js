@@ -10,6 +10,7 @@ import { sessionCookieOptions, signUserSession } from '../auth/session.js';
 import {
   claimTotpCode,
   generateRecoveryCodes,
+  isChallengeRevokedByLockout,
   isMfaEligible,
   isMfaRequired,
   MFA_USER_SELECT,
@@ -18,7 +19,14 @@ import {
   verifyMfaChallenge,
   verifySecondFactor,
 } from '../auth/mfa.js';
-import { mfaConfirmSchema, mfaDisableSchema, mfaLoginSchema, validateBody } from '../validators/schemas.js';
+import {
+  mfaAdminResetSchema,
+  mfaConfirmSchema,
+  mfaDisableSchema,
+  mfaEnrollSchema,
+  mfaLoginSchema,
+  validateBody,
+} from '../validators/schemas.js';
 
 const MFA_EVENTS = {
   enabled: {
@@ -28,6 +36,10 @@ const MFA_EVENTS = {
   disabled: {
     title: 'Two-factor authentication disabled',
     message: 'Two-factor authentication was turned off for your account. Other signed-in sessions were signed out. If this was not you, change your password now.',
+  },
+  admin_reset: {
+    title: 'Two-factor authentication reset by an administrator',
+    message: 'An administrator reset two-factor authentication on your account and signed out your sessions. Sign in with your password and set it up again. If you did not ask for this, contact your administrator.',
   },
   recovery_code_used: {
     title: 'Recovery code used to sign in',
@@ -105,11 +117,17 @@ export default async function mfaRoutes(fastify) {
   fastify.post('/mfa/enroll', {
     ...enrollmentRateLimit,
     onRequest: [fastify.authenticate],
+    preHandler: [validateBody(mfaEnrollSchema)],
   }, async (request, reply) => {
     const user = await loadStaffUser(request, reply);
     if (!user) return reply;
     if (user.mfaEnabled) {
       return reply.status(409).send({ error: 'Two-factor authentication is already enabled. Disable it before enrolling a new authenticator.' });
+    }
+    // Re-authenticate so a stolen session cannot bind an attacker's
+    // authenticator and lock the real owner out.
+    if (!(await verifyPassword(request.body.password, user.password))) {
+      return reply.status(400).send({ error: 'Current password is incorrect' });
     }
     const enrollment = startEnrollment(user);
     await request.prisma.user.update({
@@ -204,7 +222,8 @@ export default async function mfaRoutes(fastify) {
     const user = await request.prisma.user.findUnique({ where: { id: challenge.uid }, select: MFA_USER_SELECT });
     // A challenge is bound to the session version it was issued for, so a
     // password change or MFA reset in the meantime invalidates it.
-    if (!user || !user.isActive || user.sessionVersion !== challenge.sv || !isMfaRequired(user)) {
+    if (!user || !user.isActive || user.sessionVersion !== challenge.sv || !isMfaRequired(user)
+      || isChallengeRevokedByLockout(user, challenge)) {
       return reply.status(401).send(expired);
     }
 
@@ -220,5 +239,55 @@ export default async function mfaRoutes(fastify) {
       method: factor.method,
       recoveryCodesRemaining: factor.recoveryCodesRemaining,
     };
+  });
+
+  // Admin recovery: reset (and unlock) another member's two-factor
+  // authentication in the admin's own organization. Requires the admin's
+  // password, revokes every session of the target user, and notifies them.
+  fastify.post('/mfa/admin/users/:userId/reset', {
+    ...enrollmentRateLimit,
+    onRequest: [fastify.authenticate],
+    preHandler: [validateBody(mfaAdminResetSchema)],
+  }, async (request, reply) => {
+    const admin = await request.prisma.user.findUnique({
+      where: { id: request.user.id },
+      select: { id: true, role: true, isActive: true, organizationId: true, password: true },
+    });
+    if (!admin || !admin.isActive) return reply.status(401).send({ error: 'Unauthorized' });
+    if (admin.role !== 'ADMIN') return reply.status(403).send({ error: 'Admin access required' });
+
+    const { userId } = request.params;
+    if (userId === admin.id) {
+      return reply.status(400).send({ error: 'Use Settings → Security to change your own two-factor authentication' });
+    }
+    if (!(await verifyPassword(request.body.password, admin.password))) {
+      return reply.status(400).send({ error: 'Current password is incorrect' });
+    }
+    // /api/auth bypasses tenancy scoping, so the organization check is explicit.
+    // Another organization's user is indistinguishable from a missing one.
+    const target = await request.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, organizationId: true, mfaEnabled: true, mfaSecret: true, mfaLockedUntil: true },
+    });
+    if (!target || !admin.organizationId || target.organizationId !== admin.organizationId) {
+      return reply.status(404).send({ error: 'User not found' });
+    }
+
+    const wasEnabled = Boolean(target.mfaEnabled);
+    await request.prisma.user.update({
+      where: { id: target.id },
+      data: {
+        mfaEnabled: false,
+        mfaSecret: null,
+        mfaEnabledAt: null,
+        mfaLastUsedStep: null,
+        mfaRecoveryCodes: [],
+        mfaFailedAttempts: 0,
+        mfaLockedUntil: null,
+        sessionVersion: { increment: 1 },
+      },
+    });
+    await recordMfaEvent(request.prisma, request, target.id, 'admin_reset', { actorUserId: admin.id, wasEnabled });
+    return { reset: true, userId: target.id };
   });
 }

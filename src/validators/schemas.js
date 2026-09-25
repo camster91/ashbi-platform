@@ -50,7 +50,11 @@ const secondFactor = {
 const exactlyOneFactor = (value) => Boolean(value.code) !== Boolean(value.recoveryCode);
 const exactlyOneFactorMessage = { message: 'Provide either an authenticator code or a recovery code' };
 
+export const mfaEnrollSchema = z.object({ password: z.string().min(1).max(128) });
+
 export const mfaConfirmSchema = z.object({ code: totpCode });
+
+export const mfaAdminResetSchema = z.object({ password: z.string().min(1).max(128) });
 
 export const mfaDisableSchema = z.object({
   password: z.string().min(1).max(128),

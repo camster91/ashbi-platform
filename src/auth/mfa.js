@@ -19,7 +19,9 @@ import env from '../config/env.js';
 import { decrypt, encrypt, safeEqual } from '../utils/crypto.js';
 import { generateTotpSecret, otpauthUri, verifyTotp } from './totp.js';
 
-export const MFA_ELIGIBLE_ROLES = Object.freeze(['ADMIN', 'TEAM']);
+// Every staff role may enroll (ADMIN, TEAM, STAFF and any future staff role);
+// client-portal users and bot identities authenticate differently.
+export const MFA_INELIGIBLE_ROLES = Object.freeze(['CLIENT', 'BOT']);
 export const MFA_ISSUER = 'Ashbi Hub';
 export const MFA_CHALLENGE_TTL_SECONDS = 5 * 60;
 export const MFA_MAX_FAILED_ATTEMPTS = 5;
@@ -33,12 +35,16 @@ const RECOVERY_GROUPS = 4;
 const RECOVERY_GROUP_LENGTH = 4;
 
 export function isMfaEligible(user) {
-  return Boolean(user) && MFA_ELIGIBLE_ROLES.includes(user.role);
+  return Boolean(user) && typeof user.role === 'string' && !MFA_INELIGIBLE_ROLES.includes(user.role);
 }
 
-/** Whether a password login must be completed with a second factor. */
+/**
+ * Whether a password login must be completed with a second factor. This
+ * deliberately ignores the role: once enabled, a later role change must not
+ * silently drop the second factor.
+ */
 export function isMfaRequired(user) {
-  return isMfaEligible(user) && user.mfaEnabled === true && Boolean(user.mfaSecret);
+  return Boolean(user) && user.mfaEnabled === true && Boolean(user.mfaSecret);
 }
 
 export function encryptMfaSecret(secret) {
@@ -149,16 +155,56 @@ export function isMfaLocked(user, nowMs = Date.now()) {
   return Boolean(user.mfaLockedUntil && new Date(user.mfaLockedUntil).getTime() > nowMs);
 }
 
-async function recordFailure(prisma, user, nowMs) {
-  const attempts = (user.mfaFailedAttempts || 0) + 1;
-  const locked = attempts >= MFA_MAX_FAILED_ATTEMPTS;
-  await prisma.user.update({
-    where: { id: user.id },
-    data: locked
-      ? { mfaFailedAttempts: 0, mfaLockedUntil: new Date(nowMs + MFA_LOCKOUT_MS) }
-      : { mfaFailedAttempts: { increment: 1 } },
+/** When the most recent lockout began (ms), or null. Persists after the lock expires. */
+export function lastLockStartedAt(user) {
+  if (!user.mfaLockedUntil) return null;
+  return new Date(user.mfaLockedUntil).getTime() - MFA_LOCKOUT_MS;
+}
+
+/**
+ * Challenges issued before the account's most recent lockout are dead, so a
+ * single challenge token is worth at most MFA_MAX_FAILED_ATTEMPTS guesses.
+ */
+export function isChallengeRevokedByLockout(user, challenge) {
+  const lockStart = lastLockStartedAt(user);
+  return lockStart !== null && challenge.iat * 1000 <= lockStart;
+}
+
+function isNotFound(err) {
+  return err?.code === 'P2025';
+}
+
+/**
+ * Atomically reserve one verification attempt before any code is evaluated.
+ *
+ * The increment is a single conditional UPDATE ... RETURNING on the current
+ * row (not the row read at the start of the request), so concurrent requests
+ * receive distinct attempt numbers and at most MFA_MAX_FAILED_ATTEMPTS of
+ * them can ever be evaluated before the account locks. The condition also
+ * refuses to count attempts while a lock is active, so an attacker hammering
+ * a locked account cannot pre-load the counter for when the lock expires.
+ * Returns the attempt number, or null when the account is locked.
+ */
+async function reserveAttempt(prisma, userId, nowMs) {
+  try {
+    const row = await prisma.user.update({
+      where: { id: userId, OR: [{ mfaLockedUntil: null }, { mfaLockedUntil: { lte: new Date(nowMs) } }] },
+      data: { mfaFailedAttempts: { increment: 1 } },
+      select: { mfaFailedAttempts: true },
+    });
+    return row.mfaFailedAttempts;
+  } catch (err) {
+    if (isNotFound(err)) return null;
+    throw err;
+  }
+}
+
+async function lockAccount(prisma, userId, nowMs) {
+  // Conditional so concurrent lockers do not keep pushing the expiry forward.
+  await prisma.user.updateMany({
+    where: { id: userId, OR: [{ mfaLockedUntil: null }, { mfaLockedUntil: { lte: new Date(nowMs) } }] },
+    data: { mfaFailedAttempts: 0, mfaLockedUntil: new Date(nowMs + MFA_LOCKOUT_MS) },
   });
-  return locked;
 }
 
 /**
@@ -186,12 +232,24 @@ export async function claimTotpCode(prisma, user, code, { nowMs = Date.now(), en
  * On success with a recovery code the code is consumed and sessionVersion is
  * bumped in the same conditional update (so two concurrent uses cannot both
  * win and every other session is revoked). Returns
- * { ok, method, reason, lockedUntil, recoveryCodesRemaining, sessionVersion }.
+ * { ok, method, reason, recoveryCodesRemaining, sessionVersion }.
  */
 export async function verifySecondFactor(prisma, user, { code, recoveryCode } = {}, { nowMs = Date.now() } = {}) {
-  if (isMfaLocked(user, nowMs)) {
-    return { ok: false, reason: 'locked', lockedUntil: new Date(user.mfaLockedUntil) };
+  const attempt = await reserveAttempt(prisma, user.id, nowMs);
+  if (attempt === null) return { ok: false, reason: 'locked' };
+  if (attempt > MFA_MAX_FAILED_ATTEMPTS) {
+    // Budget already spent by concurrent requests: lock without evaluating.
+    await lockAccount(prisma, user.id, nowMs);
+    return { ok: false, reason: 'locked' };
   }
+
+  const fail = async (reason) => {
+    if (attempt >= MFA_MAX_FAILED_ATTEMPTS) {
+      await lockAccount(prisma, user.id, nowMs);
+      return { ok: false, reason: 'locked' };
+    }
+    return { ok: false, reason };
+  };
 
   if (recoveryCode) {
     const hash = findRecoveryCodeHash(user.mfaRecoveryCodes, recoveryCode);
@@ -203,7 +261,6 @@ export async function verifySecondFactor(prisma, user, { code, recoveryCode } = 
           mfaRecoveryCodes: { set: remaining },
           sessionVersion: { increment: 1 },
           mfaFailedAttempts: 0,
-          mfaLockedUntil: null,
         },
       });
       if (consumed.count === 1) {
@@ -215,12 +272,13 @@ export async function verifySecondFactor(prisma, user, { code, recoveryCode } = 
         };
       }
     }
-  } else if (code) {
+    return fail('invalid');
+  }
+
+  if (code) {
     const result = await claimTotpCode(prisma, user, code, { nowMs });
     if (result === 'ok') {
-      if (user.mfaFailedAttempts || user.mfaLockedUntil) {
-        await prisma.user.update({ where: { id: user.id }, data: { mfaFailedAttempts: 0, mfaLockedUntil: null } });
-      }
+      await prisma.user.update({ where: { id: user.id }, data: { mfaFailedAttempts: 0 } });
       return {
         ok: true,
         method: 'totp',
@@ -228,14 +286,10 @@ export async function verifySecondFactor(prisma, user, { code, recoveryCode } = 
         sessionVersion: user.sessionVersion,
       };
     }
-    if (result === 'replayed') {
-      await recordFailure(prisma, user, nowMs);
-      return { ok: false, reason: 'replayed' };
-    }
+    return fail(result === 'replayed' ? 'replayed' : 'invalid');
   }
 
-  const locked = await recordFailure(prisma, user, nowMs);
-  return { ok: false, reason: locked ? 'locked' : 'invalid' };
+  return fail('invalid');
 }
 
 export const MFA_USER_SELECT = Object.freeze({

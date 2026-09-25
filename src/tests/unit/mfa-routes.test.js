@@ -60,6 +60,7 @@ function matches(row, where) {
     if (key === 'OR') return condition.some((branch) => matches(row, branch));
     if (condition === null) return row[key] === null || row[key] === undefined;
     if (condition && typeof condition === 'object' && 'lt' in condition) return row[key] !== null && row[key] < condition.lt;
+    if (condition && typeof condition === 'object' && 'lte' in condition) return row[key] !== null && row[key] <= condition.lte;
     if (condition && typeof condition === 'object' && 'has' in condition) return (row[key] || []).includes(condition.has);
     return row[key] === condition;
   });
@@ -73,8 +74,11 @@ function fakePrisma(users) {
         const row = db.users.find((u) => (where.id ? u.id === where.id : u.email === where.email));
         return row ? structuredClone(row) : null;
       },
+      // Models Prisma's extended-where update: one atomic conditional
+      // UPDATE ... RETURNING that throws P2025 when no row matches.
       update: async ({ where, data }) => {
-        const row = db.users.find((u) => u.id === where.id);
+        const row = db.users.find((u) => matches(u, where));
+        if (!row) throw Object.assign(new Error('No record found'), { code: 'P2025' });
         applyData(row, data);
         return structuredClone(row);
       },
@@ -123,7 +127,7 @@ function tokenCookie(response) {
 /** Enroll the fake user through the real endpoints and return the plain secret + recovery codes. */
 async function enroll(app, db) {
   const cookies = sessionCookie(app, db.users[0]);
-  const started = await app.inject({ method: 'POST', url: '/mfa/enroll', cookies });
+  const started = await app.inject({ method: 'POST', url: '/mfa/enroll', cookies, payload: { password: PASSWORD } });
   assert.equal(started.statusCode, 200, started.body);
   const { secret } = started.json();
   const confirmed = await app.inject({ method: 'POST', url: '/mfa/confirm', cookies, payload: { code: totp(secret) } });
@@ -154,7 +158,13 @@ describe('MFA enrollment', () => {
     const app = await buildApp(t, db);
     const cookies = sessionCookie(app, db.users[0]);
 
-    const started = await app.inject({ method: 'POST', url: '/mfa/enroll', cookies });
+    const noPassword = await app.inject({ method: 'POST', url: '/mfa/enroll', cookies, payload: {} });
+    assert.equal(noPassword.statusCode, 400);
+    const wrongPassword = await app.inject({ method: 'POST', url: '/mfa/enroll', cookies, payload: { password: 'not-my-password' } });
+    assert.equal(wrongPassword.statusCode, 400, 'a stolen session alone cannot bind an authenticator');
+    assert.equal(db.users[0].mfaSecret, null);
+
+    const started = await app.inject({ method: 'POST', url: '/mfa/enroll', cookies, payload: { password: PASSWORD } });
     assert.equal(started.statusCode, 200);
     const { secret, otpauthUri } = started.json();
     assert.match(secret, /^[A-Z2-7]{32}$/);
@@ -191,24 +201,40 @@ describe('MFA enrollment', () => {
     assert.equal(db.notifications.at(-1).type, 'security.mfa_enabled');
     assert.ok(!JSON.stringify(db.notifications).includes(secret));
 
-    const again = await app.inject({ method: 'POST', url: '/mfa/enroll', cookies: { token: renewed.value } });
+    const again = await app.inject({ method: 'POST', url: '/mfa/enroll', cookies: { token: renewed.value }, payload: { password: PASSWORD } });
     assert.equal(again.statusCode, 409, 'cannot silently replace an active authenticator');
   });
 
-  it('is limited to staff accounts', async (t) => {
+  it('is available to every staff role and refused to client and bot identities', async (t) => {
     for (const role of ['CLIENT', 'BOT']) {
       const db = fakePrisma([makeUser({ role })]);
       const app = await buildApp(t, db);
-      const response = await app.inject({ method: 'POST', url: '/mfa/enroll', cookies: sessionCookie(app, db.users[0]) });
+      const response = await app.inject({ method: 'POST', url: '/mfa/enroll', cookies: sessionCookie(app, db.users[0]), payload: { password: PASSWORD } });
       assert.equal(response.statusCode, 403, role);
       assert.equal(db.users[0].mfaSecret, null);
     }
+    for (const role of ['ADMIN', 'TEAM', 'STAFF']) {
+      const db = fakePrisma([makeUser({ role })]);
+      const app = await buildApp(t, db);
+      const response = await app.inject({ method: 'POST', url: '/mfa/enroll', cookies: sessionCookie(app, db.users[0]), payload: { password: PASSWORD } });
+      assert.equal(response.statusCode, 200, role);
+    }
+  });
+
+  it('keeps requiring the second factor after a role change', async (t) => {
+    const db = fakePrisma([makeUser({ role: 'STAFF' })]);
+    const app = await buildApp(t, db);
+    await enroll(app, db);
+    db.users[0].role = 'CLIENT';
+    const response = await passwordLogin(app);
+    assert.equal(response.json().mfaRequired, true);
+    assert.equal(tokenCookie(response), undefined);
   });
 
   it('requires a session', async (t) => {
     const db = fakePrisma([makeUser()]);
     const app = await buildApp(t, db);
-    const response = await app.inject({ method: 'POST', url: '/mfa/enroll' });
+    const response = await app.inject({ method: 'POST', url: '/mfa/enroll', payload: { password: PASSWORD } });
     assert.equal(response.statusCode, 401);
   });
 
@@ -350,9 +376,22 @@ describe('MFA login challenge', () => {
     assert.equal(locking.statusCode, 429);
     assert.ok(db.users[0].mfaLockedUntil > new Date());
 
-    const correctButLocked = await app.inject({ method: 'POST', url: '/login/mfa', payload: { challengeToken, code: totp(secret) } });
+    // The challenge that burned the budget is dead even with a correct code…
+    const sameChallenge = await app.inject({ method: 'POST', url: '/login/mfa', payload: { challengeToken, code: totp(secret) } });
+    assert.equal(sameChallenge.statusCode, 401);
+    assert.equal(sameChallenge.json().code, 'MFA_CHALLENGE_EXPIRED');
+    assert.equal(tokenCookie(sameChallenge), undefined);
+
+    // …and a fresh challenge stays locked out until the lock expires.
+    await new Promise((resolve) => { setTimeout(resolve, 1100); });
+    const fresh = (await passwordLogin(app)).json();
+    const correctButLocked = await app.inject({ method: 'POST', url: '/login/mfa', payload: { challengeToken: fresh.challengeToken, code: totp(secret) } });
     assert.equal(correctButLocked.statusCode, 429);
     assert.equal(tokenCookie(correctButLocked), undefined);
+
+    db.users[0].mfaLockedUntil = new Date(Date.now() - 1000);
+    const afterExpiry = await app.inject({ method: 'POST', url: '/login/mfa', payload: { challengeToken: fresh.challengeToken, code: totp(secret) } });
+    assert.equal(afterExpiry.statusCode, 200, afterExpiry.body);
   });
 
   it('rate-limits the challenge endpoint per IP', async (t) => {
@@ -374,5 +413,111 @@ describe('MFA login challenge', () => {
     assert.equal(response.json().mfaRequired, undefined);
     assert.equal(response.json().user.email, 'staff@agency.test');
     assert.ok(tokenCookie(response));
+  });
+});
+
+describe('MFA lockout under concurrency', () => {
+  it('evaluates at most 5 codes even when many wrong codes arrive in parallel from many IPs', async (t) => {
+    const db = fakePrisma([makeUser()]);
+    const app = await buildApp(t, db);
+    const { secret } = await enroll(app, db);
+    const { challengeToken } = (await passwordLogin(app)).json();
+    const bad = wrongCode(secret);
+
+    const responses = await Promise.all(Array.from({ length: 60 }, (_, i) => app.inject({
+      method: 'POST',
+      url: '/login/mfa',
+      remoteAddress: `10.0.${Math.floor(i / 250)}.${(i % 250) + 1}`,
+      payload: { challengeToken, code: bad },
+    })));
+
+    const evaluatedAndRejected = responses.filter((r) => r.statusCode === 401 && r.json().error === 'Invalid authentication code').length;
+    const refused = responses.filter((r) => r.statusCode === 429 || r.json().code === 'MFA_CHALLENGE_EXPIRED').length;
+    // Attempts 1-4 are evaluated and rejected, attempt 5 is evaluated and
+    // locks; every other request is refused without evaluating its code
+    // (locked, or its challenge was revoked by the lock).
+    assert.equal(evaluatedAndRejected, MFA_MAX_FAILED_ATTEMPTS - 1);
+    assert.equal(refused, 60 - evaluatedAndRejected);
+    assert.ok(responses.every((r) => !tokenCookie(r)));
+    assert.ok(db.users[0].mfaLockedUntil > new Date());
+    assert.equal(db.users[0].mfaFailedAttempts, 0, 'no attempts are counted while locked');
+  });
+
+  it('evaluates at most 5 codes when parallel requests are spread over fresh challenges', async (t) => {
+    const db = fakePrisma([makeUser()]);
+    const app = await buildApp(t, db);
+    const { secret } = await enroll(app, db);
+    const challenges = [];
+    for (let i = 0; i < 3; i += 1) challenges.push((await passwordLogin(app)).json().challengeToken);
+    const bad = wrongCode(secret);
+
+    const responses = await Promise.all(Array.from({ length: 30 }, (_, i) => app.inject({
+      method: 'POST',
+      url: '/login/mfa',
+      remoteAddress: `10.1.0.${i + 1}`,
+      payload: { challengeToken: challenges[i % 3], code: bad },
+    })));
+    const evaluated = responses.filter((r) => r.statusCode === 401 && r.json().error === 'Invalid authentication code').length;
+    assert.equal(evaluated, MFA_MAX_FAILED_ATTEMPTS - 1);
+    assert.ok(db.users[0].mfaLockedUntil > new Date());
+  });
+});
+
+describe('MFA admin reset', () => {
+  function orgUsers() {
+    return [
+      makeUser({ id: 'admin-1', email: 'admin@agency.test', role: 'ADMIN' }),
+      makeUser({ id: 'user-1', email: 'staff@agency.test', role: 'STAFF' }),
+      makeUser({ id: 'other-1', email: 'other@elsewhere.test', role: 'STAFF', organizationId: 'org-2', mfaEnabled: true, mfaSecret: 'x' }),
+    ];
+  }
+
+  async function enrolledTarget(t) {
+    const db = fakePrisma(orgUsers());
+    const app = await buildApp(t, db);
+    const target = db.users[1];
+    const cookies = sessionCookie(app, target);
+    const { secret } = (await app.inject({ method: 'POST', url: '/mfa/enroll', cookies, payload: { password: PASSWORD } })).json();
+    await app.inject({ method: 'POST', url: '/mfa/confirm', cookies, payload: { code: totp(secret) } });
+    assert.equal(target.mfaEnabled, true);
+    target.mfaLockedUntil = new Date(Date.now() + 60_000);
+    return { db, app, target, adminCookies: sessionCookie(app, db.users[0]) };
+  }
+
+  it('resets and unlocks a same-organization user, revoking their sessions and notifying them', async (t) => {
+    const { db, app, target, adminCookies } = await enrolledTarget(t);
+    const targetSession = sessionCookie(app, target);
+    const versionBefore = target.sessionVersion;
+
+    const response = await app.inject({ method: 'POST', url: '/mfa/admin/users/user-1/reset', cookies: adminCookies, payload: { password: PASSWORD } });
+    assert.equal(response.statusCode, 200, response.body);
+    assert.equal(target.mfaEnabled, false);
+    assert.equal(target.mfaSecret, null);
+    assert.deepEqual(target.mfaRecoveryCodes, []);
+    assert.equal(target.mfaLockedUntil, null);
+    assert.equal(target.sessionVersion, versionBefore + 1);
+    assert.equal(await isCurrentUserSession(db.client, app.jwt.verify(targetSession.token)), false);
+    const notice = db.notifications.at(-1);
+    assert.equal(notice.userId, 'user-1');
+    assert.equal(notice.type, 'security.mfa_admin_reset');
+    assert.equal(notice.data.actorUserId, 'admin-1');
+    assert.equal(tokenCookie(response), undefined, "the admin's own session is untouched");
+  });
+
+  it('requires the admin password, the ADMIN role and the same organization', async (t) => {
+    const { db, app, target, adminCookies } = await enrolledTarget(t);
+
+    const wrongPassword = await app.inject({ method: 'POST', url: '/mfa/admin/users/user-1/reset', cookies: adminCookies, payload: { password: 'nope-nope' } });
+    assert.equal(wrongPassword.statusCode, 400);
+    const crossOrg = await app.inject({ method: 'POST', url: '/mfa/admin/users/other-1/reset', cookies: adminCookies, payload: { password: PASSWORD } });
+    assert.equal(crossOrg.statusCode, 404);
+    assert.equal(db.users[2].mfaEnabled, true);
+    const self = await app.inject({ method: 'POST', url: '/mfa/admin/users/admin-1/reset', cookies: adminCookies, payload: { password: PASSWORD } });
+    assert.equal(self.statusCode, 400);
+
+    db.users[0].role = 'STAFF';
+    const notAdmin = await app.inject({ method: 'POST', url: '/mfa/admin/users/user-1/reset', cookies: sessionCookie(app, db.users[0]), payload: { password: PASSWORD } });
+    assert.equal(notAdmin.statusCode, 403, 'the role is re-read from the database, not trusted from the token');
+    assert.equal(target.mfaEnabled, true);
   });
 });

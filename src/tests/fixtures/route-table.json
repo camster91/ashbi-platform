@@ -517,6 +517,7 @@
   "POST /api/auth/login",
   "POST /api/auth/login/mfa",
   "POST /api/auth/logout",
+  "POST /api/auth/mfa/admin/users/:userId/reset",
   "POST /api/auth/mfa/confirm",
   "POST /api/auth/mfa/disable",
   "POST /api/auth/mfa/enroll",

@@ -21,6 +21,8 @@ export default async function teamRoutes(fastify) {
         skills: true,
         capacity: true,
         isActive: true,
+        mfaEnabled: true,
+        mfaLockedUntil: true,
         _count: {
           select: {
             assignedThreads: { where: { status: { not: 'RESOLVED' } } },
@@ -34,8 +36,10 @@ export default async function teamRoutes(fastify) {
       ]
     });
 
-    return team.map(member => ({
+    const now = Date.now();
+    return team.map(({ mfaLockedUntil, ...member }) => ({
       ...member,
+      mfaLocked: Boolean(mfaLockedUntil && new Date(mfaLockedUntil).getTime() > now),
       skills: JSON.parse(member.skills),
       activeThreads: member._count.assignedThreads,
       activeTasks: member._count.assignedTasks
