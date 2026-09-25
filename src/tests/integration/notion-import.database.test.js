@@ -8,6 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import prismaPkg from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { purgeFixtureAuditEvents } from '../helpers/audit-cleanup.js';
 
 // Runs the real controlled importer CLI against a real PostgreSQL database
 // (built with `prisma migrate deploy`) to prove the reconciliation contract:
@@ -144,6 +145,7 @@ test('Notion Markdown import is idempotent, reports conflicts, and rolls back li
     await raw.user.deleteMany({ where: { id: ids.user } });
     await raw.project.deleteMany({ where: { id: { in: projects } } });
     await raw.client.deleteMany({ where: { id: ids.client } });
+    await purgeFixtureAuditEvents(raw, { ids: [ids.org] });
     await raw.organization.deleteMany({ where: { id: ids.org } });
     await raw.$disconnect();
     fs.rmSync(workDir, { recursive: true, force: true });

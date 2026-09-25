@@ -2,6 +2,7 @@
 
 import bcrypt from 'bcrypt';
 import { validateBody, teamInviteSchema, teamResetPasswordSchema, teamUpdateSchema } from '../validators/schemas.js';
+import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 
 async function hashPassword(password) {
   return bcrypt.hash(password, 12);
@@ -21,6 +22,8 @@ export default async function teamRoutes(fastify) {
         skills: true,
         capacity: true,
         isActive: true,
+        mfaEnabled: true,
+        mfaLockedUntil: true,
         _count: {
           select: {
             assignedThreads: { where: { status: { not: 'RESOLVED' } } },
@@ -34,8 +37,15 @@ export default async function teamRoutes(fastify) {
       ]
     });
 
-    return team.map(member => ({
+    // MFA state is security posture: only admins (who can reset it) see it.
+    const isAdmin = request.user.role === 'ADMIN';
+    const now = Date.now();
+    return team.map(({ mfaLockedUntil, mfaEnabled, ...member }) => ({
       ...member,
+      ...(isAdmin ? {
+        mfaEnabled,
+        mfaLocked: Boolean(mfaLockedUntil && new Date(mfaLockedUntil).getTime() > now),
+      } : {}),
       skills: JSON.parse(member.skills),
       activeThreads: member._count.assignedThreads,
       activeTasks: member._count.assignedTasks
@@ -143,6 +153,12 @@ export default async function teamRoutes(fastify) {
     if (capacity !== undefined) data.capacity = capacity;
     if (isActive !== undefined) data.isActive = isActive;
 
+    // Read the prior access state only when it can change, so the audit
+    // trail records real transitions rather than every profile save.
+    const before = (role || isActive !== undefined)
+      ? await request.prisma.user.findUnique({ where: { id }, select: { role: true, isActive: true } })
+      : null;
+
     const member = await request.prisma.user.update({
       where: { id },
       data,
@@ -156,6 +172,21 @@ export default async function teamRoutes(fastify) {
         isActive: true
       }
     });
+
+    if (before && role && before.role !== member.role) {
+      await recordRequestAuditEvent(request.prisma, request, {
+        action: 'user.role_changed',
+        entityId: member.id,
+        metadata: { fromRole: before.role, toRole: member.role },
+      });
+    }
+    if (before && isActive !== undefined && before.isActive !== member.isActive) {
+      await recordRequestAuditEvent(request.prisma, request, {
+        action: member.isActive ? 'user.reactivated' : 'user.deactivated',
+        entityId: member.id,
+        metadata: { fromActive: before.isActive, toActive: member.isActive },
+      });
+    }
 
     return {
       ...member,
@@ -225,6 +256,12 @@ export default async function teamRoutes(fastify) {
     await request.prisma.user.update({
       where: { id },
       data: { password: await hashPassword(newPassword) }
+    });
+
+    await recordRequestAuditEvent(request.prisma, request, {
+      action: 'auth.password_changed',
+      entityId: id,
+      metadata: { method: 'admin_reset' },
     });
 
     return { success: true };

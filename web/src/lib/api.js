@@ -163,6 +163,10 @@ export const api = {
   // Auth
   login: (email, password) =>
     request('/auth/login', { method: 'POST', body: { email, password } }),
+  // Second sign-in step for accounts with two-factor authentication. Kept
+  // under /auth/login so a wrong code never triggers the global sign-out.
+  loginMfa: ({ challengeToken, code, recoveryCode }) =>
+    request('/auth/login/mfa', { method: 'POST', body: { challengeToken, code, recoveryCode } }),
   logout: () =>
     request('/auth/logout', { method: 'POST' }),
   me: () =>
@@ -177,6 +181,16 @@ export const api = {
     request('/auth/me', { method: 'PUT', body: data }),
   changePassword: (data) =>
     request('/auth/change-password', { method: 'POST', body: data }),
+  getMfaStatus: () =>
+    request('/auth/mfa'),
+  startMfaEnrollment: (password) =>
+    request('/auth/mfa/enroll', { method: 'POST', body: { password } }),
+  adminResetMfa: (userId, { password, code, recoveryCode }) =>
+    request(`/auth/mfa/admin/users/${encodeURIComponent(userId)}/reset`, { method: 'POST', body: { password, code, recoveryCode } }),
+  confirmMfaEnrollment: (code) =>
+    request('/auth/mfa/confirm', { method: 'POST', body: { code } }),
+  disableMfa: ({ password, code, recoveryCode }) =>
+    request('/auth/mfa/disable', { method: 'POST', body: { password, code, recoveryCode } }),
 
   // Inbox
   getInbox: (params = {}) => {
@@ -1416,6 +1430,14 @@ export const api = {
   getApiKeys: () => request('/api-keys'),
   createApiKey: (data) => request('/api-keys', { method: 'POST', body: data }),
   deleteApiKey: (id) => request(`/api-keys/${id}`, { method: 'DELETE' }),
+
+  // Audit event log (admin only, read-only)
+  getAuditEvents: (params = {}) => {
+    const defined = Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ''));
+    const query = new URLSearchParams(defined).toString();
+    return request(`/audit-events${query ? `?${query}` : ''}`);
+  },
+  getAuditEventCatalog: () => request('/audit-events/catalog'),
 
   // ===== ESTIMATES =====
   getEstimates: (params = {}) => {

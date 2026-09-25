@@ -2,6 +2,7 @@
 
 import crypto from 'crypto';
 import { validateBody, apiKeyCreateSchema } from '../validators/schemas.js';
+import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 
 const PREFIX = 'ashbi_'; // API keys start with ashbi_ for easy identification
 
@@ -63,6 +64,12 @@ export default async function apiKeyRoutes(fastify) {
       }
     });
 
+    await recordRequestAuditEvent(request.prisma, request, {
+      action: 'api_key.created',
+      entityId: apiKey.id,
+      metadata: { ownerUserId: request.user.id, expires: Boolean(apiKey.expiresAt) },
+    });
+
     // Return the raw key ONCE — it won't be stored in plaintext
     return {
       id: apiKey.id,
@@ -87,6 +94,12 @@ export default async function apiKeyRoutes(fastify) {
     await request.prisma.apiKey.update({
       where: { id },
       data: { isActive: false }
+    });
+
+    await recordRequestAuditEvent(request.prisma, request, {
+      action: 'api_key.revoked',
+      entityId: id,
+      metadata: { ownerUserId: key.userId },
     });
 
     return { success: true };

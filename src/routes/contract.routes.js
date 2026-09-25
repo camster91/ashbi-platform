@@ -6,6 +6,7 @@ import { deliveryFieldsFromSend, withDeliveryState } from '../services/mailgun-d
 import { getContractTemplate, renderTemplate } from '../services/contractTemplates.service.js';
 import {validateBody, createContractSchema, updateContractDraftSchema, contractDraftUpdateSchema} from '../validators/schemas.js';
 import { clampTake } from '../utils/query-limits.js';
+import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { contractPdfFilename, generateContractPdf } from '../utils/generate-contract-pdf.js';
 import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
 
@@ -262,6 +263,17 @@ export default async function contractRoutes(fastify) {
       }
     });
     if (updated.count !== 1) return reply.status(409).send({ error: 'Contract is no longer awaiting signature' });
+    // The signer's name and full IP stay on the contract itself as signing
+    // evidence; the audit event carries only ids and the content hash.
+    await recordRequestAuditEvent(fastify.prisma, request, {
+      action: 'contract.signed',
+      actorType: 'CLIENT',
+      actorUserId: null,
+      organizationId: null,
+      ownerClientId: contract.clientId,
+      entityId: contract.id,
+      metadata: { fromStatus: 'SENT', toStatus: 'SIGNED', signingMethod: signatureType, documentHash: signedContentHash, via: 'public_link' },
+    });
     return {
       status: 'SIGNED',
       signedAt: now,

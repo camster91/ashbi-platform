@@ -2,7 +2,7 @@
 
 import { parseEmail } from '../utils/emailParser.js';
 import { processEmailPipeline } from '../services/pipeline.service.js';
-import { clearExpiredCheckout, handleWebhook, recordCompletedCheckout } from '../services/stripe.service.js';
+import { clearExpiredCheckout, handleWebhook, recordCheckoutAuditEvents, recordCompletedCheckout } from '../services/stripe.service.js';
 import env from '../config/env.js';
 import crypto from 'crypto';
 import {validateBody, webhookEmailTestSchema} from '../validators/schemas.js';
@@ -132,6 +132,7 @@ export default async function webhookRoutes(fastify) {
       case 'checkout.session.completed': {
         try {
           const result = await recordCompletedCheckout(fastify.prisma, event);
+          await recordCheckoutAuditEvents(fastify.prisma, request, event, result);
           fastify.log.info({ invoiceId: result.invoiceId, duplicate: result.duplicate }, 'Stripe checkout processed');
         } catch (error) {
           fastify.log.error({ error }, 'Error processing Stripe payment');

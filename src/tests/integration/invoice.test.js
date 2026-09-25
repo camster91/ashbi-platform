@@ -12,6 +12,7 @@ import portalRoutes from '../../routes/portal.routes.js';
 import { createScopedPrisma } from '../../utils/prisma-tenant-proxy.js';
 import { enterRequestContext } from '../../utils/request-context.js';
 import { shouldSkipHeavyTests } from '../_test-skip.js';
+import { purgeFixtureAuditEvents } from '../helpers/audit-cleanup.js';
 
 const skip = shouldSkipHeavyTests();
 
@@ -112,6 +113,8 @@ after(async () => {
   await rawPrisma.contact.deleteMany({ where: { clientId: testClientId } });
   await rawPrisma.client.deleteMany({ where: { organizationId: testOrganizationId } });
   await rawPrisma.user.delete({ where: { id: testUserId } }).catch(() => null);
+  // Invoice sends and payments now write audit events for this fixture org.
+  await purgeFixtureAuditEvents(rawPrisma, { ids: [testOrganizationId] });
   await rawPrisma.organization.delete({ where: { id: testOrganizationId } }).catch(() => null);
   await rawPrisma.$disconnect();
   await fastify.close();

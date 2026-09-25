@@ -7,6 +7,7 @@ import {
   WITH_DELETED,
   withSoftDelete,
 } from '../../services/soft-delete.service.js';
+import { purgeFixtureAuditEvents } from '../helpers/audit-cleanup.js';
 
 const { PrismaClient } = prismaPkg;
 const databaseUrl = process.env.TENANT_INTEGRATION_DATABASE_URL;
@@ -148,6 +149,7 @@ test('real database enforces one soft-delete policy across every classified mode
       await deleteIds('client');
       await raw.client.deleteMany({ where: { name: { contains: `retainer client ${suffix}` } } });
       await raw.user.deleteMany({ where: { email: `soft-delete-${suffix}@example.test` } });
+      await purgeFixtureAuditEvents(raw, { slugs: [`soft-delete-${suffix}`] });
       await raw.organization.deleteMany({ where: { slug: `soft-delete-${suffix}` } });
       await raw.$disconnect();
     }

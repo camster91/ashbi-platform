@@ -36,7 +36,15 @@ const DIRECT_SCOPED_MODELS = new Set([
   'aicontext', 'ashconversation', 'projecttemplate', 'brandsettings',
   'pipelinestage', 'promptversion', 'credential', 'credentialaccessaudit',
   'onboardingprogress', 'slackinstallation', 'slackchannelmapping', 'slackeventreceipt', 'googlecalendarconnection', 'notionimportrecord', 'aibridgeaction',
-  'publicinquiry'
+  'publicinquiry', 'auditevent'
+]);
+
+// Evidence tables that may only ever be appended to. Request-scoped code gets
+// no update/upsert/delete path for them; the database enforces the same rule
+// with triggers (see prisma/migrations/*_audit_events).
+const APPEND_ONLY_MODELS = new Set(['auditevent']);
+const APPEND_ONLY_BLOCKED_METHODS = new Set([
+  'update', 'updateMany', 'updateManyAndReturn', 'upsert', 'delete', 'deleteMany',
 ]);
 
 // Models that are intentionally shared across organizations. Every Prisma
@@ -271,6 +279,11 @@ export function createScopedPrisma(prisma, organizationId) {
         get(modelTarget, methodName) {
           const method = modelTarget[methodName];
           if (typeof method !== 'function') return method;
+          if (APPEND_ONLY_MODELS.has(modelKey) && APPEND_ONLY_BLOCKED_METHODS.has(methodName)) {
+            return async () => {
+              throw new Error(`Tenancy Error: ${String(modelName)} is append-only; ${String(methodName)} is not permitted`);
+            };
+          }
 
           return async (...args) => {
             const queryArgs = args[0] || {};

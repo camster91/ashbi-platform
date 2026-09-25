@@ -18,6 +18,8 @@ import {
   Bell,
   ListChecks,
   CalendarDays,
+  ShieldCheck,
+  History,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
@@ -25,6 +27,8 @@ import { usePushNotifications } from '../hooks/usePushNotifications';
 import QueryErrorState from '../components/QueryErrorState';
 import { Button, Card, LoadingState } from '../components/ui';
 import ConfirmDialog from '../components/ConfirmDialog';
+import TwoFactorSettings from '../components/TwoFactorSettings';
+import ActivityLog from '../components/ActivityLog';
 
 function Section({ icon: Icon, title, description, children }) {
   // Expose each settings card as a named accessible region so screen-reader
@@ -826,6 +830,12 @@ export default function Settings() {
         </form>
       </Section>
 
+      {user && user.role !== 'CLIENT' && user.role !== 'BOT' && (
+        <Section icon={ShieldCheck} title="Security" description="Protect your account with two-factor authentication">
+          <TwoFactorSettings />
+        </Section>
+      )}
+
       <Section icon={Bell} title="Browser notifications" description="Inspect or change notifications for this browser">
         <NotificationPreferences />
       </Section>
@@ -850,6 +860,13 @@ export default function Settings() {
 
       {/* AI Model Picker — admin only */}
       {isAdmin && <AIModelSection />}
+
+      {/* Append-only audit trail — admin only (the API also enforces this) */}
+      {isAdmin && (
+        <Section icon={History} title="Activity log" description="Who sent or settled invoices, signed contracts, and changed access">
+          <ActivityLog />
+        </Section>
+      )}
 
       {/* Admin links */}
       {isAdmin && (

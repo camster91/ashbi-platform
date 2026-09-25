@@ -7,6 +7,7 @@ import FormData from 'form-data';
 import env from '../config/env.js';
 import logger from '../utils/logger.js';
 import { isCurrentUserSession, revokeUserSessions, sessionCookieOptions, signUserSession } from '../auth/session.js';
+import { recordAuditEvent, recordRequestAuditEvent } from '../services/audit-event.service.js';
 import {
   validateBody,
   schemas,
@@ -41,6 +42,86 @@ async function upgradeHashIfNeeded(prisma, userId, password, currentHash) {
     const newHash = await hashPassword(password);
     await prisma.user.update({ where: { id: userId }, data: { password: newHash } });
   }
+}
+
+// At most one auth.login_failed event per account per window, so a password
+// spraying run cannot flood audit_events (the IP rate limit bounds attempts;
+// this bounds rows). The in-process map skips the database for hot accounts;
+// the database check covers other API instances.
+export const LOGIN_FAILURE_AUDIT_WINDOW_MS = 60_000;
+const LOGIN_FAILURE_MEMORY_LIMIT = 10_000;
+const recentLoginFailureAudits = new Map();
+
+function loginFailureRecentlyAudited(accountId, now) {
+  const last = recentLoginFailureAudits.get(accountId);
+  if (last !== undefined && now - last < LOGIN_FAILURE_AUDIT_WINDOW_MS) return true;
+  if (recentLoginFailureAudits.size >= LOGIN_FAILURE_MEMORY_LIMIT) recentLoginFailureAudits.clear();
+  recentLoginFailureAudits.set(accountId, now);
+  return false;
+}
+
+/** Test hook: forget the in-process throttle state. */
+export function resetLoginFailureAuditThrottle() {
+  recentLoginFailureAudits.clear();
+}
+
+/**
+ * Record a failed sign-in against the account's own organization. Unknown
+ * emails have no tenant and are only rate-limited, never logged here. The
+ * email match is case-insensitive (and skipped when ambiguous), so
+ * "Jane@X.test" and "jane@x.test" attribute to the same account. This is
+ * intentionally not awaited by callers: the lookup and write must not make a
+ * known email measurably slower to reject than an unknown one.
+ * @param {any} prisma
+ * @param {any} request
+ * @param {{ email?: string, account?: { id: string, organizationId: string, isActive: boolean } }} subject
+ * @param {'staff' | 'client'} portal
+ */
+function auditLoginFailure(prisma, request, { email, account: knownAccount }, portal) {
+  const trimmed = typeof email === 'string' ? email.trim() : '';
+  if (!knownAccount && !trimmed) return Promise.resolve(null);
+  return (async () => {
+    try {
+      let account = knownAccount;
+      if (!account) {
+        const matches = await prisma.user.findMany({
+          where: { email: { equals: trimmed, mode: 'insensitive' } },
+          select: { id: true, organizationId: true, isActive: true },
+          take: 2,
+        });
+        account = matches.length === 1 ? matches[0] : null;
+      }
+      if (!account?.organizationId) return null;
+
+      const now = Date.now();
+      if (loginFailureRecentlyAudited(account.id, now)) return null;
+      const recent = await prisma.auditEvent.findFirst({
+        where: {
+          organizationId: account.organizationId,
+          action: 'auth.login_failed',
+          entityType: 'user',
+          entityId: account.id,
+          createdAt: { gte: new Date(now - LOGIN_FAILURE_AUDIT_WINDOW_MS) },
+        },
+        select: { id: true },
+      });
+      if (recent) return null;
+
+      return await recordAuditEvent(prisma, {
+        organizationId: account.organizationId,
+        actorType: portal === 'client' ? 'CLIENT' : 'USER',
+        actorUserId: null,
+        action: 'auth.login_failed',
+        entityId: account.id,
+        requestId: request.id,
+        ip: request.ip,
+        metadata: { portal, accountActive: account.isActive },
+      });
+    } catch (err) {
+      logger.warn({ err: { message: err?.message } }, 'Login failure audit lookup failed');
+      return null;
+    }
+  })();
 }
 
 // Arbitrary constant key for the bootstrap registration advisory lock.
@@ -78,12 +159,22 @@ export default async function authRoutes(fastify) {
     const { email, password } = request.body;
 
     try {
-      const { user, token } = await fastify.auth.login({ email, password });
+      const result = await fastify.auth.login({ email, password });
+      if (result.mfaRequired) {
+        // No session cookie until the second factor is verified.
+        return reply.send({
+          mfaRequired: true,
+          challengeToken: result.challengeToken,
+          expiresInSeconds: result.expiresInSeconds,
+        });
+      }
+      const { user, token } = result;
 
       reply
         .setCookie('token', token, sessionCookieOptions({ includeMaxAge: true }))
         .send({ user });
     } catch (err) {
+      void auditLoginFailure(request.prisma, request, { email }, 'staff');
       return reply.status(401).send({ error: 'Invalid credentials' });
     }
   });
@@ -276,6 +367,12 @@ export default async function authRoutes(fastify) {
       }
     });
 
+    await recordRequestAuditEvent(request.prisma, request, {
+      action: 'auth.password_changed',
+      entityId: request.user.id,
+      metadata: { method: 'self_service', sessionsRevoked: true },
+    });
+
     return { success: true };
   });
 
@@ -368,6 +465,7 @@ export default async function authRoutes(fastify) {
     }
 
     if (!(await verifyPassword(password, user.password))) {
+      void auditLoginFailure(request.prisma, request, { account: user }, 'client');
       return reply.status(401).send({ error: 'Invalid email or password' });
     }
 
@@ -501,6 +599,17 @@ export default async function authRoutes(fastify) {
           resetToken: null,
           resetTokenExpiresAt: null
         }
+      });
+
+      await recordAuditEvent(request.prisma, {
+        organizationId: user.organizationId,
+        actorType: 'USER',
+        actorUserId: user.id,
+        action: 'auth.password_changed',
+        entityId: user.id,
+        requestId: request.id,
+        ip: request.ip,
+        metadata: { method: 'reset_link', sessionsRevoked: true },
       });
 
       return { success: true };

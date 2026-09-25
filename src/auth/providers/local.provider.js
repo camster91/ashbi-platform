@@ -2,6 +2,7 @@ import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import env from '../../config/env.js';
 import { isCurrentUserSession, signUserSession } from '../session.js';
+import { createMfaChallenge, isMfaRequired, MFA_CHALLENGE_TTL_SECONDS } from '../mfa.js';
 
 const BCRYPT_ROUNDS = 12;
 
@@ -47,6 +48,16 @@ export class LocalAuthProvider {
       });
       organizationId = defaultOrg.id;
       await this.prisma.user.update({ where: { id: user.id }, data: { organizationId } });
+    }
+
+    // Staff accounts with MFA enabled get only a short-lived challenge here;
+    // the session is issued by POST /api/auth/login/mfa after the second factor.
+    if (isMfaRequired(user)) {
+      return {
+        mfaRequired: true,
+        challengeToken: createMfaChallenge(user),
+        expiresInSeconds: MFA_CHALLENGE_TTL_SECONDS,
+      };
     }
 
     const token = signUserSession(this.jwt, { ...user, organizationId });

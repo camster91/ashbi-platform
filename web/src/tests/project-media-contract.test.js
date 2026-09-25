@@ -11,6 +11,7 @@ describe('project media collaboration contract', () => {
     expect(media).toContain('new MediaRecorder');
     expect(media).toContain("api.uploadAttachment(file, 'PROJECT', projectId)");
     expect(media).toContain('MAX_RECORDING_BYTES');
+    expect(media).toContain('MAX_RECORDING_DURATION_MS');
   });
 
   it('uses authenticated project signalling for audio/video calls', () => {
@@ -31,7 +32,10 @@ describe('project media collaboration contract', () => {
     expect(media).toContain('api.getIceServers()');
     // A participant who leaves or disconnects without a hangup releases the binding.
     expect(media).toContain("if (remoteUserRef.current === userId) releasePeer();");
-    expect(media).toContain("['failed', 'closed'].includes(peer.connectionState) && peerRef.current === peer");
+    expect(media).toContain("} else if (state === 'closed') {");
+    // A failed or long-disconnected peer is recovered by a bounded ICE restart first.
+    expect(media).toContain('createOffer({ iceRestart: true })');
+    expect(media).toContain('MAX_ICE_RESTART_ATTEMPTS');
     expect(media).not.toContain("iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }");
   });
 

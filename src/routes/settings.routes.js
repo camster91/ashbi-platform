@@ -11,6 +11,7 @@ import {
   aiProviderSwitchSchema,
 } from '../validators/schemas.js';
 import env from '../config/env.js';
+import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 
 // Re-read the account so a demoted or deactivated operator loses the right
 // immediately, not when their session token expires.
@@ -302,7 +303,21 @@ export default async function settingsRoutes(fastify) {
         return reply.status(400).send({ error: `Unknown Ollama model: ${model}` });
       }
     }
+    const previousProvider = getProviderName();
+    const previousModel = getOllamaModel();
     setProvider(provider, { model });
+    // The provider is deployment-wide; the event is filed under the acting
+    // operator's organization, which is the only tenant context available.
+    await recordRequestAuditEvent(request.prisma, request, {
+      action: 'settings.ai_provider_changed',
+      entityId: 'ai_provider',
+      metadata: {
+        fromProvider: previousProvider,
+        toProvider: getProviderName(),
+        fromModel: previousModel,
+        toModel: getOllamaModel(),
+      },
+    });
     return {
       provider: getProviderName(),
       ollamaModel: getOllamaModel(),
