@@ -4,7 +4,9 @@
 contract (`on: workflow_call`). It is invoked by exactly one workflow,
 `.github/workflows/required-release-gates.yml` (`Required release gates`), which
 runs on every pull request to `main`, on every push to `main` (so the merged
-result is verified too), and on manual `workflow_dispatch`.
+result is verified too), and on manual `workflow_dispatch`. A newer push to a
+pull request cancels that pull request's in-progress run, but runs for pushes
+to `main` are never cancelled, so every merge is verified.
 
 No GitHub workflow deploys the application. Production and staging are deployed
 by an operator with `scripts/deploy-vps-direct.sh` after the release gates pass

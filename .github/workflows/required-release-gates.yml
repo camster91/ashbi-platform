@@ -12,7 +12,9 @@ permissions:
 
 concurrency:
   group: required-release-gates-${{ github.ref }}
-  cancel-in-progress: true
+  # Superseded PR pushes may be cancelled; every main push must finish so each
+  # merge is verified even when two land in quick succession.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   release-gates:
