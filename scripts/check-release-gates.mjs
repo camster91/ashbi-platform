@@ -9,7 +9,7 @@ export function validateReleaseGates(root = process.cwd()) {
     .filter((name) => /\.ya?ml$/.test(name))
     .map((name) => [name, read(name)]);
   const release = read('release-gates.yml');
-  const ci = read('ci.yml');
+  const ci = read('required-release-gates.yml');
   const imageBuild = read('build-and-push.yml');
   const directDeploy = fs.readFileSync(path.join(root, 'scripts', 'deploy-vps-direct.sh'), 'utf8');
   const dockerfile = fs.readFileSync(path.join(root, 'Dockerfile'), 'utf8');
@@ -47,6 +47,8 @@ export function validateReleaseGates(root = process.cwd()) {
     'npm run test:lighthouse',
     'npm run test:public-routes',
     'npm run test:pwa-offline',
+    'npm audit --omit=dev --audit-level=high',
+    'npm --prefix web audit --omit=dev --audit-level=high',
   ];
   for (const command of commands) {
     if (!release.includes(command)) failures.push(`release-gates.yml is missing ${command}`);
@@ -59,7 +61,7 @@ export function validateReleaseGates(root = process.cwd()) {
   if (!browserJob.includes('npm run build')) failures.push('release-gates.yml browser job does not build the production frontend');
 
   if (!/uses:\s*\.\/\.github\/workflows\/release-gates\.yml/.test(ci)) {
-    failures.push('ci.yml does not invoke the canonical release gates');
+    failures.push('required-release-gates.yml does not invoke the canonical release gates');
   }
   if (!/COPY scripts\/check-frontend-budgets\.mjs \/app\/scripts\/check-frontend-budgets\.mjs/.test(dockerfile)) {
     failures.push('Dockerfile frontend builder is missing the performance budget verifier');

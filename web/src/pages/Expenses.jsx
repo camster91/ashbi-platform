@@ -5,7 +5,7 @@ import {
   X, TrendingUp, Tag, Calendar, Building2, FolderOpen,
 } from 'lucide-react';
 import { api } from '../lib/api';
-import { Button, Card } from '../components/ui';
+import { Button, Card, EmptyState, TablePageSkeleton } from '../components/ui';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 import { useToast } from '../hooks/useToast';
@@ -553,7 +553,9 @@ export default function Expenses() {
       {/* Expense List */}
       <Card>
         {isLoading ? (
-          <div className="p-8 text-center text-muted-foreground">Loading expenses...</div>
+          <div className="p-4">
+            <TablePageSkeleton rows={5} label="Loading expenses" />
+          </div>
         ) : expensesError ? (
           <QueryErrorState
             error={expensesRequestError}
@@ -562,11 +564,13 @@ export default function Expenses() {
             isRetrying={expensesFetching}
           />
         ) : expenses.length === 0 ? (
-          <div className="p-8 text-center">
-            <Receipt className="w-12 h-12 text-muted-foreground/50 mx-auto mb-3" />
-            <p className="text-muted-foreground">No expenses found</p>
-            <p className="text-sm text-muted-foreground mt-1">Add your first expense to start tracking</p>
-          </div>
+          <EmptyState
+            icon="expense"
+            title="No expenses found"
+            description="Add your first expense to start tracking costs and profitability."
+            actionLabel="Add Expense"
+            onAction={() => { resetForm(); setShowForm(true); }}
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">

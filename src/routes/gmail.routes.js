@@ -3,6 +3,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import env from '../config/env.js';
 import { validateBody, gmailDraftReplySchema, gmailSendSchema } from '../validators/schemas.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -12,20 +13,20 @@ const GMAIL_API = 'https://www.googleapis.com/gmail/v1/users/me';
 // ==================== TOKEN MANAGEMENT ====================
 
 function getTokensPath() {
-  return process.env.GMAIL_TOKENS_PATH
+  return env.gmailTokensPath
     || path.resolve(__dirname, '../../config/google-tokens.json');
 }
 
 function loadTokens() {
-  if (process.env.GMAIL_TOKENS_JSON) {
-    return JSON.parse(process.env.GMAIL_TOKENS_JSON);
+  if (env.gmailTokensJson) {
+    return JSON.parse(env.gmailTokensJson);
   }
   const raw = fs.readFileSync(getTokensPath(), 'utf-8');
   return JSON.parse(raw);
 }
 
 function saveTokens(tokens) {
-  if (process.env.GMAIL_TOKENS_JSON) return;
+  if (env.gmailTokensJson) return;
   fs.writeFileSync(getTokensPath(), JSON.stringify(tokens, null, 4), 'utf-8');
 }
 
@@ -299,11 +300,15 @@ Write a helpful, professional reply that addresses the client's needs. Be concis
   fastify.post('/sync-now', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
-    const { exec } = await import('child_process');
+    // SECURITY: run the sync script with execFile (no shell) instead of exec.
+    // The previous shell string interpolated the resolved script path, so any
+    // future change that let a caller influence the path or arguments would
+    // have been a command-injection vector. execFile passes argv directly.
+    const { execFile } = await import('child_process');
     const scriptPath = path.resolve(__dirname, '../../scripts/gmail-sync.js');
-    
+
     return new Promise((resolve) => {
-      const child = exec(`node ${scriptPath}`, { timeout: 120000 }, (error, stdout, stderr) => {
+      execFile(process.execPath, [scriptPath], { timeout: 120000 }, (error, stdout, stderr) => {
         if (error) {
           resolve({ success: false, error: 'Command failed', output: stderr });
         } else {

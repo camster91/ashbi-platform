@@ -1,11 +1,12 @@
 // Stripe integration service for payment links and webhooks
 import Stripe from 'stripe';
+import env from '../config/env.js';
 
 let stripe = null;
 
 function getStripe() {
-  if (!stripe && process.env.STRIPE_SECRET_KEY) {
-    stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+  if (!stripe && env.stripeSecretKey) {
+    stripe = new Stripe(env.stripeSecretKey);
   }
   return stripe;
 }
@@ -33,8 +34,8 @@ export async function createPaymentLinkWithClient(invoice, stripeClient) {
       quantity: 1,
     }],
     mode: 'payment',
-    success_url: `${process.env.APP_URL || 'https://hub.ashbi.ca'}/portal/invoice/${invoice.viewToken}?payment=success`,
-    cancel_url: `${process.env.APP_URL || 'https://hub.ashbi.ca'}/portal/invoice/${invoice.viewToken}?payment=cancelled`,
+    success_url: `${env.appUrl}/portal/invoice/${invoice.viewToken}?payment=success`,
+    cancel_url: `${env.appUrl}/portal/invoice/${invoice.viewToken}?payment=cancelled`,
     client_reference_id: invoice.id,
     metadata: {
       invoiceId: invoice.id,
@@ -55,7 +56,7 @@ export async function handleWebhook(payload, signature) {
   const stripeClient = getStripe();
   if (!stripeClient) throw new Error('Stripe not configured');
 
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const webhookSecret = env.stripeWebhookSecret;
   if (!webhookSecret) throw new Error('STRIPE_WEBHOOK_SECRET not set');
 
   const event = stripeClient.webhooks.constructEvent(payload, signature, webhookSecret);

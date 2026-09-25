@@ -50,12 +50,20 @@ describe('role-aware onboarding', () => {
     api.getOnboardingProgress.mockResolvedValue(eligible);
   });
 
-  it('starts explicitly and does not mark work complete from navigation', async () => {
+  it('walks through the 3-step feature intro before starting the checklist', async () => {
     api.startOnboarding.mockResolvedValue({ ...eligible, state: 'in_progress', startedAt: '2026-08-09T12:00:00.000Z' });
     renderTour();
 
-    expect(await screen.findByRole('dialog', { name: 'Get started with Ashbi' }, { timeout: 2000 })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Start checklist' }));
+    expect(await screen.findByRole('dialog', { name: 'Welcome to Ashbi Hub' }, { timeout: 2000 })).toBeInTheDocument();
+    expect(screen.getByText('Your agency command center')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+    expect(screen.getByText('Never miss a client message')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+    expect(screen.getByText('Create anything in seconds')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Start checklist/i }));
     expect(await screen.findByRole('dialog', { name: 'Your getting-started checklist' })).toBeInTheDocument();
     expect(api.startOnboarding).toHaveBeenCalledTimes(1);
 

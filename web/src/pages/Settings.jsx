@@ -27,14 +27,17 @@ import { Button, Card, LoadingState } from '../components/ui';
 import ConfirmDialog from '../components/ConfirmDialog';
 
 function Section({ icon: Icon, title, description, children }) {
+  // Expose each settings card as a named accessible region so screen-reader
+  // users (and tests) can address one section without page-global queries.
+  const headingId = `settings-section-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
   return (
-    <Card className="p-6">
+    <Card className="p-6" role="region" aria-labelledby={headingId}>
       <div className="flex items-start gap-4 mb-5">
         <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
           <Icon className="w-5 h-5 text-primary" />
         </div>
         <div>
-          <h2 className="text-base font-semibold text-foreground">{title}</h2>
+          <h2 id={headingId} className="text-base font-semibold text-foreground">{title}</h2>
           {description && <p className="text-sm text-muted-foreground mt-0.5">{description}</p>}
         </div>
       </div>
@@ -811,6 +814,9 @@ export default function Settings() {
               { label: 'Command Center', href: '/admin/command-center', desc: 'VPS & GitHub integrations' },
               { label: 'Automations', href: '/automations', desc: 'Workflow automation log' },
               { label: 'Credentials', href: '/credentials', desc: 'Stored API keys & passwords' },
+              { label: 'Approvals', href: '/approvals', desc: 'Pending automation and content approvals' },
+              { label: 'Retainers', href: '/retainers', desc: 'Recurring client retainers' },
+              { label: 'Invoice Chaser', href: '/invoice-chaser', desc: 'Overdue invoice follow-ups' },
               { label: 'Reports (planned)', desc: 'P&L and team utilization will appear after the finance workflow is approved.' },
             ].map(({ label, href, desc }) => (
               href ? <a

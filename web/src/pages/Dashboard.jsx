@@ -17,7 +17,6 @@ import {
   Zap,
   Eye,
   CircleDot,
-  WifiOff,
   Mail,
   Bug,
 } from 'lucide-react';
@@ -30,7 +29,6 @@ import TimeTrackerWidget from '../components/widgets/TimeTrackerWidget';
 import UpcomingEventsWidget from '../components/widgets/UpcomingEventsWidget';
 import OutreachFunnelWidget from '../components/widgets/OutreachFunnelWidget';
 import RevenueSparklineWidget from '../components/widgets/RevenueSparklineWidget';
-import WPSiteHealthWidget from '../components/widgets/WPSiteHealthWidget';
 import QueryErrorState from '../components/QueryErrorState';
 
 export default function Dashboard() {
@@ -214,9 +212,11 @@ export default function Dashboard() {
               <Activity className="w-4 h-4 text-primary" />
               <h2 className="font-semibold text-foreground">Activity Feed</h2>
             </div>
-            <Link to="/activity" className="text-xs text-primary hover:underline flex items-center gap-1">
-              View all <ArrowRight className="w-3 h-3" />
-            </Link>
+            {/* The list below is already scrollable in place (max-h-400px).
+                A "View all" link was removed because /activity is not a
+                registered route; clicking it would 404. The full activity
+                page can be reintroduced when the feature ships — issue #293
+                tracks the "valid destinations" requirement. */}
           </div>
           {stats?.recentActivity?.length > 0 ? (
             <ul className="divide-y divide-border max-h-[400px] overflow-y-auto">
@@ -477,49 +477,8 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* ─── Row: WordPress Sites + Overdue Tasks ─── */}
+      {/* ─── Row: Overdue Tasks ─── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* WordPress Site Alerts */}
-        {(stats?.wpSiteAlerts?.length || 0) > 0 && (
-          <Card>
-            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <WifiOff className="w-4 h-4 text-red-500" />
-                <h2 className="font-semibold text-foreground">WP Site Alerts</h2>
-              </div>
-            </div>
-            <ul className="divide-y divide-border max-h-[340px] overflow-y-auto">
-              {stats.wpSiteAlerts.map(site => (
-                <li key={site.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground">{site.name}</p>
-                      <p className="text-xs text-muted-foreground">{site.url}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className={cn(
-                          'text-xs px-1.5 py-0.5 rounded font-medium',
-                          site.status === 'ERROR' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                          : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                        )}>{site.status}</span>
-                        {site.client && (
-                          <span className="text-xs text-muted-foreground">{site.client}</span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="text-right ml-3">
-                      <span className={cn(
-                        'text-lg font-bold',
-                        site.healthScore >= 80 ? 'text-green-600' : site.healthScore >= 50 ? 'text-amber-600' : 'text-red-600'
-                      )}>{site.healthScore}</span>
-                      <p className="text-[10px] text-muted-foreground">health</p>
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        )}
-
         {/* Overdue Tasks */}
         {(stats?.overdueTasks?.length || 0) > 0 && (
           <Card>
@@ -577,11 +536,6 @@ export default function Dashboard() {
           />
           <RevenueSparklineWidget data={stats?.revenueHistory} />
         </div>
-      )}
-
-      {/* ─── NEW: WP Site Health Heatmap ─── */}
-      {stats?.wpSites?.length > 0 && (
-        <WPSiteHealthWidget sites={stats.wpSites} />
       )}
 
       {/* ─── Row 3: Client Health Grid ─── */}

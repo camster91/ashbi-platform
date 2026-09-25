@@ -55,7 +55,7 @@ these domain groups:
 2. client delivery: clients, projects, tasks, notes, files, portal, chat;
 3. revenue: proposals, estimates, contracts, invoices, expenses, retainers;
 4. automation and AI: AI, semantic search, agents, approvals, automations;
-5. integrations and operations: Gmail, Mailgun, calendar, webhooks, WordPress;
+5. integrations and operations: Gmail, Mailgun, calendar, webhooks;
 6. platform: health, onboarding, notifications, search, trash, drafts.
 
 Each future group extraction must preserve the registered prefix and ordering,

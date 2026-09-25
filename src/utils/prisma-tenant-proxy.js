@@ -35,7 +35,8 @@ const DIRECT_SCOPED_MODELS = new Set([
   'weeklydigest', 'tasktemplate', 'outreachsequence', 'emailtriageitem',
   'aicontext', 'ashconversation', 'projecttemplate', 'brandsettings',
   'pipelinestage', 'promptversion', 'credential', 'credentialaccessaudit',
-  'onboardingprogress', 'slackinstallation', 'slackchannelmapping', 'slackeventreceipt', 'googlecalendarconnection', 'notionimportrecord', 'aibridgeaction'
+  'onboardingprogress', 'slackinstallation', 'slackchannelmapping', 'slackeventreceipt', 'googlecalendarconnection', 'notionimportrecord', 'aibridgeaction',
+  'publicinquiry'
 ]);
 
 // Models that are intentionally shared across organizations. Every Prisma
@@ -76,6 +77,7 @@ const DIRECT_PARENT_RELATIONS = {
   notionimportrecord: [{ relation: 'project', field: 'projectId', model: 'project', delegate: 'project', required: true }],
   aibridgeaction: [{ relation: 'user', field: 'userId', model: 'user', delegate: 'user', required: true }],
   onboardingprogress: [{ relation: 'user', field: 'userId', model: 'user', delegate: 'user', required: true }],
+  publicinquiry: [{ relation: 'owner', field: 'ownerId', model: 'user', delegate: 'user' }],
 };
 
 const RESTRICTED_MODELS = new Set([]);

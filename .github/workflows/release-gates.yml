@@ -45,10 +45,18 @@ jobs:
         run: |
           npm ci --no-audit --no-fund
           npm ci --prefix web --no-audit --no-fund
+      - name: Audit production dependency graph
+        # Fail the release on any high-severity advisory in the production
+        # (non-dev) dependency graph, before tests and build spend time.
+        run: |
+          npm audit --omit=dev --audit-level=high
+          npm --prefix web audit --omit=dev --audit-level=high
       - name: Generate Prisma client and test database
+        # Apply the committed migration chain (not db push) so database-level
+        # guarantees such as the note-hierarchy cycle trigger exist in tests.
         run: |
           npx prisma generate
-          npx prisma db push
+          npx prisma migrate deploy
       - name: Check package boundaries
         run: npm run check:boundaries
       - name: Type check
@@ -149,8 +157,6 @@ jobs:
         env:
           CI: true
           HUB_BASE: http://localhost:3001
-          WP_BASE: http://localhost:8888
-          SHARED_SECRET: test-e2e-secret-12345
       - name: Upload E2E output
         if: always()
         uses: actions/upload-artifact@v4

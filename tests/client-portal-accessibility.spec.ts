@@ -48,7 +48,9 @@ test.describe('Client portal accessibility', () => {
     expect(exchangedToken).toBe('one-time-magic-token');
     expect(page.url()).not.toContain('token=');
 
-    await page.getByRole('button', { name: 'Logout' }).click();
+    // The production control's accessible name is its descriptive aria-label
+    // ("Log out of client portal"), not the short visible text.
+    await page.getByRole('button', { name: 'Log out of client portal' }).click();
     await expect(page.getByRole('button', { name: 'Send Login Link' })).toBeVisible();
     expect(logoutCalled).toBe(true);
   });
@@ -85,7 +87,10 @@ test.describe('Client portal accessibility', () => {
     });
 
     await page.goto('/client-portal/verify?token=workflow-token');
-    await page.getByRole('button', { name: /Projects \(1\)/ }).click();
+    // Portal tabs expose proper tab semantics — address them by their real
+    // role and accessible names ("Projects (1)", "Contracts (1)"), not as
+    // generic buttons.
+    await page.getByRole('tab', { name: 'Projects (1)' }).click();
     await page.getByRole('button', { name: /Portal Project/ }).click();
     await expect(page.getByRole('heading', { name: 'Milestones' })).toBeVisible();
     await expect(page.getByText('Design review')).toBeVisible();
@@ -103,7 +108,7 @@ test.describe('Client portal accessibility', () => {
     await expect(page.getByRole('status')).toContainText('feedback was sent');
     expect(projectFeedback).toBe('The new direction looks good.');
 
-    await page.getByRole('button', { name: /Contracts \(1\)/ }).click();
+    await page.getByRole('tab', { name: 'Contracts (1)' }).click();
     await expect(page.getByRole('link', { name: 'Review and sign' })).toHaveAttribute('href', '/portal/contract/sign-a');
   });
 

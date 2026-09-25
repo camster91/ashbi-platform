@@ -25,15 +25,15 @@ export default async function mailgunRoutes(fastify) {
       return reply.status(400).send({ error: 'to, subject, and text or html are required' });
     }
 
-    if (!process.env.MAILGUN_API_KEY || !process.env.MAILGUN_DOMAIN) {
+    if (!env.mailgunApiKey || !env.mailgunDomain) {
       return reply.status(503).send({ error: 'Mailgun not configured' });
     }
 
     try {
       const mg = new Mailgun(FormData);
-      const client = mg.client({ username: 'api', key: process.env.MAILGUN_API_KEY });
-      await client.messages.create(process.env.MAILGUN_DOMAIN, {
-        from: `Ashbi Design <noreply@${process.env.MAILGUN_DOMAIN}>`,
+      const client = mg.client({ username: 'api', key: env.mailgunApiKey });
+      await client.messages.create(env.mailgunDomain, {
+        from: `Ashbi Design <noreply@${env.mailgunDomain}>`,
         to,
         subject,
         text,
@@ -54,7 +54,7 @@ export default async function mailgunRoutes(fastify) {
       const body = request.body;
 
       // Validate Mailgun webhook signature (fail closed)
-      const signingKey = process.env.MAILGUN_SIGNING_KEY;
+      const signingKey = env.mailgunSigningKey;
       if (!signingKey) {
         if (!env.isDev) {
           return reply.status(500).send({ error: 'Mailgun signing key not configured' });

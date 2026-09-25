@@ -130,14 +130,11 @@ npm run build
    npm start
    ```
 
-2. **Change default passwords immediately:**
-   - Login as cameron@ashbi.ca with: Ashbi2026!
-   - Go to Settings → Change Password
-   - Use a strong unique password
-
-   - Login as bianca@ashbi.ca with: Ashbi2026!  
-   - Go to Settings → Change Password
-   - Use a strong unique password
+2. **Verify bootstrap account security:**
+   - Never document, commit, or distribute default login credentials.
+   - Obtain any required bootstrap credential from the approved secret store.
+   - Rotate bootstrap credentials and revoke existing sessions before production use.
+   - Verify that no historical or example credential is accepted.
 
 3. **Verify security headers:**
    ```bash

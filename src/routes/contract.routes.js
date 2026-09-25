@@ -1,5 +1,7 @@
 import crypto from 'crypto';
 import PDFDocument from 'pdfkit';
+import env from '../config/env.js';
+import logger from '../utils/logger.js';
 import { sendContractSignEmail } from '../services/email.service.js';
 import { getContractTemplate, renderTemplate } from '../services/contractTemplates.service.js';
 import {validateBody, createContractSchema, updateContractDraftSchema, contractDraftUpdateSchema} from '../validators/schemas.js';
@@ -7,13 +9,16 @@ import { clampTake } from '../utils/query-limits.js';
 import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
 
 async function sendContractEmail(to, clientName, contractTitle, signUrl) {
+  // NODE_ENV/ASHBI_RUN_EMAIL_TESTS read directly because they are dev-only
+  // test toggles not exposed in env.js. See proposal.routes.js for the same
+  // pattern.
   if (process.env.NODE_ENV === 'test' && process.env.ASHBI_RUN_EMAIL_TESTS !== '1') return false;
-  if (!process.env.MAILGUN_API_KEY || !process.env.MAILGUN_DOMAIN) return false;
+  if (!env.mailgunApiKey || !env.mailgunDomain) return false;
   try {
     await sendContractSignEmail({ to, clientName, contractTitle, signLink: signUrl });
     return true;
   } catch (err) {
-    console.error('[Contract] Email send error:', err.message);
+    logger.error({ errorName: err?.name, errorCode: err?.code }, '[Contract] Email send error');
     return false;
   }
 }
@@ -167,7 +172,7 @@ export default async function contractRoutes(fastify) {
     const primaryContact = contract.client?.contacts?.[0];
     let emailSent = false;
     if (primaryContact?.email) {
-      const baseUrl = process.env.APP_URL || 'https://hub.ashbi.ca';
+      const baseUrl = env.appUrl;
       const signUrl = `${baseUrl}/portal/contract/${access.token}`;
       emailSent = await sendContractEmail(primaryContact.email, primaryContact.name || contract.client?.name, contract.title || 'Service Agreement', signUrl);
     }
@@ -215,7 +220,7 @@ export default async function contractRoutes(fastify) {
     if (contract.status !== 'SENT') return reply.status(409).send({ error: 'Contract is not awaiting signature' });
 
     const now = new Date();
-    const signatureSecret = process.env.CONTRACT_SIGNATURE_SECRET || process.env.JWT_SECRET;
+    const signatureSecret = env.contractSignatureSecret;
     if (!signatureSecret) return reply.status(503).send({ error: 'Contract signing is unavailable' });
     const signedContentHash = crypto.createHash('sha256').update(contract.content).digest('hex');
     const signatureDataHash = crypto.createHash('sha256')
@@ -272,7 +277,7 @@ export default async function contractRoutes(fastify) {
     if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
     const contact = contract.client?.contacts?.[0];
     if (!contact?.email) return reply.status(409).send({ error: 'Primary client email is missing' });
-    const signUrl = `${process.env.APP_URL || 'https://hub.ashbi.ca'}/portal/contract/${contract.signToken}`;
+    const signUrl = `${env.appUrl}/portal/contract/${contract.signToken}`;
     const emailSent = await sendContractEmail(contact.email, contact.name || contract.client.name, contract.title, signUrl);
     if (!emailSent) return reply.status(503).send({ error: 'Contract email delivery is unavailable', retryable: true });
     return { emailSent: true };
