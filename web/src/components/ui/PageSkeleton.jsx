@@ -1,10 +1,16 @@
 import { cn } from '../../lib/utils';
+import useSlowState from '../../hooks/useSlowState';
+import { SlowMessage } from './SlowNotice';
 import Skeleton, {
   SkeletonPageHeader,
   SkeletonStatCard,
   SkeletonCard,
   SkeletonThreadRow,
 } from './Skeleton';
+
+// Every page skeleton explains the "Slow" workflow state after the shared
+// threshold. aria-busy is cleared at that point because some screen readers
+// suppress live-region announcements while a region is busy.
 
 /**
  * Full-page skeleton for list/table collection screens.
@@ -15,13 +21,16 @@ export function TablePageSkeleton({
   label = 'Loading content',
   className,
 }) {
+  const isSlow = useSlowState(true);
   return (
     <div
       className={cn('space-y-6 animate-fade-in motion-reduce:animate-none', className)}
       role="status"
-      aria-busy="true"
+      aria-live="polite"
+      aria-busy={isSlow ? undefined : 'true'}
       aria-label={label}
     >
+      {isSlow && <SlowMessage kind="read" />}
       <div className="flex items-start justify-between gap-4">
         <SkeletonPageHeader />
         <Skeleton className="h-11 w-32 rounded-lg shrink-0" />
@@ -56,13 +65,16 @@ export function KanbanPageSkeleton({
   label = 'Loading projects',
   className,
 }) {
+  const isSlow = useSlowState(true);
   return (
     <div
       className={cn('space-y-6 animate-fade-in motion-reduce:animate-none', className)}
       role="status"
-      aria-busy="true"
+      aria-live="polite"
+      aria-busy={isSlow ? undefined : 'true'}
       aria-label={label}
     >
+      {isSlow && <SlowMessage kind="read" />}
       <div className="flex items-start justify-between gap-4">
         <SkeletonPageHeader />
         <Skeleton className="h-11 w-36 rounded-lg shrink-0" />
@@ -95,13 +107,16 @@ export function ListPageSkeleton({
   label = 'Loading list',
   className,
 }) {
+  const isSlow = useSlowState(true);
   return (
     <div
       className={cn('space-y-6 animate-fade-in motion-reduce:animate-none', className)}
       role="status"
-      aria-busy="true"
+      aria-live="polite"
+      aria-busy={isSlow ? undefined : 'true'}
       aria-label={label}
     >
+      {isSlow && <SlowMessage kind="read" />}
       <SkeletonPageHeader />
       <div className="space-y-3">
         {Array.from({ length: rows }).map((_, i) => (

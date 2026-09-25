@@ -1,6 +1,8 @@
 import { forwardRef } from 'react';
 import { cn } from '../../lib/utils';
 import { Loader2 } from 'lucide-react';
+import useSlowState, { SLOW_THRESHOLD_MS } from '../../hooks/useSlowState';
+import { SlowMessage } from './SlowNotice';
 
 const Button = forwardRef(({
   children,
@@ -13,11 +15,21 @@ const Button = forwardRef(({
   isDisabled = false,
   disabled,
   className,
+  slowAfterMs = SLOW_THRESHOLD_MS,
+  slowKind = 'write',
+  slowGuidance,
   ...props
 }, ref) => {
   // Accept both `loading` and `isLoading` props; also accept `disabled` alongside `isDisabled`
   const showLoading = isLoading || loading || false;
   const showDisabled = isDisabled || disabled || false;
+  // "Slow" workflow state: a pending action that outlasts the threshold gets a
+  // polite, visible explanation next to the button. The live region mounts
+  // (visually hidden and empty) as soon as loading starts so the later text is
+  // announced reliably. Primary actions are usually writes, so the default copy
+  // warns against resubmitting.
+  const isSlow = useSlowState(showLoading, slowAfterMs);
+  const trackSlow = showLoading && typeof slowAfterMs === 'number' && slowAfterMs > 0;
   const variants = {
     primary: 'bg-primary text-primary-foreground hover:bg-primary/90 focus:ring-primary/20',
     secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80 focus:ring-secondary/20',
@@ -45,7 +57,10 @@ const Button = forwardRef(({
     xl: 'w-5 h-5',
   };
 
+  // Always return the same fragment shape so the <button> never remounts (and
+  // never loses focus) when loading toggles.
   return (
+    <>
     <button
       ref={ref}
       disabled={showDisabled || showLoading}
@@ -72,6 +87,16 @@ const Button = forwardRef(({
         <span aria-hidden="true" className={cn(iconSizes[size] || iconSizes.md)}>{rightIcon}</span>
       )}
     </button>
+    {trackSlow && (
+      <span
+        role="status"
+        aria-live="polite"
+        className={isSlow ? 'basis-full w-full' : 'sr-only'}
+      >
+        {isSlow ? <SlowMessage kind={slowKind} guidance={slowGuidance} className="mt-1 text-xs" /> : null}
+      </span>
+    )}
+    </>
   );
 });
 

@@ -46,6 +46,7 @@ import ProjectContextCard from '../components/project/ProjectContext';
 import ProjectMedia from '../components/project/ProjectMedia';
 import ProjectChat from '../components/ProjectChat';
 import QueryErrorState from '../components/QueryErrorState';
+import PartialSectionNotice from '../components/PartialSectionNotice';
 import Modal from '../components/Modal';
 import { Button, LoadingState } from '../components/ui';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -70,7 +71,13 @@ export default function Project() {
     queryFn: () => api.getProject(id),
   });
 
-  const { data: revisions } = useQuery({
+  const {
+    data: revisions,
+    isError: revisionsUnavailable,
+    error: revisionsError,
+    isFetching: revisionsFetching,
+    refetch: refetchRevisions,
+  } = useQuery({
     queryKey: ['revisions', id],
     queryFn: () => api.getRevisions(id),
   });
@@ -159,12 +166,7 @@ export default function Project() {
   }
 
   if (isLoading) {
-    return (
-      <div role="status" aria-live="polite" className="flex items-center justify-center h-64 gap-3 text-muted-foreground">
-        <div aria-hidden="true" className="animate-spin motion-reduce:animate-none rounded-full h-8 w-8 border-b-2 border-primary"></div>
-        <span>Loading project…</span>
-      </div>
-    );
+    return <LoadingState label="Loading project…" compact className="h-64" />;
   }
 
   if (isError) {
@@ -284,7 +286,16 @@ export default function Project() {
           <TaskCategory title="Waiting on Client" icon={Clock} tasks={project.tasks?.filter((t) => t.category === 'WAITING_CLIENT')} color="gray" />
           <TaskCategory title="Completed" icon={CheckCircle} tasks={project.tasks?.filter((t) => t.status === 'COMPLETED')} color="green" collapsed />
 
-          {/* Revision Rounds */}
+          {/* Revision Rounds (partial state: the rest of the project stays usable) */}
+          {revisionsUnavailable ? (
+            <PartialSectionNotice
+              section="Revision rounds"
+              detail="The project plan and tasks loaded normally."
+              error={revisionsError}
+              onRetry={() => refetchRevisions()}
+              isRetrying={revisionsFetching}
+            />
+          ) : (
           <RevisionRounds
             revisions={revisions || []}
             isAdmin={user?.role === 'ADMIN'}
@@ -292,6 +303,7 @@ export default function Project() {
             onApprove={(revId) => approveRevisionMutation.mutate(revId)}
             isCreating={createRevisionMutation.isPending}
           />
+          )}
         </div>
 
         {/* Sidebar */}

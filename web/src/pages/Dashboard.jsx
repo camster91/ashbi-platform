@@ -30,6 +30,9 @@ import UpcomingEventsWidget from '../components/widgets/UpcomingEventsWidget';
 import OutreachFunnelWidget from '../components/widgets/OutreachFunnelWidget';
 import RevenueSparklineWidget from '../components/widgets/RevenueSparklineWidget';
 import QueryErrorState from '../components/QueryErrorState';
+import PartialSectionNotice from '../components/PartialSectionNotice';
+import { SlowMessage } from '../components/ui/SlowNotice';
+import useSlowState from '../hooks/useSlowState';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -45,17 +48,26 @@ export default function Dashboard() {
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
   });
 
-  const { data: myTasks = [], isError: areTasksUnavailable } = useQuery({
+  const {
+    data: myTasks = [],
+    isError: areTasksUnavailable,
+    error: tasksError,
+    isFetching: tasksFetching,
+    refetch: refetchTasks,
+  } = useQuery({
     queryKey: ['my-tasks'],
     queryFn: () => api.getMyTasks().then((r) => Object.values(r ?? {}).flat()),
     placeholderData: keepPreviousData,
   });
+
+  const isInitialLoadSlow = useSlowState(isLoading && !stats);
 
   // Show skeleton on first load (no data yet)
   if (isLoading && !stats) {
     return (
       <div role="status" aria-live="polite" aria-label="Loading dashboard" className="space-y-6 min-h-[60vh]">
         <span className="sr-only">Loading dashboard…</span>
+        {isInitialLoadSlow && <SlowMessage kind="read" />}
         {/* Greeting skeleton */}
         <Skeleton className="h-10 w-64 rounded-lg" />
         <Skeleton className="h-4 w-48" />
@@ -182,7 +194,7 @@ export default function Dashboard() {
               iconColor="text-orange-600"
               iconBg="bg-orange-100 dark:bg-orange-900/30"
               label="My Tasks"
-              value={myTasks.length}
+              value={areTasksUnavailable ? '—' : myTasks.length}
               onClick={() => navigate('/inbox')}
             />
             <StatCard
@@ -197,10 +209,28 @@ export default function Dashboard() {
         )}
       </div>
 
+      {/* Partial state: stale stats stay visible while the live refresh is retried. */}
+      {isError && stats && (
+        <PartialSectionNotice
+          section="Live dashboard numbers"
+          title="Live dashboard numbers could not be refreshed"
+          detail="The figures below are from the last successful update."
+          error={error}
+          onRetry={() => refetch()}
+          isRetrying={isFetching}
+        />
+      )}
+
+      {/* Partial state: tasks failed but the rest of the dashboard is usable. */}
       {areTasksUnavailable && (
-        <div role="status" className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-          Task data is temporarily unavailable. Other dashboard data is current.
-        </div>
+        <PartialSectionNotice
+          section="Task data"
+          title="Task data is temporarily unavailable"
+          detail="Other dashboard data is current."
+          error={tasksError}
+          onRetry={() => refetchTasks()}
+          isRetrying={tasksFetching}
+        />
       )}
 
       {/* ─── Row 2: Activity Feed + Notification Center ─── */}

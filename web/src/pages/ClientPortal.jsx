@@ -3,9 +3,11 @@ import { useSearchParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { preferredScrollBehavior } from '../lib/motion';
 import ConfirmDialog from '../components/ConfirmDialog';
+import SlowNotice, { SlowLoadingStatus, SLOW_WRITE_INLINE as slowWrite } from '../components/ui/SlowNotice';
 
 const API = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '') : '';
 const SOCKET_URL = import.meta.env.PROD ? window.location.origin : 'http://localhost:3000';
+
 
 function portalFetch(pathname, token, options = {}) {
   const headers = new Headers(options.headers || {});
@@ -251,6 +253,7 @@ function LoginScreen() {
             <button type="submit" disabled={loading} className="cp-btn-primary" style={{ width: '100%' }}>
               {loading ? 'Sending...' : 'Send Login Link'}
             </button>
+            <SlowNotice active={loading} {...slowWrite} />
           </form>
         )}
       </div>
@@ -393,6 +396,7 @@ function PortalChatComposer({ value, onChange, onSubmit, connected, sending, sen
           {sending ? 'Sending…' : Icons.send}
         </button>
       </div>
+      <SlowNotice active={sending} {...slowWrite} />
       {sendError && <p role="alert" className="cp-error" style={{ fontSize: '0.8rem' }}>{sendError} Your text is still in the composer.</p>}
     </form>
   );
@@ -759,7 +763,7 @@ function ProjectDetail({ projectId, token, onBack }) {
   }
 
   if (loading) {
-    return <div className="cp-loading">Loading project...</div>;
+    return <SlowLoadingStatus label="Loading project..." className="cp-loading" />;
   }
   if (error || !project) {
     return (
@@ -1004,6 +1008,7 @@ function ProjectDetail({ projectId, token, onBack }) {
             </p>
             <p id="project-upload-help" className="cp-text-muted" style={{ fontSize: '0.8rem' }}>PDF, images, documents — up to 50MB</p>
           </button>
+          <SlowNotice active={uploading} {...slowWrite} />
 
           {/* Upload error — surfaced so the user sees what failed instead of a ghost-success */}
           {uploadError && (
@@ -1335,10 +1340,11 @@ function DocumentsTab({ projects, token }) {
         </p>
         <p id="documents-upload-help" className="cp-text-muted" style={{ fontSize: '0.8rem' }}>PDF, images, documents — up to 50MB</p>
       </button>
+      <SlowNotice active={uploading} {...slowWrite} />
 
       {/* Document list */}
       {loading ? (
-        <div className="cp-loading">Loading documents...</div>
+        <SlowLoadingStatus label="Loading documents..." className="cp-loading" />
       ) : documents.length === 0 ? (
         <div className="cp-card" style={{ padding: '2rem', textAlign: 'center' }}>
           <p className="cp-text-muted">No documents yet. Upload one above.</p>
@@ -1500,9 +1506,10 @@ function PortalDashboard({ token }) {
 
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', background: BRAND.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <p style={{ color: BRAND.textMuted }}>Loading your portal...</p>
-      </div>
+      <SlowLoadingStatus
+        label="Loading your portal..."
+        style={{ minHeight: '100vh', background: BRAND.bg, color: BRAND.textMuted, padding: '1rem' }}
+      />
     );
   }
 
