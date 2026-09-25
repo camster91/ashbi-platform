@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useId } from 'react';
+import { useEffect, useLayoutEffect, useRef, useCallback, useId } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -21,11 +21,20 @@ export default function Modal({
   const modalRef = useRef(null);
   const previousActiveElement = useRef(null);
   const titleId = useId();
+  // Callers usually pass an inline `onClose`, which is a new function on every
+  // parent render. Reading it through a ref keeps the open/focus effect below
+  // from re-running on each render; otherwise every keystroke in a field that
+  // lives in parent state (a controlled input inside the dialog) restored
+  // focus to the trigger and then moved it to the first control in the dialog.
+  const onCloseRef = useRef(onClose);
+  useLayoutEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
   // Handle focus trap
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'Escape') {
-      onClose();
+      onCloseRef.current();
       return;
     }
 
@@ -55,7 +64,7 @@ export default function Modal({
         }
       }
     }
-  }, [onClose]);
+  }, []);
 
   // Handle escape key, body scroll, and focus management
   useEffect(() => {
