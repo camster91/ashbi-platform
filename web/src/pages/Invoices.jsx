@@ -9,7 +9,7 @@ import {
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
-import { Button, Card, EmptyState, LoadingState } from '../components/ui';
+import { Button, Card, EmptyState, LoadingState, SlowNotice } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
@@ -764,9 +764,10 @@ function InvoiceCreateForm({
         {error && <p className="text-sm text-destructive">{error}</p>}
 
         <div className="flex gap-2">
-          <Button type="submit" loading={loading}>Create Invoice</Button>
+          <Button type="submit" loading={loading} slowAfterMs={false}>Create Invoice</Button>
           <Button variant="ghost" type="button" onClick={onCancel}>Cancel</Button>
         </div>
+        <SlowNotice active={loading} kind="write" />
       </form>
     </Card>
   );

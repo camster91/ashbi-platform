@@ -21,7 +21,7 @@ import {
 import { api } from '../lib/api';
 import { useToast } from '../hooks/useToast';
 import ConfirmDialog from '../components/ConfirmDialog';
-import { Button, Card, EmptyState, LoadingState } from '../components/ui';
+import { Button, Card, EmptyState, LoadingState, SlowNotice } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
@@ -230,9 +230,10 @@ export default function Proposals() {
               />
             </div>
             <div className="flex gap-2">
-              <Button type="submit" loading={createMutation.isPending}>Create</Button>
+              <Button type="submit" loading={createMutation.isPending} slowAfterMs={false}>Create</Button>
               <Button variant="ghost" onClick={() => setShowCreate(false)}>Cancel</Button>
             </div>
+            <SlowNotice active={createMutation.isPending} kind="write" />
           </form>
         </Card>
       )}

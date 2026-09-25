@@ -38,27 +38,41 @@ describe('shared "Slow" workflow state', () => {
     expect(screen.queryByText(SLOW_MESSAGE)).not.toBeInTheDocument();
   });
 
-  it('Button mounts an empty live region while loading and explains a slow write without inviting resubmission', () => {
-    const { rerender } = render(<Button>Save invoice</Button>);
+  it('Button describes a slow write in a layout-neutral live region without inviting resubmission', () => {
+    const { rerender, container } = render(<div className="flex space-x-2"><Button>Save invoice</Button></div>);
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
 
-    rerender(<Button loading>Save invoice</Button>);
+    rerender(<div className="flex space-x-2"><Button loading aria-describedby="hint">Save invoice</Button></div>);
     const button = screen.getByRole('button', { name: 'Save invoice' });
     const region = screen.getByRole('status');
     expect(region).toHaveAttribute('aria-live', 'polite');
     expect(region).toBeEmptyDOMElement();
     expect(region).toHaveClass('sr-only');
+    // Not a sibling of the button: the caller's flex row is untouched.
+    expect(container.querySelector('.flex').children).toHaveLength(1);
+    expect(button.getAttribute('aria-describedby').split(' ')).toEqual(['hint', region.id]);
 
     advance(SLOW_THRESHOLD_MS);
     expect(region).toHaveTextContent(SLOW_MESSAGE);
     expect(region).toHaveTextContent(/do not submit again/i);
-    expect(region).not.toHaveClass('sr-only');
+    expect(region).toHaveClass('sr-only');
     expect(button).toBeDisabled();
 
-    rerender(<Button>Save invoice</Button>);
+    rerender(<div className="flex space-x-2"><Button aria-describedby="hint">Save invoice</Button></div>);
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(button).toHaveAttribute('aria-describedby', 'hint');
     // The same <button> node survives the loading toggle, so focus is not lost.
     expect(screen.getByRole('button', { name: 'Save invoice' })).toBe(button);
+  });
+
+  it('Button shows the slow message visibly next to itself only when opted in', () => {
+    const { container } = render(<div className="flex flex-wrap"><Button loading slowMessage>Create</Button></div>);
+    const region = screen.getByRole('status');
+    expect(container.querySelector('.flex').children).toHaveLength(2);
+    expect(region).toHaveClass('sr-only');
+    advance(SLOW_THRESHOLD_MS);
+    expect(region).not.toHaveClass('sr-only');
+    expect(region).toHaveTextContent(SLOW_MESSAGE);
   });
 
   it('Button resets the timer when a new request starts', () => {

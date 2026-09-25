@@ -23,7 +23,7 @@ import {
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
 import { useToast } from '../hooks/useToast';
-import { Button, Card, EmptyState, TablePageSkeleton } from '../components/ui';
+import { Button, Card, EmptyState, SlowNotice, TablePageSkeleton } from '../components/ui';
 import CreateClientModal from '../components/CreateClientModal';
 import QueryErrorState from '../components/QueryErrorState';
 
@@ -279,11 +279,12 @@ export default function Clients() {
                 <p className="text-sm text-destructive">{onboardMutation.error?.message || 'Onboarding failed'}</p>
               )}
               <div className="flex gap-2">
-                <Button type="submit" loading={onboardMutation.isPending} leftIcon={<UserPlus className="w-4 h-4" />}>
+                <Button type="submit" loading={onboardMutation.isPending} slowAfterMs={false} leftIcon={<UserPlus className="w-4 h-4" />}>
                   Onboard Client
                 </Button>
                 <Button variant="ghost" type="button" onClick={() => setShowOnboarding(false)}>Cancel</Button>
               </div>
+              <SlowNotice active={onboardMutation.isPending} kind="write" />
             </form>
           )}
         </Card>
