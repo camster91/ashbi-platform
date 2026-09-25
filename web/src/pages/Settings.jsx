@@ -18,6 +18,7 @@ import {
   Bell,
   ListChecks,
   CalendarDays,
+  ShieldCheck,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
@@ -25,6 +26,7 @@ import { usePushNotifications } from '../hooks/usePushNotifications';
 import QueryErrorState from '../components/QueryErrorState';
 import { Button, Card, LoadingState } from '../components/ui';
 import ConfirmDialog from '../components/ConfirmDialog';
+import TwoFactorSettings from '../components/TwoFactorSettings';
 
 function Section({ icon: Icon, title, description, children }) {
   // Expose each settings card as a named accessible region so screen-reader
@@ -825,6 +827,12 @@ export default function Settings() {
           </div>
         </form>
       </Section>
+
+      {(user?.role === 'ADMIN' || user?.role === 'TEAM') && (
+        <Section icon={ShieldCheck} title="Security" description="Protect your account with two-factor authentication">
+          <TwoFactorSettings />
+        </Section>
+      )}
 
       <Section icon={Bell} title="Browser notifications" description="Inspect or change notifications for this browser">
         <NotificationPreferences />

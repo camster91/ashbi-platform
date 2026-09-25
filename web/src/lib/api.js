@@ -163,6 +163,10 @@ export const api = {
   // Auth
   login: (email, password) =>
     request('/auth/login', { method: 'POST', body: { email, password } }),
+  // Second sign-in step for accounts with two-factor authentication. Kept
+  // under /auth/login so a wrong code never triggers the global sign-out.
+  loginMfa: ({ challengeToken, code, recoveryCode }) =>
+    request('/auth/login/mfa', { method: 'POST', body: { challengeToken, code, recoveryCode } }),
   logout: () =>
     request('/auth/logout', { method: 'POST' }),
   me: () =>
@@ -177,6 +181,14 @@ export const api = {
     request('/auth/me', { method: 'PUT', body: data }),
   changePassword: (data) =>
     request('/auth/change-password', { method: 'POST', body: data }),
+  getMfaStatus: () =>
+    request('/auth/mfa'),
+  startMfaEnrollment: () =>
+    request('/auth/mfa/enroll', { method: 'POST', body: {} }),
+  confirmMfaEnrollment: (code) =>
+    request('/auth/mfa/confirm', { method: 'POST', body: { code } }),
+  disableMfa: ({ password, code, recoveryCode }) =>
+    request('/auth/mfa/disable', { method: 'POST', body: { password, code, recoveryCode } }),
 
   // Inbox
   getInbox: (params = {}) => {

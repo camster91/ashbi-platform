@@ -12,9 +12,165 @@ import {
   Zap,
   Users,
   MessageSquare,
-  Globe
+  Globe,
+  ShieldCheck
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+
+const inputClass = cn(
+  'w-full px-4 py-3 bg-card border border-border rounded-xl',
+  'text-card-foreground placeholder:text-muted-foreground',
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-transparent',
+  'transition-all duration-200'
+);
+
+/**
+ * Second sign-in step for staff accounts with two-factor authentication.
+ * The password step has already succeeded; no session exists until this
+ * form verifies an authenticator code or a single-use recovery code.
+ */
+export function MfaChallengeForm({ challengeToken, returnTo, onCancel, onExpired }) {
+  const { completeMfaLogin } = useAuth();
+  const [useRecovery, setUseRecovery] = useState(false);
+  const [code, setCode] = useState('');
+  const [recoveryCode, setRecoveryCode] = useState('');
+  const [error, setError] = useState('');
+  const [isVerifying, setIsVerifying] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    const factor = useRecovery ? { recoveryCode: recoveryCode.trim() } : { code: code.replace(/\s+/g, '') };
+    if (!useRecovery && !/^\d{6}$/.test(factor.code)) {
+      setError('Enter the 6-digit code from your authenticator app.');
+      return;
+    }
+    if (useRecovery && factor.recoveryCode.length < 16) {
+      setError('Enter one of your recovery codes, for example abcd-efgh-jkmn-pqrs.');
+      return;
+    }
+    setIsVerifying(true);
+    try {
+      await completeMfaLogin(challengeToken, factor, returnTo);
+    } catch (err) {
+      if (err?.data?.code === 'MFA_CHALLENGE_EXPIRED') {
+        onExpired(err.message);
+        return;
+      }
+      const reason = authFailureReason(err);
+      const messages = {
+        offline: 'You appear to be offline. Reconnect and try again.',
+        timeout: 'Verification timed out. Check your connection and try again.',
+        server: 'Sign-in is temporarily unavailable. Please try again shortly.',
+      };
+      setError(messages[reason] || err?.message || 'That code did not work. Try again.');
+      setCode('');
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const toggleMethod = () => {
+    setUseRecovery((value) => !value);
+    setError('');
+  };
+
+  const describedBy = error ? 'mfa-error mfa-help' : 'mfa-help';
+
+  return (
+    <form onSubmit={handleSubmit} aria-busy={isVerifying} aria-labelledby="mfa-heading" className="space-y-6">
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+          <ShieldCheck className="w-5 h-5 text-primary" aria-hidden="true" />
+        </div>
+        <div>
+          <h2 id="mfa-heading" className="text-lg font-semibold text-foreground">Two-factor authentication</h2>
+          <p id="mfa-help" className="text-sm text-muted-foreground">
+            {useRecovery
+              ? 'Enter one of the recovery codes you saved when you set up two-factor authentication. Each code works once.'
+              : 'Open your authenticator app and enter the current 6-digit code for Ashbi Hub.'}
+          </p>
+        </div>
+      </div>
+
+      {useRecovery ? (
+        <div className="space-y-2">
+          <label htmlFor="mfa-recovery-code" className="text-sm font-medium text-foreground">Recovery code</label>
+          <input
+            id="mfa-recovery-code"
+            type="text"
+            value={recoveryCode}
+            onChange={(e) => setRecoveryCode(e.target.value)}
+            className={inputClass}
+            autoComplete="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            autoFocus
+            required
+            aria-invalid={error ? true : undefined}
+            aria-describedby={describedBy}
+          />
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <label htmlFor="mfa-code" className="text-sm font-medium text-foreground">Authentication code</label>
+          <input
+            id="mfa-code"
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9 ]*"
+            maxLength={7}
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            className={cn(inputClass, 'tracking-[0.3em] font-mono text-lg')}
+            autoComplete="one-time-code"
+            autoFocus
+            required
+            aria-invalid={error ? true : undefined}
+            aria-describedby={describedBy}
+          />
+        </div>
+      )}
+
+      {error && (
+        <div id="mfa-error" role="alert" className="p-4 rounded-xl bg-destructive/10 border border-destructive/20">
+          <p className="text-sm text-destructive">{error}</p>
+        </div>
+      )}
+
+      <button
+        type="submit"
+        disabled={isVerifying}
+        aria-busy={isVerifying}
+        className={cn(
+          'w-full min-h-11 flex items-center justify-center gap-2 py-3 px-6',
+          'bg-primary text-primary-foreground rounded-full hover:bg-primary/90',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          'font-semibold text-base disabled:opacity-50 disabled:cursor-not-allowed'
+        )}
+      >
+        {isVerifying ? 'Verifying…' : 'Verify and sign in'}
+      </button>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+        <button
+          type="button"
+          onClick={toggleMethod}
+          className="min-h-11 text-primary hover:text-primary/80 font-medium rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {useRecovery ? 'Use your authenticator app instead' : 'Use a recovery code instead'}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="min-h-11 text-muted-foreground hover:text-foreground rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          Back to sign in
+        </button>
+      </div>
+    </form>
+  );
+}
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -22,6 +178,7 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [mfaChallenge, setMfaChallenge] = useState(null);
   const { login } = useAuth();
   const { t, currentLang, setLang, languages } = useTranslation();
   const location = useLocation();
@@ -46,7 +203,11 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      await login(email, password, returnTo);
+      const result = await login(email, password, returnTo);
+      if (result?.mfaRequired) {
+        setPassword('');
+        setMfaChallenge(result.challengeToken);
+      }
     } catch (err) {
       const reason = authFailureReason(err);
       const messages = {
@@ -132,6 +293,14 @@ export default function Login() {
             </div>
           )}
 
+          {mfaChallenge ? (
+            <MfaChallengeForm
+              challengeToken={mfaChallenge}
+              returnTo={returnTo}
+              onCancel={() => { setMfaChallenge(null); setError(''); }}
+              onExpired={(message) => { setMfaChallenge(null); setError(message || 'Your sign-in attempt expired. Enter your email and password again.'); }}
+            />
+          ) : (
           <form onSubmit={handleSubmit} aria-busy={isLoading} className="space-y-6">
             <div className="space-y-4">
               {/* Email field */}
@@ -242,6 +411,7 @@ export default function Login() {
               )}
             </button>
           </form>
+          )}
 
           {/* Language switcher */}
           <div className="flex items-center justify-center gap-2 pt-4">

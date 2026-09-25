@@ -135,9 +135,7 @@ export function AuthProvider({ children }) {
     return afterFirstContentfulPaint(checkAuth);
   }, [checkAuth]);
 
-  const login = useCallback(async (email, password, returnTo = '/dashboard') => {
-    authCheckSequenceRef.current += 1;
-    const { user: userData } = await api.login(email, password);
+  const finishSignIn = useCallback(async (userData, returnTo) => {
     await purgePrivateCaches();
     if (mountedRef.current) {
       setUser(userData);
@@ -146,6 +144,25 @@ export function AuthProvider({ children }) {
     }
     return userData;
   }, [navigate]);
+
+  // Resolves to the signed-in user, or — for staff accounts with two-factor
+  // authentication — to { mfaRequired, challengeToken } without a session yet.
+  const login = useCallback(async (email, password, returnTo = '/dashboard') => {
+    authCheckSequenceRef.current += 1;
+    const result = await api.login(email, password);
+    if (result?.mfaRequired) {
+      return { mfaRequired: true, challengeToken: result.challengeToken, expiresInSeconds: result.expiresInSeconds };
+    }
+    return finishSignIn(result.user, returnTo);
+  }, [finishSignIn]);
+
+  // Second sign-in step: factor is { code } or { recoveryCode }.
+  const completeMfaLogin = useCallback(async (challengeToken, factor, returnTo = '/dashboard') => {
+    authCheckSequenceRef.current += 1;
+    const result = await api.loginMfa({ challengeToken, ...factor });
+    await finishSignIn(result.user, returnTo);
+    return result;
+  }, [finishSignIn]);
 
   const logout = useCallback(async () => {
     authCheckSequenceRef.current += 1;
@@ -175,7 +192,7 @@ export function AuthProvider({ children }) {
   }, [location.hash, location.pathname, location.search, navigate]);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, authState, login, logout, expireSession, checkAuth }}>
+    <AuthContext.Provider value={{ user, isLoading, authState, login, completeMfaLogin, logout, expireSession, checkAuth }}>
       {children}
     </AuthContext.Provider>
   );
