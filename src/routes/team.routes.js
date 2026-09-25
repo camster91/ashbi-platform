@@ -277,7 +277,9 @@ export default async function teamRoutes(fastify) {
 
     await request.prisma.user.update({
       where: { id },
-      data: { password: await hashPassword(newPassword) }
+      // Sign the member out everywhere: whoever held the old password must
+      // not keep a session after an administrator replaces it.
+      data: { password: await hashPassword(newPassword), sessionVersion: { increment: 1 } }
     });
 
     await recordRequestAuditEvent(request.prisma, request, {

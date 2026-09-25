@@ -575,14 +575,32 @@
             "format": "date-time",
             "type": "string"
           },
+          "expiresInDays": {
+            "maximum": 365,
+            "minimum": 1,
+            "type": "integer"
+          },
           "name": {
             "maxLength": 100,
             "minLength": 1,
             "type": "string"
+          },
+          "scopes": {
+            "items": {
+              "enum": [
+                "ai_bridge:read",
+                "ai_bridge:actions"
+              ],
+              "type": "string"
+            },
+            "maxItems": 2,
+            "minItems": 1,
+            "type": "array"
           }
         },
         "required": [
-          "name"
+          "name",
+          "scopes"
         ],
         "type": "object"
       },
@@ -3487,6 +3505,21 @@
         ],
         "type": "object"
       },
+      "Reauth": {
+        "properties": {
+          "code": {
+            "maxLength": 32,
+            "minLength": 6,
+            "type": "string"
+          },
+          "password": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "Register": {
         "properties": {
           "adminInviteToken": {
@@ -5216,7 +5249,10 @@
         "tags": [
           "ai-bridge"
         ],
-        "x-access": "api-key",
+        "x-access": "api-key + scope ai_bridge:actions",
+        "x-api-key-scopes": [
+          "ai_bridge:actions"
+        ],
         "x-tenancy": "scoped"
       }
     },
@@ -5278,7 +5314,10 @@
         "tags": [
           "ai-bridge"
         ],
-        "x-access": "api-key",
+        "x-access": "api-key + scope ai_bridge:actions",
+        "x-api-key-scopes": [
+          "ai_bridge:actions"
+        ],
         "x-tenancy": "scoped"
       }
     },
@@ -5327,7 +5366,10 @@
         "tags": [
           "ai-bridge"
         ],
-        "x-access": "api-key",
+        "x-access": "api-key + scope ai_bridge:read",
+        "x-api-key-scopes": [
+          "ai_bridge:read"
+        ],
         "x-tenancy": "scoped"
       }
     },
@@ -6208,7 +6250,8 @@
         "tags": [
           "api-keys"
         ],
-        "x-access": "staff",
+        "x-access": "recent-auth + staff",
+        "x-requires-recent-auth": true,
         "x-tenancy": "scoped"
       }
     },
@@ -7257,6 +7300,8 @@
                 "auth.mfa_reset",
                 "auth.mfa_recovery_code_used",
                 "auth.mfa_failed",
+                "auth.reauthenticated",
+                "auth.reauth_failed",
                 "api_key.created",
                 "api_key.revoked",
                 "settings.ai_provider_changed",
@@ -8032,6 +8077,55 @@
           }
         ],
         "summary": "POST /api/auth/mfa/enroll",
+        "tags": [
+          "auth"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "exempt"
+      }
+    },
+    "/api/auth/reauth": {
+      "post": {
+        "operationId": "post_api_auth_reauth",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Reauth"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/auth/reauth",
         "tags": [
           "auth"
         ],
@@ -13465,7 +13559,8 @@
         "tags": [
           "credentials"
         ],
-        "x-access": "admin",
+        "x-access": "admin + recent-auth",
+        "x-requires-recent-auth": true,
         "x-tenancy": "scoped"
       },
       "put": {
@@ -13577,7 +13672,8 @@
         "tags": [
           "credentials"
         ],
-        "x-access": "admin",
+        "x-access": "admin + recent-auth",
+        "x-requires-recent-auth": true,
         "x-tenancy": "scoped"
       }
     },
@@ -23959,7 +24055,8 @@
         "tags": [
           "settings"
         ],
-        "x-access": "admin",
+        "x-access": "admin + recent-auth",
+        "x-requires-recent-auth": true,
         "x-tenancy": "scoped"
       }
     },
@@ -26006,7 +26103,8 @@
         "tags": [
           "team"
         ],
-        "x-access": "admin",
+        "x-access": "admin + recent-auth (access change)",
+        "x-requires-recent-auth": true,
         "x-tenancy": "scoped"
       }
     },
@@ -26068,7 +26166,8 @@
         "tags": [
           "team"
         ],
-        "x-access": "admin",
+        "x-access": "admin + recent-auth",
+        "x-requires-recent-auth": true,
         "x-tenancy": "scoped"
       }
     },

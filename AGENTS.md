@@ -53,7 +53,7 @@ Optional seeding via `npx prisma db seed` / `node prisma/seed.js` uses
 
 ### Lint / test / build
 Commands are in `package.json` / `web/package.json`:
-- Backend: `npm run lint`, `npm run type-check`, `npm test` (~455 unit tests),
+- Backend: `npm run lint`, `npm run type-check`, `npm test` (~600 unit tests),
   `npm run build`.
 - Frontend: `npm test --prefix web` (Vitest; some tests intentionally assert
   thrown errors — the stderr stack traces are expected, not failures).

@@ -298,6 +298,8 @@ test('team changes emit role, deactivation and password-reset events only on rea
   await app.inject({ method: 'PUT', url: '/user-2', cookies, payload: { isActive: true } });
   const reset = await app.inject({ method: 'POST', url: '/user-2/reset-password', cookies, payload: { newPassword: 'a-new-password-1' } });
   assert.equal(reset.statusCode, 200, reset.body);
+  // An admin password reset signs the member out of every existing session.
+  assert.deepEqual(stored.sessionVersion, { increment: 1 });
   assert.deepEqual(audit.events.map((event) => [event.action, event.entityId]), [
     ['user.role_changed', 'user-2'],
     ['user.deactivated', 'user-2'],
