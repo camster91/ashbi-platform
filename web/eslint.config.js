@@ -1,35 +1,33 @@
-// Minimal ESLint config for ashbi-platform/web
-// Avoids issues with @eslint/js default export shape - uses direct rule declarations.
+// ESLint flat config for ashbi-platform/web.
+//
+// The app is JavaScript/JSX. The previous config only matched .ts/.tsx files
+// (there are none) and used a top-level `parserOptions` key flat config does
+// not accept, so `eslint . --ext js` linted .js files with no rules and never
+// parsed .jsx at all. This config parses every source file and enforces the
+// React hooks rules plus no-undef, which catch real runtime bugs (no-undef
+// found a Schedule sidebar that referenced another component's variables and
+// crashed the page); stylistic rules stay off.
 
-import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
+import globals from 'globals';
 
 export default [
   {
-    ignores: ['dist', 'node_modules', 'dev-dist', 'coverage', '**/*.test.{ts,tsx}', '**/test/**'],
+    ignores: ['dist', 'node_modules', 'dev-dist', 'coverage', 'public'],
   },
   {
-    files: ['**/*.{ts,tsx}'],
+    files: ['**/*.{js,jsx,mjs}'],
     plugins: {
-      '@typescript-eslint': tseslint.plugin,
       'react-hooks': reactHooks,
     },
-    language: '@typescript-eslint/parser',
-    parserOptions: {
+    languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'module',
-      ecmaFeatures: { jsx: true },
+      parserOptions: { ecmaFeatures: { jsx: true } },
+      globals: { ...globals.browser, ...globals.node },
     },
     rules: {
-      // Relaxed rules to avoid blocking builds on existing code
-      'no-undef': 'off',
-      'no-unused-vars': 'off',
-      'no-empty': 'off',
-      'no-unused-expressions': 'off',
-      'no-cond-assign': 'off',
-      'no-prototype-builtins': 'off',
-      'no-useless-escape': 'off',
-      'prefer-const': 'off',
+      'no-undef': 'error',
       'react-hooks/rules-of-hooks': 'error',
       'react-hooks/exhaustive-deps': 'warn',
     },
