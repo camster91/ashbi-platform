@@ -543,14 +543,20 @@ export default async function proposalRoutes(fastify) {
       return reply.status(409).send({ error: 'Proposal is not awaiting approval' });
     }
 
-    const updated = await request.prisma.proposal.update({
-      where: { id: proposal.id },
+    // Compare-and-set so a concurrent second approval cannot also succeed
+    // (and cannot write a second audit event).
+    const approvedAt = new Date();
+    const transitioned = await request.prisma.proposal.updateMany({
+      where: { id: proposal.id, status: { in: ['SENT', 'VIEWED'] }, publicAccessRevokedAt: null },
       data: {
         status: 'APPROVED',
-        approvedAt: new Date(),
-        publicAccessRevokedAt: new Date(),
+        approvedAt,
+        publicAccessRevokedAt: approvedAt,
       }
     });
+    if (transitioned.count !== 1) {
+      return reply.status(409).send({ error: 'Proposal is not awaiting approval' });
+    }
 
     // Public capability-link action: the actor is the client holding the link,
     // not a signed-in user, and the tenant comes from the proposal's client.
@@ -564,7 +570,7 @@ export default async function proposalRoutes(fastify) {
       metadata: { fromStatus: proposal.status, toStatus: 'APPROVED', total: proposal.total, via: 'public_link' },
     });
 
-    return { status: updated.status, approvedAt: updated.approvedAt };
+    return { status: 'APPROVED', approvedAt };
   });
 
   // PUBLIC: Client declines proposal

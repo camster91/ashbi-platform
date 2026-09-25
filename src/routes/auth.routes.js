@@ -44,22 +44,69 @@ async function upgradeHashIfNeeded(prisma, userId, password, currentHash) {
   }
 }
 
+// At most one auth.login_failed event per account per window, so a password
+// spraying run cannot flood audit_events (the IP rate limit bounds attempts;
+// this bounds rows). The in-process map skips the database for hot accounts;
+// the database check covers other API instances.
+export const LOGIN_FAILURE_AUDIT_WINDOW_MS = 60_000;
+const LOGIN_FAILURE_MEMORY_LIMIT = 10_000;
+const recentLoginFailureAudits = new Map();
+
+function loginFailureRecentlyAudited(accountId, now) {
+  const last = recentLoginFailureAudits.get(accountId);
+  if (last !== undefined && now - last < LOGIN_FAILURE_AUDIT_WINDOW_MS) return true;
+  if (recentLoginFailureAudits.size >= LOGIN_FAILURE_MEMORY_LIMIT) recentLoginFailureAudits.clear();
+  recentLoginFailureAudits.set(accountId, now);
+  return false;
+}
+
+/** Test hook: forget the in-process throttle state. */
+export function resetLoginFailureAuditThrottle() {
+  recentLoginFailureAudits.clear();
+}
+
 /**
  * Record a failed sign-in against the account's own organization. Unknown
- * emails have no tenant and are only rate-limited, never logged here. This is
+ * emails have no tenant and are only rate-limited, never logged here. The
+ * email match is case-insensitive (and skipped when ambiguous), so
+ * "Jane@X.test" and "jane@x.test" attribute to the same account. This is
  * intentionally not awaited by callers: the lookup and write must not make a
  * known email measurably slower to reject than an unknown one.
+ * @param {any} prisma
+ * @param {any} request
+ * @param {{ email?: string, account?: { id: string, organizationId: string, isActive: boolean } }} subject
+ * @param {'staff' | 'client'} portal
  */
-function auditLoginFailure(prisma, request, email, portal) {
-  const normalized = typeof email === 'string' ? email.toLowerCase().trim() : '';
-  if (!normalized) return Promise.resolve(null);
+function auditLoginFailure(prisma, request, { email, account: knownAccount }, portal) {
+  const trimmed = typeof email === 'string' ? email.trim() : '';
+  if (!knownAccount && !trimmed) return Promise.resolve(null);
   return (async () => {
     try {
-      const account = await prisma.user.findUnique({
-        where: { email: normalized },
-        select: { id: true, organizationId: true, isActive: true },
-      });
+      let account = knownAccount;
+      if (!account) {
+        const matches = await prisma.user.findMany({
+          where: { email: { equals: trimmed, mode: 'insensitive' } },
+          select: { id: true, organizationId: true, isActive: true },
+          take: 2,
+        });
+        account = matches.length === 1 ? matches[0] : null;
+      }
       if (!account?.organizationId) return null;
+
+      const now = Date.now();
+      if (loginFailureRecentlyAudited(account.id, now)) return null;
+      const recent = await prisma.auditEvent.findFirst({
+        where: {
+          organizationId: account.organizationId,
+          action: 'auth.login_failed',
+          entityType: 'user',
+          entityId: account.id,
+          createdAt: { gte: new Date(now - LOGIN_FAILURE_AUDIT_WINDOW_MS) },
+        },
+        select: { id: true },
+      });
+      if (recent) return null;
+
       return await recordAuditEvent(prisma, {
         organizationId: account.organizationId,
         actorType: portal === 'client' ? 'CLIENT' : 'USER',
@@ -127,7 +174,7 @@ export default async function authRoutes(fastify) {
         .setCookie('token', token, sessionCookieOptions({ includeMaxAge: true }))
         .send({ user });
     } catch (err) {
-      void auditLoginFailure(request.prisma, request, email, 'staff');
+      void auditLoginFailure(request.prisma, request, { email }, 'staff');
       return reply.status(401).send({ error: 'Invalid credentials' });
     }
   });
@@ -418,7 +465,7 @@ export default async function authRoutes(fastify) {
     }
 
     if (!(await verifyPassword(password, user.password))) {
-      void auditLoginFailure(request.prisma, request, user.email, 'client');
+      void auditLoginFailure(request.prisma, request, { account: user }, 'client');
       return reply.status(401).send({ error: 'Invalid email or password' });
     }
 

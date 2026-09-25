@@ -6,6 +6,7 @@ import { onProposalApproved, onContractSigned } from '../services/automation.ser
 import crypto from 'crypto';
 import { validateBody, bookingSchema, contractSignSchema, formSubmitSchema, proposalDeclineSchema } from '../validators/schemas.js';
 import { publicAccessFailure } from '../utils/public-document-access.js';
+import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 
 export default async function portalRoutes(fastify) {
   // ==================== PROJECT PORTAL ====================
@@ -165,13 +166,30 @@ export default async function portalRoutes(fastify) {
       return reply.status(400).send({ error: 'Proposal has expired' });
     }
 
-    const updated = await request.prisma.proposal.update({
-      where: { id: proposal.id },
+    // Compare-and-set on the status read above: two concurrent approvals
+    // (double click, replayed link) must not both run the automation or
+    // both write an audit event.
+    const approvedAt = new Date();
+    const transitioned = await request.prisma.proposal.updateMany({
+      where: { id: proposal.id, status: proposal.status, publicAccessRevokedAt: null },
       data: {
         status: 'APPROVED',
-        approvedAt: new Date(),
-        publicAccessRevokedAt: new Date(),
+        approvedAt,
+        publicAccessRevokedAt: approvedAt,
       }
+    });
+    if (transitioned.count !== 1) {
+      return reply.status(409).send({ error: 'Proposal is no longer awaiting approval' });
+    }
+
+    await recordRequestAuditEvent(request.prisma, request, {
+      action: 'proposal.approved',
+      actorType: 'CLIENT',
+      actorUserId: null,
+      organizationId: null,
+      ownerClientId: proposal.clientId,
+      entityId: proposal.id,
+      metadata: { fromStatus: proposal.status, toStatus: 'APPROVED', total: proposal.total, via: 'portal_link' },
     });
 
     // Trigger automation: proposal approved
@@ -179,7 +197,7 @@ export default async function portalRoutes(fastify) {
       console.error('[Portal] Automation trigger failed:', err)
     );
 
-    return { success: true, status: 'APPROVED', approvedAt: updated.approvedAt };
+    return { success: true, status: 'APPROVED', approvedAt };
   });
 
   // Decline proposal
@@ -305,6 +323,18 @@ export default async function portalRoutes(fastify) {
       }
     });
     if (updated.count !== 1) return reply.status(409).send({ error: 'Contract is no longer awaiting signature' });
+
+    // The signer's name and full IP stay on the contract as signing evidence;
+    // the audit event carries only ids and the content hash.
+    await recordRequestAuditEvent(request.prisma, request, {
+      action: 'contract.signed',
+      actorType: 'CLIENT',
+      actorUserId: null,
+      organizationId: null,
+      ownerClientId: contract.clientId,
+      entityId: contract.id,
+      metadata: { fromStatus: contract.status, toStatus: 'SIGNED', signingMethod: signatureType, documentHash: signedContentHash, via: 'portal_link' },
+    });
 
     // Trigger automation: contract signed
     onContractSigned(contract.id).catch(err =>

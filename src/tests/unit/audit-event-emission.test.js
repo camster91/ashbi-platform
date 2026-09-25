@@ -16,7 +16,9 @@ const { default: invoiceRoutes } = await import('../../routes/invoice.routes.js'
 const { default: proposalRoutes } = await import('../../routes/proposal.routes.js');
 const { default: contractRoutes } = await import('../../routes/contract.routes.js');
 const { default: teamRoutes } = await import('../../routes/team.routes.js');
-const { default: authRoutes } = await import('../../routes/auth.routes.js');
+const { default: authRoutes, resetLoginFailureAuditThrottle } = await import('../../routes/auth.routes.js');
+const { default: portalRoutes } = await import('../../routes/portal.routes.js');
+const { enterRequestContext } = await import('../../utils/request-context.js');
 const { default: apiKeyRoutes } = await import('../../routes/api-key.routes.js');
 const { default: settingsRoutes } = await import('../../routes/settings.routes.js');
 const { default: clientPortalRoutes } = await import('../../routes/client-portal.routes.js');
@@ -52,7 +54,12 @@ async function buildApp(t, routes, prisma, { user = ADMIN, prefix, decorate = {}
   });
   app.decorate('prisma', prisma);
   for (const [name, value] of Object.entries(decorate)) app.decorate(name, value);
-  app.addHook('onRequest', async (request) => { request.prisma = prisma; });
+  app.addHook('onRequest', async (request) => {
+    request.prisma = prisma;
+    // Services that import the default db client (e.g. approval automation)
+    // resolve to the same fake instead of a real database.
+    enterRequestContext({ prisma, organizationId: null });
+  });
   await app.register(routes, prefix ? { prefix } : {});
   t.after(() => app.close());
   return app;
@@ -170,25 +177,86 @@ test('a settled Stripe checkout is audited as a webhook actor; a replay is not',
   assert.equal(audit.events[0].requestId, 'req-9');
 });
 
-test('a client approving a proposal by link emits proposal.approved in the owner tenant', async (t) => {
-  const audit = auditStore();
-  const proposal = { id: 'prop-1', clientId: 'client-1', status: 'SENT', total: 5000, publicAccessExpiresAt: FUTURE, publicAccessRevokedAt: null };
-  const app = await buildApp(t, proposalRoutes, {
-    auditEvent: audit,
-    client: { findUnique: async ({ where }) => (where.id === 'client-1' ? { organizationId: 'org-owner' } : null) },
-    proposal: {
-      findUnique: async () => proposal,
-      update: async ({ data }) => ({ ...proposal, ...data }),
+// Every request reads the same stale SENT snapshot (as two concurrent clicks
+// would); only the compare-and-set updateMany decides which one wins.
+function racingProposalDatabase(audit) {
+  const snapshot = { id: 'prop-1', clientId: 'client-1', status: 'SENT', total: 5000, publicAccessExpiresAt: FUTURE, publicAccessRevokedAt: null };
+  const state = { status: 'SENT', revoked: false, updateManyCalls: [] };
+  return {
+    state,
+    prisma: {
+      auditEvent: audit,
+      client: { findUnique: async ({ where }) => (where.id === 'client-1' ? { organizationId: 'org-owner' } : null) },
+      proposal: {
+        findUnique: async () => ({ ...snapshot }),
+        update: async () => { throw new Error('approval must use a guarded updateMany'); },
+        updateMany: async ({ where }) => {
+          state.updateManyCalls.push(where);
+          const statusMatches = typeof where.status === 'string' ? where.status === state.status : where.status.in.includes(state.status);
+          if (!statusMatches || where.publicAccessRevokedAt !== null || state.revoked) return { count: 0 };
+          state.status = 'APPROVED';
+          state.revoked = true;
+          return { count: 1 };
+        },
+      },
     },
-  }, { user: null });
-  const response = await app.inject({ method: 'POST', url: '/client/view-token/approve' });
+  };
+}
+
+for (const [label, routes, prefix, url] of [
+  ['legacy proposal link', proposalRoutes, '/api/proposals', '/api/proposals/client/view-token/approve'],
+  ['SPA portal link', portalRoutes, '/api/portal', '/api/portal/proposal/view-token/approve'],
+]) {
+  test(`a client approving via the ${label} emits proposal.approved once, even when approvals race`, async (t) => {
+    const audit = auditStore();
+    const { prisma, state } = racingProposalDatabase(audit);
+    const app = await buildApp(t, routes, prisma, { user: null, prefix });
+    const first = await app.inject({ method: 'POST', url });
+    const second = await app.inject({ method: 'POST', url });
+    assert.equal(first.statusCode, 200, first.body);
+    assert.equal(first.json().status, 'APPROVED');
+    assert.equal(second.statusCode, 409, second.body);
+    assert.equal(state.updateManyCalls.length, 2);
+    assert.equal(audit.events.length, 1);
+    const [event] = audit.events;
+    assert.deepEqual(
+      [event.action, event.actorType, event.actorUserId, event.organizationId, event.entityType, event.entityId],
+      ['proposal.approved', 'CLIENT', null, 'org-owner', 'proposal', 'prop-1'],
+    );
+    assert.equal(event.metadata.fromStatus, 'SENT');
+    assert.equal(event.metadata.toStatus, 'APPROVED');
+  });
+}
+
+test('signing a contract through the SPA portal link emits contract.signed without the signer name', async (t) => {
+  const audit = auditStore();
+  const contract = { id: 'k-2', clientId: 'client-1', status: 'SENT', content: 'terms', publicAccessExpiresAt: FUTURE, publicAccessRevokedAt: null };
+  let signed = false;
+  const app = await buildApp(t, portalRoutes, {
+    auditEvent: audit,
+    client: { findUnique: async () => ({ organizationId: 'org-owner' }) },
+    contract: {
+      findUnique: async () => contract,
+      updateMany: async () => {
+        if (signed) return { count: 0 };
+        signed = true;
+        return { count: 1 };
+      },
+    },
+  }, { user: null, prefix: '/api/portal' });
+  const payload = { signerName: 'Jane Portal', signatureType: 'type', agreement: true };
+  const response = await app.inject({ method: 'POST', url: '/api/portal/contract/sign-token/sign', payload });
+  const replay = await app.inject({ method: 'POST', url: '/api/portal/contract/sign-token/sign', payload });
   assert.equal(response.statusCode, 200, response.body);
+  assert.equal(replay.statusCode, 409);
   assert.equal(audit.events.length, 1);
-  assert.equal(audit.events[0].action, 'proposal.approved');
-  assert.equal(audit.events[0].actorType, 'CLIENT');
-  assert.equal(audit.events[0].actorUserId, null);
-  assert.equal(audit.events[0].organizationId, 'org-owner');
-  assert.equal(audit.events[0].entityId, 'prop-1');
+  assert.deepEqual(
+    [audit.events[0].action, audit.events[0].actorType, audit.events[0].organizationId, audit.events[0].entityId],
+    ['contract.signed', 'CLIENT', 'org-owner', 'k-2'],
+  );
+  assert.equal(audit.events[0].metadata.via, 'portal_link');
+  assert.match(audit.events[0].metadata.documentHash, /^[0-9a-f]{64}$/);
+  assert.doesNotMatch(JSON.stringify(audit.events), /Jane Portal/);
 });
 
 test('signing a contract emits contract.signed without the signer name', async (t) => {
@@ -242,10 +310,23 @@ test('auth emits login_failed for known accounts only, and password changes', as
   const audit = auditStore();
   const hash = await bcrypt.hash('current-password', 4);
   const accounts = { 'known@x.test': { id: 'user-5', organizationId: 'org-5', isActive: true, password: hash, email: 'known@x.test' } };
+  resetLoginFailureAuditThrottle();
+  const lookups = [];
   const prisma = {
-    auditEvent: audit,
+    auditEvent: {
+      ...audit,
+      // Serves the cross-instance throttle check from the captured events.
+      findFirst: async ({ where }) => audit.events.find((event) => event.action === where.action
+        && event.entityId === where.entityId && event.organizationId === where.organizationId) ?? null,
+    },
     user: {
-      findUnique: async ({ where }) => (where.email ? accounts[where.email] ?? null : accounts['known@x.test']),
+      findUnique: async () => accounts['known@x.test'],
+      findMany: async ({ where }) => {
+        lookups.push(where.email);
+        return Object.values(accounts).filter((account) => (where.email.mode === 'insensitive'
+          ? account.email.toLowerCase() === where.email.equals.toLowerCase()
+          : account.email === where.email.equals));
+      },
       findFirst: async () => ({ ...accounts['known@x.test'] }),
       update: async () => ({}),
     },
@@ -254,18 +335,42 @@ test('auth emits login_failed for known accounts only, and password changes', as
     user: { id: 'user-5', role: 'TEAM', organizationId: 'org-5' },
     decorate: { auth: { login: async () => { throw new Error('Invalid credentials'); } } },
   });
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 20)); // the failure audit is not awaited by design
 
-  const known = await app.inject({ method: 'POST', url: '/login', payload: { email: 'Known@x.test', password: 'wrong' } });
+  const known = await app.inject({ method: 'POST', url: '/login', payload: { email: 'KNOWN@x.test', password: 'wrong' } });
   const unknown = await app.inject({ method: 'POST', url: '/login', payload: { email: 'nobody@x.test', password: 'wrong' } });
   assert.equal(known.statusCode, 401);
   assert.equal(unknown.statusCode, 401);
   assert.deepEqual(known.json(), unknown.json(), 'responses stay indistinguishable');
-  await new Promise((resolve) => setTimeout(resolve, 20)); // the failure audit is not awaited by design
+  await settle();
+  assert.equal(lookups[0].mode, 'insensitive', 'the account lookup ignores email case');
   assert.deepEqual(audit.events.map((event) => [event.action, event.entityId, event.organizationId, event.actorUserId]), [
     ['auth.login_failed', 'user-5', 'org-5', null],
   ]);
   assert.deepEqual(audit.events[0].metadata, { portal: 'staff', accountActive: true });
   assert.doesNotMatch(JSON.stringify(audit.events), /known@x\.test|wrong/i);
+
+  // A burst against the same account is bounded to one event per window,
+  // whether the throttle hit is in this process or (after a reset, as on
+  // another API instance) found in the table.
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    await app.inject({ method: 'POST', url: '/login', payload: { email: 'known@x.test', password: `wrong-${attempt}` } });
+  }
+  await settle();
+  resetLoginFailureAuditThrottle();
+  await app.inject({ method: 'POST', url: '/login', payload: { email: 'known@x.test', password: 'wrong-again' } });
+  await settle();
+  assert.equal(audit.events.length, 1);
+
+  // An email that matches more than one account case-insensitively is not
+  // attributed to either.
+  accounts['KNOWN@X.TEST'] = { ...accounts['known@x.test'], id: 'user-6', email: 'KNOWN@X.TEST' };
+  resetLoginFailureAuditThrottle();
+  audit.events.length = 0;
+  await app.inject({ method: 'POST', url: '/login', payload: { email: 'Known@X.test', password: 'wrong' } });
+  await settle();
+  assert.equal(audit.events.length, 0);
+  delete accounts['KNOWN@X.TEST'];
 
   audit.events.length = 0;
   const changed = await app.inject({ method: 'POST', url: '/change-password', payload: { currentPassword: 'current-password', newPassword: 'brand-new-password' } });
