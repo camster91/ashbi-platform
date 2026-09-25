@@ -30,7 +30,13 @@ const sentry = import.meta.env.VITE_SENTRY_DSN
       environment: import.meta.env.MODE,
       tracesSampleRate: import.meta.env.PROD ? 0.1 : 1.0,
       // We don't need session replay for an internal admin tool.
-      integrations: [Sentry.browserTracingIntegration()],
+      // Unhandled rejections are reported by ErrorBoundary's listener via
+      // reportFatalError (tagged with the on-screen error reference), so turn
+      // off the SDK's own rejection handler to avoid a duplicate, untagged event.
+      integrations: [
+        Sentry.browserTracingIntegration(),
+        Sentry.globalHandlersIntegration({ onerror: true, onunhandledrejection: false }),
+      ],
     });
     return Sentry;
   })

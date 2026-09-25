@@ -76,7 +76,9 @@ class ErrorBoundary extends Component {
   componentDidUpdate(_prevProps, prevState) {
     // Move focus to the recovery surface so keyboard and screen-reader users
     // land on the explanation rather than on a control that no longer exists.
-    if (!prevState.hasError && this.state.hasError) {
+    // A new reference means a new failure (e.g. "Try again" hit the same
+    // fault), whose fallback remounted and dropped focus.
+    if (this.state.hasError && (!prevState.hasError || prevState.reference !== this.state.reference)) {
       this.titleRef.current?.focus();
     }
   }

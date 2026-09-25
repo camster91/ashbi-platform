@@ -87,4 +87,17 @@ describe('fatal error screen', () => {
     await user.click(screen.getByRole('button', { name: 'Try again' }));
     expect(screen.getByText('Recovered view')).toBeInTheDocument();
   });
+
+  it('refocuses the explanation with a new reference when "Try again" hits a persistent error', async () => {
+    const user = userEvent.setup();
+    render(<ErrorBoundary><Boom /></ErrorBoundary>);
+    const first = screen.getByTestId('error-reference').textContent;
+
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+
+    const second = screen.getByTestId('error-reference').textContent;
+    expect(second).toMatch(/^ERR-/);
+    expect(second).not.toBe(first);
+    expect(screen.getByRole('heading', { name: 'Something went wrong' })).toHaveFocus();
+  });
 });
