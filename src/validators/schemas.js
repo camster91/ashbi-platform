@@ -31,6 +31,8 @@ export const registerSchema = z.object({
   name: userName,
   role: z.enum(['ADMIN', 'TEAM', 'CLIENT']).optional().default('TEAM'),
   adminInviteToken: z.string().optional(), // required when DB has users
+  // Workspace name for the bootstrap admin's organization (first user only)
+  organizationName: z.string().trim().min(1).max(120).optional(),
 });
 
 export const changePasswordSchema = z.object({

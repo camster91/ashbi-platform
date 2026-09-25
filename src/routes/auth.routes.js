@@ -43,6 +43,19 @@ async function upgradeHashIfNeeded(prisma, userId, password, currentHash) {
   }
 }
 
+function slugify(value) {
+  return value.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'workspace';
+}
+
+async function uniqueOrganizationSlug(tx, name) {
+  const base = slugify(name);
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const slug = attempt === 0 ? base : `${base}-${crypto.randomBytes(3).toString('hex')}`;
+    if (!(await tx.organization.findUnique({ where: { slug }, select: { id: true } }))) return slug;
+  }
+  return `${base}-${crypto.randomBytes(6).toString('hex')}`;
+}
+
 export default async function authRoutes(fastify) {
   const authRateLimit = {
     config: {
@@ -124,7 +137,7 @@ export default async function authRoutes(fastify) {
     ...authRateLimit,
     preHandler: [validateBody(registerSchema)],
   }, async (request, reply) => {
-    const { email, password, name, role = 'TEAM', adminInviteToken } = request.body;
+    const { email, password, name, role = 'TEAM', adminInviteToken, organizationName } = request.body;
 
     // Check if any users exist
     const userCount = await request.prisma.user.count();
@@ -180,20 +193,26 @@ export default async function authRoutes(fastify) {
     // First user is always admin; subsequent users use the provided role (validated by Zod)
     const userRole = userCount === 0 ? 'ADMIN' : role;
 
-    const user = await request.prisma.user.create({
-      data: {
-        email,
-        password: await hashPassword(password),
-        name,
-        role: userRole
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true
-      }
-    });
+    const userData = {
+      email,
+      password: await hashPassword(password),
+      name,
+      role: userRole,
+    };
+    const select = { id: true, email: true, name: true, role: true, organizationId: true };
+
+    // Every user belongs to an organization. Later users inherit the admin's
+    // organization through the tenant-scoped client; the bootstrap admin has
+    // no organization yet, so create their workspace in the same transaction.
+    const user = userCount === 0
+      ? await request.prisma.$transaction(async (tx) => {
+        const workspaceName = organizationName || `${name}'s workspace`;
+        const organization = await tx.organization.create({
+          data: { name: workspaceName, slug: await uniqueOrganizationSlug(tx, workspaceName) },
+        });
+        return tx.user.create({ data: { ...userData, organizationId: organization.id }, select });
+      })
+      : await request.prisma.user.create({ data: userData, select });
 
     return reply.status(201).send(user);
   });
