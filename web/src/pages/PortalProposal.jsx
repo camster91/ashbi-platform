@@ -35,7 +35,9 @@ export default function PortalProposal() {
   const respondMutation = useMutation({
     mutationFn: (data) => api.respondPortalProposal(token, data),
     onSuccess: (_, variables) => {
-      setCompleted(variables.action);
+      // The confirmation banner keys off past tense; storing the raw action
+      // ('approve') made every approval render as "Proposal Declined".
+      setCompleted(variables.action === 'approve' ? 'approved' : 'declined');
     },
   });
 
