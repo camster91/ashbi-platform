@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import test from 'node:test';
 import {
   AUDIT_ACTIONS,
+  AUDIT_EVENT_CATALOG,
   actorTypeForRole,
   auditContextFromRequest,
   recordAuditEvent,
@@ -97,14 +98,38 @@ test('ip addresses are reduced to a network prefix', () => {
   assert.equal(truncateIp(undefined), null);
 });
 
-test('metadata keeps only bounded primitives under non-sensitive keys', () => {
-  const long = 'x'.repeat(500);
-  assert.deepEqual(sanitizeAuditMetadata({ apiKey: 'a', resetToken: 'b', signerName: 'c', ok: true, note: long }), { ok: true, note: 'x'.repeat(200) });
-  const bounded = sanitizeAuditMetadata(Object.fromEntries(Array.from({ length: 30 }, (_, i) => [`field${i}`, i])));
-  assert.equal(Object.keys(bounded).length, 20);
-  assert.deepEqual(sanitizeAuditMetadata(['a']), {});
-  assert.deepEqual(sanitizeAuditMetadata('str'), {});
-  assert.deepEqual(sanitizeAuditMetadata({ when: new Date('2026-01-01T00:00:00Z'), n: Number.NaN }), { when: '2026-01-01T00:00:00.000Z' });
+test('metadata keeps only the fields the action allows, as bounded primitives', () => {
+  // Allowed names are kept even when they contain words a denylist would
+  // reject ("session"), and everything unlisted is dropped.
+  assert.deepEqual(
+    sanitizeAuditMetadata({ method: 'self_service', sessionsRevoked: true, password: 'x', apiKey: 'y', ok: true }, 'auth.password_changed'),
+    { method: 'self_service', sessionsRevoked: true },
+  );
+  assert.deepEqual(
+    sanitizeAuditMetadata({ ownerUserId: 'user-1', expires: false, rawKey: 'ashbi_x' }, 'api_key.created'),
+    { ownerUserId: 'user-1', expires: false },
+  );
+  // Strings must be short id/code values: free text and oversized values are
+  // dropped rather than truncated.
+  assert.deepEqual(
+    sanitizeAuditMetadata({ fromStatus: 'SENT', toStatus: 'paid by cheque #12 from Jane', via: 'x'.repeat(129) }, 'proposal.approved'),
+    { fromStatus: 'SENT' },
+  );
+  assert.deepEqual(
+    sanitizeAuditMetadata({ total: Number.NaN, amount: 12.5, invoiceId: { nested: true }, currency: null }, 'payment.recorded'),
+    { amount: 12.5, currency: null },
+  );
+  assert.deepEqual(sanitizeAuditMetadata({ fromModel: new Date('2026-01-01T00:00:00Z') }, 'settings.ai_provider_changed'), { fromModel: '2026-01-01T00:00:00.000Z' });
+  assert.deepEqual(sanitizeAuditMetadata({ method: 'x' }, 'unknown.action'), {});
+  assert.deepEqual(sanitizeAuditMetadata(['a'], 'auth.password_changed'), {});
+  assert.deepEqual(sanitizeAuditMetadata('str', 'auth.password_changed'), {});
+});
+
+test('every catalog action declares a metadata allowlist', () => {
+  for (const [action, spec] of Object.entries(AUDIT_EVENT_CATALOG)) {
+    assert.equal(AUDIT_ACTIONS[action], spec.entityType);
+    assert.ok(Array.isArray(spec.metadata) && spec.metadata.length > 0, action);
+  }
 });
 
 test('request context uses the Fastify request id as the correlation id', async () => {
@@ -148,7 +173,7 @@ test('the tenant proxy scopes audit reads and forbids every mutation path', asyn
 });
 
 test('the migration makes audit events append-only at the database level', () => {
-  const migration = fs.readFileSync(new URL('../../../prisma/migrations/20260925130000_audit_events/migration.sql', import.meta.url), 'utf8');
+  const migration = fs.readFileSync(new URL('../../../prisma/migrations/20260925130500_audit_events/migration.sql', import.meta.url), 'utf8');
   assert.match(migration, /BEFORE UPDATE OR DELETE ON "audit_events"/);
   assert.match(migration, /BEFORE TRUNCATE ON "audit_events"/);
   assert.match(migration, /ON DELETE RESTRICT/);

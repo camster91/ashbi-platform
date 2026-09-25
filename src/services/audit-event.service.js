@@ -13,35 +13,42 @@ export const AUDIT_ACTOR_TYPES = Object.freeze(['USER', 'CLIENT', 'SYSTEM', 'WEB
 const ACTOR_TYPE_SET = new Set(AUDIT_ACTOR_TYPES);
 
 /**
- * The closed catalog of actions. Adding an action means adding it here and to
- * docs/audit-events.md; unknown actions are dropped (and logged) so the log
- * never fills with ad-hoc names nobody can filter on.
+ * The closed event catalog: each action's entity type and the only metadata
+ * fields it may carry. Adding an action or field means adding it here and to
+ * docs/audit-events.md. Unknown actions are dropped (and logged) so the log
+ * never fills with ad-hoc names nobody can filter on; metadata fields not
+ * listed for the action are dropped.
  */
-export const AUDIT_ACTIONS = Object.freeze({
-  'invoice.sent': 'invoice',
-  'invoice.paid': 'invoice',
-  'payment.recorded': 'invoice_payment',
-  'proposal.approved': 'proposal',
-  'contract.signed': 'contract',
-  'user.role_changed': 'user',
-  'user.deactivated': 'user',
-  'user.reactivated': 'user',
-  'auth.login_failed': 'user',
-  'auth.password_changed': 'user',
-  'api_key.created': 'api_key',
-  'api_key.revoked': 'api_key',
-  'settings.ai_provider_changed': 'settings',
-  'client_portal.document_deleted': 'attachment',
+export const AUDIT_EVENT_CATALOG = Object.freeze({
+  'invoice.sent': { entityType: 'invoice', metadata: ['fromStatus', 'toStatus', 'deliveryAccepted', 'paymentLinkAttached', 'total', 'currency', 'bulk'] },
+  'invoice.paid': { entityType: 'invoice', metadata: ['fromStatus', 'toStatus', 'method', 'bulk', 'total', 'currency', 'stripeEventId'] },
+  'payment.recorded': { entityType: 'invoice_payment', metadata: ['invoiceId', 'amount', 'method', 'source', 'bulk', 'currency', 'stripeEventId'] },
+  'proposal.approved': { entityType: 'proposal', metadata: ['fromStatus', 'toStatus', 'total', 'via'] },
+  'contract.signed': { entityType: 'contract', metadata: ['fromStatus', 'toStatus', 'signingMethod', 'documentHash', 'via'] },
+  'user.role_changed': { entityType: 'user', metadata: ['fromRole', 'toRole'] },
+  'user.deactivated': { entityType: 'user', metadata: ['fromActive', 'toActive'] },
+  'user.reactivated': { entityType: 'user', metadata: ['fromActive', 'toActive'] },
+  'auth.login_failed': { entityType: 'user', metadata: ['portal', 'accountActive'] },
+  'auth.password_changed': { entityType: 'user', metadata: ['method', 'sessionsRevoked'] },
+  'api_key.created': { entityType: 'api_key', metadata: ['ownerUserId', 'expires'] },
+  'api_key.revoked': { entityType: 'api_key', metadata: ['ownerUserId'] },
+  'settings.ai_provider_changed': { entityType: 'settings', metadata: ['fromProvider', 'toProvider', 'fromModel', 'toModel'] },
+  'client_portal.document_deleted': { entityType: 'attachment', metadata: ['projectId', 'clientId', 'mimeType', 'size'] },
 });
+
+/** action -> entityType, derived from the catalog. */
+export const AUDIT_ACTIONS = Object.freeze(Object.fromEntries(
+  Object.entries(AUDIT_EVENT_CATALOG).map(([action, spec]) => [action, spec.entityType]),
+));
 
 export const AUDIT_ENTITY_TYPES = Object.freeze([...new Set(Object.values(AUDIT_ACTIONS))]);
 
-const MAX_METADATA_KEYS = 20;
-const MAX_METADATA_STRING = 200;
 const MAX_ID_LENGTH = 191;
-// Keys that could carry credentials or personal data. Metadata is for ids,
-// enums, amounts and flags only; anything matching is dropped, not masked.
-const FORBIDDEN_METADATA_KEY = /pass|secret|token|key|auth|cookie|session|signature|sig_?hash|email|phone|address|name|card|iban|ssn|ip$|body|content|html/i;
+// Metadata strings are ids, enums, codes, hashes and ISO dates. No spaces are
+// allowed, so free text (notes, names, messages) cannot ride in under an
+// allowed field name.
+export const MAX_METADATA_STRING = 128;
+const METADATA_STRING_FORMAT = /^[A-Za-z0-9_.:/@+-]*$/;
 
 function boundedString(value, max = MAX_ID_LENGTH) {
   if (value === undefined || value === null) return null;
@@ -85,22 +92,29 @@ export function truncateIp(ip) {
 }
 
 /**
- * Keep only flat, non-sensitive metadata: primitive values under safe keys,
- * bounded in count and length.
+ * Keep only the metadata fields the action's catalog entry allows, with
+ * primitive values: finite numbers, booleans, null, dates (as ISO strings) and
+ * strings of at most MAX_METADATA_STRING characters in a restricted id/code
+ * format. Anything else is dropped, not truncated or masked.
  * @param {unknown} metadata
+ * @param {string} action
  * @returns {Record<string, string | number | boolean | null>}
  */
-export function sanitizeAuditMetadata(metadata) {
-  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return {};
+export function sanitizeAuditMetadata(metadata, action) {
+  const allowed = AUDIT_EVENT_CATALOG[action]?.metadata;
+  if (!allowed || !metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return {};
+  const source = /** @type {Record<string, unknown>} */ (metadata);
   /** @type {Record<string, string | number | boolean | null>} */
   const clean = {};
-  for (const [key, value] of Object.entries(metadata)) {
-    if (Object.keys(clean).length >= MAX_METADATA_KEYS) break;
-    if (!/^[A-Za-z][A-Za-z0-9_]{0,39}$/.test(key) || FORBIDDEN_METADATA_KEY.test(key)) continue;
+  for (const key of allowed) {
+    if (!Object.prototype.hasOwnProperty.call(source, key)) continue;
+    const value = source[key];
     if (value === null || typeof value === 'boolean') clean[key] = value;
     else if (typeof value === 'number' && Number.isFinite(value)) clean[key] = value;
-    else if (typeof value === 'string') clean[key] = value.slice(0, MAX_METADATA_STRING);
     else if (value instanceof Date && !Number.isNaN(value.getTime())) clean[key] = value.toISOString();
+    else if (typeof value === 'string' && value.length <= MAX_METADATA_STRING && METADATA_STRING_FORMAT.test(value)) {
+      clean[key] = value;
+    }
   }
   return clean;
 }
@@ -190,7 +204,7 @@ export async function recordAuditEvent(prisma, event, { logger = defaultLogger }
         entityId: boundedString(event.entityId),
         requestId: boundedString(event.requestId, 100),
         ip: truncateIp(event.ip),
-        metadata: sanitizeAuditMetadata(event.metadata),
+        metadata: sanitizeAuditMetadata(event.metadata, action),
       },
     });
   } catch (err) {

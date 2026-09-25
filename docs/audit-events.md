@@ -6,7 +6,7 @@ in #412 ("audit history must be append-only for privileged and automated
 actions; mutable presentation records are not sufficient evidence").
 
 - Table: `audit_events` (Prisma model `AuditEvent`), added by migration
-  `20260925130000_audit_events`.
+  `20260925130500_audit_events`.
 - Writer: `recordAuditEvent` / `recordRequestAuditEvent` in
   `src/services/audit-event.service.js`.
 - Reader: `GET /api/audit-events` (admin only), shown in the web app under
@@ -20,7 +20,8 @@ actions; mutable presentation records are not sufficient evidence").
 | Tenant-scoped | `organizationId` is required and indexed. The model is a *direct* tenant model in `src/utils/prisma-tenant-proxy.js`, so request-scoped reads are filtered to the caller's organization and request-scoped writes overwrite any forged `organizationId`. |
 | History outlives its subjects | `actorUserId` and `entityId` have no foreign keys, so deleting a user or record does not remove or rewrite its history. The organization FK is `ON DELETE RESTRICT`: an organization with audit history cannot be hard-deleted until the retention policy decides how (see #310). |
 | Never breaks the business action | `recordAuditEvent` never throws. On failure it logs `Audit event write failed` with the action name and error code (never the metadata) and returns `null`. The invoice still sends and the password still changes. Alert on that log line. |
-| Closed vocabulary | Unknown actions and actor types are dropped and logged; the database also checks `actorType` and the `action` format. |
+| Closed vocabulary | Unknown actions and actor types are dropped and logged; metadata fields outside the action's allowlist are dropped; the database also checks `actorType` and the `action` format. |
+| One event per transition | Public approvals and signatures use a compare-and-set `updateMany` on the current status and emit only when exactly one row changed, so a double click or replayed link yields one event (and one automation run). |
 
 A PostgreSQL superuser can still bypass triggers (for example with
 `session_replication_role = replica`). Production application roles must not
@@ -45,13 +46,20 @@ rows.
 
 ### Metadata rules
 
-`sanitizeAuditMetadata` keeps at most 20 keys, each a primitive (string of at
-most 200 characters, finite number, boolean, null, or date). It drops nested
-objects, arrays, and any key that looks like a credential or personal data
-(for example keys containing `password`, `secret`, `token`, `key`, `session`,
-`signature`, `email`, `phone`, `address`, `name`, `content` or `body`).
-Metadata never holds free text such as payment notes, signer names, email
-addresses, API key material or password hashes.
+Metadata is an **allowlist per action**: `AUDIT_EVENT_CATALOG` in
+`src/services/audit-event.service.js` lists the only fields each action may
+carry (the Metadata column below). `sanitizeAuditMetadata(metadata, action)`
+drops every other field, whatever its name. Allowed values are:
+
+- finite numbers, booleans and `null`;
+- dates, stored as ISO-8601 strings;
+- strings of at most 128 characters matching `^[A-Za-z0-9_.:/@+-]*$` (ids,
+  enums, currency codes, hashes, model names). Strings with spaces or other
+  characters, and longer strings, are dropped rather than truncated, so free
+  text cannot be stored under an allowed field name.
+
+Nested objects and arrays are dropped. Metadata therefore never holds payment
+notes, signer names, email addresses, API key material or password hashes.
 
 ## Event catalog
 
@@ -60,8 +68,8 @@ addresses, API key material or password hashes.
 | `invoice.sent` | `invoice` | USER | `POST /api/invoices/:id/send`, `POST /api/invoices/bulk/send` | `fromStatus`, `toStatus`, `deliveryAccepted`, `paymentLinkAttached`, `total`, `currency`, `bulk` (bulk only) |
 | `invoice.paid` | `invoice` | USER or WEBHOOK | `POST /api/invoices/:id/mark-paid`, `POST /api/invoices/bulk/mark-paid`, Stripe `checkout.session.completed` (`/api/webhooks/stripe`, `/api/invoices/stripe-webhook`) | `fromStatus`, `toStatus`, `method`, `bulk`, `total`, `currency`; Stripe: `stripeEventId` |
 | `payment.recorded` | `invoice_payment` | USER or WEBHOOK | Same paths as `invoice.paid`; `entityId` is the `InvoicePayment` id | `invoiceId`, `amount`, `method`, `source` (`manual` or `stripe_checkout`), `bulk`, `currency`, `stripeEventId` |
-| `proposal.approved` | `proposal` | CLIENT | `POST /api/proposals/client/:viewToken/approve` | `fromStatus`, `toStatus`, `total`, `via: public_link` |
-| `contract.signed` | `contract` | CLIENT | `POST /api/contracts/sign/:signToken` | `fromStatus`, `toStatus`, `signingMethod` (`type` or `draw`), `documentHash` (SHA-256 of the signed content), `via: public_link` |
+| `proposal.approved` | `proposal` | CLIENT | `POST /api/portal/proposal/:viewToken/approve` (the SPA portal, `via: portal_link`) and `POST /api/proposals/client/:viewToken/approve` (`via: public_link`) | `fromStatus`, `toStatus`, `total`, `via` |
+| `contract.signed` | `contract` | CLIENT | `POST /api/portal/contract/:signToken/sign` (the SPA portal, `via: portal_link`) and `POST /api/contracts/sign/:signToken` (`via: public_link`) | `fromStatus`, `toStatus`, `signingMethod` (`type` or `draw`), `documentHash` (SHA-256 of the signed content), `via` |
 | `user.role_changed` | `user` | USER (admin) | `PUT /api/team/:id` when the role actually changes | `fromRole`, `toRole` |
 | `user.deactivated` | `user` | USER (admin) | `PUT /api/team/:id` when `isActive` goes true → false | `fromActive`, `toActive` |
 | `user.reactivated` | `user` | USER (admin) | `PUT /api/team/:id` when `isActive` goes false → true | `fromActive`, `toActive` |
@@ -72,8 +80,17 @@ addresses, API key material or password hashes.
 | `settings.ai_provider_changed` | `settings` | USER (platform operator) | `POST /api/settings/ai-provider`; `entityId` is `ai_provider`. The provider is deployment-wide; the event is filed under the operator's organization | `fromProvider`, `toProvider`, `fromModel`, `toModel` |
 | `client_portal.document_deleted` | `attachment` | CLIENT | `DELETE /api/client-portal/documents/:docId` | `projectId`, `clientId`, `mimeType`, `size` |
 
-`auth.login_failed` is written without being awaited so a known email is not
-measurably slower to reject than an unknown one.
+`auth.login_failed` details:
+
+- The account lookup is case-insensitive on email and is skipped when the
+  email matches more than one account.
+- It is written without being awaited so a known email is not measurably
+  slower to reject than an unknown one.
+- Volume is bounded to **one event per account per 60 seconds**
+  (`LOGIN_FAILURE_AUDIT_WINDOW_MS` in `src/routes/auth.routes.js`): an
+  in-process map suppresses repeats without a query, and a check for a recent
+  event in `audit_events` covers other API instances. The per-IP auth rate
+  limit bounds attempts; this bounds rows.
 
 ### Example
 
@@ -124,8 +141,8 @@ vocabulary for filters.
 
 ## Adding an event
 
-1. Add the action and its entity type to `AUDIT_ACTIONS` in
-   `src/services/audit-event.service.js`.
+1. Add the action, its entity type and its metadata allowlist to
+   `AUDIT_EVENT_CATALOG` in `src/services/audit-event.service.js`.
 2. Emit it after the business write succeeds, with
    `recordRequestAuditEvent(prisma, request, { action, entityId, metadata })`.
    On public or webhook routes, pass `actorType` and `ownerClientId` or
