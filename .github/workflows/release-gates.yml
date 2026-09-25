@@ -150,6 +150,8 @@ jobs:
           cache: npm
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
+      - name: Install Chromium for browser journeys
+        run: npx playwright install --with-deps chromium
       - name: Verify Docker
         run: docker info >/dev/null
       - name: Boot test stack
@@ -163,12 +165,20 @@ jobs:
         env:
           CI: true
           HUB_BASE: http://localhost:3001
+      - name: Run full-stack browser journeys
+        run: npm run test:e2e:journeys
+        env:
+          CI: true
+          HUB_BASE: http://localhost:3001
       - name: Upload E2E output
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: required-full-stack-gate-output
-          path: tests/e2e/.vitest-output.json
+          path: |
+            tests/e2e/.vitest-output.json
+            playwright-report/stack/
+            test-results/stack/
           if-no-files-found: ignore
           retention-days: 7
       - name: Teardown

@@ -44,6 +44,7 @@ export function validateReleaseGates(root = process.cwd()) {
     'npm --prefix web test',
     'npm run test:browser',
     'npm run test:e2e',
+    'npm run test:e2e:journeys',
     'npm run build',
     'npm run check:frontend-budgets',
     'npm run test:lighthouse',

@@ -6,6 +6,10 @@ const env = {
   nodeEnv: process.env.NODE_ENV || 'development',
   isDev: process.env.NODE_ENV !== 'production',
   isProduction: process.env.NODE_ENV === 'production',
+  // Serve the built SPA (dist/) from Fastify. Always on in production; the
+  // full-stack E2E stack opts in with SERVE_BUILT_SPA=true so browser journeys
+  // run against the real API origin without a Vite dev server.
+  serveBuiltSpa: process.env.NODE_ENV === 'production' || process.env.SERVE_BUILT_SPA === 'true',
 
   // CORS - supports multiple origins separated by commas
   corsOrigins: (process.env.CORS_ORIGIN || 'https://hub.ashbi.ca')

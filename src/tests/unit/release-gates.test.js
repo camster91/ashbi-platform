@@ -52,6 +52,13 @@ describe('mandatory release gates', () => {
     assert.match(runbook, /Manual rollback/);
   });
 
+  it('fails closed when the full-stack browser journeys are removed', () => {
+    const root = copyWorkflows();
+    const workflow = path.join(root, '.github', 'workflows', 'release-gates.yml');
+    fs.writeFileSync(workflow, fs.readFileSync(workflow, 'utf8').replace('npm run test:e2e:journeys', 'echo skipped'));
+    assert.ok(validateReleaseGates(root).some((failure) => failure.includes('test:e2e:journeys')));
+  });
+
   it('fails closed when a quality command is removed', () => {
     const root = copyWorkflows();
     const workflow = path.join(root, '.github', 'workflows', 'release-gates.yml');

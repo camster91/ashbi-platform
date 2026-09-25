@@ -44,6 +44,7 @@
     "test:e2e:teardown": "bash tests/e2e/teardown.sh",
     "test:e2e": "vitest run --config tests/e2e/vitest.config.mjs",
     "test:e2e:watch": "vitest --config tests/e2e/vitest.config.mjs",
+    "test:e2e:journeys": "playwright test --config playwright.stack.config.ts",
     "test:browser": "playwright test",
     "test:public-routes": "playwright test --config playwright.public.config.ts",
     "test:pwa-offline": "playwright test --config playwright.pwa.config.ts",

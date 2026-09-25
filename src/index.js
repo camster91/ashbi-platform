@@ -15,7 +15,7 @@ import { fileURLToPath } from 'url';
 
 import env from './config/env.js';
 import prisma from './config/db.js';
-import { isNonApiRequest } from './config/rateLimit.js';
+import { apiRateLimitMax, isNonApiRequest } from './config/rateLimit.js';
 import { isCurrentUserSession } from './auth/session.js';
 
 // Routes
@@ -146,7 +146,7 @@ await fastify.register(cookie);
 await fastify.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } });
 await fastify.register(rateLimit, {
   global: true,
-  max: 100,
+  max: apiRateLimitMax(),
   timeWindow: '1 minute',
   skipOnError: true,
   // Frontend navigation loads many immutable chunks in parallel. Counting those
@@ -288,7 +288,7 @@ fastify.get('/api/health', async (_request, reply) => {
 });
 
 // Static files
-if (!env.isDev) {
+if (env.serveBuiltSpa) {
   await fastify.register(fastifyStatic, { root: path.join(__dirname, '../dist'), prefix: '/' });
   fastify.setNotFoundHandler((request, reply) => {
     if (!request.url.startsWith('/api/')) return reply.sendFile('index.html');

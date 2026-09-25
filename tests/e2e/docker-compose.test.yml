@@ -137,6 +137,12 @@ services:
       JWT_SECRET: test-jwt-secret-do-not-use-in-prod
       ADMIN_EMAIL: cameron@ashbi.ca
       ADMIN_PASSWORD: TestPass123!
+      # Serve the image's built SPA (dist/) from this origin so the Playwright
+      # journeys drive the real UI against the real API.
+      SERVE_BUILT_SPA: "true"
+      # The journeys' browser and API client share one IP; the production
+      # default of 100 API requests/minute would throttle them mid-journey.
+      API_RATE_LIMIT_MAX: "2000"
     ports:
       - "${HOST_PORT:-3001}:3000"
     healthcheck:
