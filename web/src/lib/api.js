@@ -183,8 +183,10 @@ export const api = {
     request('/auth/change-password', { method: 'POST', body: data }),
   getMfaStatus: () =>
     request('/auth/mfa'),
-  startMfaEnrollment: () =>
-    request('/auth/mfa/enroll', { method: 'POST', body: {} }),
+  startMfaEnrollment: (password) =>
+    request('/auth/mfa/enroll', { method: 'POST', body: { password } }),
+  adminResetMfa: (userId, password) =>
+    request(`/auth/mfa/admin/users/${encodeURIComponent(userId)}/reset`, { method: 'POST', body: { password } }),
   confirmMfaEnrollment: (code) =>
     request('/auth/mfa/confirm', { method: 'POST', body: { code } }),
   disableMfa: ({ password, code, recoveryCode }) =>

@@ -18,6 +18,8 @@ import { useToast } from '../hooks/useToast';
 import { Card, Button, EmptyState, ListPageSkeleton, LoadingState } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
 import CreateTeamMemberModal from '../components/CreateTeamMemberModal';
+import MfaResetAction from '../components/MfaResetAction';
+import { useAuth } from '../hooks/useAuth';
 
 const roleColors = {
   ADMIN: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
@@ -40,6 +42,8 @@ const barColor = (status) => {
 export default function Team() {
   const queryClient = useQueryClient();
   const toast = useToast();
+  const { user: currentUser } = useAuth();
+  const isAdmin = currentUser?.role === 'ADMIN';
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingMember, setEditingMember] = useState(null);
   const [editForm, setEditForm] = useState({});
@@ -300,6 +304,12 @@ export default function Team() {
                             {!member.isActive && (
                               <span className="text-xs text-muted-foreground">(inactive)</span>
                             )}
+                            {member.mfaEnabled && (
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">2FA on</span>
+                            )}
+                            {member.mfaLocked && (
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">2FA locked</span>
+                            )}
                           </div>
                           <p className="text-xs text-muted-foreground mt-0.5">{member.email}</p>
                           {member.skills?.length > 0 && (
@@ -331,6 +341,15 @@ export default function Team() {
                           </div>
                         )}
                         <div className="flex items-center gap-1 ml-auto shrink-0">
+                          {isAdmin && member.id !== currentUser?.id && (member.mfaEnabled || member.mfaLocked) && (
+                            <MfaResetAction
+                              member={member}
+                              onReset={() => {
+                                queryClient.invalidateQueries({ queryKey: ['team'] });
+                                toast.success(`Two-factor authentication reset for ${member.name}`);
+                              }}
+                            />
+                          )}
                           <button
                             onClick={() => handleEdit(member)}
                             className="p-1.5 text-muted-foreground hover:text-foreground rounded"

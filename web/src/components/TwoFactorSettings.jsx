@@ -55,12 +55,13 @@ function RecoveryCodes({ codes, onDone }) {
 
 function Enrollment({ onEnabled }) {
   const [enrollment, setEnrollment] = useState(null);
+  const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
 
   const start = useMutation({
-    mutationFn: () => api.startMfaEnrollment(),
-    onSuccess: (data) => { setEnrollment(data); setCode(''); setError(''); },
+    mutationFn: (value) => api.startMfaEnrollment(value),
+    onSuccess: (data) => { setEnrollment(data); setPassword(''); setCode(''); setError(''); },
     onError: (err) => setError(err.message || 'Two-factor setup could not start. Try again.'),
   });
   const confirm = useMutation({
@@ -81,16 +82,36 @@ function Enrollment({ onEnabled }) {
   };
 
   if (!enrollment) {
+    const begin = (e) => {
+      e.preventDefault();
+      setError('');
+      if (!password) { setError('Enter your current password to continue.'); return; }
+      start.mutate(password);
+    };
     return (
-      <div className="space-y-3">
+      <form onSubmit={begin} className="space-y-3" aria-label="Set up two-factor authentication">
         <p className="text-sm text-muted-foreground">
           Add a second step to sign-in using an authenticator app such as 1Password, Google Authenticator, or Microsoft Authenticator.
         </p>
-        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-        <Button type="button" onClick={() => start.mutate()} loading={start.isPending} leftIcon={<ShieldCheck className="w-4 h-4" />}>
+        <div>
+          <label htmlFor="mfa-enroll-password" className="block text-sm font-medium mb-1">Current password</label>
+          <input
+            id="mfa-enroll-password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className={fieldClass}
+            required
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? 'mfa-start-error' : undefined}
+          />
+        </div>
+        {error && <p id="mfa-start-error" role="alert" className="text-sm text-destructive">{error}</p>}
+        <Button type="submit" loading={start.isPending} leftIcon={<ShieldCheck className="w-4 h-4" />}>
           Set up two-factor authentication
         </Button>
-      </div>
+      </form>
     );
   }
 
@@ -241,6 +262,9 @@ export default function TwoFactorSettings() {
         <ShieldCheck className="w-4 h-4 text-green-600" aria-hidden="true" />
         <span className="font-medium">Two-factor authentication:</span> On
         {status.enabledAt && <span className="text-muted-foreground"> since {new Date(status.enabledAt).toLocaleDateString()}</span>}
+      </p>
+      <p className="text-sm text-muted-foreground">
+        API keys you already created keep working with two-factor authentication on. Revoke any you no longer need under API Keys below.
       </p>
       <p className="text-sm text-muted-foreground">
         {status.recoveryCodesRemaining} of 10 recovery codes remaining.

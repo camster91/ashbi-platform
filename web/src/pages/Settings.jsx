@@ -828,7 +828,7 @@ export default function Settings() {
         </form>
       </Section>
 
-      {(user?.role === 'ADMIN' || user?.role === 'TEAM') && (
+      {user && user.role !== 'CLIENT' && user.role !== 'BOT' && (
         <Section icon={ShieldCheck} title="Security" description="Protect your account with two-factor authentication">
           <TwoFactorSettings />
         </Section>

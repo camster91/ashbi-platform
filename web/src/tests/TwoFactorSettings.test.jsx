@@ -46,7 +46,15 @@ describe('Settings → Security two-factor authentication', () => {
     renderSection();
 
     expect(await screen.findByText(/off/i, { selector: 'p' })).toBeInTheDocument();
+    fireEvent.submit(screen.getByRole('form', { name: /set up two-factor authentication/i }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/current password/i);
+    expect(api.startMfaEnrollment).not.toHaveBeenCalled();
+
+    const passwordInput = screen.getByLabelText(/current password/i);
+    expect(passwordInput).toHaveAttribute('autocomplete', 'current-password');
+    fireEvent.change(passwordInput, { target: { value: 'hunter22-password' } });
     fireEvent.click(screen.getByRole('button', { name: /set up two-factor authentication/i }));
+    await waitFor(() => expect(api.startMfaEnrollment).toHaveBeenCalledWith('hunter22-password'));
 
     expect(await screen.findByTestId('mfa-setup-key')).toHaveTextContent('JBSW Y3DP EHPK 3PXP');
     expect(screen.getByRole('link', { name: /open in authenticator app/i })).toHaveAttribute('href', expect.stringMatching(/^otpauth:\/\/totp\//));
@@ -75,6 +83,7 @@ describe('Settings → Security two-factor authentication', () => {
     api.getMfaStatus.mockResolvedValue({ eligible: true, enabled: true, enabledAt: '2026-09-25T00:00:00.000Z', recoveryCodesRemaining: 10 });
     fireEvent.click(screen.getByRole('button', { name: /i have saved my codes/i }));
     expect(await screen.findByText(/10 of 10 recovery codes remaining/i)).toBeInTheDocument();
+    expect(screen.getByText(/API keys you already created keep working/i)).toBeInTheDocument();
     expect(screen.queryByRole('list', { name: /recovery codes/i })).not.toBeInTheDocument();
   });
 
@@ -84,7 +93,8 @@ describe('Settings → Security two-factor authentication', () => {
     api.confirmMfaEnrollment.mockRejectedValue(new Error('That code did not match. Check the time on your device and try the current code.'));
     renderSection();
 
-    fireEvent.click(await screen.findByRole('button', { name: /set up two-factor authentication/i }));
+    fireEvent.change(await screen.findByLabelText(/current password/i), { target: { value: 'hunter22-password' } });
+    fireEvent.click(screen.getByRole('button', { name: /set up two-factor authentication/i }));
     const codeInput = await screen.findByLabelText(/enter the 6-digit code/i);
     fireEvent.change(codeInput, { target: { value: '000000' } });
     fireEvent.click(screen.getByRole('button', { name: /turn on two-factor authentication/i }));

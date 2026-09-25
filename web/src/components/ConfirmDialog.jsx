@@ -12,6 +12,7 @@ export default function ConfirmDialog({
   pending = false,
   error,
   destructive = true,
+  children,
 }) {
   const close = () => {
     if (pending) return;
@@ -27,6 +28,7 @@ export default function ConfirmDialog({
       showCloseButton={!pending}
     >
       <p className="text-sm text-muted-foreground">{description}</p>
+      {children}
       {error && (
         <p role="alert" className="mt-4 text-sm text-destructive">
           {error}
