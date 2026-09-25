@@ -1,6 +1,12 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearBrowserPushSubscription, usePushNotifications } from '../hooks/usePushNotifications';
+import {
+  clearBrowserPushSubscription,
+  getPushOptIn,
+  setPushOptIn,
+  shouldAutoResubscribe,
+  usePushNotifications,
+} from '../hooks/usePushNotifications';
 
 const apiMock = vi.hoisted(() => ({
   getPushVapidKey: vi.fn(),
@@ -39,6 +45,7 @@ function setBrowser({ permission = 'default', subscription = null, online = true
 describe('usePushNotifications', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     apiMock.getPushVapidKey.mockResolvedValue({ publicKey: 'AQAB' });
     apiMock.subscribePush.mockResolvedValue({ success: true });
     apiMock.unsubscribePush.mockResolvedValue({ success: true });
@@ -126,5 +133,88 @@ describe('usePushNotifications', () => {
     expect(window.Notification.requestPermission).not.toHaveBeenCalled();
     expect(result.current.status).toBe('offline');
     expect(result.current.error).toMatch(/offline/i);
+  });
+
+  it('records an explicit opt-in for the account that enabled notifications', async () => {
+    const subscription = {
+      endpoint: 'https://push.example/subscription',
+      toJSON: () => ({ endpoint: 'https://push.example/subscription', keys: { p256dh: 'key', auth: 'auth' } }),
+    };
+    const pushManager = setBrowser({ permission: 'default' });
+    window.Notification.requestPermission.mockResolvedValue('granted');
+    pushManager.subscribe.mockResolvedValue(subscription);
+    const { result } = renderHook(() => usePushNotifications({ userId: 'user-a' }));
+    await waitFor(() => expect(result.current.status).toBe('default'));
+
+    await act(() => result.current.subscribe());
+
+    expect(getPushOptIn('user-a')).toBe(true);
+    expect(getPushOptIn('user-b')).toBeNull();
+    expect(shouldAutoResubscribe({ userId: 'user-a', permission: 'granted' })).toBe(true);
+  });
+
+  it('persists an opt-out on disable so reloads do not re-subscribe', async () => {
+    setPushOptIn('user-a', true);
+    const subscription = {
+      endpoint: 'https://push.example/subscription',
+      toJSON: vi.fn(),
+      unsubscribe: vi.fn().mockResolvedValue(true),
+    };
+    setBrowser({ permission: 'granted', subscription });
+    const { result } = renderHook(() => usePushNotifications({ userId: 'user-a' }));
+    await waitFor(() => expect(result.current.subscribed).toBe(true));
+
+    await act(() => result.current.unsubscribe());
+
+    expect(subscription.unsubscribe).toHaveBeenCalled();
+    expect(getPushOptIn('user-a')).toBe(false);
+    expect(shouldAutoResubscribe({ userId: 'user-a', permission: 'granted' })).toBe(false);
+  });
+
+  it('keeps the opt-out even when disabling fails', async () => {
+    setPushOptIn('user-a', true);
+    const subscription = {
+      endpoint: 'https://push.example/subscription',
+      toJSON: vi.fn(),
+      unsubscribe: vi.fn().mockResolvedValue(true),
+    };
+    setBrowser({ permission: 'granted', subscription });
+    apiMock.unsubscribePush.mockRejectedValue(new Error('network'));
+    const { result } = renderHook(() => usePushNotifications({ userId: 'user-a' }));
+    await waitFor(() => expect(result.current.subscribed).toBe(true));
+
+    await act(() => result.current.unsubscribe());
+
+    expect(result.current.status).toBe('error');
+    expect(getPushOptIn('user-a')).toBe(false);
+  });
+});
+
+describe('shouldAutoResubscribe', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('never auto-subscribes an account that has not opted in, even with granted permission', () => {
+    setPushOptIn('user-a', true);
+    expect(shouldAutoResubscribe({ userId: 'user-b', permission: 'granted' })).toBe(false);
+    expect(shouldAutoResubscribe({ userId: undefined, permission: 'granted' })).toBe(false);
+  });
+
+  it('requires browser permission as well as opt-in', () => {
+    setPushOptIn('user-a', true);
+    expect(shouldAutoResubscribe({ userId: 'user-a', permission: 'default' })).toBe(false);
+    expect(shouldAutoResubscribe({ userId: 'user-a', permission: 'denied' })).toBe(false);
+  });
+
+  it('treats unavailable storage as no consent', () => {
+    const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('SecurityError');
+    });
+    try {
+      expect(getPushOptIn('user-a')).toBeNull();
+      expect(shouldAutoResubscribe({ userId: 'user-a', permission: 'granted' })).toBe(false);
+      expect(() => setPushOptIn('user-a', true)).not.toThrow();
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

@@ -55,7 +55,8 @@ const TAG_COLORS = {
 };
 
 function NotificationPreferences() {
-  const { permission, subscribed, status, error, supported, offline, subscribe, unsubscribe } = usePushNotifications();
+  const { user } = useAuth();
+  const { permission, subscribed, status, error, supported, offline, subscribe, unsubscribe } = usePushNotifications({ userId: user?.id });
   const busy = status === 'subscribing' || status === 'unsubscribing';
 
   let summary = 'Notifications are available but not enabled.';

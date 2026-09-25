@@ -19,7 +19,38 @@ export async function clearBrowserPushSubscription({ removeFromServer = false } 
   }
 }
 
-export function usePushNotifications() {
+const OPT_IN_KEY_PREFIX = 'push-opt-in:';
+
+// Per-account consent record for this browser. Browser-level
+// Notification.permission is shared by every account that signs in here, so it
+// cannot by itself tell us whether *this* user asked for push notifications.
+// Returns true (opted in), false (explicitly opted out) or null (never chose).
+export function getPushOptIn(userId) {
+  if (!userId) return null;
+  try {
+    const value = localStorage.getItem(`${OPT_IN_KEY_PREFIX}${userId}`);
+    if (value === 'in') return true;
+    if (value === 'out') return false;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function setPushOptIn(userId, optedIn) {
+  if (!userId) return;
+  try {
+    localStorage.setItem(`${OPT_IN_KEY_PREFIX}${userId}`, optedIn ? 'in' : 'out');
+  } catch { /* storage unavailable; consent then lasts only for this page */ }
+}
+
+// The shell may silently restore a subscription only when the browser already
+// grants permission AND this specific account opted in on this browser.
+export function shouldAutoResubscribe({ userId, permission }) {
+  return Boolean(userId) && permission === 'granted' && getPushOptIn(userId) === true;
+}
+
+export function usePushNotifications({ userId } = {}) {
   const supported = typeof window !== 'undefined'
     && 'Notification' in window
     && 'serviceWorker' in navigator
@@ -98,6 +129,7 @@ export function usePushNotifications() {
         keys: subJson.keys,
       });
 
+      setPushOptIn(userId, true);
       setSubscribed(true);
       setStatus('subscribed');
       return true;
@@ -107,10 +139,13 @@ export function usePushNotifications() {
       setError(err?.message || 'Notifications could not be enabled. Try again.');
       return false;
     }
-  }, [supported]);
+  }, [supported, userId]);
 
   const unsubscribe = useCallback(async () => {
     setError('');
+    // Record the opt-out first so a failed or interrupted cleanup can never be
+    // silently undone by the shell's automatic re-subscription on next load.
+    setPushOptIn(userId, false);
     if (!supported) return true;
     if (!navigator.onLine) {
       setStatus('offline');
@@ -129,7 +164,7 @@ export function usePushNotifications() {
       setError(err?.message || 'Notifications could not be disabled. Try again.');
       return false;
     }
-  }, [supported]);
+  }, [supported, userId]);
 
   return { permission, subscribed, status, error, supported, offline, subscribe, unsubscribe, checkSubscription };
 }
