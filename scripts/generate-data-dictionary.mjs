@@ -108,6 +108,9 @@ export function parseSchema(source) {
           blockAttributes: [],
         };
         pendingDoc = [];
+      } else if (/^(view|type)\s+\w+\s*\{$/.test(trimmed)) {
+        // Fail loudly rather than silently leave these out of the dictionary.
+        throw new Error(`Unsupported Prisma block (add support to the data dictionary): ${trimmed}`);
       } else if (trimmed && !trimmed.startsWith('//')) {
         pendingDoc = [];
       }

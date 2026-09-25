@@ -22,6 +22,7 @@ import assert from 'node:assert/strict';
 import diagnosticsChannel from 'node:diagnostics_channel';
 import fs from 'node:fs';
 import test from 'node:test';
+import { isTenancyExemptUrl } from '../../middleware/tenancy.js';
 
 const DOC_URL = new URL('../../../docs/api-access-matrix.md', import.meta.url);
 
@@ -43,7 +44,7 @@ const INTENTIONALLY_PUBLIC_ROUTES = {
   'POST /api/auth/login': { category: 'credential exchange', reason: 'Staff password login.' },
   'POST /api/auth/login/mfa': { category: 'credential exchange', reason: 'Second login step; requires the short-lived MFA challenge token.' },
   'POST /api/auth/logout': { category: 'credential exchange', reason: 'Verifies the session cookie in the handler when present; always clears it.' },
-  'POST /api/auth/register': { category: 'credential exchange', reason: 'First-admin bootstrap gated by ADMIN_INVITE_TOKEN.' },
+  'POST /api/auth/register': { category: 'credential exchange', reason: 'First-admin bootstrap gated by ADMIN_INVITE_TOKEN; later registrations require an admin session checked in the handler.' },
   'POST /api/auth/forgot-password': { category: 'credential exchange', reason: 'Issues a reset email; response does not reveal whether the account exists.' },
   'POST /api/auth/reset-password': { category: 'credential exchange', reason: 'Requires the emailed single-use reset token.' },
   'POST /api/auth/client/signup': { category: 'credential exchange', reason: 'Requires a client invitation token.' },
@@ -80,7 +81,7 @@ const INTENTIONALLY_PUBLIC_ROUTES = {
   'POST /api/mailgun-hitl/hitl-reply': { category: 'signed webhook', reason: 'Mailgun HMAC signature verified in the handler; always answers 200.' },
   'POST /api/slack/events': { category: 'signed webhook', reason: 'Slack request signature verified before the body is trusted.' },
   'GET /api/slack/oauth/callback': { category: 'oauth callback', reason: 'OAuth state is a signed JWT verified in the handler.' },
-  'GET /api/google-calendar/oauth/callback': { category: 'oauth callback', reason: 'OAuth state is a signed JWT verified in the handler.' },
+  'GET /api/google-calendar/oauth/callback': { category: 'oauth callback', reason: 'OAuth state is a signed JWT verified in the handler. Not tenancy-exempt, so the tenant guard also requires the staff session cookie.' },
 
   'GET /api/client-acquisition/config': { category: 'public intake', reason: 'Public ashbi.ca inquiry form configuration; own CORS allowlist, no cookies.' },
   'POST /api/client-acquisition/intake': { category: 'public intake', reason: 'Public ashbi.ca inquiry submission; own CORS allowlist, no cookies.' },
@@ -90,10 +91,36 @@ const INTENTIONALLY_PUBLIC_ROUTES = {
 };
 
 /**
+ * Signed-in routes under a tenancy-exempt prefix (see `isTenancyExemptUrl` in
+ * src/middleware/tenancy.js). They get the raw, unscoped Prisma client, so each
+ * handler must confine its own queries. Routes guarded by the client portal or
+ * bot secret are not listed: those guards scope every query themselves (by
+ * clientId, or by the bot organization). Adding a route here is a security
+ * review: state how the handler stays inside the caller's tenant.
+ *
+ * @type {Record<string, string>}
+ */
+const REVIEWED_UNSCOPED_ROUTES = {
+  'GET /api/auth/me': 'Reads and returns only the caller\'s own user record.',
+  'PUT /api/auth/me': 'Updates only the caller\'s own user record.',
+  'POST /api/auth/change-password': 'Changes only the caller\'s own password.',
+  'GET /api/auth/mfa': 'Reads only the caller\'s own two-factor state.',
+  'POST /api/auth/mfa/enroll': 'Writes only the caller\'s own two-factor state.',
+  'POST /api/auth/mfa/confirm': 'Writes only the caller\'s own two-factor state.',
+  'POST /api/auth/mfa/disable': 'Writes only the caller\'s own two-factor state.',
+  'POST /api/auth/mfa/admin/users/:userId/reset': 'Admin only; the target user is looked up with the admin\'s organizationId.',
+  'POST /api/auth/admin/clients/:clientId/invite': 'Admin only; the client is looked up with the admin\'s organizationId.',
+  'POST /api/mailgun/send': 'Admin only; sends one email and reads no tenant data.',
+  'POST /api/webhooks/email/test': 'Admin only; runs the email pipeline inside the admin\'s organization via runTenantJob.',
+};
+
+const SELF_SCOPING_GUARDS = new Set(['client-portal', 'bot-secret']);
+
+/**
  * Build the application and return every registered route together with the
  * guards in its effective request lifecycle.
  *
- * @returns {Promise<Array<{ method: string, url: string, guards: string[], declaredPublic: boolean }>>}
+ * @returns {Promise<Array<{ method: string, url: string, guards: string[], tenancy: 'exempt' | 'scoped' }>>}
  */
 async function collectAccessMatrix() {
   /** @type {Array<{ url: string, methods: string[], opts: any, instance: any }>} */
@@ -146,7 +173,7 @@ async function collectAccessMatrix() {
       ]);
       const guards = [...new Set(hooks.map(classify).filter(Boolean))].sort();
       for (const method of methods) {
-        routes.push({ method, url, guards, declaredPublic: opts.config?.public === true });
+        routes.push({ method, url, guards, tenancy: isTenancyExemptUrl(url) ? 'exempt' : 'scoped' });
       }
     }
 
@@ -210,8 +237,12 @@ function renderAccessMatrix(routes) {
   out.push('The global `onRequest` hook in `src/index.js` only *reads* a JWT when one is');
   out.push('present; it never rejects an anonymous request. A route without a guard');
   out.push('below is therefore reachable without a session, and any check it performs');
-  out.push('happens inside its handler. Tenant scoping (`tenancyMiddleware`) and role');
-  out.push('checks inside handlers are not shown.');
+  out.push('happens inside its handler. Role checks inside handlers are not shown.');
+  out.push('');
+  out.push('The Tenancy column shows whether `tenancyMiddleware` scopes the route\'s');
+  out.push('Prisma client to the caller\'s organization (`scoped`) or hands it the raw');
+  out.push('client (`exempt`). A signed-in route marked `exempt` must confine its own');
+  out.push('queries; the test keeps a reviewed list of those routes with the reason.');
   out.push('');
   out.push('## Guards');
   out.push('');
@@ -239,12 +270,13 @@ function renderAccessMatrix(routes) {
   for (const group of [...groups.keys()].sort(compare)) {
     out.push(`### ${group}`);
     out.push('');
-    out.push('| Method | Path | Access | Public reason |');
-    out.push('| --- | --- | --- | --- |');
+    out.push('| Method | Path | Access | Tenancy | Notes |');
+    out.push('| --- | --- | --- | --- | --- |');
     for (const route of groups.get(group)) {
-      const allow = route.guards.length ? null : INTENTIONALLY_PUBLIC_ROUTES[`${route.method} ${route.url}`];
-      const reason = allow ? `${allow.category}: ${allow.reason}` : '';
-      out.push(`| ${route.method} | \`${route.url}\` | ${access(route)} | ${reason} |`);
+      const key = `${route.method} ${route.url}`;
+      const allow = route.guards.length ? null : INTENTIONALLY_PUBLIC_ROUTES[key];
+      const reason = allow ? `${allow.category}: ${allow.reason}` : (route.guards.length ? REVIEWED_UNSCOPED_ROUTES[key] ?? '' : '');
+      out.push(`| ${route.method} | \`${route.url}\` | ${access(route)} | ${route.tenancy} | ${reason} |`);
     }
     out.push('');
   }
@@ -306,4 +338,20 @@ test('docs/api-access-matrix.md matches the application', async () => {
   if (process.env.UPDATE_ACCESS_MATRIX === '1') fs.writeFileSync(DOC_URL, actual);
   const expected = fs.existsSync(DOC_URL) ? fs.readFileSync(DOC_URL, 'utf8') : '';
   assert.equal(actual, expected, 'docs/api-access-matrix.md is stale; run UPDATE_ACCESS_MATRIX=1 npm test');
+});
+
+test('every signed-in route on the raw Prisma client has a reviewed tenant rule', async () => {
+  const routes = await getMatrix();
+  const unscoped = routes
+    .filter((route) => route.tenancy === 'exempt' && route.guards.length > 0)
+    .filter((route) => !route.guards.some((guard) => SELF_SCOPING_GUARDS.has(guard)))
+    .map((route) => `${route.method} ${route.url}`);
+  const unexpected = unscoped.filter((key) => !Object.hasOwn(REVIEWED_UNSCOPED_ROUTES, key));
+  const stale = Object.keys(REVIEWED_UNSCOPED_ROUTES).filter((key) => !unscoped.includes(key));
+  assert.deepEqual(
+    { unexpected, stale },
+    { unexpected: [], stale: [] },
+    'A signed-in route under a tenancy-exempt prefix gets the unscoped Prisma client. Scope its '
+      + 'queries to request.user.organizationId and add it to REVIEWED_UNSCOPED_ROUTES with the reason.',
+  );
 });

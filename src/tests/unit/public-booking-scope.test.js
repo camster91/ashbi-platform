@@ -8,14 +8,17 @@ const { default: env } = await import('../../config/env.js');
 // A weekday well in the future, so the past/weekend guards never interfere.
 const DATE = '2031-03-05';
 
-function buildFakePrisma({ admins, events }) {
-  const calls = { eventQueries: [], created: [] };
+function buildFakePrisma({ admins, events, organizationCount = 1 }) {
+  const calls = { eventQueries: [], created: [], locks: [] };
   const eventInScope = (event, where) => {
     const orgFilter = where.createdBy?.organizationId
       ?? where.AND?.find((part) => part.createdBy)?.createdBy.organizationId;
     return orgFilter === undefined || event.organizationId === orgFilter;
   };
   const prisma = {
+    organization: { count: async () => organizationCount },
+    $executeRaw: async (strings, ...values) => { calls.locks.push([strings.join('?'), ...values]); return 1; },
+    $transaction: async (callback) => callback(prisma),
     user: {
       findFirst: async ({ where }) => {
         const found = admins
@@ -62,6 +65,21 @@ const events = [
 ];
 
 describe('public booking stays inside one organization (#412 access review)', () => {
+  it('is disabled when several organizations exist and none is configured', async () => {
+    const fake = buildFakePrisma({ admins, events, organizationCount: 2 });
+    const app = await buildApp(fake);
+    const availability = await app.inject({ method: 'GET', url: `/api/portal/booking/availability?date=${DATE}` });
+    const booking = await app.inject({
+      method: 'POST',
+      url: '/api/portal/booking',
+      payload: { name: 'Visitor', email: 'visitor@example.com', date: DATE, time: '10:00' },
+    });
+    await app.close();
+    assert.equal(availability.statusCode, 503);
+    assert.equal(booking.statusCode, 503);
+    assert.equal(fake.calls.created.length, 0);
+  });
+
   it('ignores other tenants\' events when listing availability', async () => {
     const fake = buildFakePrisma({ admins, events });
     const app = await buildApp(fake);
@@ -84,13 +102,16 @@ describe('public booking stays inside one organization (#412 access review)', ()
     await app.close();
     assert.equal(res.statusCode, 200, res.body);
     assert.equal(fake.calls.created[0].createdById, 'admin-owner');
+    // The conflict check and insert run under the organization's advisory lock.
+    assert.match(fake.calls.locks[0][0], /pg_advisory_xact_lock/);
+    assert.equal(fake.calls.locks[0][1], 'public-booking:org-owner');
   });
 
   it('honours PUBLIC_BOOKING_ORGANIZATION_ID and still detects that tenant\'s conflicts', async () => {
     const previous = env.publicBookingOrganizationId;
     env.publicBookingOrganizationId = 'org-other';
     try {
-      const fake = buildFakePrisma({ admins, events });
+      const fake = buildFakePrisma({ admins, events, organizationCount: 2 });
       const app = await buildApp(fake);
       const res = await app.inject({
         method: 'POST',

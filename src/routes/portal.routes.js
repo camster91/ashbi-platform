@@ -517,7 +517,15 @@ export default async function portalRoutes(fastify) {
   // calendar.
   async function resolveBookingOrganization(prisma) {
     const where = { role: 'ADMIN', isActive: true };
-    if (env.publicBookingOrganizationId) where.organizationId = env.publicBookingOrganizationId;
+    if (env.publicBookingOrganizationId) {
+      where.organizationId = env.publicBookingOrganizationId;
+    } else if ((await prisma.organization.count()) !== 1) {
+      // With several workspaces and no configured booking organization,
+      // guessing one (for example by admin age) could silently send visitors'
+      // details into another tenant's calendar, so refuse instead.
+      fastify.log.warn('Public booking is disabled: set PUBLIC_BOOKING_ORGANIZATION_ID when more than one organization exists');
+      return null;
+    }
     return prisma.user.findFirst({
       where,
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
@@ -636,32 +644,37 @@ export default async function portalRoutes(fastify) {
       return reply.status(503).send({ error: 'Booking is not available' });
     }
 
-    // Check for conflicts in that organization's calendar only
-    const conflict = await request.prisma.calendarEvent.findFirst({
-      where: {
-        AND: [
-          { startTime: { lt: endTime } },
-          { endTime: { gt: startTime } },
-          { createdBy: { organizationId: adminUser.organizationId } }
-        ]
-      }
+    // Check for conflicts and book inside one transaction holding a
+    // per-organization advisory lock, so two visitors cannot both take the
+    // same slot between the check and the insert.
+    const event = await request.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`public-booking:${adminUser.organizationId}`}))`;
+      const conflict = await tx.calendarEvent.findFirst({
+        where: {
+          AND: [
+            { startTime: { lt: endTime } },
+            { endTime: { gt: startTime } },
+            { createdBy: { organizationId: adminUser.organizationId } }
+          ]
+        }
+      });
+      if (conflict) return null;
+      return tx.calendarEvent.create({
+        data: {
+          title: `Booking: ${name}`,
+          description: `Client booking\nName: ${name}\nEmail: ${email}${phone ? `\nPhone: ${phone}` : ''}${notes ? `\nNotes: ${notes}` : ''}`,
+          startTime,
+          endTime,
+          type: 'MEETING',
+          color: '#10B981', // Green for bookings
+          createdById: adminUser.id
+        }
+      });
     });
 
-    if (conflict) {
+    if (!event) {
       return reply.status(409).send({ error: 'This time slot is no longer available' });
     }
-
-    const event = await request.prisma.calendarEvent.create({
-      data: {
-        title: `Booking: ${name}`,
-        description: `Client booking\nName: ${name}\nEmail: ${email}${phone ? `\nPhone: ${phone}` : ''}${notes ? `\nNotes: ${notes}` : ''}`,
-        startTime,
-        endTime,
-        type: 'MEETING',
-        color: '#10B981', // Green for bookings
-        createdById: adminUser.id
-      }
-    });
 
     return {
       success: true,

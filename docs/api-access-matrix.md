@@ -13,8 +13,12 @@ the listed route's lifecycle and are omitted.
 The global `onRequest` hook in `src/index.js` only *reads* a JWT when one is
 present; it never rejects an anonymous request. A route without a guard
 below is therefore reachable without a session, and any check it performs
-happens inside its handler. Tenant scoping (`tenancyMiddleware`) and role
-checks inside handlers are not shown.
+happens inside its handler. Role checks inside handlers are not shown.
+
+The Tenancy column shows whether `tenancyMiddleware` scopes the route's
+Prisma client to the caller's organization (`scoped`) or hands it the raw
+client (`exempt`). A signed-in route marked `exempt` must confine its own
+queries; the test keeps a reviewed list of those routes with the reason.
 
 ## Guards
 
@@ -44,842 +48,842 @@ checks inside handlers are not shown.
 
 ### (root)
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| OPTIONS | `*` | public | infrastructure: CORS preflight handled by @fastify/cors. |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| OPTIONS | `*` | public | scoped | infrastructure: CORS preflight handled by @fastify/cors. |
 
 ### /api/ai
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| POST | `/api/ai/ask` | staff |  |
-| POST | `/api/ai/chat` | staff |  |
-| POST | `/api/ai/client-health` | staff |  |
-| POST | `/api/ai/draft-response` | staff |  |
-| POST | `/api/ai/draft-update` | staff |  |
-| POST | `/api/ai/generate-proposal` | staff |  |
-| POST | `/api/ai/query` | staff |  |
-| POST | `/api/ai/refine-response` | staff |  |
-| POST | `/api/ai/summarize-project` | staff |  |
-| POST | `/api/ai/triage-inbox` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| POST | `/api/ai/ask` | staff | scoped |  |
+| POST | `/api/ai/chat` | staff | scoped |  |
+| POST | `/api/ai/client-health` | staff | scoped |  |
+| POST | `/api/ai/draft-response` | staff | scoped |  |
+| POST | `/api/ai/draft-update` | staff | scoped |  |
+| POST | `/api/ai/generate-proposal` | staff | scoped |  |
+| POST | `/api/ai/query` | staff | scoped |  |
+| POST | `/api/ai/refine-response` | staff | scoped |  |
+| POST | `/api/ai/summarize-project` | staff | scoped |  |
+| POST | `/api/ai/triage-inbox` | staff | scoped |  |
 
 ### /api/ai-bridge
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/ai-bridge/capabilities` | api-key |  |
-| POST | `/api/ai-bridge/v1/actions/:actionId/confirm` | api-key |  |
-| POST | `/api/ai-bridge/v1/actions/prepare` | api-key |  |
-| POST | `/api/ai-bridge/v1/chat/completions` | api-key |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/ai-bridge/capabilities` | api-key | scoped |  |
+| POST | `/api/ai-bridge/v1/actions/:actionId/confirm` | api-key | scoped |  |
+| POST | `/api/ai-bridge/v1/actions/prepare` | api-key | scoped |  |
+| POST | `/api/ai-bridge/v1/chat/completions` | api-key | scoped |  |
 
 ### /api/ai-context
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/ai-context` | staff |  |
-| POST | `/api/ai-context` | admin |  |
-| DELETE | `/api/ai-context/:key` | admin |  |
-| GET | `/api/ai-context/prompt` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/ai-context` | staff | scoped |  |
+| POST | `/api/ai-context` | admin | scoped |  |
+| DELETE | `/api/ai-context/:key` | admin | scoped |  |
+| GET | `/api/ai-context/prompt` | staff | scoped |  |
 
 ### /api/ai-team
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/ai-team/agents` | staff |  |
-| POST | `/api/ai-team/chat` | staff |  |
-| GET | `/api/ai-team/history/:agentRole` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/ai-team/agents` | staff | scoped |  |
+| POST | `/api/ai-team/chat` | staff | scoped |  |
+| GET | `/api/ai-team/history/:agentRole` | staff | scoped |  |
 
 ### /api/api-keys
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/api-keys` | staff |  |
-| POST | `/api/api-keys` | staff |  |
-| DELETE | `/api/api-keys/:id` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/api-keys` | staff | scoped |  |
+| POST | `/api/api-keys` | staff | scoped |  |
+| DELETE | `/api/api-keys/:id` | staff | scoped |  |
 
 ### /api/approvals
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/approvals/approvals` | staff |  |
-| GET | `/api/approvals/approvals/:id` | staff |  |
-| PATCH | `/api/approvals/approvals/:id` | admin + staff |  |
-| GET | `/api/approvals/approvals/pending-count` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/approvals/approvals` | staff | scoped |  |
+| GET | `/api/approvals/approvals/:id` | staff | scoped |  |
+| PATCH | `/api/approvals/approvals/:id` | admin + staff | scoped |  |
+| GET | `/api/approvals/approvals/pending-count` | staff | scoped |  |
 
 ### /api/ash-chat
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/ash-chat/conversations` | staff |  |
-| DELETE | `/api/ash-chat/conversations/:id` | staff |  |
-| GET | `/api/ash-chat/conversations/:id/messages` | staff |  |
-| POST | `/api/ash-chat/message` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/ash-chat/conversations` | staff | scoped |  |
+| DELETE | `/api/ash-chat/conversations/:id` | staff | scoped |  |
+| GET | `/api/ash-chat/conversations/:id/messages` | staff | scoped |  |
+| POST | `/api/ash-chat/message` | staff | scoped |  |
 
 ### /api/asset-library
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| POST | `/api/asset-library/assets` | staff |  |
-| DELETE | `/api/asset-library/assets/:id` | staff |  |
-| GET | `/api/asset-library/assets/:id` | staff |  |
-| PATCH | `/api/asset-library/assets/:id` | staff |  |
-| GET | `/api/asset-library/assets/client/:clientId` | staff |  |
-| GET | `/api/asset-library/assets/search` | staff |  |
-| GET | `/api/asset-library/guidelines` | staff |  |
-| POST | `/api/asset-library/guidelines` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| POST | `/api/asset-library/assets` | staff | scoped |  |
+| DELETE | `/api/asset-library/assets/:id` | staff | scoped |  |
+| GET | `/api/asset-library/assets/:id` | staff | scoped |  |
+| PATCH | `/api/asset-library/assets/:id` | staff | scoped |  |
+| GET | `/api/asset-library/assets/client/:clientId` | staff | scoped |  |
+| GET | `/api/asset-library/assets/search` | staff | scoped |  |
+| GET | `/api/asset-library/guidelines` | staff | scoped |  |
+| POST | `/api/asset-library/guidelines` | staff | scoped |  |
 
 ### /api/attachments
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/attachments` | staff |  |
-| POST | `/api/attachments` | staff |  |
-| DELETE | `/api/attachments/attachments/:id` | staff |  |
-| GET | `/api/attachments/uploads/:filename` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/attachments` | staff | scoped |  |
+| POST | `/api/attachments` | staff | scoped |  |
+| DELETE | `/api/attachments/attachments/:id` | staff | scoped |  |
+| GET | `/api/attachments/uploads/:filename` | staff | scoped |  |
 
 ### /api/audit-events
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/audit-events` | admin |  |
-| GET | `/api/audit-events/catalog` | admin |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/audit-events` | admin | scoped |  |
+| GET | `/api/audit-events/catalog` | admin | scoped |  |
 
 ### /api/auth
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| POST | `/api/auth/admin/clients/:clientId/invite` | staff |  |
-| POST | `/api/auth/change-password` | staff |  |
-| POST | `/api/auth/client/login` | public | credential exchange: Client portal password login. |
-| POST | `/api/auth/client/signup` | public | credential exchange: Requires a client invitation token. |
-| POST | `/api/auth/forgot-password` | public | credential exchange: Issues a reset email; response does not reveal whether the account exists. |
-| POST | `/api/auth/login` | public | credential exchange: Staff password login. |
-| POST | `/api/auth/login/mfa` | public | credential exchange: Second login step; requires the short-lived MFA challenge token. |
-| POST | `/api/auth/logout` | public | credential exchange: Verifies the session cookie in the handler when present; always clears it. |
-| GET | `/api/auth/me` | staff |  |
-| PUT | `/api/auth/me` | staff |  |
-| GET | `/api/auth/mfa` | staff |  |
-| POST | `/api/auth/mfa/admin/users/:userId/reset` | staff |  |
-| POST | `/api/auth/mfa/confirm` | staff |  |
-| POST | `/api/auth/mfa/disable` | staff |  |
-| POST | `/api/auth/mfa/enroll` | staff |  |
-| POST | `/api/auth/register` | public | credential exchange: First-admin bootstrap gated by ADMIN_INVITE_TOKEN. |
-| POST | `/api/auth/reset-password` | public | credential exchange: Requires the emailed single-use reset token. |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| POST | `/api/auth/admin/clients/:clientId/invite` | staff | exempt | Admin only; the client is looked up with the admin's organizationId. |
+| POST | `/api/auth/change-password` | staff | exempt | Changes only the caller's own password. |
+| POST | `/api/auth/client/login` | public | exempt | credential exchange: Client portal password login. |
+| POST | `/api/auth/client/signup` | public | exempt | credential exchange: Requires a client invitation token. |
+| POST | `/api/auth/forgot-password` | public | exempt | credential exchange: Issues a reset email; response does not reveal whether the account exists. |
+| POST | `/api/auth/login` | public | exempt | credential exchange: Staff password login. |
+| POST | `/api/auth/login/mfa` | public | exempt | credential exchange: Second login step; requires the short-lived MFA challenge token. |
+| POST | `/api/auth/logout` | public | exempt | credential exchange: Verifies the session cookie in the handler when present; always clears it. |
+| GET | `/api/auth/me` | staff | exempt | Reads and returns only the caller's own user record. |
+| PUT | `/api/auth/me` | staff | exempt | Updates only the caller's own user record. |
+| GET | `/api/auth/mfa` | staff | exempt | Reads only the caller's own two-factor state. |
+| POST | `/api/auth/mfa/admin/users/:userId/reset` | staff | exempt | Admin only; the target user is looked up with the admin's organizationId. |
+| POST | `/api/auth/mfa/confirm` | staff | exempt | Writes only the caller's own two-factor state. |
+| POST | `/api/auth/mfa/disable` | staff | exempt | Writes only the caller's own two-factor state. |
+| POST | `/api/auth/mfa/enroll` | staff | exempt | Writes only the caller's own two-factor state. |
+| POST | `/api/auth/register` | public | exempt | credential exchange: First-admin bootstrap gated by ADMIN_INVITE_TOKEN; later registrations require an admin session checked in the handler. |
+| POST | `/api/auth/reset-password` | public | exempt | credential exchange: Requires the emailed single-use reset token. |
 
 ### /api/automations
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/automations/history` | admin |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/automations/history` | admin | scoped |  |
 
 ### /api/bot
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/bot/activities` | bot-secret |  |
-| POST | `/api/bot/activity` | bot-secret |  |
-| GET | `/api/bot/approvals` | bot-secret |  |
-| POST | `/api/bot/approvals` | bot-secret |  |
-| GET | `/api/bot/approvals/:id` | bot-secret |  |
-| PATCH | `/api/bot/approvals/:id` | bot-secret |  |
-| POST | `/api/bot/auth` | public | credential exchange: Checks the bot bearer secret in the handler before issuing a JWT. |
-| POST | `/api/bot/client` | bot-secret |  |
-| GET | `/api/bot/client-email-map` | bot-secret |  |
-| POST | `/api/bot/client-email-map` | bot-secret |  |
-| GET | `/api/bot/clients` | bot-secret |  |
-| POST | `/api/bot/communications` | bot-secret |  |
-| GET | `/api/bot/communications/:projectId` | bot-secret |  |
-| GET | `/api/bot/context/:projectId` | bot-secret |  |
-| POST | `/api/bot/context/:projectId` | bot-secret |  |
-| GET | `/api/bot/dashboard` | bot-secret |  |
-| POST | `/api/bot/gmail-draft` | bot-secret |  |
-| POST | `/api/bot/hitl/notify` | bot-secret |  |
-| GET | `/api/bot/leads` | bot-secret |  |
-| GET | `/api/bot/notifications` | bot-secret |  |
-| POST | `/api/bot/onboard` | bot-secret |  |
-| POST | `/api/bot/project` | bot-secret |  |
-| GET | `/api/bot/project/:id` | bot-secret |  |
-| PATCH | `/api/bot/project/:id` | bot-secret |  |
-| POST | `/api/bot/project/:id/note` | bot-secret |  |
-| GET | `/api/bot/projects` | bot-secret |  |
-| GET | `/api/bot/projects/:id/hours` | bot-secret |  |
-| GET | `/api/bot/projects/hours/summary` | bot-secret |  |
-| POST | `/api/bot/reports/generate/:clientId` | bot-secret |  |
-| GET | `/api/bot/reports/pending` | bot-secret |  |
-| GET | `/api/bot/retainer-alerts` | bot-secret |  |
-| GET | `/api/bot/retainer/:clientId` | bot-secret |  |
-| GET | `/api/bot/sync` | bot-secret |  |
-| GET | `/api/bot/system/gateway-status` | bot-secret |  |
-| POST | `/api/bot/system/restart-gateway` | bot-secret |  |
-| POST | `/api/bot/task` | bot-secret |  |
-| PATCH | `/api/bot/task/:id` | bot-secret |  |
-| POST | `/api/bot/tasks/bulk` | bot-secret |  |
-| GET | `/api/bot/team` | bot-secret |  |
-| POST | `/api/bot/thread` | bot-secret |  |
-| POST | `/api/bot/thread/:id/note` | bot-secret |  |
-| POST | `/api/bot/weekly-digest` | bot-secret |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/bot/activities` | bot-secret | exempt |  |
+| POST | `/api/bot/activity` | bot-secret | exempt |  |
+| GET | `/api/bot/approvals` | bot-secret | exempt |  |
+| POST | `/api/bot/approvals` | bot-secret | exempt |  |
+| GET | `/api/bot/approvals/:id` | bot-secret | exempt |  |
+| PATCH | `/api/bot/approvals/:id` | bot-secret | exempt |  |
+| POST | `/api/bot/auth` | public | exempt | credential exchange: Checks the bot bearer secret in the handler before issuing a JWT. |
+| POST | `/api/bot/client` | bot-secret | exempt |  |
+| GET | `/api/bot/client-email-map` | bot-secret | exempt |  |
+| POST | `/api/bot/client-email-map` | bot-secret | exempt |  |
+| GET | `/api/bot/clients` | bot-secret | exempt |  |
+| POST | `/api/bot/communications` | bot-secret | exempt |  |
+| GET | `/api/bot/communications/:projectId` | bot-secret | exempt |  |
+| GET | `/api/bot/context/:projectId` | bot-secret | exempt |  |
+| POST | `/api/bot/context/:projectId` | bot-secret | exempt |  |
+| GET | `/api/bot/dashboard` | bot-secret | exempt |  |
+| POST | `/api/bot/gmail-draft` | bot-secret | exempt |  |
+| POST | `/api/bot/hitl/notify` | bot-secret | exempt |  |
+| GET | `/api/bot/leads` | bot-secret | exempt |  |
+| GET | `/api/bot/notifications` | bot-secret | exempt |  |
+| POST | `/api/bot/onboard` | bot-secret | exempt |  |
+| POST | `/api/bot/project` | bot-secret | exempt |  |
+| GET | `/api/bot/project/:id` | bot-secret | exempt |  |
+| PATCH | `/api/bot/project/:id` | bot-secret | exempt |  |
+| POST | `/api/bot/project/:id/note` | bot-secret | exempt |  |
+| GET | `/api/bot/projects` | bot-secret | exempt |  |
+| GET | `/api/bot/projects/:id/hours` | bot-secret | exempt |  |
+| GET | `/api/bot/projects/hours/summary` | bot-secret | exempt |  |
+| POST | `/api/bot/reports/generate/:clientId` | bot-secret | exempt |  |
+| GET | `/api/bot/reports/pending` | bot-secret | exempt |  |
+| GET | `/api/bot/retainer-alerts` | bot-secret | exempt |  |
+| GET | `/api/bot/retainer/:clientId` | bot-secret | exempt |  |
+| GET | `/api/bot/sync` | bot-secret | exempt |  |
+| GET | `/api/bot/system/gateway-status` | bot-secret | exempt |  |
+| POST | `/api/bot/system/restart-gateway` | bot-secret | exempt |  |
+| POST | `/api/bot/task` | bot-secret | exempt |  |
+| PATCH | `/api/bot/task/:id` | bot-secret | exempt |  |
+| POST | `/api/bot/tasks/bulk` | bot-secret | exempt |  |
+| GET | `/api/bot/team` | bot-secret | exempt |  |
+| POST | `/api/bot/thread` | bot-secret | exempt |  |
+| POST | `/api/bot/thread/:id/note` | bot-secret | exempt |  |
+| POST | `/api/bot/weekly-digest` | bot-secret | exempt |  |
 
 ### /api/brand
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/brand` | staff |  |
-| PUT | `/api/brand` | admin |  |
-| POST | `/api/brand/logo` | admin |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/brand` | staff | scoped |  |
+| PUT | `/api/brand` | admin | scoped |  |
+| POST | `/api/brand/logo` | admin | scoped |  |
 
 ### /api/calendar
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/calendar/calendar` | staff |  |
-| POST | `/api/calendar/calendar` | staff |  |
-| DELETE | `/api/calendar/calendar/:id` | staff |  |
-| GET | `/api/calendar/calendar/:id` | staff |  |
-| PUT | `/api/calendar/calendar/:id` | staff |  |
-| POST | `/api/calendar/calendar/:id/rsvp` | staff |  |
-| GET | `/api/calendar/calendar/my` | staff |  |
-| GET | `/api/calendar/calendar/upcoming` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/calendar/calendar` | staff | scoped |  |
+| POST | `/api/calendar/calendar` | staff | scoped |  |
+| DELETE | `/api/calendar/calendar/:id` | staff | scoped |  |
+| GET | `/api/calendar/calendar/:id` | staff | scoped |  |
+| PUT | `/api/calendar/calendar/:id` | staff | scoped |  |
+| POST | `/api/calendar/calendar/:id/rsvp` | staff | scoped |  |
+| GET | `/api/calendar/calendar/my` | staff | scoped |  |
+| GET | `/api/calendar/calendar/upcoming` | staff | scoped |  |
 
 ### /api/chat
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/chat/projects/:projectId/messages` | staff |  |
-| POST | `/api/chat/projects/:projectId/messages` | staff |  |
-| DELETE | `/api/chat/projects/:projectId/messages/:messageId` | staff |  |
-| PUT | `/api/chat/projects/:projectId/messages/:messageId` | staff |  |
-| POST | `/api/chat/projects/:projectId/messages/:messageId/reactions` | staff |  |
-| DELETE | `/api/chat/projects/:projectId/messages/:messageId/reactions/:emoji` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/chat/projects/:projectId/messages` | staff | scoped |  |
+| POST | `/api/chat/projects/:projectId/messages` | staff | scoped |  |
+| DELETE | `/api/chat/projects/:projectId/messages/:messageId` | staff | scoped |  |
+| PUT | `/api/chat/projects/:projectId/messages/:messageId` | staff | scoped |  |
+| POST | `/api/chat/projects/:projectId/messages/:messageId/reactions` | staff | scoped |  |
+| DELETE | `/api/chat/projects/:projectId/messages/:messageId/reactions/:emoji` | staff | scoped |  |
 
 ### /api/client-acquisition
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/client-acquisition/config` | public | public intake: Public ashbi.ca inquiry form configuration; own CORS allowlist, no cookies. |
-| GET | `/api/client-acquisition/inquiries` | staff |  |
-| DELETE | `/api/client-acquisition/inquiries/:id` | admin |  |
-| POST | `/api/client-acquisition/intake` | public | public intake: Public ashbi.ca inquiry submission; own CORS allowlist, no cookies. |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/client-acquisition/config` | public | exempt | public intake: Public ashbi.ca inquiry form configuration; own CORS allowlist, no cookies. |
+| GET | `/api/client-acquisition/inquiries` | staff | scoped |  |
+| DELETE | `/api/client-acquisition/inquiries/:id` | admin | scoped |  |
+| POST | `/api/client-acquisition/intake` | public | exempt | public intake: Public ashbi.ca inquiry submission; own CORS allowlist, no cookies. |
 
 ### /api/client-portal
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/client-portal/contracts` | client-portal |  |
-| GET | `/api/client-portal/contracts/:id/pdf` | client-portal |  |
-| DELETE | `/api/client-portal/documents/:docId` | client-portal |  |
-| GET | `/api/client-portal/documents/:docId/download` | client-portal |  |
-| GET | `/api/client-portal/invoices` | client-portal |  |
-| GET | `/api/client-portal/invoices/:id/pdf` | client-portal |  |
-| POST | `/api/client-portal/logout` | client-portal |  |
-| GET | `/api/client-portal/me` | client-portal |  |
-| GET | `/api/client-portal/projects` | client-portal |  |
-| GET | `/api/client-portal/projects/:id` | client-portal |  |
-| GET | `/api/client-portal/projects/:id/documents` | client-portal |  |
-| POST | `/api/client-portal/projects/:id/feedback` | client-portal |  |
-| GET | `/api/client-portal/projects/:id/messages` | client-portal |  |
-| POST | `/api/client-portal/projects/:id/messages` | client-portal |  |
-| POST | `/api/client-portal/projects/:id/revisions/:revisionId/respond` | client-portal |  |
-| GET | `/api/client-portal/projects/:id/tasks` | client-portal |  |
-| POST | `/api/client-portal/projects/:id/upload` | client-portal |  |
-| POST | `/api/client-portal/request-access` | public | magic link: Emails a client portal magic link. |
-| GET | `/api/client-portal/retainer` | client-portal |  |
-| GET | `/api/client-portal/unread-count` | client-portal |  |
-| POST | `/api/client-portal/verify-token` | public | magic link: Exchanges the emailed magic-link token for a portal session cookie. |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/client-portal/contracts` | client-portal | exempt |  |
+| GET | `/api/client-portal/contracts/:id/pdf` | client-portal | exempt |  |
+| DELETE | `/api/client-portal/documents/:docId` | client-portal | exempt |  |
+| GET | `/api/client-portal/documents/:docId/download` | client-portal | exempt |  |
+| GET | `/api/client-portal/invoices` | client-portal | exempt |  |
+| GET | `/api/client-portal/invoices/:id/pdf` | client-portal | exempt |  |
+| POST | `/api/client-portal/logout` | client-portal | exempt |  |
+| GET | `/api/client-portal/me` | client-portal | exempt |  |
+| GET | `/api/client-portal/projects` | client-portal | exempt |  |
+| GET | `/api/client-portal/projects/:id` | client-portal | exempt |  |
+| GET | `/api/client-portal/projects/:id/documents` | client-portal | exempt |  |
+| POST | `/api/client-portal/projects/:id/feedback` | client-portal | exempt |  |
+| GET | `/api/client-portal/projects/:id/messages` | client-portal | exempt |  |
+| POST | `/api/client-portal/projects/:id/messages` | client-portal | exempt |  |
+| POST | `/api/client-portal/projects/:id/revisions/:revisionId/respond` | client-portal | exempt |  |
+| GET | `/api/client-portal/projects/:id/tasks` | client-portal | exempt |  |
+| POST | `/api/client-portal/projects/:id/upload` | client-portal | exempt |  |
+| POST | `/api/client-portal/request-access` | public | exempt | magic link: Emails a client portal magic link. |
+| GET | `/api/client-portal/retainer` | client-portal | exempt |  |
+| GET | `/api/client-portal/unread-count` | client-portal | exempt |  |
+| POST | `/api/client-portal/verify-token` | public | exempt | magic link: Exchanges the emailed magic-link token for a portal session cookie. |
 
 ### /api/clients
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/clients` | staff |  |
-| POST | `/api/clients` | staff |  |
-| GET | `/api/clients/:id` | staff |  |
-| PUT | `/api/clients/:id` | staff |  |
-| GET | `/api/clients/:id/contacts` | staff |  |
-| POST | `/api/clients/:id/contacts` | staff |  |
-| GET | `/api/clients/:id/insights` | staff |  |
-| POST | `/api/clients/:id/notes` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/clients` | staff | scoped |  |
+| POST | `/api/clients` | staff | scoped |  |
+| GET | `/api/clients/:id` | staff | scoped |  |
+| PUT | `/api/clients/:id` | staff | scoped |  |
+| GET | `/api/clients/:id/contacts` | staff | scoped |  |
+| POST | `/api/clients/:id/contacts` | staff | scoped |  |
+| GET | `/api/clients/:id/insights` | staff | scoped |  |
+| POST | `/api/clients/:id/notes` | staff | scoped |  |
 
 ### /api/command-center
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/command-center` | staff |  |
-| GET | `/api/command-center/ping` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/command-center` | staff | scoped |  |
+| GET | `/api/command-center/ping` | staff | scoped |  |
 
 ### /api/comments
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| DELETE | `/api/comments/comments/:id` | staff |  |
-| PUT | `/api/comments/comments/:id` | staff |  |
-| GET | `/api/comments/tasks/:taskId/comments` | staff |  |
-| POST | `/api/comments/tasks/:taskId/comments` | staff |  |
-| GET | `/api/comments/users/mentionable` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| DELETE | `/api/comments/comments/:id` | staff | scoped |  |
+| PUT | `/api/comments/comments/:id` | staff | scoped |  |
+| GET | `/api/comments/tasks/:taskId/comments` | staff | scoped |  |
+| POST | `/api/comments/tasks/:taskId/comments` | staff | scoped |  |
+| GET | `/api/comments/users/mentionable` | staff | scoped |  |
 
 ### /api/contracts
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/contracts` | staff |  |
-| POST | `/api/contracts` | staff |  |
-| GET | `/api/contracts/:id` | staff |  |
-| GET | `/api/contracts/:id/draft` | staff |  |
-| PATCH | `/api/contracts/:id/draft` | staff |  |
-| GET | `/api/contracts/:id/pdf` | staff |  |
-| POST | `/api/contracts/:id/public-link/revoke` | staff |  |
-| POST | `/api/contracts/:id/public-link/rotate` | staff |  |
-| POST | `/api/contracts/:id/resend` | staff |  |
-| POST | `/api/contracts/:id/send` | staff |  |
-| POST | `/api/contracts/:id/void` | staff |  |
-| POST | `/api/contracts/from-proposal/:proposalId` | staff |  |
-| GET | `/api/contracts/sign/:signToken` | public | capability token: Contract signing link (legacy path). |
-| POST | `/api/contracts/sign/:signToken` | public | capability token: Contract signature (legacy path). |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/contracts` | staff | scoped |  |
+| POST | `/api/contracts` | staff | scoped |  |
+| GET | `/api/contracts/:id` | staff | scoped |  |
+| GET | `/api/contracts/:id/draft` | staff | scoped |  |
+| PATCH | `/api/contracts/:id/draft` | staff | scoped |  |
+| GET | `/api/contracts/:id/pdf` | staff | scoped |  |
+| POST | `/api/contracts/:id/public-link/revoke` | staff | scoped |  |
+| POST | `/api/contracts/:id/public-link/rotate` | staff | scoped |  |
+| POST | `/api/contracts/:id/resend` | staff | scoped |  |
+| POST | `/api/contracts/:id/send` | staff | scoped |  |
+| POST | `/api/contracts/:id/void` | staff | scoped |  |
+| POST | `/api/contracts/from-proposal/:proposalId` | staff | scoped |  |
+| GET | `/api/contracts/sign/:signToken` | public | exempt | capability token: Contract signing link (legacy path). |
+| POST | `/api/contracts/sign/:signToken` | public | exempt | capability token: Contract signature (legacy path). |
 
 ### /api/creative-brief
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/creative-brief` | staff |  |
-| DELETE | `/api/creative-brief/:id` | staff |  |
-| GET | `/api/creative-brief/:id` | staff |  |
-| PATCH | `/api/creative-brief/:id` | staff |  |
-| GET | `/api/creative-brief/client/:clientId` | staff |  |
-| POST | `/api/creative-brief/generate` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/creative-brief` | staff | scoped |  |
+| DELETE | `/api/creative-brief/:id` | staff | scoped |  |
+| GET | `/api/creative-brief/:id` | staff | scoped |  |
+| PATCH | `/api/creative-brief/:id` | staff | scoped |  |
+| GET | `/api/creative-brief/client/:clientId` | staff | scoped |  |
+| POST | `/api/creative-brief/generate` | staff | scoped |  |
 
 ### /api/credentials
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/credentials` | admin |  |
-| POST | `/api/credentials` | admin |  |
-| DELETE | `/api/credentials/:id` | admin |  |
-| GET | `/api/credentials/:id` | admin |  |
-| PUT | `/api/credentials/:id` | admin |  |
-| GET | `/api/credentials/:id/password` | admin |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/credentials` | admin | scoped |  |
+| POST | `/api/credentials` | admin | scoped |  |
+| DELETE | `/api/credentials/:id` | admin | scoped |  |
+| GET | `/api/credentials/:id` | admin | scoped |  |
+| PUT | `/api/credentials/:id` | admin | scoped |  |
+| GET | `/api/credentials/:id/password` | admin | scoped |  |
 
 ### /api/dashboard
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/dashboard/stats` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/dashboard/stats` | staff | scoped |  |
 
 ### /api/draft
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| DELETE | `/api/draft/:entity/:id` | staff |  |
-| GET | `/api/draft/:entity/:id` | staff |  |
-| PUT | `/api/draft/:entity/:id` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| DELETE | `/api/draft/:entity/:id` | staff | scoped |  |
+| GET | `/api/draft/:entity/:id` | staff | scoped |  |
+| PUT | `/api/draft/:entity/:id` | staff | scoped |  |
 
 ### /api/email-triage
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| PUT | `/api/email-triage/approve/:draftId` | staff |  |
-| PUT | `/api/email-triage/archive/:itemId` | staff |  |
-| POST | `/api/email-triage/draft/:messageId` | staff |  |
-| GET | `/api/email-triage/queue` | staff |  |
-| POST | `/api/email-triage/scan` | staff |  |
-| PUT | `/api/email-triage/update-draft/:draftId` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| PUT | `/api/email-triage/approve/:draftId` | staff | scoped |  |
+| PUT | `/api/email-triage/archive/:itemId` | staff | scoped |  |
+| POST | `/api/email-triage/draft/:messageId` | staff | scoped |  |
+| GET | `/api/email-triage/queue` | staff | scoped |  |
+| POST | `/api/email-triage/scan` | staff | scoped |  |
+| PUT | `/api/email-triage/update-draft/:draftId` | staff | scoped |  |
 
 ### /api/estimates
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/estimates` | staff |  |
-| POST | `/api/estimates` | staff |  |
-| DELETE | `/api/estimates/:id` | staff |  |
-| GET | `/api/estimates/:id` | staff |  |
-| PUT | `/api/estimates/:id` | staff |  |
-| POST | `/api/estimates/:id/convert` | staff |  |
-| POST | `/api/estimates/:id/send` | staff |  |
-| GET | `/api/estimates/view/:viewToken` | public | capability token: Estimate view link. |
-| POST | `/api/estimates/view/:viewToken/approve` | public | capability token: Estimate approval via view link. |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/estimates` | staff | scoped |  |
+| POST | `/api/estimates` | staff | scoped |  |
+| DELETE | `/api/estimates/:id` | staff | scoped |  |
+| GET | `/api/estimates/:id` | staff | scoped |  |
+| PUT | `/api/estimates/:id` | staff | scoped |  |
+| POST | `/api/estimates/:id/convert` | staff | scoped |  |
+| POST | `/api/estimates/:id/send` | staff | scoped |  |
+| GET | `/api/estimates/view/:viewToken` | public | exempt | capability token: Estimate view link. |
+| POST | `/api/estimates/view/:viewToken/approve` | public | exempt | capability token: Estimate approval via view link. |
 
 ### /api/expenses
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/expenses` | staff |  |
-| POST | `/api/expenses` | staff |  |
-| DELETE | `/api/expenses/:id` | staff |  |
-| GET | `/api/expenses/:id` | staff |  |
-| PUT | `/api/expenses/:id` | staff |  |
-| GET | `/api/expenses/summary` | staff |  |
-| POST | `/api/expenses/upload-receipt` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/expenses` | staff | scoped |  |
+| POST | `/api/expenses` | staff | scoped |  |
+| DELETE | `/api/expenses/:id` | staff | scoped |  |
+| GET | `/api/expenses/:id` | staff | scoped |  |
+| PUT | `/api/expenses/:id` | staff | scoped |  |
+| GET | `/api/expenses/summary` | staff | scoped |  |
+| POST | `/api/expenses/upload-receipt` | staff | scoped |  |
 
 ### /api/gmail
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| POST | `/api/gmail/draft-reply` | staff |  |
-| POST | `/api/gmail/send` | staff |  |
-| GET | `/api/gmail/status` | staff |  |
-| POST | `/api/gmail/sync-now` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| POST | `/api/gmail/draft-reply` | staff | scoped |  |
+| POST | `/api/gmail/send` | staff | scoped |  |
+| GET | `/api/gmail/status` | staff | scoped |  |
+| POST | `/api/gmail/sync-now` | staff | scoped |  |
 
 ### /api/google-calendar
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/google-calendar/connection` | staff |  |
-| POST | `/api/google-calendar/connection/disconnect` | staff |  |
-| POST | `/api/google-calendar/events/:eventId/sync` | staff |  |
-| GET | `/api/google-calendar/oauth/callback` | public | oauth callback: OAuth state is a signed JWT verified in the handler. |
-| GET | `/api/google-calendar/oauth/start` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/google-calendar/connection` | staff | scoped |  |
+| POST | `/api/google-calendar/connection/disconnect` | staff | scoped |  |
+| POST | `/api/google-calendar/events/:eventId/sync` | staff | scoped |  |
+| GET | `/api/google-calendar/oauth/callback` | public | scoped | oauth callback: OAuth state is a signed JWT verified in the handler. Not tenancy-exempt, so the tenant guard also requires the staff session cookie. |
+| GET | `/api/google-calendar/oauth/start` | staff | scoped |  |
 
 ### /api/health
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/health` | public | health: Readiness probe for the deploy controller and uptime checks. |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/health` | public | exempt | health: Readiness probe for the deploy controller and uptime checks. |
 
 ### /api/inbox
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/inbox` | staff |  |
-| GET | `/api/inbox/stats` | staff |  |
-| GET | `/api/inbox/unmatched` | staff |  |
-| POST | `/api/inbox/unmatched/:id/assign` | staff |  |
-| POST | `/api/inbox/unmatched/:id/ignore` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/inbox` | staff | scoped |  |
+| GET | `/api/inbox/stats` | staff | scoped |  |
+| GET | `/api/inbox/unmatched` | staff | scoped |  |
+| POST | `/api/inbox/unmatched/:id/assign` | staff | scoped |  |
+| POST | `/api/inbox/unmatched/:id/ignore` | staff | scoped |  |
 
 ### /api/integrations
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/integrations` | staff |  |
-| GET | `/api/integrations/:type` | staff |  |
-| POST | `/api/integrations/:type/connect` | staff |  |
-| POST | `/api/integrations/:type/disconnect` | staff |  |
-| POST | `/api/integrations/:type/sync` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/integrations` | staff | scoped |  |
+| GET | `/api/integrations/:type` | staff | scoped |  |
+| POST | `/api/integrations/:type/connect` | staff | scoped |  |
+| POST | `/api/integrations/:type/disconnect` | staff | scoped |  |
+| POST | `/api/integrations/:type/sync` | staff | scoped |  |
 
 ### /api/invoice-chaser
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| POST | `/api/invoice-chaser/chase` | staff |  |
-| GET | `/api/invoice-chaser/overdue` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| POST | `/api/invoice-chaser/chase` | staff | scoped |  |
+| GET | `/api/invoice-chaser/overdue` | staff | scoped |  |
 
 ### /api/invoices
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/invoices` | staff |  |
-| POST | `/api/invoices` | staff |  |
-| DELETE | `/api/invoices/:id` | admin |  |
-| GET | `/api/invoices/:id` | staff |  |
-| PUT | `/api/invoices/:id` | staff |  |
-| POST | `/api/invoices/:id/mark-paid` | staff |  |
-| POST | `/api/invoices/:id/payment-link` | staff |  |
-| GET | `/api/invoices/:id/payments` | staff |  |
-| GET | `/api/invoices/:id/pdf` | staff |  |
-| POST | `/api/invoices/:id/pdf` | staff |  |
-| POST | `/api/invoices/:id/public-link/revoke` | staff |  |
-| POST | `/api/invoices/:id/public-link/rotate` | staff |  |
-| POST | `/api/invoices/:id/resend` | staff |  |
-| POST | `/api/invoices/:id/send` | staff |  |
-| POST | `/api/invoices/:id/undo-void` | admin |  |
-| POST | `/api/invoices/bulk/archive` | staff |  |
-| POST | `/api/invoices/bulk/mark-paid` | staff |  |
-| POST | `/api/invoices/bulk/send` | staff |  |
-| GET | `/api/invoices/client/:viewToken` | public | capability token: Invoice view link (legacy path). |
-| POST | `/api/invoices/from-proposal/:proposalId` | staff |  |
-| GET | `/api/invoices/stats` | staff |  |
-| POST | `/api/invoices/stripe-webhook` | public | signed webhook: Stripe-Signature verified in the handler. |
-| GET | `/api/invoices/templates` | staff |  |
-| POST | `/api/invoices/templates` | staff |  |
-| DELETE | `/api/invoices/templates/:id` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/invoices` | staff | scoped |  |
+| POST | `/api/invoices` | staff | scoped |  |
+| DELETE | `/api/invoices/:id` | admin | scoped |  |
+| GET | `/api/invoices/:id` | staff | scoped |  |
+| PUT | `/api/invoices/:id` | staff | scoped |  |
+| POST | `/api/invoices/:id/mark-paid` | staff | scoped |  |
+| POST | `/api/invoices/:id/payment-link` | staff | scoped |  |
+| GET | `/api/invoices/:id/payments` | staff | scoped |  |
+| GET | `/api/invoices/:id/pdf` | staff | scoped |  |
+| POST | `/api/invoices/:id/pdf` | staff | scoped |  |
+| POST | `/api/invoices/:id/public-link/revoke` | staff | scoped |  |
+| POST | `/api/invoices/:id/public-link/rotate` | staff | scoped |  |
+| POST | `/api/invoices/:id/resend` | staff | scoped |  |
+| POST | `/api/invoices/:id/send` | staff | scoped |  |
+| POST | `/api/invoices/:id/undo-void` | admin | scoped |  |
+| POST | `/api/invoices/bulk/archive` | staff | scoped |  |
+| POST | `/api/invoices/bulk/mark-paid` | staff | scoped |  |
+| POST | `/api/invoices/bulk/send` | staff | scoped |  |
+| GET | `/api/invoices/client/:viewToken` | public | exempt | capability token: Invoice view link (legacy path). |
+| POST | `/api/invoices/from-proposal/:proposalId` | staff | scoped |  |
+| GET | `/api/invoices/stats` | staff | scoped |  |
+| POST | `/api/invoices/stripe-webhook` | public | exempt | signed webhook: Stripe-Signature verified in the handler. |
+| GET | `/api/invoices/templates` | staff | scoped |  |
+| POST | `/api/invoices/templates` | staff | scoped |  |
+| DELETE | `/api/invoices/templates/:id` | staff | scoped |  |
 
 ### /api/leads
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/leads/leads` | staff |  |
-| PATCH | `/api/leads/leads/:id/convert` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/leads/leads` | staff | scoped |  |
+| PATCH | `/api/leads/leads/:id/convert` | staff | scoped |  |
 
 ### /api/live
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/live` | public | health: Liveness probe; returns only status and revision. |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/live` | public | exempt | health: Liveness probe; returns only status and revision. |
 
 ### /api/mailgun
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| POST | `/api/mailgun` | public | signed webhook: Mailgun HMAC signature verified in the handler (fails closed outside dev). |
-| POST | `/api/mailgun/events` | public | signed webhook: Mailgun HMAC signature and single-use token verified in the handler. |
-| POST | `/api/mailgun/send` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| POST | `/api/mailgun` | public | exempt | signed webhook: Mailgun HMAC signature verified in the handler (fails closed outside dev). |
+| POST | `/api/mailgun/events` | public | exempt | signed webhook: Mailgun HMAC signature and single-use token verified in the handler. |
+| POST | `/api/mailgun/send` | staff | exempt | Admin only; sends one email and reads no tenant data. |
 
 ### /api/mailgun-hitl
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| POST | `/api/mailgun-hitl/hitl-reply` | public | signed webhook: Mailgun HMAC signature verified in the handler; always answers 200. |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| POST | `/api/mailgun-hitl/hitl-reply` | public | exempt | signed webhook: Mailgun HMAC signature verified in the handler; always answers 200. |
 
 ### /api/messages
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| POST | `/api/messages/messages/paste` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| POST | `/api/messages/messages/paste` | staff | scoped |  |
 
 ### /api/milestones
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| DELETE | `/api/milestones/milestones/:id` | staff |  |
-| GET | `/api/milestones/milestones/:id` | staff |  |
-| PUT | `/api/milestones/milestones/:id` | staff |  |
-| DELETE | `/api/milestones/milestones/:id/tasks/:taskId` | staff |  |
-| POST | `/api/milestones/milestones/:id/tasks/:taskId` | staff |  |
-| GET | `/api/milestones/projects/:projectId/milestones` | staff |  |
-| POST | `/api/milestones/projects/:projectId/milestones` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| DELETE | `/api/milestones/milestones/:id` | staff | scoped |  |
+| GET | `/api/milestones/milestones/:id` | staff | scoped |  |
+| PUT | `/api/milestones/milestones/:id` | staff | scoped |  |
+| DELETE | `/api/milestones/milestones/:id/tasks/:taskId` | staff | scoped |  |
+| POST | `/api/milestones/milestones/:id/tasks/:taskId` | staff | scoped |  |
+| GET | `/api/milestones/projects/:projectId/milestones` | staff | scoped |  |
+| POST | `/api/milestones/projects/:projectId/milestones` | staff | scoped |  |
 
 ### /api/notes
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/notes` | staff |  |
-| DELETE | `/api/notes/:id` | staff |  |
-| GET | `/api/notes/:id` | staff |  |
-| PUT | `/api/notes/:id` | staff |  |
-| POST | `/api/notes/:id/pin` | staff |  |
-| POST | `/api/notes/:id/restore` | staff |  |
-| GET | `/api/notes/templates` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/notes` | staff | scoped |  |
+| DELETE | `/api/notes/:id` | staff | scoped |  |
+| GET | `/api/notes/:id` | staff | scoped |  |
+| PUT | `/api/notes/:id` | staff | scoped |  |
+| POST | `/api/notes/:id/pin` | staff | scoped |  |
+| POST | `/api/notes/:id/restore` | staff | scoped |  |
+| GET | `/api/notes/templates` | staff | scoped |  |
 
 ### /api/notifications
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/notifications` | staff |  |
-| PATCH | `/api/notifications/:id/read` | staff |  |
-| DELETE | `/api/notifications/cleanup` | admin |  |
-| PATCH | `/api/notifications/read-all` | staff |  |
-| GET | `/api/notifications/unread-count` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/notifications` | staff | scoped |  |
+| PATCH | `/api/notifications/:id/read` | staff | scoped |  |
+| DELETE | `/api/notifications/cleanup` | admin | scoped |  |
+| PATCH | `/api/notifications/read-all` | staff | scoped |  |
+| GET | `/api/notifications/unread-count` | staff | scoped |  |
 
 ### /api/onboarding
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| POST | `/api/onboarding/client` | staff |  |
-| GET | `/api/onboarding/progress` | staff |  |
-| POST | `/api/onboarding/progress/restart` | staff |  |
-| POST | `/api/onboarding/progress/skip` | staff |  |
-| POST | `/api/onboarding/progress/start` | staff |  |
-| POST | `/api/onboarding/progress/tasks/skip` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| POST | `/api/onboarding/client` | staff | scoped |  |
+| GET | `/api/onboarding/progress` | staff | scoped |  |
+| POST | `/api/onboarding/progress/restart` | staff | scoped |  |
+| POST | `/api/onboarding/progress/skip` | staff | scoped |  |
+| POST | `/api/onboarding/progress/start` | staff | scoped |  |
+| POST | `/api/onboarding/progress/tasks/skip` | staff | scoped |  |
 
 ### /api/pipeline
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/pipeline` | staff |  |
-| GET | `/api/pipeline/analytics` | staff |  |
-| POST | `/api/pipeline/deals` | staff |  |
-| DELETE | `/api/pipeline/deals/:id` | staff |  |
-| PUT | `/api/pipeline/deals/:id` | staff |  |
-| POST | `/api/pipeline/stages` | staff |  |
-| DELETE | `/api/pipeline/stages/:id` | staff |  |
-| PUT | `/api/pipeline/stages/:id` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/pipeline` | staff | scoped |  |
+| GET | `/api/pipeline/analytics` | staff | scoped |  |
+| POST | `/api/pipeline/deals` | staff | scoped |  |
+| DELETE | `/api/pipeline/deals/:id` | staff | scoped |  |
+| PUT | `/api/pipeline/deals/:id` | staff | scoped |  |
+| POST | `/api/pipeline/stages` | staff | scoped |  |
+| DELETE | `/api/pipeline/stages/:id` | staff | scoped |  |
+| PUT | `/api/pipeline/stages/:id` | staff | scoped |  |
 
 ### /api/portal
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/portal/:token` | public | capability token: Project status page addressed by an unguessable project viewToken. |
-| POST | `/api/portal/booking` | public | public intake: Public booking page submission; books into the one booking organization only. |
-| GET | `/api/portal/booking/availability` | public | public intake: Public booking page availability; returns free/busy slots for the one booking organization only. |
-| GET | `/api/portal/contract/:signToken` | public | capability token: Contract signing link. |
-| POST | `/api/portal/contract/:signToken/sign` | public | capability token: Contract signature via signing link. |
-| GET | `/api/portal/form/:viewToken` | public | capability token: Client form link. |
-| POST | `/api/portal/form/:viewToken` | public | capability token: Client form submission via form link. |
-| GET | `/api/portal/invoice/:viewToken` | public | capability token: Invoice view link. |
-| POST | `/api/portal/invoice/:viewToken/pay` | public | capability token: Starts checkout for the invoice behind the view link. |
-| GET | `/api/portal/proposal/:viewToken` | public | capability token: Proposal view link. |
-| POST | `/api/portal/proposal/:viewToken/approve` | public | capability token: Proposal approval via view link. |
-| POST | `/api/portal/proposal/:viewToken/decline` | public | capability token: Proposal decline via view link. |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/portal/:token` | public | exempt | capability token: Project status page addressed by an unguessable project viewToken. |
+| POST | `/api/portal/booking` | public | exempt | public intake: Public booking page submission; books into the one booking organization only. |
+| GET | `/api/portal/booking/availability` | public | exempt | public intake: Public booking page availability; returns free/busy slots for the one booking organization only. |
+| GET | `/api/portal/contract/:signToken` | public | exempt | capability token: Contract signing link. |
+| POST | `/api/portal/contract/:signToken/sign` | public | exempt | capability token: Contract signature via signing link. |
+| GET | `/api/portal/form/:viewToken` | public | exempt | capability token: Client form link. |
+| POST | `/api/portal/form/:viewToken` | public | exempt | capability token: Client form submission via form link. |
+| GET | `/api/portal/invoice/:viewToken` | public | exempt | capability token: Invoice view link. |
+| POST | `/api/portal/invoice/:viewToken/pay` | public | exempt | capability token: Starts checkout for the invoice behind the view link. |
+| GET | `/api/portal/proposal/:viewToken` | public | exempt | capability token: Proposal view link. |
+| POST | `/api/portal/proposal/:viewToken/approve` | public | exempt | capability token: Proposal approval via view link. |
+| POST | `/api/portal/proposal/:viewToken/decline` | public | exempt | capability token: Proposal decline via view link. |
 
 ### /api/projects
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/projects` | staff |  |
-| POST | `/api/projects` | staff |  |
-| GET | `/api/projects/:id` | staff |  |
-| PUT | `/api/projects/:id` | staff |  |
-| POST | `/api/projects/:id/ai-plan` | staff |  |
-| GET | `/api/projects/:id/budget` | staff |  |
-| GET | `/api/projects/:id/communications` | staff |  |
-| GET | `/api/projects/:id/communications/:communicationId` | staff |  |
-| GET | `/api/projects/:id/context` | staff |  |
-| POST | `/api/projects/:id/context` | staff |  |
-| GET | `/api/projects/:id/health-history` | staff |  |
-| GET | `/api/projects/:id/plan` | staff |  |
-| POST | `/api/projects/:id/plan/refresh` | staff |  |
-| GET | `/api/projects/:id/tasks` | staff |  |
-| POST | `/api/projects/:id/tasks` | staff |  |
-| GET | `/api/projects/:projectId/notes` | staff |  |
-| POST | `/api/projects/:projectId/notes` | staff |  |
-| POST | `/api/projects/:projectId/notes/from-template/:templateId` | staff |  |
-| POST | `/api/projects/from-template` | staff |  |
-| GET | `/api/projects/templates` | staff |  |
-| POST | `/api/projects/templates` | staff |  |
-| DELETE | `/api/projects/templates/:templateId` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/projects` | staff | scoped |  |
+| POST | `/api/projects` | staff | scoped |  |
+| GET | `/api/projects/:id` | staff | scoped |  |
+| PUT | `/api/projects/:id` | staff | scoped |  |
+| POST | `/api/projects/:id/ai-plan` | staff | scoped |  |
+| GET | `/api/projects/:id/budget` | staff | scoped |  |
+| GET | `/api/projects/:id/communications` | staff | scoped |  |
+| GET | `/api/projects/:id/communications/:communicationId` | staff | scoped |  |
+| GET | `/api/projects/:id/context` | staff | scoped |  |
+| POST | `/api/projects/:id/context` | staff | scoped |  |
+| GET | `/api/projects/:id/health-history` | staff | scoped |  |
+| GET | `/api/projects/:id/plan` | staff | scoped |  |
+| POST | `/api/projects/:id/plan/refresh` | staff | scoped |  |
+| GET | `/api/projects/:id/tasks` | staff | scoped |  |
+| POST | `/api/projects/:id/tasks` | staff | scoped |  |
+| GET | `/api/projects/:projectId/notes` | staff | scoped |  |
+| POST | `/api/projects/:projectId/notes` | staff | scoped |  |
+| POST | `/api/projects/:projectId/notes/from-template/:templateId` | staff | scoped |  |
+| POST | `/api/projects/from-template` | staff | scoped |  |
+| GET | `/api/projects/templates` | staff | scoped |  |
+| POST | `/api/projects/templates` | staff | scoped |  |
+| DELETE | `/api/projects/templates/:templateId` | staff | scoped |  |
 
 ### /api/proposal-builder
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/proposal-builder/:id` | staff |  |
-| PUT | `/api/proposal-builder/:id` | staff |  |
-| POST | `/api/proposal-builder/:id/accept` | staff |  |
-| GET | `/api/proposal-builder/:id/pdf` | staff |  |
-| POST | `/api/proposal-builder/:id/send` | staff |  |
-| POST | `/api/proposal-builder/:id/send-pdf` | staff |  |
-| POST | `/api/proposal-builder/:id/track` | staff |  |
-| POST | `/api/proposal-builder/generate` | staff |  |
-| GET | `/api/proposal-builder/pricing-tiers` | staff |  |
-| GET | `/api/proposal-builder/stats` | staff |  |
-| GET | `/api/proposal-builder/templates` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/proposal-builder/:id` | staff | scoped |  |
+| PUT | `/api/proposal-builder/:id` | staff | scoped |  |
+| POST | `/api/proposal-builder/:id/accept` | staff | scoped |  |
+| GET | `/api/proposal-builder/:id/pdf` | staff | scoped |  |
+| POST | `/api/proposal-builder/:id/send` | staff | scoped |  |
+| POST | `/api/proposal-builder/:id/send-pdf` | staff | scoped |  |
+| POST | `/api/proposal-builder/:id/track` | staff | scoped |  |
+| POST | `/api/proposal-builder/generate` | staff | scoped |  |
+| GET | `/api/proposal-builder/pricing-tiers` | staff | scoped |  |
+| GET | `/api/proposal-builder/stats` | staff | scoped |  |
+| GET | `/api/proposal-builder/templates` | staff | scoped |  |
 
 ### /api/proposals
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/proposals` | staff |  |
-| POST | `/api/proposals` | staff |  |
-| DELETE | `/api/proposals/:id` | staff |  |
-| GET | `/api/proposals/:id` | staff |  |
-| PUT | `/api/proposals/:id` | staff |  |
-| POST | `/api/proposals/:id/duplicate` | staff |  |
-| POST | `/api/proposals/:id/public-link/revoke` | staff |  |
-| POST | `/api/proposals/:id/public-link/rotate` | staff |  |
-| POST | `/api/proposals/:id/resend` | staff |  |
-| POST | `/api/proposals/:id/send` | staff |  |
-| GET | `/api/proposals/:id/versions` | staff |  |
-| POST | `/api/proposals/:id/versions/:versionId/restore` | staff |  |
-| POST | `/api/proposals/bulk/archive` | staff |  |
-| POST | `/api/proposals/bulk/send` | staff |  |
-| GET | `/api/proposals/client/:viewToken` | public | capability token: Proposal view link (legacy path). |
-| POST | `/api/proposals/client/:viewToken/approve` | public | capability token: Proposal approval (legacy path). |
-| POST | `/api/proposals/client/:viewToken/decline` | public | capability token: Proposal decline (legacy path). |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/proposals` | staff | scoped |  |
+| POST | `/api/proposals` | staff | scoped |  |
+| DELETE | `/api/proposals/:id` | staff | scoped |  |
+| GET | `/api/proposals/:id` | staff | scoped |  |
+| PUT | `/api/proposals/:id` | staff | scoped |  |
+| POST | `/api/proposals/:id/duplicate` | staff | scoped |  |
+| POST | `/api/proposals/:id/public-link/revoke` | staff | scoped |  |
+| POST | `/api/proposals/:id/public-link/rotate` | staff | scoped |  |
+| POST | `/api/proposals/:id/resend` | staff | scoped |  |
+| POST | `/api/proposals/:id/send` | staff | scoped |  |
+| GET | `/api/proposals/:id/versions` | staff | scoped |  |
+| POST | `/api/proposals/:id/versions/:versionId/restore` | staff | scoped |  |
+| POST | `/api/proposals/bulk/archive` | staff | scoped |  |
+| POST | `/api/proposals/bulk/send` | staff | scoped |  |
+| GET | `/api/proposals/client/:viewToken` | public | exempt | capability token: Proposal view link (legacy path). |
+| POST | `/api/proposals/client/:viewToken/approve` | public | exempt | capability token: Proposal approval (legacy path). |
+| POST | `/api/proposals/client/:viewToken/decline` | public | exempt | capability token: Proposal decline (legacy path). |
 
 ### /api/push
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| POST | `/api/push/send` | admin |  |
-| POST | `/api/push/subscribe` | staff |  |
-| POST | `/api/push/unsubscribe` | staff |  |
-| GET | `/api/push/vapid-key` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| POST | `/api/push/send` | admin | scoped |  |
+| POST | `/api/push/subscribe` | staff | scoped |  |
+| POST | `/api/push/unsubscribe` | staff | scoped |  |
+| GET | `/api/push/vapid-key` | staff | scoped |  |
 
 ### /api/rate-cards
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/rate-cards` | staff |  |
-| POST | `/api/rate-cards` | staff |  |
-| DELETE | `/api/rate-cards/:id` | staff |  |
-| GET | `/api/rate-cards/:id` | staff |  |
-| PUT | `/api/rate-cards/:id` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/rate-cards` | staff | scoped |  |
+| POST | `/api/rate-cards` | staff | scoped |  |
+| DELETE | `/api/rate-cards/:id` | staff | scoped |  |
+| GET | `/api/rate-cards/:id` | staff | scoped |  |
+| PUT | `/api/rate-cards/:id` | staff | scoped |  |
 
 ### /api/realtime
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/realtime/ice-servers` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/realtime/ice-servers` | staff | scoped |  |
 
 ### /api/responses
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/responses/:id` | staff |  |
-| PUT | `/api/responses/:id` | staff |  |
-| POST | `/api/responses/:id/approve` | admin |  |
-| POST | `/api/responses/:id/reject` | admin |  |
-| POST | `/api/responses/:id/sent` | staff |  |
-| POST | `/api/responses/:id/submit` | staff |  |
-| POST | `/api/responses/:threadId/drafts` | staff |  |
-| GET | `/api/responses/pending` | admin |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/responses/:id` | staff | scoped |  |
+| PUT | `/api/responses/:id` | staff | scoped |  |
+| POST | `/api/responses/:id/approve` | admin | scoped |  |
+| POST | `/api/responses/:id/reject` | admin | scoped |  |
+| POST | `/api/responses/:id/sent` | staff | scoped |  |
+| POST | `/api/responses/:id/submit` | staff | scoped |  |
+| POST | `/api/responses/:threadId/drafts` | staff | scoped |  |
+| GET | `/api/responses/pending` | admin | scoped |  |
 
 ### /api/retainers
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/retainers/retainer` | staff |  |
-| POST | `/api/retainers/retainer` | staff |  |
-| GET | `/api/retainers/retainer/:clientId` | staff |  |
-| PUT | `/api/retainers/retainer/:clientId` | staff |  |
-| POST | `/api/retainers/retainer/:clientId/generate-invoice` | staff |  |
-| POST | `/api/retainers/retainer/:clientId/log-hours` | staff |  |
-| GET | `/api/retainers/retainer/:clientId/status` | staff |  |
-| POST | `/api/retainers/retainer/check-all` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/retainers/retainer` | staff | scoped |  |
+| POST | `/api/retainers/retainer` | staff | scoped |  |
+| GET | `/api/retainers/retainer/:clientId` | staff | scoped |  |
+| PUT | `/api/retainers/retainer/:clientId` | staff | scoped |  |
+| POST | `/api/retainers/retainer/:clientId/generate-invoice` | staff | scoped |  |
+| POST | `/api/retainers/retainer/:clientId/log-hours` | staff | scoped |  |
+| GET | `/api/retainers/retainer/:clientId/status` | staff | scoped |  |
+| POST | `/api/retainers/retainer/check-all` | staff | scoped |  |
 
 ### /api/revisions
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/revisions/projects/:projectId/revisions` | staff |  |
-| POST | `/api/revisions/projects/:projectId/revisions` | staff |  |
-| PUT | `/api/revisions/revisions/:id` | staff |  |
-| POST | `/api/revisions/revisions/:id/approve` | admin |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/revisions/projects/:projectId/revisions` | staff | scoped |  |
+| POST | `/api/revisions/projects/:projectId/revisions` | staff | scoped |  |
+| PUT | `/api/revisions/revisions/:id` | staff | scoped |  |
+| POST | `/api/revisions/revisions/:id/approve` | admin | scoped |  |
 
 ### /api/search
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/search` | staff |  |
-| POST | `/api/search/ask` | staff |  |
-| GET | `/api/search/similar/:threadId` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/search` | staff | scoped |  |
+| POST | `/api/search/ask` | staff | scoped |  |
+| GET | `/api/search/similar/:threadId` | staff | scoped |  |
 
 ### /api/semantic-search
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| POST | `/api/semantic-search/embed` | staff |  |
-| DELETE | `/api/semantic-search/embeddings/:source/:sourceId` | staff |  |
-| POST | `/api/semantic-search/rebuild/:clientId` | staff |  |
-| GET | `/api/semantic-search/search` | staff |  |
-| GET | `/api/semantic-search/stats` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| POST | `/api/semantic-search/embed` | staff | scoped |  |
+| DELETE | `/api/semantic-search/embeddings/:source/:sourceId` | staff | scoped |  |
+| POST | `/api/semantic-search/rebuild/:clientId` | staff | scoped |  |
+| GET | `/api/semantic-search/search` | staff | scoped |  |
+| GET | `/api/semantic-search/stats` | staff | scoped |  |
 
 ### /api/settings
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/settings/ai-provider` | staff |  |
-| POST | `/api/settings/ai-provider` | admin |  |
-| GET | `/api/settings/ai-provider/ollama-models` | staff |  |
-| GET | `/api/settings/assignment-rules` | staff |  |
-| POST | `/api/settings/assignment-rules` | admin |  |
-| DELETE | `/api/settings/assignment-rules/:id` | admin |  |
-| PUT | `/api/settings/assignment-rules/:id` | admin |  |
-| GET | `/api/settings/escalation` | staff |  |
-| GET | `/api/settings/sla` | staff |  |
-| GET | `/api/settings/templates` | staff |  |
-| POST | `/api/settings/templates` | admin |  |
-| DELETE | `/api/settings/templates/:id` | admin |  |
-| GET | `/api/settings/templates/:id` | staff |  |
-| PUT | `/api/settings/templates/:id` | admin |  |
-| POST | `/api/settings/templates/:id/render` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/settings/ai-provider` | staff | scoped |  |
+| POST | `/api/settings/ai-provider` | admin | scoped |  |
+| GET | `/api/settings/ai-provider/ollama-models` | staff | scoped |  |
+| GET | `/api/settings/assignment-rules` | staff | scoped |  |
+| POST | `/api/settings/assignment-rules` | admin | scoped |  |
+| DELETE | `/api/settings/assignment-rules/:id` | admin | scoped |  |
+| PUT | `/api/settings/assignment-rules/:id` | admin | scoped |  |
+| GET | `/api/settings/escalation` | staff | scoped |  |
+| GET | `/api/settings/sla` | staff | scoped |  |
+| GET | `/api/settings/templates` | staff | scoped |  |
+| POST | `/api/settings/templates` | admin | scoped |  |
+| DELETE | `/api/settings/templates/:id` | admin | scoped |  |
+| GET | `/api/settings/templates/:id` | staff | scoped |  |
+| PUT | `/api/settings/templates/:id` | admin | scoped |  |
+| POST | `/api/settings/templates/:id/render` | staff | scoped |  |
 
 ### /api/slack
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/slack` | admin + staff |  |
-| POST | `/api/slack/events` | public | signed webhook: Slack request signature verified before the body is trusted. |
-| POST | `/api/slack/install` | admin + staff |  |
-| POST | `/api/slack/installations/:installationId/disconnect` | admin + staff |  |
-| POST | `/api/slack/installations/:installationId/mappings` | admin + staff |  |
-| GET | `/api/slack/oauth/callback` | public | oauth callback: OAuth state is a signed JWT verified in the handler. |
-| GET | `/api/slack/oauth/start` | admin + staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/slack` | admin + staff | scoped |  |
+| POST | `/api/slack/events` | public | exempt | signed webhook: Slack request signature verified before the body is trusted. |
+| POST | `/api/slack/install` | admin + staff | scoped |  |
+| POST | `/api/slack/installations/:installationId/disconnect` | admin + staff | scoped |  |
+| POST | `/api/slack/installations/:installationId/mappings` | admin + staff | scoped |  |
+| GET | `/api/slack/oauth/callback` | public | exempt | oauth callback: OAuth state is a signed JWT verified in the handler. |
+| GET | `/api/slack/oauth/start` | admin + staff | scoped |  |
 
 ### /api/tasks
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/tasks` | staff |  |
-| DELETE | `/api/tasks/:id` | staff |  |
-| GET | `/api/tasks/:id` | staff |  |
-| PUT | `/api/tasks/:id` | staff |  |
-| GET | `/api/tasks/:id/breadcrumbs` | staff |  |
-| POST | `/api/tasks/:id/complete` | staff |  |
-| PUT | `/api/tasks/:id/content` | staff |  |
-| PUT | `/api/tasks/:id/dependency` | staff |  |
-| POST | `/api/tasks/:id/move` | staff |  |
-| GET | `/api/tasks/:id/page` | staff |  |
-| POST | `/api/tasks/:id/subpage` | staff |  |
-| POST | `/api/tasks/:projectId/quick` | staff |  |
-| POST | `/api/tasks/bulk-update` | staff |  |
-| GET | `/api/tasks/gantt` | staff |  |
-| GET | `/api/tasks/kanban/:projectId` | staff |  |
-| GET | `/api/tasks/mentions/search` | staff |  |
-| GET | `/api/tasks/my` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/tasks` | staff | scoped |  |
+| DELETE | `/api/tasks/:id` | staff | scoped |  |
+| GET | `/api/tasks/:id` | staff | scoped |  |
+| PUT | `/api/tasks/:id` | staff | scoped |  |
+| GET | `/api/tasks/:id/breadcrumbs` | staff | scoped |  |
+| POST | `/api/tasks/:id/complete` | staff | scoped |  |
+| PUT | `/api/tasks/:id/content` | staff | scoped |  |
+| PUT | `/api/tasks/:id/dependency` | staff | scoped |  |
+| POST | `/api/tasks/:id/move` | staff | scoped |  |
+| GET | `/api/tasks/:id/page` | staff | scoped |  |
+| POST | `/api/tasks/:id/subpage` | staff | scoped |  |
+| POST | `/api/tasks/:projectId/quick` | staff | scoped |  |
+| POST | `/api/tasks/bulk-update` | staff | scoped |  |
+| GET | `/api/tasks/gantt` | staff | scoped |  |
+| GET | `/api/tasks/kanban/:projectId` | staff | scoped |  |
+| GET | `/api/tasks/mentions/search` | staff | scoped |  |
+| GET | `/api/tasks/my` | staff | scoped |  |
 
 ### /api/team
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/team` | staff |  |
-| POST | `/api/team` | admin |  |
-| GET | `/api/team/:id` | staff |  |
-| PUT | `/api/team/:id` | admin |  |
-| POST | `/api/team/:id/reset-password` | admin |  |
-| GET | `/api/team/allocations` | staff |  |
-| GET | `/api/team/workload` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/team` | staff | scoped |  |
+| POST | `/api/team` | admin | scoped |  |
+| GET | `/api/team/:id` | staff | scoped |  |
+| PUT | `/api/team/:id` | admin | scoped |  |
+| POST | `/api/team/:id/reset-password` | admin | scoped |  |
+| GET | `/api/team/allocations` | staff | scoped |  |
+| GET | `/api/team/workload` | staff | scoped |  |
 
 ### /api/templates
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/templates` | staff |  |
-| POST | `/api/templates` | staff |  |
-| DELETE | `/api/templates/:id` | staff |  |
-| PUT | `/api/templates/:id` | staff |  |
-| POST | `/api/templates/:id/apply/:projectId` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/templates` | staff | scoped |  |
+| POST | `/api/templates` | staff | scoped |  |
+| DELETE | `/api/templates/:id` | staff | scoped |  |
+| PUT | `/api/templates/:id` | staff | scoped |  |
+| POST | `/api/templates/:id/apply/:projectId` | staff | scoped |  |
 
 ### /api/threads
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/threads` | staff |  |
-| POST | `/api/threads` | staff |  |
-| GET | `/api/threads/:id` | staff |  |
-| PUT | `/api/threads/:id` | staff |  |
-| POST | `/api/threads/:id/analyze` | staff |  |
-| POST | `/api/threads/:id/assign` | staff |  |
-| POST | `/api/threads/:id/messages` | staff |  |
-| POST | `/api/threads/:id/notes` | staff |  |
-| POST | `/api/threads/:id/resolve` | staff |  |
-| POST | `/api/threads/:id/snooze` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/threads` | staff | scoped |  |
+| POST | `/api/threads` | staff | scoped |  |
+| GET | `/api/threads/:id` | staff | scoped |  |
+| PUT | `/api/threads/:id` | staff | scoped |  |
+| POST | `/api/threads/:id/analyze` | staff | scoped |  |
+| POST | `/api/threads/:id/assign` | staff | scoped |  |
+| POST | `/api/threads/:id/messages` | staff | scoped |  |
+| POST | `/api/threads/:id/notes` | staff | scoped |  |
+| POST | `/api/threads/:id/resolve` | staff | scoped |  |
+| POST | `/api/threads/:id/snooze` | staff | scoped |  |
 
 ### /api/time
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/time/projects/:projectId/time-entries` | staff |  |
-| POST | `/api/time/time-entries` | staff |  |
-| DELETE | `/api/time/time-entries/:id` | staff |  |
-| PUT | `/api/time/time-entries/:id` | staff |  |
-| GET | `/api/time/time-entries/my` | staff |  |
-| GET | `/api/time/time-entries/summary` | staff |  |
-| PATCH | `/api/time/timesheets/:id/approve` | staff |  |
-| PATCH | `/api/time/timesheets/:id/reject` | staff |  |
-| GET | `/api/time/timesheets/weekly` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/time/projects/:projectId/time-entries` | staff | scoped |  |
+| POST | `/api/time/time-entries` | staff | scoped |  |
+| DELETE | `/api/time/time-entries/:id` | staff | scoped |  |
+| PUT | `/api/time/time-entries/:id` | staff | scoped |  |
+| GET | `/api/time/time-entries/my` | staff | scoped |  |
+| GET | `/api/time/time-entries/summary` | staff | scoped |  |
+| PATCH | `/api/time/timesheets/:id/approve` | staff | scoped |  |
+| PATCH | `/api/time/timesheets/:id/reject` | staff | scoped |  |
+| GET | `/api/time/timesheets/weekly` | staff | scoped |  |
 
 ### /api/time-sessions
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| POST | `/api/time-sessions` | staff |  |
-| POST | `/api/time-sessions/:id/stop` | staff |  |
-| GET | `/api/time-sessions/running` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| POST | `/api/time-sessions` | staff | scoped |  |
+| POST | `/api/time-sessions/:id/stop` | staff | scoped |  |
+| GET | `/api/time-sessions/running` | staff | scoped |  |
 
 ### /api/time-tracking
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| DELETE | `/api/time-tracking/:id` | staff |  |
-| POST | `/api/time-tracking/:id/stop` | staff |  |
-| POST | `/api/time-tracking/manual` | staff |  |
-| GET | `/api/time-tracking/running` | staff |  |
-| POST | `/api/time-tracking/start` | staff |  |
-| POST | `/api/time-tracking/stop-all` | staff |  |
-| GET | `/api/time-tracking/summary` | staff |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| DELETE | `/api/time-tracking/:id` | staff | scoped |  |
+| POST | `/api/time-tracking/:id/stop` | staff | scoped |  |
+| POST | `/api/time-tracking/manual` | staff | scoped |  |
+| GET | `/api/time-tracking/running` | staff | scoped |  |
+| POST | `/api/time-tracking/start` | staff | scoped |  |
+| POST | `/api/time-tracking/stop-all` | staff | scoped |  |
+| GET | `/api/time-tracking/summary` | staff | scoped |  |
 
 ### /api/trash
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| GET | `/api/trash` | staff |  |
-| DELETE | `/api/trash/:id/permanent` | admin |  |
-| POST | `/api/trash/:id/restore` | staff |  |
-| DELETE | `/api/trash/empty` | admin |  |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/trash` | staff | scoped |  |
+| DELETE | `/api/trash/:id/permanent` | admin | scoped |  |
+| POST | `/api/trash/:id/restore` | staff | scoped |  |
+| DELETE | `/api/trash/empty` | admin | scoped |  |
 
 ### /api/webhooks
 
-| Method | Path | Access | Public reason |
-| --- | --- | --- | --- |
-| POST | `/api/webhooks/email` | public | signed webhook: Inbound email webhook; signature verified in the handler. |
-| GET | `/api/webhooks/email/status` | public | health: Static liveness response for the email webhook; reads no data. |
-| POST | `/api/webhooks/email/test` | staff |  |
-| POST | `/api/webhooks/stripe` | public | signed webhook: Stripe-Signature verified in the handler. |
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| POST | `/api/webhooks/email` | public | exempt | signed webhook: Inbound email webhook; signature verified in the handler. |
+| GET | `/api/webhooks/email/status` | public | exempt | health: Static liveness response for the email webhook; reads no data. |
+| POST | `/api/webhooks/email/test` | staff | exempt | Admin only; runs the email pipeline inside the admin's organization via runTenantJob. |
+| POST | `/api/webhooks/stripe` | public | exempt | signed webhook: Stripe-Signature verified in the handler. |

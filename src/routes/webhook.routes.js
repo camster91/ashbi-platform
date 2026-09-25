@@ -86,7 +86,17 @@ export default async function webhookRoutes(fastify) {
       receivedAt: new Date()
     };
 
-    const result = await processEmailPipeline(emailData);
+    // /api/webhooks is tenancy-exempt, so run the pipeline in the admin's own
+    // organization explicitly; otherwise its threads land outside any tenant.
+    if (!request.user.organizationId) {
+      return reply.status(403).send({ error: 'Organization context required' });
+    }
+    const result = await runTenantJob(
+      fastify.prisma,
+      request.user.organizationId,
+      () => processEmailPipeline(emailData),
+      backgroundPrisma,
+    );
 
     return {
       success: true,
