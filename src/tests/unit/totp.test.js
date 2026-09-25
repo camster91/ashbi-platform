@@ -90,11 +90,11 @@ describe('base32 and provisioning', () => {
   });
 
   it('builds an otpauth URI authenticator apps accept', () => {
-    const uri = otpauthUri({ secret: 'JBSWY3DPEHPK3PXP', accountName: 'ada@example.com', issuer: 'Ashbi Hub' });
+    const uri = otpauthUri({ secret: 'AAAABBBBCCCCDDDD', accountName: 'ada@example.com', issuer: 'Ashbi Hub' });
     const parsed = new URL(uri);
     assert.equal(parsed.protocol, 'otpauth:');
     assert.ok(uri.startsWith('otpauth://totp/Ashbi%20Hub%3Aada%40example.com?'), uri);
-    assert.equal(parsed.searchParams.get('secret'), 'JBSWY3DPEHPK3PXP');
+    assert.equal(parsed.searchParams.get('secret'), 'AAAABBBBCCCCDDDD');
     assert.equal(parsed.searchParams.get('issuer'), 'Ashbi Hub');
     assert.equal(parsed.searchParams.get('digits'), '6');
     assert.equal(parsed.searchParams.get('period'), '30');

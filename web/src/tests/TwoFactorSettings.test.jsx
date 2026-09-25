@@ -31,14 +31,14 @@ describe('Settings → Security two-factor authentication', () => {
   });
 
   it('groups the setup key for manual entry', () => {
-    expect(formatSecret('JBSWY3DPEHPK3PXP')).toBe('JBSW Y3DP EHPK 3PXP');
+    expect(formatSecret('AAAABBBBCCCCDDDD')).toBe('AAAA BBBB CCCC DDDD');
   });
 
   it('enrolls with the setup key, confirms a code and shows recovery codes once', async () => {
     api.getMfaStatus.mockResolvedValue({ eligible: true, enabled: false, pendingEnrollment: false, recoveryCodesRemaining: 0 });
     api.startMfaEnrollment.mockResolvedValue({
-      secret: 'JBSWY3DPEHPK3PXP',
-      otpauthUri: 'otpauth://totp/Ashbi%20Hub%3Astaff%40example.com?secret=JBSWY3DPEHPK3PXP&issuer=Ashbi+Hub',
+      secret: 'AAAABBBBCCCCDDDD',
+      otpauthUri: 'otpauth://totp/Ashbi%20Hub%3Astaff%40example.com?secret=AAAABBBBCCCCDDDD&issuer=Ashbi+Hub',
     });
     api.confirmMfaEnrollment.mockResolvedValue({ enabled: true, recoveryCodes: RECOVERY_CODES });
     const writeText = vi.fn().mockResolvedValue();
@@ -56,7 +56,7 @@ describe('Settings → Security two-factor authentication', () => {
     fireEvent.click(screen.getByRole('button', { name: /set up two-factor authentication/i }));
     await waitFor(() => expect(api.startMfaEnrollment).toHaveBeenCalledWith('hunter22-password'));
 
-    expect(await screen.findByTestId('mfa-setup-key')).toHaveTextContent('JBSW Y3DP EHPK 3PXP');
+    expect(await screen.findByTestId('mfa-setup-key')).toHaveTextContent('AAAA BBBB CCCC DDDD');
     expect(screen.getByRole('link', { name: /open in authenticator app/i })).toHaveAttribute('href', expect.stringMatching(/^otpauth:\/\/totp\//));
 
     const codeInput = screen.getByLabelText(/enter the 6-digit code/i);
@@ -89,7 +89,7 @@ describe('Settings → Security two-factor authentication', () => {
 
   it('announces a rejected confirmation code', async () => {
     api.getMfaStatus.mockResolvedValue({ eligible: true, enabled: false, recoveryCodesRemaining: 0 });
-    api.startMfaEnrollment.mockResolvedValue({ secret: 'JBSWY3DPEHPK3PXP', otpauthUri: 'otpauth://totp/x?secret=JBSWY3DPEHPK3PXP' });
+    api.startMfaEnrollment.mockResolvedValue({ secret: 'AAAABBBBCCCCDDDD', otpauthUri: 'otpauth://totp/x?secret=AAAABBBBCCCCDDDD' });
     api.confirmMfaEnrollment.mockRejectedValue(new Error('That code did not match. Check the time on your device and try the current code.'));
     renderSection();
 
