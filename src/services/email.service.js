@@ -5,6 +5,7 @@
 import { readFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import path from 'path';
+import { mailgunTrackingFields } from './mailgun-delivery.service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_DIR = path.join(__dirname, '..', 'emails');
@@ -54,9 +55,11 @@ export async function loadTemplate(templateName, variables = {}) {
  * @param {string} [opts.from]   - Sender (defaults to Ashbi <hub@ashbi.ca>)
  * @param {string} [opts.replyTo]- Reply-To header
  * @param {string} [opts.text]   - Plain-text fallback
+ * @param {{documentType: string, documentId: string}} [opts.tracking] - Adds Mailgun `v:`
+ *   custom variables so delivery events can be correlated back to the document
  * @returns {Promise<{ok: boolean, id?: string, error?: string}>}
  */
-export async function sendMailgunEmail({ to, subject, html, from, replyTo, text }) {
+export async function sendMailgunEmail({ to, subject, html, from, replyTo, text, tracking }) {
   if (!MAILGUN_API_KEY) {
     console.warn('[email] MAILGUN_API_KEY not set — skipping email send');
     console.log('[email] To:', to, '| Subject:', subject);
@@ -70,6 +73,7 @@ export async function sendMailgunEmail({ to, subject, html, from, replyTo, text 
   formData.append('subject', subject);
   formData.append('html', html);
   if (text) formData.append('text', text);
+  for (const [key, value] of Object.entries(mailgunTrackingFields(tracking))) formData.append(key, value);
 
   try {
     const res = await fetch(MAILGUN_API_URL, {
@@ -106,9 +110,9 @@ export async function sendMailgunEmail({ to, subject, html, from, replyTo, text 
  * @param {string} [opts.replyTo]  - Reply-To header
  * @returns {Promise<{ok: boolean, id?: string, error?: string}>}
  */
-export async function sendEmail({ to, subject, template, variables = {}, from, replyTo }) {
+export async function sendEmail({ to, subject, template, variables = {}, from, replyTo, tracking }) {
   const html = await loadTemplate(template, variables);
-  return sendMailgunEmail({ to, subject, html, from, replyTo });
+  return sendMailgunEmail({ to, subject, html, from, replyTo, tracking });
 }
 
 /**
@@ -138,7 +142,7 @@ export async function sendInvoiceCreatedEmail({ to, clientName, invoiceNumber, a
   });
 }
 
-export function buildInvoiceDeliveryEmail({ to, clientName, invoiceNumber, total, dueDate, viewUrl, paymentLink }) {
+export function buildInvoiceDeliveryEmail({ to, clientName, invoiceNumber, total, dueDate, viewUrl, paymentLink, invoiceId }) {
   const amount = `${Number(total || 0).toLocaleString('en-CA', {
     style: 'currency',
     currency: 'CAD',
@@ -159,6 +163,7 @@ export function buildInvoiceDeliveryEmail({ to, clientName, invoiceNumber, total
       dueDate: formattedDueDate,
       payLink: paymentLink || viewUrl,
     },
+    ...(invoiceId ? { tracking: { documentType: 'invoice', documentId: invoiceId } } : {}),
   };
 }
 
@@ -204,8 +209,9 @@ export async function sendProposalSentEmail({ to, clientName, proposalTitle, amo
   });
 }
 
-export async function sendContractSignEmail({ to, clientName, contractTitle, signLink, expiresDate, from, replyTo }) {
+export async function sendContractSignEmail({ to, clientName, contractTitle, signLink, expiresDate, from, replyTo, contractId }) {
   return sendEmail({
+    ...(contractId ? { tracking: { documentType: 'contract', documentId: contractId } } : {}),
     to,
     subject: `Contract Ready to Sign: ${contractTitle}`,
     template: 'contract-sign.html',

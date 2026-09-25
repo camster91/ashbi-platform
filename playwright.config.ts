@@ -2,6 +2,10 @@ import { defineConfig, devices } from '@playwright/test';
 
 const browserTestPort = Number(process.env.PLAYWRIGHT_PORT || 4188);
 const browserTestBaseUrl = `http://127.0.0.1:${browserTestPort}`;
+// Optional local override for sandboxes that ship a pre-installed Chromium
+// build instead of Playwright's bundled one. Unset in CI.
+const chromiumExecutablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined;
+const chromiumLaunchOptions = chromiumExecutablePath ? { launchOptions: { executablePath: chromiumExecutablePath } } : {};
 
 /**
  * Read environment variables from file.
@@ -50,7 +54,7 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: { ...devices['Desktop Chrome'], ...chromiumLaunchOptions },
     },
 
     {
@@ -65,7 +69,7 @@ export default defineConfig({
 
     {
       name: 'Mobile Chrome',
-      use: { ...devices['Pixel 5'] },
+      use: { ...devices['Pixel 5'], ...chromiumLaunchOptions },
     },
     {
       name: 'Mobile Safari',

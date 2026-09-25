@@ -46,6 +46,9 @@ import ProjectContextCard from '../components/project/ProjectContext';
 import ProjectMedia from '../components/project/ProjectMedia';
 import ProjectChat from '../components/ProjectChat';
 import QueryErrorState from '../components/QueryErrorState';
+import PartialSectionNotice from '../components/PartialSectionNotice';
+import useManualRetry from '../hooks/useManualRetry';
+import useSettledFailure from '../hooks/useSettledFailure';
 import Modal from '../components/Modal';
 import { Button, LoadingState } from '../components/ui';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -70,10 +73,14 @@ export default function Project() {
     queryFn: () => api.getProject(id),
   });
 
-  const { data: revisions } = useQuery({
+  const revisionsQuery = useQuery({
     queryKey: ['revisions', id],
     queryFn: () => api.getRevisions(id),
   });
+
+  const { data: revisions, refetch: refetchRevisions } = revisionsQuery;
+  const { failed: revisionsUnavailable, error: revisionsError } = useSettledFailure(revisionsQuery);
+  const [retryRevisions, isRetryingRevisions] = useManualRetry(refetchRevisions);
 
   const refreshMutation = useMutation({
     mutationFn: () => api.refreshProjectPlan(id),
@@ -159,12 +166,7 @@ export default function Project() {
   }
 
   if (isLoading) {
-    return (
-      <div role="status" aria-live="polite" className="flex items-center justify-center h-64 gap-3 text-muted-foreground">
-        <div aria-hidden="true" className="animate-spin motion-reduce:animate-none rounded-full h-8 w-8 border-b-2 border-primary"></div>
-        <span>Loading project…</span>
-      </div>
-    );
+    return <LoadingState label="Loading project…" compact className="h-64" />;
   }
 
   if (isError) {
@@ -185,8 +187,12 @@ export default function Project() {
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Link to="/projects" className="p-2 hover:bg-muted rounded-lg transition-colors">
-          <ArrowLeft className="w-5 h-5" />
+        <Link
+          to="/projects"
+          aria-label="Back to projects"
+          className="p-2 hover:bg-muted rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <ArrowLeft className="w-5 h-5" aria-hidden="true" />
         </Link>
         <div className="flex-1">
           <div className="flex items-center gap-3">
@@ -284,7 +290,16 @@ export default function Project() {
           <TaskCategory title="Waiting on Client" icon={Clock} tasks={project.tasks?.filter((t) => t.category === 'WAITING_CLIENT')} color="gray" />
           <TaskCategory title="Completed" icon={CheckCircle} tasks={project.tasks?.filter((t) => t.status === 'COMPLETED')} color="green" collapsed />
 
-          {/* Revision Rounds */}
+          {/* Revision Rounds (partial state: the rest of the project stays usable) */}
+          {revisionsUnavailable ? (
+            <PartialSectionNotice
+              section="Revision rounds"
+              detail="The project plan and tasks loaded normally."
+              error={revisionsError}
+              onRetry={retryRevisions}
+              isRetrying={isRetryingRevisions}
+            />
+          ) : (
           <RevisionRounds
             revisions={revisions || []}
             isAdmin={user?.role === 'ADMIN'}
@@ -292,6 +307,7 @@ export default function Project() {
             onApprove={(revId) => approveRevisionMutation.mutate(revId)}
             isCreating={createRevisionMutation.isPending}
           />
+          )}
         </div>
 
         {/* Sidebar */}
@@ -802,9 +818,10 @@ function ProjectNotes({ projectId }) {
 
       {showForm && (
         <div className="p-4 border-b bg-muted/20">
-          <form onSubmit={handleCreate} className="space-y-3">
+          <form onSubmit={handleCreate} aria-label="New note" className="space-y-3">
             <div className="flex gap-3">
               <input
+                aria-label="Note title"
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
                 placeholder="Note title..."
@@ -812,6 +829,7 @@ function ProjectNotes({ projectId }) {
                 required
               />
               <select
+                aria-label="Note type"
                 value={form.type}
                 onChange={(e) => setForm({ ...form, type: e.target.value })}
                 className="px-3 py-2 rounded-lg border border-border bg-background text-sm"
@@ -820,6 +838,7 @@ function ProjectNotes({ projectId }) {
               </select>
             </div>
             <textarea
+              aria-label="Note content"
               value={form.content}
               onChange={(e) => setForm({ ...form, content: e.target.value })}
               placeholder="Content... (supports Markdown)"
@@ -828,6 +847,7 @@ function ProjectNotes({ projectId }) {
             />
             <div className="flex items-center gap-3">
               <input
+                aria-label="Note tags"
                 value={form.tags}
                 onChange={(e) => setForm({ ...form, tags: e.target.value })}
                 placeholder="Tags (comma separated)"
@@ -1010,13 +1030,19 @@ function TaskCategory({ title, icon: Icon, tasks = [], color, collapsed = false 
                   to={`/task/${task.id}`}
                   className="px-4 py-3 hover:bg-secondary/50 flex items-center gap-3 transition-colors"
                 >
-                  <input
-                    type="checkbox"
-                    checked={task.status === 'COMPLETED'}
-                    onChange={() => {}}
-                    onClick={(e) => e.stopPropagation()}
-                    className="rounded border-border"
-                  />
+                  {/* Read-only completion indicator. A real checkbox here was
+                      unlabeled, did nothing, and nested a control inside the
+                      task link; completion is changed on the task page. */}
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      'flex h-4 w-4 shrink-0 items-center justify-center rounded border',
+                      task.status === 'COMPLETED' ? 'border-primary bg-primary text-primary-foreground' : 'border-border'
+                    )}
+                  >
+                    {task.status === 'COMPLETED' && <Check className="h-3 w-3" />}
+                  </span>
+                  <span className="sr-only">{task.status === 'COMPLETED' ? 'Completed:' : 'Open:'}</span>
                   <div className="flex-1 min-w-0">
                     <span className={cn('text-sm', task.status === 'COMPLETED' && 'line-through text-muted-foreground')}>
                       {task.title}
@@ -1048,7 +1074,7 @@ function ProjectBudget({ projectId, budget, hourlyBudget }) {
   if (!data) return null;
 
   const pct = data.percentUsed ?? 0;
-  const pctColor = pct >= 100 ? 'text-red-600 bg-red-50 dark:bg-red-900/20' : pct >= 90 ? 'text-orange-600 bg-orange-50 dark:bg-orange-900/20' : pct >= 70 ? 'text-yellow-600 bg-yellow-50 dark:bg-yellow-900/20' : 'text-green-600 bg-green-50 dark:bg-green-900/20';
+  const pctColor = pct >= 100 ? 'text-red-700 bg-red-50 dark:bg-red-900/20 dark:text-red-400' : pct >= 90 ? 'text-orange-800 bg-orange-50 dark:bg-orange-900/20 dark:text-orange-400' : pct >= 70 ? 'text-yellow-800 bg-yellow-50 dark:bg-yellow-900/20 dark:text-yellow-400' : 'text-green-800 bg-green-50 dark:bg-green-900/20 dark:text-green-400';
   const barColor = pct >= 100 ? 'bg-red-500' : pct >= 90 ? 'bg-orange-500' : pct >= 70 ? 'bg-yellow-500' : 'bg-green-500';
 
   return (

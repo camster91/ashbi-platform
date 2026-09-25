@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { clientPortalSource } from './helpers/clientPortalSource';
 
 function rgb(hex) {
   return hex.match(/[0-9a-f]{2}/gi).map((part) => parseInt(part, 16));
@@ -64,6 +65,28 @@ describe('WCAG contrast policy', () => {
     expect(ratio(hsl(250, 15, 45), hsl(250, 39, 10))).toBeGreaterThanOrEqual(3);
   });
 
+  it('the light destructive token meets 4.5:1 as text and as a solid fill', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');
+    const [, h, s, l] = css.match(/--destructive:\s*(\d+)\s+(\d+)%\s+(\d+)%/).map(Number);
+    const destructive = hsl(h, s, l);
+    expect(ratio(destructive, white)).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(destructive, cream)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('the dark destructive token meets 4.5:1 as text on dark surfaces and as a solid fill', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');
+    const dark = css.slice(css.indexOf('.dark {'));
+    const token = (name) => {
+      const [, h, s, l] = dark.match(new RegExp(`--${name}:\\s*(\\d+)\\s+(\\d+)%\\s+(\\d+)%`)).map(Number);
+      return hsl(h, s, l);
+    };
+    const destructive = token('destructive');
+    for (const surface of ['background', 'card', 'muted']) {
+      expect(ratio(destructive, token(surface)), `text-destructive on dark ${surface}`).toBeGreaterThanOrEqual(4.5);
+    }
+    expect(ratio(token('destructive-foreground'), destructive), 'dark destructive fill').toBeGreaterThanOrEqual(4.5);
+  });
+
   it('semantic solid statuses meet 4.5:1 in light and dark themes', () => {
     expect(ratio(white, hsl(142, 72, 28))).toBeGreaterThanOrEqual(4.5);
     expect(ratio(white, hsl(32, 95, 32))).toBeGreaterThanOrEqual(4.5);
@@ -74,7 +97,7 @@ describe('WCAG contrast policy', () => {
   });
 
   it('keeps inaccessible legacy portal overrides out and defines visible focus', () => {
-    const portal = readFileSync(resolve(process.cwd(), 'src/pages/ClientPortal.jsx'), 'utf8');
+    const portal = clientPortalSource();
     const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');
     expect(portal).not.toContain('#8a85a0');
     expect(portal).not.toMatch(/color:\s*connected \? '#16a34a'/);

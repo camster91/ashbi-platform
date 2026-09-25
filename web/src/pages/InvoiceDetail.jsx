@@ -283,9 +283,12 @@ export default function InvoiceDetail() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/invoices')}
-            className="p-1.5 rounded hover:bg-muted text-muted-foreground">
-            <ArrowLeft className="w-5 h-5" />
+          <button
+            type="button"
+            onClick={() => navigate('/invoices')}
+            aria-label="Back to invoices"
+            className="p-1.5 rounded hover:bg-muted text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <ArrowLeft className="w-5 h-5" aria-hidden="true" />
           </button>
           <div>
             <div className="flex items-center gap-2 flex-wrap">

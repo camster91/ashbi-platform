@@ -7,9 +7,9 @@ import noteRoutes from '../../routes/note.routes.js';
 import { noteFromTemplateSchema, noteProjectCreateSchema, noteUpdateV2Schema } from '../../validators/schemas.js';
 
 test('note routes mount at the frontend canonical API paths', async () => {
-  const index = await readFile(new URL('../../index.js', import.meta.url), 'utf8');
+  const registrar = await readFile(new URL('../../domains/client-delivery/register-workspace-routes.js', import.meta.url), 'utf8');
   const routes = await readFile(new URL('../../routes/note.routes.js', import.meta.url), 'utf8');
-  assert.match(index, /register\(noteRoutes, \{ prefix: '\/api' \}\)/);
+  assert.match(registrar, /register\(noteRoutes, \{ prefix: '\/api' \}\)/);
   assert.match(routes, /get\('\/notes'/);
   assert.match(routes, /post\('\/projects\/:projectId\/notes'/);
   assert.match(routes, /get\('\/notes\/templates'/);

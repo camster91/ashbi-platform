@@ -75,14 +75,16 @@ describe('ErrorBoundary', () => {
       expect(screen.queryByTestId('good')).not.toBeInTheDocument();
     });
 
-    it('displays the error message in the fallback UI', () => {
+    it('shows a reference instead of the raw error message', () => {
       render(
         <ErrorBoundary>
-          <ThrowOnRender error="Custom error message" />
+          <ThrowOnRender error="Custom error message for jane@example.com" />
         </ErrorBoundary>
       );
 
-      expect(screen.getByText('Custom error message')).toBeInTheDocument();
+      expect(screen.queryByText(/Custom error message/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/jane@example.com/)).not.toBeInTheDocument();
+      expect(screen.getByTestId('error-reference')).toHaveTextContent(/^ERR-[0-9A-Z]+-[0-9A-F]{8}$/);
     });
 
     it('shows an explicit reload button in the fallback UI', () => {
@@ -210,13 +212,13 @@ describe('ErrorBoundary', () => {
       });
 
       // The ErrorBoundary should show the error UI
-      expect(screen.getByText('Async error')).toBeInTheDocument();
+      expect(screen.queryByText('Async error')).not.toBeInTheDocument();
       expect(screen.getByText('An unexpected error occurred while processing your request.')).toBeInTheDocument();
     });
   });
 
   describe('edge cases', () => {
-    it('shows "An unexpected error occurred" when error has no message', () => {
+    it('still renders the fatal screen when a non-Error value is thrown', () => {
       function ThrowNull() {
         throw {};
       }
@@ -227,7 +229,8 @@ describe('ErrorBoundary', () => {
         </ErrorBoundary>
       );
 
-      expect(screen.getByText('An unexpected error occurred')).toBeInTheDocument();
+      expect(screen.getByText('Something went wrong')).toBeInTheDocument();
+      expect(screen.getByTestId('error-reference')).toHaveTextContent(/^ERR-/);
     });
 
     it('renders children with complex nesting', () => {

@@ -72,8 +72,10 @@ describe('ErrorBoundary Integration', () => {
         </ErrorBoundary>
       );
 
-      expect(screen.getByText('Component crashed!')).toBeInTheDocument();
+      // Raw error messages are never rendered (they can contain personal data).
+      expect(screen.queryByText('Component crashed!')).not.toBeInTheDocument();
       expect(screen.getByText('Something went wrong')).toBeInTheDocument();
+      expect(screen.getByTestId('error-reference')).toHaveTextContent(/^ERR-/);
     });
 
     it('shows an explicit reload button in error state', () => {
@@ -107,7 +109,7 @@ describe('ErrorBoundary Integration', () => {
       // Sibling elements outside the error boundary should still render
       expect(screen.getByTestId('sibling')).toBeInTheDocument();
       // Error boundary should show its fallback
-      expect(screen.getByText('Isolated error')).toBeInTheDocument();
+      expect(screen.getByText('Something went wrong')).toBeInTheDocument();
     });
   });
 

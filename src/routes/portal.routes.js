@@ -1,7 +1,7 @@
 // Client Portal routes (public - no auth required, token-based access)
 
 import { safeParse } from '../utils/safeParse.js';
-import { createPaymentLink } from '../services/stripe.service.js';
+import { ensureCheckoutSession } from '../services/stripe.service.js';
 import { onProposalApproved, onContractSigned } from '../services/automation.service.js';
 import crypto from 'crypto';
 import { validateBody, bookingSchema, contractSignSchema, formSubmitSchema, proposalDeclineSchema } from '../validators/schemas.js';
@@ -402,26 +402,13 @@ export default async function portalRoutes(fastify) {
       return reply.status(400).send({ error: 'Invoice has been voided' });
     }
 
-    // If there's already a Stripe payment link, return it
-    if (invoice.stripePaymentLink) {
-      return { checkoutUrl: invoice.stripePaymentLink };
-    }
-
     try {
-      const result = await createPaymentLink(invoice);
+      // Reuses the open session when amount/currency still match and it has
+      // not expired; otherwise creates (and stores) a fresh one.
+      const result = await ensureCheckoutSession(request.prisma, invoice);
       if (!result) {
         return reply.status(500).send({ error: 'Payment service not configured' });
       }
-
-      // Store the payment link and intent ID
-      await request.prisma.invoice.update({
-        where: { id: invoice.id },
-        data: {
-          stripePaymentLink: result.paymentLink,
-          stripeCheckoutSessionId: result.checkoutSessionId,
-          stripePaymentIntentId: result.paymentIntentId
-        }
-      });
 
       return { checkoutUrl: result.paymentLink };
     } catch (error) {

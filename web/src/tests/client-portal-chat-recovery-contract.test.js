@@ -1,8 +1,7 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { clientPortalSource } from './helpers/clientPortalSource';
 
-const source = readFileSync(resolve(process.cwd(), 'src/pages/ClientPortal.jsx'), 'utf8');
+const source = clientPortalSource();
 
 describe('client portal chat recovery', () => {
   it('preserves an unsent message and announces a recoverable failure in both chat surfaces', () => {

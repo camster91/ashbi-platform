@@ -94,3 +94,28 @@ test('sending an estimate emails the client its amount and portal link', async (
   assert.ok(sent[0].message.html.includes(`/portal/estimate/${VIEW_TOKEN}`));
   assertNoTokenInLogs(lines);
 });
+
+test('a delivery-status write failure after a successful send still returns success', async (t) => {
+  const sent = [];
+  const originalClient = Mailgun.prototype.client;
+  Mailgun.prototype.client = () => ({
+    messages: { create: async (domain, message) => { sent.push(message); return { id: '<msg-2@mail.ashbi.test>' }; } },
+  });
+  t.after(() => { Mailgun.prototype.client = originalClient; });
+  const app = await buildApp(t, draftEstimate('client@example.test'));
+  const originalUpdate = app.prisma.estimate.update;
+  app.prisma.estimate.update = async (args) => {
+    if (args.data.deliveryStatus) throw Object.assign(new Error('connection lost'), { code: 'P1001' });
+    return originalUpdate(args);
+  };
+  const lines = captureConsole(t);
+
+  const response = await app.inject({ method: 'POST', url: '/estimate-a/send' });
+
+  assert.equal(response.statusCode, 200, response.body);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0]['v:ashbi-document-id'], 'estimate-a');
+  assert.equal(response.json().status, 'SENT');
+  assert.equal(response.json().deliveryStatus, 'ACCEPTED');
+  assertNoTokenInLogs(lines);
+});

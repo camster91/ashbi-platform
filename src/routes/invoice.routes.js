@@ -1,6 +1,7 @@
 // Invoice routes — full CRUD + send + PDF + payments + templates
-import { createPaymentLink, handleWebhook, recordCompletedCheckout } from '../services/stripe.service.js';
+import { CLEARED_CHECKOUT_FIELDS, checkoutPersistenceData, createPaymentLink, ensureCheckoutSession, handleWebhook, recordCompletedCheckout } from '../services/stripe.service.js';
 import { generateInvoicePdf } from '../utils/generate-invoice-pdf.js';
+import { deliveryFieldsFromSend, withDeliveryState } from '../services/mailgun-delivery.service.js';
 import { generateInvoiceNumber } from '../utils/invoice.js';
 import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
 import { validateBody, createInvoiceSchema, updateInvoiceSchema, markInvoicePaidSchema, sendInvoiceSchema, lineItemTemplateCreateSchema, invoiceBulkIdsSchema, invoiceBulkArchiveSchema, bulkMarkPaidSchema } from '../validators/schemas.js';
@@ -34,7 +35,7 @@ export default async function invoiceRoutes(fastify) {
   function flagOverdue(inv) {
     const now = new Date();
     const isOverdue = inv.status === 'SENT' && inv.dueDate && new Date(inv.dueDate) < now;
-    return { ...inv, isOverdue };
+    return withDeliveryState({ ...inv, isOverdue });
   }
 
   // ─── GET / — list invoices ──────────────────────────────────────────────────
@@ -368,12 +369,11 @@ export default async function invoiceRoutes(fastify) {
 
     // Attempt Stripe payment link
     try {
-      const result = await createPaymentLink(invoice);
-      if (result) {
-        updateData.stripePaymentLink = result.paymentLink;
-        updateData.stripeCheckoutSessionId = result.checkoutSessionId;
-        updateData.stripePaymentIntentId = result.paymentIntentId;
-      }
+      // The Checkout return URLs must point at the token issued by this send,
+      // not the pre-send token that is about to be replaced.
+      const checkoutInvoice = { ...invoice, viewToken: access.token };
+      const result = await createPaymentLink(checkoutInvoice);
+      if (result) Object.assign(updateData, checkoutPersistenceData(checkoutInvoice, result));
     } catch (err) {
       fastify.log.warn({ err }, 'Stripe payment link failed — sending without it');
     }
@@ -392,8 +392,10 @@ export default async function invoiceRoutes(fastify) {
           dueDate: invoice.dueDate,
           viewUrl,
           paymentLink: updateData.stripePaymentLink,
+          invoiceId: invoice.id,
         });
         emailSent = delivery.ok;
+        Object.assign(updateData, deliveryFieldsFromSend(delivery));
         if (emailSent) fastify.log.info('Invoice email accepted by delivery provider');
         else fastify.log.warn({ emailError: delivery.error }, 'Invoice email delivery unavailable');
       } catch (emailErr) {
@@ -491,25 +493,10 @@ export default async function invoiceRoutes(fastify) {
     const accessFailure = publicAccessFailure(invoice);
     if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
 
-    // Return existing link if already generated
-    if (invoice.stripePaymentLink) {
-      return { paymentLinkUrl: invoice.stripePaymentLink };
-    }
-
     try {
-      const result = await createPaymentLink(invoice);
+      const result = await ensureCheckoutSession(fastify.prisma, invoice);
       if (!result) return reply.status(503).send({ error: 'Stripe not configured' });
-
-      const updated = await fastify.prisma.invoice.update({
-        where: { id: request.params.id },
-        data: {
-          stripePaymentLink: result.paymentLink,
-          stripeCheckoutSessionId: result.checkoutSessionId,
-          stripePaymentIntentId: result.paymentIntentId,
-        }
-      });
-
-      return { paymentLinkUrl: updated.stripePaymentLink };
+      return { paymentLinkUrl: result.paymentLink, reused: result.reused };
     } catch (err) {
       fastify.log.error({ err }, 'Failed to create Stripe payment link');
       return reply.status(500).send({ error: 'Failed to create payment link', detail: err.message });
@@ -615,6 +602,9 @@ export default async function invoiceRoutes(fastify) {
       proposalId,
       viewToken,
       publicAccessRevokedAt,
+      deliveryMessageId,
+      deliveryError,
+      stripeCheckoutAttempt,
       ...safe
     } = invoice;
     return safe;
@@ -625,7 +615,7 @@ export default async function invoiceRoutes(fastify) {
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
     await request.prisma.invoice.update({
       where: { id: invoice.id },
-      data: { publicAccessRevokedAt: new Date(), stripePaymentLink: null },
+      data: { publicAccessRevokedAt: new Date(), ...CLEARED_CHECKOUT_FIELDS },
     });
     return { revoked: true };
   });
@@ -653,7 +643,9 @@ export default async function invoiceRoutes(fastify) {
       dueDate: invoice.dueDate,
       viewUrl,
       paymentLink: invoice.stripePaymentLink,
+      invoiceId: invoice.id,
     });
+    await request.prisma.invoice.update({ where: { id: invoice.id }, data: deliveryFieldsFromSend(delivery) });
     if (!delivery.ok) return reply.status(503).send({ error: 'Invoice email delivery is unavailable', retryable: true });
     return { emailSent: true };
   });
@@ -665,7 +657,7 @@ export default async function invoiceRoutes(fastify) {
     const access = createPublicAccessWindow();
     return request.prisma.invoice.update({
       where: { id: invoice.id },
-      data: { viewToken: access.token, publicAccessExpiresAt: access.expiresAt, publicAccessRevokedAt: null, stripePaymentLink: null, stripeCheckoutSessionId: null },
+      data: { viewToken: access.token, publicAccessExpiresAt: access.expiresAt, publicAccessRevokedAt: null, ...CLEARED_CHECKOUT_FIELDS },
       select: { viewToken: true, publicAccessExpiresAt: true },
     });
   });

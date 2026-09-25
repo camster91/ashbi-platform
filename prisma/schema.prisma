@@ -636,6 +636,7 @@ model Milestone {
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   tasks   Task[]  @relation("MilestoneTasks")
 
+  @@index([deletedAt])
   @@map("milestones")
 }
 
@@ -883,6 +884,11 @@ model Proposal {
   approvedAt            DateTime?
   declinedAt            DateTime?
   sentAt                DateTime?
+  // Email delivery tracking, updated by the signed Mailgun events webhook
+  deliveryMessageId String?
+  deliveryStatus    String? // ACCEPTED | DELIVERED | FAILED | BOUNCED | COMPLAINED
+  deliveryStatusAt  DateTime?
+  deliveryError     String?
   clientId              String
   projectId             String?
   createdById           String
@@ -952,6 +958,11 @@ model Contract {
   signatureDataHash     String?
   signerIp              String?
   signerUserAgent       String?
+  // Email delivery tracking, updated by the signed Mailgun events webhook
+  deliveryMessageId String?
+  deliveryStatus    String? // ACCEPTED | DELIVERED | FAILED | BOUNCED | COMPLAINED
+  deliveryStatusAt  DateTime?
+  deliveryError     String?
   proposalId            String?   @unique
   clientId              String
   createdById           String
@@ -998,11 +1009,23 @@ model Invoice {
   stripePaymentLink       String?
   stripeCheckoutSessionId String?
   stripePaymentIntentId   String?
+  // Checkout session tracking: reuse an open session only while amount,
+  // currency and expiry still match; the attempt counter feeds the Stripe
+  // idempotency key so a new session can be created after expiry or edits.
+  stripeCheckoutAmountMinor Int?
+  stripeCheckoutCurrency    String?
+  stripeCheckoutExpiresAt   DateTime?
+  stripeCheckoutAttempt     Int       @default(0)
   paymentMethod           String? // STRIPE | BANK | TRANSFER | CHEQUE | CASH | OTHER (legacy rows may hold CHECK)
   paymentNotes            String?
   transactionId           String?
   paidAt                  DateTime?
   sentAt                  DateTime?
+  // Email delivery tracking, updated by the signed Mailgun events webhook
+  deliveryMessageId String?
+  deliveryStatus    String? // ACCEPTED | DELIVERED | FAILED | BOUNCED | COMPLAINED
+  deliveryStatusAt  DateTime?
+  deliveryError     String?
   voidedAt                DateTime?
   voidedFromStatus        String?
   isRecurring             Boolean   @default(false)
@@ -1745,6 +1768,11 @@ model Estimate {
   validUntil  DateTime?
   viewToken   String    @unique @default(cuid())
   sentAt      DateTime?
+  // Email delivery tracking, updated by the signed Mailgun events webhook
+  deliveryMessageId String?
+  deliveryStatus    String? // ACCEPTED | DELIVERED | FAILED | BOUNCED | COMPLAINED
+  deliveryStatusAt  DateTime?
+  deliveryError     String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   // Soft delete
@@ -2143,4 +2171,15 @@ model PublicInquiry {
   @@index([organizationId, createdAt])
   @@index([ownerId])
   @@map("public_inquiries")
+}
+
+// Replay guard for the Mailgun events webhook: each signed token is accepted
+// once. Holds no tenant data (only the random Mailgun token), so it is global.
+model MailgunWebhookReceipt {
+  id         String   @id @default(cuid())
+  token      String   @unique
+  receivedAt DateTime @default(now())
+
+  @@index([receivedAt])
+  @@map("mailgun_webhook_receipts")
 }

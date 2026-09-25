@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import '../pages/ClientPortal';
+import { clientPortalCss } from './helpers/clientPortalSource';
 
+// The portal design system is a static stylesheet imported by ClientPortal.
 function portalCss() {
-  const style = document.getElementById('cp-styles');
-  expect(style).not.toBeNull();
-  return style.textContent;
+  const css = clientPortalCss();
+  expect(css).toContain('.cp-btn-primary');
+  return css;
 }
 
 function reducedMotionBlock(css) {

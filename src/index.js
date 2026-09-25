@@ -18,61 +18,22 @@ import prisma from './config/db.js';
 import { apiRateLimitMax, isNonApiRequest } from './config/rateLimit.js';
 import { isCurrentUserSession } from './auth/session.js';
 import { canJoinProjectRoom } from './auth/project-room-access.js';
-
-// Routes
-import authRoutes from './routes/auth.routes.js';
-import inboxRoutes from './routes/inbox.routes.js';
-import teamRoutes from './routes/team.routes.js';
-import searchRoutes from './routes/search.routes.js';
-import aiRoutes from './routes/ai.routes.js';
-import notificationRoutes from './routes/notification.routes.js';
-import settingsRoutes from './routes/settings.routes.js';
-import realtimeRoutes from './routes/realtime.routes.js';
-import noteRoutes from './routes/note.routes.js';
-import mailgunRoutes from './routes/mailgun.routes.js';
-import mailgunHitlRoutes from './routes/mailgun-hitl.routes.js';
-import slackEventRoutes from './routes/slack-events.routes.js';
-import slackAdminRoutes from './routes/slack.routes.js';
-import googleCalendarRoutes from './routes/google-calendar.routes.js';
-import approvalRoutes from './routes/approvals.routes.js';
-import dashboardRoutes from './routes/dashboard.routes.js';
-import botRoutes from './routes/bot.routes.js';
-import onboardingRoutes from './routes/onboarding.routes.js';
-import retainerRoutes from './routes/retainer.routes.js';
-import leadRoutes from './routes/leads.routes.js';
-import clientAcquisitionRoutes from './routes/client-acquisition.routes.js';
 import { clientAcquisitionCorsOptions, loadClientAcquisitionConfig } from './services/client-acquisition.contract.js';
-import credentialRoutes from './routes/credential.routes.js';
-import portalRoutes from './routes/portal.routes.js';
-import templateRoutes from './routes/template.routes.js';
-import aiTeamRoutes from './routes/ai-team.routes.js';
-import emailTriageRoutes from './routes/email-triage.routes.js';
-import aiContextRoutes from './routes/ai-context.routes.js';
-import pushRoutes from './routes/push.routes.js';
-import commandCenterRoutes from './routes/integrations.command-center.routes.js';
-import expenseRoutes from './routes/expense.routes.js';
-import automationRoutes from './routes/automation.routes.js';
-import brandRoutes from './routes/brand.routes.js';
-import pipelineRoutes from './routes/pipeline.routes.js';
 import { initHermesBridge } from './agents/hub-hermes.integration.js';
-import timeTrackingRoutes from './routes/time-tracking.routes.js';
-import timeSessionRoutes from './routes/time-sessions.routes.js';
-import semanticSearchRoutes from './routes/semantic-search.routes.js';
-import creativeBriefRoutes from './routes/creative-brief.routes.js';
-import assetLibraryRoutes from './routes/asset-library.routes.js';
-import apiKeyRoutes, { authenticateApiKey } from './routes/api-key.routes.js';
-import aiBridgeRoutes from './routes/ai-bridge.routes.js';
-import estimateRoutes from './routes/estimate.routes.js';
-import rateCardRoutes from './routes/rate-card.routes.js';
-import integrationRoutes from './routes/integration.routes.js';
-import proposalBuilderRoutes from './routes/proposal-builder.routes.js';
-import trashRoutes from './routes/trash.routes.js';
-import draftRoutes from './routes/draft.routes.js';
+
+// Route domains (see docs/backend-application-boundaries.md)
+import { registerIdentityRoutes, authenticateApiKey } from './domains/identity/register-routes.js';
+import { registerWorkManagementRoutes } from './domains/client-delivery/register-work-management-routes.js';
+import { registerInboxRoutes } from './domains/client-communications/register-inbox-routes.js';
+import { registerPlatformRoutes } from './domains/platform/register-routes.js';
+import { registerAiRoutes } from './domains/ai/register-routes.js';
+import { registerCommercialRevenueRoutes } from './domains/revenue/register-commercial-routes.js';
+import { registerIntegrationRoutes } from './domains/integrations/register-routes.js';
+import { registerClientWorkspaceRoutes } from './domains/client-delivery/register-workspace-routes.js';
 import { registerCoreRevenueRoutes } from './domains/revenue/register-core-routes.js';
 import { registerCollaborationRoutes } from './domains/client-delivery/register-collaboration-routes.js';
-import { registerWorkManagementRoutes } from './domains/client-delivery/register-work-management-routes.js';
-import { registerClientCommunicationRoutes } from './domains/client-communications/register-routes.js';
 import { registerConversationRoutes } from './domains/client-communications/register-conversation-routes.js';
+import { registerClientCommunicationRoutes } from './domains/client-communications/register-routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -220,58 +181,20 @@ fastify.decorate('auth', getAuthProvider(fastify));
 fastify.addHook('preHandler', tenancyMiddleware);
 fastify.decorate('authenticateWithApiKey', authenticateApiKey);
 
-// Routes
-await fastify.register(authRoutes, { prefix: '/api/auth' });
+// Routes — every route module is registered by a domain registrar. Route
+// plugins are encapsulated, so domains are ordered by where each one first
+// appeared in the pre-extraction sequence.
+await registerIdentityRoutes(fastify);
 await registerWorkManagementRoutes(fastify);
-await fastify.register(inboxRoutes, { prefix: '/api/inbox' });
-await fastify.register(dashboardRoutes, { prefix: '/api/dashboard' });
-await fastify.register(aiRoutes, { prefix: '/api/ai' });
-await fastify.register(notificationRoutes, { prefix: '/api/notifications' });
-await fastify.register(settingsRoutes, { prefix: '/api/settings' });
-await fastify.register(realtimeRoutes, { prefix: '/api/realtime' });
-await fastify.register(proposalBuilderRoutes, { prefix: '/api/proposal-builder' });
-// Route registrations continued
-await fastify.register(apiKeyRoutes, { prefix: '/api/api-keys' });
-await fastify.register(aiBridgeRoutes, { prefix: '/api/ai-bridge' });
-await fastify.register(estimateRoutes, { prefix: '/api/estimates' });
-await fastify.register(rateCardRoutes, { prefix: '/api/rate-cards' });
-await fastify.register(integrationRoutes, { prefix: '/api/integrations' });
-await fastify.register(brandRoutes, { prefix: '/api/brand' });
-await fastify.register(pipelineRoutes, { prefix: '/api/pipeline' });
-await fastify.register(timeTrackingRoutes, { prefix: '/api/time-tracking' });
-await fastify.register(timeSessionRoutes, { prefix: '/api/time-sessions' });
-await fastify.register(semanticSearchRoutes, { prefix: '/api/semantic-search' });
-await fastify.register(creativeBriefRoutes, { prefix: '/api/creative-brief' });
-await fastify.register(assetLibraryRoutes, { prefix: '/api/asset-library' });
-await fastify.register(automationRoutes, { prefix: '/api/automations' });
-await fastify.register(expenseRoutes, { prefix: '/api/expenses' });
-await fastify.register(commandCenterRoutes, { prefix: '/api/command-center' });
-await fastify.register(pushRoutes, { prefix: '/api/push' });
-  await fastify.register(trashRoutes, { prefix: '/api/trash' });
-  await fastify.register(draftRoutes, { prefix: '/api/draft' });
-await fastify.register(aiContextRoutes, { prefix: '/api/ai-context' });
+await registerInboxRoutes(fastify);
+await registerPlatformRoutes(fastify);
+await registerAiRoutes(fastify);
+await registerCommercialRevenueRoutes(fastify);
+await registerIntegrationRoutes(fastify);
+await registerClientWorkspaceRoutes(fastify);
 await registerCoreRevenueRoutes(fastify);
-await fastify.register(emailTriageRoutes, { prefix: '/api/email-triage' });
-await fastify.register(aiTeamRoutes, { prefix: '/api/ai-team' });
-await fastify.register(templateRoutes, { prefix: '/api/templates' });
-await fastify.register(portalRoutes, { prefix: '/api/portal' });
-await fastify.register(credentialRoutes, { prefix: '/api/credentials' });
-await fastify.register(leadRoutes, { prefix: '/api/leads' });
-await fastify.register(clientAcquisitionRoutes, { prefix: '/api/client-acquisition' });
-await fastify.register(retainerRoutes, { prefix: '/api/retainers' });
-await fastify.register(onboardingRoutes, { prefix: '/api/onboarding' });
-await fastify.register(botRoutes, { prefix: '/api/bot' });
-await fastify.register(approvalRoutes, { prefix: '/api/approvals' });
-await fastify.register(mailgunHitlRoutes, { prefix: '/api/mailgun-hitl' });
-await fastify.register(mailgunRoutes, { prefix: '/api/mailgun' });
-await fastify.register(slackEventRoutes, { prefix: '/api/slack/events' });
-await fastify.register(slackAdminRoutes, { prefix: '/api/slack' });
-await fastify.register(googleCalendarRoutes, { prefix: '/api/google-calendar' });
 await registerCollaborationRoutes(fastify);
-await fastify.register(noteRoutes, { prefix: '/api' });
 await registerConversationRoutes(fastify);
-await fastify.register(searchRoutes, { prefix: '/api/search' });
-await fastify.register(teamRoutes, { prefix: '/api/team' });
 await registerClientCommunicationRoutes(fastify);
 
 // Hub-Hermes bridge initialization

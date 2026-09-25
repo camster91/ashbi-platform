@@ -133,13 +133,17 @@ export default function Layout({ children }) {
     refetchInterval: 30000,
   });
 
-  const { data: projects } = useQuery({
+  // Shares the ['projects'] cache entry with the Projects, Invoices, Expenses
+  // and Planner pages, so it must store the same shape (an array). Caching the
+  // raw `{ projects }` envelope here made those pages render an empty list
+  // whenever the shell's request resolved first.
+  const { data: projects = [] } = useQuery({
     queryKey: ['projects'],
-    queryFn: () => api.getProjects(),
+    queryFn: () => api.getProjects().then((r) => r?.projects ?? []),
     refetchInterval: 60000,
   });
 
-  const activeProjectCount = projects?.projects?.filter(
+  const activeProjectCount = (Array.isArray(projects) ? projects : []).filter(
     p => !['LAUNCHED', 'CANCELLED'].includes(p.status)
   ).length || 0;
 

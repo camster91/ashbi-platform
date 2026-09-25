@@ -506,7 +506,7 @@ function ApiKeysSection() {
 
 export function IntegrationsSection() {
   const providers = [
-    { type: 'QUICKBOOKS', name: 'QuickBooks Online', color: 'bg-green-600' },
+    { type: 'QUICKBOOKS', name: 'QuickBooks Online', color: 'bg-green-700' },
     { type: 'XERO', name: 'Xero', color: 'bg-blue-600' },
   ];
 
@@ -701,8 +701,9 @@ export default function Settings() {
       <Section icon={User} title="Profile" description="Update your name, skills, and weekly capacity">
         <form onSubmit={handleProfileSave} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Full Name</label>
+            <label htmlFor="settings-profile-name" className="block text-sm font-medium mb-1">Full Name</label>
             <input
+              id="settings-profile-name"
               type="text"
               value={profile.name}
               onChange={(e) => setProfile({ ...profile, name: e.target.value })}
@@ -711,29 +712,34 @@ export default function Settings() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Email</label>
+            <label htmlFor="settings-profile-email" className="block text-sm font-medium mb-1">Email</label>
             <input
+              id="settings-profile-email"
               type="email"
               value={user?.email || ''}
+              aria-describedby="settings-profile-email-help"
               disabled
               className="w-full px-3 py-2 rounded-lg border border-border bg-muted text-sm text-muted-foreground cursor-not-allowed"
             />
-            <p className="text-xs text-muted-foreground mt-1">Contact an admin to change your email</p>
+            <p id="settings-profile-email-help" className="text-xs text-muted-foreground mt-1">Contact an admin to change your email</p>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Skills</label>
+            <label htmlFor="settings-profile-skills" className="block text-sm font-medium mb-1">Skills</label>
             <input
+              id="settings-profile-skills"
               type="text"
               value={profile.skills}
+              aria-describedby="settings-profile-skills-help"
               onChange={(e) => setProfile({ ...profile, skills: e.target.value })}
               className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
               placeholder="e.g. design, react, shopify, branding"
             />
-            <p className="text-xs text-muted-foreground mt-1">Comma-separated. Used for AI task assignment.</p>
+            <p id="settings-profile-skills-help" className="text-xs text-muted-foreground mt-1">Comma-separated. Used for AI task assignment.</p>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Weekly Capacity (hours)</label>
+            <label htmlFor="settings-profile-capacity" className="block text-sm font-medium mb-1">Weekly Capacity (hours)</label>
             <input
+              id="settings-profile-capacity"
               type="number"
               min="1"
               max="80"
@@ -759,10 +765,12 @@ export default function Settings() {
       <Section icon={Lock} title="Password" description="Change your login password">
         <form onSubmit={handlePasswordSave} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Current Password</label>
+            <label htmlFor="settings-current-password" className="block text-sm font-medium mb-1">Current Password</label>
             <div className="relative">
               <input
+                id="settings-current-password"
                 type={showPw ? 'text' : 'password'}
+                autoComplete="current-password"
                 value={pwForm.currentPassword}
                 onChange={(e) => setPwForm({ ...pwForm, currentPassword: e.target.value })}
                 className="w-full px-3 py-2 pr-10 rounded-lg border border-border bg-background text-sm"
@@ -771,16 +779,20 @@ export default function Settings() {
               <button
                 type="button"
                 onClick={() => setShowPw(!showPw)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                aria-label={showPw ? 'Hide passwords' : 'Show passwords'}
+                aria-pressed={showPw}
+                className="absolute right-3 top-1/2 -translate-y-1/2 rounded text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                {showPw ? <EyeOff className="w-4 h-4" aria-hidden="true" /> : <Eye className="w-4 h-4" aria-hidden="true" />}
               </button>
             </div>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">New Password</label>
+            <label htmlFor="settings-new-password" className="block text-sm font-medium mb-1">New Password</label>
             <input
+              id="settings-new-password"
               type={showPw ? 'text' : 'password'}
+              autoComplete="new-password"
               value={pwForm.newPassword}
               onChange={(e) => setPwForm({ ...pwForm, newPassword: e.target.value })}
               className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
@@ -789,16 +801,18 @@ export default function Settings() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Confirm New Password</label>
+            <label htmlFor="settings-confirm-password" className="block text-sm font-medium mb-1">Confirm New Password</label>
             <input
+              id="settings-confirm-password"
               type={showPw ? 'text' : 'password'}
+              autoComplete="new-password"
               value={pwForm.confirmPassword}
               onChange={(e) => setPwForm({ ...pwForm, confirmPassword: e.target.value })}
               className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
               required
             />
           </div>
-          {pwError && <p className="text-sm text-destructive">{pwError}</p>}
+          {pwError && <p role="alert" className="text-sm text-destructive">{pwError}</p>}
           <div className="flex items-center gap-3">
             <Button type="submit" loading={passwordMutation.isPending} leftIcon={<Lock className="w-4 h-4" />}>
               Change Password

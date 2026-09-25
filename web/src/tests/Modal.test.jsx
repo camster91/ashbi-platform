@@ -57,6 +57,43 @@ describe('Modal', () => {
     expect(trigger).toHaveFocus();
   });
 
+  it('keeps focus in a controlled field while the parent re-renders on each keystroke', async () => {
+    const user = userEvent.setup();
+
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      const [notes, setNotes] = useState('');
+      return (
+        <>
+          <button onClick={() => setOpen(true)}>Open dialog</button>
+          {/* Inline onClose: a new function on every render, as real callers pass. */}
+          <Modal isOpen={open} onClose={() => setOpen(false)} title="Draft update">
+            <label htmlFor="notes">Notes</label>
+            <textarea id="notes" value={notes} onChange={(event) => setNotes(event.target.value)} />
+          </Modal>
+        </>
+      );
+    }
+
+    render(<Harness />);
+    const trigger = screen.getByRole('button', { name: 'Open dialog' });
+    await user.click(trigger);
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Close modal' })).toHaveFocus());
+    const notes = screen.getByLabelText('Notes');
+    await user.tab();
+    expect(notes).toHaveFocus();
+
+    await user.keyboard('Homepage approved');
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(notes).toHaveFocus();
+    expect(notes).toHaveValue('Homepage approved');
+    expect(screen.getByRole('dialog', { name: 'Draft update' })).toBeInTheDocument();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
   it('restores the previous body overflow value', () => {
     document.body.style.overflow = 'scroll';
     const { rerender } = render(

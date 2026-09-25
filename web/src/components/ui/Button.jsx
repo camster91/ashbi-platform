@@ -1,6 +1,9 @@
-import { forwardRef } from 'react';
+import { forwardRef, useId } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '../../lib/utils';
 import { Loader2 } from 'lucide-react';
+import useSlowState, { SLOW_THRESHOLD_MS } from '../../hooks/useSlowState';
+import { SlowMessage } from './SlowNotice';
 
 const Button = forwardRef(({
   children,
@@ -13,11 +16,44 @@ const Button = forwardRef(({
   isDisabled = false,
   disabled,
   className,
+  slowAfterMs = SLOW_THRESHOLD_MS,
+  slowKind = 'write',
+  slowGuidance,
+  slowMessage = false,
+  'aria-describedby': ariaDescribedBy,
   ...props
 }, ref) => {
   // Accept both `loading` and `isLoading` props; also accept `disabled` alongside `isDisabled`
   const showLoading = isLoading || loading || false;
   const showDisabled = isDisabled || disabled || false;
+  // "Slow" workflow state: a pending action that outlasts the threshold is
+  // explained in a polite live region, which also describes the button. The
+  // region mounts empty as soon as loading starts so the later text is
+  // announced reliably. Primary actions are usually writes, so the default
+  // copy warns against resubmitting.
+  //
+  // By default the region is visually hidden and portalled to <body>, so it
+  // never changes the caller's layout (flex rows, space-x, :last-child).
+  // Pass `slowMessage` to also show it visibly right after the button, where
+  // the surrounding layout has room for a full-width line.
+  const slowId = useId();
+  const isSlow = useSlowState(showLoading, slowAfterMs);
+  const trackSlow = showLoading && typeof slowAfterMs === 'number' && slowAfterMs > 0;
+  const describedBy = [ariaDescribedBy, trackSlow && slowId].filter(Boolean).join(' ') || undefined;
+  const slowCopy = isSlow ? <SlowMessage kind={slowKind} guidance={slowGuidance} className="mt-1 text-xs" /> : null;
+  let slowRegion = null;
+  if (trackSlow && slowMessage) {
+    slowRegion = (
+      <span id={slowId} role="status" aria-live="polite" className={isSlow ? 'basis-full w-full' : 'sr-only'}>
+        {slowCopy}
+      </span>
+    );
+  } else if (trackSlow && typeof document !== 'undefined') {
+    slowRegion = createPortal(
+      <span id={slowId} role="status" aria-live="polite" className="sr-only">{slowCopy}</span>,
+      document.body
+    );
+  }
   const variants = {
     primary: 'bg-primary text-primary-foreground hover:bg-primary/90 focus:ring-primary/20',
     secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80 focus:ring-secondary/20',
@@ -45,7 +81,10 @@ const Button = forwardRef(({
     xl: 'w-5 h-5',
   };
 
+  // Always return the same fragment shape so the <button> never remounts (and
+  // never loses focus) when loading toggles.
   return (
+    <>
     <button
       ref={ref}
       disabled={showDisabled || showLoading}
@@ -60,6 +99,7 @@ const Button = forwardRef(({
         className
       )}
       {...props}
+      aria-describedby={describedBy}
     >
       {showLoading && (
         <Loader2 aria-hidden="true" className={cn('animate-spin motion-reduce:animate-none', iconSizes[size] || iconSizes.md)} />
@@ -72,6 +112,8 @@ const Button = forwardRef(({
         <span aria-hidden="true" className={cn(iconSizes[size] || iconSizes.md)}>{rightIcon}</span>
       )}
     </button>
+    {slowRegion}
+    </>
   );
 });
 

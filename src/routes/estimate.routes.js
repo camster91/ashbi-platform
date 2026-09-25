@@ -4,6 +4,7 @@ import env from '../config/env.js';
 import { validateBody, createEstimateSchema, updateEstimateSchema, estimateUpdateSchema } from '../validators/schemas.js';
 import { clampTake } from '../utils/query-limits.js';
 import { softDelete } from '../services/trash.service.js';
+import { deliveryFieldsFromSend, mailgunTrackingFields, withDeliveryState } from '../services/mailgun-delivery.service.js';
 
 export default async function estimateRoutes(fastify) {
   // List estimates
@@ -34,7 +35,7 @@ export default async function estimateRoutes(fastify) {
       include: { client: { select: { id: true, name: true, email: true } } }
     });
     if (!estimate) return reply.status(404).send({ error: 'Estimate not found' });
-    return estimate;
+    return withDeliveryState(estimate);
   });
 
   // Create estimate
@@ -140,6 +141,7 @@ export default async function estimateRoutes(fastify) {
 
     // Send estimate email with magic link to client
     const portalUrl = `${env.hubUrl}/portal/estimate/${estimate.viewToken}`;
+    let deliveryFields = null;
 
     if (env.mailgunApiKey && env.mailgunDomain && estimate.client?.email) {
       try {
@@ -149,7 +151,8 @@ export default async function estimateRoutes(fastify) {
           key: env.mailgunApiKey
         });
 
-        await mgClient.messages.create(env.mailgunDomain, {
+        const sent = await mgClient.messages.create(env.mailgunDomain, {
+          ...mailgunTrackingFields({ documentType: 'estimate', documentId: estimate.id }),
           from: `Ashbi Design <noreply@${env.mailgunDomain}>`,
           to: estimate.client.email,
           subject: `Estimate from Ashbi Design — $${updated.total.toLocaleString()}`,
@@ -167,8 +170,17 @@ export default async function estimateRoutes(fastify) {
           `
         });
         console.log(`[estimate] Estimate email sent to ${estimate.client.email}`);
+        deliveryFields = deliveryFieldsFromSend({ ok: true, id: sent?.id });
       } catch (mailErr) {
         console.error('[estimate] Failed to send estimate email:', mailErr.message || mailErr);
+        deliveryFields = deliveryFieldsFromSend({ ok: false, error: 'Estimate email send error' });
+      }
+      try {
+        await request.prisma.estimate.update({ where: { id }, data: deliveryFields });
+      } catch (recordErr) {
+        // The email outcome is already decided; a tracking write failure must
+        // not turn a completed send into a 500.
+        request.log.error({ errorName: recordErr?.name, errorCode: recordErr?.code, estimateId: id }, '[estimate] Failed to record email delivery status');
       }
     } else {
       console.warn('[estimate] Mailgun not configured or no client email — estimate email not sent');
@@ -176,7 +188,7 @@ export default async function estimateRoutes(fastify) {
       // it to logs; staff can recover it from the authenticated response below.
     }
 
-    return updated;
+    return withDeliveryState({ ...updated, ...deliveryFields });
   });
 
   // Public view by token
@@ -186,7 +198,9 @@ export default async function estimateRoutes(fastify) {
       include: { client: { select: { id: true, name: true, email: true } } }
     });
     if (!estimate) return reply.status(404).send({ error: 'Estimate not found' });
-    return estimate;
+    // Provider message ids and bounce diagnostics are staff-only.
+    const { deliveryMessageId, deliveryError, ...publicEstimate } = estimate;
+    return publicEstimate;
   });
 
   // Client approve/decline estimate

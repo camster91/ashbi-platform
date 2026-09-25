@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Receipt, Plus, Send, DollarSign, Clock, CheckCircle, AlertTriangle,
   ExternalLink, CreditCard, FileText, Filter, Search, Download,
@@ -9,7 +9,7 @@ import {
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
-import { Button, Card, EmptyState, LoadingState } from '../components/ui';
+import { Button, Card, EmptyState, LoadingState, SlowNotice } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
@@ -385,7 +385,13 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <span className="font-mono font-semibold text-foreground">{invoice.invoiceNumber}</span>
+              <Link
+                to={`/invoices/${invoice.id}`}
+                onClick={(e) => e.stopPropagation()}
+                className="rounded font-mono font-semibold text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {invoice.invoiceNumber}
+              </Link>
               <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full ${config.color}`}>
                 <StatusIcon className="w-3 h-3" />
                 {config.label}
@@ -429,7 +435,13 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
       <div className="hidden sm:flex items-center gap-4">
         <div className="flex-1 min-w-0" onClick={onView}>
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-mono font-semibold text-foreground">{invoice.invoiceNumber}</span>
+            <Link
+              to={`/invoices/${invoice.id}`}
+              onClick={(e) => e.stopPropagation()}
+              className="rounded text-sm font-mono font-semibold text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {invoice.invoiceNumber}
+            </Link>
             <span className="text-muted-foreground">·</span>
             <span className="text-sm text-muted-foreground">{invoice.client?.name}</span>
             {invoice.title && <span className="text-xs text-muted-foreground truncate">— {invoice.title}</span>}
@@ -764,9 +776,10 @@ function InvoiceCreateForm({
         {error && <p className="text-sm text-destructive">{error}</p>}
 
         <div className="flex gap-2">
-          <Button type="submit" loading={loading}>Create Invoice</Button>
+          <Button type="submit" loading={loading} slowAfterMs={false}>Create Invoice</Button>
           <Button variant="ghost" type="button" onClick={onCancel}>Cancel</Button>
         </div>
+        <SlowNotice active={loading} kind="write" />
       </form>
     </Card>
   );

@@ -1,5 +1,6 @@
 import Button from './ui/Button';
 import Alert from './ui/Alert';
+import SlowNotice from './ui/SlowNotice';
 
 export function getQueryErrorGuidance(error, online = typeof navigator === 'undefined' || navigator.onLine) {
   if (!online || error?.name === 'NetworkError') {
@@ -18,7 +19,10 @@ export function getQueryErrorGuidance(error, online = typeof navigator === 'unde
 
 export function QueryErrorState({ onRetry, error, message, isRetrying = false }) {
   const guidance = getQueryErrorGuidance(error);
+  // The retry is a read, so the slow copy says waiting/retrying later is safe.
+  // It lives outside the role=alert container so it is announced politely.
   return (
+    <>
     <Alert
       variant="error"
       title={message || guidance.title}
@@ -33,6 +37,8 @@ export function QueryErrorState({ onRetry, error, message, isRetrying = false })
     >
       {guidance.detail}
     </Alert>
+    <SlowNotice active={isRetrying} kind="read" className="max-w-lg mx-auto mt-2" />
+    </>
   );
 }
 

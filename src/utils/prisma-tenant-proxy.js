@@ -42,7 +42,9 @@ const DIRECT_SCOPED_MODELS = new Set([
 // Models that are intentionally shared across organizations. Every Prisma
 // model must be present here, DIRECT_SCOPED_MODELS, or TENANT_PATHS; an
 // unclassified delegate is rejected instead of silently bypassing tenancy.
-const GLOBAL_MODELS = new Set(['organization']);
+// mailgunwebhookreceipt only stores Mailgun's random webhook tokens for replay
+// protection and is written from the unauthenticated, signed webhook route.
+const GLOBAL_MODELS = new Set(['organization', 'mailgunwebhookreceipt']);
 
 // Direct-owned records can also reference another tenant-owned root. The
 // redundant organizationId is not enough: the referenced parent must belong

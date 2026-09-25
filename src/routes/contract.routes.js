@@ -1,26 +1,36 @@
 import crypto from 'crypto';
-import PDFDocument from 'pdfkit';
 import env from '../config/env.js';
 import logger from '../utils/logger.js';
 import { sendContractSignEmail } from '../services/email.service.js';
+import { deliveryFieldsFromSend, withDeliveryState } from '../services/mailgun-delivery.service.js';
 import { getContractTemplate, renderTemplate } from '../services/contractTemplates.service.js';
 import {validateBody, createContractSchema, updateContractDraftSchema, contractDraftUpdateSchema} from '../validators/schemas.js';
 import { clampTake } from '../utils/query-limits.js';
+import { contractPdfFilename, generateContractPdf } from '../utils/generate-contract-pdf.js';
 import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
 
-async function sendContractEmail(to, clientName, contractTitle, signUrl) {
+// Returns the provider result ({ ok, id?, error? }), or null when no send was
+// attempted (test mode). The helper used to return `true` whenever it did not
+// throw, even when Mailgun rejected the message.
+async function sendContractEmail(to, clientName, contractTitle, signUrl, contractId) {
   // NODE_ENV/ASHBI_RUN_EMAIL_TESTS read directly because they are dev-only
   // test toggles not exposed in env.js. See proposal.routes.js for the same
   // pattern.
-  if (process.env.NODE_ENV === 'test' && process.env.ASHBI_RUN_EMAIL_TESTS !== '1') return false;
-  if (!env.mailgunApiKey || !env.mailgunDomain) return false;
+  if (process.env.NODE_ENV === 'test' && process.env.ASHBI_RUN_EMAIL_TESTS !== '1') return null;
+  if (!env.mailgunApiKey || !env.mailgunDomain) return { ok: false, error: 'Mailgun not configured' };
   try {
-    await sendContractSignEmail({ to, clientName, contractTitle, signLink: signUrl });
-    return true;
+    return await sendContractSignEmail({ to, clientName, contractTitle, signLink: signUrl, contractId });
   } catch (err) {
     logger.error({ errorName: err?.name, errorCode: err?.code }, '[Contract] Email send error');
-    return false;
+    return { ok: false, error: 'Contract email send error' };
   }
+}
+
+async function recordContractDelivery(prisma, contractId, delivery) {
+  if (!delivery) return null;
+  const data = deliveryFieldsFromSend(delivery);
+  await prisma.contract.update({ where: { id: contractId }, data });
+  return data;
 }
 
 export default async function contractRoutes(fastify) {
@@ -58,7 +68,7 @@ export default async function contractRoutes(fastify) {
       }
     });
     if (!contract) return reply.status(404).send({ error: 'Contract not found' });
-    return contract;
+    return withDeliveryState(contract);
   });
 
   // POST / — create contract
@@ -171,13 +181,16 @@ export default async function contractRoutes(fastify) {
     // Email the primary contact
     const primaryContact = contract.client?.contacts?.[0];
     let emailSent = false;
+    let deliveryFields = null;
     if (primaryContact?.email) {
       const baseUrl = env.appUrl;
       const signUrl = `${baseUrl}/portal/contract/${access.token}`;
-      emailSent = await sendContractEmail(primaryContact.email, primaryContact.name || contract.client?.name, contract.title || 'Service Agreement', signUrl);
+      const delivery = await sendContractEmail(primaryContact.email, primaryContact.name || contract.client?.name, contract.title || 'Service Agreement', signUrl, contract.id);
+      emailSent = Boolean(delivery?.ok);
+      deliveryFields = await recordContractDelivery(fastify.prisma, contract.id, delivery);
     }
 
-    return { ...updated, emailSent };
+    return withDeliveryState({ ...updated, ...deliveryFields, emailSent });
   });
 
   // GET /sign/:signToken — PUBLIC — client views contract to sign
@@ -201,6 +214,8 @@ export default async function contractRoutes(fastify) {
       signerIp,
       signerUserAgent,
       publicAccessRevokedAt,
+      deliveryMessageId,
+      deliveryError,
       ...publicContract
     } = contract;
     return publicContract;
@@ -278,8 +293,9 @@ export default async function contractRoutes(fastify) {
     const contact = contract.client?.contacts?.[0];
     if (!contact?.email) return reply.status(409).send({ error: 'Primary client email is missing' });
     const signUrl = `${env.appUrl}/portal/contract/${contract.signToken}`;
-    const emailSent = await sendContractEmail(contact.email, contact.name || contract.client.name, contract.title, signUrl);
-    if (!emailSent) return reply.status(503).send({ error: 'Contract email delivery is unavailable', retryable: true });
+    const delivery = await sendContractEmail(contact.email, contact.name || contract.client.name, contract.title, signUrl, contract.id);
+    await recordContractDelivery(request.prisma, contract.id, delivery);
+    if (!delivery?.ok) return reply.status(503).send({ error: 'Contract email delivery is unavailable', retryable: true });
     return { emailSent: true };
   });
 
@@ -314,99 +330,9 @@ export default async function contractRoutes(fastify) {
     });
     if (!contract) return reply.status(404).send({ error: 'Contract not found' });
 
-    const doc = new PDFDocument({ size: 'A4', margins: { top: 60, bottom: 60, left: 60, right: 60 }, bufferPages: true });
-    const chunks = [];
+    const pdfBuffer = await generateContractPdf(contract);
 
-    doc.on('data', (chunk) => chunks.push(chunk));
-
-    // Strip HTML for text rendering
-    const stripHtml = (html) => {
-      if (!html) return '';
-      return html
-        .replace(/<br\s*\/?>/gi, '\n')
-        .replace(/<\/p>/gi, '\n\n')
-        .replace(/<\/li>/gi, '\n')
-        .replace(/<li>/gi, '  \u2022 ')
-        .replace(/<[^>]*>/g, '')
-        .replace(/&nbsp;/g, ' ')
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/\n{3,}/g, '\n\n')
-        .trim();
-    };
-
-    const primaryColor = '#2e2958';
-    const accentColor = '#e6f354';
-    const textColor = '#1a1a1a';
-    const mutedColor = '#666666';
-
-    // ---- Header bar ----
-    doc.rect(0, 0, doc.page.width, 50).fill(primaryColor);
-    doc.fillColor(accentColor).fontSize(18).font('Helvetica-Bold')
-      .text('ASHBI HUB', 60, 15, { align: 'left' });
-    doc.fillColor('#ffffff').fontSize(10).font('Helvetica')
-      .text('hub.ashbi.ca', doc.page.width - 160, 20, { align: 'right', width: 100 });
-
-    // ---- Contract title ----
-    doc.moveDown(2);
-    doc.fillColor(primaryColor).fontSize(22).font('Helvetica-Bold')
-      .text(contract.title || 'Service Agreement', { align: 'center' });
-    doc.moveDown(0.5);
-
-    // ---- Meta line ----
-    doc.fillColor(mutedColor).fontSize(10).font('Helvetica');
-    const metaLine = `Client: ${contract.client?.name || 'N/A'}    |    Date: ${new Date(contract.createdAt).toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' })}    |    Type: ${contract.templateType || 'N/A'}`;
-    doc.text(metaLine, { align: 'center' });
-    doc.moveDown(0.3);
-
-    // Accent line separator
-    const lineY = doc.y;
-    doc.moveTo(60, lineY).lineTo(doc.page.width - 60, lineY).strokeColor(accentColor).lineWidth(2).stroke();
-    doc.moveDown(1);
-
-    // ---- Contract content ----
-    const plainContent = stripHtml(contract.content);
-    doc.fillColor(textColor).fontSize(11).font('Helvetica')
-      .text(plainContent, { align: 'left', lineGap: 4 });
-
-    // ---- Signature block ----
-    if (contract.status === 'SIGNED' && contract.clientSigName) {
-      doc.moveDown(2);
-      const sigY = doc.y;
-      doc.moveTo(60, sigY).lineTo(300, sigY).strokeColor('#cccccc').lineWidth(0.5).stroke();
-      doc.fillColor(textColor).fontSize(11).font('Helvetica-Bold')
-        .text(contract.clientSigName, 60, sigY + 5);
-      doc.fillColor(mutedColor).fontSize(9).font('Helvetica')
-        .text(`Signed on ${new Date(contract.signedAt || contract.clientSigDate).toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' })}`, 60, sigY + 20);
-
-      // Signature hash
-      if (contract.clientSigHash) {
-        doc.fontSize(7).fillColor('#aaaaaa')
-          .text(`Signature ID: ${contract.clientSigHash}`, 60, sigY + 35);
-      }
-    }
-
-    // ---- Footer with page numbers ----
-    const range = doc.bufferedPageRange();
-    for (let i = range.start; i < range.start + range.count; i++) {
-      doc.switchToPage(i);
-      doc.save();
-      const bottomY = doc.page.height - 40;
-      doc.moveTo(60, bottomY - 5).lineTo(doc.page.width - 60, bottomY - 5).strokeColor('#eeeeee').lineWidth(0.5).stroke();
-      doc.fillColor('#aaaaaa').fontSize(8).font('Helvetica')
-        .text(`Ashbi Hub  |  hub.ashbi.ca  |  Page ${i + 1} of ${range.count}`, 60, bottomY, { align: 'center', width: doc.page.width - 120 });
-      doc.restore();
-    }
-
-    doc.end();
-
-    const pdfBuffer = await new Promise((resolve) => {
-      doc.on('end', () => resolve(Buffer.concat(chunks)));
-    });
-
-    const safeFilename = (contract.title || 'contract').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const safeFilename = contractPdfFilename(contract);
     reply.header('Content-Type', 'application/pdf');
     reply.header('Content-Disposition', `attachment; filename="${safeFilename}.pdf"`);
     reply.header('Content-Length', pdfBuffer.length);

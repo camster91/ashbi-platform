@@ -83,19 +83,19 @@ describe('Frontend Utils', () => {
 
   describe('Color Helpers', () => {
     it('getPriorityColor returns correct classes', () => {
-      expect(getPriorityColor('CRITICAL')).toContain('text-red-600');
-      expect(getPriorityColor('LOW')).toContain('text-gray-600');
-      expect(getPriorityColor('UNKNOWN')).toContain('text-gray-600');
+      expect(getPriorityColor('CRITICAL')).toContain('text-red-700');
+      expect(getPriorityColor('LOW')).toContain('text-gray-700');
+      expect(getPriorityColor('UNKNOWN')).toContain('text-gray-700');
     });
 
     it('getHealthColor returns correct classes', () => {
-      expect(getHealthColor('ON_TRACK')).toContain('text-green-600');
-      expect(getHealthColor('AT_RISK')).toContain('text-red-600');
+      expect(getHealthColor('ON_TRACK')).toContain('text-green-800');
+      expect(getHealthColor('AT_RISK')).toContain('text-red-700');
     });
 
     it('getProjectStatusColor returns correct classes', () => {
-      expect(getProjectStatusColor('LAUNCHED')).toContain('text-green-600');
-      expect(getProjectStatusColor('CANCELLED')).toContain('text-red-600');
+      expect(getProjectStatusColor('LAUNCHED')).toContain('text-green-800');
+      expect(getProjectStatusColor('CANCELLED')).toContain('text-red-700');
     });
   });
 

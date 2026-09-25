@@ -30,32 +30,58 @@ import UpcomingEventsWidget from '../components/widgets/UpcomingEventsWidget';
 import OutreachFunnelWidget from '../components/widgets/OutreachFunnelWidget';
 import RevenueSparklineWidget from '../components/widgets/RevenueSparklineWidget';
 import QueryErrorState from '../components/QueryErrorState';
+import PartialSectionNotice from '../components/PartialSectionNotice';
+import { SlowMessage } from '../components/ui/SlowNotice';
+import useSlowState from '../hooks/useSlowState';
+import useManualRetry from '../hooks/useManualRetry';
+import useSettledFailure from '../hooks/useSettledFailure';
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { notifications: liveNotifications } = useSocket();
 
-  const { data: stats, isLoading, isError, error, isFetching, refetch } = useQuery({
+  const statsQuery = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: () => api.getDashboardStats(),
-    refetchInterval: 30000,
+    // Pause polling while the stats request is failing: the error surface
+    // offers an explicit retry, and polling a failing endpoint would keep
+    // re-rendering (and re-announcing) the recovery notice.
+    refetchInterval: (query) => (query.state.status === 'error' ? false : 30000),
     placeholderData: keepPreviousData,
     retry: 3,
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
   });
 
-  const { data: myTasks = [], isError: areTasksUnavailable } = useQuery({
+  const tasksQuery = useQuery({
     queryKey: ['my-tasks'],
     queryFn: () => api.getMyTasks().then((r) => Object.values(r ?? {}).flat()),
     placeholderData: keepPreviousData,
   });
 
+  const { data: stats, isLoading, refetch } = statsQuery;
+  const { data: myTasks, refetch: refetchTasks } = tasksQuery;
+  // Failure state that survives retries/background refetches, so notices are
+  // not unmounted and re-announced while a request is in flight.
+  const { failed: isError, error } = useSettledFailure(statsQuery);
+  const { failed: areTasksUnavailable, error: tasksError } = useSettledFailure(tasksQuery);
+
+  // "Retrying…" reflects only a retry the person asked for, never polling or
+  // background refetches, so live regions are not re-announced every cycle.
+  const [retryStats, isRetryingStats] = useManualRetry(refetch);
+  const [retryTasks, isRetryingTasks] = useManualRetry(refetchTasks);
+  // Undefined until tasks load (or when they never loaded). The card shows
+  // "—" in that case instead of a misleading 0.
+  const taskList = myTasks ?? [];
+
+  const isInitialLoadSlow = useSlowState(isLoading && !stats && !isError);
+
   // Show skeleton on first load (no data yet)
-  if (isLoading && !stats) {
+  if (isLoading && !stats && !isError) {
     return (
       <div role="status" aria-live="polite" aria-label="Loading dashboard" className="space-y-6 min-h-[60vh]">
         <span className="sr-only">Loading dashboard…</span>
+        {isInitialLoadSlow && <SlowMessage kind="read" />}
         {/* Greeting skeleton */}
         <Skeleton className="h-10 w-64 rounded-lg" />
         <Skeleton className="h-4 w-48" />
@@ -79,7 +105,7 @@ export default function Dashboard() {
   if (isError && !stats) {
     return (
       <div className="space-y-6 min-h-[60vh]">
-        <QueryErrorState error={error} onRetry={refetch} isRetrying={isFetching} message="Dashboard data could not be loaded" />
+        <QueryErrorState error={error} onRetry={retryStats} isRetrying={isRetryingStats} message="Dashboard data could not be loaded" />
       </div>
     );
   }
@@ -144,7 +170,7 @@ export default function Dashboard() {
             label="Outstanding"
             value={`$${(stats?.totalOutstanding || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}
             subtitle={stats?.overdueCount > 0 ? (
-              <span className="text-xs text-red-500 flex items-center gap-1">
+              <span className="text-xs text-red-700 dark:text-red-400 flex items-center gap-1">
                 <AlertTriangle className="w-3 h-3" />
                 {stats.overdueCount} overdue (${(stats.overdueAmount || 0).toLocaleString()})
               </span>
@@ -182,7 +208,7 @@ export default function Dashboard() {
               iconColor="text-orange-600"
               iconBg="bg-orange-100 dark:bg-orange-900/30"
               label="My Tasks"
-              value={myTasks.length}
+              value={myTasks ? myTasks.length : '—'}
               onClick={() => navigate('/inbox')}
             />
             <StatCard
@@ -197,10 +223,28 @@ export default function Dashboard() {
         )}
       </div>
 
+      {/* Partial state: stale stats stay visible while the live refresh is retried. */}
+      {isError && stats && (
+        <PartialSectionNotice
+          section="Live dashboard numbers"
+          title="Live dashboard numbers could not be refreshed"
+          detail="The figures below are from the last successful update."
+          error={error}
+          onRetry={retryStats}
+          isRetrying={isRetryingStats}
+        />
+      )}
+
+      {/* Partial state: tasks failed but the rest of the dashboard is usable. */}
       {areTasksUnavailable && (
-        <div role="status" className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
-          Task data is temporarily unavailable. Other dashboard data is current.
-        </div>
+        <PartialSectionNotice
+          section="Task data"
+          title="Task data is temporarily unavailable"
+          detail="Other dashboard data is current."
+          error={tasksError}
+          onRetry={retryTasks}
+          isRetrying={isRetryingTasks}
+        />
       )}
 
       {/* ─── Row 2: Activity Feed + Notification Center ─── */}
@@ -340,7 +384,7 @@ export default function Dashboard() {
                         {daysSince !== null && (
                           <span className={cn(
                             'text-xs font-medium',
-                            needsResponse ? 'text-red-500' : 'text-muted-foreground'
+                            needsResponse ? 'text-red-700 dark:text-red-400' : 'text-muted-foreground'
                           )}>
                             {daysSince === 0 ? 'Today' : daysSince === 1 ? 'Yesterday' : `${daysSince} days ago`}
                           </span>
@@ -401,7 +445,7 @@ export default function Dashboard() {
                           {project.health?.replace('_', ' ')}
                         </span>
                         {project.blockedTasks?.length > 0 && (
-                          <span className="text-xs text-red-500 flex items-center gap-1">
+                          <span className="text-xs text-red-700 dark:text-red-400 flex items-center gap-1">
                             <Bug className="w-3 h-3" />
                             {project.blockedTasks.length} blocked
                           </span>
@@ -513,7 +557,7 @@ export default function Dashboard() {
                         <p className="text-xs text-muted-foreground mt-0.5">{task.assignee}</p>
                       )}
                     </div>
-                    <span className="text-xs text-red-500 font-medium ml-2">
+                    <span className="text-xs text-red-700 dark:text-red-400 font-medium ml-2">
                       {new Date(task.dueDate).toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })}
                     </span>
                   </div>
@@ -554,7 +598,7 @@ export default function Dashboard() {
       )}
 
       {/* ─── Row 4: My Tasks (compact) ─── */}
-      {myTasks.length > 0 && (
+      {taskList.length > 0 && (
         <Card>
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -566,7 +610,7 @@ export default function Dashboard() {
             </Link>
           </div>
           <ul className="divide-y divide-border">
-            {myTasks.slice(0, 6).map(task => (
+            {taskList.slice(0, 6).map(task => (
               <li key={task.id}>
                 <Link
                   to={`/task/${task.id}`}
@@ -581,7 +625,7 @@ export default function Dashboard() {
                   {task.dueDate && (
                     <span className={cn(
                       'text-xs ml-2 flex items-center gap-1',
-                      new Date(task.dueDate) < new Date() ? 'text-red-500' : 'text-muted-foreground'
+                      new Date(task.dueDate) < new Date() ? 'text-red-700 dark:text-red-400' : 'text-muted-foreground'
                     )}>
                       <Clock className="w-3 h-3" />
                       {new Date(task.dueDate).toLocaleDateString({ month: 'short', day: 'numeric' })}

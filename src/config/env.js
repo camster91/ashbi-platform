@@ -108,6 +108,8 @@ const env = {
   mailgunApiKey: process.env.MAILGUN_API_KEY,
   mailgunDomain: process.env.MAILGUN_DOMAIN || 'ashbi.ca',
   mailgunSigningKey: process.env.MAILGUN_SIGNING_KEY,
+  // HTTP webhook signing key (Mailgun → Sending → Webhooks) for delivery events.
+  mailgunWebhookSigningKey: process.env.MAILGUN_WEBHOOK_SIGNING_KEY,
 
   // Stripe
   stripeSecretKey: process.env.STRIPE_SECRET_KEY,
@@ -182,6 +184,7 @@ if (!env.isDev) {
     HERMES_WEBHOOK_SECRET: 'your-hermes-webhook-secret',
     MAILGUN_API_KEY: 'your-mailgun-api-key',
     MAILGUN_SIGNING_KEY: 'your-mailgun-signing-key',
+    MAILGUN_WEBHOOK_SIGNING_KEY: 'your-mailgun-webhook-signing-key',
     STRIPE_SECRET_KEY: 'your-stripe-secret-key',
     STRIPE_WEBHOOK_SECRET: 'your-stripe-webhook-secret',
     BOT_SECRET: 'your-bot-secret',
