@@ -636,6 +636,7 @@ model Milestone {
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   tasks   Task[]  @relation("MilestoneTasks")
 
+  @@index([deletedAt])
   @@map("milestones")
 }
 

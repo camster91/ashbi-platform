@@ -63,6 +63,10 @@ jobs:
         run: |
           npx prisma generate
           npx prisma migrate deploy
+      - name: Check migrations match the Prisma schema
+        # Fail when the committed migration chain and schema.prisma disagree,
+        # so the database the app runs against is the one the schema describes.
+        run: npm run check:schema-drift
       - name: Check package boundaries
         run: npm run check:boundaries
       - name: Type check
