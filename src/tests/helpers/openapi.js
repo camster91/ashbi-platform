@@ -93,7 +93,22 @@ const ERROR_SCHEMA = {
   type: 'object',
   required: ['error'],
   properties: {
-    error: { type: 'string', description: 'Human-readable message, or an error name for errors raised by the framework.' },
+    error: {
+      description: 'Human-readable message (most routes), or, on the AI bridge (`/api/ai-bridge`), an '
+        + 'OpenAI-style object with `message` and `type`.',
+      oneOf: [
+        { type: 'string', description: 'Human-readable message, or an error name for errors raised by the framework.' },
+        {
+          type: 'object',
+          required: ['message', 'type'],
+          properties: {
+            message: { type: 'string' },
+            type: { type: 'string', description: 'Machine-readable category, for example invalid_request_error or insufficient_permissions.' },
+          },
+          additionalProperties: true,
+        },
+      ],
+    },
     code: { type: 'string', description: 'Stable machine-readable code, when the route defines one.' },
     message: { type: 'string', description: 'Additional detail sent by the global error handler.' },
     statusCode: { type: 'integer', description: 'HTTP status, sent by the global error handler.' },
@@ -167,7 +182,10 @@ function parametersOf(route, path) {
 function requestBodyOf(route, describe) {
   if (route.zod.body) {
     return {
-      required: !route.zod.body.safeParse({}).success,
+      // validateBody parses request.body as sent, so a request with no body
+      // reaches it as `undefined`, not `{}`. The body is optional only when
+      // the schema itself accepts `undefined`.
+      required: !route.zod.body.safeParse(undefined).success,
       content: { 'application/json': { schema: describe(route.zod.body) } },
     };
   }

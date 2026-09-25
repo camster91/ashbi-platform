@@ -57,7 +57,6 @@ export default async function creativeBriefRoutes(fastify) {
   // Delete a brief
   fastify.delete('/:id', {
     onRequest: [fastify.authenticate],
-    preHandler: validateBody(creativeBriefUpdateSchema),
   }, async (request) => {
     await deleteBrief(request.params.id);
     return { success: true };

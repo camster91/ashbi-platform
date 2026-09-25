@@ -114,7 +114,6 @@ export default async function templateRoutes(fastify) {
   // Delete template
   fastify.delete('/:id', {
     onRequest: [fastify.authenticate],
-    preHandler: validateBody(taskTemplateSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     await request.prisma.taskTemplate.delete({ where: { id } });

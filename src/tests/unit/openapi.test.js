@@ -238,3 +238,32 @@ test('security and extensions follow the access matrix guards', async () => {
     assert.equal(response.content['application/json'].schema.$ref, '#/components/schemas/Error');
   }
 });
+
+test('a validated body is required unless its schema accepts no body at all', async () => {
+  const spec = JSON.parse(await getSpecText());
+  // Every field optional, but validateBody still rejects a missing body.
+  assert.equal(spec.paths['/api/auth/me'].put.requestBody.required, true);
+});
+
+test('the error schema covers the AI bridge object form', async () => {
+  const spec = JSON.parse(await getSpecText());
+  const shapes = spec.components.schemas.Error.properties.error.oneOf.map((shape) => shape.type).sort();
+  assert.deepEqual(shapes, ['object', 'string']);
+});
+
+test('the web client never calls a body-required route without a body', async () => {
+  const spec = JSON.parse(await getSpecText());
+  const client = fs.readFileSync(new URL('../../../web/src/lib/api.js', import.meta.url), 'utf8');
+  const required = operationsOf(spec)
+    .filter(({ operation }) => operation.requestBody?.required)
+    .map(({ path, method }) => ({ method: method.toUpperCase(), path, match: new RegExp(`^${path.replace(/\{[^}]+\}/g, '[^/]+')}$`) }));
+  const bodiless = /request\(\s*`([^`]+)`\s*,\s*\{\s*method:\s*'(POST|PUT|PATCH|DELETE)'\s*\}\s*\)/g;
+  const offending = [];
+  for (const [, template, method] of client.matchAll(bodiless)) {
+    const url = `/api${template.replace(/\$\{[^}]+\}/g, 'x').split('?')[0]}`;
+    for (const operation of required) {
+      if (operation.method === method && operation.match.test(url)) offending.push(`${method} ${template} -> ${operation.path}`);
+    }
+  }
+  assert.deepEqual(offending, [], 'these calls send no body, so the route\'s body validator answers 400');
+});
