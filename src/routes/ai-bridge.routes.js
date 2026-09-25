@@ -3,6 +3,12 @@ import crypto from 'node:crypto';
 import { decrypt } from '../utils/crypto.js';
 import { postSlackMessage } from '../services/slack-outbound.service.js';
 import { validateBody, aiBridgeActionConfirmSchema, aiBridgeActionPrepareSchema, aiBridgeChatSchema } from '../validators/schemas.js';
+import { requireApiKeyScope } from '../auth/api-key-scopes.js';
+
+// Scope checks run before body validation so a key without the scope learns
+// nothing about the request shape.
+const requireReadScope = requireApiKeyScope('ai_bridge:read');
+const requireActionsScope = requireApiKeyScope('ai_bridge:actions');
 
 const MAX_MESSAGES = 20;
 const MAX_MESSAGE_CHARS = 12000;
@@ -92,14 +98,15 @@ export default async function aiBridgeRoutes(fastify, options = {}) {
     transport: 'OpenAI-compatible HTTP API',
     chatCompletions: '/api/ai-bridge/v1/chat/completions',
     authentication: 'x-api-key or Authorization: Bearer ashbi_…',
+    grantedScopes: request.apiKeyScopes ?? [],
     capabilities: [
-      { name: 'agency_context_chat', mode: 'read', description: 'Ask about the authenticated organization\'s projects, tasks, clients, threads, and retainers.' },
-      { name: 'workflow_actions', mode: 'write', description: 'Prepare and separately confirm allowlisted actions with idempotency and audit records.', actions: ['create_task', 'create_calendar_event', 'send_slack_message'] },
+      { name: 'agency_context_chat', mode: 'read', scope: 'ai_bridge:read', description: 'Ask about the authenticated organization\'s projects, tasks, clients, threads, and retainers.' },
+      { name: 'workflow_actions', mode: 'write', scope: 'ai_bridge:actions', description: 'Prepare and separately confirm allowlisted actions with idempotency and audit records.', actions: ['create_task', 'create_calendar_event', 'send_slack_message'] },
     ],
     safety: { tenantScoped: true, writesRequireConfirmation: true, credentialsNeverReturned: true },
   }));
 
-  fastify.post('/v1/chat/completions', { onRequest: [fastify.authenticateWithApiKey], preHandler: validateBody(aiBridgeChatSchema) }, async (request, reply) => {
+  fastify.post('/v1/chat/completions', { onRequest: [fastify.authenticateWithApiKey], preHandler: [requireReadScope, validateBody(aiBridgeChatSchema)] }, async (request, reply) => {
     const body = request.body || {};
     const messages = Array.isArray(body.messages) ? body.messages.map(normalizeMessage).filter(Boolean).slice(-MAX_MESSAGES) : [];
     if (!messages.length || !messages.some(message => message.role === 'user')) {
@@ -141,7 +148,7 @@ export default async function aiBridgeRoutes(fastify, options = {}) {
     }
   });
 
-  fastify.post('/v1/actions/prepare', { onRequest: [fastify.authenticateWithApiKey], preHandler: validateBody(aiBridgeActionPrepareSchema) }, async (request, reply) => {
+  fastify.post('/v1/actions/prepare', { onRequest: [fastify.authenticateWithApiKey], preHandler: [requireActionsScope, validateBody(aiBridgeActionPrepareSchema)] }, async (request, reply) => {
     if (!requireActionRole(request, reply)) return;
     const { action, input, idempotencyKey } = request.body ?? {};
     if (!['create_task', 'create_calendar_event', 'send_slack_message'].includes(action) || typeof idempotencyKey !== 'string' || !/^[A-Za-z0-9._:-]{8,128}$/.test(idempotencyKey)) {
@@ -187,7 +194,7 @@ export default async function aiBridgeRoutes(fastify, options = {}) {
     return reply.status(201).send({ action: actionResponse(actionRecord), confirmationRequired: true });
   });
 
-  fastify.post('/v1/actions/:actionId/confirm', { onRequest: [fastify.authenticateWithApiKey], preHandler: validateBody(aiBridgeActionConfirmSchema) }, async (request, reply) => {
+  fastify.post('/v1/actions/:actionId/confirm', { onRequest: [fastify.authenticateWithApiKey], preHandler: [requireActionsScope, validateBody(aiBridgeActionConfirmSchema)] }, async (request, reply) => {
     if (!requireActionRole(request, reply)) return;
     if (request.body?.confirm !== true) return reply.status(400).send({ error: { message: 'Set confirm to true to execute this action', type: 'confirmation_required' } });
     const actionId = request.params.actionId;

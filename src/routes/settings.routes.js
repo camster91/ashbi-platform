@@ -12,6 +12,7 @@ import {
 } from '../validators/schemas.js';
 import env from '../config/env.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
+import { requireRecentAuth } from '../auth/reauth.js';
 
 // Re-read the account so a demoted or deactivated operator loses the right
 // immediately, not when their session token expires.
@@ -287,7 +288,7 @@ export default async function settingsRoutes(fastify) {
   // able to change it for other tenants: only platform operators may.
   fastify.post('/ai-provider', {
     onRequest: [fastify.adminOnly],
-    preHandler: validateBody(aiProviderSwitchSchema),
+    preHandler: [requireRecentAuth, validateBody(aiProviderSwitchSchema)],
   }, async (request, reply) => {
     if (!(await isPlatformOperator(request.prisma, request.user))) {
       return reply.status(403).send({

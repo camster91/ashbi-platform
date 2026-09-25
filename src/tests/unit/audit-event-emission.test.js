@@ -24,6 +24,7 @@ const { default: settingsRoutes } = await import('../../routes/settings.routes.j
 const { default: clientPortalRoutes } = await import('../../routes/client-portal.routes.js');
 const { recordCheckoutAuditEvents } = await import('../../services/stripe.service.js');
 const providers = await import('../../ai/providers/index.js');
+const { reauthCookies, withSession } = await import('../helpers/reauth.js');
 
 const ADMIN = { id: 'admin-1', role: 'ADMIN', organizationId: 'org-1' };
 const FUTURE = new Date(Date.now() + 86_400_000);
@@ -42,11 +43,12 @@ function auditStore({ failing = false } = {}) {
 
 async function buildApp(t, routes, prisma, { user = ADMIN, prefix, decorate = {}, jwtPlugins = false } = {}) {
   const app = Fastify({ logger: false });
+  await app.register(cookie);
   if (jwtPlugins) {
-    await app.register(cookie);
     await app.register(jwt, { secret: 'audit-emission-jwt', cookie: { cookieName: 'token', signed: false } });
   }
-  const signIn = async (request) => { request.user = user; };
+  const principal = user ? withSession(user) : user;
+  const signIn = async (request) => { request.user = principal; };
   app.decorate('authenticate', signIn);
   app.decorate('adminOnly', async (request, reply) => {
     await signIn(request);
@@ -280,21 +282,35 @@ test('signing a contract emits contract.signed without the signer name', async (
 test('team changes emit role, deactivation and password-reset events only on real transitions', async (t) => {
   const audit = auditStore();
   let stored = { id: 'user-2', role: 'STAFF', isActive: true, name: 'Sam', email: 's@x.test', skills: '[]', capacity: 100 };
+  const updates = [];
+  const keyRevocations = [];
   const app = await buildApp(t, teamRoutes, {
     auditEvent: audit,
     user: {
       findUnique: async () => ({ role: stored.role, isActive: stored.isActive }),
-      update: async ({ data }) => { stored = { ...stored, ...data }; return stored; },
+      update: async ({ data }) => { updates.push(data); stored = { ...stored, ...data }; return stored; },
+    },
+    apiKey: {
+      updateMany: async ({ where, data }) => { keyRevocations.push({ where, data }); return { count: 2 }; },
     },
   });
+  const cookies = reauthCookies(ADMIN);
   await app.inject({ method: 'PUT', url: '/user-2', payload: { name: 'Sam B' } });
   await app.inject({ method: 'PUT', url: '/user-2', payload: { role: 'STAFF' } });
   assert.equal(audit.events.length, 0, 'no transition, no event');
 
-  await app.inject({ method: 'PUT', url: '/user-2', payload: { role: 'ADMIN', isActive: false } });
-  await app.inject({ method: 'PUT', url: '/user-2', payload: { isActive: true } });
-  const reset = await app.inject({ method: 'POST', url: '/user-2/reset-password', payload: { newPassword: 'a-new-password-1' } });
+  await app.inject({ method: 'PUT', url: '/user-2', cookies, payload: { role: 'ADMIN', isActive: false } });
+  await app.inject({ method: 'PUT', url: '/user-2', cookies, payload: { isActive: true } });
+  const reset = await app.inject({ method: 'POST', url: '/user-2/reset-password', cookies, payload: { newPassword: 'a-new-password-1' } });
   assert.equal(reset.statusCode, 200, reset.body);
+  // A role change and an admin password reset each sign the member out of
+  // every session; the reset also revokes the member's API keys.
+  assert.equal(updates.filter((data) => data.sessionVersion).length, 2, 'role change + password reset');
+  assert.deepEqual(updates.find((data) => data.role === 'ADMIN').sessionVersion, { increment: 1 });
+  assert.equal(updates.find((data) => data.name === 'Sam B').sessionVersion, undefined, 'a profile edit keeps sessions');
+  assert.deepEqual(keyRevocations[0].where, { userId: 'user-2', isActive: true });
+  assert.equal(keyRevocations[0].data.isActive, false);
+  assert.ok(keyRevocations[0].data.revokedAt instanceof Date);
   assert.deepEqual(audit.events.map((event) => [event.action, event.entityId]), [
     ['user.role_changed', 'user-2'],
     ['user.deactivated', 'user-2'],
@@ -302,7 +318,7 @@ test('team changes emit role, deactivation and password-reset events only on rea
     ['auth.password_changed', 'user-2'],
   ]);
   assert.deepEqual(audit.events[0].metadata, { fromRole: 'STAFF', toRole: 'ADMIN' });
-  assert.deepEqual(audit.events[3].metadata, { method: 'admin_reset' });
+  assert.deepEqual(audit.events[3].metadata, { method: 'admin_reset', apiKeysRevoked: 2 });
   assert.doesNotMatch(JSON.stringify(audit.events), /a-new-password-1/);
 });
 
@@ -395,7 +411,9 @@ test('API key creation and revocation are audited without the key material', asy
       update: async () => ({}),
     },
   });
-  const response = await app.inject({ method: 'POST', url: '/', payload: { name: 'CI' } });
+  const response = await app.inject({
+    method: 'POST', url: '/', cookies: reauthCookies(ADMIN), payload: { name: 'CI', scopes: ['ai_bridge:read'] },
+  });
   assert.equal(response.statusCode, 200, response.body);
   const revoked = await app.inject({ method: 'DELETE', url: '/key-1' });
   assert.equal(revoked.statusCode, 200);
@@ -406,6 +424,9 @@ test('API key creation and revocation are audited without the key material', asy
   const serialized = JSON.stringify(audit.events);
   assert.doesNotMatch(serialized, new RegExp(response.json().key));
   assert.doesNotMatch(serialized, new RegExp(created.key));
+  assert.equal(audit.events[0].metadata.scopes, 'ai_bridge:read');
+  assert.equal(audit.events[0].metadata.expires, true);
+  assert.equal(audit.events[0].metadata.expiresAt, created.expiresAt.toISOString());
 });
 
 test('a platform operator switching the AI provider is audited', async (t) => {
@@ -417,7 +438,9 @@ test('a platform operator switching the AI provider is audited', async (t) => {
     user: { findUnique: async () => ({ role: 'ADMIN', isActive: true }) },
   }, { user: { id: 'user-op', role: 'ADMIN', organizationId: 'org-ops' } });
   const target = before.provider === 'gemini' ? 'claude' : 'gemini';
-  const response = await app.inject({ method: 'POST', url: '/ai-provider', payload: { provider: target } });
+  const response = await app.inject({
+    method: 'POST', url: '/ai-provider', cookies: reauthCookies({ id: 'user-op' }), payload: { provider: target },
+  });
   assert.equal(response.statusCode, 200, response.body);
   assert.equal(audit.events.length, 1);
   assert.equal(audit.events[0].action, 'settings.ai_provider_changed');

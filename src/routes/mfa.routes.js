@@ -9,6 +9,13 @@ import logger from '../utils/logger.js';
 import { sessionCookieOptions, signUserSession } from '../auth/session.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import {
+  auditReauthFailure,
+  REAUTH_COOKIE,
+  REAUTH_TTL_SECONDS,
+  reauthCookieOptions,
+  signReauthToken,
+} from '../auth/reauth.js';
+import {
   claimTotpCode,
   generateRecoveryCodes,
   isChallengeRevokedByLockout,
@@ -27,6 +34,7 @@ import {
   mfaDisableSchema,
   mfaEnrollSchema,
   mfaLoginSchema,
+  reauthSchema,
   validateBody,
 } from '../validators/schemas.js';
 
@@ -88,6 +96,33 @@ async function verifyPassword(password, hash) {
   return bcrypt.compare(password, hash);
 }
 
+// Per-account budget for step-up password attempts (#416 review). The route's
+// per-IP rate limit alone would let a stolen session cookie spread password
+// guesses across many addresses; this caps failures per account. It is kept
+// in process memory, so each API instance enforces its own budget.
+export const REAUTH_PASSWORD_MAX_FAILURES = 10;
+const REAUTH_PASSWORD_WINDOW_MS = 15 * 60 * 1000;
+const reauthPasswordFailures = new Map();
+
+function reauthPasswordBudgetExceeded(userId, now = Date.now()) {
+  const entry = reauthPasswordFailures.get(userId);
+  if (!entry || entry.resetAt <= now) return false;
+  return entry.count >= REAUTH_PASSWORD_MAX_FAILURES;
+}
+
+function recordReauthPasswordFailure(userId, now = Date.now()) {
+  const entry = reauthPasswordFailures.get(userId);
+  if (!entry || entry.resetAt <= now) {
+    reauthPasswordFailures.set(userId, { count: 1, resetAt: now + REAUTH_PASSWORD_WINDOW_MS });
+  } else {
+    entry.count += 1;
+  }
+}
+
+export function resetReauthPasswordFailures() {
+  reauthPasswordFailures.clear();
+}
+
 function publicUser(user) {
   return { id: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId };
 }
@@ -126,7 +161,9 @@ export default async function mfaRoutes(fastify) {
   }
 
   function reissueSession(reply, user, sessionVersion) {
-    reply.setCookie('token', signUserSession(fastify.jwt, { ...user, sessionVersion }), sessionCookieOptions({ includeMaxAge: true }));
+    const token = signUserSession(fastify.jwt, { ...user, sessionVersion });
+    reply.setCookie('token', token, sessionCookieOptions({ includeMaxAge: true }));
+    return token;
   }
 
   // Current MFA status for the signed-in staff user.
@@ -236,6 +273,72 @@ export default async function mfaRoutes(fastify) {
     reissueSession(reply, user, updated.sessionVersion);
     await recordMfaEvent(request.prisma, request, user, 'disabled', { method: factor.method });
     return { enabled: false };
+  });
+
+  // Step-up re-authentication (#416). Proves the signed-in user is present
+  // and sets the short-lived `reauth` cookie that requireRecentAuth checks on
+  // privileged actions (docs/privileged-actions.md). Accounts with two-factor
+  // authentication must use a TOTP or recovery code (drawing on the same
+  // per-account attempt budget and lockout as sign-in); others use their
+  // password (bounded by this route's per-IP rate limit and a per-account
+  // failure budget).
+  fastify.post('/reauth', {
+    config: { rateLimit: { max: 20, timeWindow: '15 minutes', keyGenerator: (req) => req.ip } },
+    onRequest: [fastify.authenticate],
+    preHandler: [validateBody(reauthSchema)],
+  }, async (request, reply) => {
+    const user = await request.prisma.user.findUnique({ where: { id: request.user.id }, select: MFA_USER_SELECT });
+    if (!user || !user.isActive) return reply.status(401).send({ error: 'Unauthorized' });
+    const { password, code } = request.body;
+    let method;
+    let session = request.user;
+
+    if (isMfaRequired(user)) {
+      if (!code) {
+        return reply.status(400).send({ error: 'Enter your authentication code or a recovery code', code: 'MFA_CODE_REQUIRED' });
+      }
+      const isTotp = /^\d{3}\s?\d{3}$/.test(code);
+      const factor = await verifySecondFactor(request.prisma, user, isTotp ? { code } : { recoveryCode: code });
+      if (!factor.ok) {
+        void auditReauthFailure(request.prisma, request, user, factor.reason);
+        return secondFactorFailure(reply, factor, 400);
+      }
+      method = factor.method;
+      if (factor.sessionVersion !== user.sessionVersion) {
+        // A recovery code revokes every other session; keep this one and
+        // bind the re-authentication to the replacement session token.
+        const token = reissueSession(reply, user, factor.sessionVersion);
+        session = fastify.jwt.decode(token);
+        await recordMfaEvent(request.prisma, request, user, 'recovery_code_used', { remaining: factor.recoveryCodesRemaining });
+      }
+    } else {
+      if (!password) {
+        return reply.status(400).send({ error: 'Enter your current password' });
+      }
+      if (reauthPasswordBudgetExceeded(user.id)) {
+        return reply.status(429).send({ error: 'Too many attempts. Try again in a few minutes.', code: 'REAUTH_LOCKED' });
+      }
+      if (!(await verifyPassword(password, user.password))) {
+        recordReauthPasswordFailure(user.id);
+        void auditReauthFailure(request.prisma, request, user, 'invalid_password');
+        return reply.status(400).send({ error: 'Current password is incorrect' });
+      }
+      reauthPasswordFailures.delete(user.id);
+      method = 'password';
+    }
+
+    const expiresAt = new Date(Date.now() + REAUTH_TTL_SECONDS * 1000);
+    reply.setCookie(REAUTH_COOKIE, signReauthToken({ ...session, id: user.id }), reauthCookieOptions());
+    await recordRequestAuditEvent(request.prisma, request, {
+      organizationId: user.organizationId,
+      actorUserId: user.id,
+      actorType: 'USER',
+      action: 'auth.reauthenticated',
+      entityId: user.id,
+      metadata: { method },
+    });
+    reply.header('Cache-Control', 'no-store');
+    return { reauthenticated: true, method, expiresAt };
   });
 
   // Second login step: exchange a valid challenge + code for a session cookie.

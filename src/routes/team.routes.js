@@ -3,6 +3,28 @@
 import bcrypt from 'bcrypt';
 import { validateBody, teamInviteSchema, teamResetPasswordSchema, teamUpdateSchema } from '../validators/schemas.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
+import { requireRecentAuth } from '../auth/reauth.js';
+
+/**
+ * preHandler for PUT /:id: changing a member's role or deactivating /
+ * reactivating them is a privileged action (docs/privileged-actions.md) and
+ * needs recent re-authentication; ordinary profile edits (name, skills,
+ * capacity) do not. Compares against the stored state, so a form that
+ * resubmits the unchanged role is not prompted.
+ */
+async function requireRecentAuthForAccessChange(request, reply) {
+  const { role, isActive } = request.body || {};
+  if (!role && isActive === undefined) return undefined;
+  const current = await request.prisma.user.findUnique({
+    where: { id: request.params.id },
+    select: { role: true, isActive: true },
+  });
+  if (!current) return undefined; // the handler answers 404 / Prisma error as before
+  const changesAccess = (role && role !== current.role)
+    || (isActive !== undefined && isActive !== current.isActive);
+  if (!changesAccess) return undefined;
+  return requireRecentAuth(request, reply);
+}
 
 async function hashPassword(password) {
   return bcrypt.hash(password, 12);
@@ -141,7 +163,7 @@ export default async function teamRoutes(fastify) {
   // Update team member
   fastify.put('/:id', {
     onRequest: [fastify.adminOnly],
-    preHandler: validateBody(teamUpdateSchema),
+    preHandler: [validateBody(teamUpdateSchema), requireRecentAuthForAccessChange],
   }, async (request, reply) => {
     const { id } = request.params;
     const { name, role, skills, capacity, isActive } = request.body;
@@ -158,6 +180,11 @@ export default async function teamRoutes(fastify) {
     const before = (role || isActive !== undefined)
       ? await request.prisma.user.findUnique({ where: { id }, select: { role: true, isActive: true } })
       : null;
+
+    // A role change ends the member's sessions: adminOnly trusts the role in
+    // the session token, so a demoted admin would otherwise keep admin rights
+    // until the token expired.
+    if (before && role && before.role !== role) data.sessionVersion = { increment: 1 };
 
     const member = await request.prisma.user.update({
       where: { id },
@@ -248,20 +275,27 @@ export default async function teamRoutes(fastify) {
   // Reset password (admin only)
   fastify.post('/:id/reset-password', {
     onRequest: [fastify.adminOnly],
-    preHandler: validateBody(teamResetPasswordSchema),
+    preHandler: [requireRecentAuth, validateBody(teamResetPasswordSchema)],
   }, async (request, reply) => {
     const { id } = request.params;
     const { newPassword } = request.body;
 
     await request.prisma.user.update({
       where: { id },
-      data: { password: await hashPassword(newPassword) }
+      // Sign the member out everywhere: whoever held the old password must
+      // not keep a session after an administrator replaces it.
+      data: { password: await hashPassword(newPassword), sessionVersion: { increment: 1 } }
+    });
+    // Nor any API key they could have created with it.
+    const revokedKeys = await request.prisma.apiKey.updateMany({
+      where: { userId: id, isActive: true },
+      data: { isActive: false, revokedAt: new Date() }
     });
 
     await recordRequestAuditEvent(request.prisma, request, {
       action: 'auth.password_changed',
       entityId: id,
-      metadata: { method: 'admin_reset' },
+      metadata: { method: 'admin_reset', apiKeysRevoked: revokedKeys.count },
     });
 
     return { success: true };

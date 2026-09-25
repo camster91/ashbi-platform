@@ -8,6 +8,7 @@ import {
   MAX_UPLOAD_SIZE,
   validateUploadedFile,
 } from '../security/file-upload-policy.js';
+import { API_KEY_MAX_EXPIRY_DAYS, API_KEY_SCOPES } from '../auth/api-key-scopes.js';
 
 // ── Reusable field validators ──────────────────────────────────────────────
 const email = z.string().email().max(255);
@@ -68,6 +69,15 @@ export const mfaLoginSchema = z.object({
   challengeToken: z.string().min(1).max(1024),
   ...secondFactor,
 }).refine(exactlyOneFactor, exactlyOneFactorMessage);
+
+// Step-up re-authentication (#416): the password, or (when two-factor is on)
+// an authenticator code or a recovery code, never both.
+export const reauthSchema = z.object({
+  password: z.string().min(1).max(128).optional(),
+  code: z.string().trim().min(6).max(32).optional(),
+}).refine((value) => Boolean(value.password) !== Boolean(value.code), {
+  message: 'Provide either your password or an authentication code',
+});
 
 export const forgotPasswordSchema = z.object({
   email: email,
@@ -446,8 +456,10 @@ export const slackChannelMappingSchema = z.object({
 
 // ── Helper: Fastify preValidation hook from Zod schema ─────────────────────
 // Usage: { preHandler: [fastify.authenticate, validateBody(createProjectSchema)] }
+// Each helper records its schema and target on the returned hook so tooling
+// (scripts/generate-openapi.mjs) can describe the route; runtime ignores them.
 export function validateBody(schema) {
-  return async (request, reply) => {
+  return Object.assign(async (request, reply) => {
     const result = schema.safeParse(request.body);
     if (!result.success) {
       const errors = result.error.errors.map(e => `${e.path.join('.')}: ${e.message}`);
@@ -455,29 +467,29 @@ export function validateBody(schema) {
     }
     // Replace request.body with parsed/trimmed data
     request.body = result.data;
-  };
+  }, { zodSchema: schema, zodTarget: 'body' });
 }
 
 export function validateParams(schema) {
-  return async (request, reply) => {
+  return Object.assign(async (request, reply) => {
     const result = schema.safeParse(request.params);
     if (!result.success) {
       const errors = result.error.errors.map(e => `${e.path.join('.')}: ${e.message}`);
       return reply.status(400).send({ error: errors.join('; ') });
     }
     request.params = result.data;
-  };
+  }, { zodSchema: schema, zodTarget: 'params' });
 }
 
 export function validateQuery(schema) {
-  return async (request, reply) => {
+  return Object.assign(async (request, reply) => {
     const result = schema.safeParse(request.query);
     if (!result.success) {
       const errors = result.error.errors.map(e => `${e.path.join('.')}: ${e.message}`);
       return reply.status(400).send({ error: errors.join('; ') });
     }
     request.query = result.data;
-  };
+  }, { zodSchema: schema, zodTarget: 'query' });
 }
 
 export const schemas = {
@@ -1394,9 +1406,16 @@ export const invoiceChaserSchema = z.object({
 });
 
 // ── API key (programmatic access tokens) ─────────────────────────────────
+// Closed scope catalogue: see API_KEY_SCOPES in src/auth/api-key-scopes.js.
 export const apiKeyCreateSchema = z.object({
-  name: z.string().min(1).max(100),
+  name: z.string().trim().min(1).max(100),
+  scopes: z.array(z.enum(API_KEY_SCOPES)).min(1, 'Choose at least one scope').max(API_KEY_SCOPES.length),
+  // Whole days from now; the route defaults to 90 and rejects more than 365.
+  expiresInDays: z.number().int().min(1).max(API_KEY_MAX_EXPIRY_DAYS).optional(),
+  // Absolute expiry (legacy field); must also fall within the maximum.
   expiresAt: z.string().datetime().optional(),
+}).refine((value) => !(value.expiresInDays && value.expiresAt), {
+  message: 'Provide either expiresInDays or expiresAt, not both',
 });
 
 // ── Ash Chat ─────────────────────────────────────────────────────────────

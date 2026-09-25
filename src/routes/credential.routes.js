@@ -3,6 +3,7 @@
 import { encrypt, getActiveCredentialKeyVersion } from '../utils/crypto.js';
 import { validateBody, credentialCreateSchema, credentialUpdateSchema } from '../validators/schemas.js';
 import { clampTake } from '../utils/query-limits.js';
+import { requireRecentAuth } from '../auth/reauth.js';
 import {
   normalizeCredentialPurpose,
   recordMissingCredentialAccess,
@@ -50,7 +51,9 @@ export default async function credentialRoutes(fastify) {
 
   // Get single credential (with decrypted password, admin only)
   fastify.get('/:id', {
-    onRequest: [fastify.adminOnly]
+    onRequest: [fastify.adminOnly],
+    // Revealing a stored secret is a privileged action (docs/privileged-actions.md).
+    preHandler: [requireRecentAuth],
   }, async (request, reply) => {
     const { id } = request.params;
     const purpose = normalizeCredentialPurpose(request.headers['x-credential-purpose']);
@@ -85,7 +88,9 @@ export default async function credentialRoutes(fastify) {
 
   // Decrypt password only (for copy-to-clipboard, admin only)
   fastify.get('/:id/password', {
-    onRequest: [fastify.adminOnly]
+    onRequest: [fastify.adminOnly],
+    // Revealing a stored secret is a privileged action (docs/privileged-actions.md).
+    preHandler: [requireRecentAuth],
   }, async (request, reply) => {
     const { id } = request.params;
     const purpose = normalizeCredentialPurpose(request.headers['x-credential-purpose']);

@@ -29,20 +29,28 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | api-key | `fastify.authenticateWithApiKey`: hashed API key (AI bridge / ChatGPT actions). |
 | client-portal | `clientAuth` in `client-portal.routes.js`: client portal session cookie. |
 | bot-secret | `requireBotAuth` in `bot.routes.js`: bot bearer secret, fails closed without a bot tenant. |
+| recent-auth | `requireRecentAuth` (`src/auth/reauth.js`): step-up re-authentication within the last 10 minutes in this session, else `403 REAUTH_REQUIRED`. Always paired with a session guard. See docs/privileged-actions.md. |
+| recent-auth (access change) | `requireRecentAuthForAccessChange` in `team.routes.js`: `recent-auth`, only when the request changes the member's role or active state. |
+| scope … | `requireApiKeyScope(scope)` (`src/auth/api-key-scopes.js`): the API key must carry that scope, else `403 INSUFFICIENT_SCOPE`. |
 | public | No auth hook. Each one is on the allowlist in the test, with the reason shown in the table. |
 
 ## Summary
 
 | Access | Routes |
 | --- | --- |
-| admin | 34 |
+| admin | 29 |
+| admin + recent-auth | 4 |
+| admin + recent-auth (access change) | 1 |
 | admin + staff | 6 |
-| api-key | 4 |
+| api-key | 1 |
+| api-key + scope ai_bridge:actions | 2 |
+| api-key + scope ai_bridge:read | 1 |
 | bot-secret | 41 |
 | client-portal | 19 |
 | public | 46 |
+| recent-auth + staff | 1 |
 | staff | 342 |
-| **total** | 492 |
+| **total** | 493 |
 
 ## Routes by prefix
 
@@ -72,9 +80,9 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | Method | Path | Access | Tenancy | Notes |
 | --- | --- | --- | --- | --- |
 | GET | `/api/ai-bridge/capabilities` | api-key | scoped |  |
-| POST | `/api/ai-bridge/v1/actions/:actionId/confirm` | api-key | scoped |  |
-| POST | `/api/ai-bridge/v1/actions/prepare` | api-key | scoped |  |
-| POST | `/api/ai-bridge/v1/chat/completions` | api-key | scoped |  |
+| POST | `/api/ai-bridge/v1/actions/:actionId/confirm` | api-key + scope ai_bridge:actions | scoped |  |
+| POST | `/api/ai-bridge/v1/actions/prepare` | api-key + scope ai_bridge:actions | scoped |  |
+| POST | `/api/ai-bridge/v1/chat/completions` | api-key + scope ai_bridge:read | scoped |  |
 
 ### /api/ai-context
 
@@ -98,7 +106,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | Method | Path | Access | Tenancy | Notes |
 | --- | --- | --- | --- | --- |
 | GET | `/api/api-keys` | staff | scoped |  |
-| POST | `/api/api-keys` | staff | scoped |  |
+| POST | `/api/api-keys` | recent-auth + staff | scoped |  |
 | DELETE | `/api/api-keys/:id` | staff | scoped |  |
 
 ### /api/approvals
@@ -167,6 +175,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | POST | `/api/auth/mfa/confirm` | staff | exempt | Writes only the caller's own two-factor state. |
 | POST | `/api/auth/mfa/disable` | staff | exempt | Writes only the caller's own two-factor state. |
 | POST | `/api/auth/mfa/enroll` | staff | exempt | Writes only the caller's own two-factor state. |
+| POST | `/api/auth/reauth` | staff | exempt | Verifies only the caller's own password or second factor and writes only the caller's own MFA attempt state. |
 | POST | `/api/auth/register` | public | exempt | credential exchange: First-admin bootstrap gated by ADMIN_INVITE_TOKEN; later registrations require an admin session checked in the handler. |
 | POST | `/api/auth/reset-password` | public | exempt | credential exchange: Requires the emailed single-use reset token. |
 
@@ -357,9 +366,9 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | GET | `/api/credentials` | admin | scoped |  |
 | POST | `/api/credentials` | admin | scoped |  |
 | DELETE | `/api/credentials/:id` | admin | scoped |  |
-| GET | `/api/credentials/:id` | admin | scoped |  |
+| GET | `/api/credentials/:id` | admin + recent-auth | scoped |  |
 | PUT | `/api/credentials/:id` | admin | scoped |  |
-| GET | `/api/credentials/:id/password` | admin | scoped |  |
+| GET | `/api/credentials/:id/password` | admin + recent-auth | scoped |  |
 
 ### /api/dashboard
 
@@ -750,7 +759,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | Method | Path | Access | Tenancy | Notes |
 | --- | --- | --- | --- | --- |
 | GET | `/api/settings/ai-provider` | staff | scoped |  |
-| POST | `/api/settings/ai-provider` | admin | scoped |  |
+| POST | `/api/settings/ai-provider` | admin + recent-auth | scoped |  |
 | GET | `/api/settings/ai-provider/ollama-models` | staff | scoped |  |
 | GET | `/api/settings/assignment-rules` | staff | scoped |  |
 | POST | `/api/settings/assignment-rules` | admin | scoped |  |
@@ -806,8 +815,8 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | GET | `/api/team` | staff | scoped |  |
 | POST | `/api/team` | admin | scoped |  |
 | GET | `/api/team/:id` | staff | scoped |  |
-| PUT | `/api/team/:id` | admin | scoped |  |
-| POST | `/api/team/:id/reset-password` | admin | scoped |  |
+| PUT | `/api/team/:id` | admin + recent-auth (access change) | scoped |  |
+| POST | `/api/team/:id/reset-password` | admin + recent-auth | scoped |  |
 | GET | `/api/team/allocations` | staff | scoped |  |
 | GET | `/api/team/workload` | staff | scoped |  |
 

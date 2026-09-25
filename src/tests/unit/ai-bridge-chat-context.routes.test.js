@@ -21,6 +21,7 @@ test('supplies bounded tenant-scoped conversation and retainer context to the AI
   });
   app.decorate('authenticateWithApiKey', async (request) => {
     request.user = { id: 'user-1', organizationId: 'org-1', role: 'TEAM' };
+    request.apiKeyScopes = ['ai_bridge:read', 'ai_bridge:actions'];
   });
   app.addHook('preHandler', async (request) => { request.prisma = app.prisma; });
   await app.register(aiBridgeRoutes, {

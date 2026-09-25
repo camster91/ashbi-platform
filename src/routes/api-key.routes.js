@@ -3,6 +3,8 @@
 import crypto from 'crypto';
 import { validateBody, apiKeyCreateSchema } from '../validators/schemas.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
+import { requireRecentAuth } from '../auth/reauth.js';
+import { API_KEY_SCOPES, resolveApiKeyExpiry, scopesForAudit } from '../auth/api-key-scopes.js';
 
 const PREFIX = 'ashbi_'; // API keys start with ashbi_ for easy identification
 
@@ -24,25 +26,38 @@ export default async function apiKeyRoutes(fastify) {
       select: {
         id: true,
         name: true,
+        scopes: true,
         lastUsedAt: true,
         createdAt: true,
         expiresAt: true,
       },
       orderBy: { createdAt: 'desc' }
     });
-    return { keys };
+    // Keys created before expiry became mandatory keep working with no
+    // expiry; the list flags them so the owner can replace them.
+    return {
+      keys: keys.map((key) => ({ ...key, noExpiry: key.expiresAt === null })),
+      availableScopes: API_KEY_SCOPES,
+    };
   });
 
-  // Create a new API key
+  // Create a new API key. A privileged action: requires recent
+  // re-authentication (docs/privileged-actions.md), at least one scope from
+  // the closed catalogue, and an expiry (default 90 days, at most 365).
   fastify.post('/', {
     onRequest: [fastify.authenticate],
-    preHandler: validateBody(apiKeyCreateSchema),
+    preHandler: [requireRecentAuth, validateBody(apiKeyCreateSchema)],
   }, async (request, reply) => {
-    const { name, expiresAt } = request.body || {};
+    const { name, scopes, expiresInDays, expiresAt: requestedExpiry } = request.body || {};
 
     if (!name || !name.trim()) {
       return reply.status(400).send({ error: 'Name is required' });
     }
+    const expiry = resolveApiKeyExpiry({ expiresInDays, expiresAt: requestedExpiry });
+    if (expiry.error) {
+      return reply.status(400).send({ error: expiry.error });
+    }
+    const grantedScopes = [...new Set(scopes)].sort();
 
     // Limit to 5 active keys per user
     const count = await request.prisma.apiKey.count({
@@ -60,14 +75,21 @@ export default async function apiKeyRoutes(fastify) {
         name: name.trim(),
         key: hashed,
         userId: request.user.id,
-        expiresAt: expiresAt ? new Date(expiresAt) : null,
+        scopes: grantedScopes,
+        expiresAt: expiry.expiresAt,
       }
     });
 
+    // Scopes and expiry only: the key (raw or hashed) is never audited or logged.
     await recordRequestAuditEvent(request.prisma, request, {
       action: 'api_key.created',
       entityId: apiKey.id,
-      metadata: { ownerUserId: request.user.id, expires: Boolean(apiKey.expiresAt) },
+      metadata: {
+        ownerUserId: request.user.id,
+        expires: Boolean(apiKey.expiresAt),
+        expiresAt: apiKey.expiresAt,
+        scopes: scopesForAudit(grantedScopes),
+      },
     });
 
     // Return the raw key ONCE — it won't be stored in plaintext
@@ -75,6 +97,7 @@ export default async function apiKeyRoutes(fastify) {
       id: apiKey.id,
       name: apiKey.name,
       key: rawKey, // Only time the raw key is returned
+      scopes: apiKey.scopes,
       createdAt: apiKey.createdAt,
       expiresAt: apiKey.expiresAt,
     };
@@ -93,7 +116,7 @@ export default async function apiKeyRoutes(fastify) {
 
     await request.prisma.apiKey.update({
       where: { id },
-      data: { isActive: false }
+      data: { isActive: false, revokedAt: key.revokedAt ?? new Date() }
     });
 
     await recordRequestAuditEvent(request.prisma, request, {
@@ -126,7 +149,7 @@ export async function authenticateApiKey(request, reply) {
     include: { user: true }
   });
 
-  if (!key || !key.isActive) {
+  if (!key || !key.isActive || key.revokedAt) {
     return reply.status(401).send({ error: 'Invalid API key' });
   }
 
@@ -153,4 +176,6 @@ export async function authenticateApiKey(request, reply) {
     organizationId: key.user.organizationId,
     clientId: key.user.clientId,
   };
+  // Enforced per route by requireApiKeyScope (src/auth/api-key-scopes.js).
+  request.apiKeyScopes = Array.isArray(key.scopes) ? [...key.scopes] : [];
 }

@@ -12,12 +12,14 @@ actions; mutable presentation records are not sufficient evidence").
 - Reader: `GET /api/audit-events` (admin only), shown in the web app under
   **Settings → Activity log**.
 
-Related #412 references, both generated and checked for drift:
+Related #412 references, all generated and checked for drift:
 
 - [data-dictionary.md](data-dictionary.md): every model, its table, tenant
   scoping, soft-delete support and fields, generated from `prisma/schema.prisma`.
 - [api-access-matrix.md](api-access-matrix.md): every API route and the auth
   guard it runs, with the reason each public route is public.
+- [openapi.json](openapi.json): the OpenAPI 3.1 contract generated from the
+  routes and their Zod validators; see [api-contract.md](api-contract.md).
 
 ## Guarantees
 
@@ -81,13 +83,15 @@ notes, signer names, email addresses, API key material or password hashes.
 | `user.deactivated` | `user` | USER (admin) | `PUT /api/team/:id` when `isActive` goes true → false | `fromActive`, `toActive` |
 | `user.reactivated` | `user` | USER (admin) | `PUT /api/team/:id` when `isActive` goes false → true | `fromActive`, `toActive` |
 | `auth.login_failed` | `user` | USER or CLIENT | `POST /api/auth/login` (any failure) and `POST /api/auth/client/login` (wrong password) for an **existing** account; unknown emails have no tenant and are not logged | `portal` (`staff` or `client`), `accountActive` |
-| `auth.password_changed` | `user` | USER | `POST /api/auth/change-password`, `POST /api/auth/reset-password`, `POST /api/team/:id/reset-password` | `method` (`self_service`, `reset_link`, `admin_reset`), `sessionsRevoked` |
+| `auth.password_changed` | `user` | USER | `POST /api/auth/change-password`, `POST /api/auth/reset-password`, `POST /api/team/:id/reset-password` | `method` (`self_service`, `reset_link`, `admin_reset`), `sessionsRevoked`, `apiKeysRevoked` (admin reset) |
 | `auth.mfa_enabled` | `user` | USER | `POST /api/auth/mfa/confirm` | `recoveryCodesIssued` |
 | `auth.mfa_disabled` | `user` | USER | `POST /api/auth/mfa/disable` | `method` (`totp` or `recovery_code`) |
 | `auth.mfa_reset` | `user` | USER (the acting admin) | `POST /api/auth/mfa/admin/users/:userId/reset` | `wasEnabled` |
-| `auth.mfa_recovery_code_used` | `user` | USER | `POST /api/auth/login/mfa` signed in with a recovery code | `remaining` |
+| `auth.mfa_recovery_code_used` | `user` | USER | `POST /api/auth/login/mfa` signed in, or `POST /api/auth/reauth` re-authenticated, with a recovery code | `remaining` |
 | `auth.mfa_failed` | `user` | USER | `POST /api/auth/login/mfa` rejected a code (bounded by the per-account attempt budget: at most 5 per lockout window) | `reason` (`invalid`, `replayed`, `locked`) |
-| `api_key.created` | `api_key` | USER | `POST /api/api-keys` | `ownerUserId`, `expires` |
+| `auth.reauthenticated` | `user` | USER | `POST /api/auth/reauth` succeeded (step-up re-authentication for a privileged action, see [privileged-actions.md](privileged-actions.md)) | `method` (`password`, `totp` or `recovery_code`) |
+| `auth.reauth_failed` | `user` | USER | `POST /api/auth/reauth` rejected the password or code. Throttled like `auth.login_failed`: at most one per account per 60 seconds (`REAUTH_FAILURE_AUDIT_WINDOW_MS` in `src/auth/reauth.js`) | `reason` (`invalid_password`, `invalid`, `replayed`, `locked`) |
+| `api_key.created` | `api_key` | USER | `POST /api/api-keys` | `ownerUserId`, `expires`, `expiresAt`, `scopes` (granted scopes sorted and joined with `+`, e.g. `ai_bridge:actions+ai_bridge:read`; never the key) |
 | `api_key.revoked` | `api_key` | USER | `DELETE /api/api-keys/:id` | `ownerUserId` |
 | `settings.ai_provider_changed` | `settings` | USER (platform operator) | `POST /api/settings/ai-provider`; `entityId` is `ai_provider`. The provider is deployment-wide; the event is filed under the operator's organization | `fromProvider`, `toProvider`, `fromModel`, `toModel` |
 | `client_portal.document_deleted` | `attachment` | CLIENT | `DELETE /api/client-portal/documents/:docId` | `projectId`, `clientId`, `mimeType`, `size` |
