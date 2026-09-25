@@ -1330,7 +1330,9 @@ export const clientPortalEmailSchema = z.object({
 });
 
 export const clientPortalTokenRedeemSchema = z.object({
-  token: z.string().min(1).max(500),
+  // A magic-link JWT embeds the contact's name and email plus three ids, so
+  // ordinary contacts exceed 500 characters. Bound it generously instead.
+  token: z.string().min(1).max(4096),
 });
 
 export const clientPortalMessageNewSchema = z.object({
