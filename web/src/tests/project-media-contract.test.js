@@ -23,6 +23,15 @@ describe('project media collaboration contract', () => {
     expect(media).toContain('toggleCamera');
   });
 
+  it('addresses every call signal to one bound participant and uses server ICE config', () => {
+    const emits = media.match(/socket\.emit\('call:signal', \{[^}]*\}/g) || [];
+    expect(emits.length).toBeGreaterThan(0);
+    for (const emit of emits) expect(emit).toMatch(/\bto: /);
+    expect(media).toContain('remoteUserRef.current !== from');
+    expect(media).toContain('api.getIceServers()');
+    expect(media).not.toContain("iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] }");
+  });
+
   it('places the controls in the real project workspace', () => {
     expect(project).toContain("import ProjectMedia from '../components/project/ProjectMedia'");
     expect(project).toContain('<ProjectMedia projectId={id} />');

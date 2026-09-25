@@ -26,6 +26,7 @@ import searchRoutes from './routes/search.routes.js';
 import aiRoutes from './routes/ai.routes.js';
 import notificationRoutes from './routes/notification.routes.js';
 import settingsRoutes from './routes/settings.routes.js';
+import realtimeRoutes from './routes/realtime.routes.js';
 import noteRoutes from './routes/note.routes.js';
 import mailgunRoutes from './routes/mailgun.routes.js';
 import mailgunHitlRoutes from './routes/mailgun-hitl.routes.js';
@@ -76,6 +77,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 import logger from './utils/logger.js';
 import { initSubscribers } from './subscribers/index.js';
+import { registerCallSignalling } from './services/call-signalling.service.js';
 import { tenancyMiddleware } from './middleware/tenancy.js';
 import { getAuthProvider } from './auth/index.js';
 import { toClientErrorBody } from './utils/http-errors.js';
@@ -225,6 +227,7 @@ await fastify.register(dashboardRoutes, { prefix: '/api/dashboard' });
 await fastify.register(aiRoutes, { prefix: '/api/ai' });
 await fastify.register(notificationRoutes, { prefix: '/api/notifications' });
 await fastify.register(settingsRoutes, { prefix: '/api/settings' });
+await fastify.register(realtimeRoutes, { prefix: '/api/realtime' });
 await fastify.register(proposalBuilderRoutes, { prefix: '/api/proposal-builder' });
 // Route registrations continued
 await fastify.register(apiKeyRoutes, { prefix: '/api/api-keys' });
@@ -375,40 +378,7 @@ io.on('connection', (socket) => {
     if (projectId) socket.leave(`project:${projectId}`);
   });
 
-  // WebRTC media never traverses this server. Socket.IO only relays bounded
-  // offer/answer/ICE messages inside an already-authorized project room.
-  // This keeps calls tenant-scoped and avoids making a signalling endpoint a
-  // cross-project message relay.
-  socket.on('call:signal', ({ projectId, callId, signal } = {}) => {
-    if (
-      typeof projectId !== 'string' || typeof callId !== 'string' ||
-      !signal || typeof signal !== 'object' ||
-      !socket.rooms.has(`project:${projectId}`)
-    ) return;
-    const serialized = JSON.stringify(signal);
-    if (serialized.length > 16_000) return;
-    const allowedTypes = new Set(['offer', 'answer', 'ice', 'hangup']);
-    if (!allowedTypes.has(signal.type)) return;
-    socket.to(`project:${projectId}`).emit('call:signal', {
-      projectId,
-      callId: callId.slice(0, 128),
-      from: socket.userId,
-      signal,
-    });
-  });
-
-  socket.on('call:presence', ({ projectId, callId, state } = {}) => {
-    if (
-      typeof projectId !== 'string' || typeof callId !== 'string' ||
-      !['joined', 'left'].includes(state) || !socket.rooms.has(`project:${projectId}`)
-    ) return;
-    socket.to(`project:${projectId}`).emit('call:presence', {
-      projectId,
-      callId: callId.slice(0, 128),
-      userId: socket.userId,
-      state,
-    });
-  });
+  registerCallSignalling(io, socket);
 });
 
 fastify.decorate('io', io);

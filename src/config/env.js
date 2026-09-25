@@ -39,6 +39,9 @@ const env = {
   kiloApiBase: process.env.KILO_API_BASE || 'https://api.kilo.ai/api/gateway/',
   kiloModel: process.env.KILO_MODEL || 'anthropic/claude-haiku-4-5',
 
+  // WebRTC: JSON array of RTCIceServer objects (add a TURN relay here)
+  webrtcIceServers: process.env.WEBRTC_ICE_SERVERS,
+
   // Redis
   redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
 
