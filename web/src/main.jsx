@@ -6,6 +6,7 @@ import App from './App';
 import ErrorBoundary from './components/ErrorBoundary';
 import { setUnauthorizedCallback, setApiErrorCallback } from './lib/api';
 import { applyTheme, getInitialTheme } from './lib/theme';
+import { preloadInitialRoute } from './lib/initial-route';
 import './index.css';
 
 // Apply public/system preference before React renders the authentication
@@ -59,14 +60,16 @@ function ApiErrorHandler({ children }) {
   return children;
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <BrowserRouter>
-      <ApiErrorHandler>
-        <ErrorBoundary>
-          <App />
-        </ErrorBoundary>
-      </ApiErrorHandler>
-    </BrowserRouter>
-  </React.StrictMode>
-);
+preloadInitialRoute(window.location.pathname).finally(() => {
+  ReactDOM.createRoot(document.getElementById('root')).render(
+    <React.StrictMode>
+      <BrowserRouter>
+        <ApiErrorHandler>
+          <ErrorBoundary>
+            <App />
+          </ErrorBoundary>
+        </ApiErrorHandler>
+      </BrowserRouter>
+    </React.StrictMode>
+  );
+});
