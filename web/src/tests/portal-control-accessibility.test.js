@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { clientPortalSource } from './helpers/clientPortalSource';
 
-const portal = readFileSync(resolve(process.cwd(), 'src/pages/ClientPortal.jsx'), 'utf8');
+const portal = clientPortalSource();
 const layout = readFileSync(resolve(process.cwd(), 'src/components/Layout.jsx'), 'utf8');
 const intake = readFileSync(resolve(process.cwd(), 'src/pages/PortalIntakeForm.jsx'), 'utf8');
 const proposal = readFileSync(resolve(process.cwd(), 'src/pages/PortalProposal.jsx'), 'utf8');

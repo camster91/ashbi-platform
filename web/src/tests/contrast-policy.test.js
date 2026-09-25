@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { clientPortalSource } from './helpers/clientPortalSource';
 
 function rgb(hex) {
   return hex.match(/[0-9a-f]{2}/gi).map((part) => parseInt(part, 16));
@@ -74,7 +75,7 @@ describe('WCAG contrast policy', () => {
   });
 
   it('keeps inaccessible legacy portal overrides out and defines visible focus', () => {
-    const portal = readFileSync(resolve(process.cwd(), 'src/pages/ClientPortal.jsx'), 'utf8');
+    const portal = clientPortalSource();
     const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');
     expect(portal).not.toContain('#8a85a0');
     expect(portal).not.toMatch(/color:\s*connected \? '#16a34a'/);
