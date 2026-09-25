@@ -113,8 +113,8 @@ export default async function noteRoutes(fastify) {
     if (pinned === 'true') where.isPinned = true;
     if (search) {
       where.OR = [
-        { title: { contains: search } },
-        { content: { contains: search } }
+        { title: { contains: search, mode: 'insensitive' } },
+        { content: { contains: search, mode: 'insensitive' } }
       ];
     }
 

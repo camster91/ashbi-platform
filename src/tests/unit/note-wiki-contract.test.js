@@ -133,3 +133,34 @@ test('canonical wiki API creates nested pages, audit rows, template copies, and 
     await app.close();
   }
 });
+
+test('project note search is case-insensitive like the workspace note search', async () => {
+  const queries = [];
+  const prisma = {
+    note: {
+      findMany: async args => {
+        queries.push(args);
+        return [{ id: 'note-1', title: 'Launch Plan', tags: '[]', mentions: '[]' }];
+      },
+    },
+  };
+  const app = Fastify();
+  app.decorate('authenticate', async request => {
+    request.user = { id: 'author', role: 'ADMIN', organizationId: 'org-a' };
+  });
+  app.addHook('preHandler', async request => { request.prisma = prisma; });
+  await app.register(noteRoutes, { prefix: '/api' });
+
+  try {
+    const response = await app.inject({ method: 'GET', url: '/api/projects/project-a/notes?search=launch%20plan' });
+    assert.equal(response.statusCode, 200, response.body);
+    assert.equal(response.json()[0].title, 'Launch Plan');
+    assert.equal(queries[0].where.projectId, 'project-a');
+    assert.deepEqual(queries[0].where.OR, [
+      { title: { contains: 'launch plan', mode: 'insensitive' } },
+      { content: { contains: 'launch plan', mode: 'insensitive' } },
+    ]);
+  } finally {
+    await app.close();
+  }
+});
