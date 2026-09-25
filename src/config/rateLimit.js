@@ -4,13 +4,17 @@ export function isNonApiRequest(request) {
 }
 
 export const DEFAULT_API_RATE_LIMIT_MAX = 100;
+export const API_RATE_LIMIT_OVERRIDE_CEILING = 5000;
 
 /**
- * Requests per minute each client IP may make to /api. Production keeps the
- * default; API_RATE_LIMIT_MAX lets single-IP harnesses such as the full-stack
- * browser journeys (one browser + API client on 127.0.0.1) raise it.
+ * Requests per minute each client IP may make to /api. API_RATE_LIMIT_MAX lets
+ * single-IP harnesses such as the full-stack browser journeys (one browser +
+ * API client on 127.0.0.1) raise it. Production always uses the default, and
+ * an override is clamped so a typo cannot effectively disable the limiter.
  */
-export function apiRateLimitMax(value = process.env.API_RATE_LIMIT_MAX) {
+export function apiRateLimitMax(value = process.env.API_RATE_LIMIT_MAX, nodeEnv = process.env.NODE_ENV) {
+  if (nodeEnv === 'production') return DEFAULT_API_RATE_LIMIT_MAX;
   const parsed = Number.parseInt(String(value ?? ''), 10);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : DEFAULT_API_RATE_LIMIT_MAX;
+  if (!Number.isInteger(parsed) || parsed <= 0) return DEFAULT_API_RATE_LIMIT_MAX;
+  return Math.min(parsed, API_RATE_LIMIT_OVERRIDE_CEILING);
 }
