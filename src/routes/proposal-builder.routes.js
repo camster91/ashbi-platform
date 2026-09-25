@@ -363,9 +363,12 @@ export default async function proposalBuilderRoutes(fastify) {
 
   /**
    * POST /:id/track
-   * Track that a proposal was viewed (for email open tracking webhooks)
+   * Record that a sent proposal was viewed. Requires a staff session: the
+   * tenancy guard already refused anonymous calls, and the explicit hook keeps
+   * the route off the public access list. Client views are recorded by the
+   * capability-token routes under /api/portal instead.
    */
-  fastify.post('/:id/track', async (request, reply) => {
+  fastify.post('/:id/track', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     try {
       const proposalId = request.params.id;
       await trackProposalView(proposalId);

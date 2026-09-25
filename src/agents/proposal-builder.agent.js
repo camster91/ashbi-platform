@@ -535,16 +535,16 @@ async function updateProposal(proposalId, updateData) {
  */
 async function trackProposalView(proposalId) {
   try {
-    const proposal = await prisma.proposal.update({
-      where: { id: proposalId },
-      data: {
-        status: PROPOSAL_STATUS.VIEWED
-      }
+    // Only a SENT proposal becomes VIEWED. A view must never move an accepted,
+    // rejected or draft proposal backwards.
+    const { count } = await prisma.proposal.updateMany({
+      where: { id: proposalId, status: PROPOSAL_STATUS.SENT },
+      data: { status: PROPOSAL_STATUS.VIEWED }
     });
 
     return {
-      id: proposal.id,
-      status: proposal.status
+      id: proposalId,
+      updated: count > 0
     };
   } catch (error) {
     console.error('Error tracking proposal view:', error);

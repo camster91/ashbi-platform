@@ -36,9 +36,9 @@ checks inside handlers are not shown.
 | api-key | 4 |
 | bot-secret | 41 |
 | client-portal | 19 |
-| public | 48 |
-| staff | 341 |
-| **total** | 493 |
+| public | 46 |
+| staff | 342 |
+| **total** | 492 |
 
 ## Routes by prefix
 
@@ -496,7 +496,6 @@ checks inside handlers are not shown.
 | --- | --- | --- | --- |
 | GET | `/api/leads/leads` | staff |  |
 | PATCH | `/api/leads/leads/:id/convert` | staff |  |
-| POST | `/api/leads/leads/intake` | public | public intake: Legacy public lead form (see access review notes in the #412 report). |
 
 ### /api/live
 
@@ -587,8 +586,8 @@ checks inside handlers are not shown.
 | Method | Path | Access | Public reason |
 | --- | --- | --- | --- |
 | GET | `/api/portal/:token` | public | capability token: Project status page addressed by an unguessable project viewToken. |
-| POST | `/api/portal/booking` | public | public intake: Public booking widget submission (see access review notes in the #412 report). |
-| GET | `/api/portal/booking/availability` | public | public intake: Public booking widget availability (see access review notes in the #412 report). |
+| POST | `/api/portal/booking` | public | public intake: Public booking page submission; books into the one booking organization only. |
+| GET | `/api/portal/booking/availability` | public | public intake: Public booking page availability; returns free/busy slots for the one booking organization only. |
 | GET | `/api/portal/contract/:signToken` | public | capability token: Contract signing link. |
 | POST | `/api/portal/contract/:signToken/sign` | public | capability token: Contract signature via signing link. |
 | GET | `/api/portal/form/:viewToken` | public | capability token: Client form link. |
@@ -636,7 +635,7 @@ checks inside handlers are not shown.
 | GET | `/api/proposal-builder/:id/pdf` | staff |  |
 | POST | `/api/proposal-builder/:id/send` | staff |  |
 | POST | `/api/proposal-builder/:id/send-pdf` | staff |  |
-| POST | `/api/proposal-builder/:id/track` | public | tracking pixel: Proposal view tracking pixel (see access review notes in the #412 report). |
+| POST | `/api/proposal-builder/:id/track` | staff |  |
 | POST | `/api/proposal-builder/generate` | staff |  |
 | GET | `/api/proposal-builder/pricing-tiers` | staff |  |
 | GET | `/api/proposal-builder/stats` | staff |  |

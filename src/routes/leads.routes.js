@@ -1,44 +1,9 @@
-// Lead intake routes — public intake + admin management
-
-import { queueEmailForProcessing } from '../jobs/queue.js';
+// Lead management routes (admin)
 
 export default async function leadRoutes(fastify) {
-  // POST /leads/intake — public endpoint, no auth
-  fastify.post('/leads/intake', { config: { public: true } }, async (request, reply) => {
-    const { name, email, company, message, source } = request.body || {};
-
-    if (!name || !email || !message) {
-      return reply.status(400).send({ error: 'name, email, and message are required' });
-    }
-
-    // Create as unmatched email (inbound lead)
-    const lead = await fastify.prisma.unmatchedEmail.create({
-      data: {
-        senderEmail: email,
-        senderName: name,
-        subject: company ? `Lead from ${company}` : `Lead from ${name}`,
-        bodyText: message,
-        status: 'PENDING',
-        suggestedClients: JSON.stringify({ source: source || 'web', company: company || null })
-      }
-    });
-
-    // Queue for AI analysis
-    try {
-      await queueEmailForProcessing({
-        from: email,
-        fromName: name,
-        subject: lead.subject,
-        text: message,
-        unmatchedEmailId: lead.id
-      });
-    } catch (err) {
-      // Queue may not be available — lead is still saved
-      console.error('Failed to queue lead for processing:', err.message);
-    }
-
-    return { received: true, message: 'Thank you, we will be in touch shortly.' };
-  });
+  // Public inquiries arrive through /api/client-acquisition/intake. The old
+  // anonymous /leads/intake route here was removed: it created leads with no
+  // organization, so every submission failed.
 
   // GET /leads — admin only, list pending leads
   fastify.get('/leads', {

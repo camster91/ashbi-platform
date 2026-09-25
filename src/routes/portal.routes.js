@@ -7,6 +7,7 @@ import crypto from 'crypto';
 import { validateBody, bookingSchema, contractSignSchema, formSubmitSchema, proposalDeclineSchema } from '../validators/schemas.js';
 import { publicAccessFailure } from '../utils/public-document-access.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
+import env from '../config/env.js';
 
 export default async function portalRoutes(fastify) {
   // ==================== PROJECT PORTAL ====================
@@ -510,6 +511,20 @@ export default async function portalRoutes(fastify) {
 
   // ==================== PUBLIC BOOKING ====================
 
+  // The booking page is anonymous, so it cannot take its tenant from a
+  // session. Every lookup below is restricted to the one booking organization
+  // so a visitor never sees another tenant's busy times or books into their
+  // calendar.
+  async function resolveBookingOrganization(prisma) {
+    const where = { role: 'ADMIN', isActive: true };
+    if (env.publicBookingOrganizationId) where.organizationId = env.publicBookingOrganizationId;
+    return prisma.user.findFirst({
+      where,
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { id: true, organizationId: true },
+    });
+  }
+
   // Get available time slots for a given date
   fastify.get('/booking/availability', async (request, reply) => {
     const { date } = request.query;
@@ -541,10 +556,18 @@ export default async function portalRoutes(fastify) {
     const dayStart = new Date(date + 'T00:00:00');
     const dayEnd = new Date(date + 'T23:59:59');
 
+    const owner = await resolveBookingOrganization(request.prisma);
+    if (!owner) {
+      return reply.status(503).send({ error: 'Booking is not available' });
+    }
+
+    // Any event overlapping the day blocks its slots, including ones that
+    // start the evening before or run past midnight.
     const existingEvents = await request.prisma.calendarEvent.findMany({
       where: {
-        startTime: { gte: dayStart },
-        endTime: { lte: dayEnd }
+        startTime: { lte: dayEnd },
+        endTime: { gte: dayStart },
+        createdBy: { organizationId: owner.organizationId }
       },
       select: { startTime: true, endTime: true }
     });
@@ -606,28 +629,26 @@ export default async function portalRoutes(fastify) {
       return reply.status(400).send({ error: 'Cannot book a time in the past' });
     }
 
-    // Check for conflicts
+    // The booking is owned by the booking organization's longest-standing
+    // active admin.
+    const adminUser = await resolveBookingOrganization(request.prisma);
+    if (!adminUser) {
+      return reply.status(503).send({ error: 'Booking is not available' });
+    }
+
+    // Check for conflicts in that organization's calendar only
     const conflict = await request.prisma.calendarEvent.findFirst({
       where: {
         AND: [
           { startTime: { lt: endTime } },
-          { endTime: { gt: startTime } }
+          { endTime: { gt: startTime } },
+          { createdBy: { organizationId: adminUser.organizationId } }
         ]
       }
     });
 
     if (conflict) {
       return reply.status(409).send({ error: 'This time slot is no longer available' });
-    }
-
-    // Get or use a system user for createdById (first admin)
-    const adminUser = await request.prisma.user.findFirst({
-      where: { role: 'ADMIN' },
-      select: { id: true }
-    });
-
-    if (!adminUser) {
-      return reply.status(500).send({ error: 'System configuration error' });
     }
 
     const event = await request.prisma.calendarEvent.create({

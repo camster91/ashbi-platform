@@ -37,6 +37,10 @@ const env = {
     .map((id) => id.trim())
     .filter(Boolean),
   aiModel: 'gemma4:31b',
+  // The anonymous booking page (/portal/book) books into one organization's
+  // calendar. Unset, it uses the organization of the longest-standing active
+  // admin, which is the deployment owner on a single-agency install.
+  publicBookingOrganizationId: process.env.PUBLIC_BOOKING_ORGANIZATION_ID?.trim() || null,
 
   // Kilo AI (alternative AI gateway)
   kiloApiKey: process.env.KILO_API_KEY,

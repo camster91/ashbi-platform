@@ -55,7 +55,7 @@ export async function tenancyMiddleware(request, reply) {
     // These are scoped by an unguessable viewToken/signToken in the URL, not
     // by tenant. Without these exemptions the tenancy guard 403s before the
     // token lookup runs, breaking client proposal/contract/estimate/invoice
-    // review links and the Mailgun HITL + lead-intake webhooks.
+    // review links and the Mailgun HITL webhook.
     request.url.startsWith('/api/proposals/client') ||
     request.url.startsWith('/api/contracts/sign') ||
     request.url.startsWith('/api/estimates/view') ||
@@ -64,7 +64,6 @@ export async function tenancyMiddleware(request, reply) {
     request.url.startsWith('/api/mailgun') ||
     request.url.startsWith('/api/slack/events') ||
     request.url.startsWith('/api/slack/oauth/callback') ||
-    request.url.startsWith('/api/leads/leads/intake') ||
     request.url === '/api/health' ||
     request.url === '/api/live'
   ) {

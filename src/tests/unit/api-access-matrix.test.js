@@ -84,11 +84,9 @@ const INTENTIONALLY_PUBLIC_ROUTES = {
 
   'GET /api/client-acquisition/config': { category: 'public intake', reason: 'Public ashbi.ca inquiry form configuration; own CORS allowlist, no cookies.' },
   'POST /api/client-acquisition/intake': { category: 'public intake', reason: 'Public ashbi.ca inquiry submission; own CORS allowlist, no cookies.' },
-  'POST /api/leads/leads/intake': { category: 'public intake', reason: 'Legacy public lead form (see access review notes in the #412 report).' },
   'GET /api/webhooks/email/status': { category: 'health', reason: 'Static liveness response for the email webhook; reads no data.' },
-  'GET /api/portal/booking/availability': { category: 'public intake', reason: 'Public booking widget availability (see access review notes in the #412 report).' },
-  'POST /api/portal/booking': { category: 'public intake', reason: 'Public booking widget submission (see access review notes in the #412 report).' },
-  'POST /api/proposal-builder/:id/track': { category: 'tracking pixel', reason: 'Proposal view tracking pixel (see access review notes in the #412 report).' },
+  'GET /api/portal/booking/availability': { category: 'public intake', reason: 'Public booking page availability; returns free/busy slots for the one booking organization only.' },
+  'POST /api/portal/booking': { category: 'public intake', reason: 'Public booking page submission; books into the one booking organization only.' },
 };
 
 /**
