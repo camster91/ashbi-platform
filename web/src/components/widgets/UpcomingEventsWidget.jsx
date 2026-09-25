@@ -11,7 +11,13 @@ export default function UpcomingEventsWidget({ events = [] }) {
         <CalendarDays className="w-4 h-4 text-purple-500" />
         <h2 className="font-semibold text-foreground">Upcoming Events</h2>
       </div>
-      <ul className="divide-y divide-border max-h-[340px] overflow-y-auto">
+      {/* Up to six events can overflow this scroll box, and the items hold no
+          focusable content, so the list itself must be keyboard-scrollable. */}
+      <ul
+        tabIndex={0}
+        aria-label="Upcoming events"
+        className="divide-y divide-border max-h-[340px] overflow-y-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+      >
         {events.slice(0, 6).map(event => {
           const start = new Date(event.startTime);
           const isToday = new Date().toDateString() === start.toDateString();
@@ -36,9 +42,9 @@ export default function UpcomingEventsWidget({ events = [] }) {
                     )}>
                       {event.type}
                     </span>
-                    {isToday && <span className="text-xs text-emerald-600 font-medium">Today</span>}
+                    {isToday && <span className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">Today</span>}
                   </div>
-                  <div className="flex items-center gap-3 mt-1">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
                     <span className="text-xs text-muted-foreground flex items-center gap-1">
                       <Clock className="w-3 h-3" />
                       {start.toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit' })}

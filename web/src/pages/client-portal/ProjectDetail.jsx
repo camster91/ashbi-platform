@@ -398,6 +398,10 @@ export default function ProjectDetail({ projectId, token, onBack }) {
             multiple
             className="cp-visually-hidden"
             aria-label="Choose project documents to upload"
+            // The visible upload button opens this picker; keep the visually
+            // hidden input out of the tab order so keyboard focus never lands
+            // on an invisible control.
+            tabIndex={-1}
             onChange={e => { if (e.target.files.length > 0) handleFileUpload(e.target.files); }}
           />
           <button

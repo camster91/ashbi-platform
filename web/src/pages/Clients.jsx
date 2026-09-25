@@ -476,8 +476,12 @@ export default function Clients() {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <Link to={`/client/${client.id}`} className="text-muted-foreground hover:text-primary">
-                          <ChevronRight className="w-5 h-5" />
+                        <Link
+                          to={`/client/${client.id}`}
+                          aria-label={`Open ${client.name}`}
+                          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded text-muted-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          <ChevronRight className="w-5 h-5" aria-hidden="true" />
                         </Link>
                       </td>
                     </tr>

@@ -216,7 +216,7 @@ export default function ProjectChat({ projectId }) {
         {Object.entries(groupedMessages).map(([date, msgs]) => (
           <div key={date}>
             <div className="flex items-center justify-center my-4">
-              <span className="text-xs text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+              <span className="text-xs text-gray-700 bg-gray-100 px-3 py-1 rounded-full">
                 {date === new Date().toLocaleDateString('en-CA') ? 'Today' : date}
               </span>
             </div>
@@ -238,7 +238,7 @@ export default function ProjectChat({ projectId }) {
                   >
                     {editingId === msg.id ? <form onSubmit={(event) => { event.preventDefault(); if (editingContent.trim()) editMutation.mutate({ id: msg.id, content: editingContent.trim() }); }}><input autoFocus value={editingContent} onChange={(event) => setEditingContent(event.target.value)} className="w-full rounded px-2 py-1 text-gray-900" /><div className="mt-2 flex gap-2"><button type="submit" className="text-xs underline">Save</button><button type="button" onClick={() => setEditingId(null)} className="text-xs underline">Cancel</button></div></form> : <p className="whitespace-pre-wrap">{msg.content}</p>}
                     <div className="flex items-center justify-between mt-1">
-                      <span className={`text-xs ${msg.authorId === user?.id ? 'text-blue-200' : 'text-gray-600'}`}>
+                      <span className={`text-xs ${msg.authorId === user?.id ? 'text-blue-50' : 'text-gray-600'}`}>
                         {formatTime(msg.createdAt)}
                         {msg.isEdited && ' (edited)'}
                       </span>

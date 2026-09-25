@@ -187,8 +187,12 @@ export default function Project() {
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex items-center gap-4">
-        <Link to="/projects" className="p-2 hover:bg-muted rounded-lg transition-colors">
-          <ArrowLeft className="w-5 h-5" />
+        <Link
+          to="/projects"
+          aria-label="Back to projects"
+          className="p-2 hover:bg-muted rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <ArrowLeft className="w-5 h-5" aria-hidden="true" />
         </Link>
         <div className="flex-1">
           <div className="flex items-center gap-3">
@@ -814,9 +818,10 @@ function ProjectNotes({ projectId }) {
 
       {showForm && (
         <div className="p-4 border-b bg-muted/20">
-          <form onSubmit={handleCreate} className="space-y-3">
+          <form onSubmit={handleCreate} aria-label="New note" className="space-y-3">
             <div className="flex gap-3">
               <input
+                aria-label="Note title"
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
                 placeholder="Note title..."
@@ -824,6 +829,7 @@ function ProjectNotes({ projectId }) {
                 required
               />
               <select
+                aria-label="Note type"
                 value={form.type}
                 onChange={(e) => setForm({ ...form, type: e.target.value })}
                 className="px-3 py-2 rounded-lg border border-border bg-background text-sm"
@@ -832,6 +838,7 @@ function ProjectNotes({ projectId }) {
               </select>
             </div>
             <textarea
+              aria-label="Note content"
               value={form.content}
               onChange={(e) => setForm({ ...form, content: e.target.value })}
               placeholder="Content... (supports Markdown)"
@@ -840,6 +847,7 @@ function ProjectNotes({ projectId }) {
             />
             <div className="flex items-center gap-3">
               <input
+                aria-label="Note tags"
                 value={form.tags}
                 onChange={(e) => setForm({ ...form, tags: e.target.value })}
                 placeholder="Tags (comma separated)"
@@ -1022,13 +1030,19 @@ function TaskCategory({ title, icon: Icon, tasks = [], color, collapsed = false 
                   to={`/task/${task.id}`}
                   className="px-4 py-3 hover:bg-secondary/50 flex items-center gap-3 transition-colors"
                 >
-                  <input
-                    type="checkbox"
-                    checked={task.status === 'COMPLETED'}
-                    onChange={() => {}}
-                    onClick={(e) => e.stopPropagation()}
-                    className="rounded border-border"
-                  />
+                  {/* Read-only completion indicator. A real checkbox here was
+                      unlabeled, did nothing, and nested a control inside the
+                      task link; completion is changed on the task page. */}
+                  <span
+                    aria-hidden="true"
+                    className={cn(
+                      'flex h-4 w-4 shrink-0 items-center justify-center rounded border',
+                      task.status === 'COMPLETED' ? 'border-primary bg-primary text-primary-foreground' : 'border-border'
+                    )}
+                  >
+                    {task.status === 'COMPLETED' && <Check className="h-3 w-3" />}
+                  </span>
+                  <span className="sr-only">{task.status === 'COMPLETED' ? 'Completed:' : 'Open:'}</span>
                   <div className="flex-1 min-w-0">
                     <span className={cn('text-sm', task.status === 'COMPLETED' && 'line-through text-muted-foreground')}>
                       {task.title}
@@ -1060,7 +1074,7 @@ function ProjectBudget({ projectId, budget, hourlyBudget }) {
   if (!data) return null;
 
   const pct = data.percentUsed ?? 0;
-  const pctColor = pct >= 100 ? 'text-red-600 bg-red-50 dark:bg-red-900/20' : pct >= 90 ? 'text-orange-600 bg-orange-50 dark:bg-orange-900/20' : pct >= 70 ? 'text-yellow-600 bg-yellow-50 dark:bg-yellow-900/20' : 'text-green-600 bg-green-50 dark:bg-green-900/20';
+  const pctColor = pct >= 100 ? 'text-red-700 bg-red-50 dark:bg-red-900/20 dark:text-red-400' : pct >= 90 ? 'text-orange-800 bg-orange-50 dark:bg-orange-900/20 dark:text-orange-400' : pct >= 70 ? 'text-yellow-800 bg-yellow-50 dark:bg-yellow-900/20 dark:text-yellow-400' : 'text-green-800 bg-green-50 dark:bg-green-900/20 dark:text-green-400';
   const barColor = pct >= 100 ? 'bg-red-500' : pct >= 90 ? 'bg-orange-500' : pct >= 70 ? 'bg-yellow-500' : 'bg-green-500';
 
   return (

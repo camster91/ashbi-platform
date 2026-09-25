@@ -73,8 +73,10 @@
     --muted: 75 30% 95%;
     --muted-foreground: 250 25% 32%;
 
-    /* Destructive */
-    --destructive: 0 84% 60%;
+    /* Destructive — used both as text (text-destructive) and as a solid
+       fill behind white text, so it must clear 4.5:1 on white and cream.
+       The previous 0 84% 60% (#ef4444) was only 3.8:1 either way. */
+    --destructive: 0 74% 42%;
     --destructive-foreground: 0 0% 100%;
 
     /* Borders & Inputs */

@@ -170,7 +170,7 @@ export default function Dashboard() {
             label="Outstanding"
             value={`$${(stats?.totalOutstanding || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}
             subtitle={stats?.overdueCount > 0 ? (
-              <span className="text-xs text-red-500 flex items-center gap-1">
+              <span className="text-xs text-red-700 dark:text-red-400 flex items-center gap-1">
                 <AlertTriangle className="w-3 h-3" />
                 {stats.overdueCount} overdue (${(stats.overdueAmount || 0).toLocaleString()})
               </span>
@@ -384,7 +384,7 @@ export default function Dashboard() {
                         {daysSince !== null && (
                           <span className={cn(
                             'text-xs font-medium',
-                            needsResponse ? 'text-red-500' : 'text-muted-foreground'
+                            needsResponse ? 'text-red-700 dark:text-red-400' : 'text-muted-foreground'
                           )}>
                             {daysSince === 0 ? 'Today' : daysSince === 1 ? 'Yesterday' : `${daysSince} days ago`}
                           </span>
@@ -445,7 +445,7 @@ export default function Dashboard() {
                           {project.health?.replace('_', ' ')}
                         </span>
                         {project.blockedTasks?.length > 0 && (
-                          <span className="text-xs text-red-500 flex items-center gap-1">
+                          <span className="text-xs text-red-700 dark:text-red-400 flex items-center gap-1">
                             <Bug className="w-3 h-3" />
                             {project.blockedTasks.length} blocked
                           </span>
@@ -557,7 +557,7 @@ export default function Dashboard() {
                         <p className="text-xs text-muted-foreground mt-0.5">{task.assignee}</p>
                       )}
                     </div>
-                    <span className="text-xs text-red-500 font-medium ml-2">
+                    <span className="text-xs text-red-700 dark:text-red-400 font-medium ml-2">
                       {new Date(task.dueDate).toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })}
                     </span>
                   </div>
@@ -625,7 +625,7 @@ export default function Dashboard() {
                   {task.dueDate && (
                     <span className={cn(
                       'text-xs ml-2 flex items-center gap-1',
-                      new Date(task.dueDate) < new Date() ? 'text-red-500' : 'text-muted-foreground'
+                      new Date(task.dueDate) < new Date() ? 'text-red-700 dark:text-red-400' : 'text-muted-foreground'
                     )}>
                       <Clock className="w-3 h-3" />
                       {new Date(task.dueDate).toLocaleDateString({ month: 'short', day: 'numeric' })}

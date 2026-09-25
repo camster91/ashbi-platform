@@ -30,7 +30,7 @@ export default function RevenueSparklineWidget({ data = [] }) {
           <TrendingUp className="w-4 h-4 text-emerald-500" />
           <h2 className="font-semibold text-foreground">Revenue Trend</h2>
         </div>
-        <span className="text-xs font-bold text-emerald-600">${total.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
+        <span className="text-xs font-bold text-emerald-700 dark:text-emerald-400">${total.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>
       </div>
       <div className="p-4">
         <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-16 overflow-visible">

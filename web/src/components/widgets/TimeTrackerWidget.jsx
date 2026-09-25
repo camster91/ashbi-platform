@@ -26,7 +26,7 @@ export default function TimeTrackerWidget({ data }) {
         <div>
           <div className="flex items-center justify-between mb-1">
             <span className="text-sm font-medium text-foreground">Today</span>
-            <span className="text-sm font-bold text-foreground">{todayHours}h <span className="text-xs font-normal text-emerald-600">({todayBillableHours}h billable)</span></span>
+            <span className="text-sm font-bold text-foreground">{todayHours}h <span className="text-xs font-normal text-emerald-700 dark:text-emerald-400">({todayBillableHours}h billable)</span></span>
           </div>
           <div className="h-2 bg-muted rounded-full overflow-hidden">
             <div
@@ -39,7 +39,7 @@ export default function TimeTrackerWidget({ data }) {
         <div>
           <div className="flex items-center justify-between mb-1">
             <span className="text-sm font-medium text-foreground">This Week</span>
-            <span className="text-sm font-bold text-foreground">{weekHours}h <span className="text-xs font-normal text-emerald-600">({weekBillableHours}h billable)</span></span>
+            <span className="text-sm font-bold text-foreground">{weekHours}h <span className="text-xs font-normal text-emerald-700 dark:text-emerald-400">({weekBillableHours}h billable)</span></span>
           </div>
           <div className="h-2 bg-muted rounded-full overflow-hidden">
             <div
