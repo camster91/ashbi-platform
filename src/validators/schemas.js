@@ -40,6 +40,28 @@ export const changePasswordSchema = z.object({
   newPassword: password,
 });
 
+// ---- Multi-factor authentication ----
+const totpCode = z.string().trim().regex(/^\d{3}\s?\d{3}$/, 'Enter the 6-digit code from your authenticator app');
+const recoveryCode = z.string().trim().min(16).max(32);
+const secondFactor = {
+  code: totpCode.optional(),
+  recoveryCode: recoveryCode.optional(),
+};
+const exactlyOneFactor = (value) => Boolean(value.code) !== Boolean(value.recoveryCode);
+const exactlyOneFactorMessage = { message: 'Provide either an authenticator code or a recovery code' };
+
+export const mfaConfirmSchema = z.object({ code: totpCode });
+
+export const mfaDisableSchema = z.object({
+  password: z.string().min(1).max(128),
+  ...secondFactor,
+}).refine(exactlyOneFactor, exactlyOneFactorMessage);
+
+export const mfaLoginSchema = z.object({
+  challengeToken: z.string().min(1).max(1024),
+  ...secondFactor,
+}).refine(exactlyOneFactor, exactlyOneFactorMessage);
+
 export const forgotPasswordSchema = z.object({
   email: email,
 });

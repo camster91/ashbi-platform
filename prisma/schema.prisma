@@ -81,6 +81,16 @@ model User {
   hourlyRate          Float?       @default(50)
   resetToken          String?
   resetTokenExpiresAt DateTime?
+  // Optional TOTP multi-factor authentication (staff roles only). The secret
+  // is an AES-256-GCM envelope from src/utils/crypto.js, never plaintext;
+  // recovery codes are stored only as SHA-256 hashes and removed once used.
+  mfaEnabled          Boolean      @default(false)
+  mfaSecret           String?
+  mfaEnabledAt        DateTime?
+  mfaLastUsedStep     Int? // Highest accepted TOTP step, so a code cannot be replayed
+  mfaRecoveryCodes    String[]     @default([])
+  mfaFailedAttempts   Int          @default(0)
+  mfaLockedUntil      DateTime?
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
 

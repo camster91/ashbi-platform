@@ -211,6 +211,7 @@ const DOMAIN_REGISTRARS = [
     exportName: 'registerIdentityRoutes',
     routes: [
       ['auth', '/api/auth'],
+      ['mfa', '/api/auth'],
       ['settings', '/api/settings'],
       ['api-key', '/api/api-keys'],
       ['credential', '/api/credentials'],
@@ -344,8 +345,9 @@ test('every domain-registered route module has exactly one owner', () => {
       }
     }
   }
-  // 21 modules from the earlier slices plus 46 moved out of src/index.js.
-  assert.equal(owners.size, 67);
+  // 21 modules from the earlier slices plus 46 moved out of src/index.js,
+  // plus the MFA routes added to the identity domain.
+  assert.equal(owners.size, 68);
 });
 
 test('route modules stay encapsulated so cross-domain registration order cannot leak hooks', () => {

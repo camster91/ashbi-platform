@@ -78,7 +78,16 @@ export default async function authRoutes(fastify) {
     const { email, password } = request.body;
 
     try {
-      const { user, token } = await fastify.auth.login({ email, password });
+      const result = await fastify.auth.login({ email, password });
+      if (result.mfaRequired) {
+        // No session cookie until the second factor is verified.
+        return reply.send({
+          mfaRequired: true,
+          challengeToken: result.challengeToken,
+          expiresInSeconds: result.expiresInSeconds,
+        });
+      }
+      const { user, token } = result;
 
       reply
         .setCookie('token', token, sessionCookieOptions({ includeMaxAge: true }))
