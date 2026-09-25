@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
-import { mockAuthenticatedApi, mockClientPortalApi } from './fixtures/authenticated-api';
+import { mockAuthenticatedApi, mockClientPortalApi, unmockedRequests } from './fixtures/authenticated-api';
 
 // Issue #305: the public-page axe checks never saw the signed-in app. These
 // scans cover the main staff screens and the CLIENT portal against hermetic,
@@ -36,6 +36,10 @@ const staffScreens: Array<{ name: string; path: string; ready: (page: Page) => P
 ];
 
 test.describe('Authenticated accessibility', () => {
+  test.afterEach(({ page }) => {
+    expect(unmockedRequests(page), 'API requests with no fixture; add them to tests/fixtures/authenticated-api.ts').toEqual([]);
+  });
+
   test.skip(({ browserName }) => browserName !== 'chromium', 'Axe rule results are engine-independent; scan once per layout on Chromium desktop and Pixel 5 to keep the required job fast.');
 
   for (const screen of staffScreens) {

@@ -137,7 +137,25 @@ const notifications = [
 export type ApiState = {
   notes: Array<Record<string, unknown>>;
   createdNotes: Array<Record<string, unknown>>;
+  unmocked: string[];
 };
+
+// Requests that reached no fixture, per page. Specs assert this stays empty
+// in afterEach (see expectNoUnmockedRequests) so fixture drift — a screen
+// starting to call an endpoint these fixtures do not know — fails loudly
+// instead of rendering a half-populated page that still passes axe.
+const unmockedByPage = new WeakMap<Page, string[]>();
+
+function trackUnmocked(page: Page) {
+  const unmocked: string[] = [];
+  unmockedByPage.set(page, unmocked);
+  return unmocked;
+}
+
+/** Unmocked `/api` requests the page made since its fixture was installed. */
+export function unmockedRequests(page: Page): string[] {
+  return unmockedByPage.get(page) ?? [];
+}
 
 function json(route: Route, body: unknown, status = 200) {
   return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
@@ -155,6 +173,7 @@ export async function mockAuthenticatedApi(page: Page, { user = adminUser, signe
       { id: 'note-a', title: 'Kickoff notes', content: 'Client wants a lighter palette.', type: 'MEETING_NOTES', tags: ['kickoff'], isPinned: true, updatedAt: LAST_WEEK, author: { id: adminUser.id, name: adminUser.name } },
     ],
     createdNotes: [],
+    unmocked: trackUnmocked(page),
   };
 
   await page.route('**/api/**', async route => {
@@ -243,8 +262,9 @@ export async function mockAuthenticatedApi(page: Page, { user = adminUser, signe
     if (path === '/settings/ai-provider') return json(route, { provider: 'ollama', ollamaModel: 'llama3.1:8b', ollamaModels: ['llama3.1:8b'], canManage: true });
     if (path === '/settings/ai-provider/ollama-models') return json(route, { models: ['llama3.1:8b', 'qwen2.5:14b'] });
 
-    // Unmocked endpoints fail loudly so fixture gaps surface as test noise
-    // rather than silently rendering a half-populated page.
+    // Unmocked endpoints are recorded (and asserted empty after each test)
+    // and answered with 501 so the page's own error handling shows too.
+    state.unmocked.push(`${method} ${pathname}`);
     return json(route, { error: `Unmocked endpoint in authenticated fixture: ${method} ${pathname}` }, 501);
   });
 
@@ -262,7 +282,13 @@ export const portalFixture = {
 
 /** Routes every `/api/client-portal/**` call for a signed-in CLIENT contact. */
 export async function mockClientPortalApi(page: Page) {
-  const state = { uploads: 0, deleted: [] as string[], messages: [...portalFixture.messages], documents: [...portalFixture.documents] };
+  const state = {
+    uploads: 0,
+    deleted: [] as string[],
+    messages: [...portalFixture.messages],
+    documents: [...portalFixture.documents],
+    unmocked: trackUnmocked(page),
+  };
   await page.route('**/api/**', async route => {
     const request = route.request();
     const method = request.method();
@@ -270,6 +296,8 @@ export async function mockClientPortalApi(page: Page) {
     const path = pathname.replace(/^\/api\/client-portal/, '');
     const projectId = portalFixture.projects[0].id;
 
+    // The SPA shell still probes the staff session; a portal contact has none.
+    if (pathname === '/api/auth/me') return json(route, { error: 'Unauthorized' }, 401);
     if (path === '/verify-token') return json(route, { user: { role: 'CLIENT' } });
     if (path === '/me') return json(route, portalFixture.me);
     if (path === '/projects') return json(route, portalFixture.projects);
@@ -305,6 +333,7 @@ export async function mockClientPortalApi(page: Page) {
       state.documents = state.documents.filter(document => document.id !== documentMatch[1]);
       return json(route, { success: true });
     }
+    state.unmocked.push(`${method} ${pathname}`);
     return json(route, { error: `Unmocked endpoint in client portal fixture: ${method} ${pathname}` }, 501);
   });
   return state;

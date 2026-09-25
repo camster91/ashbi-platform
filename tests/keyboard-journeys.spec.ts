@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
-import { mockAuthenticatedApi, mockClientPortalApi } from './fixtures/authenticated-api';
+import { mockAuthenticatedApi, mockClientPortalApi, unmockedRequests } from './fixtures/authenticated-api';
 
 // Issue #305: keyboard-only journeys through the signed-in app and the CLIENT
 // portal. Every step is driven with Tab / Shift+Tab / Enter / Escape and typed
@@ -11,6 +11,10 @@ test.skip(
   ({ browserName, isMobile }) => browserName !== 'chromium' || isMobile,
   'Keyboard journeys target the desktop layout. WebKit does not Tab to links by default, and touch layouts are covered by mobile-navigation.spec.ts.',
 );
+
+test.afterEach(({ page }) => {
+  expect(unmockedRequests(page), 'API requests with no fixture; add them to tests/fixtures/authenticated-api.ts').toEqual([]);
+});
 
 async function isFocused(locator: Locator) {
   return locator.evaluate(element => element === document.activeElement).catch(() => false);
