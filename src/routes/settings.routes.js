@@ -10,6 +10,12 @@ import {
   templateRenderSchema,
   aiProviderSwitchSchema,
 } from '../validators/schemas.js';
+import env from '../config/env.js';
+
+function isPlatformOperator(user) {
+  const email = typeof user?.email === 'string' ? user.email.trim().toLowerCase() : '';
+  return user?.role === 'ADMIN' && email !== '' && env.platformOperatorEmails.includes(email);
+}
 
 export default async function settingsRoutes(fastify) {
   // ==================== ASSIGNMENT RULES ====================
@@ -257,34 +263,38 @@ export default async function settingsRoutes(fastify) {
   // Get current AI provider + available Ollama cloud models
   fastify.get('/ai-provider', {
     onRequest: [fastify.authenticate]
-  }, async () => {
-    const { getProviderName } = await import('../ai/providers/index.js');
+  }, async (request) => {
+    const { getProviderName, getOllamaModel } = await import('../ai/providers/index.js');
     const { OLLAMA_MODELS } = await import('../ai/providers/ollama.js');
-    const env = (await import('../config/env.js')).default;
     return {
       provider: getProviderName(),
       available: ['claude', 'gemini', 'ollama'],
-      ollamaModel: env.ollamaModel,
+      ollamaModel: getOllamaModel(),
       ollamaModels: OLLAMA_MODELS,
+      canManage: isPlatformOperator(request.user),
     };
   });
 
-  // Switch AI provider at runtime (admin only)
+  // Switch AI provider at runtime. The provider is shared by every
+  // organization on this deployment, so an organization admin must not be
+  // able to change it for other tenants: only platform operators may.
   fastify.post('/ai-provider', {
     onRequest: [fastify.adminOnly],
     preHandler: validateBody(aiProviderSwitchSchema),
   }, async (request, reply) => {
+    if (!isPlatformOperator(request.user)) {
+      return reply.status(403).send({
+        error: 'The AI provider is shared by every workspace on this deployment and can only be changed by a platform operator.',
+      });
+    }
     const { provider, model } = request.body;
-    if (!provider || !['claude', 'gemini', 'ollama'].includes(provider)) {
-      return reply.status(400).send({ error: 'Invalid provider. Use "claude", "gemini", or "ollama".' });
-    }
-    const { setProvider, getProviderName } = await import('../ai/providers/index.js');
-    setProvider(provider);
-    // Allow overriding the Ollama model at runtime
-    if (provider === 'ollama' && model) {
-      process.env.OLLAMA_MODEL = model;
-    }
-    return { provider: getProviderName(), message: `AI provider switched to ${provider}` };
+    const { setProvider, getProviderName, getOllamaModel } = await import('../ai/providers/index.js');
+    setProvider(provider, { model });
+    return {
+      provider: getProviderName(),
+      ollamaModel: getOllamaModel(),
+      message: `AI provider switched to ${provider}`,
+    };
   });
 
   // List available Ollama cloud models (fetched live from ollama.com)

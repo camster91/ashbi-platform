@@ -7,6 +7,7 @@ import env from '../../config/env.js';
 
 let currentProvider = null;
 let currentProviderName = null;
+let currentOllamaModel = null;
 let creativeProvider = null;
 
 const VALID_PROVIDERS = ['claude', 'gemini', 'ollama'];
@@ -28,7 +29,7 @@ export function getProvider() {
       currentProviderName = 'gemini';
       break;
     case 'ollama':
-      currentProvider = new OllamaProvider();
+      currentProvider = new OllamaProvider(currentOllamaModel || undefined);
       currentProviderName = 'ollama';
       break;
     case 'claude':
@@ -42,15 +43,25 @@ export function getProvider() {
 }
 
 /**
- * Switch the AI provider at runtime (admin only).
+ * Switch the AI provider at runtime. This is process-wide and affects every
+ * organization, so callers must restrict it to platform operators.
  * @param {'claude' | 'gemini' | 'ollama'} providerName
+ * @param {{ model?: string }} [options] Ollama model to use instead of OLLAMA_MODEL
  */
-export function setProvider(providerName) {
+export function setProvider(providerName, { model } = {}) {
   if (!VALID_PROVIDERS.includes(providerName)) {
     throw new Error(`Unknown AI provider: ${providerName}. Use ${VALID_PROVIDERS.join(', ')}.`);
   }
   currentProviderName = providerName;
+  if (providerName === 'ollama' && model) currentOllamaModel = model;
   currentProvider = null; // Force re-creation on next getProvider()
+}
+
+/**
+ * Get the Ollama model the provider uses, including any runtime override.
+ */
+export function getOllamaModel() {
+  return currentOllamaModel || env.ollamaModel;
 }
 
 /**
@@ -70,4 +81,4 @@ export function getCreativeProvider() {
   return creativeProvider;
 }
 
-export default { getProvider, setProvider, getProviderName, getCreativeProvider };
+export default { getProvider, setProvider, getProviderName, getOllamaModel, getCreativeProvider };

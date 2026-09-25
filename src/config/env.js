@@ -25,6 +25,12 @@ const env = {
   ollamaBaseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434',
   ollamaModel: process.env.OLLAMA_MODEL || 'gemma4:31b',
   aiProvider: process.env.AI_PROVIDER || 'ollama', // 'claude', 'gemini', or 'ollama'
+  // The AI provider is one process-wide setting shared by every organization,
+  // so only these deployment operators may switch it at runtime.
+  platformOperatorEmails: (process.env.PLATFORM_OPERATOR_EMAILS || '')
+    .split(',')
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean),
   aiModel: 'gemma4:31b',
 
   // Kilo AI (alternative AI gateway)

@@ -202,6 +202,7 @@ function OnboardingPreferences() {
 }
 
 function AIModelSection() {
+  const queryClient = useQueryClient();
   const [saved, setSaved] = useState(false);
 
   const {
@@ -237,12 +238,14 @@ function AIModelSection() {
   const mutation = useMutation({
     mutationFn: (model) => api.setAIProvider('ollama', model),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['ai-provider'] });
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     },
   });
 
   const models = modelData?.models || aiData?.ollamaModels || {};
+  const canManage = aiData?.canManage === true;
 
   // Group models by family
   const families = {};
@@ -273,6 +276,8 @@ function AIModelSection() {
                   <button
                     key={key}
                     onClick={() => setSelectedModel(key)}
+                    disabled={!canManage}
+                    aria-pressed={selectedModel === key}
                     className={`p-3 rounded-lg border text-left transition-all ${
                       selectedModel === key
                         ? 'border-primary bg-primary/5 ring-1 ring-primary'
@@ -295,6 +300,7 @@ function AIModelSection() {
               </div>
             </div>
           ))}
+          {canManage ? (
           <div className="flex items-center gap-3 pt-1">
             <Button
               onClick={() => mutation.mutate(selectedModel)}
@@ -306,10 +312,20 @@ function AIModelSection() {
             </Button>
             {saved && (
               <span className="text-sm text-green-600 flex items-center gap-1">
-                <CheckCircle className="w-4 h-4" /> Saved — restart may be needed
+                <CheckCircle className="w-4 h-4" /> Saved
+              </span>
+            )}
+            {mutation.isError && (
+              <span role="alert" className="text-sm text-destructive">
+                {mutation.error?.message || 'Failed to change the AI model'}
               </span>
             )}
           </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              The AI model is shared by every workspace on this deployment, so only a platform operator can change it.
+            </p>
+          )}
           <p className="text-xs text-muted-foreground">
             Current: <span className="font-mono font-medium">{aiData?.ollamaModel || '—'}</span>
           </p>
