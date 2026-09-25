@@ -175,7 +175,13 @@ export default async function estimateRoutes(fastify) {
         console.error('[estimate] Failed to send estimate email:', mailErr.message || mailErr);
         deliveryFields = deliveryFieldsFromSend({ ok: false, error: 'Estimate email send error' });
       }
-      await request.prisma.estimate.update({ where: { id }, data: deliveryFields });
+      try {
+        await request.prisma.estimate.update({ where: { id }, data: deliveryFields });
+      } catch (recordErr) {
+        // The email outcome is already decided; a tracking write failure must
+        // not turn a completed send into a 500.
+        request.log.error({ errorName: recordErr?.name, errorCode: recordErr?.code, estimateId: id }, '[estimate] Failed to record email delivery status');
+      }
     } else {
       console.warn('[estimate] Mailgun not configured or no client email — estimate email not sent');
       // The view token lets anyone approve or decline the estimate. Never write

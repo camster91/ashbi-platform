@@ -208,18 +208,22 @@ export async function recordCompletedCheckout(prisma, event) {
   }
 }
 
+// Fields that forget a stored Checkout session so the next payment request
+// creates a fresh one (the attempt counter is deliberately kept).
+export const CLEARED_CHECKOUT_FIELDS = Object.freeze({
+  stripePaymentLink: null,
+  stripeCheckoutSessionId: null,
+  stripeCheckoutAmountMinor: null,
+  stripeCheckoutCurrency: null,
+  stripeCheckoutExpiresAt: null,
+});
+
 export async function clearExpiredCheckout(prisma, session) {
   const invoiceId = session.metadata?.invoiceId;
   if (!invoiceId) return false;
   await prisma.invoice.updateMany({
     where: { id: invoiceId, stripeCheckoutSessionId: session.id, status: { not: 'PAID' } },
-    data: {
-      stripePaymentLink: null,
-      stripeCheckoutSessionId: null,
-      stripeCheckoutAmountMinor: null,
-      stripeCheckoutCurrency: null,
-      stripeCheckoutExpiresAt: null,
-    },
+    data: { ...CLEARED_CHECKOUT_FIELDS },
   });
   return true;
 }

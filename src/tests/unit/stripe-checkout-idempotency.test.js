@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  CLEARED_CHECKOUT_FIELDS,
   checkoutPersistenceData,
   createPaymentLinkWithClient,
   ensureCheckoutSession,
@@ -156,4 +157,16 @@ test('persisting a session advances the attempt counter used by the next key', (
   });
   assert.equal(data.stripeCheckoutAttempt, 5);
   assert.equal(data.stripeCheckoutExpiresAt, NOW);
+});
+
+test('revoking or rotating a link clears every stored checkout field but keeps the attempt counter', async () => {
+  const stripe = fakeStripe();
+  const { state, prisma } = invoiceStore();
+  await ensureCheckoutSession(prisma, state.invoice, { stripeClient: stripe.client, now: NOW });
+  Object.assign(state.invoice, CLEARED_CHECKOUT_FIELDS);
+  assert.equal(state.invoice.stripeCheckoutAmountMinor, null);
+  assert.equal(state.invoice.stripeCheckoutCurrency, null);
+  assert.equal(state.invoice.stripeCheckoutExpiresAt, null);
+  assert.equal(state.invoice.stripeCheckoutAttempt, 1);
+  assert.equal(reusableCheckoutLink(state.invoice, NOW), null);
 });

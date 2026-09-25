@@ -1,5 +1,5 @@
 // Invoice routes — full CRUD + send + PDF + payments + templates
-import { checkoutPersistenceData, createPaymentLink, ensureCheckoutSession, handleWebhook, recordCompletedCheckout } from '../services/stripe.service.js';
+import { CLEARED_CHECKOUT_FIELDS, checkoutPersistenceData, createPaymentLink, ensureCheckoutSession, handleWebhook, recordCompletedCheckout } from '../services/stripe.service.js';
 import { generateInvoicePdf } from '../utils/generate-invoice-pdf.js';
 import { deliveryFieldsFromSend, withDeliveryState } from '../services/mailgun-delivery.service.js';
 import { generateInvoiceNumber } from '../utils/invoice.js';
@@ -615,7 +615,7 @@ export default async function invoiceRoutes(fastify) {
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
     await request.prisma.invoice.update({
       where: { id: invoice.id },
-      data: { publicAccessRevokedAt: new Date(), stripePaymentLink: null },
+      data: { publicAccessRevokedAt: new Date(), ...CLEARED_CHECKOUT_FIELDS },
     });
     return { revoked: true };
   });
@@ -657,7 +657,7 @@ export default async function invoiceRoutes(fastify) {
     const access = createPublicAccessWindow();
     return request.prisma.invoice.update({
       where: { id: invoice.id },
-      data: { viewToken: access.token, publicAccessExpiresAt: access.expiresAt, publicAccessRevokedAt: null, stripePaymentLink: null, stripeCheckoutSessionId: null },
+      data: { viewToken: access.token, publicAccessExpiresAt: access.expiresAt, publicAccessRevokedAt: null, ...CLEARED_CHECKOUT_FIELDS },
       select: { viewToken: true, publicAccessExpiresAt: true },
     });
   });

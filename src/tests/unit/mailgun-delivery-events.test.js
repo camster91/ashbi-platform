@@ -163,6 +163,21 @@ describe('recording delivery events on documents', () => {
     assert.equal(prisma.docs.invoice['inv-1'].deliveryStatus, 'BOUNCED');
   });
 
+  it('ignores events that cannot be tied to the stored message id', async () => {
+    const noHeaders = fakePrisma({ invoice: { 'inv-1': { id: 'inv-1', deliveryMessageId: 'msg-1@mg.ashbi.ca', deliveryStatus: 'ACCEPTED' } } });
+    const withoutId = await recordDeliveryEvent(noHeaders, eventData({ message: {} }));
+    assert.deepEqual(withoutId, { recorded: false, reason: 'uncorrelated_message' });
+    assert.equal(noHeaders.docs.invoice['inv-1'].deliveryStatus, 'ACCEPTED');
+
+    // A re-send that failed stores no message id; a late bounce for the
+    // earlier message must not overwrite that FAILED outcome.
+    const failedResend = fakePrisma({ invoice: { 'inv-1': { id: 'inv-1', deliveryMessageId: null, deliveryStatus: 'FAILED', deliveryError: 'Forbidden' } } });
+    const lateBounce = await recordDeliveryEvent(failedResend, eventData({ event: 'complained' }));
+    assert.deepEqual(lateBounce, { recorded: false, reason: 'uncorrelated_message' });
+    assert.equal(failedResend.docs.invoice['inv-1'].deliveryStatus, 'FAILED');
+    assert.equal(failedResend.docs.invoice['inv-1'].deliveryError, 'Forbidden');
+  });
+
   it('ignores events without document variables', async () => {
     const prisma = fakePrisma();
     assert.equal((await recordDeliveryEvent(prisma, eventData({ 'user-variables': {} }))).reason, 'uncorrelated');
@@ -213,6 +228,13 @@ describe('POST /api/mailgun/events', () => {
 
     const replay = await post({ signature, 'event-data': eventData({ event: 'complained' }) });
     assert.equal(replay.statusCode, 406);
+    assert.equal(prisma.docs.invoice['inv-1'].deliveryStatus, 'BOUNCED');
+  });
+
+  it('acknowledges but ignores a signed event with no message id', async () => {
+    const response = await post({ signature: signatureBlock(), 'event-data': eventData({ event: 'complained', message: {} }) });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().recorded, false);
     assert.equal(prisma.docs.invoice['inv-1'].deliveryStatus, 'BOUNCED');
   });
 

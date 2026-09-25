@@ -167,9 +167,12 @@ export async function recordDeliveryEvent(prisma, eventData) {
 
   const eventMessageId = normalizeMessageId(eventData?.message?.headers?.['message-id']);
   const storedMessageId = normalizeMessageId(document.deliveryMessageId);
-  if (storedMessageId && eventMessageId && storedMessageId !== eventMessageId) {
-    return { recorded: false, reason: 'stale_message' };
-  }
+  // Both ids must be present and equal. Skipping the check when either is
+  // missing would let a captured signed payload without message headers set
+  // any status on any document id, and let a late event for an older message
+  // overwrite the outcome of a newer (failed, id-less) re-send.
+  if (!eventMessageId || !storedMessageId) return { recorded: false, reason: 'uncorrelated_message' };
+  if (storedMessageId !== eventMessageId) return { recorded: false, reason: 'stale_message' };
   if (document.deliveryStatus && (STATUS_RANK[status] ?? 0) < (STATUS_RANK[document.deliveryStatus] ?? 0)) {
     return { recorded: false, reason: 'superseded' };
   }
