@@ -47,6 +47,8 @@ import ProjectMedia from '../components/project/ProjectMedia';
 import ProjectChat from '../components/ProjectChat';
 import QueryErrorState from '../components/QueryErrorState';
 import PartialSectionNotice from '../components/PartialSectionNotice';
+import useManualRetry from '../hooks/useManualRetry';
+import useSettledFailure from '../hooks/useSettledFailure';
 import Modal from '../components/Modal';
 import { Button, LoadingState } from '../components/ui';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -71,16 +73,14 @@ export default function Project() {
     queryFn: () => api.getProject(id),
   });
 
-  const {
-    data: revisions,
-    isError: revisionsUnavailable,
-    error: revisionsError,
-    isFetching: revisionsFetching,
-    refetch: refetchRevisions,
-  } = useQuery({
+  const revisionsQuery = useQuery({
     queryKey: ['revisions', id],
     queryFn: () => api.getRevisions(id),
   });
+
+  const { data: revisions, refetch: refetchRevisions } = revisionsQuery;
+  const { failed: revisionsUnavailable, error: revisionsError } = useSettledFailure(revisionsQuery);
+  const [retryRevisions, isRetryingRevisions] = useManualRetry(refetchRevisions);
 
   const refreshMutation = useMutation({
     mutationFn: () => api.refreshProjectPlan(id),
@@ -292,8 +292,8 @@ export default function Project() {
               section="Revision rounds"
               detail="The project plan and tasks loaded normally."
               error={revisionsError}
-              onRetry={() => refetchRevisions()}
-              isRetrying={revisionsFetching}
+              onRetry={retryRevisions}
+              isRetrying={isRetryingRevisions}
             />
           ) : (
           <RevisionRounds

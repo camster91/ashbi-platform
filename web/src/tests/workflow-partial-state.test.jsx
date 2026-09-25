@@ -87,6 +87,38 @@ describe('Dashboard partial state', () => {
     expect(api.getDashboardStats).toHaveBeenCalledTimes(statsCalls);
     expect(await screen.findByText('Write brief')).toBeInTheDocument();
   });
+
+  it('does not re-announce the notice or toggle "Retrying…" on background refetches', async () => {
+    api.getDashboardStats.mockResolvedValue({ projects: { active: 7 } });
+    api.getMyTasks.mockRejectedValueOnce(Object.assign(new Error('boom'), { status: 503 }));
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider><MemoryRouter><Dashboard /></MemoryRouter></ToastProvider>
+      </QueryClientProvider>,
+    );
+
+    await screen.findByText('Task data is temporarily unavailable');
+    const notice = screen.getByText('Task data is temporarily unavailable').closest('[role="status"]');
+    const mutations = [];
+    const observer = new MutationObserver((records) => mutations.push(...records));
+    observer.observe(notice.parentElement, { subtree: true, childList: true, characterData: true, attributes: true });
+
+    // Simulate polling/background refetches that keep failing: isFetching
+    // toggles, but nothing the person asked for is in flight.
+    let rejectPending;
+    api.getMyTasks.mockImplementation(() => new Promise((_, reject) => { rejectPending = reject; }));
+    const refetch = queryClient.refetchQueries({ queryKey: ['my-tasks'] });
+    await waitFor(() => expect(queryClient.isFetching({ queryKey: ['my-tasks'] })).toBe(1));
+    expect(screen.getByRole('button', { name: 'Retry Task data' })).toBeEnabled();
+    rejectPending(Object.assign(new Error('still down'), { status: 503 }));
+    await refetch;
+    await waitFor(() => expect(queryClient.isFetching({ queryKey: ['my-tasks'] })).toBe(0));
+
+    observer.disconnect();
+    expect(mutations).toHaveLength(0);
+    expect(screen.queryByText(/Retrying/)).not.toBeInTheDocument();
+  });
 });
 
 describe('Project partial state', () => {

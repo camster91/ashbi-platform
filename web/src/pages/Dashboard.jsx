@@ -33,37 +33,51 @@ import QueryErrorState from '../components/QueryErrorState';
 import PartialSectionNotice from '../components/PartialSectionNotice';
 import { SlowMessage } from '../components/ui/SlowNotice';
 import useSlowState from '../hooks/useSlowState';
+import useManualRetry from '../hooks/useManualRetry';
+import useSettledFailure from '../hooks/useSettledFailure';
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { notifications: liveNotifications } = useSocket();
 
-  const { data: stats, isLoading, isError, error, isFetching, refetch } = useQuery({
+  const statsQuery = useQuery({
     queryKey: ['dashboard-stats'],
     queryFn: () => api.getDashboardStats(),
-    refetchInterval: 30000,
+    // Pause polling while the stats request is failing: the error surface
+    // offers an explicit retry, and polling a failing endpoint would keep
+    // re-rendering (and re-announcing) the recovery notice.
+    refetchInterval: (query) => (query.state.status === 'error' ? false : 30000),
     placeholderData: keepPreviousData,
     retry: 3,
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
   });
 
-  const {
-    data: myTasks = [],
-    isError: areTasksUnavailable,
-    error: tasksError,
-    isFetching: tasksFetching,
-    refetch: refetchTasks,
-  } = useQuery({
+  const tasksQuery = useQuery({
     queryKey: ['my-tasks'],
     queryFn: () => api.getMyTasks().then((r) => Object.values(r ?? {}).flat()),
     placeholderData: keepPreviousData,
   });
 
-  const isInitialLoadSlow = useSlowState(isLoading && !stats);
+  const { data: stats, isLoading, refetch } = statsQuery;
+  const { data: myTasks, refetch: refetchTasks } = tasksQuery;
+  // Failure state that survives retries/background refetches, so notices are
+  // not unmounted and re-announced while a request is in flight.
+  const { failed: isError, error } = useSettledFailure(statsQuery);
+  const { failed: areTasksUnavailable, error: tasksError } = useSettledFailure(tasksQuery);
+
+  // "Retrying…" reflects only a retry the person asked for, never polling or
+  // background refetches, so live regions are not re-announced every cycle.
+  const [retryStats, isRetryingStats] = useManualRetry(refetch);
+  const [retryTasks, isRetryingTasks] = useManualRetry(refetchTasks);
+  // Undefined until tasks load (or when they never loaded). The card shows
+  // "—" in that case instead of a misleading 0.
+  const taskList = myTasks ?? [];
+
+  const isInitialLoadSlow = useSlowState(isLoading && !stats && !isError);
 
   // Show skeleton on first load (no data yet)
-  if (isLoading && !stats) {
+  if (isLoading && !stats && !isError) {
     return (
       <div role="status" aria-live="polite" aria-label="Loading dashboard" className="space-y-6 min-h-[60vh]">
         <span className="sr-only">Loading dashboard…</span>
@@ -91,7 +105,7 @@ export default function Dashboard() {
   if (isError && !stats) {
     return (
       <div className="space-y-6 min-h-[60vh]">
-        <QueryErrorState error={error} onRetry={refetch} isRetrying={isFetching} message="Dashboard data could not be loaded" />
+        <QueryErrorState error={error} onRetry={retryStats} isRetrying={isRetryingStats} message="Dashboard data could not be loaded" />
       </div>
     );
   }
@@ -194,7 +208,7 @@ export default function Dashboard() {
               iconColor="text-orange-600"
               iconBg="bg-orange-100 dark:bg-orange-900/30"
               label="My Tasks"
-              value={areTasksUnavailable ? '—' : myTasks.length}
+              value={myTasks ? myTasks.length : '—'}
               onClick={() => navigate('/inbox')}
             />
             <StatCard
@@ -216,8 +230,8 @@ export default function Dashboard() {
           title="Live dashboard numbers could not be refreshed"
           detail="The figures below are from the last successful update."
           error={error}
-          onRetry={() => refetch()}
-          isRetrying={isFetching}
+          onRetry={retryStats}
+          isRetrying={isRetryingStats}
         />
       )}
 
@@ -228,8 +242,8 @@ export default function Dashboard() {
           title="Task data is temporarily unavailable"
           detail="Other dashboard data is current."
           error={tasksError}
-          onRetry={() => refetchTasks()}
-          isRetrying={tasksFetching}
+          onRetry={retryTasks}
+          isRetrying={isRetryingTasks}
         />
       )}
 
@@ -584,7 +598,7 @@ export default function Dashboard() {
       )}
 
       {/* ─── Row 4: My Tasks (compact) ─── */}
-      {myTasks.length > 0 && (
+      {taskList.length > 0 && (
         <Card>
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -596,7 +610,7 @@ export default function Dashboard() {
             </Link>
           </div>
           <ul className="divide-y divide-border">
-            {myTasks.slice(0, 6).map(task => (
+            {taskList.slice(0, 6).map(task => (
               <li key={task.id}>
                 <Link
                   to={`/task/${task.id}`}

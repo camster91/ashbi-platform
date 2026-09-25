@@ -34,13 +34,17 @@ Critical workflows must explain what happened, what the user can do next, whethe
 - Built into the shared primitives:
   - `LoadingState`: the copy appears inside its own status. Opt out with `slowAfterMs={false}`.
   - `TablePageSkeleton`, `KanbanPageSkeleton` and `ListPageSkeleton`: `aria-busy` is cleared once the copy appears.
-  - `Button` with `loading`/`isLoading`: the write copy appears in a sibling polite region. The button element is never remounted, so it keeps focus.
+  - `Button` with `loading`/`isLoading`: the write copy goes into a visually hidden polite region, portalled to `<body>` and linked to the button with `aria-describedby`, so it never changes the caller's layout.
+    - Pass `slowMessage` to also show the copy right after the button.
+    - For forms whose action row cannot take a full-width line (Invoices, Proposals, Clients onboarding), pass `slowAfterMs={false}` to the button and render a visible `SlowNotice` below the row instead.
+    - The button element is never remounted, so it keeps focus.
   - `QueryErrorState` while `isRetrying`: the notice sits outside the error alert.
 - Adoption:
-  - Primitives: Invoices and Proposals (`LoadingState` and `Button`), Projects (`KanbanPageSkeleton`), Clients (`TablePageSkeleton`).
+  - Primitives: Invoices and Proposals (`LoadingState`), Projects (`KanbanPageSkeleton`), Clients (`TablePageSkeleton`).
+  - Create/onboard actions on Invoices, Proposals and Clients use a `SlowNotice` below the action row.
   - The Dashboard first-load skeleton uses `SlowMessage`.
   - The Project first load uses `LoadingState`.
-  - Client portal: portal, project and document loading use `SlowLoadingStatus`. The login-link, upload and chat-send writes use `SlowNotice` with `SLOW_WRITE_INLINE`.
+  - Client portal: portal, project and document loading use `SlowLoadingStatus`. The login-link, upload and chat-send writes use `SlowNotice` with `SLOW_WRITE_INLINE`. The lazily loaded `ProjectDetail` and `DocumentsTab` sections use `SlowLoadingStatus` as their Suspense fallback.
 - The copy's fade-in uses `motion-reduce:animate-none`.
 
 ### Partial
@@ -48,7 +52,9 @@ Critical workflows must explain what happened, what the user can do next, whethe
   - It is a warning surface with `role="status"` and polite announcement, so polling does not repeatedly interrupt assistive technology.
   - The notice names the section and reuses the typed `getQueryErrorGuidance` detail.
   - Its retry control is named `Retry <section>`, refetches only that query, is disabled while retrying, and gets the slow notice.
-- Dashboard: a task-query failure shows "Task data is temporarily unavailable" next to the loaded stats, and the My Tasks card shows "—" rather than a false 0. A failed background refresh keeps the last stats visible with a "could not be refreshed" notice.
+  - Pages pass `isRetrying` from `useManualRetry`, which is true only while a retry the person clicked is in flight. Polling and background refetches never toggle "Retrying…".
+  - Pages derive the failure from `useSettledFailure`, which stays failed (with the last error) until a fetch succeeds. The notice therefore does not unmount, remount and re-announce while a request is in flight.
+- Dashboard: a task-query failure shows "Task data is temporarily unavailable" next to the loaded stats, and the My Tasks card shows "—" rather than a false 0. A failed background refresh keeps the last stats visible with a "could not be refreshed" notice. Stats polling (every 30s) pauses while the stats request is failing.
 - Project: a failure of the revision-rounds query shows the notice in place of that section, and the plan, tasks and sidebar stay usable.
 
 ### Fatal
