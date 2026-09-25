@@ -1982,8 +1982,30 @@
             "type": "string"
           },
           "error": {
-            "description": "Human-readable message, or an error name for errors raised by the framework.",
-            "type": "string"
+            "description": "Human-readable message (most routes), or, on the AI bridge (`/api/ai-bridge`), an OpenAI-style object with `message` and `type`.",
+            "oneOf": [
+              {
+                "description": "Human-readable message, or an error name for errors raised by the framework.",
+                "type": "string"
+              },
+              {
+                "additionalProperties": true,
+                "properties": {
+                  "message": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "description": "Machine-readable category, for example invalid_request_error or insufficient_permissions.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "message",
+                  "type"
+                ],
+                "type": "object"
+              }
+            ]
           },
           "message": {
             "description": "Additional detail sent by the global error handler.",
@@ -2001,80 +2023,6 @@
         "required": [
           "error"
         ],
-        "type": "object"
-      },
-      "EstimateUpdate": {
-        "properties": {
-          "clientId": {
-            "maxLength": 50,
-            "minLength": 1,
-            "type": "string"
-          },
-          "description": {
-            "maxLength": 10000,
-            "type": "string"
-          },
-          "lineItems": {
-            "items": {
-              "properties": {
-                "description": {
-                  "maxLength": 500,
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "quantity": {
-                  "default": 1,
-                  "exclusiveMinimum": 0,
-                  "maximum": 10000,
-                  "type": "number"
-                },
-                "type": {
-                  "default": "LABOR",
-                  "enum": [
-                    "LABOR",
-                    "EXPENSE",
-                    "PRODUCT",
-                    "DISCOUNT"
-                  ],
-                  "type": "string"
-                },
-                "unit": {
-                  "maxLength": 20,
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "unitPrice": {
-                  "maximum": 10000000,
-                  "minimum": 0,
-                  "type": "number"
-                }
-              },
-              "required": [
-                "description",
-                "unitPrice"
-              ],
-              "type": "object"
-            },
-            "maxItems": 100,
-            "minItems": 1,
-            "type": "array"
-          },
-          "tax": {
-            "default": 0,
-            "maximum": 100,
-            "minimum": 0,
-            "type": "number"
-          },
-          "title": {
-            "maxLength": 200,
-            "minLength": 1,
-            "type": "string"
-          },
-          "validUntil": {
-            "format": "date-time",
-            "type": "string"
-          }
-        },
         "type": "object"
       },
       "ExpenseUpdate": {
@@ -6133,7 +6081,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -6949,7 +6897,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -7801,7 +7749,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -9737,7 +9685,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -10087,7 +10035,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -11783,7 +11731,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -13219,16 +13167,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreativeBriefUpdate"
-              }
-            }
-          },
-          "required": false
-        },
         "responses": {
           "400": {
             "$ref": "#/components/responses/BadRequest"
@@ -13337,7 +13275,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -14102,7 +14040,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -14376,16 +14314,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/EstimateUpdate"
-              }
-            }
-          },
-          "required": false
-        },
         "responses": {
           "400": {
             "$ref": "#/components/responses/BadRequest"
@@ -14807,16 +14735,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ExpenseUpdate"
-              }
-            }
-          },
-          "required": false
-        },
         "responses": {
           "400": {
             "$ref": "#/components/responses/BadRequest"
@@ -14925,7 +14843,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -15471,7 +15389,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -16591,7 +16509,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -17971,7 +17889,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -18746,7 +18664,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -18907,7 +18825,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -19358,7 +19276,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -20101,7 +20019,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -20551,7 +20469,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -20820,7 +20738,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -21550,7 +21468,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -22426,7 +22344,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -22610,7 +22528,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -22724,7 +22642,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -23183,7 +23101,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -24250,7 +24168,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -24567,7 +24485,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -24629,7 +24547,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -25317,7 +25235,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -25737,7 +25655,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -26066,7 +25984,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -26267,16 +26185,6 @@
             }
           }
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TaskTemplate"
-              }
-            }
-          },
-          "required": true
-        },
         "responses": {
           "400": {
             "$ref": "#/components/responses/BadRequest"
@@ -26590,7 +26498,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {
@@ -27674,7 +27582,7 @@
               }
             }
           },
-          "required": false
+          "required": true
         },
         "responses": {
           "400": {

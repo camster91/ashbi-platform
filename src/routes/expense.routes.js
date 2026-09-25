@@ -184,7 +184,6 @@ export default async function expenseRoutes(fastify) {
 
   // ─── DELETE /:id — delete expense ──────────────────────────────────────────
   fastify.delete('/:id', { onRequest: [fastify.authenticate],
-    preHandler: validateBody(expenseUpdateSchema),
   }, async (request, reply) => {
     const existing = await request.prisma.expense.findUnique({
       where: { id: request.params.id }

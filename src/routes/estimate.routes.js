@@ -1,7 +1,7 @@
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import env from '../config/env.js';
-import { validateBody, createEstimateSchema, updateEstimateSchema, estimateUpdateSchema } from '../validators/schemas.js';
+import { validateBody, createEstimateSchema, updateEstimateSchema } from '../validators/schemas.js';
 import { clampTake } from '../utils/query-limits.js';
 import { softDelete } from '../services/trash.service.js';
 import { deliveryFieldsFromSend, mailgunTrackingFields, withDeliveryState } from '../services/mailgun-delivery.service.js';
@@ -107,7 +107,6 @@ export default async function estimateRoutes(fastify) {
   // Delete estimate
   fastify.delete('/:id', {
     onRequest: [fastify.authenticate],
-    preHandler: validateBody(estimateUpdateSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const existing = await request.prisma.estimate.findUnique({ where: { id } });
