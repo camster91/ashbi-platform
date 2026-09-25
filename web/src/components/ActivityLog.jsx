@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { Fragment, useId, useState } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import QueryErrorState from './QueryErrorState';
@@ -38,10 +38,10 @@ function MetadataList({ metadata }) {
   return (
     <dl className="grid grid-cols-[auto,1fr] gap-x-2 gap-y-0.5 text-xs">
       {entries.map(([key, value]) => (
-        <div key={key} className="contents">
+        <Fragment key={key}>
           <dt className="text-muted-foreground">{key}</dt>
           <dd className="break-all text-foreground">{String(value)}</dd>
-        </div>
+        </Fragment>
       ))}
     </dl>
   );
@@ -55,6 +55,9 @@ export default function ActivityLog() {
   const formId = useId();
   const [draft, setDraft] = useState(EMPTY_FILTERS);
   const [applied, setApplied] = useState(EMPTY_FILTERS);
+  // Set once the admin applies or clears filters, so the result count is
+  // announced for their action but not on the initial page load.
+  const [announceResults, setAnnounceResults] = useState(false);
   const query = toAuditQuery(applied);
 
   const catalog = useQuery({
@@ -78,11 +81,19 @@ export default function ActivityLog() {
   const submit = (event) => {
     event.preventDefault();
     setApplied(draft);
+    setAnnounceResults(true);
   };
   const reset = () => {
     setDraft(EMPTY_FILTERS);
     setApplied(EMPTY_FILTERS);
+    setAnnounceResults(true);
   };
+  let resultAnnouncement = '';
+  if (announceResults && !events.isFetching) {
+    if (events.error && rows.length === 0) resultAnnouncement = 'The activity log could not be loaded.';
+    else if (rows.length === 0) resultAnnouncement = filtered ? 'No events match these filters.' : 'No activity recorded yet.';
+    else resultAnnouncement = `${rows.length} event${rows.length === 1 ? '' : 's'} shown${events.hasNextPage ? ', older events available' : ''}.`;
+  }
 
   const options = (list = []) => list.map((value) => <option key={value} value={value}>{value}</option>);
 
@@ -129,6 +140,10 @@ export default function ActivityLog() {
           </Button>
         </div>
       </form>
+
+      <p role="status" aria-live="polite" aria-atomic="true" className="sr-only" data-testid="activity-log-results">
+        {resultAnnouncement}
+      </p>
 
       {events.isLoading ? (
         <LoadingState label="Loading activity log…" compact size="sm" />

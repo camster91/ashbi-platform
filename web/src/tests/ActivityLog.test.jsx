@@ -60,6 +60,10 @@ describe('activity log', () => {
     expect(within(table).getByText('Payment provider')).toBeInTheDocument();
     expect(within(table).getByText('STRIPE')).toBeInTheDocument();
     expect(within(table).getByText('Request req-9')).toBeInTheDocument();
+    // Metadata is a valid description list: dt/dd pairs directly under dl.
+    const list = table.querySelector('dl');
+    expect([...list.children].map((node) => node.tagName)).toEqual(['DT', 'DD', 'DT', 'DD']);
+    expect(screen.getByTestId('activity-log-results')).toHaveTextContent('');
     expect(screen.queryByRole('button', { name: /load older events/i })).not.toBeInTheDocument();
   });
 
@@ -72,7 +76,13 @@ describe('activity log', () => {
     fireEvent.change(screen.getByLabelText('Action'), { target: { value: 'user.role_changed' } });
     fireEvent.click(screen.getByRole('button', { name: 'Apply filters' }));
     expect(await screen.findByText('No events match these filters')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('activity-log-results')).toHaveTextContent('No events match these filters.'));
+    expect(screen.getByTestId('activity-log-results')).toHaveAttribute('aria-live', 'polite');
     expect(getAuditEvents).toHaveBeenLastCalledWith({ action: 'user.role_changed', limit: 50, cursor: undefined });
+
+    getAuditEvents.mockResolvedValue({ events: [EVENT, { ...EVENT, id: 'e2' }], nextCursor: 'more' });
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+    await waitFor(() => expect(screen.getByTestId('activity-log-results')).toHaveTextContent('2 events shown, older events available.'));
   });
 
   it('shows a retryable error state', async () => {
