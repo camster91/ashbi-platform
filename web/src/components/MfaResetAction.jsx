@@ -1,29 +1,53 @@
 import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { ShieldOff } from 'lucide-react';
 import { api } from '../lib/api';
 import ConfirmDialog from './ConfirmDialog';
 
+const fieldClass = 'w-full px-3 py-2 rounded-lg border border-border bg-background text-sm';
+
 /**
  * Admin action on the Team page: reset (and unlock) another member's
- * two-factor authentication. The admin re-enters their own password; the
- * member is signed out everywhere and notified.
+ * two-factor authentication. The admin re-enters their own password and,
+ * when their own account uses two-factor authentication, a code as well.
+ * The member is signed out everywhere and notified.
  */
 export default function MfaResetAction({ member, onReset }) {
   const [open, setOpen] = useState(false);
   const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
+  const [useRecovery, setUseRecovery] = useState(false);
   const [error, setError] = useState('');
 
+  // The admin's own MFA status decides whether a code is required.
+  const { data: ownStatus } = useQuery({
+    queryKey: ['mfa-status'],
+    queryFn: () => api.getMfaStatus(),
+    enabled: open,
+  });
+  const [serverNeedsCode, setServerNeedsCode] = useState(false);
+  const needsCode = Boolean(ownStatus?.enabled) || serverNeedsCode;
+
   const reset = useMutation({
-    mutationFn: () => api.adminResetMfa(member.id, password),
+    mutationFn: (body) => api.adminResetMfa(member.id, body),
     onSuccess: () => {
-      setOpen(false);
-      setPassword('');
-      setError('');
+      close();
       onReset?.();
     },
-    onError: (err) => setError(err.message || 'Two-factor authentication could not be reset.'),
+    onError: (err) => {
+      if (err?.data?.code === 'MFA_CODE_REQUIRED') setServerNeedsCode(true);
+      setError(err.message || 'Two-factor authentication could not be reset.');
+      setCode('');
+    },
   });
+
+  function close() {
+    setOpen(false);
+    setPassword('');
+    setCode('');
+    setUseRecovery(false);
+    setError('');
+  }
 
   const confirm = () => {
     setError('');
@@ -31,13 +55,14 @@ export default function MfaResetAction({ member, onReset }) {
       setError('Enter your password to confirm.');
       return;
     }
-    reset.mutate();
-  };
-
-  const close = () => {
-    setOpen(false);
-    setPassword('');
-    setError('');
+    const body = { password };
+    if (needsCode) {
+      const value = useRecovery ? code.trim() : code.replace(/\s+/g, '');
+      if (!useRecovery && !/^\d{6}$/.test(value)) { setError('Enter the 6-digit code from your authenticator app.'); return; }
+      if (useRecovery && value.length < 16) { setError('Enter one of your recovery codes.'); return; }
+      if (useRecovery) body.recoveryCode = value; else body.code = value;
+    }
+    reset.mutate(body);
   };
 
   return (
@@ -61,17 +86,43 @@ export default function MfaResetAction({ member, onReset }) {
         pending={reset.isPending}
         error={error}
       >
-        <div className="mt-4">
-          <label htmlFor={`mfa-reset-password-${member.id}`} className="block text-sm font-medium mb-1">Your password</label>
-          <input
-            id={`mfa-reset-password-${member.id}`}
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm"
-            required
-          />
+        <div className="mt-4 space-y-3">
+          <div>
+            <label htmlFor={`mfa-reset-password-${member.id}`} className="block text-sm font-medium mb-1">Your password</label>
+            <input
+              id={`mfa-reset-password-${member.id}`}
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className={fieldClass}
+              required
+            />
+          </div>
+          {needsCode && (
+            <div>
+              <label htmlFor={`mfa-reset-code-${member.id}`} className="block text-sm font-medium mb-1">
+                {useRecovery ? 'Your recovery code' : 'Your authentication code'}
+              </label>
+              <input
+                id={`mfa-reset-code-${member.id}`}
+                type="text"
+                inputMode={useRecovery ? 'text' : 'numeric'}
+                autoComplete={useRecovery ? 'off' : 'one-time-code'}
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                className={`${fieldClass} font-mono`}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => { setUseRecovery((v) => !v); setCode(''); setError(''); }}
+                className="mt-1 min-h-11 text-sm text-primary hover:text-primary/80 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {useRecovery ? 'Use your authenticator app instead' : 'Use a recovery code instead'}
+              </button>
+            </div>
+          )}
         </div>
       </ConfirmDialog>
     </>
