@@ -73,6 +73,19 @@ export async function tenancyMiddleware(request, reply) {
     return;
   }
 
+  // SECURITY: Client-portal sessions carry the agency's organizationId (their
+  // client belongs to it), so without this guard a CLIENT cookie would pass
+  // the org scope below and read every other client's invoices, contracts,
+  // proposals and the client list through the staff APIs. Clients reach their
+  // own data only through /api/client-portal (scoped by clientId) and the
+  // capability-token /api/portal routes, both exempted above.
+  if (request.user?.role === 'CLIENT') {
+    return reply.status(403).send({
+      error: 'Client portal sessions cannot access staff APIs',
+      code: 'CLIENT_SESSION_FORBIDDEN'
+    });
+  }
+
   // SECURITY: Derive organizationId from the verified JWT only.
   // The x-org-id header fallback was a tenant-spoofing vector (C5) — any
   // authenticated user could send x-org-id: <other-tenant> and read their data.
