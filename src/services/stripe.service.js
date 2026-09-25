@@ -1,4 +1,5 @@
 // Stripe integration service for payment links and webhooks
+import crypto from 'crypto';
 import Stripe from 'stripe';
 import env from '../config/env.js';
 
@@ -18,8 +19,59 @@ export async function createPaymentLink(invoice) {
   return createPaymentLinkWithClient(invoice, stripeClient);
 }
 
+// Reuse an open session only while it has at least this long left, so a
+// client is never redirected to a Checkout page that expires mid-payment.
+const CHECKOUT_REUSE_MARGIN_MS = 5 * 60 * 1000;
+
+export function checkoutAmountMinor(invoice) {
+  return Math.round(Number(invoice.total || 0) * 100);
+}
+
+export function checkoutCurrency(invoice) {
+  return (invoice.currency || 'CAD').toLowerCase();
+}
+
+/**
+ * Stripe idempotency key for one Checkout creation request.
+ *
+ * Stripe caches a key for 24h and rejects (or replays) any later request that
+ * reuses it. A single per-invoice key therefore broke every legitimate new
+ * session: an edited total, a rotated public link, or a session that expired
+ * inside that window. The key now covers everything that makes the request
+ * distinct — the attempt counter (bumped after each stored session), the
+ * amount/currency, and a digest of the remaining request parameters — while
+ * rapid duplicate retries of the *same* request still share one key and so
+ * cannot create two sessions.
+ */
+export function checkoutIdempotencyKey(invoice, params) {
+  const attempt = Number.isInteger(invoice.stripeCheckoutAttempt) ? invoice.stripeCheckoutAttempt : 0;
+  const digest = crypto.createHash('sha256').update(JSON.stringify(params)).digest('hex').slice(0, 16);
+  return `ashbi:invoice:${invoice.id}:checkout:${attempt}:${params.currency}:${params.amountMinor}:${digest}`;
+}
+
+/**
+ * Return the stored Checkout URL when it is still safe to hand out: same
+ * amount and currency as the invoice now has, and not expired (or about to).
+ */
+export function reusableCheckoutLink(invoice, now = new Date()) {
+  if (!invoice.stripePaymentLink || !invoice.stripeCheckoutSessionId) return null;
+  if (invoice.stripeCheckoutAmountMinor !== checkoutAmountMinor(invoice)) return null;
+  if ((invoice.stripeCheckoutCurrency || '').toLowerCase() !== checkoutCurrency(invoice)) return null;
+  if (!invoice.stripeCheckoutExpiresAt) return null;
+  if (new Date(invoice.stripeCheckoutExpiresAt).getTime() - now.getTime() <= CHECKOUT_REUSE_MARGIN_MS) return null;
+  return invoice.stripePaymentLink;
+}
+
 export async function createPaymentLinkWithClient(invoice, stripeClient) {
-  const currency = (invoice.currency || 'CAD').toLowerCase();
+  const currency = checkoutCurrency(invoice);
+  const amountMinor = checkoutAmountMinor(invoice);
+  const description = invoice.notes || `Payment for invoice ${invoice.invoiceNumber}`;
+  const successUrl = `${env.appUrl}/portal/invoice/${invoice.viewToken}?payment=success`;
+  const cancelUrl = `${env.appUrl}/portal/invoice/${invoice.viewToken}?payment=cancelled`;
+  const idempotencyKey = checkoutIdempotencyKey(invoice, {
+    currency, amountMinor, invoiceNumber: invoice.invoiceNumber, description, successUrl, cancelUrl,
+  });
+
   const session = await stripeClient.checkout.sessions.create({
     payment_method_types: ['card'],
     line_items: [{
@@ -27,29 +79,66 @@ export async function createPaymentLinkWithClient(invoice, stripeClient) {
         currency,
         product_data: {
           name: `Invoice ${invoice.invoiceNumber}`,
-          description: invoice.notes || `Payment for invoice ${invoice.invoiceNumber}`,
+          description,
         },
-        unit_amount: Math.round(invoice.total * 100),
+        unit_amount: amountMinor,
       },
       quantity: 1,
     }],
     mode: 'payment',
-    success_url: `${env.appUrl}/portal/invoice/${invoice.viewToken}?payment=success`,
-    cancel_url: `${env.appUrl}/portal/invoice/${invoice.viewToken}?payment=cancelled`,
+    success_url: successUrl,
+    cancel_url: cancelUrl,
     client_reference_id: invoice.id,
     metadata: {
       invoiceId: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
       currency: currency.toUpperCase(),
-      amountMinor: String(Math.round(invoice.total * 100)),
+      amountMinor: String(amountMinor),
     },
-  }, { idempotencyKey: `ashbi:invoice:${invoice.id}:checkout` });
+  }, { idempotencyKey });
 
   return {
     paymentLink: session.url,
     checkoutSessionId: session.id,
     paymentIntentId: session.payment_intent || null,
+    amountMinor,
+    currency,
+    expiresAt: session.expires_at ? new Date(session.expires_at * 1000) : null,
+    idempotencyKey,
   };
+}
+
+/**
+ * Fields to persist on the invoice after a session was created. Bumping the
+ * attempt counter here is what lets the *next* creation (after expiry or an
+ * edit) use a fresh idempotency key.
+ */
+export function checkoutPersistenceData(invoice, result) {
+  const attempt = Number.isInteger(invoice.stripeCheckoutAttempt) ? invoice.stripeCheckoutAttempt : 0;
+  return {
+    stripePaymentLink: result.paymentLink,
+    stripeCheckoutSessionId: result.checkoutSessionId,
+    stripePaymentIntentId: result.paymentIntentId,
+    stripeCheckoutAmountMinor: result.amountMinor,
+    stripeCheckoutCurrency: result.currency,
+    stripeCheckoutExpiresAt: result.expiresAt,
+    stripeCheckoutAttempt: attempt + 1,
+  };
+}
+
+/**
+ * Reuse the invoice's open Checkout session when it still matches, otherwise
+ * create a new one and persist it. Returns null when Stripe is not configured.
+ */
+export async function ensureCheckoutSession(prisma, invoice, { stripeClient = getStripe(), now = new Date() } = {}) {
+  const reusable = reusableCheckoutLink(invoice, now);
+  if (reusable) return { paymentLink: reusable, reused: true };
+  if (!stripeClient) return null;
+
+  const result = await createPaymentLinkWithClient(invoice, stripeClient);
+  const data = checkoutPersistenceData(invoice, result);
+  await prisma.invoice.update({ where: { id: invoice.id }, data });
+  return { paymentLink: result.paymentLink, reused: false, data };
 }
 
 export async function handleWebhook(payload, signature) {
@@ -124,7 +213,13 @@ export async function clearExpiredCheckout(prisma, session) {
   if (!invoiceId) return false;
   await prisma.invoice.updateMany({
     where: { id: invoiceId, stripeCheckoutSessionId: session.id, status: { not: 'PAID' } },
-    data: { stripePaymentLink: null, stripeCheckoutSessionId: null },
+    data: {
+      stripePaymentLink: null,
+      stripeCheckoutSessionId: null,
+      stripeCheckoutAmountMinor: null,
+      stripeCheckoutCurrency: null,
+      stripeCheckoutExpiresAt: null,
+    },
   });
   return true;
 }

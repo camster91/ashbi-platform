@@ -998,6 +998,13 @@ model Invoice {
   stripePaymentLink       String?
   stripeCheckoutSessionId String?
   stripePaymentIntentId   String?
+  // Checkout session tracking: reuse an open session only while amount,
+  // currency and expiry still match; the attempt counter feeds the Stripe
+  // idempotency key so a new session can be created after expiry or edits.
+  stripeCheckoutAmountMinor Int?
+  stripeCheckoutCurrency    String?
+  stripeCheckoutExpiresAt   DateTime?
+  stripeCheckoutAttempt     Int       @default(0)
   paymentMethod           String? // STRIPE | BANK | TRANSFER | CHEQUE | CASH | OTHER (legacy rows may hold CHECK)
   paymentNotes            String?
   transactionId           String?

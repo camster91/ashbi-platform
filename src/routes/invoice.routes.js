@@ -1,5 +1,5 @@
 // Invoice routes — full CRUD + send + PDF + payments + templates
-import { createPaymentLink, handleWebhook, recordCompletedCheckout } from '../services/stripe.service.js';
+import { checkoutPersistenceData, createPaymentLink, ensureCheckoutSession, handleWebhook, recordCompletedCheckout } from '../services/stripe.service.js';
 import { generateInvoicePdf } from '../utils/generate-invoice-pdf.js';
 import { generateInvoiceNumber } from '../utils/invoice.js';
 import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
@@ -368,12 +368,11 @@ export default async function invoiceRoutes(fastify) {
 
     // Attempt Stripe payment link
     try {
-      const result = await createPaymentLink(invoice);
-      if (result) {
-        updateData.stripePaymentLink = result.paymentLink;
-        updateData.stripeCheckoutSessionId = result.checkoutSessionId;
-        updateData.stripePaymentIntentId = result.paymentIntentId;
-      }
+      // The Checkout return URLs must point at the token issued by this send,
+      // not the pre-send token that is about to be replaced.
+      const checkoutInvoice = { ...invoice, viewToken: access.token };
+      const result = await createPaymentLink(checkoutInvoice);
+      if (result) Object.assign(updateData, checkoutPersistenceData(checkoutInvoice, result));
     } catch (err) {
       fastify.log.warn({ err }, 'Stripe payment link failed — sending without it');
     }
@@ -491,25 +490,10 @@ export default async function invoiceRoutes(fastify) {
     const accessFailure = publicAccessFailure(invoice);
     if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
 
-    // Return existing link if already generated
-    if (invoice.stripePaymentLink) {
-      return { paymentLinkUrl: invoice.stripePaymentLink };
-    }
-
     try {
-      const result = await createPaymentLink(invoice);
+      const result = await ensureCheckoutSession(fastify.prisma, invoice);
       if (!result) return reply.status(503).send({ error: 'Stripe not configured' });
-
-      const updated = await fastify.prisma.invoice.update({
-        where: { id: request.params.id },
-        data: {
-          stripePaymentLink: result.paymentLink,
-          stripeCheckoutSessionId: result.checkoutSessionId,
-          stripePaymentIntentId: result.paymentIntentId,
-        }
-      });
-
-      return { paymentLinkUrl: updated.stripePaymentLink };
+      return { paymentLinkUrl: result.paymentLink, reused: result.reused };
     } catch (err) {
       fastify.log.error({ err }, 'Failed to create Stripe payment link');
       return reply.status(500).send({ error: 'Failed to create payment link', detail: err.message });
