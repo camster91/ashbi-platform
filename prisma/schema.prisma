@@ -883,6 +883,11 @@ model Proposal {
   approvedAt            DateTime?
   declinedAt            DateTime?
   sentAt                DateTime?
+  // Email delivery tracking, updated by the signed Mailgun events webhook
+  deliveryMessageId String?
+  deliveryStatus    String? // ACCEPTED | DELIVERED | FAILED | BOUNCED | COMPLAINED
+  deliveryStatusAt  DateTime?
+  deliveryError     String?
   clientId              String
   projectId             String?
   createdById           String
@@ -952,6 +957,11 @@ model Contract {
   signatureDataHash     String?
   signerIp              String?
   signerUserAgent       String?
+  // Email delivery tracking, updated by the signed Mailgun events webhook
+  deliveryMessageId String?
+  deliveryStatus    String? // ACCEPTED | DELIVERED | FAILED | BOUNCED | COMPLAINED
+  deliveryStatusAt  DateTime?
+  deliveryError     String?
   proposalId            String?   @unique
   clientId              String
   createdById           String
@@ -1010,6 +1020,11 @@ model Invoice {
   transactionId           String?
   paidAt                  DateTime?
   sentAt                  DateTime?
+  // Email delivery tracking, updated by the signed Mailgun events webhook
+  deliveryMessageId String?
+  deliveryStatus    String? // ACCEPTED | DELIVERED | FAILED | BOUNCED | COMPLAINED
+  deliveryStatusAt  DateTime?
+  deliveryError     String?
   voidedAt                DateTime?
   voidedFromStatus        String?
   isRecurring             Boolean   @default(false)
@@ -1752,6 +1767,11 @@ model Estimate {
   validUntil  DateTime?
   viewToken   String    @unique @default(cuid())
   sentAt      DateTime?
+  // Email delivery tracking, updated by the signed Mailgun events webhook
+  deliveryMessageId String?
+  deliveryStatus    String? // ACCEPTED | DELIVERED | FAILED | BOUNCED | COMPLAINED
+  deliveryStatusAt  DateTime?
+  deliveryError     String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   // Soft delete
@@ -2150,4 +2170,15 @@ model PublicInquiry {
   @@index([organizationId, createdAt])
   @@index([ownerId])
   @@map("public_inquiries")
+}
+
+// Replay guard for the Mailgun events webhook: each signed token is accepted
+// once. Holds no tenant data (only the random Mailgun token), so it is global.
+model MailgunWebhookReceipt {
+  id         String   @id @default(cuid())
+  token      String   @unique
+  receivedAt DateTime @default(now())
+
+  @@index([receivedAt])
+  @@map("mailgun_webhook_receipts")
 }

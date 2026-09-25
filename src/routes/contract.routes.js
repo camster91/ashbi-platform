@@ -3,24 +3,34 @@ import PDFDocument from 'pdfkit';
 import env from '../config/env.js';
 import logger from '../utils/logger.js';
 import { sendContractSignEmail } from '../services/email.service.js';
+import { deliveryFieldsFromSend, withDeliveryState } from '../services/mailgun-delivery.service.js';
 import { getContractTemplate, renderTemplate } from '../services/contractTemplates.service.js';
 import {validateBody, createContractSchema, updateContractDraftSchema, contractDraftUpdateSchema} from '../validators/schemas.js';
 import { clampTake } from '../utils/query-limits.js';
 import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
 
-async function sendContractEmail(to, clientName, contractTitle, signUrl) {
+// Returns the provider result ({ ok, id?, error? }), or null when no send was
+// attempted (test mode). The helper used to return `true` whenever it did not
+// throw, even when Mailgun rejected the message.
+async function sendContractEmail(to, clientName, contractTitle, signUrl, contractId) {
   // NODE_ENV/ASHBI_RUN_EMAIL_TESTS read directly because they are dev-only
   // test toggles not exposed in env.js. See proposal.routes.js for the same
   // pattern.
-  if (process.env.NODE_ENV === 'test' && process.env.ASHBI_RUN_EMAIL_TESTS !== '1') return false;
-  if (!env.mailgunApiKey || !env.mailgunDomain) return false;
+  if (process.env.NODE_ENV === 'test' && process.env.ASHBI_RUN_EMAIL_TESTS !== '1') return null;
+  if (!env.mailgunApiKey || !env.mailgunDomain) return { ok: false, error: 'Mailgun not configured' };
   try {
-    await sendContractSignEmail({ to, clientName, contractTitle, signLink: signUrl });
-    return true;
+    return await sendContractSignEmail({ to, clientName, contractTitle, signLink: signUrl, contractId });
   } catch (err) {
     logger.error({ errorName: err?.name, errorCode: err?.code }, '[Contract] Email send error');
-    return false;
+    return { ok: false, error: 'Contract email send error' };
   }
+}
+
+async function recordContractDelivery(prisma, contractId, delivery) {
+  if (!delivery) return null;
+  const data = deliveryFieldsFromSend(delivery);
+  await prisma.contract.update({ where: { id: contractId }, data });
+  return data;
 }
 
 export default async function contractRoutes(fastify) {
@@ -58,7 +68,7 @@ export default async function contractRoutes(fastify) {
       }
     });
     if (!contract) return reply.status(404).send({ error: 'Contract not found' });
-    return contract;
+    return withDeliveryState(contract);
   });
 
   // POST / — create contract
@@ -171,13 +181,16 @@ export default async function contractRoutes(fastify) {
     // Email the primary contact
     const primaryContact = contract.client?.contacts?.[0];
     let emailSent = false;
+    let deliveryFields = null;
     if (primaryContact?.email) {
       const baseUrl = env.appUrl;
       const signUrl = `${baseUrl}/portal/contract/${access.token}`;
-      emailSent = await sendContractEmail(primaryContact.email, primaryContact.name || contract.client?.name, contract.title || 'Service Agreement', signUrl);
+      const delivery = await sendContractEmail(primaryContact.email, primaryContact.name || contract.client?.name, contract.title || 'Service Agreement', signUrl, contract.id);
+      emailSent = Boolean(delivery?.ok);
+      deliveryFields = await recordContractDelivery(fastify.prisma, contract.id, delivery);
     }
 
-    return { ...updated, emailSent };
+    return withDeliveryState({ ...updated, ...deliveryFields, emailSent });
   });
 
   // GET /sign/:signToken — PUBLIC — client views contract to sign
@@ -201,6 +214,8 @@ export default async function contractRoutes(fastify) {
       signerIp,
       signerUserAgent,
       publicAccessRevokedAt,
+      deliveryMessageId,
+      deliveryError,
       ...publicContract
     } = contract;
     return publicContract;
@@ -278,8 +293,9 @@ export default async function contractRoutes(fastify) {
     const contact = contract.client?.contacts?.[0];
     if (!contact?.email) return reply.status(409).send({ error: 'Primary client email is missing' });
     const signUrl = `${env.appUrl}/portal/contract/${contract.signToken}`;
-    const emailSent = await sendContractEmail(contact.email, contact.name || contract.client.name, contract.title, signUrl);
-    if (!emailSent) return reply.status(503).send({ error: 'Contract email delivery is unavailable', retryable: true });
+    const delivery = await sendContractEmail(contact.email, contact.name || contract.client.name, contract.title, signUrl, contract.id);
+    await recordContractDelivery(request.prisma, contract.id, delivery);
+    if (!delivery?.ok) return reply.status(503).send({ error: 'Contract email delivery is unavailable', retryable: true });
     return { emailSent: true };
   });
 

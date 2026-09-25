@@ -14,19 +14,23 @@ import {
 } from '../validators/schemas.js';
 import { clampTake } from '../utils/query-limits.js';
 import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
+import { deliveryFieldsFromSend, mailgunTrackingFields, withDeliveryState } from '../services/mailgun-delivery.service.js';
 
-async function sendProposalEmail(to, clientName, proposalTitle, portalUrl) {
+// Returns the provider result ({ ok, id?, error? }), or null when no send was
+// attempted (test mode).
+async function sendProposalEmail(to, clientName, proposalTitle, portalUrl, proposalId) {
   // ASHI_RUN_EMAIL_TESTS is intentionally read directly from process.env
   // (not env.*) because it is a developer-only test toggle and is never
   // wired into env.js. NODE_ENV === 'test' is also read directly because
   // env.isTest is not part of the public config surface; the explicit
   // test gate lives here.
-  if (process.env.NODE_ENV === 'test' && process.env.ASHBI_RUN_EMAIL_TESTS !== '1') return false;
-  if (!env.mailgunApiKey || !env.mailgunDomain) return false;
+  if (process.env.NODE_ENV === 'test' && process.env.ASHBI_RUN_EMAIL_TESTS !== '1') return null;
+  if (!env.mailgunApiKey || !env.mailgunDomain) return { ok: false, error: 'Mailgun not configured' };
   try {
     const mg = new Mailgun(FormData);
     const client = mg.client({ username: 'api', key: env.mailgunApiKey });
-    await client.messages.create(env.mailgunDomain, {
+    const sent = await client.messages.create(env.mailgunDomain, {
+      ...mailgunTrackingFields({ documentType: 'proposal', documentId: proposalId }),
       from: `Ashbi Design <noreply@${env.mailgunDomain}>`,
       to,
       subject: `Your Proposal is Ready — ${proposalTitle}`,
@@ -50,11 +54,18 @@ async function sendProposalEmail(to, clientName, proposalTitle, portalUrl) {
         </div>
       `,
     });
-    return true;
+    return { ok: true, id: sent?.id };
   } catch (err) {
     logger.error({ errorName: err?.name, errorCode: err?.code }, '[Proposal] Email send error');
-    return false;
+    return { ok: false, error: 'Proposal email send error' };
   }
+}
+
+async function recordProposalDelivery(prisma, proposalId, delivery) {
+  if (!delivery) return null;
+  const data = deliveryFieldsFromSend(delivery);
+  await prisma.proposal.update({ where: { id: proposalId }, data });
+  return data;
 }
 
 export default async function proposalRoutes(fastify) {
@@ -106,7 +117,7 @@ export default async function proposalRoutes(fastify) {
       return reply.status(404).send({ error: 'Proposal not found' });
     }
 
-    return proposal;
+    return withDeliveryState(proposal);
   });
 
   // Create proposal
@@ -313,12 +324,15 @@ export default async function proposalRoutes(fastify) {
     const primaryEmail = proposal.client?.contacts?.[0]?.email;
     const primaryName = proposal.client?.contacts?.[0]?.name || proposal.client?.name;
     let emailSent = false;
+    let deliveryFields = null;
     if (primaryEmail && proposal.viewToken) {
       const portalUrl = `${env.portalBaseUrl}/portal/proposal/${proposal.viewToken}`;
-      emailSent = await sendProposalEmail(primaryEmail, primaryName, proposal.title, portalUrl);
+      const delivery = await sendProposalEmail(primaryEmail, primaryName, proposal.title, portalUrl, proposal.id);
+      emailSent = Boolean(delivery?.ok);
+      deliveryFields = await recordProposalDelivery(request.prisma, proposal.id, delivery);
     }
 
-    return { ...proposal, emailSent };
+    return withDeliveryState({ ...proposal, ...deliveryFields, emailSent });
   });
 
   fastify.post('/:id/resend', { onRequest: [fastify.authenticate] }, async (request, reply) => {
@@ -333,8 +347,9 @@ export default async function proposalRoutes(fastify) {
     const contact = proposal.client?.contacts?.[0];
     if (!contact?.email) return reply.status(409).send({ error: 'Primary client email is missing' });
     const portalUrl = `${env.portalBaseUrl}/portal/proposal/${proposal.viewToken}`;
-    const emailSent = await sendProposalEmail(contact.email, contact.name || proposal.client.name, proposal.title, portalUrl);
-    if (!emailSent) return reply.status(503).send({ error: 'Proposal email delivery is unavailable', retryable: true });
+    const delivery = await sendProposalEmail(contact.email, contact.name || proposal.client.name, proposal.title, portalUrl, proposal.id);
+    await recordProposalDelivery(request.prisma, proposal.id, delivery);
+    if (!delivery?.ok) return reply.status(503).send({ error: 'Proposal email delivery is unavailable', retryable: true });
     return { emailSent: true };
   });
 
@@ -503,6 +518,8 @@ export default async function proposalRoutes(fastify) {
       metadata,
       draftData,
       deletedAt,
+      deliveryMessageId,
+      deliveryError,
       ...publicProposal
     } = proposal;
     return publicProposal;

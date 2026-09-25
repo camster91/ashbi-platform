@@ -1,6 +1,7 @@
 // Invoice routes — full CRUD + send + PDF + payments + templates
 import { checkoutPersistenceData, createPaymentLink, ensureCheckoutSession, handleWebhook, recordCompletedCheckout } from '../services/stripe.service.js';
 import { generateInvoicePdf } from '../utils/generate-invoice-pdf.js';
+import { deliveryFieldsFromSend, withDeliveryState } from '../services/mailgun-delivery.service.js';
 import { generateInvoiceNumber } from '../utils/invoice.js';
 import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
 import { validateBody, createInvoiceSchema, updateInvoiceSchema, markInvoicePaidSchema, sendInvoiceSchema, lineItemTemplateCreateSchema, invoiceBulkIdsSchema, invoiceBulkArchiveSchema, bulkMarkPaidSchema } from '../validators/schemas.js';
@@ -34,7 +35,7 @@ export default async function invoiceRoutes(fastify) {
   function flagOverdue(inv) {
     const now = new Date();
     const isOverdue = inv.status === 'SENT' && inv.dueDate && new Date(inv.dueDate) < now;
-    return { ...inv, isOverdue };
+    return withDeliveryState({ ...inv, isOverdue });
   }
 
   // ─── GET / — list invoices ──────────────────────────────────────────────────
@@ -391,8 +392,10 @@ export default async function invoiceRoutes(fastify) {
           dueDate: invoice.dueDate,
           viewUrl,
           paymentLink: updateData.stripePaymentLink,
+          invoiceId: invoice.id,
         });
         emailSent = delivery.ok;
+        Object.assign(updateData, deliveryFieldsFromSend(delivery));
         if (emailSent) fastify.log.info('Invoice email accepted by delivery provider');
         else fastify.log.warn({ emailError: delivery.error }, 'Invoice email delivery unavailable');
       } catch (emailErr) {
@@ -599,6 +602,9 @@ export default async function invoiceRoutes(fastify) {
       proposalId,
       viewToken,
       publicAccessRevokedAt,
+      deliveryMessageId,
+      deliveryError,
+      stripeCheckoutAttempt,
       ...safe
     } = invoice;
     return safe;
@@ -637,7 +643,9 @@ export default async function invoiceRoutes(fastify) {
       dueDate: invoice.dueDate,
       viewUrl,
       paymentLink: invoice.stripePaymentLink,
+      invoiceId: invoice.id,
     });
+    await request.prisma.invoice.update({ where: { id: invoice.id }, data: deliveryFieldsFromSend(delivery) });
     if (!delivery.ok) return reply.status(503).send({ error: 'Invoice email delivery is unavailable', retryable: true });
     return { emailSent: true };
   });
