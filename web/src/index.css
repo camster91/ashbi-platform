@@ -132,9 +132,12 @@
     --muted: 250 30% 18%;
     --muted-foreground: 250 18% 70%;
 
-    /* Destructive */
-    --destructive: 0 63% 31%;
-    --destructive-foreground: 48 33% 97%;
+    /* Destructive — a light red with dark foreground so the one token passes
+       AA both as text-destructive on the dark surfaces (~5.2:1 on muted,
+       ~6.2:1 on background) and as a solid fill behind its foreground. The
+       previous 0 63% 31% was only ~1.9:1 as text on the dark background. */
+    --destructive: 0 84% 68%;
+    --destructive-foreground: 250 39% 10%;
 
     /* Status colours */
     --success: 142 70% 30%;

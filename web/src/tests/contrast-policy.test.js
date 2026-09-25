@@ -73,6 +73,20 @@ describe('WCAG contrast policy', () => {
     expect(ratio(destructive, cream)).toBeGreaterThanOrEqual(4.5);
   });
 
+  it('the dark destructive token meets 4.5:1 as text on dark surfaces and as a solid fill', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');
+    const dark = css.slice(css.indexOf('.dark {'));
+    const token = (name) => {
+      const [, h, s, l] = dark.match(new RegExp(`--${name}:\\s*(\\d+)\\s+(\\d+)%\\s+(\\d+)%`)).map(Number);
+      return hsl(h, s, l);
+    };
+    const destructive = token('destructive');
+    for (const surface of ['background', 'card', 'muted']) {
+      expect(ratio(destructive, token(surface)), `text-destructive on dark ${surface}`).toBeGreaterThanOrEqual(4.5);
+    }
+    expect(ratio(token('destructive-foreground'), destructive), 'dark destructive fill').toBeGreaterThanOrEqual(4.5);
+  });
+
   it('semantic solid statuses meet 4.5:1 in light and dark themes', () => {
     expect(ratio(white, hsl(142, 72, 28))).toBeGreaterThanOrEqual(4.5);
     expect(ratio(white, hsl(32, 95, 32))).toBeGreaterThanOrEqual(4.5);
