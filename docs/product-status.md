@@ -6,7 +6,7 @@ The active agency-replacement acceptance map is [replacement-readiness-matrix.md
 
 ## Current supported milestone
 
-The supported milestone is a controlled Ashbi agency-operations deployment: authenticated staff/client workflows, project and task management, finance document preparation, collaboration/docs, and client portal on `hub.ashbi.ca`. It is not yet proven as a general-market replacement for ClickUp, Notion, Slack, or Bonsai. The milestone/deferral decision remains tracked in [#277](https://github.com/camster91/ashbi-platform/issues/277); the complete backlog and release plan are [#290](https://github.com/camster91/ashbi-platform/issues/290) and [#291](https://github.com/camster91/ashbi-platform/issues/291).
+The supported milestone is a controlled Ashbi agency-operations deployment: authenticated staff/client workflows, project and task management, finance document preparation, collaboration/docs, and client portal on `hub.ashbi.ca`. It is not yet proven as a general-market replacement for ClickUp, Notion, Slack, or Bonsai. The current roadmap and replacement-readiness waves are tracked in [#393](https://github.com/camster91/ashbi-platform/issues/393), which supersedes the earlier milestone decision in #277; the backlog and release plan [#290](https://github.com/camster91/ashbi-platform/issues/290) and [#291](https://github.com/camster91/ashbi-platform/issues/291) are being reconciled against it.
 
 | Capability | Classification | Authoritative evidence or remaining gate |
 | --- | --- | --- |

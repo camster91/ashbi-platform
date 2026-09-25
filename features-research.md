@@ -1,5 +1,8 @@
 # ashbi-platform — State of the Build (2026-07-23)
 
+> **Superseded / historical.** This 2026-07-23 build snapshot is retained for history only; its status and completion claims are not maintained. Use [docs/product-status.md](docs/product-status.md) (canonical status map) and roadmap issue [#393](https://github.com/camster91/ashbi-platform/issues/393) for current status.
+
+
 **The PRODUCT_ROADMAP.md is stale.** Phase 3 is largely already implemented at the schema + route level. This document is the corrected state.
 
 ## What's actually built vs. what's in the roadmap

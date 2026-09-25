@@ -35,7 +35,9 @@ export default function PortalProposal() {
   const respondMutation = useMutation({
     mutationFn: (data) => api.respondPortalProposal(token, data),
     onSuccess: (_, variables) => {
-      setCompleted(variables.action);
+      // The confirmation banner keys off past tense; storing the raw action
+      // ('approve') made every approval render as "Proposal Declined".
+      setCompleted(variables.action === 'approve' ? 'approved' : 'declined');
     },
   });
 
@@ -61,7 +63,7 @@ export default function PortalProposal() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
         <div className="text-center">
-          <FileText className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+          <FileText className="w-12 h-12 text-slate-500 mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-slate-800 mb-2">Proposal Not Found</h1>
           <p className="text-slate-500">This link may be invalid or expired.</p>
         </div>
@@ -123,7 +125,7 @@ export default function PortalProposal() {
                 </div>
               )}
               {proposal.createdAt && (
-                <p className="text-xs text-slate-400 mt-1">Created {formatDate(proposal.createdAt)}</p>
+                <p className="text-xs text-slate-500 mt-1">Created {formatDate(proposal.createdAt)}</p>
               )}
             </div>
             {proposal.status && !completed && (
@@ -200,7 +202,7 @@ export default function PortalProposal() {
                   aria-invalid={!!declineError}
                   aria-describedby={declineError ? 'decline-reason-error' : undefined}
                   placeholder="Your feedback helps us improve our proposals..."
-                  className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 resize-none"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm text-slate-700 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 resize-none"
                   rows={4}
                 />
                 {declineError && <p id="decline-reason-error" role="alert" className="text-sm text-red-600">{declineError}</p>}
@@ -256,7 +258,7 @@ export default function PortalProposal() {
 
         {/* Footer */}
         <div className="text-center py-6">
-          <p className="text-xs text-slate-400">Powered by Ashbi Design</p>
+          <p className="text-xs text-slate-600">Powered by Ashbi Design</p>
         </div>
       </main>
     </div>

@@ -998,7 +998,7 @@ model Invoice {
   stripePaymentLink       String?
   stripeCheckoutSessionId String?
   stripePaymentIntentId   String?
-  paymentMethod           String? // STRIPE | BANK | CHECK | CASH | OTHER
+  paymentMethod           String? // STRIPE | BANK | TRANSFER | CHEQUE | CASH | OTHER (legacy rows may hold CHECK)
   paymentNotes            String?
   transactionId           String?
   paidAt                  DateTime?
@@ -1053,7 +1053,7 @@ model InvoiceLineItem {
 model InvoicePayment {
   id            String   @id @default(cuid())
   amount        Float
-  method        String   @default("BANK") // STRIPE | BANK | CHECK | CASH | OTHER
+  method        String   @default("BANK") // STRIPE | BANK | TRANSFER | CHEQUE | CASH | OTHER (legacy rows may hold CHECK)
   notes         String?
   transactionId String?  @unique
   paidAt        DateTime @default(now())

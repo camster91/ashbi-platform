@@ -31,6 +31,8 @@ export const registerSchema = z.object({
   name: userName,
   role: z.enum(['ADMIN', 'TEAM', 'CLIENT']).optional().default('TEAM'),
   adminInviteToken: z.string().optional(), // required when DB has users
+  // Workspace name for the bootstrap admin's organization (first user only)
+  organizationName: z.string().trim().min(1).max(120).optional(),
 });
 
 export const changePasswordSchema = z.object({
@@ -190,10 +192,18 @@ export const updateInvoiceSchema = z.object({
 }).refine(val => Object.keys(val).length > 0, { message: 'At least one field must be provided' });
 
 // ── Mark invoice paid ──────────────────────────────────────────────────────
+// CHEQUE is the canonical stored value. Older web builds sent CHECK from the
+// Record payment dialog (and were rejected), so accept it and normalize.
+export const INVOICE_PAYMENT_METHODS = ['STRIPE', 'BANK', 'TRANSFER', 'CASH', 'CHEQUE', 'OTHER'];
+const invoicePaymentMethodSchema = z.preprocess(
+  (value) => (value === 'CHECK' ? 'CHEQUE' : value),
+  z.enum(INVOICE_PAYMENT_METHODS),
+);
+
 export const markInvoicePaidSchema = z.object({
   amount: z.number().positive().optional(),
-  method: z.enum(['STRIPE', 'BANK', 'TRANSFER', 'CASH', 'CHEQUE', 'OTHER']).optional(),
-  paymentMethod: z.enum(['STRIPE', 'BANK', 'TRANSFER', 'CASH', 'CHEQUE', 'OTHER']).optional(),
+  method: invoicePaymentMethodSchema.optional(),
+  paymentMethod: invoicePaymentMethodSchema.optional(),
   paymentNotes: z.string().max(2000).optional(),
   transactionId: z.string().max(200).optional(),
   paidAt: z.string().datetime().optional(),
@@ -1328,7 +1338,9 @@ export const clientPortalEmailSchema = z.object({
 });
 
 export const clientPortalTokenRedeemSchema = z.object({
-  token: z.string().min(1).max(500),
+  // A magic-link JWT embeds the contact's name and email plus three ids, so
+  // ordinary contacts exceed 500 characters. Bound it generously instead.
+  token: z.string().min(1).max(4096),
 });
 
 export const clientPortalMessageNewSchema = z.object({

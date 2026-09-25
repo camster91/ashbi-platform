@@ -19,6 +19,24 @@ import QueryErrorState from '../components/QueryErrorState';
 const HST_RATE = 13;
 const INITIAL_PAYMENT_FORM = { paymentMethod: 'BANK', paymentNotes: '', transactionId: '' };
 
+// Values must match the API's mark-paid enum; CHEQUE is canonical and legacy
+// rows may still hold CHECK.
+export const PAYMENT_METHOD_OPTIONS = [
+  { value: 'BANK', label: 'Bank Transfer / e-Transfer' },
+  { value: 'STRIPE', label: 'Stripe' },
+  { value: 'CHEQUE', label: 'Cheque' },
+  { value: 'CASH', label: 'Cash' },
+  { value: 'OTHER', label: 'Other' },
+];
+const PAYMENT_METHOD_LABELS = {
+  ...Object.fromEntries(PAYMENT_METHOD_OPTIONS.map(({ value, label }) => [value, label])),
+  TRANSFER: 'Bank Transfer / e-Transfer',
+  CHECK: 'Cheque',
+};
+export function paymentMethodLabel(method) {
+  return PAYMENT_METHOD_LABELS[method] || method;
+}
+
 const STATUS_CONFIG = {
   DRAFT:   { label: 'Draft',   color: 'bg-muted text-muted-foreground' },
   SENT:    { label: 'Sent',    color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
@@ -761,7 +779,7 @@ export default function InvoiceDetail() {
                   </div>
                   <p className="text-xs text-muted-foreground">{formatDate(invoice.paidAt)}</p>
                   {invoice.paymentMethod && (
-                    <p className="text-xs text-muted-foreground">via {invoice.paymentMethod}</p>
+                    <p className="text-xs text-muted-foreground">via {paymentMethodLabel(invoice.paymentMethod)}</p>
                   )}
                   {invoice.paymentNotes && (
                     <p className="text-xs text-muted-foreground mt-1">{invoice.paymentNotes}</p>
@@ -786,7 +804,7 @@ export default function InvoiceDetail() {
                         <div key={p.id} className="flex items-center justify-between text-sm">
                           <div>
                             <p className="font-medium">{fmt(p.amount)}</p>
-                            <p className="text-xs text-muted-foreground">{p.method} · {formatDate(p.paidAt)}</p>
+                            <p className="text-xs text-muted-foreground">{paymentMethodLabel(p.method)} · {formatDate(p.paidAt)}</p>
                             {p.transactionId && <p className="text-xs text-muted-foreground font-mono">{p.transactionId}</p>}
                             {p.notes && <p className="text-xs text-muted-foreground">{p.notes}</p>}
                           </div>
@@ -851,11 +869,9 @@ export default function InvoiceDetail() {
               disabled={markPaidMutation.isPending}
               className="w-full px-3 py-2 rounded-lg border border-border bg-background text-base"
             >
-              <option value="BANK">Bank Transfer / e-Transfer</option>
-              <option value="STRIPE">Stripe</option>
-              <option value="CHECK">Check</option>
-              <option value="CASH">Cash</option>
-              <option value="OTHER">Other</option>
+              {PAYMENT_METHOD_OPTIONS.map(({ value, label }) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
             </select>
           </div>
           <div>

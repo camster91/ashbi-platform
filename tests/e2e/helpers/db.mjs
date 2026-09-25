@@ -35,6 +35,20 @@ export async function findUserByEmail(email) {
   return r.rows[0] || null;
 }
 
+// The portal user that POST /api/client-portal/request-access provisions for
+// a client contact, with the claims its emailed magic link carries.
+export async function findPortalPrincipal(email) {
+  const c = await getClient();
+  const r = await c.query(
+    `SELECT u.id, u.email, u.name, u."sessionVersion", u."clientId", u."organizationId", ct.id AS "contactId"
+       FROM users u
+       JOIN contacts ct ON lower(ct.email) = u.email AND ct."clientId" = u."clientId"
+      WHERE u.email = $1 AND u.role = 'CLIENT'`,
+    [email.toLowerCase()]
+  );
+  return r.rows[0] || null;
+}
+
 export async function findClientById(id) {
   const c = await getClient();
   const r = await c.query('SELECT id, name, "organizationId", "deletedAt" FROM clients WHERE id = $1', [id]);

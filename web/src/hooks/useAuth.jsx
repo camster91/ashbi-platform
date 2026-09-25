@@ -28,6 +28,52 @@ export function sessionEndReason(message) {
   return normalized.includes('revoked') && !normalized.includes('expired') ? 'revoked' : 'expired';
 }
 
+function isSignInScreen(pathname) {
+  return pathname === '/login';
+}
+
+const FIRST_PAINT_FALLBACK_MS = 1000;
+
+// Runs `callback` once the page's first contentful paint has been presented
+// (not merely scheduled: a requestAnimationFrame hop still lands before the
+// frame reaches the screen). Falls back to a timer where paint timing is
+// unavailable or never fires, e.g. in a background tab. Returns a cancel
+// function for effect cleanup.
+export function afterFirstContentfulPaint(callback, fallbackMs = FIRST_PAINT_FALLBACK_MS) {
+  let done = false;
+  let observer = null;
+  let timer = null;
+  const run = () => {
+    if (done) return;
+    done = true;
+    observer?.disconnect();
+    clearTimeout(timer);
+    callback();
+  };
+  const painted = () => typeof performance !== 'undefined'
+    && typeof performance.getEntriesByName === 'function'
+    && performance.getEntriesByName('first-contentful-paint').length > 0;
+
+  if (painted()) {
+    timer = setTimeout(run, 0);
+  } else {
+    timer = setTimeout(run, fallbackMs);
+    try {
+      observer = new PerformanceObserver((list) => {
+        if (list.getEntriesByName('first-contentful-paint').length > 0) run();
+      });
+      observer.observe({ type: 'paint', buffered: true });
+    } catch {
+      observer = null; // No paint timing support: the fallback timer runs it.
+    }
+  }
+  return () => {
+    done = true;
+    observer?.disconnect();
+    clearTimeout(timer);
+  };
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -77,7 +123,16 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    checkAuth();
+    if (!isSignInScreen(window.location.pathname)) {
+      checkAuth();
+      return undefined;
+    }
+    // Nothing on the sign-in screen waits for the session check, so let the
+    // form reach the screen first. When /api/auth/me completed before that
+    // paint, Lighthouse's simulation charged its whole round trip (plus the
+    // script work that starts it) to the login page's largest contentful
+    // paint.
+    return afterFirstContentfulPaint(checkAuth);
   }, [checkAuth]);
 
   const login = useCallback(async (email, password, returnTo = '/dashboard') => {

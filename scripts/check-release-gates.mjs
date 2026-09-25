@@ -34,6 +34,8 @@ export function validateReleaseGates(root = process.cwd()) {
   }
 
   const commands = [
+    'npm run check:secrets',
+    'npm run check:release-gates',
     'npm run type-check',
     'npm run lint',
     'npm --prefix web run lint',
@@ -42,6 +44,7 @@ export function validateReleaseGates(root = process.cwd()) {
     'npm --prefix web test',
     'npm run test:browser',
     'npm run test:e2e',
+    'npm run test:e2e:journeys',
     'npm run build',
     'npm run check:frontend-budgets',
     'npm run test:lighthouse',

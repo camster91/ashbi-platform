@@ -181,7 +181,7 @@ export default function Milestones({ projectId }) {
                             ? 'Due today'
                             : `${daysUntil} days left`}
                         </span>
-                        <p className="text-xs text-gray-400 mt-1">
+                        <p className="text-xs text-gray-500 mt-1">
                           {formatDate(milestone.dueDate)}
                         </p>
                       </div>
@@ -337,7 +337,7 @@ function MilestoneModal({ milestone, onSave, onDelete, onClose, isLoading, isDel
                   key={task.id}
                   className="flex items-center justify-between px-3 py-2 border-b last:border-b-0"
                 >
-                  <span className={`text-sm ${task.status === 'COMPLETED' ? 'line-through text-gray-400' : 'text-gray-700'}`}>
+                  <span className={`text-sm ${task.status === 'COMPLETED' ? 'line-through text-gray-500' : 'text-gray-700'}`}>
                     {task.title}
                   </span>
                   <span className={`text-xs px-2 py-0.5 rounded ${

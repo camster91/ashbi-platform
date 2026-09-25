@@ -43,6 +43,22 @@ async function upgradeHashIfNeeded(prisma, userId, password, currentHash) {
   }
 }
 
+// Arbitrary constant key for the bootstrap registration advisory lock.
+const BOOTSTRAP_LOCK_KEY = 7_203_115_401;
+
+function slugify(value) {
+  return value.normalize('NFKD').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'workspace';
+}
+
+async function uniqueOrganizationSlug(tx, name) {
+  const base = slugify(name);
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const slug = attempt === 0 ? base : `${base}-${crypto.randomBytes(3).toString('hex')}`;
+    if (!(await tx.organization.findUnique({ where: { slug }, select: { id: true } }))) return slug;
+  }
+  return `${base}-${crypto.randomBytes(6).toString('hex')}`;
+}
+
 export default async function authRoutes(fastify) {
   const authRateLimit = {
     config: {
@@ -124,7 +140,7 @@ export default async function authRoutes(fastify) {
     ...authRateLimit,
     preHandler: [validateBody(registerSchema)],
   }, async (request, reply) => {
-    const { email, password, name, role = 'TEAM', adminInviteToken } = request.body;
+    const { email, password, name, role = 'TEAM', adminInviteToken, organizationName } = request.body;
 
     // Check if any users exist
     const userCount = await request.prisma.user.count();
@@ -180,20 +196,40 @@ export default async function authRoutes(fastify) {
     // First user is always admin; subsequent users use the provided role (validated by Zod)
     const userRole = userCount === 0 ? 'ADMIN' : role;
 
-    const user = await request.prisma.user.create({
-      data: {
-        email,
-        password: await hashPassword(password),
-        name,
-        role: userRole
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true
-      }
+    const userData = {
+      email,
+      password: await hashPassword(password),
+      name,
+      role: userRole,
+    };
+    const select = { id: true, email: true, name: true, role: true, organizationId: true };
+
+    // Every user belongs to an organization. /api/auth is exempt from the
+    // tenancy middleware, so request.prisma is the raw client here: later users
+    // join the registering admin's organization explicitly. The bootstrap
+    // admin has no organization yet, so their workspace is created in the same
+    // transaction, under a lock so two concurrent first registrations cannot
+    // each create a tenant.
+    if (userCount !== 0) {
+      const user = await request.prisma.user.create({
+        data: { ...userData, organizationId: request.user.organizationId },
+        select,
+      });
+      return reply.status(201).send(user);
+    }
+
+    const user = await request.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${BOOTSTRAP_LOCK_KEY})`;
+      if ((await tx.user.count()) !== 0) return null;
+      const workspaceName = organizationName || `${name}'s workspace`;
+      const organization = await tx.organization.create({
+        data: { name: workspaceName, slug: await uniqueOrganizationSlug(tx, workspaceName) },
+      });
+      return tx.user.create({ data: { ...userData, organizationId: organization.id }, select });
     });
+    if (!user) {
+      return reply.status(409).send({ error: 'The first administrator has already been registered. Sign in instead.' });
+    }
 
     return reply.status(201).send(user);
   });

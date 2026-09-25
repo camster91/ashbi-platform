@@ -2,10 +2,18 @@ import { lazy, Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth, AuthProvider } from './hooks/useAuth';
 import ErrorBoundary from './components/ErrorBoundary';
+import { getPreloadedLogin } from './lib/initial-route';
 import { ToastProvider, useToast } from './hooks/useToast';
 
 // Public entry points are split so each deep link loads only its route module.
 const Login = lazy(() => import('./pages/Login'));
+
+// Render the already-resolved login page directly on a cold /login visit so
+// the first commit shows it instead of the route loader (see initial-route.js).
+function LoginRoute() {
+  const PreloadedLogin = getPreloadedLogin();
+  return PreloadedLogin ? <PreloadedLogin /> : <Login />;
+}
 const UiLab = lazy(() => import('./pages/UiLab'));
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
@@ -171,7 +179,7 @@ function AppRoutes() {
       <ErrorBoundary>
         <Suspense fallback={<RouteLoader />}>
           <Routes>
-          <Route path="/login" element={<Login />} />
+          <Route path="/login" element={<LoginRoute />} />
           {import.meta.env.DEV && (
             <Route path="/ui-lab" element={<UiLab />} />
           )}

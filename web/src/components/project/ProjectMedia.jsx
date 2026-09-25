@@ -4,7 +4,7 @@ import { api } from '../../lib/api';
 import { useSocket } from '../../hooks/useSocket';
 
 const MAX_RECORDING_BYTES = 50 * 1024 * 1024;
-const rtcConfiguration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+const DEFAULT_ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
 
 function makeCallId() {
   return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -24,6 +24,10 @@ export default function ProjectMedia({ projectId }) {
   const recorderRef = useRef(null);
   const recordingStreamRef = useRef(null);
   const callIdRef = useRef(null);
+  // Calls are 1:1: the peer is bound to one remote user, and every signal is
+  // addressed to that user instead of the whole project room.
+  const remoteUserRef = useRef(null);
+  const iceServersRef = useRef(DEFAULT_ICE_SERVERS);
   const localStreamRef = useRef(null);
   const peerRef = useRef(null);
   const localVideoRef = useRef(null);
@@ -48,8 +52,9 @@ export default function ProjectMedia({ projectId }) {
 
   const leaveCall = useCallback(() => {
     const callId = callIdRef.current;
+    const remoteUser = remoteUserRef.current;
     if (socket && callId) {
-      socket.emit('call:signal', { projectId, callId, signal: { type: 'hangup' } });
+      if (remoteUser) socket.emit('call:signal', { projectId, callId, to: remoteUser, signal: { type: 'hangup' } });
       socket.emit('call:presence', { projectId, callId, state: 'left' });
     }
     peerRef.current?.close();
@@ -57,17 +62,29 @@ export default function ProjectMedia({ projectId }) {
     stopLocalTracks();
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
     callIdRef.current = null;
+    remoteUserRef.current = null;
     setRemoteParticipant(false);
     setCallState('idle');
   }, [projectId, socket, stopLocalTracks]);
 
-  const ensurePeer = useCallback(() => {
+  // Drop the current peer but stay in the call, waiting for a participant.
+  const releasePeer = useCallback(() => {
+    peerRef.current?.close();
+    peerRef.current = null;
+    remoteUserRef.current = null;
+    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+    setRemoteParticipant(false);
+    if (callIdRef.current) setCallState('waiting');
+  }, []);
+
+  const ensurePeer = useCallback((remoteUser) => {
     if (peerRef.current) return peerRef.current;
-    const peer = new RTCPeerConnection(rtcConfiguration);
+    remoteUserRef.current = remoteUser;
+    const peer = new RTCPeerConnection({ iceServers: iceServersRef.current });
     localStreamRef.current?.getTracks().forEach((track) => peer.addTrack(track, localStreamRef.current));
     peer.onicecandidate = ({ candidate }) => {
-      if (candidate && socket && callIdRef.current) {
-        socket.emit('call:signal', { projectId, callId: callIdRef.current, signal: { type: 'ice', candidate } });
+      if (candidate && socket && callIdRef.current && remoteUserRef.current) {
+        socket.emit('call:signal', { projectId, callId: callIdRef.current, to: remoteUserRef.current, signal: { type: 'ice', candidate } });
       }
     };
     peer.ontrack = ({ streams }) => {
@@ -77,10 +94,13 @@ export default function ProjectMedia({ projectId }) {
     };
     peer.onconnectionstatechange = () => {
       if (['failed', 'disconnected', 'closed'].includes(peer.connectionState)) setRemoteParticipant(false);
+      // The other side vanished without a hangup (closed tab, lost network):
+      // release the 1:1 binding so they, or someone else, can join again.
+      if (['failed', 'closed'].includes(peer.connectionState) && peerRef.current === peer) releasePeer();
     };
     peerRef.current = peer;
     return peer;
-  }, [projectId, socket]);
+  }, [projectId, releasePeer, socket]);
 
   const joinCall = useCallback(async () => {
     setCallError('');
@@ -96,6 +116,12 @@ export default function ProjectMedia({ projectId }) {
         if (!['NotAllowedError', 'NotFoundError', 'OverconstrainedError'].includes(error.name)) throw error;
         stream = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
         setCallError('Camera is unavailable, so you joined with audio only. You can continue the call or enable a camera in your browser settings.');
+      }
+      try {
+        const { iceServers } = await api.getIceServers();
+        if (Array.isArray(iceServers) && iceServers.length) iceServersRef.current = iceServers;
+      } catch {
+        // Fall back to public STUN; the call can still connect on open networks.
       }
       localStreamRef.current = stream;
       if (localVideoRef.current) localVideoRef.current.srcObject = stream;
@@ -127,25 +153,35 @@ export default function ProjectMedia({ projectId }) {
   useEffect(() => {
     if (!socket || !projectId) return undefined;
     socket.emit('join-project', projectId);
-    const onPresence = async ({ projectId: incomingProject, callId, state }) => {
-      if (incomingProject !== projectId || state !== 'joined' || !callIdRef.current || callId === callIdRef.current) return;
+    const onPresence = async ({ projectId: incomingProject, callId, userId, state }) => {
+      if (incomingProject !== projectId || !userId || !callIdRef.current || callId === callIdRef.current) return;
+      if (state === 'left') {
+        if (remoteUserRef.current === userId) releasePeer();
+        return;
+      }
+      if (state !== 'joined') return;
+      // Already in a call with someone: ignore further participants.
+      if (peerRef.current || remoteUserRef.current) return;
       try {
-        const peer = ensurePeer();
+        const peer = ensurePeer(userId);
         const offer = await peer.createOffer();
         await peer.setLocalDescription(offer);
-        socket.emit('call:signal', { projectId, callId: callIdRef.current, signal: { type: 'offer', sdp: offer } });
+        socket.emit('call:signal', { projectId, callId: callIdRef.current, to: userId, signal: { type: 'offer', sdp: offer } });
       } catch { setCallError('Could not connect the call.'); }
     };
-    const onSignal = async ({ projectId: incomingProject, callId, signal }) => {
-      if (incomingProject !== projectId || !callIdRef.current || callId === callIdRef.current) return;
+    const onSignal = async ({ projectId: incomingProject, callId, from, signal }) => {
+      if (incomingProject !== projectId || !from || !callIdRef.current || callId === callIdRef.current) return;
+      // Only the bound participant may negotiate; an offer may bind a new one.
+      if (remoteUserRef.current && remoteUserRef.current !== from) return;
+      if (!remoteUserRef.current && signal.type !== 'offer') return;
       try {
         if (signal.type === 'hangup') return leaveCall();
-        const peer = ensurePeer();
+        const peer = ensurePeer(from);
         if (signal.type === 'offer') {
           await peer.setRemoteDescription(new RTCSessionDescription(signal.sdp));
           const answer = await peer.createAnswer();
           await peer.setLocalDescription(answer);
-          socket.emit('call:signal', { projectId, callId: callIdRef.current, signal: { type: 'answer', sdp: answer } });
+          socket.emit('call:signal', { projectId, callId: callIdRef.current, to: from, signal: { type: 'answer', sdp: answer } });
         } else if (signal.type === 'answer') await peer.setRemoteDescription(new RTCSessionDescription(signal.sdp));
         else if (signal.type === 'ice' && signal.candidate) await peer.addIceCandidate(new RTCIceCandidate(signal.candidate));
       } catch { setCallError('The call negotiation failed. Leave and try again.'); }
@@ -157,7 +193,7 @@ export default function ProjectMedia({ projectId }) {
       socket.off('call:signal', onSignal);
       leaveCall();
     };
-  }, [ensurePeer, leaveCall, projectId, socket]);
+  }, [ensurePeer, leaveCall, projectId, releasePeer, socket]);
 
   const shareCallScreen = async () => {
     try {

@@ -63,7 +63,7 @@ import LiveTimer from './LiveTimer';
 import Modal, { ModalFooter } from './Modal';
 import { Button } from './ui';
 import { useInstallPrompt } from '../hooks/useInstallPrompt';
-import { usePushNotifications } from '../hooks/usePushNotifications';
+import { shouldAutoResubscribe, usePushNotifications } from '../hooks/usePushNotifications';
 import { useSocket } from '../hooks/useSocket';
 import OnboardingTour from './OnboardingTour';
 
@@ -81,7 +81,7 @@ export default function Layout({ children }) {
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const sidebarRef = useRef(null);
   const { isInstallable, install } = useInstallPrompt();
-  const { permission, subscribed, status: pushStatus, error: pushError, supported: pushSupported, offline: pushOffline, subscribe } = usePushNotifications();
+  const { permission, subscribed, status: pushStatus, error: pushError, supported: pushSupported, offline: pushOffline, optedIn: pushOptedIn, subscribe } = usePushNotifications({ userId: user?.id });
   const { socket } = useSocket();
   const [installDismissed, setInstallDismissed] = useState(false);
   const [notificationPromptDismissed, setNotificationPromptDismissed] = useState(false);
@@ -98,12 +98,15 @@ export default function Layout({ children }) {
     }
   }, [user?.id]);
 
-  // Re-register a previously approved browser subscription for this account.
+  // Re-register the browser subscription only for an account that explicitly
+  // opted in here. Browser permission alone is shared across accounts and
+  // survives a Settings "Disable", so it is not consent for this user.
   useEffect(() => {
-    if (user?.id && permission === 'granted') {
-      subscribe();
+    // pushOptedIn is a dependency so the one-time consent backfill re-runs this.
+    if (shouldAutoResubscribe({ userId: user?.id, permission })) {
+      subscribe({ auto: true });
     }
-  }, [user?.id, permission, subscribe]);
+  }, [user?.id, permission, pushOptedIn, subscribe]);
 
   const snoozeNotificationPrompt = () => {
     setNotificationPromptDismissed(true);

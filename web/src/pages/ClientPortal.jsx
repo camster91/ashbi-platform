@@ -1782,7 +1782,13 @@ const globalStyles = `
     .cp-kanban { grid-template-columns: 1fr; }
     .cp-chat-container { height: 400px; }
   }
+  @media (prefers-reduced-motion: reduce) {
+    [class*='cp-'] { animation: none !important; transition-duration: 0.01ms !important; transition-delay: 0ms !important; }
+    .cp-btn-primary:hover, .cp-card--interactive:hover { transform: none !important; }
+  }
 `;
+// Reduced motion (#318) above mirrors the shell contract in index.css: hover
+// feedback stays visible through colour/border/shadow, never movement.
 
 // Inject global styles once
 if (typeof document !== 'undefined' && !document.getElementById('cp-styles')) {

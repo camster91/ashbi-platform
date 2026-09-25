@@ -19,7 +19,38 @@ export async function clearBrowserPushSubscription({ removeFromServer = false } 
   }
 }
 
-export function usePushNotifications() {
+const OPT_IN_KEY_PREFIX = 'push-opt-in:';
+
+// Per-account consent record for this browser. Browser-level
+// Notification.permission is shared by every account that signs in here, so it
+// cannot by itself tell us whether *this* user asked for push notifications.
+// Returns true (opted in), false (explicitly opted out) or null (never chose).
+export function getPushOptIn(userId) {
+  if (!userId) return null;
+  try {
+    const value = localStorage.getItem(`${OPT_IN_KEY_PREFIX}${userId}`);
+    if (value === 'in') return true;
+    if (value === 'out') return false;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function setPushOptIn(userId, optedIn) {
+  if (!userId) return;
+  try {
+    localStorage.setItem(`${OPT_IN_KEY_PREFIX}${userId}`, optedIn ? 'in' : 'out');
+  } catch { /* storage unavailable; consent then lasts only for this page */ }
+}
+
+// The shell may silently restore a subscription only when the browser already
+// grants permission AND this specific account opted in on this browser.
+export function shouldAutoResubscribe({ userId, permission }) {
+  return Boolean(userId) && permission === 'granted' && getPushOptIn(userId) === true;
+}
+
+export function usePushNotifications({ userId } = {}) {
   const supported = typeof window !== 'undefined'
     && 'Notification' in window
     && 'serviceWorker' in navigator
@@ -29,6 +60,16 @@ export function usePushNotifications() {
   const [status, setStatus] = useState('checking');
   const [error, setError] = useState('');
   const [offline, setOffline] = useState(() => typeof navigator !== 'undefined' && !navigator.onLine);
+  const [optedIn, setOptedIn] = useState(() => getPushOptIn(userId));
+
+  const recordOptIn = useCallback((value) => {
+    setPushOptIn(userId, value);
+    setOptedIn(getPushOptIn(userId) ?? value);
+  }, [userId]);
+
+  useEffect(() => {
+    setOptedIn(getPushOptIn(userId));
+  }, [userId]);
 
   const checkSubscription = useCallback(async () => {
     if (!supported) {
@@ -38,6 +79,11 @@ export function usePushNotifications() {
     try {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription();
+      // One-time backfill: subscriptions created before per-account consent
+      // was recorded were explicitly approved, so keep re-registering them.
+      if (sub && userId && Notification.permission === 'granted' && getPushOptIn(userId) === null) {
+        recordOptIn(true);
+      }
       setSubscribed(!!sub);
       setStatus(!navigator.onLine ? 'offline' : sub ? 'subscribed' : Notification.permission);
       return !!sub;
@@ -46,7 +92,7 @@ export function usePushNotifications() {
       setError('We could not inspect this browser notification subscription. Try again.');
       return false;
     }
-  }, [supported]);
+  }, [supported, userId, recordOptIn]);
 
   useEffect(() => {
     checkSubscription();
@@ -59,8 +105,14 @@ export function usePushNotifications() {
     };
   }, [checkSubscription]);
 
-  const subscribe = useCallback(async () => {
+  // `auto: true` is the shell's silent re-registration; anything else (including
+  // being used directly as an onClick handler) is an explicit user request.
+  const subscribe = useCallback(async (options) => {
+    const auto = options?.auto === true;
     setError('');
+    // Never subscribe without an account to record consent against.
+    if (!userId) return false;
+    if (auto && getPushOptIn(userId) !== true) return false;
     if (!supported) {
       setStatus('unsupported');
       return false;
@@ -83,6 +135,18 @@ export function usePushNotifications() {
         }
         return false;
       }
+      if (!auto) recordOptIn(true);
+
+      // Another hook instance (e.g. Settings "Disable") may record an opt-out
+      // while this request is in flight; that choice must win.
+      const optedOutMeanwhile = () => getPushOptIn(userId) === false;
+      const abandon = async (createdSub) => {
+        if (createdSub) {
+          try { await createdSub.unsubscribe(); } catch { /* best effort */ }
+        }
+        setStatus(Notification.permission);
+        return false;
+      };
 
       const { publicKey } = await api.getPushVapidKey();
       const reg = await navigator.serviceWorker.ready;
@@ -92,12 +156,20 @@ export function usePushNotifications() {
         applicationServerKey: urlBase64ToUint8Array(publicKey),
       });
 
+      if (optedOutMeanwhile()) return abandon(existing ? null : sub);
+
       const subJson = sub.toJSON();
       await api.subscribePush({
         endpoint: subJson.endpoint,
         keys: subJson.keys,
       });
 
+      if (optedOutMeanwhile()) {
+        // Undo the server registration we just made on the user's behalf.
+        try { await api.unsubscribePush(subJson.endpoint); } catch { /* Disable retries cleanup */ }
+        return abandon(existing ? null : sub);
+      }
+      recordOptIn(true);
       setSubscribed(true);
       setStatus('subscribed');
       return true;
@@ -107,10 +179,13 @@ export function usePushNotifications() {
       setError(err?.message || 'Notifications could not be enabled. Try again.');
       return false;
     }
-  }, [supported]);
+  }, [supported, userId, recordOptIn]);
 
   const unsubscribe = useCallback(async () => {
     setError('');
+    // Record the opt-out first so a failed or interrupted cleanup can never be
+    // silently undone by the shell's automatic re-subscription on next load.
+    recordOptIn(false);
     if (!supported) return true;
     if (!navigator.onLine) {
       setStatus('offline');
@@ -129,9 +204,9 @@ export function usePushNotifications() {
       setError(err?.message || 'Notifications could not be disabled. Try again.');
       return false;
     }
-  }, [supported]);
+  }, [supported, recordOptIn]);
 
-  return { permission, subscribed, status, error, supported, offline, subscribe, unsubscribe, checkSubscription };
+  return { permission, subscribed, status, error, supported, offline, optedIn, subscribe, unsubscribe, checkSubscription };
 }
 
 // Helper to convert VAPID key

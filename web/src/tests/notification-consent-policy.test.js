@@ -51,4 +51,11 @@ describe('notification consent policy', () => {
     expect(auth).toContain('clearBrowserPushSubscription({ removeFromServer: true })');
     expect(auth).toContain('await clearBrowserPushSubscription();');
   });
+
+  it('only auto re-subscribes accounts that explicitly opted in (#321)', () => {
+    expect(layout).toContain('shouldAutoResubscribe({ userId: user?.id, permission })');
+    expect(layout).not.toMatch(/if \(user\?\.id && permission === 'granted'\)/);
+    expect(layout).toContain('usePushNotifications({ userId: user?.id })');
+    expect(settings).toContain('usePushNotifications({ userId: user?.id })');
+  });
 });

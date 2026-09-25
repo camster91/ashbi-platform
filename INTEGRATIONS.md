@@ -1,5 +1,8 @@
 # Agency Hub Integrations
 
+> **Superseded / historical.** This describes an earlier Discord/OpenClaw integration and is not a current integration reference; production Discord webhooks are intentionally unset. Use [docs/product-status.md](docs/product-status.md) for current integration status and [docs/connected-workflow-contract.md](docs/connected-workflow-contract.md) for the connected-workflow contract.
+
+
 ## Discord & OpenClaw Sync Integration
 
 Agency Hub now pushes real-time events and notifications to Discord channels and OpenClaw for unified visibility across Cameron's workflow.

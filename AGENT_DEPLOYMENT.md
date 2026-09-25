@@ -1,5 +1,8 @@
 # Phase 2 Agent Deployment Guide
 
+> **Superseded / historical.** This March 2026 agent deployment guide is obsolete and must not be used to deploy. The only current production path is [docs/deployment-and-rollback.md](docs/deployment-and-rollback.md), with [docs/backup-and-restore.md](docs/backup-and-restore.md) for recoverability and [docs/product-status.md](docs/product-status.md) for feature status.
+
+
 **Created:** 2026-03-20  
 **Status:** Ready for deployment to hub.ashbi.ca
 

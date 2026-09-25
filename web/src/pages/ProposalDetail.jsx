@@ -248,16 +248,20 @@ export default function ProposalDetail() {
               <ExternalLink className="w-3 h-3" /> Copy client view link
             </button>
           )}
-          {proposal.status === 'APPROVED' && !proposal.contract && (
+          {/* Approval auto-generates the contract, so invoicing must not depend on
+              the contract being absent or accepted work could never be billed. */}
+          {proposal.status === 'APPROVED' && (
             <div className="mt-2 flex gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => generateContractMutation.mutate()}
-                loading={generateContractMutation.isPending}
-              >
-                Generate Contract
-              </Button>
+              {!proposal.contract && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => generateContractMutation.mutate()}
+                  loading={generateContractMutation.isPending}
+                >
+                  Generate Contract
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="outline"

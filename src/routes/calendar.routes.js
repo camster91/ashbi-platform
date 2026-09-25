@@ -1,8 +1,13 @@
 // Calendar & Meeting routes
 
 import { validateBody, calendarEventCreateSchema, calendarEventUpdateSchema, calendarRsvpSchema } from '../validators/schemas.js';
+import { decrypt } from '../utils/crypto.js';
+import { createGoogleCalendarClient, propagateCalendarEventDeletion } from '../services/google-calendar-sync.service.js';
 
-export default async function calendarRoutes(fastify) {
+export default async function calendarRoutes(fastify, options = {}) {
+  const propagateGoogleDeletion = options.propagateGoogleDeletion ?? ((input) => propagateCalendarEventDeletion({
+    createCalendarClient: createGoogleCalendarClient, decryptSecret: decrypt, ...input,
+  }));
   // Get calendar events
   fastify.get('/calendar', {
     onRequest: [fastify.authenticate]
@@ -311,7 +316,15 @@ export default async function calendarRoutes(fastify) {
 
     await request.prisma.calendarEvent.delete({ where: { id } });
 
-    return { success: true };
+    // Remove the Google copy too, otherwise it lingers forever. Best-effort
+    // and after the Hub delete, so Google being down never blocks it.
+    let google;
+    if (existing.googleEventId) {
+      google = await propagateGoogleDeletion({ prisma: request.prisma, event: existing, log: request.log })
+        .catch(() => ({ propagated: false, reason: 'PROVIDER_ERROR' }));
+    }
+
+    return { success: true, ...(google ? { googleDeleted: google.propagated } : {}) };
   });
 
   // RSVP to event

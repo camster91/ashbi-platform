@@ -1,11 +1,11 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
-import * as Sentry from '@sentry/react';
 import App from './App';
 import ErrorBoundary from './components/ErrorBoundary';
 import { setUnauthorizedCallback, setApiErrorCallback } from './lib/api';
 import { applyTheme, getInitialTheme } from './lib/theme';
+import { preloadInitialRoute } from './lib/initial-route';
 import './index.css';
 
 // Apply public/system preference before React renders the authentication
@@ -18,23 +18,31 @@ applyTheme(getInitialTheme());
 // fell into a black hole. Wire the browser SDK here, gated on the
 // VITE_SENTRY_DSN env so dev / preview builds stay quiet.
 //
-// Set VITE_SENTRY_DSN at build time (Coolify / .env) to enable. Without
-// it, Sentry is a no-op (the SDK no-ops when DSN is missing).
-if (import.meta.env.VITE_SENTRY_DSN) {
-  Sentry.init({
-    dsn: import.meta.env.VITE_SENTRY_DSN,
-    environment: import.meta.env.MODE,
-    tracesSampleRate: import.meta.env.PROD ? 0.1 : 1.0,
-    // We don't need session replay for an internal admin tool.
-    integrations: [Sentry.browserTracingIntegration()],
-  });
+// Set VITE_SENTRY_DSN at build time (Coolify / .env) to enable. The SDK is
+// loaded with a dynamic import so it never sits on the first-paint critical
+// path: builds without a DSN drop it entirely (it used to add ~21 KB of
+// @sentry/core to the entry chunk even though it was never initialised), and
+// builds with one fetch it alongside the first render instead of before it.
+const sentry = import.meta.env.VITE_SENTRY_DSN
+  ? import('@sentry/react').then((Sentry) => {
+    Sentry.init({
+      dsn: import.meta.env.VITE_SENTRY_DSN,
+      environment: import.meta.env.MODE,
+      tracesSampleRate: import.meta.env.PROD ? 0.1 : 1.0,
+      // We don't need session replay for an internal admin tool.
+      integrations: [Sentry.browserTracingIntegration()],
+    });
+    return Sentry;
+  })
+  : null;
+
+function reportError(error) {
+  sentry?.then((Sentry) => Sentry.captureException(error)).catch(() => {});
 }
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((error) => {
-      Sentry.captureException(error);
-    });
+    navigator.serviceWorker.register('/sw.js').catch(reportError);
   });
 }
 
@@ -59,14 +67,16 @@ function ApiErrorHandler({ children }) {
   return children;
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
-    <BrowserRouter>
-      <ApiErrorHandler>
-        <ErrorBoundary>
-          <App />
-        </ErrorBoundary>
-      </ApiErrorHandler>
-    </BrowserRouter>
-  </React.StrictMode>
-);
+preloadInitialRoute(window.location.pathname).finally(() => {
+  ReactDOM.createRoot(document.getElementById('root')).render(
+    <React.StrictMode>
+      <BrowserRouter>
+        <ApiErrorHandler>
+          <ErrorBoundary>
+            <App />
+          </ErrorBoundary>
+        </ApiErrorHandler>
+      </BrowserRouter>
+    </React.StrictMode>
+  );
+});

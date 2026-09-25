@@ -21,7 +21,9 @@ export default defineConfig({
   testMatch: '**/*.spec.ts',
   // These need the production preview build (service workers, route chunks)
   // and run through playwright.pwa.config.ts / playwright.public.config.ts.
-  testIgnore: ['**/pwa-offline.spec.ts', '**/public-route-deep-links.spec.ts'],
+  // tests/e2e/journeys need the full Docker stack and run through
+  // playwright.stack.config.ts in the Full-stack E2E gate.
+  testIgnore: ['**/pwa-offline.spec.ts', '**/public-route-deep-links.spec.ts', '**/e2e/**'],
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */

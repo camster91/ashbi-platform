@@ -143,7 +143,7 @@ export default function PortalEstimate() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             {/* From */}
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">From</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">From</p>
               <div className="flex items-center gap-2">
                 <Building2 className="w-4 h-4" style={{ color: '#2e2958' }} />
                 <span className="text-sm font-semibold" style={{ color: '#2e2958' }}>
@@ -157,7 +157,7 @@ export default function PortalEstimate() {
 
             {/* To */}
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Prepared For</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Prepared For</p>
               <div className="flex items-center gap-2">
                 <User className="w-4 h-4" style={{ color: '#2e2958' }} />
                 <span className="text-sm font-semibold" style={{ color: '#2e2958' }}>
@@ -198,7 +198,7 @@ export default function PortalEstimate() {
         {/* Line Items */}
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <div className="px-6 py-4 border-b border-slate-100">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">Line Items</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Line Items</h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -264,7 +264,7 @@ export default function PortalEstimate() {
                   aria-invalid={Boolean(declineError)}
                   aria-describedby={declineError ? 'estimate-decline-reason-error' : undefined}
                   placeholder="Your feedback helps us improve our estimates..."
-                  className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 resize-none"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-lg text-sm text-slate-700 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 resize-none"
                   rows={4}
                 />
                 {declineError && <p id="estimate-decline-reason-error" role="alert" className="text-sm text-red-600">{declineError}</p>}
@@ -321,7 +321,7 @@ export default function PortalEstimate() {
 
         {/* Footer */}
         <div className="text-center py-6">
-          <p className="text-xs text-slate-400">Powered by Ashbi Design</p>
+          <p className="text-xs text-slate-600">Powered by Ashbi Design</p>
         </div>
       </main>
     </div>

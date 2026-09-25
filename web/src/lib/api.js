@@ -568,6 +568,7 @@ export const api = {
     request(`/slack/installations/${installationId}/mappings`, { method: 'POST', body: data }),
 
   // Attachments
+  getIceServers: () => request('/realtime/ice-servers'),
   getAttachments: (entityType, entityId) =>
     request(`/attachments?entityType=${entityType}&entityId=${entityId}`),
   uploadAttachment: async (file, entityType, entityId) => {

@@ -19,7 +19,7 @@ const Button = forwardRef(({
   const showLoading = isLoading || loading || false;
   const showDisabled = isDisabled || disabled || false;
   const variants = {
-    primary: 'bg-primary text-primary-foreground hover:bg-primary-600 focus:ring-primary/20',
+    primary: 'bg-primary text-primary-foreground hover:bg-primary/90 focus:ring-primary/20',
     secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80 focus:ring-secondary/20',
     outline: 'border-2 border-border bg-transparent text-foreground hover:bg-muted focus:ring-border',
     ghost: 'bg-transparent text-foreground hover:bg-muted focus:ring-muted',

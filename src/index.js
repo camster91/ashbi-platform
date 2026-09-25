@@ -15,8 +15,9 @@ import { fileURLToPath } from 'url';
 
 import env from './config/env.js';
 import prisma from './config/db.js';
-import { isNonApiRequest } from './config/rateLimit.js';
+import { apiRateLimitMax, isNonApiRequest } from './config/rateLimit.js';
 import { isCurrentUserSession } from './auth/session.js';
+import { canJoinProjectRoom } from './auth/project-room-access.js';
 
 // Routes
 import authRoutes from './routes/auth.routes.js';
@@ -26,6 +27,7 @@ import searchRoutes from './routes/search.routes.js';
 import aiRoutes from './routes/ai.routes.js';
 import notificationRoutes from './routes/notification.routes.js';
 import settingsRoutes from './routes/settings.routes.js';
+import realtimeRoutes from './routes/realtime.routes.js';
 import noteRoutes from './routes/note.routes.js';
 import mailgunRoutes from './routes/mailgun.routes.js';
 import mailgunHitlRoutes from './routes/mailgun-hitl.routes.js';
@@ -76,6 +78,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 import logger from './utils/logger.js';
 import { initSubscribers } from './subscribers/index.js';
+import { registerCallSignalling } from './services/call-signalling.service.js';
 import { tenancyMiddleware } from './middleware/tenancy.js';
 import { getAuthProvider } from './auth/index.js';
 import { toClientErrorBody } from './utils/http-errors.js';
@@ -144,7 +147,7 @@ await fastify.register(cookie);
 await fastify.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } });
 await fastify.register(rateLimit, {
   global: true,
-  max: 100,
+  max: apiRateLimitMax(),
   timeWindow: '1 minute',
   skipOnError: true,
   // Frontend navigation loads many immutable chunks in parallel. Counting those
@@ -225,6 +228,7 @@ await fastify.register(dashboardRoutes, { prefix: '/api/dashboard' });
 await fastify.register(aiRoutes, { prefix: '/api/ai' });
 await fastify.register(notificationRoutes, { prefix: '/api/notifications' });
 await fastify.register(settingsRoutes, { prefix: '/api/settings' });
+await fastify.register(realtimeRoutes, { prefix: '/api/realtime' });
 await fastify.register(proposalBuilderRoutes, { prefix: '/api/proposal-builder' });
 // Route registrations continued
 await fastify.register(apiKeyRoutes, { prefix: '/api/api-keys' });
@@ -285,7 +289,7 @@ fastify.get('/api/health', async (_request, reply) => {
 });
 
 // Static files
-if (!env.isDev) {
+if (env.serveBuiltSpa) {
   await fastify.register(fastifyStatic, { root: path.join(__dirname, '../dist'), prefix: '/' });
   fastify.setNotFoundHandler((request, reply) => {
     if (!request.url.startsWith('/api/')) return reply.sendFile('index.html');
@@ -353,8 +357,8 @@ io.on('connection', (socket) => {
     if (userId && userId === socket.userId) socket.join(`user:${userId}`);
   });
 
-  // Join a project room only if the caller belongs to the project's org
-  // (team member) or is the project's own client.
+  // Join a project room only if the caller is staff in the project's org or
+  // the project's own client (see canJoinProjectRoom).
   socket.on('join-project', async (projectId) => {
     if (!projectId) return;
     try {
@@ -362,10 +366,7 @@ io.on('connection', (socket) => {
         where: { id: projectId },
         select: { clientId: true, client: { select: { organizationId: true } } },
       });
-      if (!project) return;
-      const sameOrg = socket.organizationId && project.client?.organizationId === socket.organizationId;
-      const isProjectClient = socket.userRole === 'CLIENT' && socket.clientId && project.clientId === socket.clientId;
-      if (sameOrg || isProjectClient) socket.join(`project:${projectId}`);
+      if (canJoinProjectRoom(socket, project)) socket.join(`project:${projectId}`);
     } catch (err) {
       logger.error({ err, projectId }, '[socket] join-project authorization failed');
     }
@@ -375,40 +376,7 @@ io.on('connection', (socket) => {
     if (projectId) socket.leave(`project:${projectId}`);
   });
 
-  // WebRTC media never traverses this server. Socket.IO only relays bounded
-  // offer/answer/ICE messages inside an already-authorized project room.
-  // This keeps calls tenant-scoped and avoids making a signalling endpoint a
-  // cross-project message relay.
-  socket.on('call:signal', ({ projectId, callId, signal } = {}) => {
-    if (
-      typeof projectId !== 'string' || typeof callId !== 'string' ||
-      !signal || typeof signal !== 'object' ||
-      !socket.rooms.has(`project:${projectId}`)
-    ) return;
-    const serialized = JSON.stringify(signal);
-    if (serialized.length > 16_000) return;
-    const allowedTypes = new Set(['offer', 'answer', 'ice', 'hangup']);
-    if (!allowedTypes.has(signal.type)) return;
-    socket.to(`project:${projectId}`).emit('call:signal', {
-      projectId,
-      callId: callId.slice(0, 128),
-      from: socket.userId,
-      signal,
-    });
-  });
-
-  socket.on('call:presence', ({ projectId, callId, state } = {}) => {
-    if (
-      typeof projectId !== 'string' || typeof callId !== 'string' ||
-      !['joined', 'left'].includes(state) || !socket.rooms.has(`project:${projectId}`)
-    ) return;
-    socket.to(`project:${projectId}`).emit('call:presence', {
-      projectId,
-      callId: callId.slice(0, 128),
-      userId: socket.userId,
-      state,
-    });
-  });
+  registerCallSignalling(io, socket);
 });
 
 fastify.decorate('io', io);
