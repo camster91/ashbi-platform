@@ -8,7 +8,22 @@ import { mockAuthenticatedApi, mockClientPortalApi, unmockedRequests } from './f
 // a backend.
 const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 
+// Colour contrast must be measured on the settled page. Entry animations
+// (fades and colour transitions) blend foreground and background while they
+// run, and on slower CI runners axe caught them mid-transition and reported
+// contrast that no user sees once the page has loaded. Scans run with reduced
+// motion (which the app honours) and wait for every finite animation to end;
+// infinite ones (loading spinners) never settle and are ignored.
+async function waitForSettledPage(page: Page) {
+  await page.evaluate(() => Promise.all(
+    document.getAnimations()
+      .filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity)
+      .map(animation => animation.finished.catch(() => undefined)),
+  ));
+}
+
 async function expectNoAxeViolations(page: Page, screen: string) {
+  await waitForSettledPage(page);
   const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
   const summary = results.violations.map(violation => ({
     id: violation.id,
@@ -36,6 +51,10 @@ const staffScreens: Array<{ name: string; path: string; ready: (page: Page) => P
 ];
 
 test.describe('Authenticated accessibility', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+  });
+
   test.afterEach(({ page }) => {
     expect(unmockedRequests(page), 'API requests with no fixture; add them to tests/fixtures/authenticated-api.ts').toEqual([]);
   });
