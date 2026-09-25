@@ -19,6 +19,7 @@ import {
   ListChecks,
   CalendarDays,
   ShieldCheck,
+  History,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
@@ -27,6 +28,7 @@ import QueryErrorState from '../components/QueryErrorState';
 import { Button, Card, LoadingState } from '../components/ui';
 import ConfirmDialog from '../components/ConfirmDialog';
 import TwoFactorSettings from '../components/TwoFactorSettings';
+import ActivityLog from '../components/ActivityLog';
 
 function Section({ icon: Icon, title, description, children }) {
   // Expose each settings card as a named accessible region so screen-reader
@@ -858,6 +860,13 @@ export default function Settings() {
 
       {/* AI Model Picker — admin only */}
       {isAdmin && <AIModelSection />}
+
+      {/* Append-only audit trail — admin only (the API also enforces this) */}
+      {isAdmin && (
+        <Section icon={History} title="Activity log" description="Who sent or settled invoices, signed contracts, and changed access">
+          <ActivityLog />
+        </Section>
+      )}
 
       {/* Admin links */}
       {isAdmin && (

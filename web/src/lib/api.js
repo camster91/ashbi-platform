@@ -1431,6 +1431,14 @@ export const api = {
   createApiKey: (data) => request('/api-keys', { method: 'POST', body: data }),
   deleteApiKey: (id) => request(`/api-keys/${id}`, { method: 'DELETE' }),
 
+  // Audit event log (admin only, read-only)
+  getAuditEvents: (params = {}) => {
+    const defined = Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ''));
+    const query = new URLSearchParams(defined).toString();
+    return request(`/audit-events${query ? `?${query}` : ''}`);
+  },
+  getAuditEventCatalog: () => request('/audit-events/catalog'),
+
   // ===== ESTIMATES =====
   getEstimates: (params = {}) => {
     const query = new URLSearchParams(params).toString();
