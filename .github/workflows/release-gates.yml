@@ -86,6 +86,16 @@ jobs:
         run: npm run check:frontend-budgets
       - name: Lighthouse mobile and desktop budgets
         run: npm run test:lighthouse
+      - name: Upload Lighthouse reports on failure
+        # Keep the simulated traces so a budget failure on the hosted runner can
+        # be diagnosed instead of re-run blind.
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-reports
+          path: .lighthouseci/
+          retention-days: 7
+          if-no-files-found: ignore
 
   browser:
     name: Browser and accessibility smoke

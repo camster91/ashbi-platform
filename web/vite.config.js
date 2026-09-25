@@ -42,6 +42,22 @@ export function routeChunkPreloadPlugin(modules = PRELOADED_ROUTE_CHUNKS) {
   };
 }
 
+const nodeModule = (names) => new RegExp(`[\\\\/]node_modules[\\\\/](?:${names.join('|')})[\\\\/]`);
+
+// Vendor chunk groups for Rolldown's code splitting. Groups pull their
+// dependencies in with them, so the order of priorities matters: React is
+// claimed first, otherwise the first group that imports it (TanStack Query)
+// would absorb React core and drag that whole chunk onto every page's
+// critical path, including the login screen that never uses a query client.
+export const VENDOR_CHUNK_GROUPS = [
+  { name: 'vendor-react', test: nodeModule(['react', 'react-dom', 'react-router', 'react-router-dom', 'scheduler']), priority: 30 },
+  { name: 'vendor-query', test: nodeModule(['@tanstack']), priority: 20 },
+  { name: 'vendor-radix', test: nodeModule(['@radix-ui']), priority: 20 },
+  { name: 'vendor-utils', test: nodeModule(['date-fns', 'framer-motion']), priority: 20 },
+  { name: 'vendor-socket', test: nodeModule(['socket.io-client', 'engine.io-client', 'socket.io-parser', 'engine.io-parser', '@socket.io']), priority: 20 },
+  { name: 'vendor-ui', test: nodeModule(['lucide-react', 'clsx', 'tailwind-merge']), priority: 10 },
+];
+
 export default defineConfig({
   plugins: [react(), routeChunkPreloadPlugin()],
   resolve: {
@@ -67,33 +83,10 @@ export default defineConfig({
     manifest: true,
     sourcemap: false, // disable in prod for smaller output
     chunkSizeWarningLimit: 600,
-    rollupOptions: {
+    rolldownOptions: {
       output: {
-        manualChunks(id) {
-          // Core React
-          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom') || id.includes('node_modules/react-router-dom')) {
-            return 'vendor-react';
-          }
-          // UI utilities
-          if (id.includes('node_modules/lucide-react') || id.includes('node_modules/clsx') || id.includes('node_modules/tailwind-merge')) {
-            return 'vendor-ui';
-          }
-          // Radix UI
-          if (id.includes('node_modules/@radix-ui')) {
-            return 'vendor-radix';
-          }
-          // TanStack Query
-          if (id.includes('node_modules/@tanstack')) {
-            return 'vendor-query';
-          }
-          // Date utilities
-          if (id.includes('node_modules/date-fns') || id.includes('node_modules/framer-motion')) {
-            return 'vendor-utils';
-          }
-          // Socket.io
-          if (id.includes('node_modules/socket.io-client')) {
-            return 'vendor-socket';
-          }
+        codeSplitting: {
+          groups: VENDOR_CHUNK_GROUPS,
         },
       },
     },
