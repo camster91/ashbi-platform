@@ -29,10 +29,12 @@ function fakeDatabase({ users = [], organizations = [] } = {}) {
       return pick(row, select);
     },
   };
+  const $executeRaw = async (strings) => { db.locks.push(strings.join('?')); return 1; };
+  db.locks = [];
   db.client = {
     organization,
     user,
-    $transaction: async (fn) => { db.transactions += 1; return fn({ organization, user }); },
+    $transaction: async (fn) => { db.transactions += 1; return fn({ organization, user, $executeRaw }); },
   };
   return db;
 }
@@ -40,6 +42,7 @@ function fakeDatabase({ users = [], organizations = [] } = {}) {
 async function buildApp(t, db) {
   const app = Fastify();
   await app.register(fastifyJwt, { secret: 'unit-test-secret' });
+  app.decorate('signFor', (payload) => app.jwt.sign(payload));
   app.decorate('authenticate', async () => {});
   app.decorate('prisma', db.client);
   app.addHook('onRequest', async (request) => { request.prisma = db.client; });
@@ -90,4 +93,43 @@ test('the bootstrap still requires the admin invite token', async (t) => {
   assert.equal(response.statusCode, 403);
   assert.equal(db.organizations.length, 0);
   assert.equal(db.users.length, 0);
+});
+
+test('the bootstrap takes an advisory lock and refuses a second concurrent first admin', async (t) => {
+  const db = fakeDatabase();
+  const app = await buildApp(t, db);
+  // Simulate a racing request that committed its admin after our count() but
+  // before we acquired the lock.
+  const originalCount = db.client.user.count;
+  let calls = 0;
+  db.client.user.count = async () => (calls++ === 0 ? 0 : 1);
+  t.after(() => { db.client.user.count = originalCount; });
+
+  const response = await app.inject({ method: 'POST', url: '/register', payload: ADMIN });
+
+  assert.equal(response.statusCode, 409, response.body);
+  assert.equal(db.locks.length, 1);
+  assert.match(db.locks[0], /pg_advisory_xact_lock/);
+  assert.equal(db.organizations.length, 0);
+});
+
+test('an admin registering a later user places them in the admin organization', async (t) => {
+  const db = fakeDatabase({
+    users: [{ id: 'admin-1', email: 'founder@agency.test', role: 'ADMIN', organizationId: 'org-a', sessionVersion: 0, isActive: true }],
+    organizations: [{ id: 'org-a', name: 'Agency', slug: 'agency' }],
+  });
+  db.client.user.findUnique = async ({ where }) => db.users.find((row) => (where.id ? row.id === where.id : row.email === where.email)) ?? null;
+  const app = await buildApp(t, db);
+  const token = app.signFor({ id: 'admin-1', role: 'ADMIN', organizationId: 'org-a', sessionVersion: 0 });
+
+  const response = await app.inject({
+    method: 'POST',
+    url: '/register',
+    headers: { authorization: `Bearer ${token}` },
+    payload: { email: 'designer@agency.test', password: 'Designer-Passw0rd!', name: 'Dana Designer', role: 'TEAM' },
+  });
+
+  assert.equal(response.statusCode, 201, response.body);
+  assert.equal(response.json().organizationId, 'org-a');
+  assert.equal(db.organizations.length, 1, 'no new organization for later users');
 });
