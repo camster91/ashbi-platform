@@ -527,6 +527,7 @@
   "POST /api/auth/mfa/confirm",
   "POST /api/auth/mfa/disable",
   "POST /api/auth/mfa/enroll",
+  "POST /api/auth/reauth",
   "POST /api/auth/register",
   "POST /api/auth/reset-password",
   "POST /api/bot/activity",

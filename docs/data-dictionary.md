@@ -24,7 +24,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [AiBridgeAction](#model-aibridgeaction) | `ai_bridge_actions` | yes | no | 18 |
 | [AiContext](#model-aicontext) | `ai_context` | yes | no | 7 |
 | [AiTeamMessage](#model-aiteammessage) | `ai_team_messages` | no | no | 9 |
-| [ApiKey](#model-apikey) | `api_keys` | no | no | 10 |
+| [ApiKey](#model-apikey) | `api_keys` | no | no | 12 |
 | [Approval](#model-approval) | `approvals` | no | no | 16 |
 | [AshChatMessage](#model-ashchatmessage) | `ash_chat_messages` | no | no | 6 |
 | [AshConversation](#model-ashconversation) | `ash_conversations` | yes | no | 7 |
@@ -218,8 +218,10 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `name` | String | required |  |  |  |
 | `key` | String | unique, required |  |  |  |
 | `userId` | String | required |  |  |  |
+| `scopes` | String[] | list, required | `[]` |  |  |
 | `lastUsedAt` | DateTime | optional |  |  |  |
 | `expiresAt` | DateTime | optional |  |  |  |
+| `revokedAt` | DateTime | optional |  |  |  |
 | `isActive` | Boolean | required | `true` |  |  |
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |

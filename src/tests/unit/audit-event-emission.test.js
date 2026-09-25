@@ -24,6 +24,7 @@ const { default: settingsRoutes } = await import('../../routes/settings.routes.j
 const { default: clientPortalRoutes } = await import('../../routes/client-portal.routes.js');
 const { recordCheckoutAuditEvents } = await import('../../services/stripe.service.js');
 const providers = await import('../../ai/providers/index.js');
+const { reauthCookies, withSession } = await import('../helpers/reauth.js');
 
 const ADMIN = { id: 'admin-1', role: 'ADMIN', organizationId: 'org-1' };
 const FUTURE = new Date(Date.now() + 86_400_000);
@@ -42,11 +43,12 @@ function auditStore({ failing = false } = {}) {
 
 async function buildApp(t, routes, prisma, { user = ADMIN, prefix, decorate = {}, jwtPlugins = false } = {}) {
   const app = Fastify({ logger: false });
+  await app.register(cookie);
   if (jwtPlugins) {
-    await app.register(cookie);
     await app.register(jwt, { secret: 'audit-emission-jwt', cookie: { cookieName: 'token', signed: false } });
   }
-  const signIn = async (request) => { request.user = user; };
+  const principal = user ? withSession(user) : user;
+  const signIn = async (request) => { request.user = principal; };
   app.decorate('authenticate', signIn);
   app.decorate('adminOnly', async (request, reply) => {
     await signIn(request);
@@ -287,13 +289,14 @@ test('team changes emit role, deactivation and password-reset events only on rea
       update: async ({ data }) => { stored = { ...stored, ...data }; return stored; },
     },
   });
+  const cookies = reauthCookies(ADMIN);
   await app.inject({ method: 'PUT', url: '/user-2', payload: { name: 'Sam B' } });
   await app.inject({ method: 'PUT', url: '/user-2', payload: { role: 'STAFF' } });
   assert.equal(audit.events.length, 0, 'no transition, no event');
 
-  await app.inject({ method: 'PUT', url: '/user-2', payload: { role: 'ADMIN', isActive: false } });
-  await app.inject({ method: 'PUT', url: '/user-2', payload: { isActive: true } });
-  const reset = await app.inject({ method: 'POST', url: '/user-2/reset-password', payload: { newPassword: 'a-new-password-1' } });
+  await app.inject({ method: 'PUT', url: '/user-2', cookies, payload: { role: 'ADMIN', isActive: false } });
+  await app.inject({ method: 'PUT', url: '/user-2', cookies, payload: { isActive: true } });
+  const reset = await app.inject({ method: 'POST', url: '/user-2/reset-password', cookies, payload: { newPassword: 'a-new-password-1' } });
   assert.equal(reset.statusCode, 200, reset.body);
   assert.deepEqual(audit.events.map((event) => [event.action, event.entityId]), [
     ['user.role_changed', 'user-2'],
@@ -395,7 +398,9 @@ test('API key creation and revocation are audited without the key material', asy
       update: async () => ({}),
     },
   });
-  const response = await app.inject({ method: 'POST', url: '/', payload: { name: 'CI' } });
+  const response = await app.inject({
+    method: 'POST', url: '/', cookies: reauthCookies(ADMIN), payload: { name: 'CI', scopes: ['ai_bridge:read'] },
+  });
   assert.equal(response.statusCode, 200, response.body);
   const revoked = await app.inject({ method: 'DELETE', url: '/key-1' });
   assert.equal(revoked.statusCode, 200);
@@ -406,6 +411,9 @@ test('API key creation and revocation are audited without the key material', asy
   const serialized = JSON.stringify(audit.events);
   assert.doesNotMatch(serialized, new RegExp(response.json().key));
   assert.doesNotMatch(serialized, new RegExp(created.key));
+  assert.equal(audit.events[0].metadata.scopes, 'ai_bridge:read');
+  assert.equal(audit.events[0].metadata.expires, true);
+  assert.equal(audit.events[0].metadata.expiresAt, created.expiresAt.toISOString());
 });
 
 test('a platform operator switching the AI provider is audited', async (t) => {
@@ -417,7 +425,9 @@ test('a platform operator switching the AI provider is audited', async (t) => {
     user: { findUnique: async () => ({ role: 'ADMIN', isActive: true }) },
   }, { user: { id: 'user-op', role: 'ADMIN', organizationId: 'org-ops' } });
   const target = before.provider === 'gemini' ? 'claude' : 'gemini';
-  const response = await app.inject({ method: 'POST', url: '/ai-provider', payload: { provider: target } });
+  const response = await app.inject({
+    method: 'POST', url: '/ai-provider', cookies: reauthCookies({ id: 'user-op' }), payload: { provider: target },
+  });
   assert.equal(response.statusCode, 200, response.body);
   assert.equal(audit.events.length, 1);
   assert.equal(audit.events[0].action, 'settings.ai_provider_changed');

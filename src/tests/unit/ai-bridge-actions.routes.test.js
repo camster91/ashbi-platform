@@ -8,6 +8,7 @@ async function buildApp(prisma, options = {}) {
   app.decorate('prisma', prisma);
   app.decorate('authenticateWithApiKey', async (request) => {
     request.user = { id: 'user-1', organizationId: 'org-1', role: 'TEAM' };
+    request.apiKeyScopes = ['ai_bridge:read', 'ai_bridge:actions'];
   });
   app.addHook('preHandler', async (request) => { request.prisma = prisma; });
   await app.register(aiBridgeRoutes, options);

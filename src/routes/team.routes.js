@@ -3,6 +3,28 @@
 import bcrypt from 'bcrypt';
 import { validateBody, teamInviteSchema, teamResetPasswordSchema, teamUpdateSchema } from '../validators/schemas.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
+import { requireRecentAuth } from '../auth/reauth.js';
+
+/**
+ * preHandler for PUT /:id: changing a member's role or deactivating /
+ * reactivating them is a privileged action (docs/privileged-actions.md) and
+ * needs recent re-authentication; ordinary profile edits (name, skills,
+ * capacity) do not. Compares against the stored state, so a form that
+ * resubmits the unchanged role is not prompted.
+ */
+async function requireRecentAuthForAccessChange(request, reply) {
+  const { role, isActive } = request.body || {};
+  if (!role && isActive === undefined) return undefined;
+  const current = await request.prisma.user.findUnique({
+    where: { id: request.params.id },
+    select: { role: true, isActive: true },
+  });
+  if (!current) return undefined; // the handler answers 404 / Prisma error as before
+  const changesAccess = (role && role !== current.role)
+    || (isActive !== undefined && isActive !== current.isActive);
+  if (!changesAccess) return undefined;
+  return requireRecentAuth(request, reply);
+}
 
 async function hashPassword(password) {
   return bcrypt.hash(password, 12);
@@ -141,7 +163,7 @@ export default async function teamRoutes(fastify) {
   // Update team member
   fastify.put('/:id', {
     onRequest: [fastify.adminOnly],
-    preHandler: validateBody(teamUpdateSchema),
+    preHandler: [validateBody(teamUpdateSchema), requireRecentAuthForAccessChange],
   }, async (request, reply) => {
     const { id } = request.params;
     const { name, role, skills, capacity, isActive } = request.body;
@@ -248,7 +270,7 @@ export default async function teamRoutes(fastify) {
   // Reset password (admin only)
   fastify.post('/:id/reset-password', {
     onRequest: [fastify.adminOnly],
-    preHandler: validateBody(teamResetPasswordSchema),
+    preHandler: [requireRecentAuth, validateBody(teamResetPasswordSchema)],
   }, async (request, reply) => {
     const { id } = request.params;
     const { newPassword } = request.body;

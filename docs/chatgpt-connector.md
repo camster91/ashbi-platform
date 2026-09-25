@@ -5,7 +5,13 @@ want ChatGPT (or another compatible client) to work with Ashbi context.
 
 ## Connection
 
-1. An authenticated Ashbi user creates an API key under Settings → API keys.
+1. An authenticated Ashbi user creates an API key under Settings → API keys,
+   after confirming their password or two-factor code. Each key carries at
+   least one scope and an expiry (90 days by default, at most 365):
+   `ai_bridge:read` for chat completions, `ai_bridge:actions` for preparing
+   and confirming workflow actions. A key without the scope a route needs
+   gets `403` with `code: INSUFFICIENT_SCOPE`; expired or revoked keys get
+   `401`. See [privileged-actions.md](privileged-actions.md).
 2. The connector calls `GET /api/ai-bridge/capabilities` with `x-api-key: ashbi_…`.
 3. ChatGPT-compatible clients send OpenAI-shaped requests to
    `POST /api/ai-bridge/v1/chat/completions`.

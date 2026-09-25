@@ -1746,13 +1746,20 @@ model ClientInvitation {
   @@map("client_invitations")
 }
 
+// Service credential for the AI bridge (#416). `key` is the SHA-256 of the
+// raw key, which is shown once. New keys need at least one scope from
+// API_KEY_SCOPES (src/auth/api-key-scopes.js) and an expiry of at most 365
+// days; keys created before that rule may have a null expiresAt and keep
+// working (the list flags them). Revocation sets isActive=false and revokedAt.
 model ApiKey {
   id         String    @id @default(cuid())
   name       String
   key        String    @unique
   userId     String
+  scopes     String[]  @default([])
   lastUsedAt DateTime?
   expiresAt  DateTime?
+  revokedAt  DateTime?
   isActive   Boolean   @default(true)
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt

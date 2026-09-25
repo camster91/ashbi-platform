@@ -38,6 +38,7 @@ import { registerClientCommunicationRoutes } from './domains/client-communicatio
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 import logger from './utils/logger.js';
+import { LOG_REDACT_OPTIONS } from './utils/log-redaction.js';
 import { initSubscribers } from './subscribers/index.js';
 import { registerCallSignalling } from './services/call-signalling.service.js';
 import { tenancyMiddleware } from './middleware/tenancy.js';
@@ -63,7 +64,9 @@ if (initializeRuntime && initSentry('api', [Sentry.fastifyIntegration()])) {
 // Initialize Fastify
 const fastify = Fastify({
   logger: {
-    level: env.isDev ? 'debug' : 'info'
+    level: env.isDev ? 'debug' : 'info',
+    // Never write API keys, session cookies or passwords to request logs.
+    redact: { ...LOG_REDACT_OPTIONS, paths: [...LOG_REDACT_OPTIONS.paths] },
   }
 });
 

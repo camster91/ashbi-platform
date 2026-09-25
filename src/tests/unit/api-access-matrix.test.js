@@ -108,6 +108,7 @@ const REVIEWED_UNSCOPED_ROUTES = {
   'POST /api/auth/mfa/enroll': 'Writes only the caller\'s own two-factor state.',
   'POST /api/auth/mfa/confirm': 'Writes only the caller\'s own two-factor state.',
   'POST /api/auth/mfa/disable': 'Writes only the caller\'s own two-factor state.',
+  'POST /api/auth/reauth': 'Verifies only the caller\'s own password or second factor and writes only the caller\'s own MFA attempt state.',
   'POST /api/auth/mfa/admin/users/:userId/reset': 'Admin only; the target user is looked up with the admin\'s organizationId.',
   'POST /api/auth/admin/clients/:clientId/invite': 'Admin only; the client is looked up with the admin\'s organizationId.',
   'POST /api/mailgun/send': 'Admin only; sends one email and reads no tenant data.',
@@ -153,12 +154,17 @@ async function collectAccessMatrix() {
     const namedGuards = new Map([
       ['clientAuth', 'client-portal'],
       ['requireBotAuth', 'bot-secret'],
+      // Additional checks, not authentication by themselves (see the test
+      // that requires a session or API-key guard alongside them).
+      ['requireRecentAuth', 'recent-auth'],
+      ['requireRecentAuthForAccessChange', 'recent-auth (access change)'],
     ]);
 
     /** @param {Function} fn */
     const classify = (fn) => {
       if (identityGuards.has(fn)) return identityGuards.get(fn);
       if (namedGuards.has(fn.name)) return namedGuards.get(fn.name);
+      if (typeof (/** @type {any} */ (fn).apiKeyScope) === 'string') return `scope ${/** @type {any} */ (fn).apiKeyScope}`;
       const source = Function.prototype.toString.call(fn);
       if (/fastify\.adminOnly\(/.test(source)) return 'admin (inline)';
       if (/fastify\.authenticate\(/.test(source)) return 'staff (inline)';
@@ -212,6 +218,9 @@ const GUARD_LEGEND = [
   ['api-key', '`fastify.authenticateWithApiKey`: hashed API key (AI bridge / ChatGPT actions).'],
   ['client-portal', '`clientAuth` in `client-portal.routes.js`: client portal session cookie.'],
   ['bot-secret', '`requireBotAuth` in `bot.routes.js`: bot bearer secret, fails closed without a bot tenant.'],
+  ['recent-auth', '`requireRecentAuth` (`src/auth/reauth.js`): step-up re-authentication within the last 10 minutes in this session, else `403 REAUTH_REQUIRED`. Always paired with a session guard. See docs/privileged-actions.md.'],
+  ['recent-auth (access change)', '`requireRecentAuthForAccessChange` in `team.routes.js`: `recent-auth`, only when the request changes the member\'s role or active state.'],
+  ['scope …', '`requireApiKeyScope(scope)` (`src/auth/api-key-scopes.js`): the API key must carry that scope, else `403 INSUFFICIENT_SCOPE`.'],
   ['public', 'No auth hook. Each one is on the allowlist in the test, with the reason shown in the table.'],
 ];
 
@@ -315,6 +324,19 @@ test('access matrix covers every route in the committed route table', async () =
     .map(([method, url]) => `${method} ${bare(url)}`)
     .filter((key) => !covered.has(key));
   assert.deepEqual(missing, []);
+});
+
+test('re-authentication and scope checks never stand in for authentication', async () => {
+  const routes = await getMatrix();
+  const auth = new Set(['admin', 'staff', 'api-key']);
+  const bare = routes
+    .filter((route) => route.guards.some((guard) => guard.startsWith('recent-auth') || guard.startsWith('scope ')))
+    .filter((route) => !route.guards.some((guard) => auth.has(guard)))
+    .map((route) => `${route.method} ${route.url}`);
+  assert.deepEqual(bare, []);
+  const byKey = new Map(routes.map((route) => [`${route.method} ${route.url}`, route]));
+  assert.deepEqual(byKey.get('POST /api/api-keys')?.guards, ['recent-auth', 'staff']);
+  assert.deepEqual(byKey.get('POST /api/ai-bridge/v1/actions/prepare')?.guards, ['api-key', 'scope ai_bridge:actions']);
 });
 
 test('every unguarded route is on the documented public allowlist', async () => {

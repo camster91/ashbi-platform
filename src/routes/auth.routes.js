@@ -8,6 +8,7 @@ import env from '../config/env.js';
 import logger from '../utils/logger.js';
 import { isCurrentUserSession, revokeUserSessions, sessionCookieOptions, signUserSession } from '../auth/session.js';
 import { recordAuditEvent, recordRequestAuditEvent } from '../services/audit-event.service.js';
+import { clearReauthCookieOptions, REAUTH_COOKIE } from '../auth/reauth.js';
 import {
   validateBody,
   schemas,
@@ -197,6 +198,7 @@ export default async function authRoutes(fastify) {
       // (name+path+secure+sameSite). If they diverge, the browser keeps the
       // session cookie and the user appears to remain signed in.
       .clearCookie('token', sessionCookieOptions())
+      .clearCookie(REAUTH_COOKIE, clearReauthCookieOptions())
       .send({ success: true });
   });
 

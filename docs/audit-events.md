@@ -85,9 +85,11 @@ notes, signer names, email addresses, API key material or password hashes.
 | `auth.mfa_enabled` | `user` | USER | `POST /api/auth/mfa/confirm` | `recoveryCodesIssued` |
 | `auth.mfa_disabled` | `user` | USER | `POST /api/auth/mfa/disable` | `method` (`totp` or `recovery_code`) |
 | `auth.mfa_reset` | `user` | USER (the acting admin) | `POST /api/auth/mfa/admin/users/:userId/reset` | `wasEnabled` |
-| `auth.mfa_recovery_code_used` | `user` | USER | `POST /api/auth/login/mfa` signed in with a recovery code | `remaining` |
+| `auth.mfa_recovery_code_used` | `user` | USER | `POST /api/auth/login/mfa` signed in, or `POST /api/auth/reauth` re-authenticated, with a recovery code | `remaining` |
 | `auth.mfa_failed` | `user` | USER | `POST /api/auth/login/mfa` rejected a code (bounded by the per-account attempt budget: at most 5 per lockout window) | `reason` (`invalid`, `replayed`, `locked`) |
-| `api_key.created` | `api_key` | USER | `POST /api/api-keys` | `ownerUserId`, `expires` |
+| `auth.reauthenticated` | `user` | USER | `POST /api/auth/reauth` succeeded (step-up re-authentication for a privileged action, see [privileged-actions.md](privileged-actions.md)) | `method` (`password`, `totp` or `recovery_code`) |
+| `auth.reauth_failed` | `user` | USER | `POST /api/auth/reauth` rejected the password or code. Throttled like `auth.login_failed`: at most one per account per 60 seconds (`REAUTH_FAILURE_AUDIT_WINDOW_MS` in `src/auth/reauth.js`) | `reason` (`invalid_password`, `invalid`, `replayed`, `locked`) |
+| `api_key.created` | `api_key` | USER | `POST /api/api-keys` | `ownerUserId`, `expires`, `expiresAt`, `scopes` (granted scopes sorted and joined with `+`, e.g. `ai_bridge:actions+ai_bridge:read`; never the key) |
 | `api_key.revoked` | `api_key` | USER | `DELETE /api/api-keys/:id` | `ownerUserId` |
 | `settings.ai_provider_changed` | `settings` | USER (platform operator) | `POST /api/settings/ai-provider`; `entityId` is `ai_provider`. The provider is deployment-wide; the event is filed under the operator's organization | `fromProvider`, `toProvider`, `fromModel`, `toModel` |
 | `client_portal.document_deleted` | `attachment` | CLIENT | `DELETE /api/client-portal/documents/:docId` | `projectId`, `clientId`, `mimeType`, `size` |

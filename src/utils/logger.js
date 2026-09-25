@@ -1,5 +1,6 @@
 import pino from 'pino';
 import env from '../config/env.js';
+import { LOG_REDACT_OPTIONS } from './log-redaction.js';
 
 // Enterprise structured logging
 const logger = pino({
@@ -18,6 +19,8 @@ const logger = pino({
     },
   },
   timestamp: pino.stdTimeFunctions.isoTime,
+  // Never write API keys, session cookies or passwords to logs.
+  redact: { ...LOG_REDACT_OPTIONS, paths: [...LOG_REDACT_OPTIONS.paths] },
 });
 
 export default logger;
