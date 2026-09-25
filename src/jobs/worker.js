@@ -24,7 +24,6 @@ import { purgeExpiredTrashForAllOrganizations } from './trash-purge.js';
 import {
   checkOverdueInvoicesForAllOrganizations,
 } from '../services/automation.service.js';
-import { runScheduledFleetDigest } from '../routes/wp-bridge.routes.js';
 import { resolveEmbeddingOrganizationId } from './embedding-ownership.js';
 import { initSentry, Sentry } from '../observability/sentry.js';
 import { sendOperationalAlert } from '../observability/alerts.js';
@@ -465,7 +464,7 @@ const scheduledWorker = createWorker(
       case 'trash-purge':
         return purgeExpiredTrashForAllOrganizations();
       case 'fleet-digest':
-        return runScheduledFleetDigest(logger);
+        return { skipped: true, reason: 'retired WordPress fleet digest' };
       case 'scheduled-workflows':
         return { skipped: true, reason: 'deprecated unmodeled workflow scheduler' };
       default:

@@ -1,5 +1,6 @@
 // Bot API routes - external bot integration with ultra-fast caching
 
+import env from '../config/env.js';
 import { onboardClient } from '../services/onboarding.service.js';
 import { generateWeeklyReport } from '../services/weeklyReport.service.js';
 import { weeklyDigestQueue } from '../jobs/queue.js';
@@ -32,8 +33,8 @@ const aiCache = {
 };
 
 export default async function botRoutes(fastify) {
-  const BOT_SECRET = process.env.BOT_SECRET;
-  const BOT_ORG_ID = process.env.BOT_ORGANIZATION_ID;
+  const BOT_SECRET = env.botSecret;
+  const BOT_ORG_ID = env.botOrganizationId;
 
   // Scope all authenticated bot traffic to a single service org when configured.
   fastify.addHook('preHandler', async (request) => {
@@ -1333,7 +1334,7 @@ export default async function botRoutes(fastify) {
       }
     } else {
       // CUSTOM or PROJECT — send generic email
-      const replyTo = `reply+${notification.id}@${process.env.MAILGUN_DOMAIN || 'ashbi.ca'}`;
+      const replyTo = `reply+${notification.id}@${env.mailgunDomain || 'ashbi.ca'}`;
       const urgencyPrefix = urgency === 'CRITICAL' ? '🔴 [CRITICAL] ' : urgency === 'HIGH' ? '🟠 [ACTION NEEDED] ' : '';
       emailResult = await sendMailgunEmail({
         to: 'cameron@ashbi.ca',

@@ -38,16 +38,6 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-// Fonts are progressive enhancement. A third-party stylesheet must not block
-// the login/portal first paint; display=optional avoids a late swap on slow
-// connections while fast connections still receive the Ashbi typography.
-window.addEventListener('load', () => {
-  const fontStylesheet = document.createElement('link');
-  fontStylesheet.rel = 'stylesheet';
-  fontStylesheet.href = 'https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=optional';
-  document.head.append(fontStylesheet);
-}, { once: true });
-
 // Component to set up global API error handling
 function ApiErrorHandler({ children }) {
   // Set up the unauthorized callback to trigger logout

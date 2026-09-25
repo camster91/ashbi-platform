@@ -26,8 +26,12 @@ test('account-backed ADMIN onboarding is accessible and responsive without recor
 
   await page.setViewportSize({ width: 320, height: 720 });
   await page.goto('/dashboard');
-  await expect(page.getByRole('dialog', { name: 'Get started with Ashbi' })).toBeVisible({ timeout: 15_000 });
-  await page.getByRole('button', { name: 'Start checklist' }).click();
+  const welcome = page.getByRole('dialog', { name: 'Welcome to Ashbi Hub' });
+  await expect(welcome).toBeVisible({ timeout: 15_000 });
+  // Eligible users walk a short feature intro before starting the checklist.
+  await welcome.getByRole('button', { name: 'Next' }).click();
+  await welcome.getByRole('button', { name: 'Next' }).click();
+  await welcome.getByRole('button', { name: 'Start checklist' }).click();
   await expect(page.getByRole('dialog', { name: 'Your getting-started checklist' })).toBeVisible();
 
   for (const width of [320, 375, 768, 1024, 1440]) {

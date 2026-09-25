@@ -586,8 +586,18 @@ export default async function clientPortalRoutes(fastify) {
         .header('X-Content-Type-Options', 'nosniff')
         .header('Content-Security-Policy', "default-src 'none'; sandbox")
         .send(file);
-    } catch {
-      return reply.status(404).send({ error: 'Document not found' });
+    } catch (err) {
+      // ENOENT is the only case where "Document not found" is honest
+      // (upload was deleted, the path is stale, etc.). Anything else —
+      // permission denied, disk full, I/O error, DB outage — must be
+      // logged and surfaced as a 5xx so the operator can investigate.
+      // Previously a single catch-all turned every error into a 404,
+      // which masked real outages behind a misleading "not found".
+      if (err && err.code === 'ENOENT') {
+        return reply.status(404).send({ error: 'Document not found' });
+      }
+      request.log.error({ err, docId: request.params.docId }, 'client-portal: document download failed');
+      return reply.status(500).send({ error: 'Failed to download document' });
     }
   });
 

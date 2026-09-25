@@ -129,14 +129,14 @@ export default function GlobalAIChat() {
 
   return (
     <>
-      {/* Floating Button */}
+      {/* Floating Button — sits above the mobile bottom navigation below lg */}
       <button
         type="button"
         data-ai-chat-btn
         onClick={() => setIsOpen(prev => !prev)}
         aria-expanded={isOpen}
         aria-controls="global-ai-chat-drawer"
-        className="fixed bottom-6 right-6 z-50 min-h-14 min-w-14 w-14 h-14 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl transition-all duration-200 motion-reduce:transition-none flex items-center justify-center group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] right-4 lg:bottom-6 lg:right-6 z-50 min-h-14 min-w-14 w-14 h-14 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl transition-all duration-200 motion-reduce:transition-none flex items-center justify-center group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         aria-label="Open AI Chat"
       >
         <Bot className="w-6 h-6 group-hover:scale-110 transition-transform" />
@@ -153,7 +153,7 @@ export default function GlobalAIChat() {
           role="dialog"
           aria-modal="false"
           aria-labelledby="global-ai-chat-title"
-          className="fixed bottom-24 right-4 sm:right-6 z-50 w-[calc(100vw-32px)] sm:w-[400px] max-h-[560px] rounded-xl shadow-2xl bg-card border border-border flex flex-col overflow-hidden"
+          className="fixed bottom-[calc(10rem+env(safe-area-inset-bottom))] lg:bottom-24 right-4 sm:right-6 z-50 w-[calc(100vw-32px)] sm:w-[400px] max-h-[min(560px,calc(100dvh-12rem))] rounded-xl shadow-2xl bg-card border border-border flex flex-col overflow-hidden"
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card shrink-0">

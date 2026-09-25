@@ -3,10 +3,9 @@
  *
  * src/config/env.js refuses to start in production if any of the tracked
  * secrets equals the .env.example placeholder value. The previous
- * implementation only caught JWT_SECRET and CREDENTIALS_KEY. PR-D
- * extended the list to include WP_BRIDGE_SECRET after the audit
- * identified that a copy-paste deploy would otherwise start with a
- * publicly-known shared HMAC secret.
+ * implementation only caught JWT_SECRET and CREDENTIALS_KEY; the list now
+ * also covers integration secrets such as STRIPE_WEBHOOK_SECRET so a
+ * copy-paste deploy cannot start with a publicly-known secret.
  *
  * The validation is a module-load-time side effect, so the only way to
  * exercise it in isolation is to spawn a fresh `node` subprocess with
@@ -57,7 +56,7 @@ const MUTATED_KEYS = [
   'NODE_ENV',
   'JWT_SECRET',
   'CREDENTIALS_KEY',
-  'WP_BRIDGE_SECRET',
+  'STRIPE_WEBHOOK_SECRET',
 ];
 const originalEnv = Object.fromEntries(
   MUTATED_KEYS.map((k) => [k, process.env[k]])
@@ -75,18 +74,18 @@ after(() => {
 });
 
 describe('Env placeholder rejection (production-only)', () => {
-  test('rejects WP_BRIDGE_SECRET equal to placeholder in production', async () => {
+  test('rejects STRIPE_WEBHOOK_SECRET equal to placeholder in production', async () => {
     const { code, stderr } = await runEnvWithEnv({
       NODE_ENV: 'production',
       JWT_SECRET: 'a-real-secret-not-the-placeholder',
       CREDENTIALS_KEY: 'a-real-credentials-key',
-      WP_BRIDGE_SECRET: 'your-wp-bridge-shared-secret',
+      STRIPE_WEBHOOK_SECRET: 'your-stripe-webhook-secret',
     });
 
     assert.notEqual(code, 0, 'process should exit non-zero on placeholder');
     assert.match(
       stderr,
-      /WP_BRIDGE_SECRET/,
+      /STRIPE_WEBHOOK_SECRET/,
       'error should name the offending key'
     );
     assert.match(
@@ -101,7 +100,7 @@ describe('Env placeholder rejection (production-only)', () => {
       NODE_ENV: 'production',
       JWT_SECRET: 'your-secret-key-change-in-production',
       CREDENTIALS_KEY: 'a-real-credentials-key',
-      WP_BRIDGE_SECRET: 'a-real-bridge-secret',
+      STRIPE_WEBHOOK_SECRET: 'a-real-stripe-webhook-secret',
     });
 
     assert.notEqual(code, 0);
@@ -113,7 +112,7 @@ describe('Env placeholder rejection (production-only)', () => {
       NODE_ENV: 'production',
       JWT_SECRET: 'a-real-secret-not-the-placeholder',
       CREDENTIALS_KEY: 'your-credentials-key-change-in-production',
-      WP_BRIDGE_SECRET: 'a-real-bridge-secret',
+      STRIPE_WEBHOOK_SECRET: 'a-real-stripe-webhook-secret',
     });
 
     assert.notEqual(code, 0);
@@ -125,13 +124,13 @@ describe('Env placeholder rejection (production-only)', () => {
       NODE_ENV: 'production',
       JWT_SECRET: 'your-secret-key-change-in-production',
       CREDENTIALS_KEY: 'your-credentials-key-change-in-production',
-      WP_BRIDGE_SECRET: 'your-wp-bridge-shared-secret',
+      STRIPE_WEBHOOK_SECRET: 'your-stripe-webhook-secret',
     });
 
     assert.notEqual(code, 0);
     assert.match(stderr, /JWT_SECRET/);
     assert.match(stderr, /CREDENTIALS_KEY/);
-    assert.match(stderr, /WP_BRIDGE_SECRET/);
+    assert.match(stderr, /STRIPE_WEBHOOK_SECRET/);
   });
 
   test('starts cleanly with all secrets replaced (no placeholders)', async () => {
@@ -139,7 +138,7 @@ describe('Env placeholder rejection (production-only)', () => {
       NODE_ENV: 'production',
       JWT_SECRET: 'a-real-secret-not-the-placeholder',
       CREDENTIALS_KEY: 'a-real-credentials-key',
-      WP_BRIDGE_SECRET: 'a-real-bridge-secret',
+      STRIPE_WEBHOOK_SECRET: 'a-real-stripe-webhook-secret',
     });
 
     // Code 0 (or 0/exit cleanly) — any non-zero is a regression in the
@@ -158,7 +157,7 @@ describe('Env placeholder rejection (production-only)', () => {
     // works with the .env.example values. Only production is strict.
     const { code, stderr } = await runEnvWithEnv({
       NODE_ENV: 'development',
-      WP_BRIDGE_SECRET: 'your-wp-bridge-shared-secret',
+      STRIPE_WEBHOOK_SECRET: 'your-stripe-webhook-secret',
     });
 
     if (code !== 0) {
@@ -169,17 +168,17 @@ describe('Env placeholder rejection (production-only)', () => {
   });
 });
 
-describe('WP_BRIDGE_SECRET is in the rejection list (static check)', () => {
+describe('STRIPE_WEBHOOK_SECRET is in the rejection list (static check)', () => {
   // Static / source-text guard so a future refactor can't silently
-  // remove WP_BRIDGE_SECRET from the placeholders object. This is the
+  // remove STRIPE_WEBHOOK_SECRET from the placeholders object. This is the
   // same discipline as the audit's manual scan, encoded as a test.
-  test('src/config/env.js placeholders object contains WP_BRIDGE_SECRET', async () => {
+  test('src/config/env.js placeholders object contains STRIPE_WEBHOOK_SECRET', async () => {
     const { readFile } = await import('node:fs/promises');
     const src = await readFile(envJsPath, 'utf8');
     assert.match(
       src,
-      /WP_BRIDGE_SECRET\s*:\s*['"]your-wp-bridge-shared-secret['"]/,
-      'placeholders object must include WP_BRIDGE_SECRET with its placeholder value'
+      /STRIPE_WEBHOOK_SECRET\s*:\s*['"]your-stripe-webhook-secret['"]/,
+      'placeholders object must include STRIPE_WEBHOOK_SECRET with its placeholder value'
     );
   });
 

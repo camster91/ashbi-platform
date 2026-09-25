@@ -12,7 +12,7 @@ The canonical gate owns these blocking checks:
 - backend unit and integration tests against PostgreSQL with pgvector;
 - frontend unit tests;
 - desktop, mobile, and accessibility browser smoke;
-- full-stack WordPress/hub E2E smoke;
+- full-stack E2E smoke (Postgres, Redis, worker and API in Docker);
 - the production build.
 
 `npm run check:release-gates` rejects missing commands, deployment bypasses,

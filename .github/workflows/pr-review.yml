@@ -5,11 +5,8 @@ on:
     types: [opened, synchronize]
     branches: [main]
 
-# SECURITY (audit 2026-07-09): add concurrency + timeout. A flurry of
-# pushes to one PR was previously spawning parallel Claude reviews —
-# each costs $$ via API + burns the 360-min default job timeout if the
-# API call hangs. Group by PR number so each PR gets one review at a
-# time; cancel previous on push so we don't queue up old reviews.
+# SECURITY (audit 2026-07-09): concurrency + timeout prevent a flurry of
+# pushes to one PR from spawning parallel paid reviews.
 concurrency:
   group: pr-review-${{ github.event.pull_request.number }}
   cancel-in-progress: true
@@ -17,6 +14,9 @@ concurrency:
 jobs:
   review:
     name: Claude Code Review
+    # Dependency-update PRs already receive deterministic CI/security checks;
+    # do not spend external AI-review API usage on automated Dependabot churn.
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -41,7 +41,6 @@ jobs:
             TRUNCATED="true"
           fi
 
-          # Write to file to avoid shell escaping issues
           echo "$DIFF" > /tmp/pr_diff.txt
           echo "truncated=$TRUNCATED" >> "$GITHUB_OUTPUT"
           echo "char_count=$CHAR_COUNT" >> "$GITHUB_OUTPUT"
@@ -59,7 +58,6 @@ jobs:
             TRUNCATION_NOTE="NOTE: The diff was truncated to 15,000 characters (original: ${{ steps.diff.outputs.char_count }} chars). Some changes may not be reviewed."
           fi
 
-          # Build the JSON payload
           PROMPT=$(cat <<'PROMPT_EOF'
           You are a code reviewer for Agency Hub, an AI-powered client request management system.
 
@@ -79,7 +77,6 @@ jobs:
           PROMPT_EOF
           )
 
-          # Escape diff content for JSON
           ESCAPED_DIFF=$(echo "$DIFF" | jq -Rs .)
           ESCAPED_PROMPT=$(echo "$PROMPT" | jq -Rs .)
           ESCAPED_NOTE=$(echo "$TRUNCATION_NOTE" | jq -Rs .)
@@ -117,7 +114,6 @@ jobs:
             REVIEW_TEXT=$(echo "$BODY" | jq -r '.content[0].text')
           fi
 
-          # Write review to file for the comment step
           echo "$REVIEW_TEXT" > /tmp/review_result.txt
 
       - name: Post PR comment
@@ -136,7 +132,6 @@ jobs:
           EOF
           )
 
-          # Post comment via GitHub API
           jq -n --arg body "$COMMENT_BODY" '{"body": $body}' | \
             curl -s -X POST \
               -H "Authorization: Bearer $GH_TOKEN" \

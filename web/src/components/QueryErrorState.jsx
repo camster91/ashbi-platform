@@ -1,4 +1,5 @@
 import Button from './ui/Button';
+import Alert from './ui/Alert';
 
 export function getQueryErrorGuidance(error, online = typeof navigator === 'undefined' || navigator.onLine) {
   if (!online || error?.name === 'NetworkError') {
@@ -18,17 +19,20 @@ export function getQueryErrorGuidance(error, online = typeof navigator === 'unde
 export function QueryErrorState({ onRetry, error, message, isRetrying = false }) {
   const guidance = getQueryErrorGuidance(error);
   return (
-    <div role="alert" aria-live="assertive" className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-950/30 dark:border-red-900 p-6 text-center">
-      <p className="font-medium text-red-700 dark:text-red-300">{message || guidance.title}</p>
-      <p className="text-sm text-red-600 dark:text-red-400 mt-1">
-        {guidance.detail}
-      </p>
-      {onRetry && (
-        <Button onClick={onRetry} className="mt-4" variant="outline" disabled={isRetrying}>
-          {isRetrying ? 'Retrying…' : 'Retry'}
-        </Button>
-      )}
-    </div>
+    <Alert
+      variant="error"
+      title={message || guidance.title}
+      className="max-w-lg mx-auto"
+      action={
+        onRetry ? (
+          <Button onClick={onRetry} variant="outline" size="sm" disabled={isRetrying}>
+            {isRetrying ? 'Retrying…' : 'Retry'}
+          </Button>
+        ) : undefined
+      }
+    >
+      {guidance.detail}
+    </Alert>
   );
 }
 

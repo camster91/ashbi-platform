@@ -55,6 +55,23 @@ describe('client portal cookie session flow', () => {
           return row;
         },
       },
+      attachment: {
+        findUnique: async ({ where }) => {
+          const base = {
+            entityType: 'PROJECT',
+            entityId: 'project-a',
+            mimeType: 'text/plain',
+            originalName: 'project-note.txt',
+          };
+          if (where.id === 'missing-document') {
+            return { id: where.id, path: '.missing-portal-document', ...base };
+          }
+          if (where.id === 'unreadable-document') {
+            return { id: where.id, path: '.', ...base };
+          }
+          return null;
+        },
+      },
       contract: {
         findMany: async () => [{
           id: 'contract-a', title: 'Project agreement', status: 'SENT', signToken: 'sign-a',
@@ -78,6 +95,30 @@ describe('client portal cookie session flow', () => {
     const doubled = await app.inject({ method: 'POST', url: '/api/client-portal/client-portal/verify-token', payload: { token: 'invalid' } });
     assert.equal(correct.statusCode, 401);
     assert.equal(doubled.statusCode, 404);
+  });
+
+  it('returns 404 only when a client document is absent from storage', async () => {
+    const bearer = app.jwt.sign({ ...user, contactId: contact.id, sessionVersion }, { expiresIn: '1h' });
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/client-portal/documents/missing-document/download',
+      headers: { authorization: `Bearer ${bearer}` },
+    });
+
+    assert.equal(response.statusCode, 404);
+    assert.equal(response.json().error, 'Document not found');
+  });
+
+  it('returns 500 instead of masking a document storage failure as absent', async () => {
+    const bearer = app.jwt.sign({ ...user, contactId: contact.id, sessionVersion }, { expiresIn: '1h' });
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/client-portal/documents/unreadable-document/download',
+      headers: { authorization: `Bearer ${bearer}` },
+    });
+
+    assert.equal(response.statusCode, 500);
+    assert.equal(response.json().error, 'Failed to download document');
   });
 
   it('exchanges a bounded magic token for an httpOnly session and revokes it on logout', async () => {

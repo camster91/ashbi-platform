@@ -335,14 +335,6 @@ export default async function dashboardRoutes(fastify) {
           project: t.project?.name || null
         }))
       },
-      // wpSiteAlerts + wpSites kept as empty arrays for backward compat with the
-      // dashboard frontend widgets that may still reference these keys. Pre-strip-down
-      // had WordPress / Outreach funnel widgets populated from these — with the
-      // Batches 1-6 cuts they no longer fetch from the dropped models. Frontend
-      // widgets no-op on empty arrays (OutreachFunnelWidget and WPSiteHealthWidget
-      // both return null when their data is empty).
-      wpSiteAlerts: [],
-      wpSites: [],
       overdueTasks: overdueTasks.map(t => ({
         id: t.id,
         title: t.title,

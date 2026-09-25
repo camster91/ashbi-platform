@@ -2,9 +2,7 @@
 # tests/e2e/teardown.sh
 #
 # Tears down everything setup.sh booted. Removes Docker volumes so the
-# next run starts on a fresh DB.
-#
-# Safe to run even when containers don't exist (uses `|| true`).
+# next run starts on a fresh DB. Safe to run when containers don't exist.
 
 set -euo pipefail
 
@@ -12,26 +10,13 @@ E2E_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$E2E_DIR/../.." && pwd)"
 
 log() { printf '[e2e-teardown] %s\n' "$*" >&2; }
-fail() { log "WARN: $*"; }
 
 cd "$REPO_ROOT"
 
 log "stopping hub stack (with -v to wipe Postgres volume)"
 docker compose \
   -f "$E2E_DIR/docker-compose.test.yml" \
-  --project-name ashbi-e2e down -v --remove-orphans || fail "hub compose down failed"
-
-if [ "${SKIP_WP_ENV:-0}" != "1" ]; then
-  E2E_DIR="$(cd "$(dirname "$0")" && pwd)"
-  REPO_ROOT="$(cd "$E2E_DIR/../.." && pwd)"
-  log "stopping wp-env (with --clean to wipe WordPress + MariaDB volumes)"
-  cd "$REPO_ROOT"
-  if [ -f "$REPO_ROOT/.wp-env.json" ]; then
-    npx --yes @wordpress/env stop --clean || fail "wp-env stop failed"
-  else
-    npx --yes @wordpress/env stop --config "$E2E_DIR/wp-env/.wp-env.json" --clean || fail "wp-env stop failed"
-  fi
-fi
+  --project-name ashbi-e2e down -v --remove-orphans || log "WARN: hub compose down failed"
 
 log "pruning ashbi-e2e-* orphan containers"
 docker ps -a --filter "label=com.docker.compose.project=ashbi-e2e" -q \

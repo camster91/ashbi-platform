@@ -34,7 +34,7 @@ test('creates a nested document from a tenant template with authorized mentions'
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto('/docs');
   await expect(page.getByRole('heading', { name: 'Docs & Notes' })).toBeVisible();
-  await page.getByRole('button', { name: 'Project home', exact: true }).click();
+  await page.getByRole('button', { name: 'Toggle note Project home', exact: true }).click();
   await expect(page.getByText(/<img src=x onerror=/)).toBeVisible();
   expect(await page.evaluate(() => (window as Window & { __wikiXss?: boolean }).__wikiXss)).toBeUndefined();
   await page.getByRole('button', { name: 'New Note' }).click();
@@ -47,7 +47,7 @@ test('creates a nested document from a tenant template with authorized mentions'
   expect(accessibility.violations).toEqual([]);
   await page.getByRole('button', { name: 'Save' }).click();
 
-  await expect(page.getByRole('button', { name: 'Nested launch guide', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Toggle note Nested launch guide', exact: true })).toBeVisible();
   expect(createdPayload).toEqual({ title: 'Nested launch guide', parentId: 'root-note', mentionUserIds: ['user-b'] });
   await page.getByRole('button', { name: 'Edit Project home' }).click();
   await page.getByLabel('Notify mentioned teammates for Project home').selectOption('user-b');

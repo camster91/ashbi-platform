@@ -1,24 +1,24 @@
 # tests/e2e/docker-compose.test.yml
 #
-# Hub stack for the magic-login end-to-end smoke test.
+# Hub stack for the full-stack end-to-end smoke test.
 #
 # Services:
 #   postgres  — fresh DB per test run (no volume)
-#   migrate   — one-shot `npx prisma db push` against the test DB.
-#               Prisma 7 reads the URL from prisma.config.ts datasource
-#               block, but `dotenv/config` only sets vars present in .env
-#               — it doesn't synthesize them. Compose sets the env var
-#               but doesn't write the .env file. So we materialize the
-#               URL into /app/.env via the entrypoint before invoking
-#               db push. --url flag is also passed as a belt-and-suspenders
-#               override.
+#   redis     — required for BullMQ queues and the /api/health readiness
+#               check (database + redis + worker heartbeat must all be ok).
+#   migrate   — one-shot `npx prisma migrate deploy` against the test DB.
+#               Prisma 7 reads the URL through prisma.config.ts, which only
+#               sees vars present in .env, so the entrypoint materializes
+#               DATABASE_URL into /app/.env first.
 #   seed      — one-shot `node prisma/seed.js` after migrate completes.
 #               Creates cameron@ashbi.ca with the role ADMIN so the test
 #               can log in via /api/auth/login.
+#   worker    — BullMQ worker. Writes the redis heartbeat that /api/health
+#               requires for readiness; without it hub never reports ready.
 #   hub       — ashbi-platform image running Fastify. depends_on
-#               postgres (healthy) + migrate (succeeded) + seed (succeeded).
+#               postgres (healthy) + redis (healthy) + migrate (succeeded)
+#               + seed (succeeded).
 #
-# WP_BRIDGE_SECRET matches ashbi_secret_key in tests/e2e/wp-env/setup-plugin.sh.
 # ADMIN_SEED_PASSWORD matches ADMIN_PASSWORD the test logs in with.
 #
 # Usage:
@@ -43,6 +43,15 @@ services:
       retries: 30
     ports:
       - "54329:5432"
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
 
   migrate:
     build:
@@ -83,31 +92,51 @@ services:
       DATABASE_URL: postgresql://ashbi_test:ashbi_test@postgres:5432/ashbi_test
       ADMIN_SEED_PASSWORD: TestPass123!
 
+  worker:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["npm", "run", "start:worker"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Not "test": src/jobs/queue.js swaps in mock queues with no Redis
+      # connection when NODE_ENV=test, so the heartbeat would never be written.
+      NODE_ENV: e2e
+      DATABASE_URL: postgresql://ashbi_test:ashbi_test@postgres:5432/ashbi_test
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: test-jwt-secret-do-not-use-in-prod
+
   hub:
     build:
       context: ../..
       dockerfile: Dockerfile
     restart: unless-stopped
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
       seed:
         condition: service_completed_successfully
+      worker:
+        condition: service_started
     environment:
       NODE_ENV: test
       PORT: 3000
       DATABASE_URL: postgresql://ashbi_test:ashbi_test@postgres:5432/ashbi_test
+      REDIS_URL: redis://redis:6379
       JWT_SECRET: test-jwt-secret-do-not-use-in-prod
       ADMIN_EMAIL: cameron@ashbi.ca
       ADMIN_PASSWORD: TestPass123!
-      WP_BRIDGE_SECRET: test-e2e-secret-12345
-      MAGIC_LOGIN_AUDIT_MAX: 500
-      MAGIC_LOGIN_RATE_LIMIT_PER_HOUR: 5
-      FLEET_DIGEST_ENABLED: "false"
     ports:
       - "${HOST_PORT:-3001}:3000"
     healthcheck:

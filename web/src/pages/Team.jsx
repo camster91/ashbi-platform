@@ -15,7 +15,7 @@ import {
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
 import { useToast } from '../hooks/useToast';
-import { Card, Button, LoadingState } from '../components/ui';
+import { Card, Button, EmptyState, ListPageSkeleton, LoadingState } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
 import CreateTeamMemberModal from '../components/CreateTeamMemberModal';
 
@@ -103,11 +103,7 @@ export default function Team() {
   const workloadMap = Object.fromEntries(workload.map(w => [w.id, w]));
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <LoadingState label="Loading team…" compact />
-      </div>
-    );
+    return <ListPageSkeleton rows={6} label="Loading team" />;
   }
 
   if (teamError) {
@@ -233,6 +229,15 @@ export default function Team() {
           {/* Team Members */}
           <div>
             <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-3">Members</h2>
+            {team.length === 0 ? (
+              <EmptyState
+                icon="team"
+                title="No team members"
+                description="Invite your team to collaborate on projects and handle client requests."
+                actionLabel="Add Member"
+                onAction={() => setShowCreateModal(true)}
+              />
+            ) : (
             <div className="space-y-2">
               {team.map((member) => {
                 const load = workloadMap[member.id];
@@ -347,6 +352,7 @@ export default function Team() {
                 );
               })}
             </div>
+            )}
           </div>
         </>
       ) : (

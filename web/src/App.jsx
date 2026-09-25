@@ -6,6 +6,7 @@ import { ToastProvider, useToast } from './hooks/useToast';
 
 // Public entry points are split so each deep link loads only its route module.
 const Login = lazy(() => import('./pages/Login'));
+const UiLab = lazy(() => import('./pages/UiLab'));
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
 const Portal = lazy(() => import('./pages/Portal'));
@@ -69,7 +70,6 @@ const Settings = lazy(() => import('./pages/Settings'));
 const Notifications = lazy(() => import('./pages/Notifications'));
 // Advanced Features
 const AssetLibrary = lazy(() => import('./pages/AssetLibrary'));
-const WPSites = lazy(() => import('./pages/WPSites'));
 const SemanticSearch = lazy(() => import('./pages/SemanticSearch'));
 // New Features
 const Estimates = lazy(() => import('./pages/Estimates'));
@@ -172,6 +172,9 @@ function AppRoutes() {
         <Suspense fallback={<RouteLoader />}>
           <Routes>
           <Route path="/login" element={<Login />} />
+          {import.meta.env.DEV && (
+            <Route path="/ui-lab" element={<UiLab />} />
+          )}
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/portal/:token" element={<QueryRoute><Portal /></QueryRoute>} />
@@ -236,7 +239,6 @@ function AppRoutes() {
                                                                                           <Route path="/notifications" element={<Notifications />} />
                   {/* Advanced Features */}
                   <Route path="/assets" element={<AssetLibrary />} />
-                  <Route path="/wp-sites" element={<AdminRoute><WPSites /></AdminRoute>} />
                   <Route path="/semantic-search" element={<SemanticSearch />} />
                   <Route path="*" element={<NotFound />} />
                   </Routes>

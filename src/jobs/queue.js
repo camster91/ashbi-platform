@@ -125,6 +125,9 @@ export async function queueEmbedding(clientId, content, source, sourceId = null,
 /**
  * Set up recurring jobs
  */
+// Retired schedules: queued copies are removed, or completed as no-ops by the worker.
+export const RETIRED_SCHEDULED_JOBS = new Set(['scheduled-workflows', 'fleet-digest']);
+
 export async function setupRecurringJobs() {
   const defaults = {
     attempts: 3,
@@ -153,9 +156,10 @@ export async function setupRecurringJobs() {
       'recurring-weekly-digest',
     ),
     scheduledQueue.removeJobScheduler('scheduled-workflows-minutely'),
+    scheduledQueue.removeJobScheduler('fleet-digest-daily-toronto'),
   ]);
   const deprecatedWorkflowJobs = await scheduledQueue.getJobs(['wait', 'delayed', 'failed']);
-  for (const job of deprecatedWorkflowJobs.filter((candidate) => candidate.name === 'scheduled-workflows')) {
+  for (const job of deprecatedWorkflowJobs.filter((candidate) => RETIRED_SCHEDULED_JOBS.has(candidate.name))) {
     try {
       await job.remove();
     } catch (error) {
@@ -189,7 +193,6 @@ export async function setupRecurringJobs() {
     ['recurring-invoices-hourly', { every: 60 * 60 * 1000 }, 'recurring-invoices'],
     ['overdue-invoices-hourly', { every: 60 * 60 * 1000 }, 'overdue-invoices'],
     ['trash-purge-daily-toronto', { pattern: '0 4 * * *', tz: 'America/Toronto' }, 'trash-purge'],
-    ['fleet-digest-daily-toronto', { pattern: '0 9 * * *', tz: 'America/Toronto' }, 'fleet-digest'],
   ];
   for (const [schedulerId, repeat, name] of scheduledJobs) {
     await scheduledQueue.upsertJobScheduler(

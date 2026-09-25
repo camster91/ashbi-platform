@@ -11,6 +11,20 @@ const CHECK_TIMEOUT_MS = 2_500;
 const REQUIRED_BACKUP_FRESHNESS_MS = 30 * 60 * 60 * 1_000;
 const BACKUP_STATUS_PATH = process.env.BACKUP_STATUS_PATH || '/app/config/backup-status.json';
 
+// Health responses are consumed by operators and uptime probes, so a failing
+// dependency must explain itself. Only a short, credential-free reason is
+// exposed: driver errors can embed the connection string, so anything
+// URL-shaped or key-shaped is stripped before it leaves this module.
+const SECRET_SHAPED = /(\b[a-z][a-z0-9+.-]*:\/\/[^\s]+|\b(?:password|passwd|pwd|secret|token|api[_-]?key)\b\s*[=:]\s*[^\s,;]+)/gi;
+
+function describeFailure(error) {
+  const name = error && error.constructor && error.constructor.name ? error.constructor.name : 'Error';
+  const raw = error && typeof error.message === 'string' ? error.message : '';
+  const message = raw.replace(SECRET_SHAPED, '[redacted]').replace(/\s+/g, ' ').trim();
+  const shortened = message.length > 200 ? message.slice(0, 200) + '…' : message;
+  return shortened ? `${name}: ${shortened}` : name;
+}
+
 let healthRedis;
 
 function getHealthRedis() {
@@ -56,16 +70,16 @@ export async function checkRuntimeHealth({
   try {
     await withTimeout(db.$queryRawUnsafe('SELECT 1'), 'database');
     checks.database = checkResult(true);
-  } catch {
-    checks.database = checkResult(false);
+  } catch (error) {
+    checks.database = checkResult(false, describeFailure(error));
   }
 
   try {
     if (redis.status === 'wait') await withTimeout(redis.connect(), 'redis connect');
     await withTimeout(redis.ping(), 'redis');
     checks.redis = checkResult(true);
-  } catch {
-    checks.redis = checkResult(false);
+  } catch (error) {
+    checks.redis = checkResult(false, describeFailure(error));
   }
 
   let workerHeartbeat;
@@ -80,8 +94,8 @@ export async function checkRuntimeHealth({
         ageMs: Number.isFinite(ageMs) ? ageMs : null,
         revision: workerHeartbeat.revision || 'unknown',
       };
-    } catch {
-      checks.worker = checkResult(false);
+    } catch (error) {
+      checks.worker = checkResult(false, describeFailure(error));
     }
   } else {
     checks.worker = checkResult(false, 'redis unavailable');
@@ -110,8 +124,8 @@ export async function checkRuntimeHealth({
       ageMs: Number.isFinite(ageMs) ? ageMs : null,
       completedAt: typeof backup.completedAt === 'string' ? backup.completedAt : null,
     };
-  } catch {
-    checks.backup = checkResult(false);
+  } catch (error) {
+    checks.backup = checkResult(false, describeFailure(error));
   }
 
   const ready = ['database', 'redis', 'worker'].every((name) => checks[name].status === 'ok');

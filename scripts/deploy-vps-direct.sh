@@ -86,7 +86,6 @@ ACTUAL_IMAGE_ID=$(docker image inspect "$IMAGE" --format '{{.Id}}')
 
 docker run --rm --network "$NETWORK" --env-file "$ENV_FILE" "$IMAGE" npx prisma migrate deploy
 docker run --rm --network "$NETWORK" --env-file "$ENV_FILE" "$IMAGE" npx prisma migrate status
-docker run --rm --network "$NETWORK" --env-file "$ENV_FILE" "$IMAGE" node scripts/audit-wp-bridge-ownership.mjs
 
 PREVIOUS_IMAGE=$(docker inspect --format '{{.Config.Image}}' "$CONTAINER" 2>/dev/null || true)
 PREVIOUS_REVISION=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$CONTAINER" 2>/dev/null | sed -n 's/^APP_REVISION=//p' | tail -1 || true)

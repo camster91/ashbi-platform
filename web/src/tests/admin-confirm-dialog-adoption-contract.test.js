@@ -8,7 +8,6 @@ describe('administrative confirmation adoption', () => {
   it.each([
     ['Credentials.jsx', ['Delete credential']],
     ['Settings.jsx', ['Restart onboarding', 'Revoke API key']],
-    ['WPSites.jsx', ['Remove WordPress site', 'Revoke magic-login token']],
   ])('%s uses shared pending-safe dialogs instead of native confirmation', (file, titles) => {
     const source = read(file);
 
@@ -27,11 +26,8 @@ describe('administrative confirmation adoption', () => {
     expect(source).toContain('error={deleteMutation.error?.message}');
   });
 
-  it('explains API-key and WordPress access consequences', () => {
+  it('explains API-key access consequences', () => {
     const settings = read('Settings.jsx');
-    const wordpress = read('WPSites.jsx');
     expect(settings).toContain('integrations using it will stop working');
-    expect(wordpress).toContain('disconnects monitoring, backups, reports, and managed operations');
-    expect(wordpress).toContain('The user will no longer be able to use this link');
   });
 });

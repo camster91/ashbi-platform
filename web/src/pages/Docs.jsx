@@ -24,7 +24,7 @@ import { renderMarkdown } from '../lib/markdown';
 import { useToast } from '../hooks/useToast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { cn } from '../lib/utils';
-import { Card, Button, LoadingState } from '../components/ui';
+import { Card, Button, EmptyState, ListPageSkeleton } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
 
 const NOTE_TYPES = [
@@ -403,9 +403,7 @@ export default function Docs() {
       )}
 
       {isLoading ? (
-        <div className="flex justify-center py-16">
-          <LoadingState label="Loading documents…" compact />
-        </div>
+        <ListPageSkeleton rows={6} label="Loading documents" />
       ) : notesError ? (
         <QueryErrorState
           error={notesRequestError}
@@ -414,15 +412,15 @@ export default function Docs() {
           isRetrying={notesFetching}
         />
       ) : notes.length === 0 ? (
-        <Card className="p-16 text-center">
-          <BookOpen className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <h3 className="text-lg font-medium">
-            {search ? 'No notes match your search' : 'No notes yet'}
-          </h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            {search ? 'Try a different search term' : 'Create notes from any project page, or use the button above.'}
-          </p>
-        </Card>
+        <EmptyState
+          icon="document"
+          title={search ? 'No notes match your search' : 'No notes yet'}
+          description={
+            search
+              ? 'Try a different search term.'
+              : 'Create notes from any project page, or use the button above.'
+          }
+        />
       ) : (
         <>
           {/* Pinned Notes */}

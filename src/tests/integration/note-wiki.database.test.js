@@ -53,9 +53,19 @@ test('wiki hierarchy and templates remain isolated between two real tenants', {
       tenantA.note.create({ data: { title: 'Cross tenant', content: '', projectId: ids.projectB, authorId: ids.userA } }),
       /does not belong to organization/i,
     );
+    // Cycle prevention is enforced in the database by the note hierarchy
+    // trigger (migration 20260809111500_note_hierarchy_templates_mentions), so
+    // every write path is covered — not only validateParent in note.routes.js.
+    // This requires a schema built with `prisma migrate deploy`; `db push`
+    // does not install the trigger.
     await assert.rejects(
       tenantA.note.update({ where: { id: root.id }, data: { parentId: child.id } }),
       /cycle/i,
+    );
+
+    await assert.rejects(
+      tenantA.note.update({ where: { id: root.id }, data: { projectId: ids.projectB } }),
+      /does not belong to organization/i,
     );
   } finally {
     await raw.notification.deleteMany({ where: { userId: { in: [ids.userA, ids.userB] } } });
