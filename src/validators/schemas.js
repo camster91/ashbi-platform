@@ -192,10 +192,18 @@ export const updateInvoiceSchema = z.object({
 }).refine(val => Object.keys(val).length > 0, { message: 'At least one field must be provided' });
 
 // ── Mark invoice paid ──────────────────────────────────────────────────────
+// CHEQUE is the canonical stored value. Older web builds sent CHECK from the
+// Record payment dialog (and were rejected), so accept it and normalize.
+export const INVOICE_PAYMENT_METHODS = ['STRIPE', 'BANK', 'TRANSFER', 'CASH', 'CHEQUE', 'OTHER'];
+const invoicePaymentMethodSchema = z.preprocess(
+  (value) => (value === 'CHECK' ? 'CHEQUE' : value),
+  z.enum(INVOICE_PAYMENT_METHODS),
+);
+
 export const markInvoicePaidSchema = z.object({
   amount: z.number().positive().optional(),
-  method: z.enum(['STRIPE', 'BANK', 'TRANSFER', 'CASH', 'CHEQUE', 'OTHER']).optional(),
-  paymentMethod: z.enum(['STRIPE', 'BANK', 'TRANSFER', 'CASH', 'CHEQUE', 'OTHER']).optional(),
+  method: invoicePaymentMethodSchema.optional(),
+  paymentMethod: invoicePaymentMethodSchema.optional(),
   paymentNotes: z.string().max(2000).optional(),
   transactionId: z.string().max(200).optional(),
   paidAt: z.string().datetime().optional(),
