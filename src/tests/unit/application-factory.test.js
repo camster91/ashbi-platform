@@ -216,6 +216,7 @@ const DOMAIN_REGISTRARS = [
       ['api-key', '/api/api-keys'],
       ['credential', '/api/credentials'],
       ['team', '/api/team'],
+      ['audit-event', '/api/audit-events'],
     ],
   },
   {
@@ -345,9 +346,9 @@ test('every domain-registered route module has exactly one owner', () => {
       }
     }
   }
-  // 21 modules from the earlier slices plus 46 moved out of src/index.js,
-  // plus the MFA routes added to the identity domain.
-  assert.equal(owners.size, 68);
+  // 21 modules from the earlier slices, 46 moved out of src/index.js, the
+  // MFA routes (#416) and the audit event log (#412).
+  assert.equal(owners.size, 69);
 });
 
 test('route modules stay encapsulated so cross-domain registration order cannot leak hooks', () => {

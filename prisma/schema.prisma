@@ -61,6 +61,7 @@ model Organization {
   notionImportRecords NotionImportRecord[]
   aiBridgeActions AiBridgeAction[]
   publicInquiries PublicInquiry[]
+  auditEvents     AuditEvent[]
 
   @@map("organizations")
 }
@@ -1177,6 +1178,31 @@ model CredentialAccessAudit {
   @@index([credentialId, createdAt])
   @@index([actorUserId, createdAt])
   @@map("credential_access_audits")
+}
+
+// Append-only, tenant-scoped audit trail for privileged, revenue, auth and
+// automated actions (issue #412). A database trigger rejects UPDATE, DELETE
+// and TRUNCATE; the application exposes no mutation path. Event catalog:
+// docs/audit-events.md.
+model AuditEvent {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  actorUserId    String? // No FK: history must outlive the actor account
+  actorType      String // USER, CLIENT, SYSTEM, WEBHOOK, BOT (CHECK constraint)
+  action         String // e.g. invoice.sent — see docs/audit-events.md
+  entityType     String
+  entityId       String?
+  requestId      String? // Fastify request id; correlates with request logs
+  ip             String? // Truncated network prefix only (IPv4 /24, IPv6 /48)
+  metadata       Json         @default("{}")
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, createdAt, id])
+  @@index([organizationId, entityType, entityId, createdAt])
+  @@index([organizationId, action, createdAt])
+  @@index([organizationId, actorUserId, createdAt])
+  @@map("audit_events")
 }
 
 model TaskTemplate {

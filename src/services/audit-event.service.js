@@ -1,0 +1,221 @@
+// Append-only audit event log (issue #412). Event catalog and field rules:
+// docs/audit-events.md.
+//
+// `recordAuditEvent` is deliberately best-effort: it never throws into the
+// business action that emitted it. A failed write is logged (without the
+// metadata payload) so it can be alerted on, but the invoice still sends and
+// the password still changes. The database, not this module, guarantees that
+// a written event can never be altered or removed.
+import { isIP } from 'node:net';
+import defaultLogger from '../utils/logger.js';
+
+export const AUDIT_ACTOR_TYPES = Object.freeze(['USER', 'CLIENT', 'SYSTEM', 'WEBHOOK', 'BOT']);
+const ACTOR_TYPE_SET = new Set(AUDIT_ACTOR_TYPES);
+
+/**
+ * The closed catalog of actions. Adding an action means adding it here and to
+ * docs/audit-events.md; unknown actions are dropped (and logged) so the log
+ * never fills with ad-hoc names nobody can filter on.
+ */
+export const AUDIT_ACTIONS = Object.freeze({
+  'invoice.sent': 'invoice',
+  'invoice.paid': 'invoice',
+  'payment.recorded': 'invoice_payment',
+  'proposal.approved': 'proposal',
+  'contract.signed': 'contract',
+  'user.role_changed': 'user',
+  'user.deactivated': 'user',
+  'user.reactivated': 'user',
+  'auth.login_failed': 'user',
+  'auth.password_changed': 'user',
+  'api_key.created': 'api_key',
+  'api_key.revoked': 'api_key',
+  'settings.ai_provider_changed': 'settings',
+  'client_portal.document_deleted': 'attachment',
+});
+
+export const AUDIT_ENTITY_TYPES = Object.freeze([...new Set(Object.values(AUDIT_ACTIONS))]);
+
+const MAX_METADATA_KEYS = 20;
+const MAX_METADATA_STRING = 200;
+const MAX_ID_LENGTH = 191;
+// Keys that could carry credentials or personal data. Metadata is for ids,
+// enums, amounts and flags only; anything matching is dropped, not masked.
+const FORBIDDEN_METADATA_KEY = /pass|secret|token|key|auth|cookie|session|signature|sig_?hash|email|phone|address|name|card|iban|ssn|ip$|body|content|html/i;
+
+function boundedString(value, max = MAX_ID_LENGTH) {
+  if (value === undefined || value === null) return null;
+  const text = String(value);
+  return text.length > 0 ? text.slice(0, max) : null;
+}
+
+function expandIpv6(address) {
+  const [head, tail = ''] = address.split('::');
+  const headParts = head ? head.split(':') : [];
+  const tailParts = address.includes('::') && tail ? tail.split(':') : [];
+  const missing = 8 - headParts.length - tailParts.length;
+  const parts = address.includes('::')
+    ? [...headParts, ...Array(Math.max(missing, 0)).fill('0'), ...tailParts]
+    : headParts;
+  return parts.map((part) => part.toLowerCase().replace(/^0+(?=.)/, ''));
+}
+
+/**
+ * Reduce an address to its network prefix (IPv4 /24, IPv6 /48) so events can
+ * show "same network" without storing a personal identifier.
+ * @param {unknown} ip
+ * @returns {string | null}
+ */
+export function truncateIp(ip) {
+  if (typeof ip !== 'string') return null;
+  let address = ip.trim();
+  const mapped = address.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
+  if (mapped) address = mapped[1];
+  const version = isIP(address);
+  if (version === 4) {
+    const [a, b, c] = address.split('.');
+    return `${a}.${b}.${c}.0/24`;
+  }
+  if (version === 6) {
+    const zoneless = address.split('%')[0];
+    const [a, b, c] = expandIpv6(zoneless);
+    return `${a}:${b}:${c}::/48`;
+  }
+  return null;
+}
+
+/**
+ * Keep only flat, non-sensitive metadata: primitive values under safe keys,
+ * bounded in count and length.
+ * @param {unknown} metadata
+ * @returns {Record<string, string | number | boolean | null>}
+ */
+export function sanitizeAuditMetadata(metadata) {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return {};
+  /** @type {Record<string, string | number | boolean | null>} */
+  const clean = {};
+  for (const [key, value] of Object.entries(metadata)) {
+    if (Object.keys(clean).length >= MAX_METADATA_KEYS) break;
+    if (!/^[A-Za-z][A-Za-z0-9_]{0,39}$/.test(key) || FORBIDDEN_METADATA_KEY.test(key)) continue;
+    if (value === null || typeof value === 'boolean') clean[key] = value;
+    else if (typeof value === 'number' && Number.isFinite(value)) clean[key] = value;
+    else if (typeof value === 'string') clean[key] = value.slice(0, MAX_METADATA_STRING);
+    else if (value instanceof Date && !Number.isNaN(value.getTime())) clean[key] = value.toISOString();
+  }
+  return clean;
+}
+
+/** Map an authenticated principal's role to an audit actor type. */
+export function actorTypeForRole(role) {
+  if (role === 'CLIENT') return 'CLIENT';
+  if (role === 'BOT') return 'BOT';
+  return 'USER';
+}
+
+/**
+ * Derive the request-bound audit fields: the Fastify request id is the
+ * correlation id that also appears in request logs and error bodies.
+ * @param {any} request Fastify request
+ * @param {{ actorType?: string, actorUserId?: string | null }} [overrides]
+ */
+export function auditContextFromRequest(request, overrides = {}) {
+  const user = request?.user;
+  return {
+    organizationId: user?.organizationId ?? null,
+    actorUserId: overrides.actorUserId !== undefined ? overrides.actorUserId : (user?.id ?? null),
+    actorType: overrides.actorType ?? actorTypeForRole(user?.role),
+    requestId: request?.id ?? null,
+    ip: request?.ip ?? null,
+  };
+}
+
+async function resolveOrganizationId(prisma, event) {
+  if (event.organizationId) return event.organizationId;
+  if (event.ownerClientId) {
+    const client = await prisma.client.findUnique({
+      where: { id: event.ownerClientId },
+      select: { organizationId: true },
+    });
+    return client?.organizationId ?? null;
+  }
+  if (event.ownerInvoiceId) {
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: event.ownerInvoiceId },
+      select: { client: { select: { organizationId: true } } },
+    });
+    return invoice?.client?.organizationId ?? null;
+  }
+  return null;
+}
+
+/**
+ * Append one audit event. Never throws; resolves to the created row, or null
+ * when the event was rejected or could not be written.
+ *
+ * @param {any} prisma Prisma client (request-scoped inside tenant routes, so
+ *   organizationId is forced to the caller's tenant; raw on public/webhook
+ *   routes, where the owner is resolved from `ownerClientId`/`ownerInvoiceId`).
+ * @param {{
+ *   organizationId?: string | null, ownerClientId?: string | null, ownerInvoiceId?: string | null,
+ *   actorUserId?: string | null, actorType: string, action: string,
+ *   entityType?: string, entityId?: string | null, requestId?: string | null,
+ *   ip?: string | null, metadata?: Record<string, unknown>,
+ * }} event
+ * @param {{ logger?: { warn: Function, error: Function } }} [options]
+ */
+export async function recordAuditEvent(prisma, event, { logger = defaultLogger } = {}) {
+  const action = event?.action;
+  try {
+    const entityType = AUDIT_ACTIONS[action];
+    if (!entityType) {
+      logger.warn({ auditAction: action }, 'Audit event rejected: unknown action');
+      return null;
+    }
+    if (!ACTOR_TYPE_SET.has(event.actorType)) {
+      logger.warn({ auditAction: action, actorType: event.actorType }, 'Audit event rejected: unknown actor type');
+      return null;
+    }
+    const organizationId = await resolveOrganizationId(prisma, event);
+    if (!organizationId) {
+      logger.warn({ auditAction: action }, 'Audit event rejected: no owning organization');
+      return null;
+    }
+    return await prisma.auditEvent.create({
+      data: {
+        organizationId,
+        actorUserId: boundedString(event.actorUserId),
+        actorType: event.actorType,
+        action,
+        entityType: event.entityType ?? entityType,
+        entityId: boundedString(event.entityId),
+        requestId: boundedString(event.requestId, 100),
+        ip: truncateIp(event.ip),
+        metadata: sanitizeAuditMetadata(event.metadata),
+      },
+    });
+  } catch (err) {
+    logger.error({ err: { message: err?.message, code: err?.code }, auditAction: action }, 'Audit event write failed');
+    return null;
+  }
+}
+
+/**
+ * Convenience wrapper for route handlers: request context + event fields.
+ * @param {any} prisma
+ * @param {any} request
+ * @param {Parameters<typeof recordAuditEvent>[1]} event
+ * @param {Parameters<typeof recordAuditEvent>[2]} [options]
+ */
+export function recordRequestAuditEvent(prisma, request, event, options) {
+  /** @type {Record<string, unknown>} */
+  let merged;
+  try {
+    merged = { ...auditContextFromRequest(request, event) };
+  } catch {
+    merged = {};
+  }
+  for (const [field, value] of Object.entries(event || {})) {
+    if (value !== undefined) merged[field] = value;
+  }
+  return recordAuditEvent(prisma, /** @type {any} */ (merged), options);
+}
