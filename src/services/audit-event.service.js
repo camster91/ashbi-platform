@@ -29,7 +29,7 @@ export const AUDIT_EVENT_CATALOG = Object.freeze({
   'user.deactivated': { entityType: 'user', metadata: ['fromActive', 'toActive'] },
   'user.reactivated': { entityType: 'user', metadata: ['fromActive', 'toActive'] },
   'auth.login_failed': { entityType: 'user', metadata: ['portal', 'accountActive'] },
-  'auth.password_changed': { entityType: 'user', metadata: ['method', 'sessionsRevoked'] },
+  'auth.password_changed': { entityType: 'user', metadata: ['method', 'sessionsRevoked', 'apiKeysRevoked'] },
   'auth.mfa_enabled': { entityType: 'user', metadata: ['recoveryCodesIssued'] },
   'auth.mfa_disabled': { entityType: 'user', metadata: ['method'] },
   'auth.mfa_reset': { entityType: 'user', metadata: ['wasEnabled'] },

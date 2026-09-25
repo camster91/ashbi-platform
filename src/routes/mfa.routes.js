@@ -96,6 +96,33 @@ async function verifyPassword(password, hash) {
   return bcrypt.compare(password, hash);
 }
 
+// Per-account budget for step-up password attempts (#416 review). The route's
+// per-IP rate limit alone would let a stolen session cookie spread password
+// guesses across many addresses; this caps failures per account. It is kept
+// in process memory, so each API instance enforces its own budget.
+export const REAUTH_PASSWORD_MAX_FAILURES = 10;
+const REAUTH_PASSWORD_WINDOW_MS = 15 * 60 * 1000;
+const reauthPasswordFailures = new Map();
+
+function reauthPasswordBudgetExceeded(userId, now = Date.now()) {
+  const entry = reauthPasswordFailures.get(userId);
+  if (!entry || entry.resetAt <= now) return false;
+  return entry.count >= REAUTH_PASSWORD_MAX_FAILURES;
+}
+
+function recordReauthPasswordFailure(userId, now = Date.now()) {
+  const entry = reauthPasswordFailures.get(userId);
+  if (!entry || entry.resetAt <= now) {
+    reauthPasswordFailures.set(userId, { count: 1, resetAt: now + REAUTH_PASSWORD_WINDOW_MS });
+  } else {
+    entry.count += 1;
+  }
+}
+
+export function resetReauthPasswordFailures() {
+  reauthPasswordFailures.clear();
+}
+
 function publicUser(user) {
   return { id: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId };
 }
@@ -253,7 +280,8 @@ export default async function mfaRoutes(fastify) {
   // privileged actions (docs/privileged-actions.md). Accounts with two-factor
   // authentication must use a TOTP or recovery code (drawing on the same
   // per-account attempt budget and lockout as sign-in); others use their
-  // password (bounded by this route's per-IP rate limit, as /login is).
+  // password (bounded by this route's per-IP rate limit and a per-account
+  // failure budget).
   fastify.post('/reauth', {
     config: { rateLimit: { max: 20, timeWindow: '15 minutes', keyGenerator: (req) => req.ip } },
     onRequest: [fastify.authenticate],
@@ -287,10 +315,15 @@ export default async function mfaRoutes(fastify) {
       if (!password) {
         return reply.status(400).send({ error: 'Enter your current password' });
       }
+      if (reauthPasswordBudgetExceeded(user.id)) {
+        return reply.status(429).send({ error: 'Too many attempts. Try again in a few minutes.', code: 'REAUTH_LOCKED' });
+      }
       if (!(await verifyPassword(password, user.password))) {
+        recordReauthPasswordFailure(user.id);
         void auditReauthFailure(request.prisma, request, user, 'invalid_password');
         return reply.status(400).send({ error: 'Current password is incorrect' });
       }
+      reauthPasswordFailures.delete(user.id);
       method = 'password';
     }
 

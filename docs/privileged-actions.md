@@ -25,7 +25,7 @@ also have re-authenticated **in the same session within the last 10 minutes**
 | Account | Body | Checked with |
 | --- | --- | --- |
 | Two-factor enabled | `{ "code": "123456" }` or `{ "code": "abcd-efgh-jkmn-pqrs" }` (recovery code) | `verifySecondFactor`: the same per-account attempt budget and 15-minute lockout as sign-in. A password is refused with `400 MFA_CODE_REQUIRED`. A recovery code is consumed, revokes the account's other sessions, and reissues this session's cookie. |
-| Password only | `{ "password": "…" }` | bcrypt; the route has the same per-IP limit as `/login` (20 per 15 minutes). |
+| Password only | `{ "password": "…" }` | bcrypt; the route has the same per-IP limit as `/login` (20 per 15 minutes), plus a per-account budget of 10 failures per 15 minutes (`429 REAUTH_LOCKED`). |
 
 On success the response sets the `reauth` cookie: httpOnly, `sameSite=strict`,
 `secure` in production, path `/`, max-age 600 seconds. Its value is an HS256
@@ -131,13 +131,37 @@ Scope catalogue, derived from the bridge routes:
 
 ### Existing keys
 
-Migration `20260925140000_api_key_scopes_revocation` changes no key's
-behaviour:
+Migration `20260925140000_api_key_scopes_revocation` keeps every existing
+key's access, and gives keys without an expiry a sunset date:
 
 - every existing key is backfilled with both scopes, which is exactly the
   access every key had before scopes existed;
-- keys created without an expiry keep `expiresAt = NULL` and keep working. The
-  settings list flags them as **No expiry** (`noExpiry: true` in
-  `GET /api/api-keys`) so the owner can replace them;
+- active keys created without an expiry get `expiresAt = migration time + 90
+  days` (service credentials must expire or rotate). They keep working until
+  then; the settings list shows the date so the owner can replace them in
+  time. **Operator action:** after deploying, tell owners of such keys (for
+  example the ChatGPT connector) to rotate them before that date. The
+  **No expiry** flag (`noExpiry: true` in `GET /api/api-keys`) remains for
+  any key that still has no expiry;
 - keys already revoked (`isActive = false`) get `revokedAt` set to their last
   update time.
+
+## Related revocations
+
+- An administrator password reset (`POST /api/team/:id/reset-password`) ends
+  the member's sessions and revokes their active API keys. Whoever held the
+  old password could otherwise keep access through a key created with it.
+- A role change through `PUT /api/team/:id` ends the member's sessions, because
+  `adminOnly` trusts the role carried in the session token.
+
+## Known limitations
+
+- Two-factor re-authentication shares the sign-in attempt budget. Someone
+  holding only a stolen session cookie can therefore use bad codes to lock the
+  real user's two-factor sign-in for 15 minutes. That is the same trade-off as
+  sign-in itself; the lockout blocks guessing and is recorded in the audit log.
+- The per-account password budget for re-authentication (10 failures per 15
+  minutes) is kept in process memory, so each API instance enforces its own.
+- Session tokens carry no `jti`, so a re-authentication is bound to the
+  session's issue time to the second; two sessions of the same user issued in
+  the same second share a binding.

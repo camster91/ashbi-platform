@@ -13,7 +13,7 @@ import { Writable } from 'node:stream';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'unit-test-secret-at-least-32-characters';
 process.env.CREDENTIALS_KEY = process.env.CREDENTIALS_KEY || 'unit-test-credentials-key';
 
-const { default: mfaRoutes } = await import('../../routes/mfa.routes.js');
+const { default: mfaRoutes, REAUTH_PASSWORD_MAX_FAILURES, resetReauthPasswordFailures } = await import('../../routes/mfa.routes.js');
 const { default: apiKeyRoutes, authenticateApiKey } = await import('../../routes/api-key.routes.js');
 const { default: aiBridgeRoutes } = await import('../../routes/ai-bridge.routes.js');
 const { isCurrentUserSession, signUserSession } = await import('../../auth/session.js');
@@ -164,7 +164,7 @@ function createKey(app, cookies, payload = { name: 'CI', scopes: ['ai_bridge:rea
   return app.inject({ method: 'POST', url: '/api/api-keys', cookies, payload });
 }
 
-beforeEach(() => resetReauthFailureAuditThrottle());
+beforeEach(() => { resetReauthFailureAuditThrottle(); resetReauthPasswordFailures(); });
 
 describe('POST /api/auth/reauth', () => {
   it('issues a short-lived, httpOnly, sameSite=strict reauth cookie and audits the method', async (t) => {
@@ -220,14 +220,33 @@ describe('POST /api/auth/reauth', () => {
   });
 
   it('rate-limits password attempts per IP like /login', async (t) => {
-    const db = fakePrisma([makeUser()]);
+    // Spread over several accounts so only the per-IP limit can trip.
+    const users = Array.from({ length: 3 }, (_, i) => makeUser({ id: `user-${i + 1}`, email: `u${i}@agency.test` }));
+    const db = fakePrisma(users);
     const app = await buildApp(t, db);
-    const token = sessionToken(app, db.users[0]);
     let last;
     for (let i = 0; i < 21; i += 1) {
+      const token = sessionToken(app, users[i % users.length]);
       last = await app.inject({ method: 'POST', url: '/api/auth/reauth', cookies: { token }, payload: { password: 'wrong-password' } });
     }
     assert.equal(last.statusCode, 429);
+    assert.notEqual(last.json().code, 'REAUTH_LOCKED');
+  });
+
+  it('caps password failures per account even across many IPs', async (t) => {
+    const db = fakePrisma([makeUser()]);
+    const app = await buildApp(t, db);
+    const token = sessionToken(app, db.users[0]);
+    const attempt = (password, i) => app.inject({
+      method: 'POST', url: '/api/auth/reauth', cookies: { token }, payload: { password }, remoteAddress: `198.51.100.${i}`,
+    });
+    for (let i = 0; i < REAUTH_PASSWORD_MAX_FAILURES; i += 1) {
+      assert.equal((await attempt('wrong-password', i)).statusCode, 400);
+    }
+    const locked = await attempt(PASSWORD, 200);
+    assert.equal(locked.statusCode, 429, 'even the right password is refused once the budget is spent');
+    assert.equal(locked.json().code, 'REAUTH_LOCKED');
+    assert.equal(cookieFrom(locked, REAUTH_COOKIE), undefined);
   });
 
   it('requires a TOTP or recovery code, not the password, when two-factor is on', async (t) => {

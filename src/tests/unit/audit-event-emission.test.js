@@ -282,11 +282,16 @@ test('signing a contract emits contract.signed without the signer name', async (
 test('team changes emit role, deactivation and password-reset events only on real transitions', async (t) => {
   const audit = auditStore();
   let stored = { id: 'user-2', role: 'STAFF', isActive: true, name: 'Sam', email: 's@x.test', skills: '[]', capacity: 100 };
+  const updates = [];
+  const keyRevocations = [];
   const app = await buildApp(t, teamRoutes, {
     auditEvent: audit,
     user: {
       findUnique: async () => ({ role: stored.role, isActive: stored.isActive }),
-      update: async ({ data }) => { stored = { ...stored, ...data }; return stored; },
+      update: async ({ data }) => { updates.push(data); stored = { ...stored, ...data }; return stored; },
+    },
+    apiKey: {
+      updateMany: async ({ where, data }) => { keyRevocations.push({ where, data }); return { count: 2 }; },
     },
   });
   const cookies = reauthCookies(ADMIN);
@@ -298,8 +303,14 @@ test('team changes emit role, deactivation and password-reset events only on rea
   await app.inject({ method: 'PUT', url: '/user-2', cookies, payload: { isActive: true } });
   const reset = await app.inject({ method: 'POST', url: '/user-2/reset-password', cookies, payload: { newPassword: 'a-new-password-1' } });
   assert.equal(reset.statusCode, 200, reset.body);
-  // An admin password reset signs the member out of every existing session.
-  assert.deepEqual(stored.sessionVersion, { increment: 1 });
+  // A role change and an admin password reset each sign the member out of
+  // every session; the reset also revokes the member's API keys.
+  assert.equal(updates.filter((data) => data.sessionVersion).length, 2, 'role change + password reset');
+  assert.deepEqual(updates.find((data) => data.role === 'ADMIN').sessionVersion, { increment: 1 });
+  assert.equal(updates.find((data) => data.name === 'Sam B').sessionVersion, undefined, 'a profile edit keeps sessions');
+  assert.deepEqual(keyRevocations[0].where, { userId: 'user-2', isActive: true });
+  assert.equal(keyRevocations[0].data.isActive, false);
+  assert.ok(keyRevocations[0].data.revokedAt instanceof Date);
   assert.deepEqual(audit.events.map((event) => [event.action, event.entityId]), [
     ['user.role_changed', 'user-2'],
     ['user.deactivated', 'user-2'],
@@ -307,7 +318,7 @@ test('team changes emit role, deactivation and password-reset events only on rea
     ['auth.password_changed', 'user-2'],
   ]);
   assert.deepEqual(audit.events[0].metadata, { fromRole: 'STAFF', toRole: 'ADMIN' });
-  assert.deepEqual(audit.events[3].metadata, { method: 'admin_reset' });
+  assert.deepEqual(audit.events[3].metadata, { method: 'admin_reset', apiKeysRevoked: 2 });
   assert.doesNotMatch(JSON.stringify(audit.events), /a-new-password-1/);
 });
 
