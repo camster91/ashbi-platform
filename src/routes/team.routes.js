@@ -37,10 +37,15 @@ export default async function teamRoutes(fastify) {
       ]
     });
 
+    // MFA state is security posture: only admins (who can reset it) see it.
+    const isAdmin = request.user.role === 'ADMIN';
     const now = Date.now();
-    return team.map(({ mfaLockedUntil, ...member }) => ({
+    return team.map(({ mfaLockedUntil, mfaEnabled, ...member }) => ({
       ...member,
-      mfaLocked: Boolean(mfaLockedUntil && new Date(mfaLockedUntil).getTime() > now),
+      ...(isAdmin ? {
+        mfaEnabled,
+        mfaLocked: Boolean(mfaLockedUntil && new Date(mfaLockedUntil).getTime() > now),
+      } : {}),
       skills: JSON.parse(member.skills),
       activeThreads: member._count.assignedThreads,
       activeTasks: member._count.assignedTasks

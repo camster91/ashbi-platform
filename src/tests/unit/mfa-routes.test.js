@@ -521,3 +521,63 @@ describe('MFA admin reset', () => {
     assert.equal(target.mfaEnabled, true);
   });
 });
+
+describe('MFA hardening follow-ups', () => {
+  it('draws enrollment confirmation guesses from the per-account budget', async (t) => {
+    const db = fakePrisma([makeUser()]);
+    const app = await buildApp(t, db);
+    const cookies = sessionCookie(app, db.users[0]);
+    const { secret } = (await app.inject({ method: 'POST', url: '/mfa/enroll', cookies, payload: { password: PASSWORD } })).json();
+
+    const responses = await Promise.all(Array.from({ length: 12 }, (_, i) => app.inject({
+      method: 'POST', url: '/mfa/confirm', cookies, remoteAddress: `10.2.0.${i + 1}`, payload: { code: wrongCode(secret) },
+    })));
+    const evaluated = responses.filter((r) => r.statusCode === 400).length;
+    assert.equal(evaluated, MFA_MAX_FAILED_ATTEMPTS - 1);
+    assert.equal(responses.filter((r) => r.statusCode === 429).length, 12 - evaluated);
+
+    const correctButLocked = await app.inject({ method: 'POST', url: '/mfa/confirm', cookies, payload: { code: totp(secret) } });
+    assert.equal(correctButLocked.statusCode, 429);
+    assert.equal(db.users[0].mfaEnabled, false);
+  });
+
+  async function adminWithMfa(t) {
+    const db = fakePrisma([
+      makeUser({ id: 'admin-1', email: 'admin@agency.test', role: 'ADMIN' }),
+      makeUser({ id: 'user-1', email: 'staff@agency.test', role: 'STAFF', mfaEnabled: true, mfaSecret: 'x' }),
+    ]);
+    const app = await buildApp(t, db);
+    const admin = db.users[0];
+    const cookies = sessionCookie(app, admin);
+    const { secret } = (await app.inject({ method: 'POST', url: '/mfa/enroll', cookies, payload: { password: PASSWORD } })).json();
+    const confirmed = await app.inject({ method: 'POST', url: '/mfa/confirm', cookies, payload: { code: totp(secret) } });
+    admin.mfaLastUsedStep = totpStep() - 2;
+    return { db, app, secret, recoveryCodes: confirmed.json().recoveryCodes, cookies: { token: tokenCookie(confirmed).value } };
+  }
+
+  it("requires the acting admin's own second factor when they use MFA", async (t) => {
+    const { db, app, secret, cookies } = await adminWithMfa(t);
+    const url = '/mfa/admin/users/user-1/reset';
+
+    const missing = await app.inject({ method: 'POST', url, cookies, payload: { password: PASSWORD } });
+    assert.equal(missing.statusCode, 400);
+    assert.equal(missing.json().code, 'MFA_CODE_REQUIRED');
+    const wrong = await app.inject({ method: 'POST', url, cookies, payload: { password: PASSWORD, code: wrongCode(secret) } });
+    assert.equal(wrong.statusCode, 400);
+    assert.equal(db.users[1].mfaEnabled, true, 'nothing reset without the admin factor');
+
+    const ok = await app.inject({ method: 'POST', url, cookies, payload: { password: PASSWORD, code: totp(secret) } });
+    assert.equal(ok.statusCode, 200, ok.body);
+    assert.equal(db.users[1].mfaEnabled, false);
+  });
+
+  it("accepts the admin's recovery code and keeps the admin signed in", async (t) => {
+    const { db, app, recoveryCodes, cookies } = await adminWithMfa(t);
+    const response = await app.inject({ method: 'POST', url: '/mfa/admin/users/user-1/reset', cookies, payload: { password: PASSWORD, recoveryCode: recoveryCodes[0] } });
+    assert.equal(response.statusCode, 200, response.body);
+    const renewed = tokenCookie(response);
+    assert.ok(renewed, 'recovery-code use revokes other sessions but reissues this one');
+    assert.equal(await isCurrentUserSession(db.client, app.jwt.verify(renewed.value)), true);
+    assert.equal(db.users[0].mfaRecoveryCodes.length, 9);
+  });
+});

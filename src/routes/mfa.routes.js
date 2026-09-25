@@ -14,6 +14,7 @@ import {
   isMfaEligible,
   isMfaRequired,
   MFA_USER_SELECT,
+  reserveCodeAttempt,
   mfaStatus,
   startEnrollment,
   verifyMfaChallenge,
@@ -149,8 +150,14 @@ export default async function mfaRoutes(fastify) {
     if (user.mfaEnabled) return reply.status(409).send({ error: 'Two-factor authentication is already enabled' });
     if (!user.mfaSecret) return reply.status(400).send({ error: 'Start enrollment before confirming a code' });
 
+    // Confirmation guesses draw on the same per-account budget as sign-in,
+    // not only the per-IP rate limit.
+    const reservation = await reserveCodeAttempt(request.prisma, user.id);
+    if (reservation.locked) return secondFactorFailure(reply, { reason: 'locked' }, 400);
     const claim = await claimTotpCode(request.prisma, user, request.body.code);
     if (claim !== 'ok') {
+      const failure = await reservation.fail('invalid');
+      if (failure.reason === 'locked') return secondFactorFailure(reply, failure, 400);
       return reply.status(400).send({ error: 'That code did not match. Check the time on your device and try the current code.' });
     }
 
@@ -249,10 +256,7 @@ export default async function mfaRoutes(fastify) {
     onRequest: [fastify.authenticate],
     preHandler: [validateBody(mfaAdminResetSchema)],
   }, async (request, reply) => {
-    const admin = await request.prisma.user.findUnique({
-      where: { id: request.user.id },
-      select: { id: true, role: true, isActive: true, organizationId: true, password: true },
-    });
+    const admin = await request.prisma.user.findUnique({ where: { id: request.user.id }, select: MFA_USER_SELECT });
     if (!admin || !admin.isActive) return reply.status(401).send({ error: 'Unauthorized' });
     if (admin.role !== 'ADMIN') return reply.status(403).send({ error: 'Admin access required' });
 
@@ -262,6 +266,19 @@ export default async function mfaRoutes(fastify) {
     }
     if (!(await verifyPassword(request.body.password, admin.password))) {
       return reply.status(400).send({ error: 'Current password is incorrect' });
+    }
+    // An admin who protects their own account with MFA must prove it here
+    // too, so a hijacked session plus a phished password cannot strip
+    // everyone else's second factor.
+    if (isMfaRequired(admin)) {
+      const { code, recoveryCode } = request.body;
+      if (!code && !recoveryCode) {
+        return reply.status(400).send({ error: 'Enter your authentication code or a recovery code', code: 'MFA_CODE_REQUIRED' });
+      }
+      const factor = await verifySecondFactor(request.prisma, admin, { code, recoveryCode });
+      if (!factor.ok) return secondFactorFailure(reply, factor, 400);
+      // A recovery code revokes the admin's other sessions; keep this one.
+      if (factor.sessionVersion !== admin.sessionVersion) reissueSession(reply, admin, factor.sessionVersion);
     }
     // /api/auth bypasses tenancy scoping, so the organization check is explicit.
     // Another organization's user is indistinguishable from a missing one.

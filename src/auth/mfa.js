@@ -234,22 +234,36 @@ export async function claimTotpCode(prisma, user, code, { nowMs = Date.now(), en
  * win and every other session is revoked). Returns
  * { ok, method, reason, recoveryCodesRemaining, sessionVersion }.
  */
-export async function verifySecondFactor(prisma, user, { code, recoveryCode } = {}, { nowMs = Date.now() } = {}) {
-  const attempt = await reserveAttempt(prisma, user.id, nowMs);
-  if (attempt === null) return { ok: false, reason: 'locked' };
+/**
+ * Reserve one attempt from the per-account budget before evaluating a code.
+ * Returns { locked: true } when no evaluation may happen, otherwise
+ * { locked: false, fail(reason) } where fail() locks the account when this
+ * was the last permitted attempt and returns the failure result.
+ */
+export async function reserveCodeAttempt(prisma, userId, { nowMs = Date.now() } = {}) {
+  const attempt = await reserveAttempt(prisma, userId, nowMs);
+  if (attempt === null) return { locked: true };
   if (attempt > MFA_MAX_FAILED_ATTEMPTS) {
     // Budget already spent by concurrent requests: lock without evaluating.
-    await lockAccount(prisma, user.id, nowMs);
-    return { ok: false, reason: 'locked' };
+    await lockAccount(prisma, userId, nowMs);
+    return { locked: true };
   }
-
-  const fail = async (reason) => {
-    if (attempt >= MFA_MAX_FAILED_ATTEMPTS) {
-      await lockAccount(prisma, user.id, nowMs);
-      return { ok: false, reason: 'locked' };
-    }
-    return { ok: false, reason };
+  return {
+    locked: false,
+    fail: async (reason) => {
+      if (attempt >= MFA_MAX_FAILED_ATTEMPTS) {
+        await lockAccount(prisma, userId, nowMs);
+        return { ok: false, reason: 'locked' };
+      }
+      return { ok: false, reason };
+    },
   };
+}
+
+export async function verifySecondFactor(prisma, user, { code, recoveryCode } = {}, { nowMs = Date.now() } = {}) {
+  const reservation = await reserveCodeAttempt(prisma, user.id, { nowMs });
+  if (reservation.locked) return { ok: false, reason: 'locked' };
+  const { fail } = reservation;
 
   if (recoveryCode) {
     const hash = findRecoveryCodeHash(user.mfaRecoveryCodes, recoveryCode);

@@ -54,7 +54,10 @@ export const mfaEnrollSchema = z.object({ password: z.string().min(1).max(128) }
 
 export const mfaConfirmSchema = z.object({ code: totpCode });
 
-export const mfaAdminResetSchema = z.object({ password: z.string().min(1).max(128) });
+export const mfaAdminResetSchema = z.object({
+  password: z.string().min(1).max(128),
+  ...secondFactor,
+}).refine((value) => !(value.code && value.recoveryCode), exactlyOneFactorMessage);
 
 export const mfaDisableSchema = z.object({
   password: z.string().min(1).max(128),
