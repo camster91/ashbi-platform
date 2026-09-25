@@ -81,8 +81,7 @@ built-in slow-state notice.
 **Sizes:** `xs`, `sm`, `md`, `lg`, `xl`
 
 `danger` and `destructive` are aliases. An unknown variant falls back to
-`primary`, and an unknown size falls back to `md`. `ConfirmDialog` relies on
-this when it passes `variant="default"`.
+`primary`, and an unknown size falls back to `md`.
 
 | Prop | Type / values | Default | Notes |
 |---|---|---|---|
@@ -306,7 +305,7 @@ A confirmation built on `Modal` (`size="sm"`), `ModalFooter` and `Button`.
 | `onConfirm`, `onCancel` | function | none | `onCancel` is also called on Escape and on a backdrop click |
 | `pending` | boolean | `false` | Blocks closing, hides the close button and puts the confirm button in its loading state |
 | `error` | node | none | Rendered with `role="alert"` |
-| `destructive` | boolean | `true` | Confirm button uses `destructive`, or falls back to `primary` when false |
+| `destructive` | boolean | `true` | Confirm button uses `destructive`, or `primary` when false |
 | `children` | node | none | Extra content under the description |
 
 Accessibility: inherits Modal's focus trap and focus restore. While `pending`,
@@ -408,7 +407,6 @@ actions.
 | `description` | string | `'There are no items to display at the moment.'` | |
 | `actionLabel` | string | none | Renders a primary `Button` that calls `onAction` |
 | `onAction` | function | none | |
-| `actionHref` | string | none | Accepted but currently unused |
 | `secondaryAction` | node | none | Rendered next to the primary action |
 | `illustration` | node | none | Replaces the icon tile |
 | `className` | string | none | |
@@ -625,12 +623,11 @@ refactored.
 | `.cp-login-logo` | Auth layout, not a primitive |
 | `.cp-login-title` | `CardTitle` |
 | `.cp-login-subtitle` | `CardDescription` |
+| `.cp-label` | Form label utilities (`block text-sm font-medium`) |
 | `.cp-login-form` | Form layout (`flex flex-col gap-3`) |
 | `.cp-login-sent` | `Alert variant="success"` |
 
-`.cp-label` is used in the portal JSX (`ClientPortal.jsx`, `ProjectDetail.jsx`)
-but `portal.css` does not define it, so those labels get no portal styling. It
-should converge to the SPA's form label utilities (`text-sm font-medium`).
+
 
 The portal's accessibility rules are:
 

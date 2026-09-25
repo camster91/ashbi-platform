@@ -24,7 +24,6 @@ export default function EmptyState({
   title = 'No items found',
   description = 'There are no items to display at the moment.',
   actionLabel,
-  actionHref,
   onAction,
   secondaryAction,
   className,

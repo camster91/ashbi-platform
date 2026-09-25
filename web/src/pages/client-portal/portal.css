@@ -16,6 +16,10 @@
    }
    .cp-tab:focus-visible { outline: 3px solid #2e2958; outline-offset: -3px; }
 
+  .cp-label {
+    display: block; margin: 0 0 0.375rem; font-size: 0.875rem; font-weight: 500; color: #2e2958;
+  }
+
   .cp-input {
     width: 100%; padding: 0.625rem 0.875rem; border: 1.5px solid #918c9f; border-radius: 10px;
     font-size: 0.875rem; color: #2e2958; background: #ffffff; outline: none;
