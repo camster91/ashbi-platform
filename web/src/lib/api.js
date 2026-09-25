@@ -37,6 +37,33 @@ export function setApiErrorCallback(callback) {
   onApiError = callback;
 }
 
+/**
+ * Step-up re-authentication (#416, docs/privileged-actions.md). Privileged
+ * routes answer 403 { code: 'REAUTH_REQUIRED' } unless the user confirmed
+ * their password or two-factor code in the last few minutes. The handler set
+ * here (ReauthProvider) prompts for it and resolves true once
+ * /auth/reauth succeeded, or false when the user cancels; the original
+ * request is then retried exactly once.
+ */
+export const REAUTH_REQUIRED = 'REAUTH_REQUIRED';
+let onReauthRequired = null;
+let pendingReauth = null;
+
+export function setReauthHandler(handler) {
+  onReauthRequired = handler;
+}
+
+// Concurrent requests that hit REAUTH_REQUIRED share one prompt.
+function requestReauth(endpoint) {
+  if (!pendingReauth) {
+    pendingReauth = Promise.resolve()
+      .then(() => onReauthRequired({ endpoint }))
+      .catch(() => false)
+      .finally(() => { pendingReauth = null; });
+  }
+  return pendingReauth;
+}
+
 function dispatchApiError(error, endpoint, retry) {
   console.group('%cAPI Error', 'color: #ef4444; font-weight: bold;');
   console.error('Endpoint:', endpoint);
@@ -120,6 +147,13 @@ async function request(endpoint, options = {}) {
         response.status,
         data
       );
+      if (response.status === 403 && data.code === REAUTH_REQUIRED && onReauthRequired && !options.reauthRetried) {
+        if (await requestReauth(endpoint)) {
+          return request(endpoint, { ...options, reauthRetried: true });
+        }
+        // Cancelled by the user: no global error toast.
+        throw error;
+      }
       if (!silent) {
         dispatchApiError(error, endpoint, retry);
       }
@@ -189,6 +223,10 @@ export const api = {
     request(`/auth/mfa/admin/users/${encodeURIComponent(userId)}/reset`, { method: 'POST', body: { password, code, recoveryCode } }),
   confirmMfaEnrollment: (code) =>
     request('/auth/mfa/confirm', { method: 'POST', body: { code } }),
+  // Step-up re-authentication: { password } or { code } (TOTP or recovery
+  // code). Silent so a wrong password never triggers the global sign-out.
+  reauth: ({ password, code }) =>
+    request('/auth/reauth', { method: 'POST', body: password ? { password } : { code }, silent: true }),
   disableMfa: ({ password, code, recoveryCode }) =>
     request('/auth/mfa/disable', { method: 'POST', body: { password, code, recoveryCode } }),
 

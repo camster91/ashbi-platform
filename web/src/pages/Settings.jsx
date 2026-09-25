@@ -356,9 +356,20 @@ function AIModelSection() {
   );
 }
 
-function ApiKeysSection() {
+// Mirrors API_KEY_SCOPES in src/auth/api-key-scopes.js (the server rejects
+// anything else). Labels are for the settings UI only.
+const API_KEY_SCOPE_OPTIONS = [
+  { value: 'ai_bridge:read', label: 'Read workspace (AI chat)', description: 'Ask the AI bridge about projects, tasks, clients and retainers.' },
+  { value: 'ai_bridge:actions', label: 'Workflow actions', description: 'Prepare and confirm tasks, calendar events and Slack messages.' },
+];
+const API_KEY_SCOPE_LABELS = Object.fromEntries(API_KEY_SCOPE_OPTIONS.map((option) => [option.value, option.label]));
+const API_KEY_EXPIRY_OPTIONS = [30, 90, 180, 365];
+
+export function ApiKeysSection() {
   const queryClient = useQueryClient();
   const [newKeyName, setNewKeyName] = useState('');
+  const [newKeyScopes, setNewKeyScopes] = useState(['ai_bridge:read']);
+  const [newKeyExpiryDays, setNewKeyExpiryDays] = useState(90);
   const [createdKey, setCreatedKey] = useState(null);
   const [keyToRevoke, setKeyToRevoke] = useState(null);
 
@@ -374,10 +385,12 @@ function ApiKeysSection() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (name) => api.createApiKey({ name }),
+    mutationFn: (name) => api.createApiKey({ name, scopes: newKeyScopes, expiresInDays: newKeyExpiryDays }),
     onSuccess: (data) => {
       setCreatedKey(data.key);
       setNewKeyName('');
+      setNewKeyScopes(['ai_bridge:read']);
+      setNewKeyExpiryDays(90);
       queryClient.invalidateQueries({ queryKey: ['api-keys'] });
     },
   });
@@ -407,21 +420,62 @@ function ApiKeysSection() {
           value={newKeyName}
           onChange={(e) => setNewKeyName(e.target.value)}
           placeholder="Key name, e.g. OpenClaw Bot"
+          aria-label="API key name"
           className="flex-1 px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/20"
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && newKeyName.trim()) {
+            if (e.key === 'Enter' && newKeyName.trim() && newKeyScopes.length > 0) {
               createMutation.mutate(newKeyName.trim());
             }
           }}
         />
         <Button
           onClick={() => createMutation.mutate(newKeyName.trim())}
-          disabled={!newKeyName.trim() || createMutation.isPending}
+          disabled={!newKeyName.trim() || newKeyScopes.length === 0 || createMutation.isPending}
           leftIcon={<Plus className="w-4 h-4" />}
           loading={createMutation.isPending}
         >
           Create Key
         </Button>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <fieldset>
+          <legend className="text-sm font-medium mb-1">Scopes</legend>
+          <div className="space-y-1">
+            {API_KEY_SCOPE_OPTIONS.map((option) => (
+              <label key={option.value} className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={newKeyScopes.includes(option.value)}
+                  onChange={(e) => setNewKeyScopes((current) => (e.target.checked
+                    ? [...new Set([...current, option.value])]
+                    : current.filter((scope) => scope !== option.value)))}
+                />
+                <span>
+                  {option.label}
+                  <span className="block text-xs text-muted-foreground">{option.description}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+          {newKeyScopes.length === 0 && (
+            <p className="text-xs text-destructive mt-1">Choose at least one scope.</p>
+          )}
+        </fieldset>
+        <div>
+          <label htmlFor="api-key-expiry" className="block text-sm font-medium mb-1">Expires after</label>
+          <select
+            id="api-key-expiry"
+            value={newKeyExpiryDays}
+            onChange={(e) => setNewKeyExpiryDays(Number(e.target.value))}
+            className="w-full px-3 py-2 text-sm bg-muted rounded-lg border-0 focus:outline-none focus:ring-2 focus:ring-primary/20"
+          >
+            {API_KEY_EXPIRY_OPTIONS.map((days) => (
+              <option key={days} value={days}>{days === 365 ? '1 year' : `${days} days`}</option>
+            ))}
+          </select>
+          <p className="text-xs text-muted-foreground mt-1">You will be asked to confirm your password or two-factor code.</p>
+        </div>
       </div>
 
       {/* Show newly created key (only shown once) */}
@@ -468,11 +522,23 @@ function ApiKeysSection() {
           {keysData.keys.map((key) => (
             <div key={key.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
               <div>
-                <p className="text-sm font-medium">{key.name}</p>
+                <p className="text-sm font-medium">
+                  {key.name}
+                  {!key.expiresAt && (
+                    <span className="ml-2 inline-flex rounded bg-amber-100 dark:bg-amber-900/30 px-1.5 py-0.5 text-xs font-medium text-amber-800 dark:text-amber-300">
+                      No expiry
+                    </span>
+                  )}
+                </p>
                 <p className="text-xs text-muted-foreground">
                   Created {new Date(key.createdAt).toLocaleDateString('en-CA')}
                   {key.lastUsedAt && ` · Last used ${new Date(key.lastUsedAt).toLocaleDateString('en-CA')}`}
                   {key.expiresAt && ` · Expires ${new Date(key.expiresAt).toLocaleDateString('en-CA')}`}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Scopes: {(key.scopes || []).length
+                    ? key.scopes.map((scope) => API_KEY_SCOPE_LABELS[scope] || scope).join(', ')
+                    : 'none'}
                 </p>
               </div>
               <button

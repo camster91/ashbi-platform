@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import ErrorBoundary from './components/ErrorBoundary';
+import { ReauthProvider } from './components/ReauthDialog';
 import { setUnauthorizedCallback, setApiErrorCallback } from './lib/api';
 import { applyTheme, getInitialTheme } from './lib/theme';
 import { preloadInitialRoute } from './lib/initial-route';
@@ -88,7 +89,10 @@ preloadInitialRoute(window.location.pathname).finally(() => {
       <BrowserRouter>
         <ApiErrorHandler>
           <ErrorBoundary onError={reportFatalError}>
-            <App />
+            {/* Prompts for step-up re-authentication on 403 REAUTH_REQUIRED. */}
+            <ReauthProvider>
+              <App />
+            </ReauthProvider>
           </ErrorBoundary>
         </ApiErrorHandler>
       </BrowserRouter>
