@@ -17,7 +17,7 @@ import env from './config/env.js';
 import prisma from './config/db.js';
 import { apiRateLimitMax, isNonApiRequest } from './config/rateLimit.js';
 import { isCurrentUserSession } from './auth/session.js';
-import { canJoinProjectRoom } from './auth/project-room-access.js';
+import { createJoinProjectHandler } from './auth/project-room-access.js';
 import { clientAcquisitionCorsOptions, loadClientAcquisitionConfig } from './services/client-acquisition.contract.js';
 import { initHermesBridge } from './agents/hub-hermes.integration.js';
 
@@ -281,19 +281,15 @@ io.on('connection', (socket) => {
   });
 
   // Join a project room only if the caller is staff in the project's org or
-  // the project's own client (see canJoinProjectRoom).
-  socket.on('join-project', async (projectId) => {
-    if (!projectId) return;
-    try {
-      const project = await prisma.project.findUnique({
-        where: { id: projectId },
-        select: { clientId: true, client: { select: { organizationId: true } } },
-      });
-      if (canJoinProjectRoom(socket, project)) socket.join(`project:${projectId}`);
-    } catch (err) {
-      logger.error({ err, projectId }, '[socket] join-project authorization failed');
-    }
-  });
+  // the project's own client (see canJoinProjectRoom). Acknowledges the result
+  // so a reconnecting call can wait for the room before re-signalling.
+  socket.on('join-project', createJoinProjectHandler(socket, {
+    findProject: (projectId) => prisma.project.findUnique({
+      where: { id: projectId },
+      select: { clientId: true, client: { select: { organizationId: true } } },
+    }),
+    logger,
+  }));
 
   socket.on('leave-project', (projectId) => {
     if (projectId) socket.leave(`project:${projectId}`);

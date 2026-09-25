@@ -18,3 +18,28 @@ export function canJoinProjectRoom(principal, project) {
   }
   return Boolean(principal.organizationId) && project.client?.organizationId === principal.organizationId;
 }
+
+/**
+ * Build the `join-project` socket handler. The optional acknowledgement lets a
+ * client that just (re)connected wait until the room is actually joined before
+ * sending call presence or signals, which the server drops for sockets that
+ * are not yet in the project room.
+ *
+ * @param {{ userRole?: string, organizationId?: string, clientId?: string, join: (room: string) => void }} socket
+ * @param {{ findProject: (projectId: string) => Promise<any>, logger?: { error: Function } }} deps
+ */
+export function createJoinProjectHandler(socket, { findProject, logger }) {
+  return async (projectId, ack) => {
+    const reply = typeof ack === 'function' ? ack : () => {};
+    if (!projectId || typeof projectId !== 'string') return reply({ joined: false });
+    try {
+      const project = await findProject(projectId);
+      const joined = canJoinProjectRoom(socket, project);
+      if (joined) socket.join(`project:${projectId}`);
+      reply({ joined });
+    } catch (err) {
+      logger?.error({ err, projectId }, '[socket] join-project authorization failed');
+      reply({ joined: false });
+    }
+  };
+}
