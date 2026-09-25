@@ -54,15 +54,19 @@ const TAG_COLORS = {
   cloud:    'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
 };
 
-function NotificationPreferences() {
+export function NotificationPreferences() {
   const { user } = useAuth();
-  const { permission, subscribed, status, error, supported, offline, subscribe, unsubscribe } = usePushNotifications({ userId: user?.id });
+  const { permission, subscribed, status, error, supported, offline, optedIn, subscribe, unsubscribe } = usePushNotifications({ userId: user?.id });
+  // Opt-out is saved before cleanup, so a failed cleanup leaves a browser
+  // subscription behind for an account that has already said no.
+  const cleanupIncomplete = subscribed && optedIn === false;
   const busy = status === 'subscribing' || status === 'unsubscribing';
 
   let summary = 'Notifications are available but not enabled.';
   if (!supported) summary = 'This browser does not support web push notifications.';
   else if (offline) summary = 'You are offline. Reconnect to change this preference.';
   else if (permission === 'denied') summary = 'Notifications are blocked in browser settings.';
+  else if (cleanupIncomplete) summary = 'Notifications are disabled for this account, but removing this browser\'s subscription did not finish. Select Disable notifications to retry.';
   else if (subscribed) summary = 'Notifications are enabled for this account and browser.';
 
   return (

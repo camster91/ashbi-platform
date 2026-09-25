@@ -69,7 +69,7 @@ describe('usePushNotifications', () => {
       toJSON: () => ({ endpoint: 'https://push.example/subscription', keys: { p256dh: 'key', auth: 'auth' } }),
     };
     setBrowser({ permission: 'granted', subscription });
-    const { result } = renderHook(() => usePushNotifications());
+    const { result } = renderHook(() => usePushNotifications({ userId: 'user-a' }));
     await waitFor(() => expect(result.current.subscribed).toBe(true));
 
     await act(() => result.current.subscribe());
@@ -89,7 +89,7 @@ describe('usePushNotifications', () => {
       unsubscribe: vi.fn().mockResolvedValue(true),
     };
     setBrowser({ permission: 'granted', subscription });
-    const { result } = renderHook(() => usePushNotifications());
+    const { result } = renderHook(() => usePushNotifications({ userId: 'user-a' }));
     await waitFor(() => expect(result.current.subscribed).toBe(true));
 
     await act(() => result.current.unsubscribe());
@@ -114,7 +114,7 @@ describe('usePushNotifications', () => {
 
   it('explains blocked permission without attempting a subscription', async () => {
     const pushManager = setBrowser({ permission: 'denied' });
-    const { result } = renderHook(() => usePushNotifications());
+    const { result } = renderHook(() => usePushNotifications({ userId: 'user-a' }));
     await waitFor(() => expect(result.current.status).toBe('denied'));
 
     await act(() => result.current.subscribe());
@@ -126,7 +126,7 @@ describe('usePushNotifications', () => {
 
   it('returns an actionable offline state before asking permission', async () => {
     setBrowser({ online: false });
-    const { result } = renderHook(() => usePushNotifications());
+    const { result } = renderHook(() => usePushNotifications({ userId: 'user-a' }));
 
     await act(() => result.current.subscribe());
 
@@ -216,5 +216,132 @@ describe('shouldAutoResubscribe', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+});
+
+describe('usePushNotifications consent races and backfill', () => {
+  const subscription = {
+    endpoint: 'https://push.example/subscription',
+    toJSON: () => ({ endpoint: 'https://push.example/subscription', keys: { p256dh: 'key', auth: 'auth' } }),
+    unsubscribe: vi.fn().mockResolvedValue(true),
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    apiMock.getPushVapidKey.mockResolvedValue({ publicKey: 'AQAB' });
+    apiMock.subscribePush.mockResolvedValue({ success: true });
+    apiMock.unsubscribePush.mockResolvedValue({ success: true });
+  });
+
+  afterEach(() => {
+    for (const [target, key, descriptor] of [
+      [window, 'Notification', originalNotification],
+      [window, 'PushManager', originalPushManager],
+      [navigator, 'serviceWorker', originalServiceWorker],
+      [navigator, 'onLine', originalOnLine],
+    ]) {
+      if (descriptor) Object.defineProperty(target, key, descriptor);
+      else delete target[key];
+    }
+  });
+
+  it('does not subscribe without a user to record consent against', async () => {
+    const pushManager = setBrowser({ permission: 'granted' });
+    const { result } = renderHook(() => usePushNotifications());
+
+    let outcome;
+    await act(async () => { outcome = await result.current.subscribe(); });
+
+    expect(outcome).toBe(false);
+    expect(window.Notification.requestPermission).not.toHaveBeenCalled();
+    expect(pushManager.subscribe).not.toHaveBeenCalled();
+    expect(apiMock.subscribePush).not.toHaveBeenCalled();
+  });
+
+  it('auto path does nothing for an account that has not opted in', async () => {
+    setBrowser({ permission: 'granted' });
+    const { result } = renderHook(() => usePushNotifications({ userId: 'user-b' }));
+    await waitFor(() => expect(result.current.status).toBe('granted'));
+
+    await act(() => result.current.subscribe({ auto: true }));
+
+    expect(apiMock.subscribePush).not.toHaveBeenCalled();
+    expect(getPushOptIn('user-b')).toBeNull();
+  });
+
+  it('an opt-out recorded before the server POST aborts an in-flight auto re-subscribe', async () => {
+    setPushOptIn('user-a', true);
+    setBrowser({ permission: 'granted', subscription });
+    let releaseKey;
+    apiMock.getPushVapidKey.mockReturnValue(new Promise((resolve) => { releaseKey = resolve; }));
+    const { result } = renderHook(() => usePushNotifications({ userId: 'user-a' }));
+    await waitFor(() => expect(result.current.subscribed).toBe(true));
+
+    let pending;
+    act(() => { pending = result.current.subscribe({ auto: true }); });
+    // Settings (a separate hook instance) disables while Layout is in flight.
+    setPushOptIn('user-a', false);
+    releaseKey({ publicKey: 'AQAB' });
+
+    let outcome;
+    await act(async () => { outcome = await pending; });
+    expect(outcome).toBe(false);
+    expect(apiMock.subscribePush).not.toHaveBeenCalled();
+    expect(getPushOptIn('user-a')).toBe(false);
+  });
+
+  it('an opt-out recorded during the server POST is not overwritten and the registration is undone', async () => {
+    setPushOptIn('user-a', true);
+    setBrowser({ permission: 'granted', subscription });
+    apiMock.subscribePush.mockImplementation(async () => {
+      setPushOptIn('user-a', false);
+      return { success: true };
+    });
+    const { result } = renderHook(() => usePushNotifications({ userId: 'user-a' }));
+    await waitFor(() => expect(result.current.subscribed).toBe(true));
+
+    let outcome;
+    await act(async () => { outcome = await result.current.subscribe({ auto: true }); });
+
+    expect(outcome).toBe(false);
+    expect(getPushOptIn('user-a')).toBe(false);
+    expect(apiMock.unsubscribePush).toHaveBeenCalledWith(subscription.endpoint);
+  });
+
+  it('an explicit enable overrides a previous opt-out', async () => {
+    setPushOptIn('user-a', false);
+    setBrowser({ permission: 'granted', subscription });
+    const { result } = renderHook(() => usePushNotifications({ userId: 'user-a' }));
+    await waitFor(() => expect(result.current.subscribed).toBe(true));
+
+    let outcome;
+    await act(async () => { outcome = await result.current.subscribe(); });
+
+    expect(outcome).toBe(true);
+    expect(getPushOptIn('user-a')).toBe(true);
+    expect(result.current.optedIn).toBe(true);
+  });
+
+  it('backfills opt-in once for an existing approved subscription with no stored preference', async () => {
+    setBrowser({ permission: 'granted', subscription });
+    const { result } = renderHook(() => usePushNotifications({ userId: 'user-a' }));
+
+    await waitFor(() => expect(result.current.optedIn).toBe(true));
+    expect(getPushOptIn('user-a')).toBe(true);
+  });
+
+  it('does not backfill over an explicit opt-out or without a subscription', async () => {
+    setPushOptIn('user-a', false);
+    setBrowser({ permission: 'granted', subscription });
+    const first = renderHook(() => usePushNotifications({ userId: 'user-a' }));
+    await waitFor(() => expect(first.result.current.subscribed).toBe(true));
+    expect(getPushOptIn('user-a')).toBe(false);
+    expect(first.result.current.optedIn).toBe(false);
+
+    setBrowser({ permission: 'granted', subscription: null });
+    const second = renderHook(() => usePushNotifications({ userId: 'user-b' }));
+    await waitFor(() => expect(second.result.current.status).toBe('granted'));
+    expect(getPushOptIn('user-b')).toBeNull();
   });
 });
