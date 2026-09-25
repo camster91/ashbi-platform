@@ -104,8 +104,6 @@ export async function portalMagicLink(contactEmail: string): Promise<string> {
   const header = base64url({ alg: 'HS256', typ: 'JWT' });
   const payload = base64url({
     id: principal.id,
-    email: principal.email,
-    name: principal.name,
     contactId: principal.contactId,
     clientId: principal.clientId,
     organizationId: principal.organizationId,

@@ -86,6 +86,23 @@ export async function resolvePortalPrincipal(prisma, payload) {
   return { user, contact, client };
 }
 
+/**
+ * Claims for the emailed magic link. Only identifiers: verify-token re-resolves
+ * the user, contact and client from the database (resolvePortalPrincipal), so
+ * carrying the contact's name or email would only leak PII into the URL and
+ * let long names push the token past the redemption length bound.
+ */
+export function magicLinkClaims(user, contact) {
+  return {
+    id: user.id,
+    contactId: contact.id,
+    clientId: contact.clientId,
+    organizationId: contact.client.organizationId,
+    role: 'CLIENT',
+    sessionVersion: user.sessionVersion,
+  };
+}
+
 // ── Routes ───────────────────────────────────────────────────────────────────
 export default async function clientPortalRoutes(fastify) {
 
@@ -165,16 +182,7 @@ export default async function clientPortalRoutes(fastify) {
       });
     }
 
-    const token = fastify.jwt.sign({
-      id: user.id,
-      email: user.email,
-      name: user.name,
-      contactId: contact.id,
-      clientId: contact.clientId,
-      organizationId: contact.client.organizationId,
-      role: 'CLIENT',
-      sessionVersion: user.sessionVersion,
-    }, { expiresIn: '1h' });
+    const token = fastify.jwt.sign(magicLinkClaims(user, contact), { expiresIn: '1h' });
     // Magic link now goes to the verify endpoint which POSTs the token
     const magicLink = `${PORTAL_BASE}/client-portal/verify?token=${token}`;
     await sendMagicLinkEmail(contact.email, contact.name, magicLink);
