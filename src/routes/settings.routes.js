@@ -12,9 +12,15 @@ import {
 } from '../validators/schemas.js';
 import env from '../config/env.js';
 
-function isPlatformOperator(user) {
-  const email = typeof user?.email === 'string' ? user.email.trim().toLowerCase() : '';
-  return user?.role === 'ADMIN' && email !== '' && env.platformOperatorEmails.includes(email);
+// Re-read the account so a demoted or deactivated operator loses the right
+// immediately, not when their session token expires.
+async function isPlatformOperator(prisma, user) {
+  if (!user?.id || !env.platformOperatorUserIds.includes(user.id)) return false;
+  const account = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: { role: true, isActive: true },
+  });
+  return account?.role === 'ADMIN' && account.isActive === true;
 }
 
 export default async function settingsRoutes(fastify) {
@@ -271,7 +277,7 @@ export default async function settingsRoutes(fastify) {
       available: ['claude', 'gemini', 'ollama'],
       ollamaModel: getOllamaModel(),
       ollamaModels: OLLAMA_MODELS,
-      canManage: isPlatformOperator(request.user),
+      canManage: await isPlatformOperator(request.prisma, request.user),
     };
   });
 
@@ -282,13 +288,20 @@ export default async function settingsRoutes(fastify) {
     onRequest: [fastify.adminOnly],
     preHandler: validateBody(aiProviderSwitchSchema),
   }, async (request, reply) => {
-    if (!isPlatformOperator(request.user)) {
+    if (!(await isPlatformOperator(request.prisma, request.user))) {
       return reply.status(403).send({
         error: 'The AI provider is shared by every workspace on this deployment and can only be changed by a platform operator.',
       });
     }
     const { provider, model } = request.body;
     const { setProvider, getProviderName, getOllamaModel } = await import('../ai/providers/index.js');
+    if (provider === 'ollama' && model && model !== getOllamaModel()) {
+      const { default: OllamaProvider, OLLAMA_MODELS } = await import('../ai/providers/ollama.js');
+      const known = new Set([...Object.values(OLLAMA_MODELS), ...await OllamaProvider.listCloudModels(env.ollamaApiKey)]);
+      if (!known.has(model)) {
+        return reply.status(400).send({ error: `Unknown Ollama model: ${model}` });
+      }
+    }
     setProvider(provider, { model });
     return {
       provider: getProviderName(),
@@ -302,7 +315,6 @@ export default async function settingsRoutes(fastify) {
     onRequest: [fastify.authenticate]
   }, async () => {
     const { default: OllamaProvider, OLLAMA_MODELS } = await import('../ai/providers/ollama.js');
-    const env = (await import('../config/env.js')).default;
     const models = await OllamaProvider.listCloudModels(env.ollamaApiKey);
     return { models, known: OLLAMA_MODELS };
   });

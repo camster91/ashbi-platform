@@ -26,10 +26,11 @@ const env = {
   ollamaModel: process.env.OLLAMA_MODEL || 'gemma4:31b',
   aiProvider: process.env.AI_PROVIDER || 'ollama', // 'claude', 'gemini', or 'ollama'
   // The AI provider is one process-wide setting shared by every organization,
-  // so only these deployment operators may switch it at runtime.
-  platformOperatorEmails: (process.env.PLATFORM_OPERATOR_EMAILS || '')
+  // so only these deployment operators (user ids, which cannot be claimed by
+  // registering a look-alike email) may switch it at runtime.
+  platformOperatorUserIds: (process.env.PLATFORM_OPERATOR_USER_IDS || '')
     .split(',')
-    .map((email) => email.trim().toLowerCase())
+    .map((id) => id.trim())
     .filter(Boolean),
   aiModel: 'gemma4:31b',
 

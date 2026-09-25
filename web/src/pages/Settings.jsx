@@ -201,6 +201,12 @@ function OnboardingPreferences() {
   );
 }
 
+export function toModelNames(models) {
+  if (!models) return [];
+  const values = Array.isArray(models) ? models : Object.values(models);
+  return values.filter((name) => typeof name === 'string' && name.length > 0);
+}
+
 function AIModelSection() {
   const queryClient = useQueryClient();
   const [saved, setSaved] = useState(false);
@@ -244,15 +250,21 @@ function AIModelSection() {
     },
   });
 
-  const models = modelData?.models || aiData?.ollamaModels || {};
   const canManage = aiData?.canManage === true;
 
-  // Group models by family
+  // The API returns model names, either as an array (live list) or as the
+  // values of the OLLAMA_MODELS map. Key every card by its real model name so
+  // the value we save is a model the provider can use.
+  const modelNames = [...new Set([
+    ...toModelNames(modelData?.models),
+    ...toModelNames(aiData?.ollamaModels),
+    ...(aiData?.ollamaModel ? [aiData.ollamaModel] : []),
+  ])];
   const families = {};
-  Object.entries(models).forEach(([key, val]) => {
-    const family = val.family || 'Other';
+  modelNames.forEach((name) => {
+    const family = name.split(':')[0] || 'Other';
     if (!families[family]) families[family] = [];
-    families[family].push({ key, ...val });
+    families[family].push({ key: name, label: name, tags: [] });
   });
 
   return (
@@ -312,7 +324,7 @@ function AIModelSection() {
             </Button>
             {saved && (
               <span className="text-sm text-green-600 flex items-center gap-1">
-                <CheckCircle className="w-4 h-4" /> Saved
+                <CheckCircle className="w-4 h-4" /> Saved for this server until it restarts
               </span>
             )}
             {mutation.isError && (
