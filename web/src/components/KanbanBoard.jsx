@@ -55,7 +55,7 @@ function MoveToMenu({ task, columns, onMove, onClose, position }) {
           }}
           disabled={task.status === col.id}
           className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 transition-colors ${
-            task.status === col.id ? 'text-gray-400 cursor-not-allowed' : 'text-gray-700'
+            task.status === col.id ? 'text-gray-500 cursor-not-allowed' : 'text-gray-700'
           }`}
           role="menuitem"
           aria-label={`Move "${task.title}" to ${col.title}${task.status === col.id ? ' (current column)' : ''}`}
@@ -339,7 +339,7 @@ export default function KanbanBoard({ projectId }) {
                     aria-hidden="true"
                   >
                     <svg
-                      className="w-5 h-5 text-gray-400"
+                      className="w-5 h-5 text-gray-500"
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
@@ -371,7 +371,7 @@ export default function KanbanBoard({ projectId }) {
                       )}
                     </div>
                     {task.dueDate && (
-                      <div className="mt-2 text-xs text-gray-400">
+                      <div className="mt-2 text-xs text-gray-500">
                         Due: {new Date(task.dueDate).toLocaleDateString('en-CA')}
                       </div>
                     )}
@@ -398,7 +398,7 @@ export default function KanbanBoard({ projectId }) {
               </div>
             ))}
             {tasksByStatus[column.id].length === 0 && (
-              <div className="text-center py-8 text-gray-400 text-sm" role="status">
+              <div className="text-center py-8 text-gray-600 text-sm" role="status">
                 No tasks
               </div>
             )}

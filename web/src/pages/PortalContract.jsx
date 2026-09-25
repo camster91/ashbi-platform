@@ -104,7 +104,7 @@ function SignatureCanvas({ onSignatureChange }) {
         />
         {!hasDrawn && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <p className="text-slate-300 text-sm">Draw your signature here</p>
+            <p className="text-slate-500 text-sm">Draw your signature here</p>
           </div>
         )}
       </div>
@@ -175,7 +175,7 @@ export default function PortalContract() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
         <div className="text-center">
-          <FileSignature className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+          <FileSignature className="w-12 h-12 text-slate-500 mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-slate-800 mb-2">Contract Not Found</h1>
           <p className="text-slate-500">This link may be invalid or expired.</p>
         </div>
@@ -258,7 +258,7 @@ export default function PortalContract() {
                 aria-invalid={!!validationError && !signerName.trim()}
                 aria-describedby={validationError ? 'signature-validation-error' : undefined}
                 placeholder="Enter your full name"
-                className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
               />
             </div>
 
@@ -305,7 +305,7 @@ export default function PortalContract() {
                       {signerName}
                     </p>
                   ) : (
-                    <p className="text-slate-300 text-sm">Your name will appear here as a typed signature</p>
+                    <p className="text-slate-500 text-sm">Your name will appear here as a typed signature</p>
                   )}
                 </div>
               )}
@@ -330,7 +330,7 @@ export default function PortalContract() {
               <p role="alert" className="text-sm text-red-600 text-center">Something went wrong. Please try again.</p>
             )}
 
-            <p className="text-xs text-slate-400 text-center">
+            <p className="text-xs text-slate-500 text-center">
               By signing, you agree to the terms outlined in this contract. This constitutes a legally binding electronic signature.
             </p>
           </div>
@@ -338,7 +338,7 @@ export default function PortalContract() {
 
         {/* Footer */}
         <div className="text-center py-6">
-          <p className="text-xs text-slate-400">Powered by Ashbi Design</p>
+          <p className="text-xs text-slate-600">Powered by Ashbi Design</p>
         </div>
       </main>
     </div>

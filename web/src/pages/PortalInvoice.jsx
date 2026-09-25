@@ -49,7 +49,7 @@ export default function PortalInvoice() {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 flex items-center justify-center">
         <div className="text-center">
-          <FileText className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+          <FileText className="w-12 h-12 text-slate-500 mx-auto mb-4" />
           <h1 className="text-2xl font-bold text-slate-800 mb-2">Invoice Not Found</h1>
           <p className="text-slate-500">This link may be invalid or expired.</p>
         </div>
@@ -218,7 +218,7 @@ export default function PortalInvoice() {
             {payMutation.isError && (
               <p role="alert" className="text-sm text-red-600 text-center mt-3">Payment initiation failed. Please try again.</p>
             )}
-            <p className="text-xs text-slate-400 text-center mt-3">
+            <p className="text-xs text-slate-500 text-center mt-3">
               Secure payment powered by Stripe
             </p>
           </div>
@@ -226,7 +226,7 @@ export default function PortalInvoice() {
 
         {/* Footer */}
         <div className="text-center py-6">
-          <p className="text-xs text-slate-400">Powered by Ashbi Design</p>
+          <p className="text-xs text-slate-600">Powered by Ashbi Design</p>
         </div>
       </main>
     </div>

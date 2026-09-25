@@ -163,7 +163,7 @@ export default function Notes({ projectId }) {
               <p className="text-sm text-gray-500 mt-2 line-clamp-3">
                 {note.content.replace(/[#*`]/g, '').substring(0, 150)}...
               </p>
-              <div className="flex items-center justify-between mt-3 text-xs text-gray-400">
+              <div className="flex items-center justify-between mt-3 text-xs text-gray-500">
                 <span>{note.author?.name}</span>
                 <span>{new Date(note.updatedAt).toLocaleDateString('en-CA')}</span>
               </div>

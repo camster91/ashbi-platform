@@ -128,7 +128,7 @@ function MiniCalendar({ selectedDate, onSelect }) {
         onClick={() => onSelect(dateStr)}
         className={cn(
           'min-h-11 min-w-11 w-10 h-10 rounded-lg text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-800 focus-visible:ring-offset-2',
-          isPast && 'text-slate-300 cursor-not-allowed',
+          isPast && 'text-slate-500 line-through cursor-not-allowed',
           !isPast && !isSelected && 'text-slate-700 hover:bg-slate-100',
           isSelected && 'bg-slate-800 text-white shadow-sm',
           isToday && !isSelected && 'ring-1 ring-amber-400'
@@ -269,7 +269,7 @@ export default function PortalBooking() {
             </div>
           </div>
           <div className="text-center py-6">
-            <p className="text-xs text-slate-400">Powered by Ashbi Design</p>
+            <p className="text-xs text-slate-600">Powered by Ashbi Design</p>
           </div>
         </main>
       </div>
@@ -311,17 +311,17 @@ export default function PortalBooking() {
             </h3>
 
             {!selectedDate ? (
-              <div className="flex flex-col items-center justify-center h-48 text-slate-400">
-                <Calendar className="w-8 h-8 mb-2 text-slate-300" />
+              <div className="flex flex-col items-center justify-center h-48 text-slate-500">
+                <Calendar className="w-8 h-8 mb-2 text-slate-500" />
                 <p className="text-sm">Pick a date to see available times</p>
               </div>
             ) : slotsLoading ? (
               <div className="flex items-center justify-center h-48">
-                <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+                <Loader2 className="w-6 h-6 animate-spin text-slate-500" />
               </div>
             ) : slots.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-48 text-slate-400">
-                <Clock className="w-8 h-8 mb-2 text-slate-300" />
+              <div className="flex flex-col items-center justify-center h-48 text-slate-500">
+                <Clock className="w-8 h-8 mb-2 text-slate-500" />
                 <p className="text-sm">No available slots for this date</p>
                 <p className="text-xs mt-1">Try a different day</p>
               </div>
@@ -338,7 +338,7 @@ export default function PortalBooking() {
                       onClick={() => setSelectedSlot(time)}
                       className={cn(
                         'min-h-11 px-3 py-2.5 rounded-lg text-sm font-medium border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-800 focus-visible:ring-offset-2',
-                        !available && 'opacity-40 cursor-not-allowed bg-slate-50 border-slate-100 text-slate-400',
+                        !available && 'cursor-not-allowed bg-slate-50 border-slate-100 text-slate-500 line-through',
                         available && selectedSlot !== time && 'bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50',
                         selectedSlot === time && 'bg-slate-800 border-slate-800 text-white shadow-sm'
                       )}
@@ -369,7 +369,7 @@ export default function PortalBooking() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Your full name"
-                  className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
                 />
               </div>
               <div>
@@ -383,7 +383,7 @@ export default function PortalBooking() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
-                  className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
                 />
               </div>
             </div>
@@ -398,14 +398,14 @@ export default function PortalBooking() {
                 onChange={(e) => setTopic(e.target.value)}
                 placeholder="Brief description of what you need help with (optional)"
                 rows={3}
-                className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 resize-none"
+                className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 resize-none"
               />
             </div>
 
             {/* Selected summary */}
             <div className="flex items-center gap-4 px-4 py-3 rounded-lg bg-slate-50 border border-slate-100 text-sm text-slate-600">
               <div className="flex items-center gap-1.5">
-                <Calendar className="w-4 h-4 text-slate-400" />
+                <Calendar className="w-4 h-4 text-slate-500" />
                 {new Date(selectedDate + 'T00:00:00').toLocaleDateString({
                   weekday: 'short',
                   month: 'short',
@@ -413,7 +413,7 @@ export default function PortalBooking() {
                 })}
               </div>
               <div className="flex items-center gap-1.5">
-                <Clock className="w-4 h-4 text-slate-400" />
+                <Clock className="w-4 h-4 text-slate-500" />
                 {selectedSlot}
               </div>
             </div>
@@ -446,7 +446,7 @@ export default function PortalBooking() {
 
         {/* Footer */}
         <div className="text-center py-6">
-          <p className="text-xs text-slate-400">Powered by Ashbi Design</p>
+          <p className="text-xs text-slate-600">Powered by Ashbi Design</p>
         </div>
       </main>
     </div>

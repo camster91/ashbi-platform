@@ -115,7 +115,7 @@ export default function Portal() {
                 {status.label}
               </span>
             </div>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-500">
               Last updated {formatDate(project.updatedAt)}
             </p>
           </div>
@@ -136,7 +136,7 @@ export default function Portal() {
                   />
                   <p className={cn(
                     'text-xs mt-1.5 text-center',
-                    isCurrent ? 'font-semibold text-slate-800' : 'text-slate-400'
+                    isCurrent ? 'font-semibold text-slate-800' : 'text-slate-500'
                   )}>
                     {phaseConf.label}
                   </p>
@@ -172,13 +172,13 @@ export default function Portal() {
                   {m.completedAt ? (
                     <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
                   ) : (
-                    <Clock className="w-5 h-5 text-slate-400 flex-shrink-0" />
+                    <Clock className="w-5 h-5 text-slate-500 flex-shrink-0" />
                   )}
-                  <span className={cn('flex-1 text-sm', m.completedAt ? 'text-slate-400 line-through' : 'text-slate-700')}>
+                  <span className={cn('flex-1 text-sm', m.completedAt ? 'text-slate-500 line-through' : 'text-slate-700')}>
                     {m.name}
                   </span>
                   {m.dueDate && (
-                    <span className="text-xs text-slate-400">{formatDate(m.dueDate)}</span>
+                    <span className="text-xs text-slate-500">{formatDate(m.dueDate)}</span>
                   )}
                 </div>
               ))}
@@ -197,7 +197,7 @@ export default function Portal() {
                 <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-slate-50">
                   {taskStatusIcons[task.status] || taskStatusIcons.PENDING}
                   <span className="flex-1 text-sm text-slate-700">{task.title}</span>
-                  <span className="text-xs text-slate-400 capitalize">{task.status.toLowerCase().replace('_', ' ')}</span>
+                  <span className="text-xs text-slate-500 capitalize">{task.status.toLowerCase().replace('_', ' ')}</span>
                 </div>
               ))}
             </div>
@@ -225,7 +225,7 @@ export default function Portal() {
                     </span>
                     {rev.notes && <p className="text-xs text-slate-500 mt-1">{rev.notes}</p>}
                   </div>
-                  <span className="text-xs text-slate-400">{formatDate(rev.requestedAt)}</span>
+                  <span className="text-xs text-slate-500">{formatDate(rev.requestedAt)}</span>
                 </div>
               ))}
             </div>
@@ -241,7 +241,7 @@ export default function Portal() {
                 <div key={note.id} className="p-4 rounded-lg bg-slate-50 border border-slate-100">
                   <h3 className="font-medium text-slate-800 mb-1">{note.title}</h3>
                   <p className="text-sm text-slate-600 line-clamp-3">{note.content}</p>
-                  <p className="text-xs text-slate-400 mt-2">{formatDate(note.updatedAt)}</p>
+                  <p className="text-xs text-slate-500 mt-2">{formatDate(note.updatedAt)}</p>
                 </div>
               ))}
             </div>
@@ -250,7 +250,7 @@ export default function Portal() {
 
         {/* Footer */}
         <div className="text-center py-6">
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-600">
             Powered by Ashbi Design
           </p>
         </div>
