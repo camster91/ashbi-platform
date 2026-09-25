@@ -261,6 +261,12 @@ export async function mockAuthenticatedApi(page: Page, { user = adminUser, signe
     if (path === '/api-keys') return json(route, { keys: [{ id: 'key-a', name: 'Zapier', createdAt: LAST_WEEK, lastUsedAt: YESTERDAY, expiresAt: null }] });
     if (path === '/settings/ai-provider') return json(route, { provider: 'ollama', ollamaModel: 'llama3.1:8b', ollamaModels: ['llama3.1:8b'], canManage: true });
     if (path === '/settings/ai-provider/ollama-models') return json(route, { models: ['llama3.1:8b', 'qwen2.5:14b'] });
+    if (path === '/auth/mfa') return json(route, { eligible: true, enabled: false, enabledAt: null, pendingEnrollment: false, recoveryCodesRemaining: 0 });
+    if (path === '/audit-events/catalog') return json(route, { actions: ['auth.login', 'invoice.sent', 'auth.mfa_enabled'], entityTypes: ['user', 'invoice'], actorTypes: ['USER', 'CLIENT', 'SYSTEM', 'WEBHOOK', 'BOT'] });
+    if (path === '/audit-events') return json(route, { events: [
+      { id: 'audit-a', organizationId: 'org-a', actorUserId: adminUser.id, actorName: adminUser.name, actorType: 'USER', action: 'invoice.sent', entityType: 'invoice', entityId: invoice.id, requestId: 'req-a', ip: '203.0.113.0/24', metadata: { invoiceNumber: 'INV-2026-001' }, createdAt: YESTERDAY },
+      { id: 'audit-b', organizationId: 'org-a', actorUserId: adminUser.id, actorName: adminUser.name, actorType: 'USER', action: 'auth.login', entityType: 'user', entityId: adminUser.id, requestId: 'req-b', ip: '203.0.113.0/24', metadata: {}, createdAt: LAST_WEEK },
+    ], nextCursor: null, limit: 50 });
 
     // Unmocked endpoints are recorded (and asserted empty after each test)
     // and answered with 501 so the page's own error handling shows too.

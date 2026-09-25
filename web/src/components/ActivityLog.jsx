@@ -165,7 +165,12 @@ export default function ActivityLog() {
         />
       ) : (
         <>
-          <div className="overflow-x-auto rounded-lg border border-border">
+          <div
+            className="overflow-x-auto rounded-lg border border-border focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            role="region"
+            aria-label="Activity log table"
+            tabIndex={0}
+          >
             <table className="w-full text-left text-sm">
               <caption className="sr-only">
                 Activity log, newest first. {rows.length} event{rows.length === 1 ? '' : 's'} shown.
