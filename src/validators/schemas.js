@@ -456,8 +456,10 @@ export const slackChannelMappingSchema = z.object({
 
 // ── Helper: Fastify preValidation hook from Zod schema ─────────────────────
 // Usage: { preHandler: [fastify.authenticate, validateBody(createProjectSchema)] }
+// Each helper records its schema and target on the returned hook so tooling
+// (scripts/generate-openapi.mjs) can describe the route; runtime ignores them.
 export function validateBody(schema) {
-  return async (request, reply) => {
+  return Object.assign(async (request, reply) => {
     const result = schema.safeParse(request.body);
     if (!result.success) {
       const errors = result.error.errors.map(e => `${e.path.join('.')}: ${e.message}`);
@@ -465,29 +467,29 @@ export function validateBody(schema) {
     }
     // Replace request.body with parsed/trimmed data
     request.body = result.data;
-  };
+  }, { zodSchema: schema, zodTarget: 'body' });
 }
 
 export function validateParams(schema) {
-  return async (request, reply) => {
+  return Object.assign(async (request, reply) => {
     const result = schema.safeParse(request.params);
     if (!result.success) {
       const errors = result.error.errors.map(e => `${e.path.join('.')}: ${e.message}`);
       return reply.status(400).send({ error: errors.join('; ') });
     }
     request.params = result.data;
-  };
+  }, { zodSchema: schema, zodTarget: 'params' });
 }
 
 export function validateQuery(schema) {
-  return async (request, reply) => {
+  return Object.assign(async (request, reply) => {
     const result = schema.safeParse(request.query);
     if (!result.success) {
       const errors = result.error.errors.map(e => `${e.path.join('.')}: ${e.message}`);
       return reply.status(400).send({ error: errors.join('; ') });
     }
     request.query = result.data;
-  };
+  }, { zodSchema: schema, zodTarget: 'query' });
 }
 
 export const schemas = {

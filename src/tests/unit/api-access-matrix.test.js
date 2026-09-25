@@ -1,13 +1,11 @@
 /**
  * API access matrix (#412).
  *
- * Builds the real application (the same way route-table.test.js does), records
- * every route through an `onRoute` hook attached as the Fastify instance is
- * created, and classifies each route by the auth guard in its effective
- * request lifecycle (route options plus hooks inherited from its plugin).
- * Guards are recognised by function identity against the root decorators
- * (`fastify.authenticate`, `fastify.adminOnly`, `fastify.authenticateWithApiKey`)
- * and by name for the two plugin-local guards (`clientAuth`, `requireBotAuth`).
+ * Builds the real application and classifies each route by the auth guard in
+ * its effective request lifecycle (route options plus hooks inherited from its
+ * plugin). Route collection and guard recognition live in
+ * src/tests/helpers/route-inventory.js, shared with the OpenAPI generator
+ * (scripts/generate-openapi.mjs).
  *
  * The rendered table is committed as docs/api-access-matrix.md. This test fails
  * when it drifts; regenerate with:
@@ -19,14 +17,11 @@
  * no longer matches an unguarded route.
  */
 import assert from 'node:assert/strict';
-import diagnosticsChannel from 'node:diagnostics_channel';
 import fs from 'node:fs';
 import test from 'node:test';
-import { isTenancyExemptUrl } from '../../middleware/tenancy.js';
+import { collectRouteInventory, compare } from '../helpers/route-inventory.js';
 
 const DOC_URL = new URL('../../../docs/api-access-matrix.md', import.meta.url);
-
-const LIFECYCLE_HOOKS = ['onRequest', 'preParsing', 'preValidation', 'preHandler'];
 
 /**
  * Routes that deliberately carry no auth hook. Each one authenticates by other
@@ -117,95 +112,6 @@ const REVIEWED_UNSCOPED_ROUTES = {
 
 const SELF_SCOPING_GUARDS = new Set(['client-portal', 'bot-secret']);
 
-/**
- * Build the application and return every registered route together with the
- * guards in its effective request lifecycle.
- *
- * @returns {Promise<Array<{ method: string, url: string, guards: string[], tenancy: 'exempt' | 'scoped' }>>}
- */
-async function collectAccessMatrix() {
-  /** @type {Array<{ url: string, methods: string[], opts: any, instance: any }>} */
-  const recorded = [];
-  const onInit = ({ fastify }) => {
-    fastify.addHook('onRoute', function recordRoute(opts) {
-      // Fastify reuses and mutates `opts` for a prefix root's trailing-slash
-      // alias, so copy the URL and methods now.
-      recorded.push({ url: opts.url, methods: [].concat(opts.method), opts, instance: this });
-    });
-  };
-  diagnosticsChannel.subscribe('fastify.initialization', onInit);
-  const { buildApp } = await import('../../index.js');
-  let app;
-  try {
-    app = await buildApp({ initializeRuntime: false, jwtSecret: 'test-only-jwt-secret' });
-  } finally {
-    diagnosticsChannel.unsubscribe('fastify.initialization', onInit);
-  }
-  try {
-    await app.ready();
-    const kHooks = Object.getOwnPropertySymbols(app).find((symbol) => symbol.description === 'fastify.hooks');
-    assert.ok(kHooks, 'Fastify internal hooks symbol not found; the access matrix needs updating for this Fastify version');
-
-    const identityGuards = new Map([
-      [app.adminOnly, 'admin'],
-      [app.authenticate, 'staff'],
-      [app.authenticateWithApiKey, 'api-key'],
-    ]);
-    const namedGuards = new Map([
-      ['clientAuth', 'client-portal'],
-      ['requireBotAuth', 'bot-secret'],
-      // Additional checks, not authentication by themselves (see the test
-      // that requires a session or API-key guard alongside them).
-      ['requireRecentAuth', 'recent-auth'],
-      ['requireRecentAuthForAccessChange', 'recent-auth (access change)'],
-    ]);
-
-    /** @param {Function} fn */
-    const classify = (fn) => {
-      if (identityGuards.has(fn)) return identityGuards.get(fn);
-      if (namedGuards.has(fn.name)) return namedGuards.get(fn.name);
-      if (typeof (/** @type {any} */ (fn).apiKeyScope) === 'string') return `scope ${/** @type {any} */ (fn).apiKeyScope}`;
-      const source = Function.prototype.toString.call(fn);
-      if (/fastify\.adminOnly\(/.test(source)) return 'admin (inline)';
-      if (/fastify\.authenticate\(/.test(source)) return 'staff (inline)';
-      return null;
-    };
-
-    const routes = [];
-    for (const { url, methods, opts, instance } of recorded) {
-      const hooks = LIFECYCLE_HOOKS.flatMap((name) => [
-        ...(instance[kHooks][name] ?? []),
-        ...[].concat(opts[name] ?? []),
-      ]);
-      const guards = [...new Set(hooks.map(classify).filter(Boolean))].sort();
-      for (const method of methods) {
-        routes.push({ method, url, guards, tenancy: isTenancyExemptUrl(url) ? 'exempt' : 'scoped' });
-      }
-    }
-
-    // HEAD routes Fastify derives from GET routes share the GET lifecycle.
-    // Compare without a trailing slash: the HEAD twin of a prefix root is
-    // recorded under its trailing-slash alias.
-    const bare = (url) => (url.length > 1 ? url.replace(/\/$/, '') : url);
-    const getUrls = new Set(routes.filter((route) => route.method === 'GET').map((route) => bare(route.url)));
-    const unique = new Map();
-    for (const route of routes) {
-      if (route.method === 'HEAD' && getUrls.has(bare(route.url))) continue;
-      unique.set(`${route.method} ${route.url}`, route);
-    }
-    return [...unique.values()].sort((a, b) => (a.url === b.url
-      ? compare(a.method, b.method)
-      : compare(a.url, b.url)));
-  } finally {
-    await app.close();
-  }
-}
-
-function compare(a, b) {
-  if (a < b) return -1;
-  return a > b ? 1 : 0;
-}
-
 /** @param {string} url */
 function groupOf(url) {
   const match = /^\/api\/([^/]+)/.exec(url);
@@ -225,7 +131,7 @@ const GUARD_LEGEND = [
 ];
 
 /**
- * @param {Awaited<ReturnType<typeof collectAccessMatrix>>} routes
+ * @param {Awaited<ReturnType<typeof collectRouteInventory>>} routes
  * @returns {string}
  */
 function renderAccessMatrix(routes) {
@@ -294,7 +200,7 @@ function renderAccessMatrix(routes) {
 
 let matrixPromise;
 function getMatrix() {
-  matrixPromise ??= collectAccessMatrix();
+  matrixPromise ??= collectRouteInventory();
   return matrixPromise;
 }
 

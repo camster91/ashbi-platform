@@ -71,6 +71,11 @@ jobs:
         # docs/data-dictionary.md is generated from schema.prisma; fail when a
         # schema change lands without regenerating it (npm run docs:data-dictionary).
         run: npm run check:data-dictionary
+      - name: Check the OpenAPI contract matches the routes
+        # docs/openapi.json is generated from the Fastify routes and Zod
+        # validators; fail when a route or validator change lands without
+        # regenerating it (npm run docs:openapi).
+        run: npm run check:openapi
       - name: Check package boundaries
         run: npm run check:boundaries
       - name: Type check
