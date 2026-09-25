@@ -1,7 +1,15 @@
-import { google } from 'googleapis';
 import { decrypt, encrypt } from '../utils/crypto.js';
 import env from '../config/env.js';
-import { syncCalendarEvent } from '../services/google-calendar-sync.service.js';
+import {
+  GOOGLE_SYNC_STALE_LOCK_MS,
+  createGoogleCalendarClient,
+  createGoogleOAuthClient,
+  describeGoogleSyncFailure,
+  resolveGoogleTimeZone,
+  revokeGoogleToken,
+  scrubGoogleError,
+  syncCalendarEvent,
+} from '../services/google-calendar-sync.service.js';
 
 const GOOGLE_CALENDAR_SCOPES = ['https://www.googleapis.com/auth/calendar.events'];
 
@@ -17,14 +25,15 @@ export default async function googleCalendarRoutes(fastify, options = {}) {
   const googleRedirectUri = options.googleRedirectUri ?? env.googleCalendarRedirectUri;
   const encryptSecret = options.encryptSecret ?? encrypt;
   const decryptSecret = options.decryptSecret ?? decrypt;
-  const createOAuthClient = options.createOAuthClient ?? (() => new google.auth.OAuth2(
-    googleClientId, googleClientSecret, googleRedirectUri,
+  const createOAuthClient = options.createOAuthClient ?? (() => createGoogleOAuthClient({
+    clientId: googleClientId, clientSecret: googleClientSecret, redirectUri: googleRedirectUri,
+  }));
+  const createCalendarClient = options.createCalendarClient ?? (({ refreshToken }) => (
+    createGoogleCalendarClient({ refreshToken, oauthClient: createOAuthClient() })
   ));
-  const createCalendarClient = options.createCalendarClient ?? (({ refreshToken }) => {
-    const client = createOAuthClient();
-    client.setCredentials({ refresh_token: refreshToken });
-    return google.calendar({ version: 'v3', auth: client });
-  });
+  const revokeToken = options.revokeGoogleToken ?? revokeGoogleToken;
+  const staleLockMs = options.staleLockMs ?? GOOGLE_SYNC_STALE_LOCK_MS;
+  const now = options.now ?? (() => new Date());
   fastify.get('/oauth/start', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     if (!googleClientId || !googleClientSecret || !googleRedirectUri) {
       return reply.status(503).send({ error: 'Google Calendar OAuth is not configured', code: 'GOOGLE_CALENDAR_OAUTH_UNAVAILABLE' });
@@ -94,11 +103,24 @@ export default async function googleCalendarRoutes(fastify, options = {}) {
   fastify.post('/connection/disconnect', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     const connection = await request.prisma.googleCalendarConnection.findFirst({ where: { userId: request.user.id } });
     if (!connection) return reply.status(404).send({ error: 'Google Calendar connection not found' });
+    // Revoke the grant with Google so the refresh token is dead, not just
+    // forgotten. Best-effort: a Google outage must not block disconnecting.
+    let tokenRevoked = false;
+    if (connection.refreshTokenEncrypted) {
+      let refreshToken;
+      try {
+        refreshToken = decryptSecret(connection.refreshTokenEncrypted);
+        await revokeToken({ token: refreshToken });
+        tokenRevoked = true;
+      } catch (error) {
+        request.log.warn({ connectionId: connection.id, ...scrubGoogleError(error, [refreshToken]) }, 'Google token revocation failed; disconnecting locally');
+      }
+    }
     await request.prisma.googleCalendarConnection.update({
       where: { id: connection.id },
       data: { status: 'DISCONNECTED', refreshTokenEncrypted: '', disconnectedAt: new Date() },
     });
-    return { success: true };
+    return { success: true, tokenRevoked };
   });
 
   fastify.post('/events/:eventId/sync', { onRequest: [fastify.authenticate] }, async (request, reply) => {
@@ -116,18 +138,31 @@ export default async function googleCalendarRoutes(fastify, options = {}) {
     if (!connection?.refreshTokenEncrypted) {
       return reply.status(409).send({ error: 'Connect Google Calendar before syncing an event', code: 'GOOGLE_CALENDAR_NOT_CONNECTED' });
     }
+    // A SYNCING claim older than the stale bound belongs to a sync that died
+    // before releasing it; let the next attempt take it over.
+    const staleBefore = new Date(now().getTime() - staleLockMs);
     const claimed = await request.prisma.calendarEvent.updateMany({
-      where: { id: event.id, createdById: request.user.id, googleSyncStatus: { not: 'SYNCING' } },
+      where: {
+        id: event.id,
+        createdById: request.user.id,
+        OR: [
+          { googleSyncStatus: { not: 'SYNCING' } },
+          { googleSyncStatus: 'SYNCING', updatedAt: { lt: staleBefore } },
+        ],
+      },
       data: { googleSyncStatus: 'SYNCING', googleSyncError: null },
     });
     if (claimed.count !== 1) {
       return reply.status(409).send({ error: 'Google Calendar sync is already in progress', code: 'GOOGLE_CALENDAR_SYNC_IN_PROGRESS' });
     }
+    let refreshToken;
     try {
+      refreshToken = decryptSecret(connection.refreshTokenEncrypted);
       const external = await syncCalendarEvent({
-        client: createCalendarClient({ refreshToken: decryptSecret(connection.refreshTokenEncrypted) }),
+        client: createCalendarClient({ refreshToken }),
         calendarId: connection.calendarId,
         event,
+        timeZone: resolveGoogleTimeZone(event.timeZone, request.user.timeZone, connection.timeZone),
       });
       const syncedAt = new Date();
       const syncedEvent = await request.prisma.calendarEvent.update({
@@ -138,13 +173,18 @@ export default async function googleCalendarRoutes(fastify, options = {}) {
         where: { id: connection.id }, data: { status: 'ACTIVE', lastError: null, lastSyncedAt: syncedAt },
       });
       return { event: syncedEvent };
-    } catch {
+    } catch (error) {
+      // Never log the raw provider error: it can carry request config with
+      // OAuth tokens. Record a scrubbed status/reason so the failure is
+      // visible on the event and the connection instead of silently lost.
+      const failure = describeGoogleSyncFailure(error, [refreshToken]);
+      request.log.warn({ eventId: event.id, connectionId: connection.id, ...scrubGoogleError(error, [refreshToken]) }, 'Google Calendar sync failed');
       await request.prisma.calendarEvent.update({
         where: { id: event.id },
-        data: { googleSyncStatus: 'ERROR', googleSyncError: 'Google Calendar sync failed' },
+        data: { googleSyncStatus: 'ERROR', googleSyncError: failure },
       });
       await request.prisma.googleCalendarConnection.update({
-        where: { id: connection.id }, data: { status: 'ERROR', lastError: 'Google Calendar sync failed' },
+        where: { id: connection.id }, data: { status: 'ERROR', lastError: failure },
       });
       return reply.status(502).send({ error: 'Google Calendar sync failed', code: 'GOOGLE_CALENDAR_SYNC_FAILED' });
     }
