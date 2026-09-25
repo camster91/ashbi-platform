@@ -85,6 +85,29 @@ test('does not sleep past the retry cap when Slack asks for a long wait', async 
   assert.equal(slept, false);
 });
 
+test('caps the total 429 wait across retries, not just each wait', async () => {
+  let calls = 0;
+  const waits = [];
+  await assert.rejects(() => callSlackApi({
+    method: 'chat.postMessage', botToken: 'xoxb-sensitive',
+    fetchImpl: async () => { calls += 1; return rateLimited('20'); },
+    sleep: async (ms) => { waits.push(ms); },
+  }), /SLACK_RATE_LIMITED/);
+
+  assert.deepEqual(waits, [20000]);
+  assert.equal(calls, 2);
+});
+
+test('every Slack request carries an abort timeout signal', async () => {
+  let signal;
+  await callSlackApi({
+    method: 'auth.revoke', botToken: 'xoxb-sensitive',
+    fetchImpl: async (_url, input) => { signal = input.signal; return { ok: true, status: 200, json: async () => ({ ok: true }) }; },
+  });
+  assert.ok(signal instanceof AbortSignal);
+  assert.equal(signal.aborted, false);
+});
+
 test('revokes a bot token through auth.revoke and treats an already-dead token as revoked', async () => {
   let request;
   const revoked = await revokeSlackToken({

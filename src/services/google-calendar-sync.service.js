@@ -3,6 +3,9 @@ import env from '../config/env.js';
 
 export const DEFAULT_GOOGLE_TIME_ZONE = 'UTC';
 export const GOOGLE_TOKEN_REVOKE_URL = 'https://oauth2.googleapis.com/revoke';
+// Best-effort provider calls (revoke on disconnect, delete on Hub delete)
+// must not be able to hang the request that triggered them.
+export const GOOGLE_REQUEST_TIMEOUT_MS = 10_000;
 // A sync claims the event by setting googleSyncStatus=SYNCING (which also
 // bumps updatedAt). If the process dies mid-sync nothing ever releases that
 // claim, so a claim older than this bound is treated as abandoned.
@@ -55,7 +58,8 @@ export function mapRecurrenceToGoogle(recurrence) {
     }
   }
   const lines = (Array.isArray(value) ? value : [value]).map((line) => {
-    if (typeof line !== 'string') return null;
+    // A CR/LF would let one stored value smuggle extra iCalendar lines.
+    if (typeof line !== 'string' || /[\r\n]/.test(line)) return null;
     const trimmed = line.trim();
     if (/^FREQ=/i.test(trimmed)) return `RRULE:${trimmed}`;
     return RECURRENCE_LINE.test(trimmed) ? trimmed : null;
@@ -104,9 +108,9 @@ function providerStatus(error) {
 }
 
 /** Deletes the Google copy of an event; an already-gone event counts as deleted. */
-export async function deleteGoogleCalendarEvent({ client, calendarId, googleEventId }) {
+export async function deleteGoogleCalendarEvent({ client, calendarId, googleEventId, timeoutMs = GOOGLE_REQUEST_TIMEOUT_MS }) {
   try {
-    await client.events.delete({ calendarId, eventId: googleEventId });
+    await client.events.delete({ calendarId, eventId: googleEventId }, { timeout: timeoutMs });
     return { deleted: true };
   } catch (error) {
     const status = providerStatus(error);
@@ -144,11 +148,12 @@ export function describeGoogleSyncFailure(error, knownSecrets = []) {
 }
 
 /** Revokes a Google OAuth token. Google treats an already-invalid token as 400 invalid_token. */
-export async function revokeGoogleToken({ token, fetchImpl = fetch }) {
+export async function revokeGoogleToken({ token, fetchImpl = fetch, timeoutMs = GOOGLE_REQUEST_TIMEOUT_MS }) {
   const response = await fetchImpl(GOOGLE_TOKEN_REVOKE_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ token }),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   if (response.ok) return { revoked: true };
   let body = null;

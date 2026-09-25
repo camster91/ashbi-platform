@@ -44,6 +44,8 @@ test('maps RRULE-compatible recurrence and skips anything else', () => {
   assert.equal(mapRecurrenceToGoogle(JSON.stringify({ frequency: 'weekly', interval: 1 })), undefined);
   assert.equal(mapRecurrenceToGoogle(JSON.stringify(['RRULE:FREQ=WEEKLY', 'every other tuesday'])), undefined);
   assert.equal(mapRecurrenceToGoogle(null), undefined);
+  assert.equal(mapRecurrenceToGoogle(JSON.stringify('RRULE:FREQ=DAILY\r\nATTENDEE:mailto:x@example.com')), undefined);
+  assert.equal(mapRecurrenceToGoogle(JSON.stringify(['RRULE:FREQ=DAILY\nX-EXTRA:1'])), undefined);
 
   assert.deepEqual(buildGoogleCalendarEvent({ ...timed, recurrence: '"RRULE:FREQ=WEEKLY"' }).recurrence, ['RRULE:FREQ=WEEKLY']);
   assert.equal('recurrence' in buildGoogleCalendarEvent({ ...timed, recurrence: '{"frequency":"weekly"}' }), false);
@@ -51,9 +53,9 @@ test('maps RRULE-compatible recurrence and skips anything else', () => {
 
 test('deletes the Google event and treats an already-missing one as deleted', async () => {
   const calls = [];
-  const client = { events: { delete: async (input) => { calls.push(input); } } };
+  const client = { events: { delete: async (input, requestOptions) => { calls.push([input, requestOptions]); } } };
   assert.deepEqual(await deleteGoogleCalendarEvent({ client, calendarId: 'primary', googleEventId: 'g-1' }), { deleted: true });
-  assert.deepEqual(calls, [{ calendarId: 'primary', eventId: 'g-1' }]);
+  assert.deepEqual(calls, [[{ calendarId: 'primary', eventId: 'g-1' }, { timeout: 10_000 }]]);
 
   const gone = { events: { delete: async () => { throw Object.assign(new Error('Resource has been deleted'), { code: 410 }); } } };
   assert.equal((await deleteGoogleCalendarEvent({ client: gone, calendarId: 'primary', googleEventId: 'g-1' })).alreadyGone, true);
@@ -81,6 +83,7 @@ test('revokes a Google token and accepts an already-invalid token', async () => 
   assert.deepEqual(result, { revoked: true });
   assert.equal(request.url, 'https://oauth2.googleapis.com/revoke');
   assert.equal(request.input.method, 'POST');
+  assert.ok(request.input.signal instanceof AbortSignal);
   assert.equal(new URLSearchParams(request.input.body.toString()).get('token'), 'refresh-secret');
 
   const invalid = await revokeGoogleToken({

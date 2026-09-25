@@ -6,6 +6,9 @@ const SLACK_API_BASE_URL = 'https://slack.com/api/';
 // caller blocked for minutes is worse than a clear, retryable failure.
 export const SLACK_MAX_RATE_LIMIT_RETRIES = 2;
 export const SLACK_MAX_RETRY_WAIT_MS = 30_000;
+// Per-attempt network timeout, so a hung Slack call cannot hold a request
+// (for example a best-effort revoke during disconnect) open indefinitely.
+export const SLACK_REQUEST_TIMEOUT_MS = 10_000;
 const SLACK_DEFAULT_RETRY_AFTER_SECONDS = 1;
 
 const defaultSleep = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
@@ -23,16 +26,21 @@ function retryAfterMs(response) {
 export async function callSlackApi({
   method, botToken, body = {}, fetchImpl = fetch, sleep = defaultSleep,
   maxRetries = SLACK_MAX_RATE_LIMIT_RETRIES, maxWaitMs = SLACK_MAX_RETRY_WAIT_MS,
+  timeoutMs = SLACK_REQUEST_TIMEOUT_MS,
 }) {
+  // maxWaitMs bounds the total time spent sleeping across all retries.
+  let totalWaitMs = 0;
   for (let attempt = 0; ; attempt += 1) {
     const response = await fetchImpl(`${SLACK_API_BASE_URL}${method}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${botToken}`, 'Content-Type': 'application/json; charset=utf-8' },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (response.status === 429) {
       const waitMs = retryAfterMs(response);
-      if (attempt >= maxRetries || waitMs > maxWaitMs) throw new Error('SLACK_RATE_LIMITED');
+      if (attempt >= maxRetries || totalWaitMs + waitMs > maxWaitMs) throw new Error('SLACK_RATE_LIMITED');
+      totalWaitMs += waitMs;
       await sleep(waitMs);
       continue;
     }
