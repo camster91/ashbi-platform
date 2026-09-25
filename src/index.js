@@ -17,6 +17,7 @@ import env from './config/env.js';
 import prisma from './config/db.js';
 import { apiRateLimitMax, isNonApiRequest } from './config/rateLimit.js';
 import { isCurrentUserSession } from './auth/session.js';
+import { canJoinProjectRoom } from './auth/project-room-access.js';
 
 // Routes
 import authRoutes from './routes/auth.routes.js';
@@ -356,8 +357,8 @@ io.on('connection', (socket) => {
     if (userId && userId === socket.userId) socket.join(`user:${userId}`);
   });
 
-  // Join a project room only if the caller belongs to the project's org
-  // (team member) or is the project's own client.
+  // Join a project room only if the caller is staff in the project's org or
+  // the project's own client (see canJoinProjectRoom).
   socket.on('join-project', async (projectId) => {
     if (!projectId) return;
     try {
@@ -365,10 +366,7 @@ io.on('connection', (socket) => {
         where: { id: projectId },
         select: { clientId: true, client: { select: { organizationId: true } } },
       });
-      if (!project) return;
-      const sameOrg = socket.organizationId && project.client?.organizationId === socket.organizationId;
-      const isProjectClient = socket.userRole === 'CLIENT' && socket.clientId && project.clientId === socket.clientId;
-      if (sameOrg || isProjectClient) socket.join(`project:${projectId}`);
+      if (canJoinProjectRoom(socket, project)) socket.join(`project:${projectId}`);
     } catch (err) {
       logger.error({ err, projectId }, '[socket] join-project authorization failed');
     }

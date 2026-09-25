@@ -115,6 +115,47 @@ test('a portal client sees only its own documents and cannot fetch another clien
     expect(stillSent.status).toBe('SENT');
   });
 
+  await test.step('client A\'s realtime socket receives its own project events but not client B\'s', async () => {
+    const projectA = await json(await admin.post('/api/projects', { data: { name: `Isolation Project A ${a.suffix}`, clientId: a.client.id } }), 201);
+    const projectB = await json(await admin.post('/api/projects', { data: { name: `Isolation Project B ${b.suffix}`, clientId: b.client.id } }), 201);
+
+    // Speak the Socket.IO v4 wire protocol over a raw WebSocket from the page,
+    // so the handshake carries client A's httpOnly portal session cookie.
+    await page.evaluate(({ ownProject, otherProject }) => new Promise<void>((resolve, reject) => {
+      const socket = new WebSocket(`${location.origin.replace(/^http/, 'ws')}/socket.io/?EIO=4&transport=websocket`);
+      const received: string[] = [];
+      (window as any).__portalSocketEvents = received;
+      const timer = setTimeout(() => reject(new Error('socket.io handshake timed out')), 10_000);
+      socket.onmessage = (event) => {
+        const frame = String(event.data);
+        if (frame === '2') { socket.send('3'); return; } // engine.io ping -> pong
+        if (frame.startsWith('0')) { socket.send('40'); return; } // engine.io open -> socket.io connect
+        if (frame.startsWith('44')) { clearTimeout(timer); reject(new Error(`socket.io refused: ${frame}`)); return; }
+        if (frame.startsWith('40')) {
+          socket.send(`42${JSON.stringify(['join-project', ownProject])}`);
+          socket.send(`42${JSON.stringify(['join-project', otherProject])}`);
+          clearTimeout(timer);
+          // join-project is authorized asynchronously; give both a moment to settle.
+          setTimeout(resolve, 1_000);
+          return;
+        }
+        if (frame.startsWith('42')) received.push(frame.slice(2));
+      };
+      socket.onerror = () => { clearTimeout(timer); reject(new Error('socket error')); };
+    }), { ownProject: projectA.id, otherProject: projectB.id });
+
+    const ownMessage = `for client A ${a.suffix}`;
+    const otherMessage = `for client B only ${b.suffix}`;
+    await json(await admin.post(`/api/chat/projects/${projectB.id}/messages`, { data: { content: otherMessage } }), 201);
+    await json(await admin.post(`/api/chat/projects/${projectA.id}/messages`, { data: { content: ownMessage } }), 201);
+
+    const events = () => page.evaluate(() => ((window as any).__portalSocketEvents as string[]).join('\n'));
+    // Positive control: the socket is live and in its own project room.
+    await expect.poll(events, { timeout: 10_000 }).toContain(ownMessage);
+    expect(await events()).not.toContain(otherMessage);
+    expect(await events()).not.toContain(projectB.id);
+  });
+
   await test.step('client A cannot open client B\'s contract or invoice in the browser', async () => {
     await page.goto(`/invoices/${soldB.invoice.id}`);
     await expect(page.getByText(soldB.invoice.invoiceNumber)).toHaveCount(0);
