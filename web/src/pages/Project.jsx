@@ -44,6 +44,7 @@ import { useToast } from '../hooks/useToast';
 import ProjectCommunications from '../components/project/ProjectCommunications';
 import ProjectContextCard from '../components/project/ProjectContext';
 import ProjectMedia from '../components/project/ProjectMedia';
+import ProjectReviews from '../components/project/ProjectReviews';
 import ProjectChat from '../components/ProjectChat';
 import QueryErrorState from '../components/QueryErrorState';
 import PartialSectionNotice from '../components/PartialSectionNotice';
@@ -389,6 +390,8 @@ export default function Project() {
       </div>
 
       <ProjectMedia projectId={id} />
+
+      <ProjectReviews projectId={id} />
 
       <section className="bg-card rounded-xl border border-border">
         <div className="border-b border-border px-5 py-4">

@@ -637,7 +637,34 @@ export const api = {
   },
   deleteAttachment: (id) =>
     request(`/attachments/${id}`, { method: 'DELETE' }),
+  attachmentFileUrl: (filename) => `${API_BASE}/attachments/uploads/${encodeURIComponent(filename)}`,
   // Note: File upload uses FormData, handled separately in components
+
+  // Media review (#417, docs/media-review.md)
+  getReviewSessions: (projectId) =>
+    request(`/reviews?projectId=${encodeURIComponent(projectId)}`),
+  createReviewSession: (data) =>
+    request('/reviews', { method: 'POST', body: data }),
+  getReviewSession: (id) =>
+    request(`/reviews/${encodeURIComponent(id)}`),
+  addReviewAnnotation: (id, data) =>
+    request(`/reviews/${encodeURIComponent(id)}/annotations`, { method: 'POST', body: data }),
+  resolveReviewAnnotation: (id, annotationId, resolved) =>
+    request(`/reviews/${encodeURIComponent(id)}/annotations/${encodeURIComponent(annotationId)}/resolve`, { method: 'POST', body: { resolved } }),
+  recordReviewDecision: (id, data) =>
+    request(`/reviews/${encodeURIComponent(id)}/decisions`, { method: 'POST', body: data }),
+  // Step-up: a 403 REAUTH_REQUIRED opens the re-authentication dialog.
+  createReviewShareLink: (id, data) =>
+    request(`/reviews/${encodeURIComponent(id)}/share-links`, { method: 'POST', body: data }),
+  revokeReviewShareLink: (id, linkId) =>
+    request(`/reviews/${encodeURIComponent(id)}/share-links/${encodeURIComponent(linkId)}/revoke`, { method: 'POST' }),
+  getPortalReview: (token) =>
+    request(`/portal/review/${encodeURIComponent(token)}`, { silent: true }),
+  portalReviewFileUrl: (token) => `${API_BASE}/portal/review/${encodeURIComponent(token)}/file`,
+  addPortalReviewAnnotation: (token, data) =>
+    request(`/portal/review/${encodeURIComponent(token)}/annotations`, { method: 'POST', body: data, silent: true }),
+  recordPortalReviewDecision: (token, data) =>
+    request(`/portal/review/${encodeURIComponent(token)}/decisions`, { method: 'POST', body: data, silent: true }),
 
   // Kanban (using existing tasks endpoints)
   updateTaskPosition: (id, data) =>

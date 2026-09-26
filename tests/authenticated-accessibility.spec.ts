@@ -48,6 +48,7 @@ const staffScreens: Array<{ name: string; path: string; ready: (page: Page) => P
   { name: 'proposals', path: '/proposals', ready: page => expect(page.getByText('Website Redesign Proposal').filter({ visible: true }).first()).toBeVisible() },
   { name: 'settings', path: '/settings', ready: page => expect(page.getByText('Zapier').filter({ visible: true }).first()).toBeVisible() },
   { name: 'notifications', path: '/notifications', ready: page => expect(page.getByText('Northwind Studio viewed INV-2026-001.')).toBeVisible() },
+  { name: 'media review', path: '/review/review-a', ready: page => expect(page.getByRole('heading', { name: 'Homepage draft', level: 1 })).toBeVisible() },
 ];
 
 test.describe('Authenticated accessibility', () => {

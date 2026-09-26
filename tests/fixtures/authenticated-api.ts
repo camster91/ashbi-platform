@@ -129,6 +129,47 @@ const proposal = {
   lineItems: [{ id: 'proposal-line-a', description: 'Website redesign', quantity: 1, unitPrice: 12000, total: 12000 }],
 };
 
+// Media review (#417): one image attachment under review on the project.
+// A 1x1 PNG stands in for the reviewed file.
+export const reviewImagePng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+
+const reviewAttachment = {
+  id: 'attachment-review-a',
+  filename: 'homepage-draft.png',
+  originalName: 'homepage-draft.png',
+  mimeType: 'image/png',
+  size: reviewImagePng.length,
+  entityType: 'PROJECT',
+  entityId: 'project-a',
+  createdAt: YESTERDAY,
+  uploadedBy: { id: 'user-admin', name: 'Cameron Admin' },
+};
+
+const reviewSession = {
+  id: 'review-a',
+  projectId: 'project-a',
+  attachmentId: reviewAttachment.id,
+  title: 'Homepage draft',
+  status: 'changes_requested',
+  version: 1,
+  previousSessionId: null,
+  nextSessionId: null,
+  createdById: 'user-admin',
+  createdAt: YESTERDAY,
+  updatedAt: YESTERDAY,
+  media: { fileName: reviewAttachment.originalName, filename: reviewAttachment.filename, mimeType: 'image/png', size: reviewAttachment.size, kind: 'image' },
+};
+
+export const reviewAnnotations = [
+  { id: 'annotation-a', parentId: null, authorType: 'staff', authorName: 'Cameron Admin', body: 'The logo feels small next to the headline.', timecodeMs: null, region: { x: 0.4, y: 0.25, w: 0, h: 0 }, pageNumber: null, resolved: false, resolvedAt: null, createdAt: YESTERDAY },
+  { id: 'annotation-b', parentId: 'annotation-a', authorType: 'guest', authorName: 'Dana Rivera', body: 'Agreed, about 20% larger.', timecodeMs: null, region: null, pageNumber: null, resolved: false, resolvedAt: null, createdAt: YESTERDAY },
+  { id: 'annotation-c', parentId: null, authorType: 'guest', authorName: 'Dana Rivera', body: 'Love the colour palette.', timecodeMs: null, region: null, pageNumber: null, resolved: true, resolvedAt: YESTERDAY, createdAt: YESTERDAY },
+];
+
+export const reviewDecisions = [
+  { id: 'decision-a', decision: 'changes_requested', actorType: 'guest', actorName: 'Dana Rivera', note: 'Please enlarge the logo.', createdAt: YESTERDAY },
+];
+
 const notifications = [
   { id: 'notification-a', type: 'TASK_ASSIGNED', title: 'Task assigned', message: 'You were assigned “Finalize homepage wireframe”.', read: false, createdAt: YESTERDAY, data: { taskId: 'task-a' } },
   { id: 'notification-b', type: 'INVOICE_VIEWED', title: 'Invoice viewed', message: 'Northwind Studio viewed INV-2026-001.', read: true, createdAt: LAST_WEEK, data: { invoiceId: invoice.id } },
@@ -244,7 +285,19 @@ export async function mockAuthenticatedApi(page: Page, { user = adminUser, signe
       return json(route, state.notes);
     }
     if (path === `/chat/projects/${project.id}/messages`) return json(route, [{ id: 'message-a', content: 'Homepage draft is ready for review.', createdAt: YESTERDAY, authorId: adminUser.id, author: { id: adminUser.id, name: adminUser.name }, isEdited: false, reactions: [] }]);
-    if (path === '/attachments') return json(route, []);
+    if (path === '/attachments') return json(route, [reviewAttachment]);
+    if (path === `/attachments/uploads/${reviewAttachment.filename}`) return route.fulfill({ status: 200, contentType: 'image/png', body: reviewImagePng });
+
+    // Media review (#417).
+    if (path === '/reviews' && method === 'GET') return json(route, { sessions: [{ ...reviewSession, openAnnotationCount: 1 }] });
+    if (path === `/reviews/${reviewSession.id}`) {
+      return json(route, {
+        session: reviewSession,
+        annotations: reviewAnnotations.map(annotation => ({ ...annotation, authorUserId: annotation.authorType === 'staff' ? adminUser.id : null, authorEmail: null, viaShareLinkId: null, resolvedById: annotation.resolved ? adminUser.id : null })),
+        decisions: reviewDecisions,
+        shareLinks: [{ id: 'share-link-a', label: 'Dana review', allowDecision: true, expiresAt: NEXT_WEEK, revokedAt: null, lastUsedAt: YESTERDAY, createdAt: YESTERDAY, createdById: adminUser.id, state: 'active' }],
+      });
+    }
 
     // Invoices.
     if (path === '/invoices' && method === 'GET') return json(route, { invoices: [invoice], total: 1, stats: { draft: 0, sent: 1, paid: 0, overdue: 0, totalOutstanding: invoice.total } });
@@ -350,6 +403,56 @@ export async function mockClientPortalApi(page: Page) {
     }
     state.unmocked.push(`${method} ${pathname}`);
     return json(route, { error: `Unmocked endpoint in client portal fixture: ${method} ${pathname}` }, 501);
+  });
+  return state;
+}
+
+// Share tokens are 43 base64url characters.
+export const portalReviewToken = 'a11y-review-share-token'.padEnd(43, '0');
+
+/**
+ * Routes the public media review share-link API (`/api/portal/review/:token`)
+ * for a client with no session (#417). Comments and decisions are kept in
+ * the returned state so a spec can assert what the page sent.
+ */
+export async function mockPortalReviewApi(page: Page, { allowDecision = true } = {}) {
+  const state = {
+    annotations: reviewAnnotations.map(annotation => ({ ...annotation })),
+    decisions: reviewDecisions.map(decision => ({ ...decision })),
+    posted: [] as Array<Record<string, unknown>>,
+    unmocked: trackUnmocked(page),
+  };
+  await page.route('**/api/**', async route => {
+    const request = route.request();
+    const method = request.method();
+    const { pathname } = new URL(request.url());
+    if (pathname === '/api/auth/me') return json(route, { error: 'Unauthorized' }, 401);
+    const base = `/api/portal/review/${portalReviewToken}`;
+    if (pathname === `${base}/file`) return route.fulfill({ status: 200, contentType: 'image/png', body: reviewImagePng });
+    if (pathname === base && method === 'GET') {
+      return json(route, {
+        session: { title: reviewSession.title, status: reviewSession.status, version: 1, media: { fileName: reviewAttachment.originalName, mimeType: 'image/png', size: reviewAttachment.size, kind: 'image' } },
+        link: { expiresAt: NEXT_WEEK, allowDecision, canComment: true },
+        annotations: state.annotations,
+        decisions: state.decisions,
+      });
+    }
+    if (pathname === `${base}/annotations` && method === 'POST') {
+      const body = request.postDataJSON();
+      state.posted.push(body);
+      const annotation = { id: `annotation-new-${state.posted.length}`, parentId: body.parentId ?? null, authorType: 'guest', authorName: body.name, body: body.body, timecodeMs: body.timecodeMs ?? null, region: body.region ?? null, pageNumber: body.pageNumber ?? null, resolved: false, resolvedAt: null, createdAt: NOW };
+      state.annotations.push(annotation);
+      return json(route, { annotation }, 201);
+    }
+    if (pathname === `${base}/decisions` && method === 'POST') {
+      const body = request.postDataJSON();
+      state.posted.push(body);
+      const decision = { id: `decision-new-${state.posted.length}`, decision: body.decision, actorType: 'guest', actorName: body.name, note: body.note ?? null, createdAt: NOW };
+      state.decisions.unshift(decision);
+      return json(route, { decision, status: body.decision }, 201);
+    }
+    state.unmocked.push(`${method} ${pathname}`);
+    return json(route, { error: `Unmocked endpoint in portal review fixture: ${method} ${pathname}` }, 501);
   });
   return state;
 }

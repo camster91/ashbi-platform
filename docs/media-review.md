@@ -168,10 +168,15 @@ share one review component:
   list entry selects the annotation, and a list entry with a timecode seeks
   the video;
 - a point on the image can be chosen with the pointer or, from the keyboard,
-  with the "Pin to a point" controls (arrow keys move the marker);
+  with the labelled "Across" and "Down" position fields under "Pin to a
+  point" (arrow keys step them, and the marker on the image follows);
 - all controls are labelled, status changes are announced in a polite live
   region, and focus moves to the new comment or the error that needs
   attention.
 
-The browser suites run axe on both pages (`tests/authenticated-accessibility.spec.ts`,
-`tests/public-route-deep-links.spec.ts`).
+The browser suites run axe on both pages and drive the client page by
+keyboard only (`tests/media-review-accessibility.spec.ts`, plus the staff
+page in `tests/authenticated-accessibility.spec.ts`); the public page is also
+in the deep-link chunk check (`tests/public-route-deep-links.spec.ts`).
+Review media has no captions track: the timestamped comment list is its text
+companion, and captions for uploaded video are out of scope for this slice.
