@@ -316,6 +316,13 @@ export async function mockAuthenticatedApi(page: Page, { user = adminUser, signe
     if (path === '/settings/ai-provider/ollama-models') return json(route, { models: ['llama3.1:8b', 'qwen2.5:14b'] });
     if (path === '/ai-tools/approvals') return json(route, { approvals: [] });
     if (path === '/ai-tools/receipts') return json(route, { receipts: [], nextBefore: null });
+    if (path === '/ai-tools/sessions' && method === 'POST') return json(route, {
+      sessionId: '00000000-0000-4000-8000-000000000413',
+      turns: 2,
+      final: 'Website Redesign is on track with one open high-priority task.',
+      stoppedReason: null,
+      steps: [{ turn: 1, tool: 'list_projects', status: 'ok', reason: null, actionId: null, output: [{ id: project.id, name: project.name, status: project.status }] }],
+    });
     if (path === '/ai-connections') return json(route, {
       connection: null,
       aiDisabled: false,

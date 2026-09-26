@@ -280,7 +280,9 @@ Built; see [ai-tool-registry.md](ai-tool-registry.md) and
   (`503 AI_DISABLED`, audited as `ai.tool_denied`). Pending actions can still
   be rejected.
 - The **budget** gates every model turn of an assistant tool session, so a
-  runaway session stops at the next turn once the budget is spent. Approving
+  runaway session stops at the next turn once the budget is spent (sessions
+  run through `POST /api/ai-tools/sessions`; their usage records carry
+  feature `ai_tools`). Approving
   an already-prepared action spends no tokens and is not blocked by the budget
   (*Proposal*).
 - Tool calls are governed in the executor, where the tool, input and records
