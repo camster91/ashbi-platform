@@ -1,5 +1,5 @@
-// Domain event outbox — admin inspection and dead-letter replay (#412,
-// docs/event-outbox.md).
+// Domain event outbox — admin inspection, dead-letter replay and discard
+// (#412, docs/event-outbox.md).
 //
 // Reads and the replay run through the request-scoped Prisma client, which
 // pins them to the caller's organization and only lets the replay touch
@@ -13,9 +13,11 @@ import { requireRecentAuth } from '../auth/reauth.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { DOMAIN_EVENT_AGGREGATE_TYPES, DOMAIN_EVENT_TYPES } from '../services/domain-event-catalog.js';
 import {
+  DISCARD_REASONS,
   DOMAIN_EVENT_STATUSES,
   MAX_REPLAY_BATCH,
   MAX_REPLAYS_PER_EVENT,
+  discardDeadDomainEvents,
   replayDeadDomainEvents,
 } from '../services/domain-event-dispatcher.service.js';
 
@@ -37,6 +39,11 @@ export const domainEventQuerySchema = z.object({
 
 export const domainEventReplaySchema = z.object({
   eventIds: z.array(shortId).min(1).max(MAX_REPLAY_BATCH),
+}).strict();
+
+export const domainEventDiscardSchema = z.object({
+  eventIds: z.array(shortId).min(1).max(MAX_REPLAY_BATCH),
+  reason: asEnum(DISCARD_REASONS),
 }).strict();
 
 /** Opaque keyset cursor over (occurredAt DESC, id DESC). */
@@ -71,6 +78,7 @@ const EVENT_SELECT = Object.freeze({
   nextAttemptAt: true,
   lastAttemptAt: true,
   publishedAt: true,
+  discardedAt: true,
   lastError: true,
   replayCount: true,
 });
@@ -140,5 +148,34 @@ export default async function domainEventRoutes(fastify) {
       skipped,
       maxReplaysPerEvent: MAX_REPLAYS_PER_EVENT,
     };
+  });
+
+  // Discard dead events that will never be delivered (normally after the
+  // replay limit), so the aggregate's later events can proceed. Admin only,
+  // with step-up; each discard writes a domain_event.discarded audit event.
+  fastify.post('/discard', {
+    onRequest: [fastify.adminOnly],
+    preHandler: [requireRecentAuth, validateBody(domainEventDiscardSchema)],
+  }, async (request) => {
+    const { eventIds, reason } = request.body;
+    const { discarded, skipped } = await discardDeadDomainEvents(request.prisma, eventIds);
+    for (const event of discarded) {
+      await recordRequestAuditEvent(request.prisma, request, {
+        action: 'domain_event.discarded',
+        entityId: event.id,
+        metadata: {
+          type: event.type,
+          aggregateType: event.aggregateType,
+          aggregateId: event.aggregateId,
+          sequence: event.sequence,
+          fromStatus: 'dead',
+          toStatus: 'discarded',
+          reason,
+          replayCount: event.replayCount,
+          previousAttempts: event.attempts,
+        },
+      });
+    }
+    return { discarded: discarded.map((event) => event.id), skipped };
   });
 }

@@ -25,6 +25,7 @@ CREATE TABLE "domain_events" (
     "lockedUntil" TIMESTAMP(3),
     "claimToken" TEXT,
     "publishedAt" TIMESTAMP(3),
+    "discardedAt" TIMESTAMP(3),
     "lastError" TEXT,
     "replayCount" INTEGER NOT NULL DEFAULT 0,
 
@@ -33,7 +34,7 @@ CREATE TABLE "domain_events" (
     CONSTRAINT "domain_events_type_format_check"
       CHECK ("type" ~ '^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$' AND length("type") <= 100),
     CONSTRAINT "domain_events_status_check"
-      CHECK ("status" IN ('pending', 'dispatching', 'published', 'dead')),
+      CHECK ("status" IN ('pending', 'dispatching', 'published', 'dead', 'discarded')),
     CONSTRAINT "domain_events_schemaVersion_check" CHECK ("schemaVersion" >= 1),
     CONSTRAINT "domain_events_sequence_check" CHECK ("sequence" >= 1),
     CONSTRAINT "domain_events_attempts_check" CHECK ("attempts" >= 0),
@@ -50,6 +51,8 @@ CREATE TABLE "domain_events" (
     -- Bookkeeping must stay consistent with the status it describes.
     CONSTRAINT "domain_events_published_at_check"
       CHECK ("status" <> 'published' OR "publishedAt" IS NOT NULL),
+    CONSTRAINT "domain_events_discarded_at_check"
+      CHECK ("status" <> 'discarded' OR "discardedAt" IS NOT NULL),
     CONSTRAINT "domain_events_claim_check"
       CHECK ("status" <> 'dispatching' OR ("lockedUntil" IS NOT NULL AND "claimToken" IS NOT NULL))
 );
@@ -70,10 +73,13 @@ CREATE UNIQUE INDEX "domain_events_organizationId_idempotencyKey_key" ON "domain
 -- "no unpublished predecessor" check.
 CREATE UNIQUE INDEX "domain_events_organizationId_aggregateType_aggregateId_sequ_key" ON "domain_events"("organizationId", "aggregateType", "aggregateId", "sequence");
 
--- AddForeignKey. CASCADE: outbox rows are delivery state, not evidence (the
--- append-only audit_events table is the evidence trail), so they go with
--- their organization. Retention of published rows is decided in #310.
-ALTER TABLE "domain_events" ADD CONSTRAINT "domain_events_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+-- AddForeignKey. ON DELETE CASCADE: outbox rows are delivery state, not
+-- evidence (the append-only audit_events table is the evidence trail), so
+-- they go with their organization. Retention of published rows is decided in
+-- #310. ON UPDATE RESTRICT: organizationId is part of the immutable envelope
+-- (see the trigger below), so an organization id change is refused rather
+-- than cascaded into a trigger error.
+ALTER TABLE "domain_events" ADD CONSTRAINT "domain_events_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE RESTRICT;
 
 -- The event envelope is immutable once written, for every database role with
 -- table write access. Only the dispatch bookkeeping columns may change.

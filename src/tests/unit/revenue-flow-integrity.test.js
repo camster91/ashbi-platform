@@ -78,7 +78,7 @@ test('Stripe checkout completion transitions an invoice and records payment exac
     ['invoice.paid', 'org-1', 'invoice-1', 'req-7', 'stripe:evt_123', 'invoice.paid:invoice-1:payment-1'],
   );
   assert.deepEqual(event.payload, {
-    invoiceId: 'invoice-1', clientId: 'client-1', paymentId: 'payment-1', total: 113, currency: 'CAD',
+    invoiceId: 'invoice-1', clientId: 'client-1', paymentId: 'payment-1', amount: 113, total: 113, currency: 'CAD',
     method: 'STRIPE', source: 'stripe_checkout', paidAt: new Date(1_786_240_000 * 1000).toISOString(),
   });
 });

@@ -121,6 +121,7 @@ notes, signer names, email addresses, API key material or password hashes.
 | `review.share_link_created` | `review_share_link` | USER | `POST /api/reviews/:id/share-links` (step-up re-authentication); never the token or its hash | `sessionId`, `expiresAt`, `expiresInDays`, `allowDecision` |
 | `review.share_link_revoked` | `review_share_link` | USER | `POST /api/reviews/:id/share-links/:linkId/revoke` (only the first revocation of a link) | `sessionId`, `wasExpired` |
 | `domain_event.replayed` | `domain_event` | USER | `POST /api/domain-events/replay` (admin, step-up); one event per requeued outbox row ([event-outbox.md](event-outbox.md)) | `type`, `aggregateType`, `aggregateId`, `sequence`, `fromStatus`, `toStatus`, `replayCount`, `previousAttempts` |
+| `domain_event.discarded` | `domain_event` | USER | `POST /api/domain-events/discard` (admin, step-up); one event per discarded dead outbox row ([event-outbox.md](event-outbox.md)) | `type`, `aggregateType`, `aggregateId`, `sequence`, `fromStatus`, `toStatus`, `reason`, `replayCount`, `previousAttempts` |
 
 `auth.login_failed` details:
 

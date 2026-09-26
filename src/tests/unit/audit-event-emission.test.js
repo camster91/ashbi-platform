@@ -115,8 +115,16 @@ test('marking an invoice paid emits invoice.paid and payment.recorded', async (t
   const audit = auditStore();
   const invoice = draftInvoice({ status: 'SENT' });
   const outbox = outboxStore();
+  let stored = { ...invoice };
   const tx = {
-    invoice: { update: async ({ data }) => ({ ...invoice, ...data }) },
+    invoice: {
+      updateMany: async ({ where, data }) => {
+        if (where.status.notIn.includes(stored.status)) return { count: 0 };
+        stored = { ...stored, ...data };
+        return { count: 1 };
+      },
+      findUnique: async () => stored,
+    },
     invoicePayment: { create: async ({ data }) => ({ id: 'pay-1', ...data }) },
     client: { findUnique: async () => ({ organizationId: 'org-1' }) },
     domainEvent: outbox.domainEvent,
@@ -146,9 +154,18 @@ test('marking an invoice paid emits invoice.paid and payment.recorded', async (t
   );
   assert.match(domainEvent.correlationId, /^req-/);
   assert.deepEqual({ ...domainEvent.payload, paidAt: undefined }, {
-    invoiceId: 'inv-1', clientId: 'client-1', paymentId: 'pay-1', total: 113, currency: 'CAD', method: 'CHEQUE', source: 'manual', paidAt: undefined,
+    invoiceId: 'inv-1', clientId: 'client-1', paymentId: 'pay-1', amount: 113, total: 113, currency: 'CAD', method: 'CHEQUE', source: 'manual', paidAt: undefined,
   });
   assert.doesNotMatch(JSON.stringify(outbox.events), /cheque #12/, 'free-text payment notes are not copied into the outbox');
+
+  // A second mark-paid that read the invoice before the first committed loses
+  // the compare-and-set: 409, and no second payment, audit or outbox event.
+  stored = { ...stored, status: 'PAID' };
+  const raced = await app.inject({ method: 'POST', url: '/inv-1/mark-paid', payload: { paymentMethod: 'CHEQUE' } });
+  assert.equal(raced.statusCode, 409, raced.body);
+  assert.equal(raced.json().code, 'INVOICE_NOT_PAYABLE');
+  assert.equal(audit.events.length, 2);
+  assert.equal(outbox.events.length, 1);
 });
 
 test('bulk actions emit one event per changed invoice', async (t) => {
@@ -161,6 +178,7 @@ test('bulk actions emit one event per changed invoice', async (t) => {
     invoice: {
       findUnique: async ({ where }) => invoices[where.id] ?? null,
       update: async ({ where, data }) => ({ ...invoices[where.id], ...data }),
+      updateMany: async ({ where }) => ({ count: where.status.notIn.includes(invoices[where.id]?.status) ? 0 : 1 }),
     },
     invoicePayment: { create: async ({ data }) => ({ id: `pay-${data.invoiceId}`, ...data }) },
     client: { findUnique: async () => ({ organizationId: 'org-1' }) },
@@ -171,7 +189,7 @@ test('bulk actions emit one event per changed invoice', async (t) => {
   const app = await buildApp(t, invoiceRoutes, prisma);
   const response = await app.inject({ method: 'POST', url: '/bulk/mark-paid', payload: { ids: ['inv-a', 'inv-b'] } });
   assert.equal(response.statusCode, 200, response.body);
-  assert.deepEqual(response.json(), { updated: 1 });
+  assert.deepEqual(response.json(), { updated: 1, skipped: [{ id: 'inv-b', reason: 'already_paid' }] });
   assert.deepEqual(audit.events.map((event) => [event.action, event.entityId, event.metadata.bulk]), [
     ['invoice.paid', 'inv-a', true],
     ['payment.recorded', 'pay-inv-a', true],

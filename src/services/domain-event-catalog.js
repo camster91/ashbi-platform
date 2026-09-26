@@ -18,6 +18,10 @@ const amount = z.number().finite();
 const currency = z.string().regex(/^[A-Z]{3}$/, 'must be an upper-case ISO 4217 code');
 const code = z.string().min(1).max(40).regex(/^[A-Za-z0-9_-]+$/, 'must be a code');
 const sha256Hex = z.string().regex(/^[a-f0-9]{64}$/, 'must be a sha256 hex digest');
+// Payload fields a producer had to normalize because the stored business
+// data was out of shape (e.g. a legacy currency). See
+// src/services/domain-event-producers.js and docs/event-outbox.md.
+const dataIssues = z.array(z.string().regex(/^[A-Za-z]+$/).max(40)).min(1).max(20).optional();
 
 /**
  * @typedef {{
@@ -38,11 +42,13 @@ export const DOMAIN_EVENT_CATALOG = Object.freeze({
         invoiceId: id,
         clientId: id,
         paymentId: id.nullable(),
+        amount,
         total: amount,
         currency,
         method: code,
         source: z.enum(['manual', 'stripe_checkout']),
         paidAt: isoDateTime,
+        dataIssues,
       }).strict(),
     },
   },
@@ -57,6 +63,7 @@ export const DOMAIN_EVENT_CATALOG = Object.freeze({
         total: amount,
         via: z.enum(['portal_link', 'public_link']),
         approvedAt: isoDateTime,
+        dataIssues,
       }).strict(),
     },
   },
@@ -72,6 +79,7 @@ export const DOMAIN_EVENT_CATALOG = Object.freeze({
         documentHash: sha256Hex,
         via: z.enum(['portal_link', 'public_link']),
         signedAt: isoDateTime,
+        dataIssues,
       }).strict(),
     },
   },

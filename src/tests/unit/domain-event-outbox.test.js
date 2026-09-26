@@ -23,15 +23,26 @@ const {
   recordDomainEvent,
 } = await import('../../services/domain-event.service.js');
 const {
+  DISPATCH_DEFAULTS,
   MAX_REPLAY_BATCH,
+  SUBSCRIBER_TIMEOUT_MS,
   computeBackoffMs,
+  deadLetterAbandonedClaims,
   describeDispatchError,
+  discardDeadDomainEvents,
   dispatchDomainEvents,
   registerDomainEventSubscriber,
   replayDeadDomainEvents,
   subscribersFor,
   unregisterDomainEventSubscriber,
 } = await import('../../services/domain-event-dispatcher.service.js');
+const {
+  UNKNOWN_CURRENCY,
+  idempotencyKeyFor,
+  recordContractSigned,
+  recordInvoicePaid,
+  recordProposalApproved,
+} = await import('../../services/domain-event-producers.js');
 const { createScopedPrisma, tenantModelPolicy } = await import('../../utils/prisma-tenant-proxy.js');
 const { requestStorage } = await import('../../utils/request-context.js');
 const { default: domainEventRoutes } = await import('../../routes/domain-event.routes.js');
@@ -46,7 +57,7 @@ function invoicePaid(overrides = {}) {
     idempotencyKey: 'invoice.paid:inv-1:pay-1',
     correlationId: 'req-1',
     payload: {
-      invoiceId: 'inv-1', clientId: 'client-1', paymentId: 'pay-1', total: 113, currency: 'CAD',
+      invoiceId: 'inv-1', clientId: 'client-1', paymentId: 'pay-1', amount: 113, total: 113, currency: 'CAD',
       method: 'CHEQUE', source: 'manual', paidAt: PAID_AT,
     },
     ...overrides,
@@ -108,6 +119,14 @@ test('recordDomainEvent dedupes by idempotency key and rejects a key reused for 
     recordDomainEvent(tx, invoicePaid({ aggregateId: 'inv-9', payload: { ...invoicePaid().payload, invoiceId: 'inv-9' } })),
     DomainEventIdempotencyConflictError,
   );
+  // Same key and aggregate but a different payload is not the same fact.
+  await assert.rejects(
+    recordDomainEvent(tx, invoicePaid({ payload: { ...invoicePaid().payload, amount: 50 } })),
+    DomainEventIdempotencyConflictError,
+  );
+  // Key order does not matter (JSONB does not preserve it).
+  const reordered = Object.fromEntries(Object.entries(invoicePaid().payload).reverse());
+  assert.equal((await recordDomainEvent(tx, invoicePaid({ payload: reordered }))).duplicate, true);
   // The same key in another organization is a different fact.
   const otherTenant = await recordDomainEvent(tx, invoicePaid({ organizationId: 'org-2' }));
   assert.equal(otherTenant.duplicate, false);
@@ -216,12 +235,12 @@ function memoryOutbox(rows) {
     occurredAt: new Date(index), correlationId: 'req-1', causationId: null, ...row,
   }));
   let tokens = 0;
-  const claim = async (_prisma, { now, limit, leaseMs }) => {
+  const claim = async (_prisma, { now, limit, leaseMs, maxAttempts }) => {
     const eligible = events.filter((event) => (
       (event.status === 'pending' && event.nextAttemptAt <= now)
-      || (event.status === 'dispatching' && event.lockedUntil < now)
+      || (event.status === 'dispatching' && event.lockedUntil < now && event.attempts < maxAttempts)
     ) && !events.some((other) => other.organizationId === event.organizationId && other.aggregateType === event.aggregateType
-      && other.aggregateId === event.aggregateId && other.sequence < event.sequence && other.status !== 'published'))
+      && other.aggregateId === event.aggregateId && other.sequence < event.sequence && !['published', 'discarded'].includes(other.status)))
       .sort((a, b) => a.occurredAt - b.occurredAt || a.sequence - b.sequence)
       .slice(0, limit);
     const claimToken = `claim-${++tokens}`;
@@ -230,13 +249,20 @@ function memoryOutbox(rows) {
     }
     return eligible.map((event) => ({ ...event }));
   };
+  const matchesWhere = (event, where) => Object.entries(where).every(([field, condition]) => {
+    if (condition && typeof condition === 'object' && !(condition instanceof Date)) {
+      if ('lt' in condition) return event[field] !== null && event[field] < condition.lt;
+      if ('gte' in condition) return event[field] >= condition.gte;
+      return false;
+    }
+    return event[field] === condition;
+  });
   const prisma = {
     domainEvent: {
       updateMany: async ({ where, data }) => {
-        const target = events.find((event) => event.id === where.id && event.status === where.status && event.claimToken === where.claimToken);
-        if (!target) return { count: 0 };
-        Object.assign(target, data);
-        return { count: 1 };
+        const targets = events.filter((event) => matchesWhere(event, where));
+        for (const target of targets) Object.assign(target, data);
+        return { count: targets.length };
       },
     },
   };
@@ -256,7 +282,7 @@ test('the dispatcher delivers each aggregate in sequence order and publishes', a
   const subscribers = [{ name: 'spy', types: null, handle: (event, ctx) => delivered.push([event.aggregateId, event.sequence, ctx.prisma.organizationId]) }];
   const summary = await dispatchDomainEvents(prisma, { claim, subscribers, runInTenant: inTenant, logger: silent, batchSize: 10 });
   assert.deepEqual(delivered, [['inv-2', 1, 'org-1'], ['inv-1', 1, 'org-1'], ['inv-1', 2, 'org-1']]);
-  assert.deepEqual(summary, { claimed: 3, published: 3, retried: 0, dead: 0, leaseLost: 0 });
+  assert.deepEqual(summary, { claimed: 3, published: 3, retried: 0, dead: 0, leaseLost: 0, abandoned: 0 });
   assert.ok(events.every((event) => event.status === 'published' && event.publishedAt && event.claimToken === null));
 });
 
@@ -277,7 +303,7 @@ test('a failing subscriber retries with backoff, blocks its successors, then dea
   };
 
   let summary = await dispatchDomainEvents(prisma, options);
-  assert.deepEqual(summary, { claimed: 1, published: 0, retried: 1, dead: 0, leaseLost: 0 });
+  assert.deepEqual(summary, { claimed: 1, published: 0, retried: 1, dead: 0, leaseLost: 0, abandoned: 0 });
   assert.equal(events[0].status, 'pending');
   assert.equal(events[0].nextAttemptAt.getTime(), clock.getTime() + 1000);
   assert.equal(events[0].lastError, 'Error [E_DOWN]: downstream unavailable');
@@ -314,6 +340,63 @@ test('a dispatcher that lost its lease does not overwrite the newer claim', asyn
   assert.equal(summary.leaseLost, 1);
   assert.equal(events[0].status, 'dispatching');
   assert.equal(events[0].claimToken, 'someone-else');
+});
+
+test('a claim abandoned on its final attempt is dead-lettered, not reclaimed forever', async () => {
+  const now = new Date('2026-09-26T00:00:00Z');
+  const expired = new Date(now.getTime() - 1);
+  const { events, claim, prisma } = memoryOutbox([
+    // Crashed its worker on the last allowed attempt.
+    { aggregateId: 'inv-1', sequence: 1, type: 'invoice.paid', status: 'dispatching', attempts: 3, lockedUntil: expired, claimToken: 'dead-worker' },
+    // Crashed with attempts left: reclaimed and delivered.
+    { aggregateId: 'inv-2', sequence: 1, type: 'invoice.paid', status: 'dispatching', attempts: 1, lockedUntil: expired, claimToken: 'dead-worker' },
+    // Lease still valid: left alone.
+    { aggregateId: 'inv-3', sequence: 1, type: 'invoice.paid', status: 'dispatching', attempts: 3, lockedUntil: new Date(now.getTime() + 60_000), claimToken: 'live' },
+  ]);
+  const delivered = [];
+  const subscribers = [{ name: 'spy', types: null, handle: (event) => delivered.push(event.aggregateId) }];
+  const summary = await dispatchDomainEvents(prisma, {
+    claim, subscribers, runInTenant: inTenant, logger: silent, now: () => now, maxAttempts: 3,
+  });
+  assert.equal(summary.abandoned, 1);
+  assert.deepEqual(delivered, ['inv-2']);
+  assert.deepEqual([events[0].status, events[0].claimToken, events[0].lockedUntil], ['dead', null, null]);
+  assert.match(events[0].lastError, /^LeaseExpired/);
+  assert.equal(events[2].status, 'dispatching');
+  // The sweep on its own, as the worker calls it.
+  assert.equal(await deadLetterAbandonedClaims(prisma, { now, maxAttempts: 3 }), 0);
+});
+
+test('a subscriber that hangs times out below the lease and counts as a failed attempt', async () => {
+  assert.ok(SUBSCRIBER_TIMEOUT_MS < DISPATCH_DEFAULTS.leaseMs);
+  const { events, claim, prisma } = memoryOutbox([{ aggregateId: 'inv-1', sequence: 1, type: 'invoice.paid' }]);
+  const subscribers = [{ name: 'hang', types: null, handle: () => new Promise(() => {}) }];
+  const summary = await dispatchDomainEvents(prisma, {
+    claim, subscribers, runInTenant: inTenant, logger: silent, subscriberTimeoutMs: 20, leaseMs: 1000,
+  });
+  assert.equal(summary.retried, 1);
+  assert.equal(events[0].status, 'pending');
+  assert.match(events[0].lastError, /^DomainEventSubscriberTimeoutError \[SUBSCRIBER_TIMEOUT\]/);
+  await assert.rejects(
+    dispatchDomainEvents(prisma, { claim, subscribers, runInTenant: inTenant, logger: silent, subscriberTimeoutMs: 1000, leaseMs: 1000 }),
+    /shorter than leaseMs/,
+  );
+});
+
+test('a discarded predecessor no longer blocks its aggregate', async () => {
+  const { events, claim, prisma } = memoryOutbox([
+    { aggregateId: 'inv-1', sequence: 1, type: 'invoice.paid', status: 'dead', attempts: 10, replayCount: 5 },
+    { aggregateId: 'inv-1', sequence: 2, type: 'invoice.paid' },
+  ]);
+  const delivered = [];
+  const subscribers = [{ name: 'spy', types: null, handle: (event) => delivered.push(event.sequence) }];
+  const options = { claim, subscribers, runInTenant: inTenant, logger: silent };
+  assert.equal((await dispatchDomainEvents(prisma, options)).claimed, 0, 'dead predecessor blocks');
+  events[0].status = 'discarded';
+  events[0].discardedAt = new Date();
+  await dispatchDomainEvents(prisma, options);
+  assert.deepEqual(delivered, [2]);
+  assert.equal(events[0].status, 'discarded', 'discarded events are never delivered');
 });
 
 test('the subscriber registry filters by type and refuses duplicates', () => {
@@ -355,6 +438,80 @@ test('replay requeues only this tenant\'s dead events, within the per-event limi
 
   await assert.rejects(replayDeadDomainEvents(scopedA, []), /between 1 and/);
   await assert.rejects(replayDeadDomainEvents(scopedA, Array.from({ length: MAX_REPLAY_BATCH + 1 }, (_, i) => `e${i}`)), /between 1 and/);
+});
+
+test('discard settles only this tenant\'s dead events', async () => {
+  const outbox = outboxStore();
+  const seed = (id, organizationId, status) => outbox.events.push({
+    id, organizationId, status, replayCount: 5, attempts: 10, type: 'invoice.paid', aggregateType: 'invoice', aggregateId: 'inv-1', sequence: 1,
+  });
+  seed('dead-a', 'org-a', 'dead');
+  seed('pending-a', 'org-a', 'pending');
+  seed('dead-b', 'org-b', 'dead');
+  const scopedA = createScopedPrisma({ domainEvent: outbox.domainEvent }, 'org-a');
+  const now = new Date('2026-09-26T00:00:00Z');
+  const result = await discardDeadDomainEvents(scopedA, ['dead-a', 'pending-a', 'dead-b'], { now });
+  assert.deepEqual(result.discarded.map((event) => event.id), ['dead-a']);
+  assert.deepEqual(result.skipped, [{ id: 'pending-a', reason: 'not_dead' }, { id: 'dead-b', reason: 'not_found' }]);
+  const row = outbox.events.find((event) => event.id === 'dead-a');
+  assert.deepEqual([row.status, row.discardedAt], ['discarded', now]);
+  assert.equal(outbox.events.find((event) => event.id === 'dead-b').status, 'dead');
+  await assert.rejects(discardDeadDomainEvents(scopedA, []), /between 1 and/);
+});
+
+// ─── Producers ───────────────────────────────────────────────────────────────
+
+test('producers normalize out-of-shape business data instead of failing the write', async () => {
+  const { outbox, tx } = fakeTx();
+  const paid = await recordInvoicePaid(tx, {
+    organizationId: 'org-1',
+    invoice: { id: 'inv-legacy', clientId: 'client 1 (old import)', total: Number.NaN, currency: 'C$' },
+    paymentId: 'pay-1', amount: Number.POSITIVE_INFINITY, method: 'E TRANSFER', source: 'manual', paidAt: new Date('not a date'),
+  });
+  const payload = paid.event.payload;
+  assert.equal(payload.currency, UNKNOWN_CURRENCY);
+  assert.equal(payload.total, 0);
+  assert.equal(payload.amount, 0);
+  assert.equal(payload.method, 'UNKNOWN');
+  assert.match(payload.clientId, /^invalid-[0-9a-f]{32}$/);
+  assert.match(payload.paidAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.deepEqual(payload.dataIssues.sort(), ['amount', 'clientId', 'currency', 'method', 'paidAt', 'total']);
+  // Deterministic: the same bad id always maps to the same id.
+  const again = await recordInvoicePaid(tx, {
+    organizationId: 'org-1',
+    invoice: { id: 'inv-legacy-2', clientId: 'client 1 (old import)', total: 10, currency: null },
+    paymentId: 'pay-2', amount: 10, method: 'OTHER', source: 'manual', paidAt: new Date(PAID_AT),
+  });
+  assert.equal(again.event.payload.clientId, payload.clientId);
+  assert.equal(again.event.payload.currency, 'CAD', 'a missing currency defaults to CAD, like Stripe checkout');
+  assert.deepEqual(again.event.payload.dataIssues, ['clientId'], 'only the out-of-shape field is flagged');
+  const clean = await recordInvoicePaid(tx, {
+    organizationId: 'org-1', invoice: { id: 'inv-clean', clientId: 'client-1', total: 10, currency: 'usd' },
+    paymentId: 'pay-3', amount: 10, method: 'OTHER', source: 'manual', paidAt: new Date(PAID_AT),
+  });
+  assert.equal(clean.event.payload.dataIssues, undefined, 'clean data carries no dataIssues');
+  assert.equal(clean.event.payload.currency, 'USD');
+
+  const approved = await recordProposalApproved(tx, {
+    organizationId: 'org-1', proposal: { id: 'prop-1', clientId: 'client-1', projectId: 'bad id!', total: undefined },
+    via: 'public_link', approvedAt: new Date(PAID_AT),
+  });
+  assert.deepEqual(approved.event.payload.dataIssues.sort(), ['projectId', 'total']);
+  const signed = await recordContractSigned(tx, {
+    organizationId: 'org-1', contract: { id: 'k-1', clientId: 'client-1', proposalId: null },
+    signingMethod: 'stamp', documentHash: 'nope', via: 'portal_link', signedAt: new Date(PAID_AT),
+  });
+  assert.deepEqual(signed.event.payload.dataIssues.sort(), ['documentHash', 'signingMethod']);
+  assert.match(signed.event.payload.documentHash, /^[0-9a-f]{64}$/);
+  assert.equal(outbox.events.length, 5);
+});
+
+test('idempotency keys stay within the column limit deterministically', () => {
+  assert.equal(idempotencyKeyFor('invoice.paid', 'inv-1', 'pay-1'), 'invoice.paid:inv-1:pay-1');
+  const long = idempotencyKeyFor('invoice.paid', 'a'.repeat(191), 'b'.repeat(191));
+  assert.ok(long.length <= 255);
+  assert.equal(long, idempotencyKeyFor('invoice.paid', 'a'.repeat(191), 'b'.repeat(191)));
+  assert.match(long, /^invoice\.paid:sha256:[0-9a-f]{64}$/);
 });
 
 // ─── Admin route ─────────────────────────────────────────────────────────────
@@ -442,9 +599,40 @@ test('POST /api/domain-events/replay needs an admin with step-up and audits each
   assert.equal(invalid.statusCode, 400);
 });
 
+test('POST /api/domain-events/discard needs an admin with step-up, a reason, and audits each discard', async (t) => {
+  const { app, outbox, audits } = await buildRouteApp(t);
+  const payload = { eventIds: ['dead-a', 'dead-b', 'ok-a'], reason: 'poison_payload' };
+  const noStepUp = await app.inject({ method: 'POST', url: '/discard', payload });
+  assert.equal(noStepUp.statusCode, 403);
+  assert.equal(outbox.events.find((event) => event.id === 'dead-a').status, 'dead');
+  const noReason = await app.inject({ method: 'POST', url: '/discard', payload: { eventIds: ['dead-a'] }, cookies: reauthCookies(ADMIN) });
+  assert.equal(noReason.statusCode, 400);
+
+  const response = await app.inject({ method: 'POST', url: '/discard', payload, cookies: reauthCookies(ADMIN) });
+  assert.equal(response.statusCode, 200, response.body);
+  assert.deepEqual(response.json(), {
+    discarded: ['dead-a'],
+    skipped: [{ id: 'dead-b', reason: 'not_found' }, { id: 'ok-a', reason: 'not_dead' }],
+  });
+  const row = outbox.events.find((event) => event.id === 'dead-a');
+  assert.equal(row.status, 'discarded');
+  assert.ok(row.discardedAt instanceof Date);
+  assert.equal(outbox.events.find((event) => event.id === 'dead-b').status, 'dead');
+  assert.equal(audits.length, 1);
+  assert.deepEqual([audits[0].action, audits[0].entityId, audits[0].organizationId], ['domain_event.discarded', 'dead-a', 'org-a']);
+  assert.deepEqual(audits[0].metadata, {
+    type: 'invoice.paid', aggregateType: 'invoice', aggregateId: 'inv-1', sequence: 1,
+    fromStatus: 'dead', toStatus: 'discarded', reason: 'poison_payload', replayCount: 0, previousAttempts: 10,
+  });
+  // A discarded event cannot be replayed.
+  const replay = await app.inject({ method: 'POST', url: '/replay', payload: { eventIds: ['dead-a'] }, cookies: reauthCookies(ADMIN) });
+  assert.deepEqual(replay.json().skipped, [{ id: 'dead-a', reason: 'not_dead' }]);
+});
+
 test('non-admins cannot read or replay the outbox', async (t) => {
   const staff = { id: 'staff-1', role: 'STAFF', organizationId: 'org-a' };
   const { app } = await buildRouteApp(t, staff);
   assert.equal((await app.inject({ method: 'GET', url: '/' })).statusCode, 403);
   assert.equal((await app.inject({ method: 'POST', url: '/replay', payload: { eventIds: ['dead-a'] }, cookies: reauthCookies(staff) })).statusCode, 403);
+  assert.equal((await app.inject({ method: 'POST', url: '/discard', payload: { eventIds: ['dead-a'], reason: 'other' }, cookies: reauthCookies(staff) })).statusCode, 403);
 });

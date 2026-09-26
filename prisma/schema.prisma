@@ -1224,7 +1224,7 @@ model AuditEvent {
 model DomainEvent {
   id             String       @id @default(cuid())
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: Restrict)
   type           String // dotted, e.g. invoice.paid (src/services/domain-event-catalog.js)
   schemaVersion  Int // payload schema version for `type`
   aggregateType  String // e.g. invoice; fixed per type by the catalog
@@ -1236,13 +1236,14 @@ model DomainEvent {
   idempotencyKey String // Unique per organization; a repeat returns the first event
   occurredAt     DateTime     @default(now())
   // Dispatch bookkeeping (the only mutable columns)
-  status         String       @default("pending") // pending, dispatching, published, dead
+  status         String       @default("pending") // pending, dispatching, published, dead, discarded
   attempts       Int          @default(0)
   nextAttemptAt  DateTime     @default(now())
   lastAttemptAt  DateTime?
   lockedUntil    DateTime? // Claim lease; an expired lease is reclaimed
   claimToken     String?
   publishedAt    DateTime?
+  discardedAt    DateTime? // Set when an admin discards a dead event
   lastError      String? // Error name and truncated message only
   replayCount    Int          @default(0)
 

@@ -64,6 +64,7 @@ export const AUDIT_EVENT_CATALOG = Object.freeze({
   'review.share_link_created': { entityType: 'review_share_link', metadata: ['sessionId', 'expiresAt', 'expiresInDays', 'allowDecision'] },
   'review.share_link_revoked': { entityType: 'review_share_link', metadata: ['sessionId', 'wasExpired'] },
   'domain_event.replayed': { entityType: 'domain_event', metadata: ['type', 'aggregateType', 'aggregateId', 'sequence', 'fromStatus', 'toStatus', 'replayCount', 'previousAttempts'] },
+  'domain_event.discarded': { entityType: 'domain_event', metadata: ['type', 'aggregateType', 'aggregateId', 'sequence', 'fromStatus', 'toStatus', 'reason', 'replayCount', 'previousAttempts'] },
 });
 
 /** action -> entityType, derived from the catalog. */

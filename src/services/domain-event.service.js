@@ -37,7 +37,7 @@ const TRACE_ID_FORMAT = /^[A-Za-z0-9_:.@/+-]+$/;
 export class DomainEventIdempotencyConflictError extends Error {
   /** @param {string} idempotencyKey */
   constructor(idempotencyKey) {
-    super('Idempotency key already used for a different domain event');
+    super('Idempotency key already used for a different domain event (type, aggregate or payload differs)');
     this.name = 'DomainEventIdempotencyConflictError';
     this.code = 'DOMAIN_EVENT_IDEMPOTENCY_CONFLICT';
     this.idempotencyKey = idempotencyKey;
@@ -58,6 +58,15 @@ function requiredId(value, field, max = MAX_ID_LENGTH) {
     throw new DomainEventValidationError(`${field} is required (1-${max} characters)`);
   }
   return value;
+}
+
+/** JSON with object keys sorted, so JSONB round-trips compare equal. */
+export function canonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
 }
 
 /** Transaction-scoped advisory lock key for one aggregate's sequence. */
@@ -131,7 +140,10 @@ export async function recordDomainEvent(tx, input) {
 
   const existing = await tx.domainEvent.findFirst({ where: { organizationId, idempotencyKey } });
   if (existing) {
-    if (existing.type !== type || existing.aggregateType !== aggregateType || existing.aggregateId !== aggregateId) {
+    // The same key must describe the same fact: same type, aggregate, schema
+    // version and payload. Anything else is a key reused by mistake.
+    if (existing.type !== type || existing.aggregateType !== aggregateType || existing.aggregateId !== aggregateId
+      || existing.schemaVersion !== spec.currentVersion || canonicalJson(existing.payload) !== canonicalJson(payload)) {
       throw new DomainEventIdempotencyConflictError(idempotencyKey);
     }
     return { event: existing, duplicate: true };

@@ -55,7 +55,7 @@ const APPEND_ONLY_BLOCKED_METHODS = new Set([
 const BOOKKEEPING_ONLY_MODELS = {
   domainevent: new Set([
     'status', 'attempts', 'nextAttemptAt', 'lastAttemptAt', 'lockedUntil',
-    'claimToken', 'publishedAt', 'lastError', 'replayCount',
+    'claimToken', 'publishedAt', 'discardedAt', 'lastError', 'replayCount',
   ]),
 };
 const BOOKKEEPING_BLOCKED_METHODS = new Set(['upsert', 'delete', 'deleteMany', 'updateManyAndReturn']);
