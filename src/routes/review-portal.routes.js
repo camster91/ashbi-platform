@@ -22,7 +22,12 @@ import {
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { scanReviewMedia } from '../services/media-scan.service.js';
 import {
+  PUBLIC_THREAD_PAGE,
+  ReviewSessionClosedError,
+  annotationLimitFailure,
   annotationPositionData,
+  applyDecisionStatus,
+  loadAnnotationThreads,
   annotationPositionError,
   canWriteToSession,
   findShareLinkByToken,
@@ -79,6 +84,11 @@ function shareTokenLimiter(fastify, name) {
     return undefined;
   };
 }
+
+const DECISION_ALREADY_RECORDED = Object.freeze({
+  error: 'A decision has already been recorded through this review link',
+  code: 'SHARE_LINK_DECISION_RECORDED',
+});
 
 const LINK_INCLUDE = {
   session: {
@@ -141,18 +151,16 @@ export default async function reviewPortalRoutes(fastify) {
     const resolved = await resolveShareLink(request, reply);
     if (!resolved) return reply;
     const { link, session } = resolved;
-    const [annotations, decisions] = await Promise.all([
-      request.prisma.reviewAnnotation.findMany({
-        where: { sessionId: session.id },
-        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-        take: 1000,
-      }),
+    const [threads, decisions, linkDecisions] = await Promise.all([
+      loadAnnotationThreads(request.prisma, session.id, PUBLIC_THREAD_PAGE),
       request.prisma.reviewDecision.findMany({
         where: { sessionId: session.id },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         take: 200,
       }),
+      request.prisma.reviewDecision.count({ where: { shareLinkId: link.id } }),
     ]);
+    const canComment = canWriteToSession(session);
     return {
       session: {
         title: session.title,
@@ -160,8 +168,17 @@ export default async function reviewPortalRoutes(fastify) {
         version: session.version,
         media: mediaSummary(session.attachment),
       },
-      link: { expiresAt: link.expiresAt, allowDecision: link.allowDecision, canComment: canWriteToSession(session) },
-      annotations: annotations.map(publicAnnotation),
+      link: {
+        expiresAt: link.expiresAt,
+        allowDecision: link.allowDecision,
+        canComment,
+        // One decision per link; staff can still decide afterwards.
+        decisionRecorded: linkDecisions > 0,
+        canDecide: link.allowDecision && canComment && linkDecisions === 0,
+      },
+      annotations: threads.annotations.map(publicAnnotation),
+      annotationTotal: threads.total,
+      annotationsTruncated: threads.truncated,
       decisions: decisions.map(publicDecision),
     };
   });
@@ -221,6 +238,8 @@ export default async function reviewPortalRoutes(fastify) {
       });
       if (!parent) return reply.status(404).send({ error: 'Comment to reply to not found' });
     }
+    const limit = await annotationLimitFailure(request.prisma, { sessionId: session.id, shareLinkId: link.id });
+    if (limit) return reply.status(409).send(limit);
     const annotation = await request.prisma.reviewAnnotation.create({
       data: {
         sessionId: session.id,
@@ -250,21 +269,32 @@ export default async function reviewPortalRoutes(fastify) {
     if (!name) return reply.status(400).send({ error: 'name: Enter your name' });
     const { decision } = request.body;
     const note = request.body.note ? sanitizePlainText(request.body.note).slice(0, 2000) : '';
-    const created = await request.prisma.$transaction(async (tx) => {
-      const row = await tx.reviewDecision.create({
-        data: {
-          sessionId: session.id,
-          decision,
-          actorType: 'guest',
-          actorName: name,
-          actorEmail: email,
-          shareLinkId: link.id,
-          note: note || null,
-        },
+    if (await request.prisma.reviewDecision.count({ where: { shareLinkId: link.id } }) > 0) {
+      return reply.status(409).send(DECISION_ALREADY_RECORDED);
+    }
+    let created;
+    try {
+      created = await request.prisma.$transaction(async (tx) => {
+        const row = await tx.reviewDecision.create({
+          data: {
+            sessionId: session.id,
+            decision,
+            actorType: 'guest',
+            actorName: name,
+            actorEmail: email,
+            shareLinkId: link.id,
+            note: note || null,
+          },
+        });
+        await applyDecisionStatus(tx, session.id, decision);
+        return row;
       });
-      await tx.reviewSession.update({ where: { id: session.id }, data: { status: decision } });
-      return row;
-    });
+    } catch (err) {
+      if (err instanceof ReviewSessionClosedError) return reply.status(409).send({ error: 'This review is closed', code: err.code });
+      // Unique shareLinkId: a concurrent request recorded this link's decision.
+      if (err?.code === 'P2002') return reply.status(409).send(DECISION_ALREADY_RECORDED);
+      throw err;
+    }
     // The guest's name and email stay on the decision row; the audit event
     // carries only ids and the transition.
     await recordRequestAuditEvent(request.prisma, request, {

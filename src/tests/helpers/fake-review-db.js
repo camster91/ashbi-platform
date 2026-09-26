@@ -35,6 +35,7 @@ const RELATIONS = {
 const UNIQUE = {
   reviewShareLink: ['tokenHash'],
   reviewSession: ['previousSessionId'],
+  reviewDecision: ['shareLinkId'],
 };
 
 function compareValues(a, b) {

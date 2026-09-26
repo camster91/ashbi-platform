@@ -11,6 +11,13 @@ export const REVIEW_DECISIONS = Object.freeze(['approved', 'changes_requested'])
 export const ANNOTATION_BODY_MAX = 5000;
 export const DECISION_NOTE_MAX = 2000;
 export const GUEST_NAME_MAX = 120;
+// Guest write bounds (#417 security review): comments per share link and per
+// session, and at most one decision per share link.
+export const ANNOTATIONS_PER_LINK_MAX = 500;
+export const ANNOTATIONS_PER_SESSION_MAX = 2000;
+// The share-link view returns the newest threads (top-level comments with
+// all their replies); older ones are summarised by a count, never the recent.
+export const PUBLIC_THREAD_PAGE = 500;
 export const SHARE_LINK_DEFAULT_DAYS = 14;
 export const SHARE_LINK_MAX_DAYS = 90;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -269,6 +276,71 @@ export async function isAttachmentUnderReview(prisma, attachmentId) {
 /** Prisma foreign-key violation (the RESTRICT above, on a race). */
 export function isForeignKeyViolation(err) {
   return err?.code === 'P2003' || /foreign key/i.test(String(err?.message || ''));
+}
+
+/**
+ * The newest `threadLimit` top-level annotations of a session with all their
+ * replies, oldest first, plus totals so a truncated view says so.
+ * @param {any} prisma
+ * @param {string} sessionId
+ * @param {number} threadLimit
+ */
+export async function loadAnnotationThreads(prisma, sessionId, threadLimit) {
+  const [total, threadTotal, newestThreads] = await Promise.all([
+    prisma.reviewAnnotation.count({ where: { sessionId } }),
+    prisma.reviewAnnotation.count({ where: { sessionId, parentId: null } }),
+    prisma.reviewAnnotation.findMany({
+      where: { sessionId, parentId: null },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: threadLimit,
+    }),
+  ]);
+  const threadIds = newestThreads.map((annotation) => annotation.id);
+  const replies = threadIds.length
+    ? await prisma.reviewAnnotation.findMany({
+      where: { sessionId, parentId: { in: threadIds } },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: ANNOTATIONS_PER_SESSION_MAX,
+    })
+    : [];
+  return {
+    annotations: [...newestThreads.reverse(), ...replies],
+    total,
+    truncated: threadTotal > newestThreads.length,
+  };
+}
+
+/** Why a new annotation would exceed a bound, or null. */
+export async function annotationLimitFailure(prisma, { sessionId, shareLinkId = null }) {
+  if (await prisma.reviewAnnotation.count({ where: { sessionId } }) >= ANNOTATIONS_PER_SESSION_MAX) {
+    return { error: `This review has reached its limit of ${ANNOTATIONS_PER_SESSION_MAX} comments`, code: 'ANNOTATION_LIMIT_REACHED' };
+  }
+  if (shareLinkId && await prisma.reviewAnnotation.count({ where: { shareLinkId } }) >= ANNOTATIONS_PER_LINK_MAX) {
+    return { error: `This review link has reached its limit of ${ANNOTATIONS_PER_LINK_MAX} comments`, code: 'ANNOTATION_LIMIT_REACHED' };
+  }
+  return null;
+}
+
+/** Thrown inside a decision transaction to roll it back. */
+export class ReviewSessionClosedError extends Error {
+  constructor() {
+    super('This review session is closed');
+    this.code = 'REVIEW_SESSION_CLOSED';
+  }
+}
+
+/**
+ * Set a session's status from a decision, inside the decision's
+ * transaction. Compare-and-set against `closed` so a decision can never
+ * reopen a session that was closed (e.g. replaced by a new version) after it
+ * was read; throws ReviewSessionClosedError to roll the decision back.
+ */
+export async function applyDecisionStatus(tx, sessionId, decision) {
+  const moved = await tx.reviewSession.updateMany({
+    where: { id: sessionId, status: { not: 'closed' } },
+    data: { status: decision },
+  });
+  if (moved.count !== 1) throw new ReviewSessionClosedError();
 }
 
 export function canWriteToSession(session) {

@@ -420,6 +420,7 @@ export async function mockPortalReviewApi(page: Page, { allowDecision = true } =
     annotations: reviewAnnotations.map(annotation => ({ ...annotation })),
     decisions: reviewDecisions.map(decision => ({ ...decision })),
     posted: [] as Array<Record<string, unknown>>,
+    decided: false,
     unmocked: trackUnmocked(page),
   };
   await page.route('**/api/**', async route => {
@@ -432,7 +433,7 @@ export async function mockPortalReviewApi(page: Page, { allowDecision = true } =
     if (pathname === base && method === 'GET') {
       return json(route, {
         session: { title: reviewSession.title, status: reviewSession.status, version: 1, media: { fileName: reviewAttachment.originalName, mimeType: 'image/png', size: reviewAttachment.size, kind: 'image' } },
-        link: { expiresAt: NEXT_WEEK, allowDecision, canComment: true },
+        link: { expiresAt: NEXT_WEEK, allowDecision, canComment: true, decisionRecorded: state.decided, canDecide: allowDecision && !state.decided },
         annotations: state.annotations,
         decisions: state.decisions,
       });
@@ -449,6 +450,7 @@ export async function mockPortalReviewApi(page: Page, { allowDecision = true } =
       state.posted.push(body);
       const decision = { id: `decision-new-${state.posted.length}`, decision: body.decision, actorType: 'guest', actorName: body.name, note: body.note ?? null, createdAt: NOW };
       state.decisions.unshift(decision);
+      state.decided = true;
       return json(route, { decision, status: body.decision }, 201);
     }
     state.unmocked.push(`${method} ${pathname}`);

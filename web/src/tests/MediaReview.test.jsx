@@ -153,7 +153,7 @@ describe('client review page', () => {
 
   const portalData = {
     session: { title: 'Homepage v1', status: 'open', version: 1, media: { fileName: 'Homepage.png', mimeType: 'image/png', size: 10, kind: 'image' } },
-    link: { expiresAt: '2026-10-04T10:00:00.000Z', allowDecision: true, canComment: true },
+    link: { expiresAt: '2026-10-04T10:00:00.000Z', allowDecision: true, canComment: true, canDecide: true, decisionRecorded: false },
     annotations: imageAnnotations,
     decisions: [],
   };
@@ -184,7 +184,7 @@ describe('client review page', () => {
   });
 
   it('hides decisions when the link does not allow them, and resolve controls always', async () => {
-    api.getPortalReview.mockResolvedValue({ ...portalData, link: { ...portalData.link, allowDecision: false } });
+    api.getPortalReview.mockResolvedValue({ ...portalData, link: { ...portalData.link, allowDecision: false, canDecide: false } });
     withProviders('/portal/review/tok', '/portal/review/:token', <PortalReview />);
     await screen.findByRole('heading', { name: 'Homepage v1', level: 1 });
     expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();

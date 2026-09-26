@@ -393,3 +393,91 @@ describe('media review share-link rate limits', () => {
   });
 });
 
+describe('media review guest write bounds', () => {
+  const seedAnnotations = (db, sessionId, count, extra = {}) => {
+    const base = Date.now() - count * 1000;
+    for (let index = 0; index < count; index += 1) {
+      db.tables.reviewAnnotation.push({
+        id: `seed-${sessionId}-${index}`, sessionId, parentId: null, authorType: 'staff', authorUserId: 'team-a', authorName: 'Seed',
+        body: `seed ${index}`, createdAt: new Date(base + index * 1000), updatedAt: new Date(), ...extra,
+      });
+    }
+  };
+
+  it('caps comments per share link and per session with 409', async (t) => {
+    const { staff, guest, db, createSession, createLink } = await setup(t);
+    const session = await createSession();
+    const { token } = await createLink(session.id);
+    const linkId = db.tables.reviewShareLink[0].id;
+    seedAnnotations(db, session.id, 500, { authorType: 'guest', authorUserId: undefined, shareLinkId: linkId });
+    const perLink = await guest('POST', `${token}/annotations`, { name: 'Guest', body: 'one more' });
+    assert.deepEqual([perLink.statusCode, perLink.json().code], [409, 'ANNOTATION_LIMIT_REACHED']);
+    // A fresh link still works until the session cap.
+    const { token: second } = await createLink(session.id);
+    assert.equal((await guest('POST', `${second}/annotations`, { name: 'Guest', body: 'fresh link' })).statusCode, 201);
+    seedAnnotations(db, `${session.id}`, 1500);
+    const perSession = await guest('POST', `${second}/annotations`, { name: 'Guest', body: 'over' });
+    assert.deepEqual([perSession.statusCode, perSession.json().code], [409, 'ANNOTATION_LIMIT_REACHED']);
+    const staffOver = await staff('teamA', 'POST', `/${session.id}/annotations`, { body: 'staff over' });
+    assert.equal(staffOver.statusCode, 409);
+  });
+
+  it('shows the newest threads with their replies when a session has more than a page', async (t) => {
+    const { guest, staff, db, createSession, createLink } = await setup(t);
+    const session = await createSession();
+    const { token } = await createLink(session.id);
+    seedAnnotations(db, session.id, 510);
+    const newest = db.tables.reviewAnnotation.at(-1);
+    db.tables.reviewAnnotation.push({ id: 'reply-newest', sessionId: session.id, parentId: newest.id, authorType: 'staff', authorUserId: 'team-a', authorName: 'Seed', body: 'reply', createdAt: new Date(), updatedAt: new Date() });
+    const view = (await guest('GET', token)).json();
+    assert.equal(view.annotationTotal, 511);
+    assert.equal(view.annotationsTruncated, true);
+    const threads = view.annotations.filter((annotation) => !annotation.parentId);
+    assert.equal(threads.length, 500);
+    assert.equal(threads.at(-1).id, newest.id, 'the newest comment is always shown');
+    assert.equal(threads.some((annotation) => annotation.id === `seed-${session.id}-0`), false);
+    assert.ok(view.annotations.some((annotation) => annotation.id === 'reply-newest'));
+    const detail = (await staff('teamA', 'GET', `/${session.id}`)).json();
+    assert.equal(detail.annotations.length, 511);
+    assert.equal(detail.annotationsTruncated, false);
+  });
+
+  it('records at most one decision per share link; staff can still decide', async (t) => {
+    const { staff, guest, db, createSession, createLink } = await setup(t);
+    const session = await createSession();
+    const { token } = await createLink(session.id, 'teamA', { allowDecision: true });
+    assert.equal((await guest('POST', `${token}/decisions`, { name: 'Casey', decision: 'changes_requested' })).statusCode, 201);
+    const again = await guest('POST', `${token}/decisions`, { name: 'Casey', decision: 'approved' });
+    assert.deepEqual([again.statusCode, again.json().code], [409, 'SHARE_LINK_DECISION_RECORDED']);
+    const view = (await guest('GET', token)).json();
+    assert.deepEqual([view.link.canDecide, view.link.decisionRecorded], [false, true]);
+    assert.equal(db.tables.reviewSession[0].status, 'changes_requested');
+    assert.equal((await staff('adminA', 'POST', `/${session.id}/decisions`, { decision: 'approved' })).statusCode, 201);
+    assert.equal(db.tables.reviewDecision.length, 2);
+  });
+
+  it('never reopens a session closed after it was read (staff and share link)', async (t) => {
+    const { staff, guest, db, createSession, createLink } = await setup(t);
+    const session = await createSession();
+    const { token } = await createLink(session.id, 'teamA', { allowDecision: true });
+    db.tables.reviewSession[0].status = 'closed';
+    // Both routes read a stale "open" session, then decide.
+    const staleSession = db.reviewSession.findFirst;
+    db.reviewSession.findFirst = async (args) => {
+      const row = await staleSession(args);
+      return row ? { ...row, status: 'open' } : row;
+    };
+    const staleLink = db.reviewShareLink.findUnique;
+    db.reviewShareLink.findUnique = async (args) => {
+      const row = await staleLink(args);
+      return row?.session ? { ...row, session: { ...row.session, status: 'open' } } : row;
+    };
+    const staffDecision = await staff('adminA', 'POST', `/${session.id}/decisions`, { decision: 'approved' });
+    assert.deepEqual([staffDecision.statusCode, staffDecision.json().code], [409, 'REVIEW_SESSION_CLOSED']);
+    const guestDecision = await guest('POST', `${token}/decisions`, { name: 'Casey', decision: 'approved' });
+    assert.deepEqual([guestDecision.statusCode, guestDecision.json().code], [409, 'REVIEW_SESSION_CLOSED']);
+    assert.equal(db.tables.reviewSession[0].status, 'closed');
+    assert.equal(db.tables.reviewDecision.length, 0, 'the decision was rolled back');
+  });
+});
+

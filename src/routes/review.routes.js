@@ -20,7 +20,12 @@ import { requireRecentAuth } from '../auth/reauth.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { scanReviewMedia } from '../services/media-scan.service.js';
 import {
+  ANNOTATIONS_PER_SESSION_MAX,
+  ReviewSessionClosedError,
+  annotationLimitFailure,
   annotationPositionData,
+  applyDecisionStatus,
+  loadAnnotationThreads,
   annotationPositionError,
   canWriteToSession,
   generateShareToken,
@@ -175,15 +180,17 @@ export default async function reviewRoutes(fastify) {
   fastify.get('/:id', { onRequest: [fastify.authenticate], preHandler: [requireReviewStaff] }, async (request, reply) => {
     const session = await loadSession(request, reply);
     if (!session) return reply;
-    const [annotations, decisions, shareLinks] = await Promise.all([
-      request.prisma.reviewAnnotation.findMany({ where: { sessionId: session.id }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], take: 1000 }),
+    const [threads, decisions, shareLinks] = await Promise.all([
+      loadAnnotationThreads(request.prisma, session.id, ANNOTATIONS_PER_SESSION_MAX),
       request.prisma.reviewDecision.findMany({ where: { sessionId: session.id }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 200 }),
       request.prisma.reviewShareLink.findMany({ where: { sessionId: session.id }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 100 }),
     ]);
     const now = new Date();
     return {
       session: staffSession(session),
-      annotations: annotations.map(staffAnnotation),
+      annotations: threads.annotations.map(staffAnnotation),
+      annotationTotal: threads.total,
+      annotationsTruncated: threads.truncated,
       decisions: decisions.map(staffDecision),
       shareLinks: shareLinks.map((link) => staffShareLink(link, now)),
     };
@@ -206,6 +213,8 @@ export default async function reviewRoutes(fastify) {
     }
     const body = sanitizePlainText(input.body);
     if (!body) return reply.status(400).send({ error: 'body: Comment cannot be empty' });
+    const limit = await annotationLimitFailure(request.prisma, { sessionId: session.id });
+    if (limit) return reply.status(409).send(limit);
     const annotation = await request.prisma.reviewAnnotation.create({
       data: {
         sessionId: session.id,
@@ -251,20 +260,28 @@ export default async function reviewRoutes(fastify) {
     if (!canWriteToSession(session)) return reply.status(409).send({ error: 'This review session is closed' });
     const { decision, note } = request.body;
     const cleanNote = note ? sanitizePlainText(note).slice(0, 2000) : '';
-    const created = await request.prisma.$transaction(async (tx) => {
-      const row = await tx.reviewDecision.create({
-        data: {
-          sessionId: session.id,
-          decision,
-          actorType: 'staff',
-          actorUserId: request.user.id,
-          actorName: String(request.user.name || request.user.email || 'Staff').slice(0, 120),
-          note: cleanNote || null,
-        },
+    let created;
+    try {
+      created = await request.prisma.$transaction(async (tx) => {
+        const row = await tx.reviewDecision.create({
+          data: {
+            sessionId: session.id,
+            decision,
+            actorType: 'staff',
+            actorUserId: request.user.id,
+            actorName: String(request.user.name || request.user.email || 'Staff').slice(0, 120),
+            note: cleanNote || null,
+          },
+        });
+        await applyDecisionStatus(tx, session.id, decision);
+        return row;
       });
-      await tx.reviewSession.update({ where: { id: session.id }, data: { status: decision } });
-      return row;
-    });
+    } catch (err) {
+      // Closed (e.g. replaced by a new version) after it was read: the
+      // decision is rolled back rather than reopening the session.
+      if (err instanceof ReviewSessionClosedError) return reply.status(409).send({ error: err.message, code: err.code });
+      throw err;
+    }
     await recordRequestAuditEvent(request.prisma, request, {
       action: 'review.decision_recorded',
       entityId: session.id,

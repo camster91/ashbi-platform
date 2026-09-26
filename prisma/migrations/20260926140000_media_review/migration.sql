@@ -103,7 +103,9 @@ CREATE INDEX "review_annotations_shareLinkId_idx" ON "review_annotations"("share
 CREATE INDEX "review_decisions_sessionId_createdAt_idx" ON "review_decisions"("sessionId", "createdAt");
 
 -- CreateIndex
-CREATE INDEX "review_decisions_shareLinkId_idx" ON "review_decisions"("shareLinkId");
+-- One decision per share link (staff decisions have a NULL shareLinkId,
+-- and NULLs never collide in a unique index).
+CREATE UNIQUE INDEX "review_decisions_shareLinkId_key" ON "review_decisions"("shareLinkId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "review_share_links_tokenHash_key" ON "review_share_links"("tokenHash");

@@ -50,14 +50,20 @@ export default function PortalReview() {
           <p className="w-full text-sm text-muted-foreground">Review link valid until {formatDateTime(link.expiresAt)}.</p>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+      <main className="mx-auto max-w-6xl space-y-4 px-4 py-6 sm:px-6">
+        {data.annotationsTruncated && (
+          <p className="rounded-lg border border-border bg-card p-3 text-sm text-muted-foreground">Showing the newest comment threads of {data.annotationTotal} comments. Older comments are kept but not listed here.</p>
+        )}
+        {link.decisionRecorded && (
+          <p className="rounded-lg border border-border bg-card p-3 text-sm text-muted-foreground">A decision has already been recorded through this link. Contact the team if it needs to change.</p>
+        )}
         <MediaReview
           media={{ ...session.media, url: api.portalReviewFileUrl(token) }}
           status={session.status}
           annotations={annotations}
           decisions={decisions}
           canComment={link.canComment}
-          canDecide={link.allowDecision && link.canComment}
+          canDecide={Boolean(link.canDecide)}
           guest={{ name, email, setName, setEmail }}
           onAddAnnotation={async (body) => {
             const result = await api.addPortalReviewAnnotation(token, { ...identity(), ...body });

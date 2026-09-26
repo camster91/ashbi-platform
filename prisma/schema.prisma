@@ -2442,12 +2442,11 @@ model ReviewDecision {
   actorUserId String? // No FK: history must outlive the actor account
   actorName   String
   actorEmail  String?
-  shareLinkId String? // No FK: the evidence keeps the link id after the link is gone
+  shareLinkId String?          @unique // No FK: the evidence keeps the link id after the link is gone. Unique: one decision per share link
   note        String? // plain text, at most 2,000 characters (CHECK constraint)
   createdAt   DateTime         @default(now())
 
   @@index([sessionId, createdAt])
-  @@index([shareLinkId])
   @@map("review_decisions")
 }
 

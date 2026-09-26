@@ -133,6 +133,13 @@ test('review share links stay inside their session and review data inside its te
     assert.equal(decided.statusCode, 201, decided.body);
     assert.equal((await raw.reviewSession.findUnique({ where: { id: a1.id } })).status, 'changes_requested');
     assert.equal((await raw.reviewSession.findUnique({ where: { id: b1.id } })).status, 'open');
+    // One decision per share link, enforced by the route and a unique index.
+    const second = await guest('POST', `${token}/decisions`, { name: 'Casey Client', decision: 'approved' });
+    assert.deepEqual([second.statusCode, second.json().code], [409, 'SHARE_LINK_DECISION_RECORDED']);
+    await assert.rejects(
+      raw.reviewDecision.create({ data: { sessionId: a1.id, decision: 'approved', actorType: 'guest', actorName: 'x', shareLinkId: shareLink.id } }),
+      /Unique constraint|P2002|unique/i,
+    );
     const event = await raw.auditEvent.findFirst({ where: { organizationId: orgA, action: 'review.decision_recorded' } });
     assert.deepEqual([event.actorType, event.actorUserId, event.metadata.via], ['CLIENT', null, 'share_link']);
 

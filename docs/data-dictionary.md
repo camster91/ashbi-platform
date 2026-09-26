@@ -2033,7 +2033,6 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Soft-deletable: no
 - Constraints and indexes:
   - `@@index([sessionId, createdAt])`
-  - `@@index([shareLinkId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -2045,7 +2044,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `actorUserId` | String | optional |  |  | No FK: history must outlive the actor account |
 | `actorName` | String | required |  |  |  |
 | `actorEmail` | String | optional |  |  |  |
-| `shareLinkId` | String | optional |  |  | No FK: the evidence keeps the link id after the link is gone |
+| `shareLinkId` | String | unique, optional |  |  | No FK: the evidence keeps the link id after the link is gone. Unique: one decision per share link |
 | `note` | String | optional |  |  | plain text, at most 2,000 characters (CHECK constraint) |
 | `createdAt` | DateTime | required | `now()` |  |  |
 
