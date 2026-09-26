@@ -270,14 +270,23 @@ routed").
 | Budget range | 1 cent to 1,000,000 USD per month | `aiConnectionConnectSchema` |
 | Step-up for validate and settings | Not required (connect, rotate, revoke and kill switches are) | `src/routes/ai-connection.routes.js` |
 
-## Slice 2 (not built yet)
+## Slice 2: tool registry, approval queue and evaluation
 
-- A **tool registry**: which tools an AI call may use, per organization.
-- An **approval queue** for AI-proposed actions.
-- An **adversarial evaluation suite** (prompt injection, data exfiltration).
+Built; see [ai-tool-registry.md](ai-tool-registry.md) and
+[ai-evaluation.md](ai-evaluation.md).
 
-They attach at `createAiGovernance({ beforeCall, afterCall })` in
-`src/ai/governance.js`: both hooks receive the resolved route (source and
-connection metadata, not the provider), the organization and the call options
-before any provider is contacted, and the usage afterwards. Ash chat's own
-platform chain runs through the same hooks.
+- The **kill switches above also stop AI tools**: while AI is off for the
+  deployment or the organization no tool runs and no pending action executes
+  (`503 AI_DISABLED`, audited as `ai.tool_denied`). Pending actions can still
+  be rejected.
+- The **budget** gates every model turn of an assistant tool session, so a
+  runaway session stops at the next turn once the budget is spent. Approving
+  an already-prepared action spends no tokens and is not blocked by the budget
+  (*Proposal*).
+- Tool calls are governed in the executor, where the tool, input and records
+  are known. The `beforeCall`/`afterCall` hooks in
+  `createAiGovernance` remain available but are not used by slice 2.
+- The AI bridge's workflow actions (`/api/ai-bridge/v1/actions/*`) now run
+  through the registry and executor with the same external contract, and
+  also answer `503` with `type: "ai_control_error"`, `code: "AI_DISABLED"`
+  while AI is off.

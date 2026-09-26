@@ -30,3 +30,23 @@ describe('BYOK AI connection API client', () => {
     ]);
   });
 });
+
+describe('AI tool approvals API client', () => {
+  beforeEach(() => vi.stubGlobal('fetch', vi.fn().mockResolvedValue(ok({}))));
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('calls the approval queue endpoints with the expected methods and bodies', async () => {
+    await api.getAiToolApprovals();
+    await api.getAiToolReceipts({ status: 'FAILED', tool: '', limit: 25 });
+    await api.approveAiToolAction('a/1');
+    await api.rejectAiToolAction('a1', 'unsafe');
+
+    const calls = fetch.mock.calls.map(([url, init]) => [url, init.method ?? 'GET', init.body ? JSON.parse(init.body) : undefined]);
+    expect(calls).toEqual([
+      ['/api/ai-tools/approvals', 'GET', undefined],
+      ['/api/ai-tools/receipts?status=FAILED&limit=25', 'GET', undefined],
+      ['/api/ai-tools/approvals/a%2F1/approve', 'POST', {}],
+      ['/api/ai-tools/approvals/a1/reject', 'POST', { reason: 'unsafe' }],
+    ]);
+  });
+});

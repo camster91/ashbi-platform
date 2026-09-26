@@ -686,6 +686,18 @@ export const api = {
   setOrganizationAiDisabled: (disabled) =>
     request(disabled ? '/ai-connections/disable' : '/ai-connections/enable', { method: 'POST' }),
 
+  // Governed AI tool approvals and receipts (#413 slice 2). Approve and
+  // reject need step-up re-authentication; the 403 opens ReauthDialog.
+  getAiToolApprovals: () => request('/ai-tools/approvals'),
+  getAiToolReceipts: (params = {}) => {
+    const defined = Object.fromEntries(Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ''));
+    const query = new URLSearchParams(defined).toString();
+    return request(`/ai-tools/receipts${query ? `?${query}` : ''}`);
+  },
+  approveAiToolAction: (id) => request(`/ai-tools/approvals/${encodeURIComponent(id)}/approve`, { method: 'POST', body: {} }),
+  rejectAiToolAction: (id, reason = 'other') =>
+    request(`/ai-tools/approvals/${encodeURIComponent(id)}/reject`, { method: 'POST', body: { reason } }),
+
   // ===== PROPOSALS =====
   getProposals: (params = {}) => {
     const query = new URLSearchParams(params).toString();

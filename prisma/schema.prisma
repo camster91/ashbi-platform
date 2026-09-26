@@ -1847,29 +1847,43 @@ model ApiKey {
 
 // Confirmation and audit ledger for actions requested through the tenant API
 // bridge. An idempotency key belongs to exactly one acting user.
+// Pending approval and immutable execution receipt for every governed AI tool
+// call (#413 slice 2, docs/ai-tool-registry.md): the ChatGPT/Codex bridge
+// actions and tool calls proposed by an assistant. `userId` is the requester;
+// `action` is the registry tool name. Once a row reaches a terminal status
+// (EXECUTED, FAILED, REJECTED, EXPIRED) a database trigger rejects any update.
 model AiBridgeAction {
-  id             String   @id @default(cuid())
-  organizationId String
-  userId         String
-  action         String
-  idempotencyKey String
-  input          Json
-  inputHash      String
-  preview        Json
-  status         String   @default("PENDING_CONFIRMATION") // PENDING_CONFIRMATION, EXECUTING, EXECUTED, FAILED, EXPIRED
-  result         Json?
-  errorCode      String?
-  expiresAt      DateTime
-  confirmedAt    DateTime?
-  executedAt     DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id               String    @id @default(cuid())
+  organizationId   String
+  userId           String
+  action           String
+  idempotencyKey   String
+  input            Json
+  inputHash        String
+  preview          Json
+  status           String    @default("PENDING_CONFIRMATION") // PENDING_CONFIRMATION, EXECUTING, EXECUTED, FAILED, REJECTED, EXPIRED
+  result           Json?
+  errorCode        String?
+  expiresAt        DateTime
+  confirmedAt      DateTime?
+  executedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  source           String    @default("ai_bridge") // ai_bridge, assistant
+  toolClass        String    @default("execute") // prepare, execute
+  correlationId    String?
+  inputScope       Json? // Record ids the scope resolver proved belong to the organization
+  approverId       String? // No foreign key: the receipt outlives the approver's account
+  approvalEvidence Json? // { method, approverRole, requesterApproved, reauthenticated }
+  outcome          String? // succeeded, failed, unknown (set when execution ends)
+  rejectedAt       DateTime?
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, idempotencyKey])
   @@index([organizationId, status, createdAt])
+  @@index([organizationId, action, createdAt])
   @@map("ai_bridge_actions")
 }
 

@@ -649,6 +649,29 @@ export const aiBridgeActionConfirmSchema = z.object({
   confirm: z.literal(true),
 }).strict();
 
+// Governed AI tool approvals and receipts (#413 slice 2, docs/ai-tool-registry.md)
+export const aiToolActionParamsSchema = z.object({ id: cuidId }).strict();
+
+export const aiToolApprovalListQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+}).strict();
+
+export const aiToolReceiptQuerySchema = z.object({
+  status: z.enum(['EXECUTED', 'FAILED', 'REJECTED', 'EXPIRED', 'EXECUTING']).optional(),
+  outcome: z.enum(['succeeded', 'failed', 'unknown']).optional(),
+  tool: z.string().regex(/^[a-z][a-z0-9_]{2,63}$/).optional(),
+  source: z.enum(['ai_bridge', 'assistant']).optional(),
+  requesterId: cuidId.optional(),
+  before: z.string().datetime().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+}).strict();
+
+export const aiToolApproveSchema = z.object({}).strict().optional();
+
+export const aiToolRejectSchema = z.object({
+  reason: z.enum(['not_needed', 'incorrect', 'unsafe', 'other']).default('other'),
+}).strict().optional();
+
 // ── Settings: assignment rules + templates + AI provider ───────────────────
 export const assignmentRuleCreateSchema = z.object({
   name: z.string().min(1).max(200),

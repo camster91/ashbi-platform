@@ -80,6 +80,7 @@ once.
 | Turn the deployment AI kill switch on or off | `POST /api/settings/ai-kill-switch` | `requireRecentAuth` (in addition to the platform-operator check) |
 | Connect, rotate or revoke the organization's AI provider key | `POST /api/ai-connections/connect`, `/rotate`, `/revoke` | `requireRecentAuth` (ADMIN). The key is validated with the provider before it is stored or replaced; see [ai-byok.md](ai-byok.md) |
 | Turn AI off or on for the organization | `POST /api/ai-connections/disable`, `/enable` | `requireRecentAuth` (ADMIN) |
+| Approve or reject an action an AI prepared | `POST /api/ai-tools/approvals/:id/approve`, `/reject` | `requireRecentAuth` (staff: ADMIN for any action in the organization, TEAM for their own). Every queued action is a prepare or execute tool; see [ai-tool-registry.md](ai-tool-registry.md). The AI bridge's own `POST /api/ai-bridge/v1/actions/:actionId/confirm` stays an API-key confirmation by the key's owner (an API key cannot re-authenticate); its receipt records `method: api_key_confirm` |
 | Disable own two-factor | `POST /api/auth/mfa/disable` | Unchanged: already requires the current password **and** a TOTP or recovery code in the request itself, which is stricter than the window |
 | Reset another member's two-factor | `POST /api/auth/mfa/admin/users/:userId/reset` | Unchanged: already requires the admin's password in the request, and the admin's own TOTP or recovery code when the admin has two-factor on |
 
@@ -115,7 +116,9 @@ The guarded actions keep emitting their own events (`api_key.created`,
 `user.role_changed`, `user.deactivated`, `user.reactivated`,
 `auth.password_changed`, `settings.ai_provider_changed`, `ai.disabled`,
 `ai.enabled`, `ai.connection_connected`, `ai.connection_rotated`,
-`ai.connection_revoked`, and the credential vault's access records). See
+`ai.connection_revoked`, `ai.tool_approved`, `ai.tool_rejected`,
+`ai.tool_executed`, `ai.tool_failed`, and the credential vault's access
+records). See
 [audit-events.md](audit-events.md).
 
 ## API keys (service credentials)

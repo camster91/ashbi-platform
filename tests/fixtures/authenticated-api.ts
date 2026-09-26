@@ -261,6 +261,8 @@ export async function mockAuthenticatedApi(page: Page, { user = adminUser, signe
     if (path === '/api-keys') return json(route, { keys: [{ id: 'key-a', name: 'Zapier', createdAt: LAST_WEEK, lastUsedAt: YESTERDAY, expiresAt: null }] });
     if (path === '/settings/ai-provider') return json(route, { provider: 'ollama', ollamaModel: 'llama3.1:8b', ollamaModels: ['llama3.1:8b'], canManage: true });
     if (path === '/settings/ai-provider/ollama-models') return json(route, { models: ['llama3.1:8b', 'qwen2.5:14b'] });
+    if (path === '/ai-tools/approvals') return json(route, { approvals: [] });
+    if (path === '/ai-tools/receipts') return json(route, { receipts: [], nextBefore: null });
     if (path === '/ai-connections') return json(route, {
       connection: null,
       aiDisabled: false,
