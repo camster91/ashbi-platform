@@ -14,7 +14,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   which reads hide soft-deleted rows is in [soft-delete-policy.md](soft-delete-policy.md).
 - **Notes** combine `///` doc comments and trailing `//` comments from the schema.
 
-93 models, 0 enums, 42 tenant-scoped, 13 soft-deletable.
+95 models, 0 enums, 44 tenant-scoped, 13 soft-deletable.
 
 ## Model index
 
@@ -54,6 +54,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Expense](#model-expense) | `expenses` | no | yes | 19 |
 | [FormDraft](#model-formdraft) | `form_drafts` | yes | no | 13 |
 | [GoogleCalendarConnection](#model-googlecalendarconnection) | `google_calendar_connections` | yes | no | 14 |
+| [ImportRun](#model-importrun) | `import_runs` | yes | no | 12 |
 | [IntakeForm](#model-intakeform) | `intake_forms` | no | no | 11 |
 | [IntakeFormResponse](#model-intakeformresponse) | `intake_form_responses` | no | no | 8 |
 | [Integration](#model-integration) | `integrations` | yes | no | 11 |
@@ -69,12 +70,12 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Notification](#model-notification) | `notifications` | no | no | 10 |
 | [NotionImportRecord](#model-notionimportrecord) | `notion_import_records` | yes | no | 14 |
 | [OnboardingProgress](#model-onboardingprogress) | `onboarding_progress` | yes | no | 12 |
-| [Organization](#model-organization) | `organizations` | no | no | 50 |
+| [Organization](#model-organization) | `organizations` | no | no | 52 |
 | [OutreachSequence](#model-outreachsequence) | `outreach_sequences` | yes | no | 10 |
 | [PipelineDeal](#model-pipelinedeal) | `pipeline_deals` | no | no | 15 |
 | [PipelineStage](#model-pipelinestage) | `pipeline_stages` | yes | no | 10 |
 | [PlatformSetting](#model-platformsetting) | `platform_settings` | no | no | 5 |
-| [Project](#model-project) | `projects` | yes | yes | 49 |
+| [Project](#model-project) | `projects` | yes | yes | 50 |
 | [ProjectCommunication](#model-projectcommunication) | `project_communications` | no | no | 18 |
 | [ProjectContext](#model-projectcontext) | `project_contexts` | no | no | 10 |
 | [ProjectTemplate](#model-projecttemplate) | `project_templates` | yes | no | 10 |
@@ -92,6 +93,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [RevisionRound](#model-revisionround) | `revision_rounds` | no | no | 10 |
 | [SlackChannelMapping](#model-slackchannelmapping) | `slack_channel_mappings` | yes | no | 13 |
 | [SlackEventReceipt](#model-slackeventreceipt) | `slack_event_receipts` | yes | no | 14 |
+| [SlackImportRecord](#model-slackimportrecord) | `slack_import_records` | yes | no | 17 |
 | [SlackInstallation](#model-slackinstallation) | `slack_installations` | yes | no | 15 |
 | [Snippet](#model-snippet) | `snippets` | no | no | 13 |
 | [SupportHourEntry](#model-supporthourentry) | `support_hours` | yes | no | 12 |
@@ -1004,6 +1006,29 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
 | `user` | User | required |  | → User, via (userId) → (id), onDelete Cascade |  |
 
+### Model ImportRun
+
+- Table: `import_runs`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@index([organizationId, source, createdAt])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `source` | String | required |  |  | SLACK_EXPORT |
+| `status` | String | required | `"APPLIED"` |  | APPLIED, ROLLED_BACK |
+| `sourceLabel` | String | optional |  |  | Export directory basename; never an absolute path |
+| `summary` | Json | optional |  |  | Counts only; no message content |
+| `createdCount` | Int | required | `0` |  |  |
+| `rolledBackAt` | DateTime | optional |  |  |  |
+| `createdAt` | DateTime | required | `now()` |  |  |
+| `updatedAt` | DateTime | required, updatedAt |  |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
+| `slackImportRecords` | SlackImportRecord[] | list, required |  | → SlackImportRecord |  |
+
 ### Model IntakeForm
 
 - Table: `intake_forms`
@@ -1427,6 +1452,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `slackEventReceipts` | SlackEventReceipt[] | list, required |  | → SlackEventReceipt |  |
 | `googleCalendarConnections` | GoogleCalendarConnection[] | list, required |  | → GoogleCalendarConnection |  |
 | `notionImportRecords` | NotionImportRecord[] | list, required |  | → NotionImportRecord |  |
+| `importRuns` | ImportRun[] | list, required |  | → ImportRun |  |
+| `slackImportRecords` | SlackImportRecord[] | list, required |  | → SlackImportRecord |  |
 | `aiBridgeActions` | AiBridgeAction[] | list, required |  | → AiBridgeAction |  |
 | `publicInquiries` | PublicInquiry[] | list, required |  | → PublicInquiry |  |
 | `auditEvents` | AuditEvent[] | list, required |  | → AuditEvent |  |
@@ -1578,6 +1605,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `wpSite` | WPSite | optional |  | → WPSite |  |
 | `slackChannelMappings` | SlackChannelMapping[] | list, required |  | → SlackChannelMapping |  |
 | `notionImportRecords` | NotionImportRecord[] | list, required |  | → NotionImportRecord |  |
+| `slackImportRecords` | SlackImportRecord[] | list, required |  | → SlackImportRecord |  |
 
 ### Model ProjectCommunication
 
@@ -2017,6 +2045,37 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 | `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
 | `installation` | SlackInstallation | required |  | → SlackInstallation, via (installationId) → (id), onDelete Cascade |  |
+
+### Model SlackImportRecord
+
+- Table: `slack_import_records`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@unique([organizationId, sourceKey])`
+  - `@@index([organizationId, projectId])`
+  - `@@index([runId])`
+  - `@@index([chatMessageId])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `projectId` | String | required |  |  |  |
+| `runId` | String | required |  |  |  |
+| `chatMessageId` | String | optional |  |  |  |
+| `sourceKey` | String | required |  |  | slack-export:<channelId>:<ts> |
+| `channelId` | String | required |  |  |  |
+| `messageTs` | String | required |  |  |  |
+| `threadTs` | String | optional |  |  |  |
+| `contentSha256` | String | required |  |  |  |
+| `outcome` | String | required | `"IMPORTED"` |  | IMPORTED |
+| `importedAt` | DateTime | required | `now()` |  |  |
+| `createdAt` | DateTime | required | `now()` |  |  |
+| `updatedAt` | DateTime | required, updatedAt |  |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
+| `project` | Project | required |  | → Project, via (projectId) → (id), onDelete Cascade |  |
+| `run` | ImportRun | required |  | → ImportRun, via (runId) → (id), onDelete Cascade |  |
 
 ### Model SlackInstallation
 

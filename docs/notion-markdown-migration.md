@@ -2,7 +2,8 @@
 
 Ashbi supports a **one-way, controlled import** of a selected Notion Markdown
 export into one existing Ashbi project. It is not a live Notion sync and does
-not authorize writing back to Notion.
+not authorize writing back to Notion. The Slack workspace-export importer
+follows the same contract; see [slack-export-migration.md](slack-export-migration.md).
 
 ## Supported input
 

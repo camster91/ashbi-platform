@@ -1,0 +1,20 @@
+[
+  {
+    "id": "U01ALICE",
+    "name": "alice",
+    "real_name": "Alice Example",
+    "profile": { "display_name": "Alice", "real_name": "Alice Example", "email": "Alice@Example.test" }
+  },
+  {
+    "id": "U02BOB",
+    "name": "bob",
+    "real_name": "Bob Outside",
+    "profile": { "display_name": "", "real_name": "Bob Outside", "email": "bob@not-in-ashbi.test" }
+  },
+  {
+    "id": "U03BUILD",
+    "name": "buildbot",
+    "is_bot": true,
+    "profile": { "real_name": "Build Bot" }
+  }
+]

@@ -35,7 +35,7 @@ const DIRECT_SCOPED_MODELS = new Set([
   'weeklydigest', 'tasktemplate', 'outreachsequence', 'emailtriageitem',
   'aicontext', 'ashconversation', 'projecttemplate', 'brandsettings',
   'pipelinestage', 'promptversion', 'credential', 'credentialaccessaudit',
-  'onboardingprogress', 'slackinstallation', 'slackchannelmapping', 'slackeventreceipt', 'googlecalendarconnection', 'notionimportrecord', 'aibridgeaction',
+  'onboardingprogress', 'slackinstallation', 'slackchannelmapping', 'slackeventreceipt', 'googlecalendarconnection', 'notionimportrecord', 'importrun', 'slackimportrecord', 'aibridgeaction',
   'publicinquiry', 'auditevent', 'aiproviderconnection', 'aiusagerecord'
 ]);
 
@@ -87,6 +87,10 @@ const DIRECT_PARENT_RELATIONS = {
   ],
   googlecalendarconnection: [{ relation: 'user', field: 'userId', model: 'user', delegate: 'user', required: true }],
   notionimportrecord: [{ relation: 'project', field: 'projectId', model: 'project', delegate: 'project', required: true }],
+  slackimportrecord: [
+    { relation: 'project', field: 'projectId', model: 'project', delegate: 'project', required: true },
+    { relation: 'run', field: 'runId', model: 'importrun', delegate: 'importRun', required: true },
+  ],
   aibridgeaction: [{ relation: 'user', field: 'userId', model: 'user', delegate: 'user', required: true }],
   onboardingprogress: [{ relation: 'user', field: 'userId', model: 'user', delegate: 'user', required: true }],
   publicinquiry: [{ relation: 'owner', field: 'ownerId', model: 'user', delegate: 'user' }],
@@ -320,6 +324,9 @@ export function createScopedPrisma(prisma, organizationId) {
                   ? (Array.isArray(queryArgs.data) ? queryArgs.data : [queryArgs.data])
                     .map((row) => ({ row, creating: isCreate }))
                   : [];
+              // Each distinct owner is verified once per call, so a batched
+              // createMany costs one check per owner instead of one per row.
+              const verifiedOwners = new Set();
               for (const { row, creating } of ownershipWrites) {
                 for (const parent of parentRelations) {
                   if (row?.[parent.relation]?.create || row?.[parent.relation]?.connectOrCreate) {
@@ -332,7 +339,10 @@ export function createScopedPrisma(prisma, organizationId) {
                     }
                     continue;
                   }
+                  const ownerKey = `${parent.relation}:${ownerId}`;
+                  if (verifiedOwners.has(ownerKey)) continue;
                   await verifyTenantOwner(parent, ownerId);
+                  verifiedOwners.add(ownerKey);
                 }
               }
               logger.debug({ modelName, methodName, organizationId }, 'Scoped Query Execution');
@@ -432,6 +442,7 @@ export function createScopedPrisma(prisma, organizationId) {
                 }
                 const ownershipWrites = (Array.isArray(queryArgs.data) ? queryArgs.data : [queryArgs.data])
                   .map((row) => ({ row, required: true }));
+                const verifiedOwners = new Set();
                 for (const { row, required } of ownershipWrites) {
                   const ownerId = row?.[ownerIdField];
                   if (!ownerId) {
@@ -441,7 +452,9 @@ export function createScopedPrisma(prisma, organizationId) {
                     continue;
                   }
 
+                  if (verifiedOwners.has(ownerId)) continue;
                   await verifyTenantOwner({ relation: ownerRelation, ...ownerPolicy }, ownerId);
+                  verifiedOwners.add(ownerId);
                 }
               }
 

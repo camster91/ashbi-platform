@@ -62,6 +62,8 @@ model Organization {
   slackEventReceipts SlackEventReceipt[]
   googleCalendarConnections GoogleCalendarConnection[]
   notionImportRecords NotionImportRecord[]
+  importRuns      ImportRun[]
+  slackImportRecords SlackImportRecord[]
   aiBridgeActions AiBridgeAction[]
   publicInquiries PublicInquiry[]
   auditEvents     AuditEvent[]
@@ -312,6 +314,7 @@ model Project {
   wpSite         WPSite?
   slackChannelMappings SlackChannelMapping[]
   notionImportRecords NotionImportRecord[]
+  slackImportRecords SlackImportRecord[]
 
   @@index([clientId])
   @@index([status])
@@ -1980,6 +1983,59 @@ model NotionImportRecord {
   @@index([organizationId, projectId])
   @@index([noteId])
   @@map("notion_import_records")
+}
+
+// Ledger of controlled migration-import runs. Only live (applied) runs are
+// recorded; dry runs write nothing. `source` names the importer so later
+// importers can reuse this table, and rollback targets one run by id.
+model ImportRun {
+  id             String    @id @default(cuid())
+  organizationId String
+  source         String // SLACK_EXPORT
+  status         String    @default("APPLIED") // APPLIED, ROLLED_BACK
+  sourceLabel    String? // Export directory basename; never an absolute path
+  summary        Json? // Counts only; no message content
+  createdCount   Int       @default(0)
+  rolledBackAt   DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization       Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  slackImportRecords SlackImportRecord[]
+
+  @@index([organizationId, source, createdAt])
+  @@map("import_runs")
+}
+
+// Durable reconciliation record for a Slack workspace-export message imported
+// into project chat. The source key is the Slack channel id plus message ts,
+// which Slack guarantees unique per channel, so a rerun recognizes a message
+// regardless of which export file or date range it arrived in.
+model SlackImportRecord {
+  id             String   @id @default(cuid())
+  organizationId String
+  projectId      String
+  runId          String
+  chatMessageId  String?
+  sourceKey      String // slack-export:<channelId>:<ts>
+  channelId      String
+  messageTs      String
+  threadTs       String?
+  contentSha256  String
+  outcome        String   @default("IMPORTED") // IMPORTED
+  importedAt     DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  run          ImportRun    @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, sourceKey])
+  @@index([organizationId, projectId])
+  @@index([runId])
+  @@index([chatMessageId])
+  @@map("slack_import_records")
 }
 
 // Slack collaboration integration. Secrets are encrypted at rest; raw Slack

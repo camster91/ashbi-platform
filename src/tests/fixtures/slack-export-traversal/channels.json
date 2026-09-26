@@ -1,0 +1,6 @@
+[
+  { "id": "C01ESCAPE", "name": "../../outside" },
+  { "id": "C02ABSOLUTE", "name": "/etc" },
+  { "id": "../C03", "name": "sneaky" },
+  { "id": "C04SAFE", "name": "safe" }
+]

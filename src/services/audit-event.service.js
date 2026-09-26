@@ -50,6 +50,8 @@ export const AUDIT_EVENT_CATALOG = Object.freeze({
   'ai.enabled': { entityType: 'organization', metadata: ['scope'] },
   'ai.budget_alert': { entityType: 'ai_provider_connection', metadata: ['month', 'spentCents', 'budgetCents', 'thresholdPercent'] },
   'ai.budget_exceeded': { entityType: 'ai_provider_connection', metadata: ['month', 'spentCents', 'budgetCents'] },
+  'migration_import.applied': { entityType: 'import_run', metadata: ['source', 'created', 'unchanged', 'alreadyPresent', 'channels'] },
+  'migration_import.rolled_back': { entityType: 'import_run', metadata: ['source', 'deletedMessages', 'deletedRecords'] },
 });
 
 /** action -> entityType, derived from the catalog. */

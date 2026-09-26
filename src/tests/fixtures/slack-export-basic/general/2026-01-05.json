@@ -1,0 +1,63 @@
+[
+  {
+    "type": "message",
+    "user": "U01ALICE",
+    "text": "Kickoff notes for <#C02RANDOM|random> &amp; <https://example.test/brief|the brief>",
+    "ts": "1767600000.000100",
+    "thread_ts": "1767600000.000100",
+    "reply_count": 3,
+    "edited": { "user": "U01ALICE", "ts": "1767600100.000000" },
+    "reactions": [
+      { "name": "thumbsup", "users": ["U01ALICE", "U02BOB"], "count": 2 },
+      { "name": "custom_party_parrot_extra_long", "users": ["U01ALICE"], "count": 1 }
+    ]
+  },
+  {
+    "type": "message",
+    "subtype": "channel_join",
+    "user": "U02BOB",
+    "text": "<@U02BOB> has joined the channel",
+    "ts": "1767600001.000200"
+  },
+  {
+    "type": "message",
+    "user": "U02BOB",
+    "text": "Thanks <@U01ALICE>!",
+    "ts": "1767600200.000300",
+    "thread_ts": "1767600000.000100",
+    "parent_user_id": "U01ALICE"
+  },
+  {
+    "type": "message",
+    "subtype": "bot_message",
+    "bot_id": "B01BUILD",
+    "username": "Build Bot",
+    "text": "Deploy finished",
+    "ts": "1767600300.000400"
+  },
+  {
+    "type": "message",
+    "subtype": "file_share",
+    "user": "U01ALICE",
+    "text": "",
+    "ts": "1767600400.000500",
+    "files": [
+      {
+        "id": "F01BRIEF",
+        "name": "brief.pdf",
+        "title": "Brief",
+        "mimetype": "application/pdf",
+        "size": 2048,
+        "url_private": "https://files.slack.test/files-pri/T0-F01BRIEF/brief.pdf?t=xoxe-not-a-real-token"
+      }
+    ]
+  },
+  {
+    "type": "message",
+    "subtype": "thread_broadcast",
+    "user": "U01ALICE",
+    "text": "Summary: shipped",
+    "ts": "1767600500.000600",
+    "thread_ts": "1767600000.000100"
+  }
+]
