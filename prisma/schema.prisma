@@ -69,6 +69,7 @@ model Organization {
   auditEvents     AuditEvent[]
   aiProviderConnection AiProviderConnection?
   aiUsageRecords  AiUsageRecord[]
+  reviewSessions  ReviewSession[]
 
   @@map("organizations")
 }
@@ -315,6 +316,7 @@ model Project {
   slackChannelMappings SlackChannelMapping[]
   notionImportRecords NotionImportRecord[]
   slackImportRecords SlackImportRecord[]
+  reviewSessions ReviewSession[]
 
   @@index([clientId])
   @@index([status])
@@ -710,8 +712,9 @@ model Attachment {
   createdAt      DateTime @default(now())
 
   // Relations
-  uploadedBy   User         @relation(fields: [uploadedById], references: [id])
-  organization Organization @relation(fields: [organizationId], references: [id])
+  uploadedBy     User            @relation(fields: [uploadedById], references: [id])
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  reviewSessions ReviewSession[]
 
   @@index([organizationId])
   @@map("attachments")
@@ -2357,6 +2360,117 @@ model PublicInquiry {
   @@index([organizationId, createdAt])
   @@index([ownerId])
   @@map("public_inquiries")
+}
+
+// Media review (#417 slice 1, docs/media-review.md). A review session puts
+// one project attachment (image, PDF, video or audio) in front of reviewers.
+// A new version of the file is a new session linked to the one it replaces.
+// Closed vocabularies, bounds and the one-of author rules are CHECK
+// constraints in migration 20260926140000_media_review.
+model ReviewSession {
+  id                String         @id @default(cuid())
+  organizationId    String
+  organization      Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  projectId         String
+  project           Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  attachmentId      String
+  attachment        Attachment     @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+  title             String
+  status            String         @default("open") // open, approved, changes_requested, closed (CHECK constraint)
+  version           Int            @default(1)
+  previousSessionId String?        @unique // the session this version replaces
+  previousSession   ReviewSession? @relation("ReviewSessionVersions", fields: [previousSessionId], references: [id], onDelete: SetNull)
+  nextSession       ReviewSession? @relation("ReviewSessionVersions")
+  createdById       String // No FK: history must outlive the actor account
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  annotations ReviewAnnotation[]
+  decisions   ReviewDecision[]
+  shareLinks  ReviewShareLink[]
+
+  @@index([organizationId, projectId, createdAt])
+  @@index([attachmentId])
+  @@map("review_sessions")
+}
+
+// A comment on a review session: optionally pinned to a video/audio timecode,
+// or to a normalized image region / PDF page, and optionally a reply
+// (parentId) in the same session. The author is a staff user (authorUserId)
+// or a named guest who came in through a share link (shareLinkId); the name
+// is a snapshot so the thread survives account changes.
+model ReviewAnnotation {
+  id           String             @id @default(cuid())
+  sessionId    String
+  session      ReviewSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  parentId     String?
+  parent       ReviewAnnotation?  @relation("ReviewAnnotationThread", fields: [parentId], references: [id], onDelete: Cascade)
+  replies      ReviewAnnotation[] @relation("ReviewAnnotationThread")
+  authorType   String // staff or guest (CHECK constraint)
+  authorUserId String? // staff author; no FK: history must outlive the actor account
+  authorName   String
+  authorEmail  String? // guest only, optional
+  shareLinkId  String? // guest only: the link the comment came through
+  shareLink    ReviewShareLink?   @relation(fields: [shareLinkId], references: [id], onDelete: SetNull)
+  body         String // plain text, at most 5,000 characters (CHECK constraint)
+  timecodeMs   Int?
+  regionX      Float? // region fields are all set or all null, each within 0..1
+  regionY      Float?
+  regionW      Float?
+  regionH      Float?
+  pageNumber   Int?
+  resolvedAt   DateTime?
+  resolvedById String? // No FK: history must outlive the actor account
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([sessionId, createdAt])
+  @@index([parentId])
+  @@index([shareLinkId])
+  @@map("review_annotations")
+}
+
+// Append-only approval evidence: database triggers reject UPDATE, and DELETE
+// unless the session itself is being deleted; the request-scoped Prisma proxy
+// rejects update/upsert/delete. The latest decision sets the session status.
+model ReviewDecision {
+  id          String           @id @default(cuid())
+  sessionId   String
+  session     ReviewSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  decision    String // approved or changes_requested (CHECK constraint)
+  actorType   String // staff or guest (CHECK constraint)
+  actorUserId String? // No FK: history must outlive the actor account
+  actorName   String
+  actorEmail  String?
+  shareLinkId String? // No FK: the evidence keeps the link id after the link is gone
+  note        String? // plain text, at most 2,000 characters (CHECK constraint)
+  createdAt   DateTime         @default(now())
+
+  @@index([sessionId, createdAt])
+  @@index([shareLinkId])
+  @@map("review_decisions")
+}
+
+// Expiring client share link for one review session. Only the SHA-256 of the
+// token is stored; the raw token is returned once, at creation.
+model ReviewShareLink {
+  id            String    @id @default(cuid())
+  sessionId     String
+  session       ReviewSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  tokenHash     String    @unique
+  label         String?
+  expiresAt     DateTime // default 14 days, at most 90 days after creation (CHECK constraint)
+  revokedAt     DateTime?
+  revokedById   String? // No FK: history must outlive the actor account
+  allowDecision Boolean   @default(false)
+  createdById   String // No FK: history must outlive the actor account
+  lastUsedAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  annotations ReviewAnnotation[]
+
+  @@index([sessionId, createdAt])
+  @@map("review_share_links")
 }
 
 // Replay guard for the Mailgun events webhook: each signed token is accepted

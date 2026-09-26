@@ -36,13 +36,14 @@ const DIRECT_SCOPED_MODELS = new Set([
   'aicontext', 'ashconversation', 'projecttemplate', 'brandsettings',
   'pipelinestage', 'promptversion', 'credential', 'credentialaccessaudit',
   'onboardingprogress', 'slackinstallation', 'slackchannelmapping', 'slackeventreceipt', 'googlecalendarconnection', 'notionimportrecord', 'importrun', 'slackimportrecord', 'aibridgeaction',
-  'publicinquiry', 'auditevent', 'aiproviderconnection', 'aiusagerecord'
+  'publicinquiry', 'auditevent', 'aiproviderconnection', 'aiusagerecord',
+  'reviewsession'
 ]);
 
 // Evidence tables that may only ever be appended to. Request-scoped code gets
 // no update/upsert/delete path for them; the database enforces the same rule
 // with triggers (see prisma/migrations/*_audit_events).
-const APPEND_ONLY_MODELS = new Set(['auditevent']);
+const APPEND_ONLY_MODELS = new Set(['auditevent', 'reviewdecision']);
 const APPEND_ONLY_BLOCKED_METHODS = new Set([
   'update', 'updateMany', 'updateManyAndReturn', 'upsert', 'delete', 'deleteMany',
 ]);
@@ -95,6 +96,13 @@ const DIRECT_PARENT_RELATIONS = {
   onboardingprogress: [{ relation: 'user', field: 'userId', model: 'user', delegate: 'user', required: true }],
   publicinquiry: [{ relation: 'owner', field: 'ownerId', model: 'user', delegate: 'user' }],
   aiusagerecord: [{ relation: 'connection', field: 'connectionId', model: 'aiproviderconnection', delegate: 'aiProviderConnection', required: true }],
+  // Media review (#417): the reviewed file and its project must be this
+  // organization's, and so must the session a new version replaces.
+  reviewsession: [
+    { relation: 'project', field: 'projectId', model: 'project', delegate: 'project', required: true },
+    { relation: 'attachment', field: 'attachmentId', model: 'attachment', delegate: 'attachment', required: true },
+    { relation: 'previousSession', field: 'previousSessionId', model: 'reviewsession', delegate: 'reviewSession' },
+  ],
 };
 
 const RESTRICTED_MODELS = new Set([]);
@@ -184,6 +192,11 @@ const TENANT_PATHS = {
   ashchatmessage:   ['conversation'],
   intakeformresponse: ['form', 'client'],
 
+  // Media review (#417): annotations, decisions and share links belong to a
+  // review session, which carries organizationId directly.
+  reviewannotation: ['session'],
+  reviewdecision:   ['session'],
+  reviewsharelink:  ['session'],
 };
 
 const RELATION_OWNER_MODELS = {
@@ -200,6 +213,7 @@ const RELATION_OWNER_MODELS = {
   item: { model: 'emailtriageitem', delegate: 'emailTriageItem' },
   conversation: { model: 'ashconversation', delegate: 'ashConversation' },
   form: { model: 'intakeform', delegate: 'intakeForm' },
+  session: { model: 'reviewsession', delegate: 'reviewSession' },
 };
 
 export const tenantModelPolicy = Object.freeze({
