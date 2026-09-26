@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
+import rateLimit from '@fastify/rate-limit';
 import prismaPkg from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 
@@ -56,6 +57,7 @@ test('review share links stay inside their session and review data inside its te
 
     app = Fastify();
     await app.register(cookie);
+    await app.register(rateLimit, { global: false });
     app.addHook('onRequest', async (request) => {
       if (request.url.startsWith('/api/portal/')) request.prisma = raw;
     });

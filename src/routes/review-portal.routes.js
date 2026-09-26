@@ -26,6 +26,7 @@ import {
   annotationPositionError,
   canWriteToSession,
   findShareLinkByToken,
+  hashShareToken,
   isQuarantined,
   mediaKindFor,
   mediaSummary,
@@ -44,6 +45,40 @@ const READ_LIMIT = { max: 60, timeWindow: '1 minute' };
 const FILE_LIMIT = { max: 30, timeWindow: '1 minute' };
 const ANNOTATE_LIMIT = { max: 20, timeWindow: '10 minutes' };
 const DECIDE_LIMIT = { max: 10, timeWindow: '10 minutes' };
+
+// Per-link limits, keyed on the token's SHA-256 (never the raw token), so
+// one leaked link cannot be hammered from many addresses. They apply on top
+// of the per-IP limits above.
+export const SHARE_TOKEN_LIMITS = Object.freeze({
+  view: { max: 120, timeWindow: '1 minute' },
+  file: { max: 60, timeWindow: '1 minute' },
+  annotate: { max: 30, timeWindow: '10 minutes' },
+  decide: { max: 5, timeWindow: '10 minutes' },
+});
+
+/**
+ * preHandler enforcing a per-share-link limit with @fastify/rate-limit's
+ * `createRateLimit` (registered app-wide in src/index.js). Fails closed at
+ * startup if the limiter is missing.
+ */
+function shareTokenLimiter(fastify, name) {
+  if (typeof fastify.createRateLimit !== 'function') {
+    throw new Error('review share-link routes require @fastify/rate-limit to be registered first');
+  }
+  const check = fastify.createRateLimit({
+    ...SHARE_TOKEN_LIMITS[name],
+    keyGenerator: (req) => `rv:${name}:${hashShareToken(String(req.params?.token ?? ''))}`,
+  });
+  return async function shareTokenRateLimit(request, reply) {
+    const limit = await check(request);
+    if (!limit.isAllowed && limit.isExceeded) {
+      privateHeaders(reply);
+      reply.header('Retry-After', String(limit.ttlInSeconds));
+      return reply.status(429).send({ error: 'Too many requests for this review link. Try again later.', code: 'SHARE_LINK_RATE_LIMITED' });
+    }
+    return undefined;
+  };
+}
 
 const LINK_INCLUDE = {
   session: {
@@ -96,8 +131,13 @@ function guestIdentity(body) {
 }
 
 export default async function reviewPortalRoutes(fastify) {
+  const limitView = shareTokenLimiter(fastify, 'view');
+  const limitFile = shareTokenLimiter(fastify, 'file');
+  const limitAnnotate = shareTokenLimiter(fastify, 'annotate');
+  const limitDecide = shareTokenLimiter(fastify, 'decide');
+
   // The session, its file description and its annotations and decisions.
-  fastify.get('/:token', { config: { public: true, rateLimit: READ_LIMIT } }, async (request, reply) => {
+  fastify.get('/:token', { config: { public: true, rateLimit: READ_LIMIT }, preHandler: [limitView] }, async (request, reply) => {
     const resolved = await resolveShareLink(request, reply);
     if (!resolved) return reply;
     const { link, session } = resolved;
@@ -127,7 +167,7 @@ export default async function reviewPortalRoutes(fastify) {
   });
 
   // The reviewed file, and only that file.
-  fastify.get('/:token/file', { config: { public: true, rateLimit: FILE_LIMIT } }, async (request, reply) => {
+  fastify.get('/:token/file', { config: { public: true, rateLimit: FILE_LIMIT }, preHandler: [limitFile], compress: false }, async (request, reply) => {
     const resolved = await resolveShareLink(request, reply);
     if (!resolved) return reply;
     const { attachment } = resolved.session;
@@ -161,7 +201,7 @@ export default async function reviewPortalRoutes(fastify) {
   // Add a comment (or a reply) as a named guest.
   fastify.post('/:token/annotations', {
     config: { public: true, rateLimit: ANNOTATE_LIMIT },
-    preHandler: [validateBody(reviewGuestAnnotationSchema)],
+    preHandler: [limitAnnotate, validateBody(reviewGuestAnnotationSchema)],
   }, async (request, reply) => {
     const resolved = await resolveShareLink(request, reply);
     if (!resolved) return reply;
@@ -199,7 +239,7 @@ export default async function reviewPortalRoutes(fastify) {
   // Approve or request changes, when the link allows decisions.
   fastify.post('/:token/decisions', {
     config: { public: true, rateLimit: DECIDE_LIMIT },
-    preHandler: [validateBody(reviewGuestDecisionSchema)],
+    preHandler: [limitDecide, validateBody(reviewGuestDecisionSchema)],
   }, async (request, reply) => {
     const resolved = await resolveShareLink(request, reply);
     if (!resolved) return reply;

@@ -55,6 +55,38 @@ container remain on the host.
 Use `--environment staging` or `--environment rehearsal` for non-production
 records; the environment is included in every history outcome field.
 
+## Client IP behind a proxy (`TRUST_PROXY`)
+
+Production is reached through Traefik (`docker-compose.prod.yml`), so every
+request arrives at the API from Traefik's address. Unless the API trusts that
+one hop, `request.ip` is the proxy and **every per-IP rate limit is a single
+bucket shared by all visitors**: login, two-factor, re-authentication, the
+public intake form and the media review share-link routes. Audit IP prefixes
+also record the proxy instead of the client.
+
+`TRUST_PROXY` in `/opt/ashbi-platform/.env` sets how many proxy hops Fastify
+trusts (`src/config/trust-proxy.js`):
+
+| Value | Effect |
+| --- | --- |
+| unset, empty, `false`, `0` | Default. Trust no proxy; `request.ip` is the TCP peer (current behaviour). |
+| `1` | **The value for the Traefik deployment.** Trust exactly one hop: the client address is the last `X-Forwarded-For` entry, the one Traefik appended. Entries a client sends itself are further left and are ignored. |
+| `2`–`5` | Only if another proxy (CDN or load balancer) sits in front of Traefik and appends its own entry. |
+| Addresses/CIDRs, comma-separated (e.g. `172.16.0.0/12`), or `loopback`, `linklocal`, `uniquelocal` | Stricter alternative: trust only peers on the proxy's network (the Docker network Traefik reaches the API through), then use the last untrusted `X-Forwarded-For` entry. |
+
+Anything else (for example `true`, which would trust any client-supplied
+`X-Forwarded-For`) is ignored with a startup warning, and no proxy is trusted.
+Fastify refuses bare numeric hop counts because it cannot check that the peer
+is really a proxy; a hop count here is applied as a trust function, so it is
+only safe when the API port is reachable exclusively through Traefik.
+
+Operator action: this change does not edit `docker-compose.prod.yml` or the
+production environment. The owner sets `TRUST_PROXY=1` in the production
+`.env` and redeploys, then checks that two clients on different networks no
+longer share a login rate limit. Set it only when the API port is reachable
+exclusively through Traefik; if the container port is also published to the
+internet, a direct caller could forge `X-Forwarded-For`.
+
 ## Automated rollback test
 
 The direct release script captures the prior API and worker containers plus

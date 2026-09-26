@@ -96,14 +96,21 @@ Staff view the file through the existing authenticated
 
 Public share-link API, `/api/portal/review/:token` (no session):
 
-| Method and path | Purpose | Per-IP limit |
-| --- | --- | --- |
-| `GET /api/portal/review/:token` | Session title, status, version, file description; annotations and decisions without staff ids, emails or storage paths. | 60 / minute |
-| `GET /api/portal/review/:token/file` | The session's file only. | 30 / minute |
-| `POST /api/portal/review/:token/annotations` | `{ name, email?, body, parentId?, timecodeMs?, region?, pageNumber? }`. | 20 / 10 minutes |
-| `POST /api/portal/review/:token/decisions` | `{ name, email?, decision, note? }`, only when the link allows decisions. | 10 / 10 minutes |
+| Method and path | Purpose | Per-IP limit | Per-link limit |
+| --- | --- | --- | --- |
+| `GET /api/portal/review/:token` | Session title, status, version, file description; annotations and decisions without staff ids, emails or storage paths. | 60 / minute | 120 / minute |
+| `GET /api/portal/review/:token/file` | The session's file only. | 30 / minute | 60 / minute |
+| `POST /api/portal/review/:token/annotations` | `{ name, email?, body, parentId?, timecodeMs?, region?, pageNumber? }`. | 20 / 10 minutes | 30 / 10 minutes |
+| `POST /api/portal/review/:token/decisions` | `{ name, email?, decision, note? }`, only when the link allows decisions. | 10 / 10 minutes | 5 / 10 minutes |
 
-These limits come on top of the global per-IP API limit. All four routes are
+Both limits apply, on top of the global per-IP API limit. The per-link
+limit is keyed on the token's SHA-256 (`rv:<route>:<hash>`), so one leaked
+link cannot be driven from many addresses; exceeding it answers `429
+SHARE_LINK_RATE_LIMITED` with `Retry-After`. Per-IP limits only see the
+real client when `TRUST_PROXY` is configured for the deployment's proxy
+([deployment-and-rollback.md](deployment-and-rollback.md)); until the
+owner sets it, every visitor behind Traefik shares one per-IP bucket and the
+per-link limits are the effective bound. All four routes are
 in the reviewed public allowlist of the API access matrix
 ([api-access-matrix.md](api-access-matrix.md)).
 
@@ -122,7 +129,7 @@ links (`src/utils/public-document-access.js`), with a stricter storage rule.
 | Scope | A link names one session. Every query is keyed by that session: its own annotations and decisions, replies only to its own annotations, and only its own file. No project, client, organization, user or storage details are returned. Deleted projects answer `404`. Closed sessions are read-only. |
 | Decisions opt-in | A guest decision needs a link created with `allowDecision`; otherwise `403`. |
 | Step-up to create | Creating a link exposes tenant data outside the tenant, so it requires recent re-authentication (*Proposal*, listed in [privileged-actions.md](privileged-actions.md)). |
-| Rate limits | Per route and per IP, see the table above. |
+| Rate limits | Per route, per IP and per link (token hash), see the table above. |
 | Response headers | `Cache-Control: no-store`, `Referrer-Policy: no-referrer`, `X-Robots-Tag: noindex, nofollow`. The file is sent with `X-Content-Type-Options: nosniff` and `Content-Security-Policy: default-src 'none'; sandbox`, inline for images, video and audio and as a download for PDFs. |
 | Logs | Fastify's request log serializer masks the token in `/api/portal/review/<token>` and `/portal/review/<token>` URLs (`src/utils/log-redaction.js`). Reverse proxies in front of the API log full URLs too: mask or drop those paths there. |
 | Guest input | Name (at most 120 characters), optional email, and plain-text comments. Control and bidi-override characters are removed; the UI renders text only, never HTML. |

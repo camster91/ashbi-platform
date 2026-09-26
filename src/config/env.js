@@ -1,4 +1,7 @@
 // Environment configuration
+import { parseTrustProxy } from './trust-proxy.js';
+
+const trustProxyConfig = parseTrustProxy(process.env.TRUST_PROXY);
 
 const env = {
   // Server
@@ -10,6 +13,10 @@ const env = {
   // full-stack E2E stack opts in with SERVE_BUILT_SPA=true so browser journeys
   // run against the real API origin without a Vite dev server.
   serveBuiltSpa: process.env.NODE_ENV === 'production' || process.env.SERVE_BUILT_SPA === 'true',
+  // Reverse-proxy hops to trust for request.ip (src/config/trust-proxy.js).
+  // Off unless TRUST_PROXY is set; 1 for the Traefik deployment.
+  trustProxy: trustProxyConfig.trustProxy,
+  trustProxyInvalid: trustProxyConfig.invalid,
 
   // CORS - supports multiple origins separated by commas
   corsOrigins: (process.env.CORS_ORIGIN || 'https://hub.ashbi.ca')

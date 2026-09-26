@@ -7,6 +7,7 @@ import path from 'node:path';
 import { describe, it } from 'node:test';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
+import rateLimit from '@fastify/rate-limit';
 
 const { default: reviewRoutes } = await import('../../routes/review.routes.js');
 const { default: reviewPortalRoutes } = await import('../../routes/review-portal.routes.js');
@@ -27,6 +28,7 @@ async function setup(t) {
   const db = seedReviewOrganizations(createFakeReviewDb());
   const app = Fastify();
   await app.register(cookie);
+  await app.register(rateLimit, { global: false });
   app.addHook('onRequest', async (request) => {
     if (request.url.startsWith('/api/portal/')) request.prisma = db; // tenancy-exempt: raw client
   });
@@ -352,3 +354,42 @@ describe('media review share links', () => {
     assert.equal((await guest('GET', `${token}/file`)).statusCode, 404);
   });
 });
+
+describe('media review share-link rate limits', () => {
+  it('limit one link across many addresses, keyed on the token hash', async (t) => {
+    const { app, createSession, createLink } = await setup(t);
+    const session = await createSession();
+    const { token } = await createLink(session.id);
+    const { token: other } = await createLink(session.id);
+    const view = (link, index) => app.inject({ method: 'GET', url: `/api/portal/review/${link}`, remoteAddress: `198.51.${Math.floor(index / 250)}.${index % 250}` });
+    for (let index = 0; index < 120; index += 1) assert.equal((await view(token, index)).statusCode, 200);
+    const limited = await view(token, 120);
+    assert.deepEqual([limited.statusCode, limited.json().code], [429, 'SHARE_LINK_RATE_LIMITED']);
+    assert.ok(Number(limited.headers['retry-after']) > 0);
+    assert.equal(limited.body.includes(token), false);
+    // Another link has its own budget.
+    assert.equal((await view(other, 121)).statusCode, 200);
+  });
+
+  it('limit guest comments per link from rotating addresses', async (t) => {
+    const { app, db, createSession, createLink } = await setup(t);
+    const session = await createSession();
+    const { token } = await createLink(session.id);
+    const post = (index) => app.inject({ method: 'POST', url: `/api/portal/review/${token}/annotations`, payload: { name: 'Guest', body: `c${index}` }, remoteAddress: `203.0.113.${index}` });
+    for (let index = 0; index < 30; index += 1) assert.equal((await post(index)).statusCode, 201);
+    assert.equal((await post(31)).statusCode, 429);
+    assert.equal(db.tables.reviewAnnotation.length, 30);
+  });
+
+  it('keep the per-IP limit for a single address', async (t) => {
+    const { app, createSession, createLink } = await setup(t);
+    const session = await createSession();
+    const { token } = await createLink(session.id);
+    let status = 0;
+    for (let index = 0; index < 21; index += 1) {
+      status = (await app.inject({ method: 'POST', url: `/api/portal/review/${token}/annotations`, payload: { name: 'Guest', body: `c${index}` }, remoteAddress: '203.0.113.9' })).statusCode;
+    }
+    assert.equal(status, 429);
+  });
+});
+
