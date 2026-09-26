@@ -12,7 +12,8 @@ import { PrismaPg } from '@prisma/adapter-pg';
 process.env.CREDENTIALS_KEY = process.env.CREDENTIALS_KEY || 'integration-credentials-key';
 
 const { createScopedPrisma } = await import('../../utils/prisma-tenant-proxy.js');
-const { createAiGovernance, createByokProvider, computeMonthToDateUsage } = await import('../../ai/governance.js');
+const { createAiGovernance, createByokProvider, computeMonthToDateUsage, setPlatformAiDisabled, useAiGovernance } = await import('../../ai/governance.js');
+const { AiDisabledError } = await import('../../ai/errors.js');
 const { AiBudgetExceededError } = await import('../../ai/errors.js');
 const { encrypt } = await import('../../utils/crypto.js');
 const { purgeFixtureAuditEvents } = await import('../helpers/audit-cleanup.js');
@@ -94,9 +95,29 @@ test('BYOK connections stay inside their tenant and calls are metered against th
     assert.equal((await computeMonthToDateUsage(tenantB, orgB)).calls, 0);
     assert.equal(await tenantB.aiUsageRecord.count({}), 0);
 
+    const rows = await raw.aiUsageRecord.findMany({ where: { organizationId: orgA } });
+    assert.ok(rows.every((row) => row.usageEstimated === false && row.model === 'model-a'));
+
     const events = await raw.auditEvent.findMany({ where: { organizationId: orgA }, orderBy: { createdAt: 'asc' } });
     assert.deepEqual(events.map((event) => event.action), ['ai.budget_alert', 'ai.budget_exceeded']);
     assert.equal(JSON.stringify(events).includes(KEY), false);
+
+    // The operator's deployment switch is persisted: a second instance (another
+    // process) reading the same database is stopped too.
+    const other = createAiGovernance({ prisma: raw, getContext: () => null, cacheTtlMs: 0, platformProvider: () => ({ chat: async () => 'platform' }) });
+    const previousSetting = await raw.platformSetting.findUnique({ where: { id: 'platform' } });
+    const restore = useAiGovernance(other);
+    try {
+      await setPlatformAiDisabled(raw, true, { actorUserId: 'op-int' });
+      await assert.rejects(other.chat({ prompt: 'x' }), AiDisabledError);
+      await setPlatformAiDisabled(raw, false);
+      assert.equal(await other.chat({ prompt: 'x' }), 'platform');
+    } finally {
+      restore();
+      if (previousSetting) await raw.platformSetting.update({ where: { id: 'platform' }, data: { aiDisabled: previousSetting.aiDisabled, aiDisabledAt: previousSetting.aiDisabledAt, aiDisabledById: previousSetting.aiDisabledById } });
+      else await raw.platformSetting.deleteMany({ where: { id: 'platform' } });
+    }
+    await assert.rejects(raw.platformSetting.create({ data: { id: 'second-row' } }), /singleton_check|check constraint/);
   } finally {
     if (previousPrices === undefined) delete process.env.AI_MODEL_PRICES;
     else process.env.AI_MODEL_PRICES = previousPrices;

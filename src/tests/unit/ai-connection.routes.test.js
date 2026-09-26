@@ -1,6 +1,6 @@
 // Organization BYOK AI connection admin API (#413, docs/ai-byok.md).
 import assert from 'node:assert/strict';
-import { beforeEach, describe, it } from 'node:test';
+import { afterEach, beforeEach, describe, it } from 'node:test';
 import { Writable } from 'node:stream';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
@@ -13,7 +13,8 @@ const { decrypt } = await import('../../utils/crypto.js');
 const { AiProviderError } = await import('../../ai/errors.js');
 const { LOG_REDACT_OPTIONS } = await import('../../utils/log-redaction.js');
 const { reauthCookies, withSession } = await import('../helpers/reauth.js');
-const { createFakeAiDb } = await import('../helpers/fake-ai-db.js');
+const { createFakeAiDb, installFakeGovernance } = await import('../helpers/fake-ai-db.js');
+const PRICES = JSON.stringify({ 'model-a': { input: 100, output: 100 }, 'model-b': { input: 200, output: 200 }, 'model-z': { input: 1, output: 1 } });
 
 const GOOD_KEY = 'sk-good-first-key-AAAA1111';
 const GOOD_KEY_2 = 'sk-good-second-key-BBBB2222';
@@ -70,7 +71,7 @@ async function buildApp(t, routeOptions = {}) {
     if (request.user.role !== 'ADMIN') return reply.status(403).send({ error: 'Admin access required' });
     return undefined;
   });
-  await app.register(aiConnectionRoutes, { createProvider: fakeProviderFactory(), isProduction: false, ...routeOptions });
+  await app.register(aiConnectionRoutes, { createProvider: fakeProviderFactory(), allowLocalhost: true, lookup: async () => [{ address: '93.184.216.34', family: 4 }], ...routeOptions });
   t.after(() => app.close());
   return app;
 }
@@ -94,10 +95,19 @@ function assertNoKeyAnywhere(...extra) {
   }
 }
 
-beforeEach(() => {
+let restoreGovernance;
+
+beforeEach(async () => {
   db = createFakeAiDb();
   logs = [];
   providerCalls = [];
+  process.env.AI_MODEL_PRICES = PRICES;
+  restoreGovernance = await installFakeGovernance(db);
+});
+
+afterEach(() => {
+  restoreGovernance();
+  delete process.env.AI_MODEL_PRICES;
 });
 
 describe('access control', () => {
@@ -199,7 +209,7 @@ describe('connect', () => {
     assert.equal(plainHttp.statusCode, 400);
     assert.equal(plainHttp.json().code, 'UNSAFE_OUTBOUND_URL');
 
-    const prod = await buildApp(t, { isProduction: true, lookup: async () => [{ address: '169.254.169.254', family: 4 }] });
+    const prod = await buildApp(t, { allowLocalhost: false, lookup: async () => [{ address: '169.254.169.254', family: 4 }] });
     const metadata = await connect(prod, 'adminA', { ...CONNECT_BODY, baseUrl: 'https://metadata.example.com' });
     assert.equal(metadata.statusCode, 400);
     assert.equal(providerCalls.length, 0);
@@ -213,7 +223,44 @@ describe('connect', () => {
   });
 });
 
+describe('model prices (budgets must count)', () => {
+  it('connect rejects allowed or default models without a configured price', async (t) => {
+    const app = await buildApp(t);
+    process.env.AI_MODEL_PRICES = JSON.stringify({ 'model-a': { input: 1, output: 1 } });
+    const response = await connect(app);
+    assert.equal(response.statusCode, 400, response.body);
+    assert.equal(response.json().code, 'MODEL_PRICE_UNKNOWN');
+    assert.deepEqual(response.json().models, ['model-b']);
+    assert.equal(providerCalls.length, 0, 'rejected before contacting the provider');
+    assert.equal(db.aiProviderConnection.rows.length, 0);
+  });
+
+  it('settings reject switching to an unpriced model', async (t) => {
+    const app = await buildApp(t);
+    await connect(app);
+    const response = await send(app, 'adminA', 'PATCH', '/settings', { allowedModels: ['model-a', 'model-new'] });
+    assert.equal(response.statusCode, 400);
+    assert.equal(response.json().code, 'MODEL_PRICE_UNKNOWN');
+    assert.deepEqual(response.json().models, ['model-new']);
+    assert.deepEqual(db.aiProviderConnection.rows[0].allowedModels, ['model-a', 'model-b']);
+  });
+
+  it('the view lists the priced models for the form', async (t) => {
+    const app = await buildApp(t);
+    assert.deepEqual((await send(app, 'adminA', 'GET', '/')).json().pricedModels, ['model-a', 'model-b', 'model-z']);
+  });
+});
+
 describe('rotate, validate, revoke', () => {
+  it('validate answers 503 AI_CONNECTION_UNAVAILABLE when the stored key cannot be decrypted', async (t) => {
+    const app = await buildApp(t);
+    await connect(app);
+    db.aiProviderConnection.rows[0].encryptedApiKey = 'v1:retired-version:00:00:00';
+    const response = await send(app, 'adminA', 'POST', '/validate');
+    assert.equal(response.statusCode, 503, response.body);
+    assert.equal(response.json().code, 'AI_CONNECTION_UNAVAILABLE');
+  });
+
   it('rotation validates the new key before replacing the stored one', async (t) => {
     const app = await buildApp(t);
     await connect(app);

@@ -5,6 +5,7 @@
 
 import { createDraft, createDraftWithAttachment } from './gmail-draft.agent.js';
 import prisma from '../config/db.js';
+import logger from '../utils/logger.js';
 
 // Pricing tiers (hardcoded for now, can be updated via UI)
 const PRICING_TIERS = {
@@ -303,7 +304,9 @@ Return JSON with these exact fields:
         }
       }
     } catch (err) {
-      console.warn('AI proposal generation failed, using fallback:', err.message);
+      // Template fallback is intentional; log only the error code, never
+      // provider text (it can echo prompt content).
+      logger.warn({ errorCode: err?.code ?? err?.name ?? 'unknown' }, 'AI proposal generation unavailable; using the template');
     }
   }
 

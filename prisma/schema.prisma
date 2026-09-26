@@ -1251,6 +1251,7 @@ model AiUsageRecord {
   model              String
   promptTokens       Int                  @default(0)
   completionTokens   Int                  @default(0)
+  usageEstimated     Boolean              @default(false) // provider omitted usage; tokens estimated at ~4 chars each
   estimatedCostCents Float? // null when the model has no configured price
   feature            String? // route pattern or job label that made the call
   requestId          String?
@@ -1261,6 +1262,20 @@ model AiUsageRecord {
   @@index([organizationId, createdAt])
   @@index([connectionId, createdAt])
   @@map("ai_usage_records")
+}
+
+// Deployment-wide settings shared by every organization (#413). A single row
+// with id "platform". aiDisabled is the persisted operator AI kill switch,
+// read by every API and worker process through a short cache; the
+// AI_DISABLED env var overrides it.
+model PlatformSetting {
+  id               String    @id @default("platform")
+  aiDisabled       Boolean   @default(false)
+  aiDisabledAt     DateTime?
+  aiDisabledById   String? // No FK: history must outlive the actor account
+  updatedAt        DateTime  @updatedAt
+
+  @@map("platform_settings")
 }
 
 model TaskTemplate {

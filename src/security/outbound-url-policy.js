@@ -6,16 +6,19 @@
 // http://169.254.169.254/ or http://10.0.0.5/ would make the API server call
 // cloud metadata or internal services.
 //
-// Rules:
-//   - https only; plain http only for localhost outside production;
-//   - no userinfo (user:pass@host) in the URL;
-//   - in production, every address the host resolves to (dns.lookup, all
-//     families) must be publicly routable: loopback, private, link-local,
-//     carrier-grade NAT, unique-local, multicast, documentation and
-//     unspecified ranges are rejected, including IPv4-mapped IPv6 forms.
+// Rules (applied in every environment):
+//   - https only; plain http only for localhost, and only when NODE_ENV is
+//     `development` or `test` (local model servers);
+//   - no userinfo (user:pass@host), query string or fragment;
+//   - every address the host resolves to (dns.lookup, all families) must be
+//     publicly routable: loopback, private, link-local, carrier-grade NAT,
+//     unique-local, multicast, documentation, discard and unspecified ranges
+//     are rejected, including IPv4-mapped/-translated, 6to4 and NAT64 forms.
+//     The localhost exemption above is the only exception.
 //
-// DNS can change after validation (rebinding), so the BYOK provider re-checks
-// the host before every request in production (src/ai/governance.js).
+// DNS can change after validation (rebinding), so BYOK requests are sent
+// through src/security/safe-fetch.js, which runs the same address check inside
+// the socket's own DNS lookup, immediately before connecting.
 
 import dns from 'node:dns';
 import { isIP } from 'node:net';
@@ -31,6 +34,16 @@ export class UnsafeOutboundUrlError extends Error {
 }
 
 const LOCALHOST_NAMES = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);
+
+/** Whether a URL hostname is one of the explicit localhost names. */
+export function isLocalhostName(hostname) {
+  return LOCALHOST_NAMES.has(String(hostname).toLowerCase());
+}
+
+/** The localhost exemption applies only in development and test. */
+export function localhostAllowedByEnv() {
+  return process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test';
+}
 
 function ipv4ToInt(address) {
   return address.split('.').reduce((acc, part) => (acc * 256) + Number(part), 0);
@@ -84,8 +97,16 @@ function isBlockedIpv6(address) {
   if (w.slice(0, 7).every((n) => n === 0) && w[7] === 1) return true; // ::1
   // IPv4-mapped (::ffff:a.b.c.d) and IPv4-compatible (::a.b.c.d)
   if (w.slice(0, 5).every((n) => n === 0) && (w[5] === 0xffff || w[5] === 0)) return isBlockedIpv4(wordsToIpv4(w[6], w[7]));
+  // IPv4-translated ::ffff:0:a.b.c.d (::ffff:0:0/96, RFC 2765): never public
+  if (w.slice(0, 4).every((n) => n === 0) && w[4] === 0xffff && w[5] === 0) return true;
   // NAT64 well-known prefix 64:ff9b::/96
   if (w[0] === 0x64 && w[1] === 0xff9b && w.slice(2, 6).every((n) => n === 0)) return isBlockedIpv4(wordsToIpv4(w[6], w[7]));
+  // Local-use NAT64 64:ff9b:1::/48 (RFC 8215)
+  if (w[0] === 0x64 && w[1] === 0xff9b && w[2] === 1) return true;
+  // 6to4 2002::/16 carries an IPv4 address in bits 16-47
+  if (w[0] === 0x2002) return isBlockedIpv4(wordsToIpv4(w[1], w[2]));
+  // Discard-only 100::/64 (RFC 6666)
+  if (w[0] === 0x100 && w[1] === 0 && w[2] === 0 && w[3] === 0) return true;
   if ((w[0] & 0xfe00) === 0xfc00) return true; // fc00::/7 unique local
   if ((w[0] & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
   if ((w[0] & 0xffc0) === 0xfec0) return true; // fec0::/10 site-local (deprecated)
@@ -110,9 +131,9 @@ export function isNonPublicAddress(address) {
  * (400, safe to show) or resolves to the parsed URL.
  *
  * @param {string} raw
- * @param {{ isProduction: boolean, lookup?: (host: string, options: { all: true, verbatim?: boolean }) => Promise<Array<{ address: string }>> }} options
+ * @param {{ allowLocalhost?: boolean, lookup?: (host: string, options: { all: true, verbatim?: boolean }) => Promise<Array<{ address: string }>> }} [options]
  */
-export async function assertSafeOutboundUrl(raw, { isProduction, lookup = dns.promises.lookup }) {
+export async function assertSafeOutboundUrl(raw, { allowLocalhost = localhostAllowedByEnv(), lookup = dns.promises.lookup } = {}) {
   let url;
   try {
     url = new URL(String(raw ?? '').trim());
@@ -121,17 +142,13 @@ export async function assertSafeOutboundUrl(raw, { isProduction, lookup = dns.pr
   }
   if (url.username || url.password) throw new UnsafeOutboundUrlError('Base URL must not contain credentials.');
   if (url.search || url.hash) throw new UnsafeOutboundUrlError('Base URL must not contain a query string or fragment.');
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new UnsafeOutboundUrlError('Base URL must use https.');
 
   const host = url.hostname.toLowerCase();
-  const isLocalhost = LOCALHOST_NAMES.has(host);
+  if (allowLocalhost && isLocalhostName(host)) return url;
   if (url.protocol === 'http:') {
-    if (isProduction || !isLocalhost) {
-      throw new UnsafeOutboundUrlError('Base URL must use https (plain http is allowed only for localhost in development).');
-    }
-    return url;
+    throw new UnsafeOutboundUrlError('Base URL must use https (plain http is allowed only for localhost in development).');
   }
-  if (url.protocol !== 'https:') throw new UnsafeOutboundUrlError('Base URL must use https.');
-  if (!isProduction) return url;
 
   const bareHost = host.replace(/^\[|\]$/g, '');
   let addresses;

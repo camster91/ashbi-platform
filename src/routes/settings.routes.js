@@ -282,14 +282,15 @@ export default async function settingsRoutes(fastify) {
       ollamaModel: getOllamaModel(),
       ollamaModels: OLLAMA_MODELS,
       canManage: await isPlatformOperator(request.prisma, request.user),
-      platformAi: getPlatformAiStatus(),
+      platformAi: await getPlatformAiStatus(),
     };
   });
 
   // Deployment-wide AI kill switch (#413, docs/ai-byok.md). Turning it on
   // makes every AI call, for every organization, fail with AI_DISABLED before
-  // any provider is contacted. AI_DISABLED=true in the environment keeps it on
-  // regardless of this toggle. Process-local, like the provider switch.
+  // any provider is contacted. It is persisted (platform_settings), so every
+  // API and worker process applies it within the governance cache TTL.
+  // AI_DISABLED=true in the environment keeps AI off regardless.
   fastify.post('/ai-kill-switch', {
     onRequest: [fastify.adminOnly],
     preHandler: [requireRecentAuth, validateBody(aiKillSwitchSchema)],
@@ -300,14 +301,14 @@ export default async function settingsRoutes(fastify) {
       });
     }
     const { disabled } = request.body;
-    setPlatformAiDisabled(disabled);
+    await setPlatformAiDisabled(request.prisma, disabled, { actorUserId: request.user.id });
     await recordRequestAuditEvent(request.prisma, request, {
       action: disabled ? 'ai.disabled' : 'ai.enabled',
       entityType: 'settings',
       entityId: 'ai_platform',
       metadata: { scope: 'platform' },
     });
-    return { platformAi: getPlatformAiStatus() };
+    return { platformAi: await getPlatformAiStatus() };
   });
 
   // Switch AI provider at runtime. The provider is shared by every

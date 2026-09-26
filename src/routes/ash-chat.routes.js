@@ -3,7 +3,7 @@
 import env from '../config/env.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { aiGovernance } from '../ai/governance.js';
-import { isAiControlError, sendAiError } from '../ai/errors.js';
+import { aiErrorBody, isAiControlError, sendAiError } from '../ai/errors.js';
 
 const ASH_SYSTEM_PROMPT = `You are Ash, Chief of Staff at Ashbi Design. You have access to the agency's Hub data. You are direct, smart, and get things done. Keep responses concise unless detail is needed.`;
 
@@ -96,12 +96,9 @@ export default async function ashChatRoutes(fastify) {
   }, async (request, reply) => {
     const { message, conversationId } = request.body;
 
-    // Kill switches first (#413): nothing is saved when AI is off. An
-    // organization with a BYOK connection is answered through it; others keep
-    // this route's own provider chain below.
-    let aiRoute;
+    // Kill switches first (#413): nothing is saved when AI is off.
     try {
-      aiRoute = await aiGovernance.resolve(request.user?.organizationId ?? null);
+      await aiGovernance.resolve(request.user?.organizationId ?? null);
     } catch (err) {
       if (isAiControlError(err)) return sendAiError(reply, err);
       throw err;
@@ -132,11 +129,19 @@ export default async function ashChatRoutes(fastify) {
     let aiResponse;
     try {
       const turns = history.map(m => ({ role: m.role, content: m.content }));
-      aiResponse = aiRoute.source === 'byok'
-        ? await aiGovernance.chat({ system: ASH_SYSTEM_PROMPT, messages: turns, temperature: 0.4, maxTokens: 2048 })
-        : await callAI(turns);
+      // Governed like every other AI call (#413): kill switches, the
+      // organization's BYOK connection and budget when it has one, and the
+      // beforeCall/afterCall hooks around this route's own platform chain.
+      aiResponse = await aiGovernance.chatVia(
+        { system: ASH_SYSTEM_PROMPT, messages: turns, temperature: 0.4, maxTokens: 2048, feature: '/api/ash-chat/message' },
+        () => callAI(turns),
+      );
     } catch (err) {
-      if (isAiControlError(err)) return sendAiError(reply, err);
+      if (isAiControlError(err)) {
+        // The user's message is already saved: return the conversation so a
+        // retry continues it instead of starting an orphaned one.
+        return reply.status(err.statusCode).send({ ...aiErrorBody(err), conversationId: conversation.id });
+      }
       fastify.log.error('AI call failed:', err);
       aiResponse = 'Sorry, I could not process that request. Please try again.';
     }

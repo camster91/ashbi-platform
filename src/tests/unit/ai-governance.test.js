@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, it } from 'node:test';
 
 process.env.CREDENTIALS_KEY = process.env.CREDENTIALS_KEY || 'unit-test-credentials-key';
 
-const { createAiGovernance, createByokProvider, setPlatformAiDisabled, AI_ORG_CACHE_TTL_MS } = await import('../../ai/governance.js');
+const { createAiGovernance, createByokProvider, setPlatformAiDisabled, useAiGovernance, AI_ORG_CACHE_TTL_MS } = await import('../../ai/governance.js');
 const { AiBudgetExceededError, AiDisabledError, AiProviderError } = await import('../../ai/errors.js');
 const { recordAuditEvent } = await import('../../services/audit-event.service.js');
 const { encrypt } = await import('../../utils/crypto.js');
@@ -37,7 +37,7 @@ const okCompletion = (promptTokens = 10, completionTokens = 5, content = 'byok a
   json: async () => ({ model: 'model-a', choices: [{ message: { content } }], usage: { prompt_tokens: promptTokens, completion_tokens: completionTokens } }),
 });
 
-function setup({ connection, org = {}, fetchHandler = () => okCompletion(), context = { organizationId: 'org-a', requestId: 'req-1', feature: '/api/ai/ask' } } = {}) {
+function setup({ connection, org = {}, fetchHandler = () => okCompletion(), context = { organizationId: 'org-a', requestId: 'req-1', feature: '/api/ai/ask' }, hooks = {} } = {}) {
   const db = createFakeAiDb({ organizations: [{ id: 'org-a', ...org }, { id: 'org-b' }] });
   if (connection) {
     db.aiProviderConnection.rows.push({
@@ -69,12 +69,14 @@ function setup({ connection, org = {}, fetchHandler = () => okCompletion(), cont
     logger,
     now: () => clock,
     platformProvider: () => platform,
-    createProvider: (options) => createByokProvider({ ...options, isProduction: false, fetchImpl }),
+    createProvider: (options) => createByokProvider({ ...options, fetchImpl }),
     getContext: () => state.context,
     audit: (client, event) => recordAuditEvent(client, event, { logger }),
+    ...hooks,
   });
   return {
     db, governance, platformCalls, calls, lines, state,
+    clock: () => clock,
     advance(ms) { clock = new Date(clock.getTime() + ms); },
     setClock(date) { clock = date; },
   };
@@ -83,13 +85,11 @@ function setup({ connection, org = {}, fetchHandler = () => okCompletion(), cont
 beforeEach(() => {
   process.env.AI_MODEL_PRICES = PRICES;
   delete process.env.AI_DISABLED;
-  setPlatformAiDisabled(false);
 });
 
 afterEach(() => {
   delete process.env.AI_MODEL_PRICES;
   delete process.env.AI_DISABLED;
-  setPlatformAiDisabled(false);
 });
 
 describe('resolution order', () => {
@@ -100,11 +100,66 @@ describe('resolution order', () => {
     assert.equal(t.calls.length + t.platformCalls.length, 0);
   });
 
-  it('platform kill switch (operator toggle) blocks calls without an organization too', async () => {
-    setPlatformAiDisabled(true);
+  it('platform kill switch (persisted operator switch) blocks calls without an organization too', async () => {
     const t = setup({ context: null });
-    await assert.rejects(t.governance.chat({ prompt: 'x' }), AiDisabledError);
+    t.db.platformSetting.rows.push({ id: 'platform', aiDisabled: true });
+    await assert.rejects(t.governance.chat({ prompt: 'x' }), (err) => err instanceof AiDisabledError && err.scope === 'platform');
+    await assert.rejects(t.governance.assertAllowed(null), AiDisabledError);
     assert.equal(t.platformCalls.length, 0);
+  });
+
+  it('the persisted platform switch reaches other processes within the cache TTL', async () => {
+    // Two governance instances over one database stand in for two processes.
+    const api = setup({ context: null });
+    const worker = createAiGovernance({ prisma: api.db, platformProvider: () => ({ chat: async () => 'platform answer' }), getContext: () => null, now: () => api.clock() });
+    assert.equal(await worker.chat({ prompt: 'x' }), 'platform answer');
+    const restore = useAiGovernance(api.governance);
+    try {
+      await setPlatformAiDisabled(api.db, true, { actorUserId: 'op-1' });
+    } finally {
+      restore();
+    }
+    await assert.rejects(api.governance.chat({ prompt: 'x' }), AiDisabledError, 'the writing process sees it at once');
+    assert.equal(await worker.chat({ prompt: 'x' }), 'platform answer', 'another process within its cache window');
+    api.advance(AI_ORG_CACHE_TTL_MS + 1);
+    await assert.rejects(worker.chat({ prompt: 'x' }), AiDisabledError, 'and after the TTL');
+    assert.deepEqual(
+      { ...api.db.platformSetting.rows[0], updatedAt: undefined, createdAt: undefined, id: 'platform', aiDisabledAt: undefined },
+      { id: 'platform', aiDisabled: true, aiDisabledById: 'op-1', aiDisabledAt: undefined, updatedAt: undefined, createdAt: undefined },
+    );
+  });
+
+  it('resolve and the hooks expose connection metadata, never the provider', async () => {
+    const seen = [];
+    const t = setup({ connection: {}, hooks: { beforeCall: (call) => { seen.push(call.route); }, afterCall: (call) => { seen.push(call.route); } } });
+    const resolved = await t.governance.resolve('org-a');
+    assert.equal(resolved.source, 'byok');
+    assert.equal('provider' in resolved, false);
+    assert.equal(resolved.connection.id, 'conn-a');
+    assert.equal('encryptedApiKey' in resolved.connection, false);
+    await t.governance.chat({ prompt: 'x' });
+    assert.equal(seen.length, 2);
+    for (const route of seen) {
+      assert.deepEqual(Object.keys(route).sort(), ['connection', 'source']);
+      assert.equal('encryptedApiKey' in route.connection, false);
+    }
+  });
+
+  it('chatVia gates a custom platform chain and runs the hooks', async () => {
+    const calls = [];
+    const t = setup({ hooks: { beforeCall: () => { calls.push('before'); }, afterCall: () => { calls.push('after'); } } });
+    assert.equal(await t.governance.chatVia({ prompt: 'x' }, async () => { calls.push('platform-chain'); return 'chain answer'; }), 'chain answer');
+    assert.deepEqual(calls, ['before', 'platform-chain', 'after']);
+    t.db.organization.rows[0].aiDisabled = true;
+    t.governance.invalidate('org-a');
+    await assert.rejects(t.governance.chatVia({ prompt: 'x' }, async () => { calls.push('leaked'); return 'no'; }), AiDisabledError);
+    assert.equal(calls.includes('leaked'), false);
+  });
+
+  it('chatVia uses the BYOK connection when the organization has one', async () => {
+    const t = setup({ connection: {} });
+    assert.equal(await t.governance.chatVia({ prompt: 'x' }, async () => 'platform chain'), 'byok answer');
+    assert.equal(t.db.aiUsageRecord.rows.length, 1);
   });
 
   it('organization kill switch blocks both BYOK and platform calls', async () => {
@@ -128,7 +183,7 @@ describe('resolution order', () => {
       { ...usage, id: undefined, createdAt: undefined, updatedAt: undefined },
       {
         id: undefined, createdAt: undefined, updatedAt: undefined,
-        organizationId: 'org-a', connectionId: 'conn-a', model: 'model-a', promptTokens: 10, completionTokens: 5,
+        organizationId: 'org-a', connectionId: 'conn-a', model: 'model-a', promptTokens: 10, completionTokens: 5, usageEstimated: false,
         estimatedCostCents: 1.5, feature: '/api/ai/ask', requestId: 'req-1', success: true, errorType: null,
       },
     );
@@ -259,6 +314,30 @@ describe('budgets', () => {
     t.governance.invalidate('org-a');
     await t.governance.chat({ prompt: 'x' });
     assert.equal(t.db.auditEvent.rows.filter((event) => event.action === 'ai.budget_alert').length, 1);
+  });
+
+  it('prices by the requested model, not the model id the provider reports', async () => {
+    // The provider claims a model with no configured price; we asked for model-a.
+    const t = setup({ connection: {}, fetchHandler: () => ({
+      ok: true, status: 200,
+      json: async () => ({ model: 'free-model', choices: [{ message: { content: 'x' } }], usage: { prompt_tokens: 10, completion_tokens: 5 } }),
+    }) });
+    process.env.AI_MODEL_PRICES = JSON.stringify({ 'model-a': { input: 100_000, output: 100_000 }, 'free-model': { input: 0, output: 0 } });
+    await t.governance.chat({ prompt: 'x' });
+    assert.equal(t.db.aiUsageRecord.rows[0].estimatedCostCents, 1.5);
+    assert.equal(t.db.aiUsageRecord.rows[0].model, 'model-a');
+  });
+
+  it('meters an estimate when the provider omits usage, and flags it', async () => {
+    const t = setup({ connection: {}, fetchHandler: () => ({
+      ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'abcdefgh' } }] }),
+    }) });
+    await t.governance.chat({ prompt: 'x'.repeat(40) });
+    const [row] = t.db.aiUsageRecord.rows;
+    assert.equal(row.usageEstimated, true);
+    assert.equal(row.promptTokens, 10);
+    assert.equal(row.completionTokens, 2);
+    assert.equal(row.estimatedCostCents, 1.2);
   });
 
   it('unpriced models are metered with a null cost', async () => {

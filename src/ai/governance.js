@@ -2,8 +2,8 @@
 //
 // Every AI call made through getProvider() / aiClient passes through here:
 //
-//   1. platform kill switch (AI_DISABLED=true or the operator's runtime
-//      toggle)                                   -> AiDisabledError('platform')
+//   1. platform kill switch (AI_DISABLED=true, or the operator's persisted
+//      switch in platform_settings)             -> AiDisabledError('platform')
 //   2. no organization in the request/job context -> platform provider
 //   3. organization aiDisabled                    -> AiDisabledError('organization')
 //   4. organization BYOK connection:
@@ -16,30 +16,36 @@
 // A BYOK failure never falls back to the platform provider and is never
 // retried: the caller gets a typed error.
 //
+// AI entry points that do not use the chat provider apply the same switches:
+// embeddings call `assertAllowed`, and Ash chat runs its own provider chain
+// through `chatVia`, which gates it and runs the beforeCall/afterCall hooks.
+//
 // Slice 2 (tool registry, approval queue, adversarial evaluation) plugs in at
 // `beforeCall` / `afterCall` in createAiGovernance: they see the resolved
-// route and the call options before any provider is contacted.
+// route (source and connection metadata, never the provider object) and the
+// call options before any provider is contacted.
 
-import env from '../config/env.js';
 import { prisma as basePrisma } from '../config/db.js';
 import defaultLogger from '../utils/logger.js';
 import { decrypt } from '../utils/crypto.js';
 import { requestStorage } from '../utils/request-context.js';
 import { recordAuditEvent } from '../services/audit-event.service.js';
-import { assertSafeOutboundUrl } from '../security/outbound-url-policy.js';
+import { assertSafeOutboundUrl, localhostAllowedByEnv } from '../security/outbound-url-policy.js';
+import { createSafeFetch } from '../security/safe-fetch.js';
 import { getPlatformProvider } from './providers/platform.js';
 import OpenAICompatibleProvider, { JSON_ONLY_INSTRUCTION, parseJsonReply } from './providers/openai-compatible.js';
 import { estimateCostCents } from './pricing.js';
 import { AiBudgetExceededError, AiControlError, AiDisabledError, AiProviderError } from './errors.js';
 
 // Proposals for owner approval (docs/ai-byok.md):
-/** How long an organization's kill switch and connection are cached per process. */
+/** How long kill switches and connections are cached per process. */
 export const AI_ORG_CACHE_TTL_MS = 30_000;
 /** Month-to-date spend ratio that triggers the once-a-month ai.budget_alert. */
 export const AI_BUDGET_ALERT_RATIO = 0.8;
 /** At most one ai.budget_exceeded audit event per organization per window. */
 export const AI_BUDGET_EXCEEDED_AUDIT_WINDOW_MS = 60 * 60 * 1000;
 
+export const PLATFORM_SETTING_ID = 'platform';
 const FEATURE_MAX_LENGTH = 100;
 
 /** First instant of the current UTC month. */
@@ -49,6 +55,10 @@ export function monthStart(now = new Date()) {
 
 function monthKey(now) {
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+function envAiDisabled() {
+  return process.env.AI_DISABLED === 'true';
 }
 
 /**
@@ -80,36 +90,7 @@ export async function computeMonthToDateUsage(prisma, organizationId, at = new D
   };
 }
 
-// ---------------------------------------------------------------------------
-// Platform kill switch
-
-let platformRuntimeDisabled = false;
-
-/** Whether AI is off for the whole deployment (env or operator toggle). */
-export function isPlatformAiDisabled() {
-  return process.env.AI_DISABLED === 'true' || platformRuntimeDisabled;
-}
-
-/**
- * The operator's runtime toggle. It can only add to AI_DISABLED: when the env
- * switch is on, AI stays off whatever the toggle says. Process-local, like
- * the platform provider switch.
- */
-export function setPlatformAiDisabled(disabled) {
-  platformRuntimeDisabled = Boolean(disabled);
-}
-
-export function getPlatformAiStatus() {
-  return {
-    disabled: isPlatformAiDisabled(),
-    envDisabled: process.env.AI_DISABLED === 'true',
-    runtimeDisabled: platformRuntimeDisabled,
-  };
-}
-
-// ---------------------------------------------------------------------------
-
-/** Connection fields safe to keep in memory and return (no ciphertext). */
+/** Connection fields safe to keep in memory and hand to hooks (no ciphertext). */
 function publicConnection(row) {
   if (!row) return null;
   const { encryptedApiKey: _encrypted, ...rest } = row;
@@ -117,19 +98,23 @@ function publicConnection(row) {
 }
 
 /**
- * Build a BYOK provider. In production the host is re-checked before every
- * request, so a DNS change after validation cannot point the key at a
- * private address.
+ * Build a BYOK provider. By default requests go through safe-fetch: the host
+ * is checked against the outbound URL policy before every request and again
+ * inside the socket's DNS lookup (DNS pinning), and redirects are never
+ * followed. `fetchImpl` replaces the transport entirely (tests); `lookup`
+ * (promise style, pre-check) and `socketLookup` (callback style, the socket's
+ * own lookup) replace DNS.
  */
-export function createByokProvider({ baseUrl, apiKey, model, isProduction = env.isProduction, fetchImpl, lookup }) {
-  const baseFetch = fetchImpl ?? ((...args) => globalThis.fetch(...args));
-  const guardedFetch = isProduction
-    ? async (url, init) => {
-      await assertSafeOutboundUrl(new URL(url).origin, { isProduction: true, ...(lookup ? { lookup } : {}) });
-      return baseFetch(url, init);
-    }
-    : baseFetch;
-  return new OpenAICompatibleProvider({ baseUrl, apiKey, model, fetchImpl: guardedFetch });
+export function createByokProvider({ baseUrl, apiKey, model, fetchImpl, lookup, socketLookup, allowLocalhost = localhostAllowedByEnv() }) {
+  let transport = fetchImpl;
+  if (!transport) {
+    const safeFetch = createSafeFetch({ allowLocalhost, ...(socketLookup ? { lookup: socketLookup } : {}) });
+    transport = async (url, init) => {
+      await assertSafeOutboundUrl(new URL(url).origin, { allowLocalhost, ...(lookup ? { lookup } : {}) });
+      return safeFetch(url, init);
+    };
+  }
+  return new OpenAICompatibleProvider({ baseUrl, apiKey, model, fetchImpl: transport });
 }
 
 /**
@@ -160,6 +145,8 @@ export function createAiGovernance(deps = {}) {
 
   /** @type {Map<string, { expiresAt: number, state: any }>} */
   const cache = new Map();
+  /** @type {{ expiresAt: number, disabled: boolean } | null} */
+  let platformCache = null;
   /** @type {Map<string, number>} */
   const budgetExceededAuditAt = new Map();
   /** @type {Set<string>} */
@@ -168,6 +155,30 @@ export function createAiGovernance(deps = {}) {
   function invalidate(organizationId) {
     if (organizationId) cache.delete(organizationId);
     else cache.clear();
+  }
+
+  function invalidatePlatform() {
+    platformCache = null;
+  }
+
+  /** The persisted operator switch, cached like organization state. */
+  async function storedPlatformDisabled() {
+    const nowMs = now().getTime();
+    if (platformCache && platformCache.expiresAt > nowMs) return platformCache.disabled;
+    const row = await prisma.platformSetting.findUnique({ where: { id: PLATFORM_SETTING_ID }, select: { aiDisabled: true } });
+    platformCache = { expiresAt: nowMs + cacheTtlMs, disabled: Boolean(row?.aiDisabled) };
+    return platformCache.disabled;
+  }
+
+  async function isPlatformDisabled() {
+    if (envAiDisabled()) return true;
+    return storedPlatformDisabled();
+  }
+
+  async function getPlatformStatus() {
+    const envDisabled = envAiDisabled();
+    const storedDisabled = await storedPlatformDisabled();
+    return { disabled: envDisabled || storedDisabled, envDisabled, storedDisabled };
   }
 
   async function loadOrgState(organizationId) {
@@ -205,17 +216,23 @@ export function createAiGovernance(deps = {}) {
   }
 
   /**
-   * Resolve where a call for this organization goes, applying kill switches.
-   * The platform provider is not instantiated here (the caller asks for it
-   * only when it makes a call).
-   * @returns {Promise<{ source: 'platform' } | { source: 'byok', provider: any, connection: any }>}
+   * Kill switches only: throws AiDisabledError when AI is off for the
+   * deployment or the organization. For AI entry points that do not use the
+   * chat provider (embeddings).
    */
-  async function resolve(organizationId) {
-    if (isPlatformAiDisabled()) throw new AiDisabledError('platform');
-    if (!organizationId) return { source: 'platform' };
+  async function assertAllowed(organizationId = getContext()?.organizationId ?? null) {
+    if (await isPlatformDisabled()) throw new AiDisabledError('platform');
+    if (!organizationId) return;
     const state = await loadOrgState(organizationId);
     if (state.aiDisabled) throw new AiDisabledError('organization');
-    if (!state.connection) return { source: 'platform' };
+  }
+
+  /** Internal routing, including the live provider object. */
+  async function route(organizationId) {
+    await assertAllowed(organizationId);
+    if (!organizationId) return { source: 'platform', connection: null, provider: null };
+    const state = await loadOrgState(organizationId);
+    if (!state.connection) return { source: 'platform', connection: null, provider: null };
     if (state.connection.status === 'disabled') {
       throw new AiControlError(
         'The workspace AI connection is disabled. An admin can validate or rotate the key in Settings.',
@@ -223,7 +240,18 @@ export function createAiGovernance(deps = {}) {
       );
     }
     if (state.loadError) throw state.loadError;
-    return { source: 'byok', provider: state.provider, connection: state.connection };
+    return { source: 'byok', connection: state.connection, provider: state.provider };
+  }
+
+  /**
+   * Where a call for this organization goes, after the kill switches.
+   * Returns metadata only: the provider object stays inside this module so
+   * no caller can make an unmetered, unbudgeted call.
+   * @returns {Promise<{ source: 'platform' | 'byok', connection: any }>}
+   */
+  async function resolve(organizationId) {
+    const { source, connection } = await route(organizationId);
+    return { source, connection };
   }
 
   function monthToDateUsage(organizationId) {
@@ -278,7 +306,9 @@ export function createAiGovernance(deps = {}) {
     });
   }
 
-  async function recordUsage(connection, context, { model, promptTokens = 0, completionTokens = 0, costCents = null, success, errorType = null }) {
+  async function recordUsage(connection, context, {
+    model, promptTokens = 0, completionTokens = 0, usageEstimated = false, costCents = null, success, errorType = null,
+  }) {
     try {
       await prisma.aiUsageRecord.create({
         data: {
@@ -287,6 +317,7 @@ export function createAiGovernance(deps = {}) {
           model: String(model).slice(0, 200),
           promptTokens,
           completionTokens,
+          usageEstimated,
           estimatedCostCents: costCents,
           feature: context?.feature ? String(context.feature).slice(0, FEATURE_MAX_LENGTH) : null,
           requestId: context?.requestId ? String(context.requestId).slice(0, 100) : null,
@@ -307,26 +338,34 @@ export function createAiGovernance(deps = {}) {
   }
 
   /**
-   * One governed call. `json` selects chatJSON semantics.
+   * One governed call.
    * @param {Record<string, any>} options
-   * @param {{ json: boolean }} mode
+   * @param {{ json: boolean, platformCall?: (options: any) => Promise<any> }} mode
+   *   platformCall replaces the platform provider for callers with their own
+   *   platform chain (Ash chat); it still runs behind the switches and hooks.
    */
-  async function call(options = {}, { json }) {
+  async function call(options = {}, { json, platformCall }) {
     const { feature, model: requestedModel, ...providerOptions } = options;
     const context = getContext() ?? null;
     const organizationId = context?.organizationId ?? null;
-    const route = await resolve(organizationId);
+    const routed = await route(organizationId);
+    const hookRoute = { source: routed.source, connection: routed.connection };
     const callContext = { ...context, feature: feature ?? context?.feature ?? null };
-    if (beforeCall) await beforeCall({ route, organizationId, options: providerOptions, feature: callContext.feature });
+    if (beforeCall) await beforeCall({ route: hookRoute, organizationId, options: providerOptions, feature: callContext.feature });
 
-    if (route.source === 'platform') {
-      const provider = platformProvider();
-      const result = json ? await provider.chatJSON(providerOptions) : await provider.chat(providerOptions);
-      if (afterCall) await afterCall({ route, organizationId, feature: callContext.feature });
+    if (routed.source === 'platform') {
+      let result;
+      if (platformCall) {
+        result = await platformCall(providerOptions);
+      } else {
+        const provider = platformProvider();
+        result = json ? await provider.chatJSON(providerOptions) : await provider.chat(providerOptions);
+      }
+      if (afterCall) await afterCall({ route: hookRoute, organizationId, feature: callContext.feature });
       return result;
     }
 
-    const { connection, provider } = route;
+    const { connection, provider } = routed;
     await assertWithinBudget(connection, callContext);
     const model = pickModel(connection, requestedModel);
     const system = json ? `${providerOptions.system || ''}\n\n${JSON_ONLY_INSTRUCTION}`.trim() : providerOptions.system;
@@ -338,23 +377,32 @@ export function createAiGovernance(deps = {}) {
       await recordUsage(connection, callContext, { model, success: false, errorType });
       throw err instanceof AiProviderError ? err : new AiProviderError('upstream');
     }
-    const { promptTokens, completionTokens } = completion.usage;
-    const costCents = estimateCostCents(completion.model, promptTokens, completionTokens)
-      ?? estimateCostCents(model, promptTokens, completionTokens);
-    await recordUsage(connection, callContext, { model, promptTokens, completionTokens, costCents, success: true });
+    const { promptTokens, completionTokens, estimated } = completion.usage;
+    // Price by the model we asked for (an allowed model with a configured
+    // price), never by the id the provider reports back.
+    const costCents = estimateCostCents(model, promptTokens, completionTokens);
+    await recordUsage(connection, callContext, {
+      model, promptTokens, completionTokens, usageEstimated: Boolean(estimated), costCents, success: true,
+    });
     await maybeAlert(connection, callContext).catch((err) => {
       logger.error({ organizationId: connection.organizationId, errorName: err?.name }, 'AI budget alert check failed');
     });
-    if (afterCall) await afterCall({ route, organizationId, feature: callContext.feature, usage: completion.usage });
+    if (afterCall) await afterCall({ route: hookRoute, organizationId, feature: callContext.feature, usage: completion.usage });
     return json ? parseJsonReply(completion.content) : completion.content;
   }
 
   return {
     resolve,
+    assertAllowed,
     invalidate,
+    invalidatePlatform,
+    isPlatformDisabled,
+    getPlatformStatus,
     monthToDateUsage,
     chat: (options) => call(options, { json: false }),
     chatJSON: (options) => call(options, { json: true }),
+    /** A text call whose platform route is `platformCall` instead of the platform provider. */
+    chatVia: (options, platformCall) => call(options, { json: false, platformCall }),
     _resetThrottles() {
       budgetExceededAuditAt.clear();
       budgetAlertSent.clear();
@@ -362,10 +410,70 @@ export function createAiGovernance(deps = {}) {
   };
 }
 
-/** The process-wide control plane used by getProvider() and aiClient. */
-export const aiGovernance = createAiGovernance();
+let currentGovernance = createAiGovernance();
+
+/**
+ * The process-wide control plane used by getProvider(), aiClient, embeddings
+ * and Ash chat. A stable facade over the current instance.
+ */
+export const aiGovernance = Object.freeze({
+  resolve: (organizationId) => currentGovernance.resolve(organizationId),
+  assertAllowed: (organizationId) => currentGovernance.assertAllowed(organizationId),
+  invalidate: (organizationId) => currentGovernance.invalidate(organizationId),
+  invalidatePlatform: () => currentGovernance.invalidatePlatform(),
+  isPlatformDisabled: () => currentGovernance.isPlatformDisabled(),
+  getPlatformStatus: () => currentGovernance.getPlatformStatus(),
+  monthToDateUsage: (organizationId) => currentGovernance.monthToDateUsage(organizationId),
+  chat: (options) => currentGovernance.chat(options),
+  chatJSON: (options) => currentGovernance.chatJSON(options),
+  chatVia: (options, platformCall) => currentGovernance.chatVia(options, platformCall),
+});
+
+/**
+ * Test seam: route the process-wide facade to another instance (for example
+ * one built on an in-memory database). Returns a function that restores the
+ * previous instance.
+ * @param {ReturnType<typeof createAiGovernance>} instance
+ */
+export function useAiGovernance(instance) {
+  const previous = currentGovernance;
+  currentGovernance = instance;
+  return () => { currentGovernance = previous; };
+}
 
 /** Drop cached kill-switch / connection state after an admin change. */
 export function invalidateAiOrganization(organizationId) {
   aiGovernance.invalidate(organizationId);
+}
+
+/** Whether AI is off for the whole deployment (env or persisted operator switch). */
+export function isPlatformAiDisabled() {
+  return aiGovernance.isPlatformDisabled();
+}
+
+/** { disabled, envDisabled, storedDisabled } for the deployment switch. */
+export function getPlatformAiStatus() {
+  return aiGovernance.getPlatformStatus();
+}
+
+/**
+ * Persist the operator's deployment kill switch and drop this process's
+ * cache; other processes pick it up within AI_ORG_CACHE_TTL_MS. The
+ * AI_DISABLED env var still wins when it is true.
+ * @param {any} prisma
+ * @param {boolean} disabled
+ * @param {{ actorUserId?: string | null, at?: Date }} [options]
+ */
+export async function setPlatformAiDisabled(prisma, disabled, { actorUserId = null, at = new Date() } = {}) {
+  const data = {
+    aiDisabled: Boolean(disabled),
+    aiDisabledAt: disabled ? at : null,
+    aiDisabledById: disabled ? actorUserId : null,
+  };
+  await prisma.platformSetting.upsert({
+    where: { id: PLATFORM_SETTING_ID },
+    create: { id: PLATFORM_SETTING_ID, ...data },
+    update: data,
+  });
+  aiGovernance.invalidatePlatform();
 }

@@ -58,7 +58,7 @@ test('complete returns token usage for metering', async () => {
     usage: { prompt_tokens: 100, completion_tokens: 20 },
   }));
   const result = await provider(fetchImpl).complete({ prompt: 'x', messages: [{ role: 'assistant', content: 'earlier' }] });
-  assert.deepEqual(result.usage, { promptTokens: 100, completionTokens: 20 });
+  assert.deepEqual(result.usage, { promptTokens: 100, completionTokens: 20, estimated: false });
   assert.equal(result.model, 'model-a-2026');
 });
 
@@ -107,6 +107,29 @@ for (const [status, body, type] of [
     assert.equal(calls.length, 1, 'no automatic retry');
   });
 }
+
+test('usage is estimated (about 4 characters per token) when the provider omits it', async () => {
+  const { fetchImpl } = fakeFetch(() => jsonResponse(200, { choices: [{ message: { content: 'x'.repeat(9) } }] }));
+  const result = await provider(fetchImpl).complete({ system: 's'.repeat(7), prompt: 'p'.repeat(8) });
+  // "sssssss\npppppppp" = 16 chars -> 4 tokens; 9 chars -> 3 tokens.
+  assert.deepEqual(result.usage, { promptTokens: 4, completionTokens: 3, estimated: true });
+});
+
+for (const status of [301, 302, 303, 307, 308]) {
+  test(`a ${status} redirect is never followed and fails as upstream`, async () => {
+    const { calls, fetchImpl } = fakeFetch(() => ({
+      ok: false, status, headers: new Map([['location', 'http://169.254.169.254/latest/meta-data/']]), json: async () => ({}),
+    }));
+    await assert.rejects(provider(fetchImpl).chat({ prompt: 'x' }), (err) => err instanceof AiProviderError && err.type === 'upstream' && err.upstreamStatus === status);
+    assert.equal(calls.length, 1, 'the Location is not requested');
+    assert.equal(calls[0].init.redirect, 'manual', 'fetch is told not to follow redirects');
+  });
+}
+
+test('an opaque redirect (browser-style manual mode) fails as upstream', async () => {
+  const { fetchImpl } = fakeFetch(() => ({ ok: false, status: 0, type: 'opaqueredirect', json: async () => ({}) }));
+  await assert.rejects(provider(fetchImpl).chat({ prompt: 'x' }), (err) => err instanceof AiProviderError && err.type === 'upstream');
+});
 
 test('a network failure maps to upstream', async () => {
   const { fetchImpl } = fakeFetch(() => { throw new TypeError('fetch failed'); });

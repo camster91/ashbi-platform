@@ -3,7 +3,7 @@
 //
 // One request per call: there are no automatic retries, so a provider failure
 // is reported to the caller instead of silently spending the workspace's
-// budget again. Errors are mapped to AiProviderError types and never include
+// budget again. Redirects are never followed. Errors are mapped to AiProviderError types and never include
 // the key or the provider's response body.
 
 import { AiProviderError } from '../errors.js';
@@ -34,6 +34,11 @@ export function parseJsonReply(text) {
   } catch {
     throw new Error('AI returned invalid JSON');
   }
+}
+
+/** Rough token count for providers that do not report usage (~4 chars/token). */
+export function estimateTokens(text) {
+  return Math.ceil(String(text ?? '').length / 4);
 }
 
 /** Map an upstream HTTP status (and provider error code) to an error type. */
@@ -80,10 +85,15 @@ class OpenAICompatibleProvider {
     try {
       let res;
       try {
-        res = await this.fetchImpl(`${this.baseUrl}${path}`, { ...init, headers: this._headers(), signal: controller.signal });
+        // Never follow redirects: a 3xx could send the key and prompt to a
+        // host (or scheme) the outbound URL policy never checked.
+        res = await this.fetchImpl(`${this.baseUrl}${path}`, { ...init, headers: this._headers(), signal: controller.signal, redirect: 'manual' });
       } catch (err) {
         if (controller.signal.aborted || err?.name === 'AbortError') throw new AiProviderError('timeout');
         throw new AiProviderError('upstream');
+      }
+      if (res.type === 'opaqueredirect' || (res.status >= 300 && res.status < 400)) {
+        throw new AiProviderError('upstream', { upstreamStatus: res.status || null });
       }
       let body = null;
       try {
@@ -105,7 +115,7 @@ class OpenAICompatibleProvider {
 
   /**
    * Chat completion with token usage.
-   * @returns {Promise<{ content: string, model: string, usage: { promptTokens: number, completionTokens: number } }>}
+   * @returns {Promise<{ content: string, model: string, usage: { promptTokens: number, completionTokens: number, estimated: boolean } }>}
    */
   async complete({ system, prompt, messages, temperature = 0.3, maxTokens = 4096, model } = {}) {
     const chatMessages = [];
@@ -126,9 +136,17 @@ class OpenAICompatibleProvider {
     });
     const content = body.choices?.[0]?.message?.content;
     if (typeof content !== 'string') throw new AiProviderError('invalid_response');
-    const promptTokens = Number.isInteger(body.usage?.prompt_tokens) ? body.usage.prompt_tokens : 0;
-    const completionTokens = Number.isInteger(body.usage?.completion_tokens) ? body.usage.completion_tokens : 0;
-    return { content, model: typeof body.model === 'string' ? body.model : useModel, usage: { promptTokens, completionTokens } };
+    const reported = Number.isInteger(body.usage?.prompt_tokens) && Number.isInteger(body.usage?.completion_tokens);
+    // A provider that omits usage is still metered: about four characters per
+    // token, flagged as an estimate.
+    const usage = reported
+      ? { promptTokens: body.usage.prompt_tokens, completionTokens: body.usage.completion_tokens, estimated: false }
+      : {
+        promptTokens: estimateTokens(chatMessages.map((message) => message.content).join('\n')),
+        completionTokens: estimateTokens(content),
+        estimated: true,
+      };
+    return { content, model: typeof body.model === 'string' ? body.model : useModel, usage };
   }
 
   /** Same interface and return shape as the platform providers: a string. */

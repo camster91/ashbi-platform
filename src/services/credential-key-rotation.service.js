@@ -32,6 +32,7 @@ export async function planCredentialKeyRotation(prisma, targetVersion) {
     planned.push({
       model: record.model,
       id: record.id,
+      previousCiphertext: record.ciphertext,
       ciphertext: encryptWithVersion(plaintext, targetVersion),
     });
   }
@@ -49,10 +50,16 @@ export async function rotateCredentialKeys(prisma, targetVersion, { apply = fals
           data: { password: record.ciphertext, encryptionVersion: targetVersion },
         });
       } else if (record.model === 'aiProviderConnection') {
-        await tx.aiProviderConnection.update({
-          where: { id: record.id },
+        // Compare-and-swap: an admin may rotate or revoke the key while this
+        // runs. Only replace the exact ciphertext that was re-encrypted; if it
+        // changed, abort the whole rotation rather than resurrect an old key.
+        const { count } = await tx.aiProviderConnection.updateMany({
+          where: { id: record.id, encryptedApiKey: record.previousCiphertext },
           data: { encryptedApiKey: record.ciphertext },
         });
+        if (count !== 1) {
+          throw new Error(`AI provider connection ${record.id} changed during key rotation; re-run the rotation`);
+        }
       } else {
         await tx.wPSite.update({
           where: { id: record.id },

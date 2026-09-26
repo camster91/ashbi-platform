@@ -6,7 +6,6 @@
 // provider, encrypted with src/utils/crypto.js and never returned: responses
 // show only its last four characters.
 
-import env from '../config/env.js';
 import { encrypt, decrypt } from '../utils/crypto.js';
 import {
   validateBody,
@@ -32,6 +31,7 @@ import {
 import { AiProviderError } from '../ai/errors.js';
 import { UnsafeOutboundUrlError } from '../security/outbound-url-policy.js';
 import { OPENAI_COMPATIBLE_KIND } from '../ai/providers/openai-compatible.js';
+import { getModelPrices, unpricedModels } from '../ai/pricing.js';
 
 function validationFailure(reply, err) {
   if (err instanceof UnsafeOutboundUrlError) {
@@ -47,6 +47,26 @@ function validationFailure(reply, err) {
   throw err;
 }
 
+// Budgets only count priced usage, so every model a connection may use must
+// have a price (AI_MODEL_PRICES, set by the operator at deploy time).
+function rejectUnpricedModels(reply, models, monthlyBudgetCents) {
+  if (!(monthlyBudgetCents > 0)) return null;
+  const missing = unpricedModels(models);
+  if (!missing.length) return null;
+  return reply.status(400).send({
+    error: `No price is configured for: ${missing.join(', ')}. Ask the platform operator to add them to AI_MODEL_PRICES, or choose priced models.`,
+    code: 'MODEL_PRICE_UNKNOWN',
+    models: missing,
+  });
+}
+
+function connectionUnavailable(reply) {
+  return reply.status(503).send({
+    error: 'The stored AI key could not be decrypted. Rotate the key.',
+    code: 'AI_CONNECTION_UNAVAILABLE',
+  });
+}
+
 function encryptionUnavailable(reply) {
   return reply.status(503).send({
     error: 'Credential encryption is not configured on this deployment.',
@@ -56,13 +76,16 @@ function encryptionUnavailable(reply) {
 
 /**
  * @param {import('fastify').FastifyInstance} fastify
- * @param {{ createProvider?: typeof createByokProvider, lookup?: any, isProduction?: boolean, now?: () => Date }} [options]
+ * @param {{ createProvider?: typeof createByokProvider, lookup?: any, allowLocalhost?: boolean, now?: () => Date }} [options]
  */
 export default async function aiConnectionRoutes(fastify, options = {}) {
   const createProvider = options.createProvider ?? createByokProvider;
-  const isProduction = options.isProduction ?? env.isProduction;
   const now = options.now ?? (() => new Date());
-  const validationOptions = { isProduction, createProvider, ...(options.lookup ? { lookup: options.lookup } : {}) };
+  const validationOptions = {
+    createProvider,
+    ...(options.allowLocalhost === undefined ? {} : { allowLocalhost: options.allowLocalhost }),
+    ...(options.lookup ? { lookup: options.lookup } : {}),
+  };
 
   const orgId = (request) => request.user.organizationId;
   const findConnection = (request) => request.prisma.aiProviderConnection.findFirst({
@@ -78,7 +101,10 @@ export default async function aiConnectionRoutes(fastify, options = {}) {
     return {
       connection: maskConnection(connection),
       aiDisabled: Boolean(organization?.aiDisabled),
-      platformAiDisabled: getPlatformAiStatus().disabled,
+      platformAiDisabled: (await getPlatformAiStatus()).disabled,
+      // Models with a configured price (AI_MODEL_PRICES); every allowed model
+      // must be one of these so the budget counts all usage.
+      pricedModels: Object.keys(getModelPrices()).sort(),
       usage: {
         since: usage.since,
         calls: usage.calls,
@@ -101,6 +127,8 @@ export default async function aiConnectionRoutes(fastify, options = {}) {
     preHandler: [requireRecentAuth, validateBody(aiConnectionConnectSchema)],
   }, async (request, reply) => {
     const { baseUrl, apiKey, allowedModels, defaultModel, monthlyBudgetCents } = request.body;
+    const unpriced = rejectUnpricedModels(reply, [defaultModel, ...allowedModels], monthlyBudgetCents);
+    if (unpriced) return unpriced;
     let normalizedBaseUrl;
     try {
       normalizedBaseUrl = await validateProviderCredentials({ baseUrl, apiKey, defaultModel }, validationOptions);
@@ -161,11 +189,17 @@ export default async function aiConnectionRoutes(fastify, options = {}) {
     if (!connection || connection.status === 'revoked' || !connection.encryptedApiKey) {
       return reply.status(404).send({ error: 'No AI connection to validate', code: 'AI_CONNECTION_NOT_FOUND' });
     }
+    let apiKey;
+    try {
+      apiKey = decrypt(connection.encryptedApiKey);
+    } catch {
+      return connectionUnavailable(reply);
+    }
     let errorType = null;
     try {
       await validateProviderCredentials({
         baseUrl: connection.baseUrl,
-        apiKey: decrypt(connection.encryptedApiKey),
+        apiKey,
         defaultModel: connection.defaultModel,
       }, validationOptions);
     } catch (err) {
@@ -282,6 +316,8 @@ export default async function aiConnectionRoutes(fastify, options = {}) {
       return reply.status(400).send({ error: 'defaultModel must be one of allowedModels' });
     }
     const monthlyBudgetCents = request.body.monthlyBudgetCents ?? connection.monthlyBudgetCents;
+    const unpriced = rejectUnpricedModels(reply, [defaultModel, ...allowedModels], monthlyBudgetCents);
+    if (unpriced) return unpriced;
     const updated = await request.prisma.aiProviderConnection.update({
       where: { organizationId: orgId(request) },
       data: { allowedModels, defaultModel, monthlyBudgetCents },

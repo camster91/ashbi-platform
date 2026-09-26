@@ -13,12 +13,12 @@ import {
 import { processEmailPipeline } from '../services/pipeline.service.js';
 import { updateAllProjectHealth } from '../services/project.service.js';
 import { storeEmbedding } from '../services/embedding.service.js';
-import aiClient from '../ai/client.js';
+import { AiDisabledError } from '../ai/errors.js';
 import env from '../config/env.js';
 import logger from '../utils/logger.js';
 import prisma, { prisma as backgroundPrisma } from '../config/db.js';
-import { createScopedPrisma } from '../utils/prisma-tenant-proxy.js';
 import { resolveTenantOrganizationIds, runTenantJob } from './tenant-iteration.js';
+import { runWeeklyDigest } from './weekly-digest.js';
 import { processRecurringInvoicesForAllOrganizations } from './recurring-invoices.js';
 import { purgeExpiredTrashForAllOrganizations } from './trash-purge.js';
 import {
@@ -319,116 +319,12 @@ async function checkThreadEscalation(threadId, existingThread = null) {
   };
 }
 
-// Weekly Digest Worker
+// Weekly Digest Worker (src/jobs/weekly-digest.js)
 const weeklyDigestWorker = createWorker(
   QUEUES.WEEKLY_DIGEST,
   async (job) => {
     console.log('Generating weekly digest');
-
-    const organizationIds = await resolveTenantOrganizationIds(prisma, job.data?.organizationId);
-    const organizationResults = [];
-
-    for (const organizationId of organizationIds) {
-      const tenantPrisma = createScopedPrisma(backgroundPrisma, organizationId);
-
-    const now = new Date();
-    const weekStart = new Date(now);
-    weekStart.setDate(weekStart.getDate() - 7);
-
-    const newLeads = await tenantPrisma.thread.count({
-      where: {
-        needsTriage: true,
-        createdAt: { gte: weekStart }
-      }
-    });
-
-    const proposalsSent = await tenantPrisma.proposal.count({
-      where: { sentAt: { gte: weekStart } }
-    });
-    const proposalsViewed = await tenantPrisma.proposal.count({
-      where: { status: 'VIEWED', updatedAt: { gte: weekStart } }
-    });
-    const proposalsHired = await tenantPrisma.proposal.count({
-      where: { status: 'APPROVED', approvedAt: { gte: weekStart } }
-    });
-
-    const clients = await tenantPrisma.client.findMany({
-      where: { status: 'ACTIVE' },
-      include: {
-        threads: { where: { status: { not: 'RESOLVED' } }, orderBy: { lastActivityAt: 'desc' }, take: 1 },
-        projects: { where: { status: 'ACTIVE' }, include: { tasks: { where: { status: { not: 'COMPLETED' } } } } },
-        retainerPlan: true
-      }
-    });
-
-    const clientHealthSummary = {};
-    for (const client of clients) {
-      let score = 100;
-      const lastThread = client.threads[0];
-      if (lastThread) {
-        const daysSince = (now - new Date(lastThread.lastActivityAt)) / (1000 * 60 * 60 * 24);
-        if (daysSince > 14) score -= 25;
-        else if (daysSince > 7) score -= 15;
-      } else { score -= 20; }
-      const openTasks = client.projects.reduce((s, p) => s + p.tasks.length, 0);
-      if (openTasks > 10) score -= 15;
-      else if (openTasks > 5) score -= 10;
-      if (client.retainerPlan) {
-        const pctUsed = client.retainerPlan.hoursPerMonth > 0 ? (client.retainerPlan.hoursUsed / client.retainerPlan.hoursPerMonth) * 100 : 0;
-        if (pctUsed > 90) score -= 20;
-        else if (pctUsed > 75) score -= 10;
-      }
-      const overdue = client.projects.reduce((s, p) => s + p.tasks.filter(t => t.dueDate && new Date(t.dueDate) < now).length, 0);
-      score -= Math.min(20, overdue * 5);
-      clientHealthSummary[client.name] = Math.max(0, Math.min(100, score));
-    }
-
-    const tasksOverdue = await tenantPrisma.task.count({
-      where: { status: { not: 'COMPLETED' }, dueDate: { lt: now } }
-    });
-
-    const retainers = await tenantPrisma.retainerPlan.findMany({ include: { client: true } });
-    const retainerTotal = retainers.reduce((sum, r) => sum + parseFloat(r.tier || 0), 0);
-
-    const system = `You are the AI assistant for Ashbi Design agency. Generate a concise weekly digest email for Cameron (CEO).`;
-    const prompt = `Generate a weekly digest for the week of ${weekStart.toLocaleDateString('en-CA')} to ${now.toLocaleDateString('en-CA')}:
-
-- New leads: ${newLeads}
-- Proposals sent: ${proposalsSent}
-- Proposals viewed: ${proposalsViewed}
-- Proposals hired/approved: ${proposalsHired}
-- Overdue tasks: ${tasksOverdue}
-- Monthly retainer revenue: $${retainerTotal}
-- Client health scores: ${JSON.stringify(clientHealthSummary)}
-
-Write a brief, actionable digest highlighting what needs attention this week. Include the numbers but also provide context and recommendations.`;
-
-    let fullDigest;
-    try {
-      fullDigest = await aiClient.chat({ system, prompt, temperature: 0.5 });
-    } catch (err) {
-      fullDigest = `Weekly Digest (${weekStart.toLocaleDateString('en-CA')} - ${now.toLocaleDateString('en-CA')})\n\nNew Leads: ${newLeads}\nProposals Sent: ${proposalsSent}\nProposals Viewed: ${proposalsViewed}\nProposals Hired: ${proposalsHired}\nOverdue Tasks: ${tasksOverdue}\nRetainer Revenue: $${retainerTotal}`;
-    }
-
-    await tenantPrisma.weeklyDigest.create({
-      data: {
-        weekStart,
-        weekEnd: now,
-        newLeads,
-        proposalsSent,
-        proposalsViewed,
-        proposalsHired,
-        tasksOverdue,
-        retainerTotal,
-        clientHealthSummary: JSON.stringify(clientHealthSummary),
-        fullDigest
-      }
-    });
-
-      organizationResults.push({ organizationId, newLeads, proposalsSent, proposalsViewed, proposalsHired, tasksOverdue, retainerTotal });
-    }
-
-    return { organizations: organizationResults };
+    return runWeeklyDigest({ prisma, backgroundPrisma, organizationId: job.data?.organizationId });
   },
   { concurrency: 1 }
 );
@@ -442,13 +338,22 @@ const embeddingWorker = createWorker(
     // Legacy queued jobs predate tenant IDs. Recover ownership only through
     // the job's client FK; missing or deleted owners continue to fail closed.
     const organizationId = await resolveEmbeddingOrganizationId(job.data);
-    const result = await runTenantJob(
-      prisma,
-      organizationId,
-      () => storeEmbedding(clientId, content, source, sourceId, metadata),
-      backgroundPrisma,
-    );
-    return result;
+    try {
+      return await runTenantJob(
+        prisma,
+        organizationId,
+        () => storeEmbedding(clientId, content, source, sourceId, metadata),
+        backgroundPrisma,
+      );
+    } catch (err) {
+      // AI is off for the deployment or this organization (#413): skip the
+      // job instead of failing and retrying it.
+      if (err instanceof AiDisabledError) {
+        logger.warn({ organizationId, scope: err.scope }, 'Embedding skipped: AI is disabled');
+        return { skipped: 'ai_disabled' };
+      }
+      throw err;
+    }
   },
   { concurrency: 3 }
 );

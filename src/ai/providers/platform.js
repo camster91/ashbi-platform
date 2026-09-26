@@ -3,14 +3,13 @@
 // connection use it (see src/ai/governance.js and docs/ai-byok.md).
 
 import ClaudeProvider from './claude.js';
-import GeminiProvider, { GEMINI_CREATIVE_MODEL } from './gemini.js';
+import GeminiProvider from './gemini.js';
 import OllamaProvider from './ollama.js';
 import env from '../../config/env.js';
 
 let currentProvider = null;
 let currentProviderName = null;
 let currentOllamaModel = null;
-let creativeProvider = null;
 
 const VALID_PROVIDERS = ['claude', 'gemini', 'ollama'];
 
@@ -74,14 +73,3 @@ export function getOllamaModel() {
 export function getProviderName() {
   return currentProviderName || env.aiProvider;
 }
-
-/**
- * Get the creative/image AI provider (always Gemini with gemini-3-pro-image-preview).
- */
-export function getCreativeProvider() {
-  if (!creativeProvider) {
-    creativeProvider = new GeminiProvider(GEMINI_CREATIVE_MODEL);
-  }
-  return creativeProvider;
-}
-

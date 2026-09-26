@@ -14,7 +14,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   which reads hide soft-deleted rows is in [soft-delete-policy.md](soft-delete-policy.md).
 - **Notes** combine `///` doc comments and trailing `//` comments from the schema.
 
-92 models, 0 enums, 42 tenant-scoped, 13 soft-deletable.
+93 models, 0 enums, 42 tenant-scoped, 13 soft-deletable.
 
 ## Model index
 
@@ -25,7 +25,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [AiContext](#model-aicontext) | `ai_context` | yes | no | 7 |
 | [AiProviderConnection](#model-aiproviderconnection) | `ai_provider_connections` | yes | no | 20 |
 | [AiTeamMessage](#model-aiteammessage) | `ai_team_messages` | no | no | 9 |
-| [AiUsageRecord](#model-aiusagerecord) | `ai_usage_records` | yes | no | 14 |
+| [AiUsageRecord](#model-aiusagerecord) | `ai_usage_records` | yes | no | 15 |
 | [ApiKey](#model-apikey) | `api_keys` | no | no | 12 |
 | [Approval](#model-approval) | `approvals` | no | no | 16 |
 | [AshChatMessage](#model-ashchatmessage) | `ash_chat_messages` | no | no | 6 |
@@ -73,6 +73,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [OutreachSequence](#model-outreachsequence) | `outreach_sequences` | yes | no | 10 |
 | [PipelineDeal](#model-pipelinedeal) | `pipeline_deals` | no | no | 15 |
 | [PipelineStage](#model-pipelinestage) | `pipeline_stages` | yes | no | 10 |
+| [PlatformSetting](#model-platformsetting) | `platform_settings` | no | no | 5 |
 | [Project](#model-project) | `projects` | yes | yes | 49 |
 | [ProjectCommunication](#model-projectcommunication) | `project_communications` | no | no | 18 |
 | [ProjectContext](#model-projectcontext) | `project_contexts` | no | no | 10 |
@@ -256,6 +257,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `model` | String | required |  |  |  |
 | `promptTokens` | Int | required | `0` |  |  |
 | `completionTokens` | Int | required | `0` |  |  |
+| `usageEstimated` | Boolean | required | `false` |  | provider omitted usage; tokens estimated at ~4 chars each |
 | `estimatedCostCents` | Float | optional |  |  | null when the model has no configured price |
 | `feature` | String | optional |  |  | route pattern or job label that made the call |
 | `requestId` | String | optional |  |  |  |
@@ -1500,6 +1502,20 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 | `deals` | PipelineDeal[] | list, required |  | → PipelineDeal |  |
+
+### Model PlatformSetting
+
+- Table: `platform_settings`
+- Tenant-scoped: no
+- Soft-deletable: no
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `"platform"` |  |  |
+| `aiDisabled` | Boolean | required | `false` |  |  |
+| `aiDisabledAt` | DateTime | optional |  |  |  |
+| `aiDisabledById` | String | optional |  |  | No FK: history must outlive the actor account |
+| `updatedAt` | DateTime | required, updatedAt |  |  |  |
 
 ### Model Project
 

@@ -14,7 +14,6 @@ export {
   setProvider,
   getOllamaModel,
   getProviderName,
-  getCreativeProvider,
 } from './platform.js';
 
 const governedProvider = Object.freeze({

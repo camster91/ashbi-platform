@@ -3,14 +3,21 @@
 
 import prisma from '../config/db.js';
 import { randomUUID } from 'node:crypto';
+import { aiGovernance } from '../ai/governance.js';
 
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
 const EMBEDDING_MODEL = 'nomic-embed-text';
 
 /**
- * Generate an embedding vector using Ollama
+ * Generate an embedding vector using Ollama.
+ *
+ * Honours the AI kill switches (#413): throws AiDisabledError when AI is off
+ * for the deployment or for the request's / job's organization, before any
+ * text leaves the server. Embeddings always use the platform endpoint, never
+ * an organization's BYOK connection (docs/ai-byok.md).
  */
 export async function generateEmbedding(text) {
+  await aiGovernance.assertAllowed();
   const headers = { 'Content-Type': 'application/json' };
   if (process.env.OLLAMA_API_KEY) {
     headers.Authorization = `Bearer ${process.env.OLLAMA_API_KEY}`;

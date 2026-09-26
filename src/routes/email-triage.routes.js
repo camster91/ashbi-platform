@@ -4,6 +4,8 @@ import aiClient from '../ai/client.js';
 import { validateBody, emailTriageDraftUpdateSchema, emailTriageScanSchema } from '../validators/schemas.js';
 import { isAiControlError, sendAiError } from '../ai/errors.js';
 
+const SCAN_STOPPING_CODES = new Set(['AI_DISABLED', 'AI_BUDGET_EXCEEDED', 'AI_CONNECTION_DISABLED', 'AI_CONNECTION_UNAVAILABLE']);
+
 export default async function emailTriageRoutes(fastify) {
   const { prisma } = fastify;
 
@@ -32,6 +34,7 @@ export default async function emailTriageRoutes(fastify) {
     const triagedIds = new Set(alreadyTriaged.map((row) => row.threadId));
 
     const items = [];
+    let failed = 0;
 
     for (const thread of threads) {
       const msg = thread.messages[0];
@@ -73,13 +76,17 @@ Choose ALL applicable tags. "needs-reply" means Cameron should respond. "lead" m
 
         items.push(item);
       } catch (err) {
-        // Kill switch / budget / provider errors stop the scan for every thread.
-        if (isAiControlError(err)) return sendAiError(reply, err);
-        fastify.log.error('Email triage scan error:', err);
+        // AI off, budget reached or the connection unusable: every remaining
+        // thread would fail the same way, so stop the scan (#413).
+        if (isAiControlError(err) && SCAN_STOPPING_CODES.has(err.code)) return sendAiError(reply, err);
+        // Per-item failures (rate limit, timeout, provider error, bad JSON):
+        // skip this thread and keep going.
+        failed += 1;
+        fastify.log.warn({ threadId: thread.id, errorCode: err?.code ?? err?.name }, 'Email triage scan item failed');
       }
     }
 
-    return { scanned: threads.length, triaged: items.length, items };
+    return { scanned: threads.length, triaged: items.length, failed, items };
   });
 
   // POST /email-agent/draft/:messageId — AI drafts 2 reply options

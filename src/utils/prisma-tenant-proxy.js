@@ -52,7 +52,9 @@ const APPEND_ONLY_BLOCKED_METHODS = new Set([
 // unclassified delegate is rejected instead of silently bypassing tenancy.
 // mailgunwebhookreceipt only stores Mailgun's random webhook tokens for replay
 // protection and is written from the unauthenticated, signed webhook route.
-const GLOBAL_MODELS = new Set(['organization', 'mailgunwebhookreceipt']);
+// platformsetting is the single deployment-wide settings row (AI kill switch);
+// only platform operators write it (settings.routes.js).
+const GLOBAL_MODELS = new Set(['organization', 'mailgunwebhookreceipt', 'platformsetting']);
 
 // Direct-owned records can also reference another tenant-owned root. The
 // redundant organizationId is not enough: the referenced parent must belong

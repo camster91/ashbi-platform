@@ -1,5 +1,6 @@
 // In-memory stand-in for the Prisma delegates the BYOK control plane uses
-// (#413): organization, aiProviderConnection, aiUsageRecord, auditEvent.
+// (#413): organization, aiProviderConnection, aiUsageRecord, auditEvent,
+// platformSetting.
 // It understands equality, null and { gte } filters, which is all the
 // governance module and routes send. Wrap it with createScopedPrisma to get
 // the real tenant proxy in front of it.
@@ -43,6 +44,11 @@ function delegate(rows, { defaults = () => ({}) } = {}) {
       Object.assign(row, data, { updatedAt: new Date() });
       return { ...row };
     },
+    updateMany: async ({ where, data }) => {
+      const hits = rows.filter((row) => matches(row, where));
+      for (const row of hits) Object.assign(row, data, { updatedAt: new Date() });
+      return { count: hits.length };
+    },
     upsert: async ({ where, create, update }) => {
       const row = find(where);
       if (row) {
@@ -77,6 +83,18 @@ export function createFakeAiDb({ organizations = [{ id: 'org-a' }, { id: 'org-b'
     aiUsageRecord: delegate([]),
     auditEvent: delegate([]),
     user: delegate([]),
+    platformSetting: delegate([]),
   };
   return db;
+}
+
+/**
+ * A governance instance over the fake database for the process-wide facade
+ * (routes, embeddings, aiClient). Returns the restore function.
+ * @param {ReturnType<typeof createFakeAiDb>} db
+ * @param {Record<string, any>} [deps]
+ */
+export async function installFakeGovernance(db, deps = {}) {
+  const { createAiGovernance, useAiGovernance } = await import('../../ai/governance.js');
+  return useAiGovernance(createAiGovernance({ prisma: db, logger: { info() {}, warn() {}, error() {}, debug() {} }, ...deps }));
 }

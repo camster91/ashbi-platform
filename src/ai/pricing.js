@@ -7,9 +7,11 @@
 //
 //   AI_MODEL_PRICES='{"example-model":{"input":15,"output":60}}'
 //
-// A model without a price records its tokens with estimatedCostCents = null;
-// such usage does not count toward the monthly budget (the settings page shows
-// it as unpriced so an admin can see the gap).
+// Connecting a BYOK provider (and changing its models) requires a price for
+// every allowed model, so budgets always count. If a price is later removed
+// from the environment, that model's usage records estimatedCostCents = null
+// and does not count toward the monthly budget (the settings page shows it
+// as unpriced).
 
 const TOKENS_PER_UNIT = 1_000_000;
 
@@ -65,4 +67,14 @@ export function estimateCostCents(model, promptTokens, completionTokens, prices 
   if (!price) return null;
   const cents = (promptTokens * price.input + completionTokens * price.output) / TOKENS_PER_UNIT;
   return Math.round(cents * 10_000) / 10_000;
+}
+
+/** Whether a model has a configured price. */
+export function hasModelPrice(model, prices = getModelPrices()) {
+  return Object.prototype.hasOwnProperty.call(prices, model);
+}
+
+/** The given models that have no configured price, in order, deduplicated. */
+export function unpricedModels(models, prices = getModelPrices()) {
+  return [...new Set(models)].filter((model) => !hasModelPrice(model, prices));
 }

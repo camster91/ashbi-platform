@@ -57,12 +57,13 @@ export function maskConnection(row) {
  * AiProviderError.
  *
  * @param {{ baseUrl: string, apiKey: string, defaultModel: string }} input
- * @param {{ isProduction: boolean, createProvider?: typeof createByokProvider, lookup?: any }} options
+ * @param {{ allowLocalhost?: boolean, createProvider?: typeof createByokProvider, lookup?: any }} [options]
  */
-export async function validateProviderCredentials({ baseUrl, apiKey, defaultModel }, { isProduction, createProvider = createByokProvider, lookup }) {
-  const url = await assertSafeOutboundUrl(baseUrl, { isProduction, ...(lookup ? { lookup } : {}) });
+export async function validateProviderCredentials({ baseUrl, apiKey, defaultModel }, { allowLocalhost, createProvider = createByokProvider, lookup } = {}) {
+  const policy = { ...(allowLocalhost === undefined ? {} : { allowLocalhost }), ...(lookup ? { lookup } : {}) };
+  const url = await assertSafeOutboundUrl(baseUrl, policy);
   const normalized = url.href.replace(/\/+$/, '').replace(/\/v1$/, '');
-  const provider = createProvider({ baseUrl: normalized, apiKey, model: defaultModel, isProduction, ...(lookup ? { lookup } : {}) });
+  const provider = createProvider({ baseUrl: normalized, apiKey, model: defaultModel, ...policy });
 
   let models = null;
   try {
