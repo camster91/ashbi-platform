@@ -14,8 +14,8 @@ changes until a person approves it.
 | Tool registry | `src/ai/tools/registry.js` |
 | Execution engine | `src/ai/tools/executor.js` |
 | Assistant tool session (model loop) | `src/ai/tools/session.js` |
-| Approval queue and receipts API | `src/routes/ai-tool.routes.js` (`/api/ai-tools`) |
-| Web | Settings → **AI approvals** (`web/src/components/AiApprovals.jsx`) |
+| Assistant session, approval queue and receipts API | `src/routes/ai-tool.routes.js` (`/api/ai-tools`) |
+| Web | Settings → **AI approvals** (`web/src/components/AiApprovals.jsx`): "Ask the assistant", the queue and receipts |
 | Receipts table | `ai_bridge_actions` (Prisma `AiBridgeAction`), migration `20260926130000_ai_tool_receipts` |
 | Adversarial evaluation | `src/tests/ai-eval/`, see [ai-evaluation.md](ai-evaluation.md) |
 
@@ -211,6 +211,7 @@ TEAM member sees only their own. Records of another organization are `404`.
 | Route | Guard | Purpose |
 | --- | --- | --- |
 | `GET /api/ai-tools/catalog` | staff | The registry, without code |
+| `POST /api/ai-tools/sessions` | staff, 10/min per user | Run one assistant session (see [Assistant sessions](#assistant-sessions)) |
 | `GET /api/ai-tools/approvals` | staff | Pending actions, newest first (`limit`) |
 | `GET /api/ai-tools/approvals/:id` | staff | One action or receipt |
 | `POST /api/ai-tools/approvals/:id/approve` | staff + step-up | Approve and execute once |
@@ -246,9 +247,102 @@ step-up prompt is the shared ReauthDialog.
 `{"final": "..."}`. It advertises only the tools the caller's role may use,
 feeds tool results back marked as data rather than instructions, and bounds
 the loop (*Proposals*: 6 turns, 4 tool calls per turn, 32,000-character
-replies). No HTTP route drives a session yet; today the AI bridge is the only
-producer of pending actions in production, and the session is exercised by
-the evaluation suite.
+replies). The transcript sent in one turn is capped at 24,000 characters
+(*Proposal*, `MAX_TRANSCRIPT_CHARS`): the person's prompt is always kept and
+the oldest tool results are dropped, with a marker, once the rest would not
+fit (each tool result is already cut to 8,000 characters). An optional
+`AbortSignal` is checked before every model turn and every tool call, and a
+model call in flight is raced against it; the session then stops with the
+signal's reason and keeps the steps already taken. The providers take no
+signal, so a model call already sent still completes in the background (and
+a BYOK call is still metered); its answer is discarded.
+
+### `POST /api/ai-tools/sessions`
+
+The HTTP route that drives one session for the signed-in staff member
+(`ADMIN` or `TEAM`; a `CLIENT` session is refused by the tenant guard with
+`CLIENT_SESSION_FORBIDDEN` and by the route with `403`). It is tenant-scoped
+like every `/api/ai-tools` route and needs no step-up: a session only reads
+and proposes, and approving what it proposed still needs step-up in the
+queue.
+
+- **Body**: `{ "prompt": string }`, trimmed, 1 to 4,000 characters
+  (*Proposal*, `AI_TOOL_SESSION_PROMPT_MAX`); any other field is `400`. The
+  server generates the session id (a UUID); a client cannot choose it, so it
+  cannot steer the idempotency keys derived from it.
+- **Rate limit**: 10 sessions per user per minute (*Proposal*,
+  `AI_SESSION_RATE_LIMIT`), on top of the per-IP API limit; over it is `429`
+  with `code: AI_SESSION_RATE_LIMITED` and `Retry-After`. A session is at most
+  6 metered model calls, so one person can cause at most 60 a minute, and the
+  BYOK budget still applies.
+- **One running session per user** (*Proposal*, `AI_SESSION_MAX_IN_FLIGHT`):
+  a second request while one is running is `409` with
+  `code: AI_SESSION_IN_PROGRESS`. The slot is released when the request ends,
+  whatever the outcome.
+- **Per process only**: the rate limit and the in-flight cap are held in the
+  memory of each API process (the rate limiter has no shared store). Today
+  the API runs as a single instance, so they are effectively global; with
+  several instances each one enforces them separately, and a user could run
+  one session per instance. Move both to Redis before scaling out.
+- **Deadline and disconnect**: a session stops after 90 seconds (*Proposal*,
+  `AI_SESSION_DEADLINE_MS`, below the web client's 120-second timeout) with
+  `stoppedReason: TIMEOUT`, and as soon as the client disconnects with
+  `CLIENT_CLOSED` (the answer is not delivered but the run is audited). Both
+  keep the steps already taken; the check runs before each model turn and
+  each tool call, and the model call in flight is abandoned rather than
+  cancelled (see above).
+- **Governance**: before anything runs, the kill switches and connection
+  state are checked and a refusal answers with the usual AI error
+  (`503 AI_DISABLED`, `503 AI_CONNECTION_DISABLED`,
+  `503 AI_CONNECTION_UNAVAILABLE`). Each model turn then goes through the same
+  governed call as every other AI feature (`aiGovernance.chat`, feature
+  `ai_tools`) with the request context pinned to the caller's organization:
+  platform or BYOK routing, budget check, one `AiUsageRecord` per BYOK turn.
+  **A session routed to the platform provider (no BYOK connection) writes no
+  `AiUsageRecord`**, like every other platform-routed AI call: its cost is
+  bounded only by the turn limit, the rate limit and the in-flight cap.
+  A switch flipped, a budget spent or a provider failure mid-session ends it
+  with `200` and a `stoppedReason` (`AI_DISABLED`, `AI_BUDGET_EXCEEDED`,
+  `AI_CONNECTION_*`, `AI_PROVIDER_*`, or `MAX_TURNS`), keeping the steps
+  already taken. A platform provider error is reported as
+  `AI_PROVIDER_UPSTREAM`; its message is never logged or returned.
+- **Response**:
+
+  ```json
+  {
+    "sessionId": "uuid",
+    "turns": 2,
+    "final": "text or null",
+    "stoppedReason": null,
+    "steps": [
+      { "turn": 1, "tool": "list_projects", "status": "ok", "reason": null, "actionId": null, "output": [] },
+      { "turn": 1, "tool": "create_task", "status": "pending_approval", "reason": null, "actionId": "cuid", "output": null },
+      { "turn": 1, "tool": "get_project_summary", "status": "denied", "reason": "RECORD_NOT_FOUND", "actionId": null, "output": null }
+    ]
+  }
+  ```
+
+  `output` is only present for read/draft tools and is the executor's
+  tenant-scoped, secret-redacted result; `final` passes through
+  `redactSecrets` too. The model's raw arguments are never returned, and
+  `tool` is the tool's name only when it is a registered tool (at most 64
+  characters); an invented name is `null` with `reason: TOOL_UNKNOWN`.
+- **Audit and logs**: one `ai.tool_session_run` event per session that ran,
+  with the session id and counts only (turns, tool calls, reads, pending,
+  denied, `stoppedReason`, whether it answered) — never the prompt, the
+  answer or tool output. The prompt is not stored or logged; tool calls are
+  audited by the executor as before (`ai.tool_prepared`, `ai.tool_denied`).
+- **Unexpected failures** (a database error, a bug) are audited as
+  `ai.tool_session_run` with `stoppedReason: ERROR` and the counts reached so
+  far, logged with the error's name only, and answered with `500`
+  `code: AI_SESSION_FAILED` and no internals.
+
+The web page (Settings → **AI approvals** → "Ask the assistant") posts the
+prompt, renders the answer as React text (never HTML), lists the steps, links
+pending actions to the queue on the same page and refreshes it, and explains
+a `stoppedReason` in plain language. The prompt stays focusable (read-only)
+while the assistant works, and focus moves to the answer or error when it
+arrives.
 
 ## Adding a tool (a reviewed change)
 
@@ -266,8 +360,8 @@ the evaluation suite.
 ## Audit events
 
 `ai.tool_prepared`, `ai.tool_approved`, `ai.tool_rejected`,
-`ai.tool_executed`, `ai.tool_failed`, `ai.tool_expired`, `ai.tool_denied`;
-fields in [audit-events.md](audit-events.md).
+`ai.tool_executed`, `ai.tool_failed`, `ai.tool_expired`, `ai.tool_denied`,
+`ai.tool_session_run`; fields in [audit-events.md](audit-events.md).
 
 ## Proposals for owner approval
 
@@ -280,5 +374,6 @@ fields in [audit-events.md](audit-events.md).
 | Step-up for approve and reject in the queue | Required | `src/routes/ai-tool.routes.js` |
 | Largest tool input | 16 KB serialized | `MAX_TOOL_INPUT_BYTES` |
 | Session limits | 6 turns, 4 tool calls per turn, 32,000-character replies | `src/ai/tools/session.js` |
+| Session route | 4,000-character prompt; 10 sessions per user per minute and one running at a time (per API process); 90-second deadline; 24,000-character transcript per turn; no step-up to ask (approving still needs it) | `AI_TOOL_SESSION_PROMPT_MAX`, `AI_SESSION_RATE_LIMIT`, `AI_SESSION_MAX_IN_FLIGHT`, `AI_SESSION_DEADLINE_MS`, `MAX_TRANSCRIPT_CHARS` |
 | Budget does not block approving a prepared action | Tokens are not spent by execution | `executor.approve` |
 | Rejection reasons | `not_needed`, `incorrect`, `unsafe`, `other` | `REJECTION_REASONS` |
