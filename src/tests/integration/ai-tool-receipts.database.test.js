@@ -16,6 +16,20 @@ const { purgeFixtureAuditEvents } = await import('../helpers/audit-cleanup.js');
 const databaseUrl = process.env.TENANT_INTEGRATION_DATABASE_URL;
 const quiet = { info() {}, warn() {}, error() {}, debug() {} };
 
+// Two concurrent approvals must execute the action exactly once. Depending on
+// timing the second approver either loses the claim (409 ACTION_UNAVAILABLE)
+// or, if the first already finished, gets the stored receipt back
+// (idempotent: true). Either way only one approval actually executes.
+function assertSingleExecution(results) {
+  const executed = results.filter((r) => r.status === 'fulfilled' && r.value.idempotent === false);
+  assert.equal(executed.length, 1, 'exactly one approval executes the action');
+  assert.equal(executed[0].value.action.status, 'EXECUTED');
+  for (const other of results.filter((r) => r !== executed[0])) {
+    if (other.status === 'rejected') assert.equal(other.reason.code, 'ACTION_UNAVAILABLE');
+    else assert.equal(other.value.idempotent, true, 'a later approval only returns the stored receipt');
+  }
+}
+
 test('AI tool actions stay in their tenant and receipts are immutable once terminal', {
   skip: !databaseUrl && 'TENANT_INTEGRATION_DATABASE_URL is not configured',
   timeout: 120_000,
@@ -92,8 +106,8 @@ test('AI tool actions stay in their tenant and receipts are immutable once termi
     const events = await raw.auditEvent.findMany({ where: { organizationId: orgA }, orderBy: { createdAt: 'asc' } });
     assert.deepEqual(events.map((event) => event.action), ['ai.tool_denied', 'ai.tool_prepared', 'ai.tool_approved', 'ai.tool_executed']);
 
-    // Two approvers at once, transaction mode: one executes, the other gets
-    // 409 ACTION_UNAVAILABLE, and exactly one task exists.
+    // Two approvers at once, transaction mode: exactly one executes and
+    // exactly one task exists.
     users.admin2A = await raw.user.create({ data: { organizationId: orgA, email: `admin2A-${suffix}@example.com`, name: 'admin2A', password: 'x', role: 'ADMIN' } });
     const { action: raced } = await executor.invoke(ctx('teamA'), {
       tool: 'create_task', input: { projectId: projectA.id, title: 'Raced task' }, idempotencyKey: 'int-race-task-0001', source: 'assistant',
@@ -102,12 +116,10 @@ test('AI tool actions stay in their tenant and receipts are immutable once termi
       executor.approve(ctx('adminA'), raced.id),
       executor.approve(ctx('admin2A'), raced.id),
     ]);
-    assert.deepEqual(taskRace.map((r) => r.status).sort(), ['fulfilled', 'rejected']);
-    assert.equal(taskRace.find((r) => r.status === 'rejected').reason.code, 'ACTION_UNAVAILABLE');
-    assert.equal(taskRace.find((r) => r.status === 'fulfilled').value.action.status, 'EXECUTED');
+    assertSingleExecution(taskRace);
     assert.equal(await raw.task.count({ where: { projectId: projectA.id, title: 'Raced task' } }), 1);
 
-    // External mode: one delivery, the other approver gets 409.
+    // External mode: exactly one delivery.
     const installation = await raw.slackInstallation.create({ data: { organizationId: orgA, teamId: `T-${suffix}`, botTokenEncrypted: 'ciphertext' } });
     await raw.slackChannelMapping.create({ data: {
       organizationId: orgA, installationId: installation.id, projectId: projectA.id, channelId: 'C-RACE', channelName: 'race', outboundEnabled: true,
@@ -132,8 +144,7 @@ test('AI tool actions stay in their tenant and receipts are immutable once termi
       slackExecutor.approve(ctx('adminA'), slackAction.id),
       slackExecutor.approve(ctx('admin2A'), slackAction.id),
     ]);
-    assert.deepEqual(slackRace.map((r) => r.status).sort(), ['fulfilled', 'rejected']);
-    assert.equal(slackRace.find((r) => r.status === 'rejected').reason.code, 'ACTION_UNAVAILABLE');
+    assertSingleExecution(slackRace);
     assert.equal(deliveries.length, 1);
     const slackReceipt = await raw.aiBridgeAction.findUnique({ where: { id: slackAction.id } });
     assert.equal(slackReceipt.status, 'EXECUTED');
