@@ -20,6 +20,7 @@ import {
   CalendarDays,
   ShieldCheck,
   History,
+  KeyRound,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
@@ -29,6 +30,7 @@ import { Button, Card, LoadingState } from '../components/ui';
 import ConfirmDialog from '../components/ConfirmDialog';
 import TwoFactorSettings from '../components/TwoFactorSettings';
 import ActivityLog from '../components/ActivityLog';
+import AiByokSettings from '../components/AiByokSettings';
 
 function Section({ icon: Icon, title, description, children }) {
   // Expose each settings card as a named accessible region so screen-reader
@@ -926,6 +928,13 @@ export default function Settings() {
 
       {/* AI Model Picker — admin only */}
       {isAdmin && <AIModelSection />}
+
+      {/* Organization BYOK AI provider, budget and kill switch (#413) — admin only */}
+      {isAdmin && (
+        <Section icon={KeyRound} title="AI provider (bring your own key)" description="Use your own AI provider account, cap monthly spend, or turn AI off for this workspace">
+          <AiByokSettings />
+        </Section>
+      )}
 
       {/* Append-only audit trail — admin only (the API also enforces this) */}
       {isAdmin && (

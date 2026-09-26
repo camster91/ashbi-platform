@@ -7,10 +7,12 @@ process.env.CREDENTIALS_KEYRING = JSON.stringify({ legacy: 'rotation-old-key', v
 const { decrypt, encryptWithVersion, getCiphertextKeyVersion } = await import('../../utils/crypto.js');
 const { rotateCredentialKeys } = await import('../../services/credential-key-rotation.service.js');
 
-function fakePrisma({ failUpdate = false } = {}) {
+function fakePrisma({ failUpdate = false, onAiUpdate = null } = {}) {
   const state = {
     credentials: [{ id: 'cred-1', password: encryptWithVersion('credential-secret', 'legacy'), encryptionVersion: 'legacy' }],
     sites: [{ id: 'site-1', bridgeSecretEncrypted: encryptWithVersion('bridge-secret', 'legacy') }],
+    aiConnections: [{ id: 'ai-1', encryptedApiKey: encryptWithVersion('sk-byok-secret', 'legacy') }],
+    aiWrites: [],
   };
   const client = {
     credential: {
@@ -24,12 +26,23 @@ function fakePrisma({ failUpdate = false } = {}) {
       findMany: async () => structuredClone(state.sites),
       update: async ({ where, data }) => Object.assign(state.sites.find((row) => row.id === where.id), data),
     },
+    aiProviderConnection: {
+      findMany: async () => structuredClone(state.aiConnections),
+      updateMany: async ({ where, data }) => {
+        if (onAiUpdate) onAiUpdate(state);
+        const hits = state.aiConnections.filter((row) => row.id === where.id && row.encryptedApiKey === where.encryptedApiKey);
+        for (const row of hits) Object.assign(row, data);
+        state.aiWrites.push(hits.length);
+        return { count: hits.length };
+      },
+    },
   };
   client.$transaction = async (callback) => {
     const snapshot = structuredClone(state);
     try { return await callback(client); } catch (error) {
       state.credentials = snapshot.credentials;
       state.sites = snapshot.sites;
+      state.aiConnections = snapshot.aiConnections;
       throw error;
     }
   };
@@ -39,7 +52,7 @@ function fakePrisma({ failUpdate = false } = {}) {
 test('old and new keys coexist through rotation and rollback', async () => {
   const { client, state } = fakePrisma();
   const dryRun = await rotateCredentialKeys(client, 'v2');
-  assert.equal(dryRun.rotate, 2);
+  assert.equal(dryRun.rotate, 3);
   assert.equal(getCiphertextKeyVersion(state.credentials[0].password), 'legacy');
 
   const applied = await rotateCredentialKeys(client, 'v2', { apply: true });
@@ -47,6 +60,8 @@ test('old and new keys coexist through rotation and rollback', async () => {
   assert.equal(getCiphertextKeyVersion(state.credentials[0].password), 'v2');
   assert.equal(decrypt(state.credentials[0].password), 'credential-secret');
   assert.equal(decrypt(state.sites[0].bridgeSecretEncrypted), 'bridge-secret');
+  assert.equal(getCiphertextKeyVersion(state.aiConnections[0].encryptedApiKey), 'v2');
+  assert.equal(decrypt(state.aiConnections[0].encryptedApiKey), 'sk-byok-secret');
 
   await rotateCredentialKeys(client, 'legacy', { apply: true });
   assert.equal(getCiphertextKeyVersion(state.credentials[0].password), 'legacy');
@@ -58,4 +73,14 @@ test('a failed staged rotation rolls every record back', async () => {
   await assert.rejects(() => rotateCredentialKeys(client, 'v2', { apply: true }), /simulated write failure/);
   assert.equal(getCiphertextKeyVersion(state.credentials[0].password), 'legacy');
   assert.equal(getCiphertextKeyVersion(state.sites[0].bridgeSecretEncrypted), 'legacy');
+});
+
+test('a BYOK key rotated or revoked during key rotation is not overwritten (compare-and-swap)', async () => {
+  const { client, state } = fakePrisma({
+    // An admin rotates the workspace key while the re-encryption runs.
+    onAiUpdate: (current) => { current.aiConnections[0].encryptedApiKey = encryptWithVersion('sk-byok-newer', 'legacy'); },
+  });
+  await assert.rejects(() => rotateCredentialKeys(client, 'v2', { apply: true }), /changed during key rotation/);
+  assert.deepEqual(state.aiWrites, [0], 'the newer ciphertext was not overwritten');
+  assert.equal(getCiphertextKeyVersion(state.credentials[0].password), 'legacy', 'the whole rotation rolled back');
 });

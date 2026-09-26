@@ -708,6 +708,37 @@ export const aiProviderSwitchSchema = z.object({
   model: z.string().min(1).max(100).regex(/^[\w.:/-]+$/, 'Invalid model name').optional(),
 });
 
+// ── Organization BYOK AI connection (#413, docs/ai-byok.md) ────────────────
+// Model ids: provider-defined, but restricted to the audit-metadata character
+// set so they can be recorded and shown safely.
+const aiModelId = z.string().trim().min(1).max(128).regex(/^[A-Za-z0-9_.:/@+-]+$/, 'Invalid model name');
+// Keys are opaque bearer tokens; whitespace would break the header.
+const aiApiKey = z.string().min(8).max(512).regex(/^\S+$/, 'API key must not contain spaces');
+// US cents per month: 1 cent to 1,000,000 dollars.
+const aiMonthlyBudgetCents = z.number().int().min(1).max(100_000_000);
+const aiAllowedModels = z.array(aiModelId).min(1).max(50);
+
+export const aiConnectionConnectSchema = z.object({
+  baseUrl: z.string().trim().min(1).max(2048),
+  apiKey: aiApiKey,
+  allowedModels: aiAllowedModels,
+  defaultModel: aiModelId,
+  monthlyBudgetCents: aiMonthlyBudgetCents,
+}).strict().refine((value) => value.allowedModels.includes(value.defaultModel), {
+  message: 'defaultModel must be one of allowedModels',
+  path: ['defaultModel'],
+});
+
+export const aiConnectionRotateSchema = z.object({ apiKey: aiApiKey }).strict();
+
+export const aiConnectionSettingsSchema = z.object({
+  allowedModels: aiAllowedModels.optional(),
+  defaultModel: aiModelId.optional(),
+  monthlyBudgetCents: aiMonthlyBudgetCents.optional(),
+}).strict().refine((value) => Object.keys(value).length > 0, { message: 'Provide at least one setting to change' });
+
+export const aiKillSwitchSchema = z.object({ disabled: z.boolean() }).strict();
+
 // ── Proposals (Bonsai replacement) ──────────────────────────────────────────
 const proposalLineItemInput = z.object({
   // Description of what the line item is for (e.g. "Design — 5 hours")

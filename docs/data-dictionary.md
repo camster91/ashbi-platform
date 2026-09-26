@@ -14,7 +14,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   which reads hide soft-deleted rows is in [soft-delete-policy.md](soft-delete-policy.md).
 - **Notes** combine `///` doc comments and trailing `//` comments from the schema.
 
-90 models, 0 enums, 40 tenant-scoped, 13 soft-deletable.
+93 models, 0 enums, 42 tenant-scoped, 13 soft-deletable.
 
 ## Model index
 
@@ -23,7 +23,9 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Activity](#model-activity) | `activities` | no | no | 12 |
 | [AiBridgeAction](#model-aibridgeaction) | `ai_bridge_actions` | yes | no | 18 |
 | [AiContext](#model-aicontext) | `ai_context` | yes | no | 7 |
+| [AiProviderConnection](#model-aiproviderconnection) | `ai_provider_connections` | yes | no | 20 |
 | [AiTeamMessage](#model-aiteammessage) | `ai_team_messages` | no | no | 9 |
+| [AiUsageRecord](#model-aiusagerecord) | `ai_usage_records` | yes | no | 15 |
 | [ApiKey](#model-apikey) | `api_keys` | no | no | 12 |
 | [Approval](#model-approval) | `approvals` | no | no | 16 |
 | [AshChatMessage](#model-ashchatmessage) | `ash_chat_messages` | no | no | 6 |
@@ -67,10 +69,11 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Notification](#model-notification) | `notifications` | no | no | 10 |
 | [NotionImportRecord](#model-notionimportrecord) | `notion_import_records` | yes | no | 14 |
 | [OnboardingProgress](#model-onboardingprogress) | `onboarding_progress` | yes | no | 12 |
-| [Organization](#model-organization) | `organizations` | no | no | 47 |
+| [Organization](#model-organization) | `organizations` | no | no | 50 |
 | [OutreachSequence](#model-outreachsequence) | `outreach_sequences` | yes | no | 10 |
 | [PipelineDeal](#model-pipelinedeal) | `pipeline_deals` | no | no | 15 |
 | [PipelineStage](#model-pipelinestage) | `pipeline_stages` | yes | no | 10 |
+| [PlatformSetting](#model-platformsetting) | `platform_settings` | no | no | 5 |
 | [Project](#model-project) | `projects` | yes | yes | 49 |
 | [ProjectCommunication](#model-projectcommunication) | `project_communications` | no | no | 18 |
 | [ProjectContext](#model-projectcontext) | `project_contexts` | no | no | 10 |
@@ -186,6 +189,35 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 | `createdAt` | DateTime | required | `now()` |  |  |
 
+### Model AiProviderConnection
+
+- Table: `ai_provider_connections`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | unique, required |  |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
+| `providerKind` | String | required | `"openai_compatible"` |  | openai_compatible (CHECK constraint) |
+| `baseUrl` | String | required |  |  |  |
+| `encryptedApiKey` | String | optional |  |  | AES-256-GCM envelope; null once revoked |
+| `keyLast4` | String | optional |  |  |  |
+| `allowedModels` | String[] | list, required | `[]` |  |  |
+| `defaultModel` | String | required |  |  |  |
+| `monthlyBudgetCents` | Int | required |  |  |  |
+| `status` | String | required | `"active"` |  | active, disabled, revoked (CHECK constraint) |
+| `disabledReason` | String | optional |  |  |  |
+| `lastValidatedAt` | DateTime | optional |  |  |  |
+| `lastValidationError` | String | optional |  |  | AiProviderError type only, never provider text |
+| `createdById` | String | optional |  |  | No FK: history must outlive the actor account |
+| `rotatedAt` | DateTime | optional |  |  |  |
+| `revokedAt` | DateTime | optional |  |  |  |
+| `createdAt` | DateTime | required | `now()` |  |  |
+| `updatedAt` | DateTime | required, updatedAt |  |  |  |
+| `usageRecords` | AiUsageRecord[] | list, required |  | → AiUsageRecord |  |
+
 ### Model AiTeamMessage
 
 - Table: `ai_team_messages`
@@ -205,6 +237,33 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `client` | Client | optional |  | → Client, via (clientId) → (id), onDelete SetNull |  |
 | `project` | Project | optional |  | → Project, via (projectId) → (id), onDelete SetNull |  |
+
+### Model AiUsageRecord
+
+- Table: `ai_usage_records`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@index([organizationId, createdAt])`
+  - `@@index([connectionId, createdAt])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
+| `connectionId` | String | required |  |  |  |
+| `connection` | AiProviderConnection | required |  | → AiProviderConnection, via (connectionId) → (id), onDelete Cascade |  |
+| `model` | String | required |  |  |  |
+| `promptTokens` | Int | required | `0` |  |  |
+| `completionTokens` | Int | required | `0` |  |  |
+| `usageEstimated` | Boolean | required | `false` |  | provider omitted usage; tokens estimated at ~4 chars each |
+| `estimatedCostCents` | Float | optional |  |  | null when the model has no configured price |
+| `feature` | String | optional |  |  | route pattern or job label that made the call |
+| `requestId` | String | optional |  |  |  |
+| `success` | Boolean | required |  |  |  |
+| `errorType` | String | optional |  |  | AiProviderError type when success is false |
+| `createdAt` | DateTime | required | `now()` |  |  |
 
 ### Model ApiKey
 
@@ -1328,6 +1387,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `slug` | String | unique, required |  |  |  |
 | `logo` | String | optional |  |  |  |
 | `plan` | String | required | `"FREE"` |  | FREE, PRO, ENTERPRISE |
+| `aiDisabled` | Boolean | required | `false` |  |  |
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 | `users` | User[] | list, required |  | → User |  |
@@ -1370,6 +1430,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `aiBridgeActions` | AiBridgeAction[] | list, required |  | → AiBridgeAction |  |
 | `publicInquiries` | PublicInquiry[] | list, required |  | → PublicInquiry |  |
 | `auditEvents` | AuditEvent[] | list, required |  | → AuditEvent |  |
+| `aiProviderConnection` | AiProviderConnection | optional |  | → AiProviderConnection |  |
+| `aiUsageRecords` | AiUsageRecord[] | list, required |  | → AiUsageRecord |  |
 
 ### Model OutreachSequence
 
@@ -1440,6 +1502,20 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 | `deals` | PipelineDeal[] | list, required |  | → PipelineDeal |  |
+
+### Model PlatformSetting
+
+- Table: `platform_settings`
+- Tenant-scoped: no
+- Soft-deletable: no
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `"platform"` |  |  |
+| `aiDisabled` | Boolean | required | `false` |  |  |
+| `aiDisabledAt` | DateTime | optional |  |  |  |
+| `aiDisabledById` | String | optional |  |  | No FK: history must outlive the actor account |
+| `updatedAt` | DateTime | required, updatedAt |  |  |  |
 
 ### Model Project
 

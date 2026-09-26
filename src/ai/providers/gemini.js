@@ -4,7 +4,6 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import env from '../../config/env.js';
 
 const GEMINI_MODEL = 'gemini-3.1-flash-lite-preview';
-const GEMINI_CREATIVE_MODEL = 'gemini-3-pro-image-preview';
 
 class GeminiProvider {
   constructor(modelOverride) {
@@ -48,5 +47,4 @@ class GeminiProvider {
   }
 }
 
-export { GEMINI_CREATIVE_MODEL };
 export default GeminiProvider;

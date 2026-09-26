@@ -45,7 +45,7 @@ export const requestStorage = new AsyncLocalStorage();
  * marks "from this point in the async chain, the store is X" and Node's
  * async_hooks propagate that to subsequent awaits.
  *
- * @param {{ prisma: any, organizationId: string }} ctx
+ * @param {{ prisma: any, organizationId: string | null, requestId?: string, feature?: string | null }} ctx
  */
 export function enterRequestContext(ctx) {
   requestStorage.enterWith(ctx);
@@ -61,4 +61,14 @@ export function getRequestPrisma() {
 
 export function getRequestOrganizationId() {
   return requestStorage.getStore()?.organizationId;
+}
+
+/** The Fastify request id of the current request, when there is one. */
+export function getRequestId() {
+  return requestStorage.getStore()?.requestId ?? null;
+}
+
+/** A label for what is running: the route pattern, or a job's label. */
+export function getRequestFeature() {
+  return requestStorage.getStore()?.feature ?? null;
 }

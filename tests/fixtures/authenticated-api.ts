@@ -261,6 +261,13 @@ export async function mockAuthenticatedApi(page: Page, { user = adminUser, signe
     if (path === '/api-keys') return json(route, { keys: [{ id: 'key-a', name: 'Zapier', createdAt: LAST_WEEK, lastUsedAt: YESTERDAY, expiresAt: null }] });
     if (path === '/settings/ai-provider') return json(route, { provider: 'ollama', ollamaModel: 'llama3.1:8b', ollamaModels: ['llama3.1:8b'], canManage: true });
     if (path === '/settings/ai-provider/ollama-models') return json(route, { models: ['llama3.1:8b', 'qwen2.5:14b'] });
+    if (path === '/ai-connections') return json(route, {
+      connection: null,
+      aiDisabled: false,
+      platformAiDisabled: false,
+      pricedModels: [],
+      usage: { since: '2026-08-01T00:00:00.000Z', calls: 0, promptTokens: 0, completionTokens: 0, unpricedTokens: 0, spentCents: 0, budgetCents: null, alertThresholdPercent: 80 },
+    });
     if (path === '/auth/mfa') return json(route, { eligible: true, enabled: false, enabledAt: null, pendingEnrollment: false, recoveryCodesRemaining: 0 });
     if (path === '/audit-events/catalog') return json(route, { actions: ['auth.login', 'invoice.sent', 'auth.mfa_enabled'], entityTypes: ['user', 'invoice'], actorTypes: ['USER', 'CLIENT', 'SYSTEM', 'WEBHOOK', 'BOT'] });
     if (path === '/audit-events') return json(route, { events: [

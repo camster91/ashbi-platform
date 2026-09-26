@@ -6,10 +6,12 @@ import aiContextRoutes from '../../routes/ai-context.routes.js';
 import aiTeamRoutes from '../../routes/ai-team.routes.js';
 import botRoutes from '../../routes/bot.routes.js';
 import approvalRoutes from '../../routes/approvals.routes.js';
+import aiConnectionRoutes from '../../routes/ai-connection.routes.js';
 
 /**
  * Register automation and AI routes: AI actions, the AI bridge, semantic
- * search, automations, AI context, the AI team, the bot, and approvals.
+ * search, automations, AI context, the AI team, the bot, approvals, and the
+ * organization's bring-your-own-key AI connection (#413).
  *
  * Every route module here is an encapsulated Fastify plugin (none uses
  * fastify-plugin or skip-override), so its hooks cannot affect other domains.
@@ -26,4 +28,5 @@ export async function registerAiRoutes(fastify) {
   await fastify.register(aiTeamRoutes, { prefix: '/api/ai-team' });
   await fastify.register(botRoutes, { prefix: '/api/bot' });
   await fastify.register(approvalRoutes, { prefix: '/api/approvals' });
+  await fastify.register(aiConnectionRoutes, { prefix: '/api/ai-connections' });
 }

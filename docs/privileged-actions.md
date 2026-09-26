@@ -77,6 +77,9 @@ once.
 | Reset another member's password | `POST /api/team/:id/reset-password` | `requireRecentAuth` (added beyond the issue's list: it hands the admin the member's account) |
 | Reveal a stored credential | `GET /api/credentials/:id`, `GET /api/credentials/:id/password` | `requireRecentAuth` (in addition to the existing purpose-tagged credential-access audit) |
 | Switch the deployment AI provider or model | `POST /api/settings/ai-provider` | `requireRecentAuth` (in addition to the platform-operator check) |
+| Turn the deployment AI kill switch on or off | `POST /api/settings/ai-kill-switch` | `requireRecentAuth` (in addition to the platform-operator check) |
+| Connect, rotate or revoke the organization's AI provider key | `POST /api/ai-connections/connect`, `/rotate`, `/revoke` | `requireRecentAuth` (ADMIN). The key is validated with the provider before it is stored or replaced; see [ai-byok.md](ai-byok.md) |
+| Turn AI off or on for the organization | `POST /api/ai-connections/disable`, `/enable` | `requireRecentAuth` (ADMIN) |
 | Disable own two-factor | `POST /api/auth/mfa/disable` | Unchanged: already requires the current password **and** a TOTP or recovery code in the request itself, which is stricter than the window |
 | Reset another member's two-factor | `POST /api/auth/mfa/admin/users/:userId/reset` | Unchanged: already requires the admin's password in the request, and the admin's own TOTP or recovery code when the admin has two-factor on |
 
@@ -90,6 +93,11 @@ Not applicable today:
   runs with database access, not a user session.
 - **Credential vault export**: there is no bulk export; the list route returns
   masked passwords only.
+
+Not guarded (*Proposal*): re-checking the stored AI key
+(`POST /api/ai-connections/validate`) and changing the AI models or monthly
+budget (`PATCH /api/ai-connections/settings`); both are admin-only and
+audited.
 
 Candidates for the owner to consider adding: creating a member with the
 `ADMIN` role (`POST /api/team`), inviting an admin through
@@ -105,8 +113,10 @@ Candidates for the owner to consider adding: creating a member with the
 
 The guarded actions keep emitting their own events (`api_key.created`,
 `user.role_changed`, `user.deactivated`, `user.reactivated`,
-`auth.password_changed`, `settings.ai_provider_changed`, and the credential
-vault's access records). See [audit-events.md](audit-events.md).
+`auth.password_changed`, `settings.ai_provider_changed`, `ai.disabled`,
+`ai.enabled`, `ai.connection_connected`, `ai.connection_rotated`,
+`ai.connection_revoked`, and the credential vault's access records). See
+[audit-events.md](audit-events.md).
 
 ## API keys (service credentials)
 

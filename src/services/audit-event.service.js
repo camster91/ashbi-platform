@@ -41,6 +41,15 @@ export const AUDIT_EVENT_CATALOG = Object.freeze({
   'api_key.revoked': { entityType: 'api_key', metadata: ['ownerUserId'] },
   'settings.ai_provider_changed': { entityType: 'settings', metadata: ['fromProvider', 'toProvider', 'fromModel', 'toModel'] },
   'client_portal.document_deleted': { entityType: 'attachment', metadata: ['projectId', 'clientId', 'mimeType', 'size'] },
+  'ai.connection_connected': { entityType: 'ai_provider_connection', metadata: ['keyLast4', 'baseUrlHost', 'defaultModel', 'allowedModelCount', 'monthlyBudgetCents', 'replacedStatus'] },
+  'ai.connection_validated': { entityType: 'ai_provider_connection', metadata: ['keyLast4', 'baseUrlHost', 'result', 'errorType', 'fromStatus', 'toStatus'] },
+  'ai.connection_rotated': { entityType: 'ai_provider_connection', metadata: ['keyLast4', 'previousKeyLast4', 'baseUrlHost'] },
+  'ai.connection_revoked': { entityType: 'ai_provider_connection', metadata: ['keyLast4', 'baseUrlHost', 'fromStatus'] },
+  'ai.connection_settings_changed': { entityType: 'ai_provider_connection', metadata: ['fromDefaultModel', 'toDefaultModel', 'fromMonthlyBudgetCents', 'toMonthlyBudgetCents', 'allowedModelCount'] },
+  'ai.disabled': { entityType: 'organization', metadata: ['scope'] },
+  'ai.enabled': { entityType: 'organization', metadata: ['scope'] },
+  'ai.budget_alert': { entityType: 'ai_provider_connection', metadata: ['month', 'spentCents', 'budgetCents', 'thresholdPercent'] },
+  'ai.budget_exceeded': { entityType: 'ai_provider_connection', metadata: ['month', 'spentCents', 'budgetCents'] },
 });
 
 /** action -> entityType, derived from the catalog. */

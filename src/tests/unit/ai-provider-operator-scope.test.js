@@ -9,6 +9,12 @@ process.env.PLATFORM_OPERATOR_USER_IDS = ' user-op , user-demoted ';
 const { default: settingsRoutes } = await import('../../routes/settings.routes.js');
 const providers = await import('../../ai/providers/index.js');
 const { reauthCookies, withSession } = await import('../helpers/reauth.js');
+const { createFakeAiDb, installFakeGovernance } = await import('../helpers/fake-ai-db.js');
+
+// The deployment AI kill switch is persisted (platform_settings) and read
+// through governance; both use this in-memory database.
+const aiDb = createFakeAiDb();
+test.after(await installFakeGovernance(aiDb));
 
 const ORG_ADMIN = { id: 'user-a', email: 'user-op@tenant-a.test', role: 'ADMIN', organizationId: 'org-a' };
 const OPERATOR = { id: 'user-op', email: 'ops@ashbi.test', role: 'ADMIN', organizationId: 'org-ops' };
@@ -39,6 +45,8 @@ async function buildApp(t, user) {
   });
   const prisma = {
     user: { findUnique: async ({ where }) => ACCOUNTS[where.id] ?? null },
+    platformSetting: aiDb.platformSetting,
+    auditEvent: aiDb.auditEvent,
   };
   app.decorate('prisma', prisma);
   app.addHook('onRequest', async (request) => { request.prisma = prisma; });
@@ -126,4 +134,35 @@ test('a platform operator must have re-authenticated recently to switch the prov
   assert.equal(response.statusCode, 403, response.body);
   assert.equal(response.json().code, 'REAUTH_REQUIRED');
   assert.deepEqual(snapshot(), before);
+});
+
+test('only a re-authenticated platform operator can flip the persisted deployment AI kill switch', async (t) => {
+  const { getPlatformAiStatus } = await import('../../ai/governance.js');
+  t.after(() => { aiDb.platformSetting.rows.length = 0; });
+
+  const orgAdmin = await buildApp(t, ORG_ADMIN);
+  const denied = await orgAdmin.inject({ method: 'POST', url: '/ai-kill-switch', cookies: reauthCookies(ORG_ADMIN), payload: { disabled: true } });
+  assert.equal(denied.statusCode, 403, denied.body);
+  assert.equal((await getPlatformAiStatus()).disabled, false);
+
+  const operator = await buildApp(t, OPERATOR);
+  const noStepUp = await operator.inject({ method: 'POST', url: '/ai-kill-switch', payload: { disabled: true } });
+  assert.equal(noStepUp.json().code, 'REAUTH_REQUIRED');
+  assert.equal((await getPlatformAiStatus()).disabled, false);
+
+  const off = await operator.inject({ method: 'POST', url: '/ai-kill-switch', cookies: reauthCookies(OPERATOR), payload: { disabled: true } });
+  assert.equal(off.statusCode, 200, off.body);
+  assert.equal(off.json().platformAi.disabled, true);
+  assert.equal(off.json().platformAi.storedDisabled, true);
+  // Persisted, so the worker and other replicas read the same row.
+  assert.equal(aiDb.platformSetting.rows[0].aiDisabled, true);
+  assert.equal(aiDb.platformSetting.rows[0].aiDisabledById, 'user-op');
+  assert.equal((await operator.inject({ method: 'GET', url: '/ai-provider' })).json().platformAi.disabled, true);
+  const events = aiDb.auditEvent.rows.filter((row) => row.action === 'ai.disabled');
+  assert.equal(events.length, 1);
+  assert.deepEqual(events[0].metadata, { scope: 'platform' });
+
+  const on = await operator.inject({ method: 'POST', url: '/ai-kill-switch', cookies: reauthCookies(OPERATOR), payload: { disabled: false } });
+  assert.equal(on.json().platformAi.disabled, false);
+  assert.equal(aiDb.platformSetting.rows[0].aiDisabled, false);
 });

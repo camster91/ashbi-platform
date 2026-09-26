@@ -38,8 +38,8 @@ queries; the test keeps a reviewed list of those routes with the reason.
 
 | Access | Routes |
 | --- | --- |
-| admin | 29 |
-| admin + recent-auth | 4 |
+| admin | 32 |
+| admin + recent-auth | 10 |
 | admin + recent-auth (access change) | 1 |
 | admin + staff | 6 |
 | api-key | 1 |
@@ -50,7 +50,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | public | 46 |
 | recent-auth + staff | 1 |
 | staff | 342 |
-| **total** | 493 |
+| **total** | 502 |
 
 ## Routes by prefix
 
@@ -83,6 +83,19 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | POST | `/api/ai-bridge/v1/actions/:actionId/confirm` | api-key + scope ai_bridge:actions | scoped |  |
 | POST | `/api/ai-bridge/v1/actions/prepare` | api-key + scope ai_bridge:actions | scoped |  |
 | POST | `/api/ai-bridge/v1/chat/completions` | api-key + scope ai_bridge:read | scoped |  |
+
+### /api/ai-connections
+
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/ai-connections` | admin | scoped |  |
+| POST | `/api/ai-connections/connect` | admin + recent-auth | scoped |  |
+| POST | `/api/ai-connections/disable` | admin + recent-auth | scoped |  |
+| POST | `/api/ai-connections/enable` | admin + recent-auth | scoped |  |
+| POST | `/api/ai-connections/revoke` | admin + recent-auth | scoped |  |
+| POST | `/api/ai-connections/rotate` | admin + recent-auth | scoped |  |
+| PATCH | `/api/ai-connections/settings` | admin | scoped |  |
+| POST | `/api/ai-connections/validate` | admin | scoped |  |
 
 ### /api/ai-context
 
@@ -758,6 +771,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 
 | Method | Path | Access | Tenancy | Notes |
 | --- | --- | --- | --- | --- |
+| POST | `/api/settings/ai-kill-switch` | admin + recent-auth | scoped |  |
 | GET | `/api/settings/ai-provider` | staff | scoped |  |
 | POST | `/api/settings/ai-provider` | admin + recent-auth | scoped |  |
 | GET | `/api/settings/ai-provider/ollama-models` | staff | scoped |  |

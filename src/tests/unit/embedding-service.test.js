@@ -1,6 +1,36 @@
-import test from 'node:test';
+import test, { after, before } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateEmbedding } from '../../services/embedding.service.js';
+import { AiDisabledError } from '../../ai/errors.js';
+import { requestStorage } from '../../utils/request-context.js';
+import { createFakeAiDb, installFakeGovernance } from '../helpers/fake-ai-db.js';
+
+// Embeddings consult the AI kill switches (#413); use an in-memory database.
+const db = createFakeAiDb({ organizations: [{ id: 'org-on' }, { id: 'org-off', aiDisabled: true }] });
+let restoreGovernance;
+before(async () => { restoreGovernance = await installFakeGovernance(db); });
+after(() => restoreGovernance());
+
+test('generateEmbedding honours the organization and platform kill switches before sending text', async (t) => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => { calls += 1; throw new Error('must not be called'); };
+  t.after(() => { globalThis.fetch = originalFetch; });
+
+  await assert.rejects(
+    requestStorage.run({ organizationId: 'org-off' }, () => generateEmbedding('private text')),
+    (err) => err instanceof AiDisabledError && err.scope === 'organization',
+  );
+  db.platformSetting.rows.push({ id: 'platform', aiDisabled: true });
+  t.after(() => { db.platformSetting.rows.length = 0; });
+  const fresh = await installFakeGovernance(db);
+  t.after(fresh);
+  await assert.rejects(
+    requestStorage.run({ organizationId: 'org-on' }, () => generateEmbedding('private text')),
+    (err) => err instanceof AiDisabledError && err.scope === 'platform',
+  );
+  assert.equal(calls, 0);
+});
 
 test('generateEmbedding uses Ollama current embed contract', async (t) => {
   const originalFetch = globalThis.fetch;

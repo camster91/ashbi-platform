@@ -15,6 +15,7 @@ import {
   projectFromTemplateSchema,
 } from '../validators/schemas.js';
 import bus, { EVENTS } from '../utils/events.js';
+import { isAiControlError, sendAiError } from '../ai/errors.js';
 
 export default async function projectRoutes(fastify) {
   // List all projects
@@ -226,6 +227,7 @@ export default async function projectRoutes(fastify) {
         }
       };
     } catch (error) {
+      if (isAiControlError(error)) return sendAiError(reply, error);
       return reply.status(500).send({
         error: 'Failed to refresh project plan',
         message: error.message
@@ -570,6 +572,7 @@ Brief: ${brief}`;
         tasks: createdTasks,
       };
     } catch (error) {
+      if (isAiControlError(error)) return sendAiError(reply, error);
       fastify.log.error(error, 'AI plan generation failed');
       return reply.status(500).send({
         error: 'Failed to generate AI plan',

@@ -46,8 +46,9 @@ copy secret values or credential metadata into tickets.
    `npm run drill:credential-rotation -- --confirm-disposable`. Attach only its
    payload-free summary to the change record.
 5. Run the production rotation with `--apply`. The transaction updates vault
-   credentials and WordPress bridge secrets atomically. Any error rolls all
-   writes back.
+   credentials, WordPress bridge secrets and organization BYOK AI provider
+   keys ([ai-byok.md](ai-byok.md)) atomically. Any error rolls all writes
+   back.
 6. Set `CREDENTIALS_ACTIVE_KEY_VERSION` to the new version, restart API and
    worker using the immutable release procedure, and verify representative
    reveal and bridge authentication flows plus the access audit.

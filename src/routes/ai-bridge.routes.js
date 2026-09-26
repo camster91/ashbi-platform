@@ -1,4 +1,5 @@
 import aiClient from '../ai/client.js';
+import { isAiControlError } from '../ai/errors.js';
 import crypto from 'node:crypto';
 import { decrypt } from '../utils/crypto.js';
 import { postSlackMessage } from '../services/slack-outbound.service.js';
@@ -143,6 +144,11 @@ export default async function aiBridgeRoutes(fastify, options = {}) {
       const content = typeof result === 'string' ? result : result?.content || result?.text || JSON.stringify(result);
       return openAiResponse(content, body.model);
     } catch (error) {
+      if (isAiControlError(error)) {
+        // Kill switch, budget or BYOK provider failure (docs/ai-byok.md), in
+        // the OpenAI error shape the bridge's clients expect.
+        return reply.status(error.statusCode).send({ error: { message: error.message, type: 'ai_control_error', code: error.code } });
+      }
       request.log.error({ err: error }, 'AI bridge completion failed');
       return reply.status(502).send({ error: { message: 'AI provider unavailable', type: 'upstream_error' } });
     }

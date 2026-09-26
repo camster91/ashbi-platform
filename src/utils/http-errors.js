@@ -6,6 +6,17 @@
  */
 export function toClientErrorBody(error, { traceId } = {}) {
   const statusCode = error.statusCode || 500;
+  // AI control-plane errors (src/ai/errors.js: AI_DISABLED, AI_BUDGET_EXCEEDED,
+  // AI_PROVIDER_*) carry fixed, caller-safe messages even when they are 5xx,
+  // so a disabled or over-budget workspace sees why instead of a generic 500.
+  if (error.expose === true && typeof error.code === 'string' && error.code.startsWith('AI_') && typeof error.message === 'string') {
+    return {
+      error: error.message,
+      code: error.code,
+      statusCode,
+      ...(traceId ? { traceId } : {}),
+    };
+  }
   const isServerError = statusCode >= 500;
   const isDev = process.env.NODE_ENV !== 'production';
   const exposeMessage = error.expose === true && typeof error.message === 'string';

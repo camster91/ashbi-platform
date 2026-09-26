@@ -30,7 +30,7 @@ export async function runTenantJob(prisma, organizationId, callback, scopingPris
   await resolveTenantOrganizationIds(prisma, organizationId);
   const tenantPrisma = createScopedPrisma(scopingPrisma, organizationId);
   return requestStorage.run(
-    { prisma: tenantPrisma, organizationId },
+    { prisma: tenantPrisma, organizationId, feature: 'background_job' },
     () => callback(tenantPrisma),
   );
 }

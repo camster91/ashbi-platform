@@ -244,7 +244,8 @@ Write a helpful, professional reply that addresses the client's needs. Be concis
     try {
       draftBody = await aiClient.chat({ system, prompt, temperature: 0.7 });
     } catch (err) {
-      fastify.log.error('AI draft error:', err);
+      // Canned fallback is intentional; record why without any content.
+      fastify.log.warn({ errorCode: err?.code ?? err?.name ?? 'unknown' }, 'AI draft unavailable; using the template reply');
       draftBody = `Hi,\n\nThank you for your email regarding "${thread.subject}". I'll get back to you shortly.\n\nBest,\nCameron | Ashbi Design`;
     }
 

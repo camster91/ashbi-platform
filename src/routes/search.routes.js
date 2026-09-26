@@ -2,6 +2,7 @@
 
 import aiClient from '../ai/client.js';
 import { validateBody, searchAskSchema } from '../validators/schemas.js';
+import { isAiControlError, sendAiError } from '../ai/errors.js';
 
 export default async function searchRoutes(fastify) {
   // Global search
@@ -261,6 +262,7 @@ export default async function searchRoutes(fastify) {
       const answer = await aiClient.chat({ system, prompt, temperature: 0.3 });
       return { question, answer, sources };
     } catch (error) {
+      if (isAiControlError(error)) return sendAiError(reply, error);
       return { question, answer: 'Unable to process question at this time.', sources: [] };
     }
   });
