@@ -35,9 +35,13 @@ async function requireStaffRole(request, reply) {
 
 /** The receipt as the API shows it: no raw input, no secrets. */
 export function receiptView(row, at = new Date()) {
+  const tool = toolRegistry.get(row.action);
   return {
     id: row.id,
     tool: row.action,
+    // The web app asks for an extra confirmation before approving these.
+    external: Boolean(tool?.external),
+    irreversible: Boolean(tool?.irreversible),
     toolClass: row.toolClass ?? 'execute',
     source: row.source ?? 'ai_bridge',
     status: row.status,

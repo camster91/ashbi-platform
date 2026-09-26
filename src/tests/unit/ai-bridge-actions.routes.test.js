@@ -274,3 +274,53 @@ test('retains an unknown Slack delivery target for reconciliation after a provid
   assert.deepEqual(failure.result, { deliveryState: 'UNKNOWN', mappingId: 'mapping-2', channelId: 'C456' });
   assert.deepEqual(response.json().action.result, { deliveryState: 'UNKNOWN', mappingId: 'mapping-2', channelId: 'C456' });
 });
+
+test('refuses to confirm an assistant-proposed action through an API key', async (t) => {
+  let written = false;
+  const pendingAction = {
+    id: 'action-assistant-1', userId: 'user-1', status: 'PENDING_CONFIRMATION', action: 'create_task', source: 'assistant',
+    input: { projectId: 'project-1', title: 'Proposed by the assistant' }, expiresAt: new Date(Date.now() + 60_000),
+  };
+  const prisma = {
+    $transaction: async (work) => { written = true; return work(prisma); },
+    aiBridgeAction: {
+      findFirst: async () => pendingAction,
+      updateMany: async () => { written = true; return { count: 1 }; },
+      update: async () => { written = true; return pendingAction; },
+    },
+    project: { findFirst: async () => ({ id: 'project-1', name: 'Website' }) },
+    task: { create: async () => { written = true; return { id: 'task-1' }; } },
+  };
+  const app = await buildApp(prisma);
+  t.after(() => app.close());
+
+  const response = await app.inject({ method: 'POST', url: '/v1/actions/action-assistant-1/confirm', payload: { confirm: true } });
+  assert.equal(response.statusCode, 403);
+  assert.equal(response.json().error.type, 'insufficient_permissions');
+  assert.equal(written, false);
+});
+
+test('a confirm that loses the claim race answers 409, not a stale 200', async (t) => {
+  const pendingAction = {
+    id: 'action-race-1', userId: 'user-1', status: 'PENDING_CONFIRMATION', action: 'create_task',
+    input: { projectId: 'project-1', title: 'Raced' }, expiresAt: new Date(Date.now() + 60_000),
+  };
+  let taskCreated = false;
+  const prisma = {
+    $transaction: async (work) => work(prisma),
+    aiBridgeAction: {
+      findFirst: async () => pendingAction,
+      updateMany: async () => ({ count: 0 }),
+      update: async ({ data }) => ({ ...pendingAction, ...data }),
+    },
+    project: { findFirst: async () => ({ id: 'project-1', name: 'Website' }) },
+    task: { create: async () => { taskCreated = true; return { id: 'task-1' }; } },
+  };
+  const app = await buildApp(prisma);
+  t.after(() => app.close());
+
+  const response = await app.inject({ method: 'POST', url: '/v1/actions/action-race-1/confirm', payload: { confirm: true } });
+  assert.equal(response.statusCode, 409);
+  assert.equal(response.json().error.type, 'action_unavailable');
+  assert.equal(taskCreated, false);
+});

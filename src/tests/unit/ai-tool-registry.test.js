@@ -21,6 +21,9 @@ const base = {
 
 test('the external allowlist holds only the existing, confirm-gated Slack post', () => {
   assert.deepEqual([...EXTERNAL_TOOL_ALLOWLIST], ['send_slack_message']);
+  const slack = toolRegistry.get('send_slack_message');
+  assert.equal(slack.external, true);
+  assert.equal(slack.irreversible, true);
   const external = toolRegistry.list().filter((tool) => tool.external || tool.irreversible).map((tool) => tool.name);
   assert.deepEqual(external, ['send_slack_message']);
 });
@@ -82,4 +85,25 @@ test('bridge tool schemas normalize input exactly as the bridge always hashed it
   assert.equal(event.success, false);
   const slack = toolRegistry.get('send_slack_message').inputSchema.parse({ projectId: 'p1', text: ' hi ' });
   assert.deepEqual(slack, { projectId: 'p1', text: 'hi' });
+});
+
+test('previews show the approver every persisted, user-visible field', async () => {
+  const scope = { records: { project: { id: 'p1', name: 'Website' } } };
+  const task = toolRegistry.get('create_task');
+  const taskInput = task.inputSchema.parse({ projectId: 'p1', title: 'Title', description: 'Full description text', dueDate: '2026-01-02' });
+  const event = toolRegistry.get('create_calendar_event');
+  const eventInput = event.inputSchema.parse({
+    projectId: 'p1', title: 'Kickoff', description: 'Agenda', location: ' Room 4 ',
+    startTime: '2026-01-01T10:00:00Z', endTime: '2026-01-01T11:00:00Z',
+  });
+  const eventPreview = await event.preview({ input: eventInput, scope });
+  assert.equal(eventPreview.location, 'Room 4');
+  // Every persisted field of each execute tool's input appears in its preview.
+  for (const [tool, input] of [[task, taskInput], [event, eventInput]]) {
+    const preview = await tool.preview({ input, scope });
+    for (const [field, value] of Object.entries(input)) {
+      if (field === 'projectId' || value === undefined) continue;
+      assert.equal(preview[field], value, `${tool.name}.${field} is missing from the preview`);
+    }
+  }
 });

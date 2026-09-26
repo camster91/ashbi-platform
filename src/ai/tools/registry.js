@@ -252,6 +252,10 @@ function findOutboundMapping(prisma, projectId, select) {
 }
 
 // ---------------------------------------------------------------------------
+// Previews. An approver must see every field the action persists that a
+// person will later see: the full title, description, location and message
+// text are in the preview, never only in the stored input.
+//
 // Input schemas. The execute tools' transforms produce exactly the object the
 // AI bridge hashed before this registry existed, so an idempotency key reused
 // across the upgrade still matches its stored input hash.
@@ -408,6 +412,7 @@ export const BUILTIN_TOOLS = Object.freeze([
       title: input.title,
       priority: input.priority,
       dueDate: input.dueDate ?? null,
+      ...(input.description ? { description: input.description } : {}),
     }),
     execution: {
       mode: 'transaction',
@@ -439,6 +444,8 @@ export const BUILTIN_TOOLS = Object.freeze([
       startTime: input.startTime,
       endTime: input.endTime,
       type: input.type,
+      ...(input.description ? { description: input.description } : {}),
+      ...(input.location ? { location: input.location } : {}),
     }),
     execution: {
       mode: 'transaction',
@@ -473,6 +480,8 @@ export const BUILTIN_TOOLS = Object.freeze([
     idempotency: 'required',
     timeoutMs: 15_000,
     external: true,
+    // A posted message cannot be recalled from Ashbi.
+    irreversible: true,
     rollback: 'Slack messages cannot be recalled from Ashbi; delete the message in Slack. When delivery fails the receipt keeps the target with deliveryState UNKNOWN for manual reconciliation and is never retried (docs/slack-outbound-recovery-policy.md).',
     preview: async ({ prisma, input, scope }) => {
       const { project, root } = scope.records;

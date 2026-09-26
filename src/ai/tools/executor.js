@@ -28,6 +28,7 @@
 import crypto from 'node:crypto';
 import defaultLogger from '../../utils/logger.js';
 import { actorTypeForRole, recordAuditEvent } from '../../services/audit-event.service.js';
+import { LOG_REDACT_PATHS } from '../../utils/log-redaction.js';
 import { aiGovernance } from '../governance.js';
 import { isAiControlError } from '../errors.js';
 import { APPROVAL_CLASSES, APPROVAL_TTL_MS, ToolError, toolRegistry } from './registry.js';
@@ -60,9 +61,32 @@ export function toolInputHash(tool, input) {
 }
 
 // Field names and value shapes that must never leave a tool: credential
-// ciphertext, bot tokens, provider keys, Ashbi API keys, password hashes.
-const SECRET_FIELD = /(password|secret|token|api[-_]?key|encrypted|credential|authorization|cookie|hash)/i;
-const SECRET_VALUE = /(sk-[A-Za-z0-9_-]{8,}|xox[abprs]-[A-Za-z0-9-]{8,}|ashbi_[A-Za-z0-9_-]{16,}|v\d+:[A-Za-z0-9_-]+:[A-Za-z0-9+/=_:-]{16,}|\$2[aby]\$\d{2}\$[./A-Za-z0-9]{20,})/g;
+// ciphertext, bot tokens, provider keys, Ashbi API keys, password hashes, and
+// the credential fields the log redaction list names (src/utils/log-redaction.js).
+const LOG_REDACTED_FIELDS = new Set(LOG_REDACT_PATHS
+  .map((path) => path.replace(/^\*\./, ''))
+  .filter((path) => /^[A-Za-z]+$/.test(path))
+  .map((path) => path.toLowerCase()));
+const SECRET_FIELD = /(password|passwd|secret|token|api[-_]?key|private[-_]?key|encrypted|credential|authorization|cookie|hash)/i;
+// Generic credential shapes, so a secret pasted into free text (a project
+// summary, a task description) is masked wherever it appears.
+const SECRET_VALUE = new RegExp([
+  'sk-[A-Za-z0-9_-]{8,}', // OpenAI-compatible provider keys
+  '(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{8,}', // Stripe
+  'xox[abprs]-[A-Za-z0-9-]{8,}', // Slack tokens
+  'hooks\\.slack\\.com/services/[A-Za-z0-9/_-]+', // Slack webhook URLs
+  'ashbi_[A-Za-z0-9_-]{16,}', // Ashbi API keys
+  'gh[pousr]_[A-Za-z0-9]{20,}', // GitHub tokens
+  'AKIA[0-9A-Z]{16}', // AWS access key ids
+  'AIza[0-9A-Za-z_-]{30,}', // Google API keys
+  'eyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}', // JWTs
+  '-----BEGIN [A-Z ]*PRIVATE KEY-----[\\s\\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)', // PEM keys
+  'v\\d+:[A-Za-z0-9_-]+:[A-Za-z0-9+/=_:-]{16,}', // Ashbi ciphertext envelopes
+  '\\$2[aby]\\$\\d{2}\\$[./A-Za-z0-9]{20,}', // bcrypt hashes
+  '(?<=://)[^/\\s:@]+:[^/\\s@]+(?=@)', // credentials in URLs
+  '(?<=\\bBearer\\s)[A-Za-z0-9._~+/=-]{8,}', // bearer tokens
+  '(?<=\\b(?:password|passwd|pwd|secret|api[_-]?key|token)\\s*[:=]\\s*)[^\\s,;]+', // key=value secrets
+].join('|'), 'gi');
 
 /**
  * Remove secret-looking fields and values from a tool output or receipt
@@ -80,7 +104,7 @@ export function redactSecrets(value, depth = 0) {
   if (typeof value === 'object') {
     const out = {};
     for (const [key, item] of Object.entries(value)) {
-      if (SECRET_FIELD.test(key)) continue;
+      if (SECRET_FIELD.test(key) || LOG_REDACTED_FIELDS.has(key.toLowerCase())) continue;
       out[key] = redactSecrets(item, depth + 1);
     }
     return out;
@@ -306,6 +330,25 @@ export function createToolExecutor(options = {}) {
     };
   }
 
+  function unavailable(message) {
+    return new ToolError('ACTION_UNAVAILABLE', message, { statusCode: 409 });
+  }
+
+  /**
+   * One status transition, conditional on the status the caller expects.
+   * A concurrent writer that got there first makes Prisma's update find no
+   * row (P2025), which is answered as 409 ACTION_UNAVAILABLE, never as a
+   * false receipt.
+   */
+  async function transition(ctx, id, expectedStatus, data) {
+    try {
+      return await ctx.prisma.aiBridgeAction.update({ where: { id, status: expectedStatus }, data });
+    } catch (error) {
+      if (error?.code === 'P2025') throw unavailable('Action is already being processed');
+      throw error;
+    }
+  }
+
   /**
    * Approve a pending action and execute it once.
    *
@@ -318,25 +361,27 @@ export function createToolExecutor(options = {}) {
     const scope = ownerWhere(ctx, { ownerOnly });
     const initial = await load(ctx, actionId, scope);
     if (initial.status === 'EXECUTED') return { action: initial, idempotent: true };
-    if (initial.status !== PENDING_STATUS) {
-      throw new ToolError('ACTION_UNAVAILABLE', `Action is ${String(initial.status).toLowerCase()}`, { statusCode: 409 });
-    }
+    if (initial.status !== PENDING_STATUS) throw unavailable(`Action is ${String(initial.status).toLowerCase()}`);
     const tool = registry.get(initial.action);
-    if (!tool || !APPROVAL_CLASSES.includes(tool.class)) {
-      throw new ToolError('ACTION_UNAVAILABLE', 'This action is no longer available', { statusCode: 409 });
+    if (!tool || !APPROVAL_CLASSES.includes(tool.class)) throw unavailable('This action is no longer available');
+    const denyApproval = async (error) => {
+      throw await deny(ctx, error, { tool: tool.name, source: initial.source ?? null, entityId: initial.id });
+    };
+    // An assistant's proposal is approved only by a person in a step-up
+    // session, never through an API key.
+    if (initial.source === 'assistant' && method !== 'session_step_up') {
+      return denyApproval(new ToolError('APPROVER_NOT_ALLOWED', 'Approve this action in Ashbi', { statusCode: 403 }));
     }
     if (!approverAllowed(ctx, tool, initial)) {
-      throw await deny(ctx, new ToolError('APPROVER_NOT_ALLOWED', 'Another authorised user must approve this action', { statusCode: 403 }), {
-        tool: tool.name, source: initial.source ?? null, entityId: initial.id,
-      });
+      return denyApproval(new ToolError('APPROVER_NOT_ALLOWED', 'Another authorised user must approve this action', { statusCode: 403 }));
     }
     try {
       await assertAiAllowed(ctx);
     } catch (error) {
-      throw await deny(ctx, error, { tool: tool.name, source: initial.source ?? null, entityId: initial.id });
+      return denyApproval(error);
     }
     if (new Date(initial.expiresAt) <= now()) {
-      const expired = await ctx.prisma.aiBridgeAction.update({ where: { id: initial.id }, data: { status: 'EXPIRED' } });
+      const expired = await transition(ctx, initial.id, PENDING_STATUS, { status: 'EXPIRED' });
       await emit(ctx, 'ai.tool_expired', { entityId: initial.id, metadata: eventMetadata(initial) });
       throw new ToolError('ACTION_EXPIRED', 'Action confirmation expired', { statusCode: 409, action: expired });
     }
@@ -354,69 +399,75 @@ export function createToolExecutor(options = {}) {
         requestId: ctx.requestId ?? null,
       },
     };
-    const claimWhere = { id: initial.id, ...scope, status: PENDING_STATUS };
+    // Compare-and-set: only a pending, unexpired row can be claimed, once.
+    const claimWhere = { id: initial.id, ...scope, status: PENDING_STATUS, expiresAt: { gt: approvedAt } };
     const requester = { id: initial.userId, organizationId: ctx.user.organizationId };
     const parseStored = () => {
       const parsed = tool.inputSchema.safeParse(initial.input);
       if (!parsed.success) throw new ToolError('TARGET_UNAVAILABLE', 'Action target is unavailable', { statusCode: 409 });
       return parsed.data;
     };
-    const approvedEvent = () => emit(ctx, 'ai.tool_approved', {
-      entityId: initial.id,
-      metadata: eventMetadata(initial, { method, reauthenticated: Boolean(reauthenticated), requesterApproved: ctx.user.id === initial.userId }),
-    });
+    const claim = async (tx) => {
+      const claimed = await tx.aiBridgeAction.updateMany({ where: claimWhere, data: { status: 'EXECUTING', ...approval } });
+      if (claimed.count !== 1) throw unavailable('Action is already being processed');
+    };
+    let approvedEmitted = false;
+    const approvedEvent = async () => {
+      if (approvedEmitted) return;
+      approvedEmitted = true;
+      await emit(ctx, 'ai.tool_approved', {
+        entityId: initial.id,
+        metadata: eventMetadata(initial, { method, reauthenticated: Boolean(reauthenticated), requesterApproved: ctx.user.id === initial.userId }),
+      });
+    };
+    const succeeded = (result) => ({ status: 'EXECUTED', executedAt: now(), result: redactSecrets(result), outcome: 'succeeded' });
 
-    let claimed = false;
+    // True only once the EXECUTING claim is committed: until then a failure
+    // leaves the row pending, and the failure write must carry the approval.
+    let claimCommitted = false;
     let attempted = null;
     let completed;
     try {
       if (tool.execution.mode === 'transaction') {
         completed = await ctx.prisma.$transaction(async (tx) => {
-          const claim = await tx.aiBridgeAction.updateMany({ where: claimWhere, data: { status: 'EXECUTING', ...approval } });
-          if (claim.count !== 1) return tx.aiBridgeAction.findFirst({ where: { id: initial.id, ...scope } });
-          claimed = true;
+          await claim(tx);
           const input = parseStored();
-          const result = await tool.execution.execute({ prisma: tx, input, user: requester, approver: ctx.user });
-          return tx.aiBridgeAction.update({
-            where: { id: initial.id },
-            data: { status: 'EXECUTED', executedAt: now(), result: redactSecrets(result), outcome: 'succeeded' },
-          });
+          const result = await withTimeout(
+            Promise.resolve(tool.execution.execute({ prisma: tx, input, user: requester, approver: ctx.user })),
+            tool.timeoutMs,
+          );
+          return transition({ prisma: tx }, initial.id, 'EXECUTING', succeeded(result));
         });
-        if (claimed) await approvedEvent();
+        claimCommitted = true;
+        await approvedEvent();
       } else {
         const target = await ctx.prisma.$transaction(async (tx) => {
-          const claim = await tx.aiBridgeAction.updateMany({ where: claimWhere, data: { status: 'EXECUTING', ...approval } });
-          if (claim.count !== 1) return null;
+          await claim(tx);
           return tool.execution.claimTarget({ prisma: tx, input: parseStored() });
         });
-        if (!target) {
-          const current = await ctx.prisma.aiBridgeAction.findFirst({ where: { id: initial.id, ...scope } });
-          throw new ToolError('ACTION_UNAVAILABLE', 'Action is already being processed', { statusCode: 409, action: current });
-        }
-        claimed = true;
+        claimCommitted = true;
         await approvedEvent();
         attempted = tool.execution.attemptedResult(target);
         const result = await withTimeout(Promise.resolve(tool.execution.deliver({ target, deps })), tool.timeoutMs);
-        completed = await ctx.prisma.aiBridgeAction.update({
-          where: { id: initial.id },
-          data: { status: 'EXECUTED', executedAt: now(), result: redactSecrets(result), outcome: 'succeeded' },
-        });
+        completed = await transition(ctx, initial.id, 'EXECUTING', succeeded(result));
       }
     } catch (error) {
-      if (error instanceof ToolError && error.code === 'ACTION_UNAVAILABLE') throw error;
+      if (error instanceof ToolError && error.code === 'ACTION_UNAVAILABLE') {
+        if (!error.action) error.action = await ctx.prisma.aiBridgeAction.findFirst({ where: { id: initial.id, ...scope } });
+        throw error;
+      }
       const targetGone = isTargetUnavailable(error);
       const timedOut = error instanceof ToolTimeoutError;
       const errorCode = targetGone ? 'ACTION_TARGET_UNAVAILABLE' : (timedOut ? 'ACTION_TIMEOUT' : 'ACTION_EXECUTION_FAILED');
       // Once an external delivery was attempted nobody knows whether it
       // happened: the outcome is unknown and the action is never retried.
       const outcome = attempted && !targetGone ? 'unknown' : 'failed';
-      const failed = await ctx.prisma.aiBridgeAction.update({
-        where: { id: initial.id },
-        data: {
-          status: 'FAILED', errorCode, outcome,
-          ...(claimed ? {} : approval),
-          ...(attempted ? { result: attempted } : {}),
-        },
+      // The approval was decided even though the action did not run: the
+      // receipt names the approver either way.
+      await approvedEvent();
+      const failed = await transition(ctx, initial.id, claimCommitted ? 'EXECUTING' : PENDING_STATUS, {
+        status: 'FAILED', errorCode, outcome, ...approval,
+        ...(attempted ? { result: attempted } : {}),
       });
       // Never log the error object or message: a provider error can echo a
       // token back. The code and error name are enough to find the receipt.
@@ -426,9 +477,7 @@ export function createToolExecutor(options = {}) {
         statusCode: targetGone ? 409 : 502, action: failed,
       });
     }
-    if (claimed && completed?.status === 'EXECUTED') {
-      await emit(ctx, 'ai.tool_executed', { entityId: initial.id, metadata: eventMetadata(initial, { outcome: 'succeeded', approverUserId: ctx.user.id }) });
-    }
+    await emit(ctx, 'ai.tool_executed', { entityId: initial.id, metadata: eventMetadata(initial, { outcome: 'succeeded', approverUserId: ctx.user.id }) });
     return { action: completed, idempotent: false };
   }
 

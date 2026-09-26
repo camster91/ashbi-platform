@@ -70,6 +70,47 @@ test('a provider error that echoes the bot token is never logged or stored', asy
   assertNoSecrets(harness);
 });
 
+// Credentials pasted into free text in other formats than the ones Ashbi
+// itself stores. Fake values, assembled at runtime so the repository secret
+// scan (scripts/check-secrets.mjs) does not mistake them for real ones.
+const join = (...parts) => parts.join('');
+const PASTED = {
+  jwt: join('eyJ', 'hbGciOiJIUzI1NiJ9.eyJzdWIiOiJvcmctYSJ9.c2lnbmF0dXJlLXZhbHVl'),
+  aws: join('AK', 'IAIOSFODNN7EXAMPLE'),
+  github: join('gh', 'p_0123456789abcdefghijABCDEFGHIJ012345'),
+  stripe: join('sk_', 'live_51Habcdefghijklmnop'),
+  pem: join('-----BEGIN ', 'PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASC\n-----END ', 'PRIVATE KEY-----'),
+  urlPassword: 'hunter2-db-password',
+  bearer: 'opaque-bearer-token-0123456789',
+  kv: 'correct-horse-battery',
+  webhook: 'hooks.slack.com/services/T000/B000/XXXXXXXX',
+};
+
+test('credentials pasted into free-text fields are masked in tool outputs and never reach the model', async () => {
+  const harness = createEvalHarness({
+    replies: [
+      { tool_calls: [{ name: 'get_project_summary', arguments: { projectId: 'project-a' } }, { name: 'list_projects', arguments: {} }] },
+      { final: 'done' },
+    ],
+  });
+  Object.assign(harness.db.tables.project[0], {
+    name: `Website A api_key=${PASTED.kv}`,
+    aiSummary: [
+      `jwt ${PASTED.jwt}`, `aws ${PASTED.aws}`, `gh ${PASTED.github}`, `stripe ${PASTED.stripe}`, PASTED.pem,
+      `postgres://app:${PASTED.urlPassword}@db.internal/app`, `Authorization: Bearer ${PASTED.bearer}`, `https://${PASTED.webhook}`,
+    ].join(' | '),
+  });
+  const result = await harness.session('admin-a', 'Summarize');
+  const everything = JSON.stringify({ steps: result.steps, prompts: harness.model.prompts, logs: harness.lines });
+  for (const [kind, secret] of Object.entries(PASTED)) {
+    assert.equal(everything.includes(secret.split('\n')[1] ?? secret), false, `${kind} leaked`);
+    assert.equal(everything.includes(secret), false, `${kind} leaked`);
+  }
+  assert.match(result.steps[0].output.aiSummary, /\[redacted\]/);
+  // Ordinary text survives.
+  assert.match(result.steps[0].output.aiSummary, /^jwt \[redacted\] \| aws \[redacted\]/);
+});
+
 test('redaction drops secret fields and masks secret-shaped values', () => {
   assert.deepEqual(redactSecrets({
     id: 'x', botTokenEncrypted: 'v1:k:abc', password: 'p', nested: { apiKey: 'k', note: 'key sk-abcdefghijkl here' },

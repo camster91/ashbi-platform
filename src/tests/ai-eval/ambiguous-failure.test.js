@@ -26,6 +26,7 @@ test('a network error after delivery was attempted is recorded as unknown and ne
   assert.equal(receipt.errorCode, 'ACTION_EXECUTION_FAILED');
   assert.deepEqual(receipt.result, { deliveryState: 'UNKNOWN', mappingId: 'mapping-a', channelId: 'CA1' });
   assert.equal(receipt.approverId, 'team-a');
+  assert.equal(receipt.approvalEvidence.method, 'session_step_up');
   assert.equal(harness.slackCalls.length, 1);
 
   // Approving again, by the requester or an admin, does not resend.
@@ -79,9 +80,34 @@ test('a failed database action rolls back and is not retried', async () => {
   const { action } = await harness.executor.invoke(ctx, { tool: 'create_task', input: { projectId: 'project-a', title: 'Will fail' }, idempotencyKey: 'ambiguous-0004' });
   let attempts = 0;
   harness.db.task.create = async () => { attempts += 1; throw new Error('deadlock detected'); };
-  await assert.rejects(harness.executor.approve(ctx, action.id), { code: 'EXECUTION_FAILED' });
+  await assert.rejects(harness.executor.approve(harness.ctx('admin-a'), action.id), { code: 'EXECUTION_FAILED' });
   assert.equal(attempts, 1);
   const receipt = harness.db.tables.aiBridgeAction[0];
   assert.equal(receipt.status, 'FAILED');
   assert.equal(receipt.outcome, 'failed');
+  // The rollback undid the claim, but the receipt still names the approver.
+  assert.equal(receipt.approverId, 'admin-a');
+  assert.equal(receipt.approvalEvidence.requesterApproved, false);
+  assert.ok(receipt.confirmedAt instanceof Date);
+  assert.deepEqual(harness.audits().map((row) => row.action).filter((name) => name !== 'ai.tool_prepared'), ['ai.tool_approved', 'ai.tool_failed']);
+  await assert.rejects(harness.executor.approve(ctx, action.id), { code: 'ACTION_UNAVAILABLE' });
+  assert.equal(attempts, 1);
+});
+
+test('a database action that exceeds its timeout is rolled back and recorded, not retried', async () => {
+  const { createToolExecutor } = await import('../../ai/tools/executor.js');
+  const { createToolRegistry, BUILTIN_TOOLS } = await import('../../ai/tools/registry.js');
+  const harness = createEvalHarness();
+  const ctx = harness.ctx('team-a');
+  const fast = createToolRegistry(BUILTIN_TOOLS.map((tool) => (tool.name === 'create_task' ? { ...tool, timeoutMs: 20 } : tool)));
+  const executor = createToolExecutor({ registry: fast, governance: harness.governance, logger: { warn() {}, error() {} } });
+  const { action } = await executor.invoke(ctx, { tool: 'create_task', input: { projectId: 'project-a', title: 'Slow' }, idempotencyKey: 'slow-task-0001' });
+  let attempts = 0;
+  harness.db.task.create = () => { attempts += 1; return new Promise(() => {}); };
+  await assert.rejects(executor.approve(ctx, action.id), { code: 'EXECUTION_FAILED' });
+  const receipt = harness.db.tables.aiBridgeAction[0];
+  assert.equal(receipt.errorCode, 'ACTION_TIMEOUT');
+  assert.equal(receipt.outcome, 'failed');
+  assert.equal(receipt.approverId, 'team-a');
+  assert.equal(attempts, 1);
 });

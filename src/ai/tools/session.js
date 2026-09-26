@@ -9,14 +9,13 @@
 // instructions.
 //
 // The model answers with JSON:
-//   { "tool_calls": [{ "name": "list_projects", "arguments": { ... }, "idempotency_key": "..." }] }
+//   { "tool_calls": [{ "name": "list_projects", "arguments": { ... } }] }
 //   { "final": "text for the user" }
 // Anything else is taken as a final plain-text answer.
 
 import crypto from 'node:crypto';
 import { isAiControlError } from '../errors.js';
 import { ToolError } from './registry.js';
-import { IDEMPOTENCY_KEY_FORMAT, toolInputHash } from './executor.js';
 
 /** Proposals for owner approval (docs/ai-tool-registry.md). */
 export const MAX_SESSION_TURNS = 6;
@@ -98,12 +97,10 @@ export async function runToolSession({
         continue;
       }
       const input = call && typeof call === 'object' ? call.arguments : undefined;
-      // A stable key per (session, tool, input): the same proposal twice in a
-      // session is one pending action, not two.
-      const proposedKey = call && typeof call === 'object' ? call.idempotency_key : undefined;
-      const idempotencyKey = typeof proposedKey === 'string' && IDEMPOTENCY_KEY_FORMAT.test(proposedKey)
-        ? proposedKey
-        : `${sessionId}.${toolInputHash(String(name), input ?? null).slice(0, 32)}`;
+      // The key is always derived from the session and the call's position,
+      // never taken from the model: a model cannot replay another action's
+      // key to fetch its receipt or collide with a person's own actions.
+      const idempotencyKey = `${sessionId}.${turns}.${index}`;
       try {
         const outcome = await executor.invoke(ctx, { tool: name, input, idempotencyKey, source: 'assistant' });
         if (outcome.kind === 'result') {

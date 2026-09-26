@@ -4,7 +4,7 @@
 // against this raw client to show that scope resolvers refuse another
 // organization's records on their own, even without the tenant proxy.
 //
-// It understands equality, null, Date, { not }, { gte }, { lt }, { in }, AND,
+// It understands equality, null, Date, { not }, { gt }, { gte }, { lt }, { in }, AND,
 // relation filters and nested selects for the relations listed in RELATIONS,
 // the ai_bridge_actions unique key (userId, idempotencyKey), transactions
 // with rollback, and the receipt-immutability trigger.
@@ -49,6 +49,7 @@ export function createFakeToolDb() {
         if ('in' in condition) return condition.in.includes(value);
         if ('not' in condition) return value !== condition.not;
         if ('gte' in condition) return value !== null && value !== undefined && value >= condition.gte;
+        if ('gt' in condition) return value !== null && value !== undefined && value > condition.gt;
         if ('lt' in condition) return value !== null && value !== undefined && value < condition.lt;
         return false;
       }

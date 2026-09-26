@@ -46,12 +46,23 @@ test('the same key with the same input returns the stored action, then the store
   assert.equal(harness.audits('ai.tool_executed').length, 1);
 });
 
-test('a model repeating the same proposal in one session creates one pending action', async () => {
-  const call = { name: 'create_task', arguments: INPUT };
-  const harness = createEvalHarness({ replies: [{ tool_calls: [call, call] }, { tool_calls: [call] }, { final: 'ok' }] });
-  const result = await harness.session('team-a', 'make the task');
-  assert.deepEqual(result.steps.map((step) => step.idempotent), [false, true, true]);
-  assert.equal(harness.db.tables.aiBridgeAction.length, 1);
+test('a model cannot choose an idempotency key to fetch or collide with another action', async () => {
+  const harness = createEvalHarness();
+  const ctx = harness.ctx('team-a');
+  // The person's own executed action, whose key a model might learn.
+  const { action: own } = await harness.executor.invoke(ctx, { tool: 'create_task', input: INPUT, idempotencyKey: 'persons-own-key-0001' });
+  await harness.executor.approve(ctx, own.id);
+
+  const call = { name: 'create_task', arguments: INPUT, idempotency_key: 'persons-own-key-0001' };
+  const session = createEvalHarness({ replies: [{ tool_calls: [call, call] }, { final: 'ok' }] });
+  session.db.tables.aiBridgeAction.push(...structuredClone(harness.db.tables.aiBridgeAction));
+  const result = await session.session('team-a', 'make the task', { sessionId: 'session-fixed-1' });
+
+  // Each call got its own session-derived key: no stored receipt came back.
+  assert.deepEqual(result.steps.map((step) => [step.status, step.idempotent]), [['pending_approval', false], ['pending_approval', false]]);
+  const created = session.db.tables.aiBridgeAction.filter((row) => row.id !== own.id);
+  assert.deepEqual(created.map((row) => row.idempotencyKey), ['session-fixed-1.1.0', 'session-fixed-1.1.1']);
+  assert.equal(session.db.tables.aiBridgeAction.find((row) => row.id === own.id).status, 'EXECUTED');
 });
 
 test('a receipt cannot be rewritten once terminal', async () => {

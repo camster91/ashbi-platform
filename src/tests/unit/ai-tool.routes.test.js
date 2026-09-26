@@ -66,6 +66,7 @@ describe('AI tool approval queue', () => {
     const admin = (await send('adminA', 'GET', '/approvals')).json().approvals;
     assert.deepEqual(admin.map((row) => row.requesterId).sort(), ['team-a', 'team2-a']);
     assert.equal(admin[0].requesterName !== null, true);
+    assert.deepEqual([admin[0].external, admin[0].irreversible], [false, false]);
     const team = (await send('teamA', 'GET', '/approvals')).json().approvals;
     assert.deepEqual(team.map((row) => row.requesterId), ['team-a']);
     const other = admin.find((row) => row.requesterId === 'team2-a');

@@ -91,9 +91,74 @@ test('AI tool actions stay in their tenant and receipts are immutable once termi
 
     const events = await raw.auditEvent.findMany({ where: { organizationId: orgA }, orderBy: { createdAt: 'asc' } });
     assert.deepEqual(events.map((event) => event.action), ['ai.tool_denied', 'ai.tool_prepared', 'ai.tool_approved', 'ai.tool_executed']);
+
+    // Two approvers at once, transaction mode: one executes, the other gets
+    // 409 ACTION_UNAVAILABLE, and exactly one task exists.
+    users.admin2A = await raw.user.create({ data: { organizationId: orgA, email: `admin2A-${suffix}@example.com`, name: 'admin2A', password: 'x', role: 'ADMIN' } });
+    const { action: raced } = await executor.invoke(ctx('teamA'), {
+      tool: 'create_task', input: { projectId: projectA.id, title: 'Raced task' }, idempotencyKey: 'int-race-task-0001', source: 'assistant',
+    });
+    const taskRace = await Promise.allSettled([
+      executor.approve(ctx('adminA'), raced.id),
+      executor.approve(ctx('admin2A'), raced.id),
+    ]);
+    assert.deepEqual(taskRace.map((r) => r.status).sort(), ['fulfilled', 'rejected']);
+    assert.equal(taskRace.find((r) => r.status === 'rejected').reason.code, 'ACTION_UNAVAILABLE');
+    assert.equal(taskRace.find((r) => r.status === 'fulfilled').value.action.status, 'EXECUTED');
+    assert.equal(await raw.task.count({ where: { projectId: projectA.id, title: 'Raced task' } }), 1);
+
+    // External mode: one delivery, the other approver gets 409.
+    const installation = await raw.slackInstallation.create({ data: { organizationId: orgA, teamId: `T-${suffix}`, botTokenEncrypted: 'ciphertext' } });
+    await raw.slackChannelMapping.create({ data: {
+      organizationId: orgA, installationId: installation.id, projectId: projectA.id, channelId: 'C-RACE', channelName: 'race', outboundEnabled: true,
+    } });
+    const deliveries = [];
+    const slackExecutor = createToolExecutor({
+      governance: { assertAllowed: async () => {} },
+      logger: quiet,
+      deps: {
+        decryptSecret: () => 'token',
+        postSlackMessage: async (input) => {
+          deliveries.push(input);
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          return { channelId: input.channelId, slackTs: '1.1' };
+        },
+      },
+    });
+    const { action: slackAction } = await slackExecutor.invoke(ctx('teamA'), {
+      tool: 'send_slack_message', input: { projectId: projectA.id, text: 'Raced post' }, idempotencyKey: 'int-race-slack-0001', source: 'assistant',
+    });
+    const slackRace = await Promise.allSettled([
+      slackExecutor.approve(ctx('adminA'), slackAction.id),
+      slackExecutor.approve(ctx('admin2A'), slackAction.id),
+    ]);
+    assert.deepEqual(slackRace.map((r) => r.status).sort(), ['fulfilled', 'rejected']);
+    assert.equal(slackRace.find((r) => r.status === 'rejected').reason.code, 'ACTION_UNAVAILABLE');
+    assert.equal(deliveries.length, 1);
+    const slackReceipt = await raw.aiBridgeAction.findUnique({ where: { id: slackAction.id } });
+    assert.equal(slackReceipt.status, 'EXECUTED');
+    assert.ok([users.adminA.id, users.admin2A.id].includes(slackReceipt.approverId));
+
+    // A failed transaction-mode action keeps its approver on the receipt.
+    const { action: doomed } = await executor.invoke(ctx('teamA'), {
+      tool: 'create_task', input: { projectId: projectA.id, title: 'Doomed task' }, idempotencyKey: 'int-doomed-0001', source: 'assistant',
+    });
+    const failing = createToolExecutor({ governance: { assertAllowed: async () => {} }, logger: quiet, registry: {
+      get: (name) => {
+        const tool = executor.registry.get(name);
+        return { ...tool, execution: { ...tool.execution, execute: async () => { throw new Error('write failed'); } } };
+      },
+      list: () => executor.registry.list(),
+    } });
+    await assert.rejects(failing.approve(ctx('adminA'), doomed.id), { code: 'EXECUTION_FAILED' });
+    const doomedReceipt = await raw.aiBridgeAction.findUnique({ where: { id: doomed.id } });
+    assert.equal(doomedReceipt.status, 'FAILED');
+    assert.equal(doomedReceipt.approverId, users.adminA.id);
+    assert.equal(doomedReceipt.approvalEvidence.method, 'session_step_up');
     const deniedB = await raw.auditEvent.findMany({ where: { organizationId: orgB } });
     assert.equal(deniedB.length, 0, 'the refused approval by B is not an event about A, and has no action row in B');
   } finally {
+    await raw.aiBridgeAction.deleteMany({ where: { organizationId: { in: [orgA, orgB] } } });
     await raw.task.deleteMany({ where: { project: { organizationId: { in: [orgA, orgB] } } } });
     await raw.project.deleteMany({ where: { organizationId: { in: [orgA, orgB] } } });
     await raw.client.deleteMany({ where: { organizationId: { in: [orgA, orgB] } } });
