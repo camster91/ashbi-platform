@@ -171,7 +171,8 @@ ALTER TABLE "review_annotations" ADD CONSTRAINT "review_annotations_region_check
   CHECK (
     ("regionX" IS NULL AND "regionY" IS NULL AND "regionW" IS NULL AND "regionH" IS NULL)
     OR (
-      "regionX" BETWEEN 0 AND 1 AND "regionY" BETWEEN 0 AND 1
+      "regionX" IS NOT NULL AND "regionY" IS NOT NULL AND "regionW" IS NOT NULL AND "regionH" IS NOT NULL
+      AND "regionX" BETWEEN 0 AND 1 AND "regionY" BETWEEN 0 AND 1
       AND "regionW" >= 0 AND "regionH" >= 0
       AND "regionX" + "regionW" <= 1 AND "regionY" + "regionH" <= 1
     )
