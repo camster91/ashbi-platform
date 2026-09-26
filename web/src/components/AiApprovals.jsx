@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import QueryErrorState from './QueryErrorState';
@@ -194,6 +194,8 @@ const STOPPED_MESSAGES = {
   AI_CONNECTION_DISABLED: 'The assistant stopped: the workspace AI connection is disabled. An admin can check it in Settings → AI.',
   AI_CONNECTION_UNAVAILABLE: 'The assistant stopped: the workspace AI connection could not be loaded. An admin can check it in Settings → AI.',
   MAX_TURNS: 'The assistant stopped after too many steps without an answer. Try a narrower question.',
+  TIMEOUT: 'The assistant ran out of time before it could answer. Try a narrower question.',
+  CLIENT_CLOSED: 'The request was interrupted before the assistant finished. Ask again.',
 };
 
 /** A plain-language reason the session ended early, or '' when it answered. */
@@ -252,6 +254,7 @@ function SessionStep({ step }) {
 export function AskAssistant({ onProposed }) {
   const promptId = useId();
   const hintId = useId();
+  const resultRef = useRef(null);
   const [prompt, setPrompt] = useState('');
   const session = useMutation({
     mutationFn: (text) => api.runAiToolSession(text),
@@ -261,7 +264,14 @@ export function AskAssistant({ onProposed }) {
   });
   const result = session.data;
   const trimmed = prompt.trim();
-  const tooLong = prompt.length > ASSISTANT_PROMPT_MAX;
+  const tooLong = trimmed.length > ASSISTANT_PROMPT_MAX;
+  const settled = !session.isPending && (Boolean(result) || Boolean(session.error));
+
+  // Move focus to the answer or the error when it arrives, so keyboard and
+  // screen-reader users land on it.
+  useEffect(() => {
+    if (settled) resultRef.current?.focus();
+  }, [settled, result, session.error]);
 
   const submit = (event) => {
     event.preventDefault();
@@ -272,7 +282,7 @@ export function AskAssistant({ onProposed }) {
   return (
     <section aria-labelledby="ai-assistant-heading" className="space-y-2">
       <h3 id="ai-assistant-heading" className="text-sm font-semibold text-foreground">Ask the assistant</h3>
-      <form onSubmit={submit} className="space-y-2">
+      <form onSubmit={submit} className="space-y-2" aria-busy={session.isPending}>
         <label htmlFor={promptId} className="sr-only">Question for the assistant</label>
         <textarea
           id={promptId}
@@ -282,12 +292,12 @@ export function AskAssistant({ onProposed }) {
           onChange={(event) => setPrompt(event.target.value)}
           placeholder="For example: which of my tasks are open on the website project?"
           className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          disabled={session.isPending}
+          readOnly={session.isPending}
         />
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p id={hintId} className={`text-xs ${tooLong ? 'text-destructive' : 'text-muted-foreground'}`}>
             {tooLong
-              ? `Too long: ${prompt.length} of ${ASSISTANT_PROMPT_MAX} characters.`
+              ? `Too long: ${trimmed.length} of ${ASSISTANT_PROMPT_MAX} characters.`
               : 'The assistant can read your workspace. Changes it proposes wait for approval below.'}
           </p>
           <Button type="submit" size="sm" disabled={!trimmed || tooLong || session.isPending}>
@@ -295,28 +305,30 @@ export function AskAssistant({ onProposed }) {
           </Button>
         </div>
       </form>
-      <div aria-live="polite" className="space-y-2">
-        {session.isPending && <LoadingState compact label="The assistant is working…" />}
-        {session.error && (
-          <p role="alert" className="text-sm text-destructive">{session.error.message || 'The assistant could not run.'}</p>
-        )}
-        {result && !session.isPending && (
-          <div className="rounded-lg border border-border p-3 space-y-2">
-            {typeof result.final === 'string' && (
-              <p className="whitespace-pre-wrap break-words text-sm text-foreground">{result.final}</p>
-            )}
-            {result.stoppedReason && <p role="alert" className="text-sm text-warning">{stoppedMessage(result.stoppedReason)}</p>}
-            {result.steps?.length > 0 && (
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">What the assistant did</p>
-                <ul className="list-disc space-y-1 pl-5">
-                  {result.steps.map((step, index) => <SessionStep key={`${step.turn}-${index}`} step={step} />)}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      {session.isPending && <LoadingState compact label="The assistant is working…" />}
+      {settled && (
+        <div ref={resultRef} tabIndex={-1} className="space-y-2 focus:outline-none">
+          {session.error && (
+            <p role="alert" className="text-sm text-destructive">{session.error.message || 'The assistant could not run.'}</p>
+          )}
+          {result && !session.error && (
+            <div className="rounded-lg border border-border p-3 space-y-2">
+              {typeof result.final === 'string' && (
+                <p className="whitespace-pre-wrap break-words text-sm text-foreground">{result.final}</p>
+              )}
+              {result.stoppedReason && <p role="alert" className="text-sm text-warning">{stoppedMessage(result.stoppedReason)}</p>}
+              {result.steps?.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">What the assistant did</p>
+                  <ul className="list-disc space-y-1 pl-5">
+                    {result.steps.map((step, index) => <SessionStep key={`${step.turn}-${index}`} step={step} />)}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </section>
   );
 }

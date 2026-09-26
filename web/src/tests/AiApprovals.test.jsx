@@ -194,4 +194,29 @@ describe('Settings → AI approvals → Ask the assistant', () => {
     await ask('Status?');
     expect((await screen.findByRole('alert')).textContent).toMatch(/turned off/);
   });
+  it('keeps the prompt editable-but-read-only while running, then focuses the answer', async () => {
+    let resolve;
+    api.runAiToolSession.mockReturnValue(new Promise((done) => { resolve = done; }));
+    renderSection();
+    await ask('Status?');
+    const textarea = screen.getByLabelText('Question for the assistant');
+    await waitFor(() => expect(textarea.readOnly).toBe(true));
+    expect(textarea.disabled).toBe(false);
+    resolve({ sessionId: 's3', turns: 1, final: 'All good.', stoppedReason: null, steps: [] });
+    const answer = await screen.findByText('All good.');
+    await waitFor(() => expect(document.activeElement.contains(answer)).toBe(true));
+    expect(textarea.readOnly).toBe(false);
+  });
+
+  it('explains a timeout and checks length on the trimmed prompt', async () => {
+    api.runAiToolSession.mockResolvedValue({ sessionId: 's4', turns: 2, final: null, stoppedReason: 'TIMEOUT', steps: [] });
+    renderSection();
+    const padded = `   ${'x'.repeat(4000)}   `;
+    fireEvent.change(await screen.findByLabelText('Question for the assistant'), { target: { value: padded } });
+    expect(screen.queryByText(/Too long/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+    await waitFor(() => expect(api.runAiToolSession).toHaveBeenCalledWith('x'.repeat(4000)));
+    expect((await screen.findByRole('alert')).textContent).toMatch(/ran out of time/);
+    expect(stoppedMessage('CLIENT_CLOSED')).toMatch(/interrupted/);
+  });
 });
