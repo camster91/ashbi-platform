@@ -14,7 +14,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   which reads hide soft-deleted rows is in [soft-delete-policy.md](soft-delete-policy.md).
 - **Notes** combine `///` doc comments and trailing `//` comments from the schema.
 
-95 models, 0 enums, 44 tenant-scoped, 13 soft-deletable.
+99 models, 0 enums, 45 tenant-scoped, 13 soft-deletable.
 
 ## Model index
 
@@ -32,7 +32,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [AshConversation](#model-ashconversation) | `ash_conversations` | yes | no | 7 |
 | [Asset](#model-asset) | `assets` | no | no | 15 |
 | [AssignmentRule](#model-assignmentrule) | `assignment_rules` | yes | no | 11 |
-| [Attachment](#model-attachment) | `attachments` | yes | no | 14 |
+| [Attachment](#model-attachment) | `attachments` | yes | no | 15 |
 | [AuditEvent](#model-auditevent) | `audit_events` | yes | no | 12 |
 | [BrandSettings](#model-brandsettings) | `brand_settings` | yes | no | 15 |
 | [CalendarEvent](#model-calendarevent) | `calendar_events` | no | no | 22 |
@@ -70,12 +70,12 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Notification](#model-notification) | `notifications` | no | no | 10 |
 | [NotionImportRecord](#model-notionimportrecord) | `notion_import_records` | yes | no | 14 |
 | [OnboardingProgress](#model-onboardingprogress) | `onboarding_progress` | yes | no | 12 |
-| [Organization](#model-organization) | `organizations` | no | no | 52 |
+| [Organization](#model-organization) | `organizations` | no | no | 53 |
 | [OutreachSequence](#model-outreachsequence) | `outreach_sequences` | yes | no | 10 |
 | [PipelineDeal](#model-pipelinedeal) | `pipeline_deals` | no | no | 15 |
 | [PipelineStage](#model-pipelinestage) | `pipeline_stages` | yes | no | 10 |
 | [PlatformSetting](#model-platformsetting) | `platform_settings` | no | no | 5 |
-| [Project](#model-project) | `projects` | yes | yes | 50 |
+| [Project](#model-project) | `projects` | yes | yes | 51 |
 | [ProjectCommunication](#model-projectcommunication) | `project_communications` | no | no | 18 |
 | [ProjectContext](#model-projectcontext) | `project_contexts` | no | no | 10 |
 | [ProjectTemplate](#model-projecttemplate) | `project_templates` | yes | no | 10 |
@@ -90,6 +90,10 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Response](#model-response) | `responses` | no | no | 18 |
 | [RetainerPlan](#model-retainerplan) | `retainer_plans` | no | yes | 23 |
 | [RevenueSnapshot](#model-revenuesnapshot) | `revenue_snapshots` | no | no | 20 |
+| [ReviewAnnotation](#model-reviewannotation) | `review_annotations` | no | no | 23 |
+| [ReviewDecision](#model-reviewdecision) | `review_decisions` | no | no | 11 |
+| [ReviewSession](#model-reviewsession) | `review_sessions` | yes | no | 19 |
+| [ReviewShareLink](#model-reviewsharelink) | `review_share_links` | no | no | 13 |
 | [RevisionRound](#model-revisionround) | `revision_rounds` | no | no | 10 |
 | [SlackChannelMapping](#model-slackchannelmapping) | `slack_channel_mappings` | yes | no | 13 |
 | [SlackEventReceipt](#model-slackeventreceipt) | `slack_event_receipts` | yes | no | 14 |
@@ -430,6 +434,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `uploadedBy` | User | required |  | → User, via (uploadedById) → (id) |  |
 | `organization` | Organization | required |  | → Organization, via (organizationId) → (id) |  |
+| `reviewSessions` | ReviewSession[] | list, required |  | → ReviewSession |  |
 
 ### Model AuditEvent
 
@@ -1468,6 +1473,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `auditEvents` | AuditEvent[] | list, required |  | → AuditEvent |  |
 | `aiProviderConnection` | AiProviderConnection | optional |  | → AiProviderConnection |  |
 | `aiUsageRecords` | AiUsageRecord[] | list, required |  | → AiUsageRecord |  |
+| `reviewSessions` | ReviewSession[] | list, required |  | → ReviewSession |  |
 
 ### Model OutreachSequence
 
@@ -1615,6 +1621,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `slackChannelMappings` | SlackChannelMapping[] | list, required |  | → SlackChannelMapping |  |
 | `notionImportRecords` | NotionImportRecord[] | list, required |  | → NotionImportRecord |  |
 | `slackImportRecords` | SlackImportRecord[] | list, required |  | → SlackImportRecord |  |
+| `reviewSessions` | ReviewSession[] | list, required |  | → ReviewSession |  |
 
 ### Model ProjectCommunication
 
@@ -1982,6 +1989,120 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 | `client` | Client | optional |  | → Client, via (clientId) → (id) |  |
+
+### Model ReviewAnnotation
+
+- Table: `review_annotations`
+- Tenant-scoped: no
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@index([sessionId, createdAt])`
+  - `@@index([parentId])`
+  - `@@index([shareLinkId])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `sessionId` | String | required |  |  |  |
+| `session` | ReviewSession | required |  | → ReviewSession, via (sessionId) → (id), onDelete Cascade |  |
+| `parentId` | String | optional |  |  |  |
+| `parent` | ReviewAnnotation | optional |  | → ReviewAnnotation, via (parentId) → (id), onDelete Cascade, "ReviewAnnotationThread" |  |
+| `replies` | ReviewAnnotation[] | list, required |  | → ReviewAnnotation, "ReviewAnnotationThread" |  |
+| `authorType` | String | required |  |  | staff or guest (CHECK constraint) |
+| `authorUserId` | String | optional |  |  | staff author; no FK: history must outlive the actor account |
+| `authorName` | String | required |  |  |  |
+| `authorEmail` | String | optional |  |  | guest only, optional |
+| `shareLinkId` | String | optional |  |  | guest only: the link the comment came through |
+| `shareLink` | ReviewShareLink | optional |  | → ReviewShareLink, via (shareLinkId) → (id), onDelete SetNull |  |
+| `body` | String | required |  |  | plain text, at most 5,000 characters (CHECK constraint) |
+| `timecodeMs` | Int | optional |  |  |  |
+| `regionX` | Float | optional |  |  | region fields are all set or all null, each within 0..1 |
+| `regionY` | Float | optional |  |  |  |
+| `regionW` | Float | optional |  |  |  |
+| `regionH` | Float | optional |  |  |  |
+| `pageNumber` | Int | optional |  |  |  |
+| `resolvedAt` | DateTime | optional |  |  |  |
+| `resolvedById` | String | optional |  |  | No FK: history must outlive the actor account |
+| `createdAt` | DateTime | required | `now()` |  |  |
+| `updatedAt` | DateTime | required, updatedAt |  |  |  |
+
+### Model ReviewDecision
+
+- Table: `review_decisions`
+- Tenant-scoped: no
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@index([sessionId, createdAt])`
+  - `@@index([shareLinkId])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `sessionId` | String | required |  |  |  |
+| `session` | ReviewSession | required |  | → ReviewSession, via (sessionId) → (id), onDelete Cascade |  |
+| `decision` | String | required |  |  | approved or changes_requested (CHECK constraint) |
+| `actorType` | String | required |  |  | staff or guest (CHECK constraint) |
+| `actorUserId` | String | optional |  |  | No FK: history must outlive the actor account |
+| `actorName` | String | required |  |  |  |
+| `actorEmail` | String | optional |  |  |  |
+| `shareLinkId` | String | optional |  |  | No FK: the evidence keeps the link id after the link is gone |
+| `note` | String | optional |  |  | plain text, at most 2,000 characters (CHECK constraint) |
+| `createdAt` | DateTime | required | `now()` |  |  |
+
+### Model ReviewSession
+
+- Table: `review_sessions`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@index([organizationId, projectId, createdAt])`
+  - `@@index([attachmentId])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
+| `projectId` | String | required |  |  |  |
+| `project` | Project | required |  | → Project, via (projectId) → (id), onDelete Cascade |  |
+| `attachmentId` | String | required |  |  |  |
+| `attachment` | Attachment | required |  | → Attachment, via (attachmentId) → (id), onDelete Cascade |  |
+| `title` | String | required |  |  |  |
+| `status` | String | required | `"open"` |  | open, approved, changes_requested, closed (CHECK constraint) |
+| `version` | Int | required | `1` |  |  |
+| `previousSessionId` | String | unique, optional |  |  | the session this version replaces |
+| `previousSession` | ReviewSession | optional |  | → ReviewSession, via (previousSessionId) → (id), onDelete SetNull, "ReviewSessionVersions" |  |
+| `nextSession` | ReviewSession | optional |  | → ReviewSession, "ReviewSessionVersions" |  |
+| `createdById` | String | required |  |  | No FK: history must outlive the actor account |
+| `createdAt` | DateTime | required | `now()` |  |  |
+| `updatedAt` | DateTime | required, updatedAt |  |  |  |
+| `annotations` | ReviewAnnotation[] | list, required |  | → ReviewAnnotation |  |
+| `decisions` | ReviewDecision[] | list, required |  | → ReviewDecision |  |
+| `shareLinks` | ReviewShareLink[] | list, required |  | → ReviewShareLink |  |
+
+### Model ReviewShareLink
+
+- Table: `review_share_links`
+- Tenant-scoped: no
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@index([sessionId, createdAt])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `sessionId` | String | required |  |  |  |
+| `session` | ReviewSession | required |  | → ReviewSession, via (sessionId) → (id), onDelete Cascade |  |
+| `tokenHash` | String | unique, required |  |  |  |
+| `label` | String | optional |  |  |  |
+| `expiresAt` | DateTime | required |  |  | default 14 days, at most 90 days after creation (CHECK constraint) |
+| `revokedAt` | DateTime | optional |  |  |  |
+| `revokedById` | String | optional |  |  | No FK: history must outlive the actor account |
+| `allowDecision` | Boolean | required | `false` |  |  |
+| `createdById` | String | required |  |  | No FK: history must outlive the actor account |
+| `lastUsedAt` | DateTime | optional |  |  |  |
+| `createdAt` | DateTime | required | `now()` |  |  |
+| `annotations` | ReviewAnnotation[] | list, required |  | → ReviewAnnotation |  |
 
 ### Model RevisionRound
 
