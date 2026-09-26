@@ -12,6 +12,9 @@ actions; mutable presentation records are not sufficient evidence").
 - Reader: `GET /api/audit-events` (admin only), shown in the web app under
   **Settings → Activity log**.
 
+Domain events for integration (transactional, delivered to subscribers) live
+in a separate outbox: [event-outbox.md](event-outbox.md).
+
 Related #412 references, all generated and checked for drift:
 
 - [data-dictionary.md](data-dictionary.md): every model, its table, tenant

@@ -67,8 +67,8 @@ export function aggregateLockKey(organizationId, aggregateType, aggregateId) {
 
 /**
  * Resolve the owning organization of a client. For public capability-link and
- * webhook producers, which run without a tenant context. Reads through
- * soft-delete filtering so a trashed client's documents still record events.
+ * webhook producers, which run without a tenant context. Bypasses soft-delete
+ * filtering so a trashed client's documents still record their events.
  * @param {any} tx
  * @param {string} clientId
  * @returns {Promise<string>}
