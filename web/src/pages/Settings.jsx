@@ -21,6 +21,7 @@ import {
   ShieldCheck,
   History,
   KeyRound,
+  ClipboardCheck,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
@@ -31,6 +32,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import TwoFactorSettings from '../components/TwoFactorSettings';
 import ActivityLog from '../components/ActivityLog';
 import AiByokSettings from '../components/AiByokSettings';
+import AiApprovals from '../components/AiApprovals';
 
 function Section({ icon: Icon, title, description, children }) {
   // Expose each settings card as a named accessible region so screen-reader
@@ -933,6 +935,13 @@ export default function Settings() {
       {isAdmin && (
         <Section icon={KeyRound} title="AI provider (bring your own key)" description="Use your own AI provider account, cap monthly spend, or turn AI off for this workspace">
           <AiByokSettings />
+        </Section>
+      )}
+
+      {/* AI approvals and receipts (#413 slice 2): admins see the workspace, team members their own */}
+      {(isAdmin || user?.role === 'TEAM') && (
+        <Section icon={ClipboardCheck} title="AI approvals" description="Approve or reject actions an AI prepared, and review what was done">
+          <AiApprovals />
         </Section>
       )}
 

@@ -58,7 +58,11 @@ confirmation. The connector never accepts a raw Slack timestamp as a target.
    `POST /api/ai-bridge/v1/actions/<action-id>/confirm`.
 
 Only the API-key owner may provide explicit user confirmation for the action.
-Ashbi records the input hash, preview, confirmation, result, and final status
+A prepared action also appears in Settings → **AI approvals**, where the
+requester or an admin can approve or reject it
+([ai-tool-registry.md](ai-tool-registry.md)). Actions are refused with
+`503` (`type: "ai_control_error"`, `code: "AI_DISABLED"`) while AI is switched
+off for the workspace or deployment. Ashbi records the input hash, preview, confirmation, result, and final status
 before returning success. The
 chat-completions endpoint itself remains read-only. Email, payment, signature,
 deletion, provider actions, and every other workflow action remain unavailable

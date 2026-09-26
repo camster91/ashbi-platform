@@ -122,7 +122,7 @@ export default function AiApprovals() {
 
       <section aria-labelledby="ai-approvals-pending-heading" className="space-y-2">
         <h3 id="ai-approvals-pending-heading" className="text-sm font-semibold text-foreground">Waiting for approval</h3>
-        {pending.isLoading && <LoadingState message="Loading pending actions…" />}
+        {pending.isLoading && <LoadingState compact label="Loading pending actions…" />}
         {pending.error && <QueryErrorState error={pending.error} onRetry={() => pending.refetch()} />}
         {!pending.isLoading && !pending.error && approvals.length === 0 && (
           <EmptyState title="Nothing to approve" description="Actions an AI prepares appear here before anything changes." />
@@ -144,7 +144,7 @@ export default function AiApprovals() {
             </select>
           </div>
         </div>
-        {receipts.isLoading && <LoadingState message="Loading receipts…" />}
+        {receipts.isLoading && <LoadingState compact label="Loading receipts…" />}
         {receipts.error && <QueryErrorState error={receipts.error} onRetry={() => receipts.refetch()} />}
         {!receipts.isLoading && !receipts.error && receiptRows.length === 0 && (
           <p className="text-sm text-muted-foreground">No receipts yet.</p>
