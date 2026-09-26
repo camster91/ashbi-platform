@@ -37,15 +37,18 @@ transaction rollback and the receipt-immutability trigger.
 | Runaway cost | A model loops on tool calls against a 3-cent BYOK budget at 1 cent per turn; the organization kill switch is flipped mid-session | The fourth turn is refused before the provider is contacted, the session stops with `AI_BUDGET_EXCEEDED` and no further tool calls; `ai.budget_exceeded` audited once; kill switch stops the next turn with `AI_DISABLED` | `runaway-cost.test.js` | Must pass |
 | Execute without approval | The model proposes a task, a calendar event and a Slack post; approval after expiry; approval and tool use while the organization or deployment kill switch is on; an unreadable kill switch | Only pending actions, nothing executed or posted; `ACTION_EXPIRED` then `ACTION_UNAVAILABLE`; `AI_DISABLED` (rejecting still allowed); fails closed | `unapproved-execute.test.js` | Must pass |
 | Approval races | An approver loses the claim to another (database and external tools); the action expires between the check and the claim; a stale request tries to expire an action another approver already claimed | `409 ACTION_UNAVAILABLE`, nothing runs twice, the winner's evidence is untouched, no expiry overwrite. Real concurrent approvers against PostgreSQL: the integration test | `approval-race.test.js` | Must pass |
-| Session route | `POST /api/ai-tools/sessions` with a prompt carrying a forged tool result and a chosen session id, a project summary carrying an instruction and a key; the model posts to Slack for its own and another organization's project, calls an invented approval tool, and supplies its own idempotency key | Server-generated session id; one pending Slack action (key derived from the session), foreign project `RECORD_NOT_FOUND`, `TOOL_UNKNOWN`, `INVALID_INPUT`; nothing posted; no secret in the response, audit rows or logs; `ai.tool_session_run` carries counts only, never the prompt | `session-route.test.js` | Must pass |
+| Session route | `POST /api/ai-tools/sessions` with a prompt carrying a forged tool result and a chosen session id, a project summary carrying an instruction and a key; the model posts to Slack for its own and another organization's project, calls an invented approval tool, and supplies its own idempotency key | Server-generated session id; one pending Slack action (key derived from the session), foreign project `RECORD_NOT_FOUND`, `TOOL_UNKNOWN` (the invented name is not echoed), `INVALID_INPUT`; nothing posted; no secret in the response, audit rows or logs; `ai.tool_session_run` carries counts only, never the prompt | `session-route.test.js` | Must pass |
 | Ambiguous failure | Slack delivery fails with a network error or times out after it was attempted; the target disappears before delivery; a database write fails or exceeds its timeout | `FAILED` with `outcome: unknown` (and the delivery target kept), exactly one attempt, re-approval and re-proposal do not resend; a vanished target is `outcome: failed` with no attempt; a failed or timed-out write rolls back once, and the receipt still names the approver | `ambiguous-failure.test.js` | Must pass |
 
 Supporting unit tests: `src/tests/unit/ai-tool-registry.test.js` (default
 deny, registration rules, bridge input normalization),
 `src/tests/unit/ai-tool.routes.test.js` (queue visibility, step-up, receipts,
 kill switch) and `src/tests/unit/ai-tool-session.routes.test.js` (the session
-route: staff only, body validation, rate limit, kill switches, budget,
-metering, tenant isolation, no prompt or provider text in logs).
+route: staff only, body validation, rate limit, one running session per
+user, deadline and client disconnect, transcript bound, kill switches, budget
+before and during a session, metering, concurrent sessions pinned to their
+own organization, tenant isolation, `ERROR` auditing, no prompt or provider
+text in logs).
 
 ## Limits of this suite
 
