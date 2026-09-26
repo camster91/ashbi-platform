@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -16,7 +16,7 @@ const { default: AiApprovals, describePreview } = await import('../components/Ai
 
 const PENDING = {
   id: 'a1', tool: 'send_slack_message', source: 'assistant', status: 'PENDING_CONFIRMATION', requesterName: 'Team A',
-  expired: false, expiresAt: '2026-09-26T12:10:00.000Z',
+  expired: false, expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
   preview: { kind: 'send_slack_message', project: { id: 'p1', name: 'Website' }, mapping: { name: 'web' }, text: 'Shipped' },
 };
 const RECEIPT = {
@@ -72,6 +72,56 @@ describe('Settings → AI approvals', () => {
     expect(await screen.findByText('Nothing to approve')).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'FAILED' } });
     await waitFor(() => expect(api.getAiToolReceipts).toHaveBeenLastCalledWith({ status: 'FAILED', limit: 25 }));
+  });
+
+  it('asks for confirmation before approving an external, irreversible tool', async () => {
+    api.getAiToolApprovals.mockResolvedValue({ approvals: [{ ...PENDING, external: true, irreversible: true }] });
+    api.getAiToolReceipts.mockResolvedValue({ receipts: [] });
+    api.approveAiToolAction.mockResolvedValue({ action: { ...PENDING, status: 'EXECUTED' } });
+    renderSection();
+
+    fireEvent.click(await screen.findByRole('button', { name: /^Approve Post to Slack/ }));
+    expect(api.approveAiToolAction).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog.textContent).toMatch(/cannot be undone/);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Approve' }));
+    await waitFor(() => expect(api.approveAiToolAction).toHaveBeenCalledWith('a1'));
+  });
+
+  it('shows long text truncated in the list and in full, as text, in a disclosure', async () => {
+    const description = `${'Long description '.repeat(20)}<img src=x onerror=alert(1)>`;
+    const title = 'T'.repeat(300);
+    api.getAiToolApprovals.mockResolvedValue({ approvals: [{
+      ...PENDING, tool: 'create_task', external: false,
+      preview: { kind: 'create_task', project: { name: 'Website' }, title, description, priority: 'HIGH' },
+    }] });
+    api.getAiToolReceipts.mockResolvedValue({ receipts: [] });
+    const { container } = render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><AiApprovals /></QueryClientProvider>,
+    );
+
+    const summary = await screen.findByText(/^“T+…” in Website$/);
+    expect(summary.textContent.length).toBeLessThan(140);
+    expect(screen.getAllByText('Show full details').length).toBeGreaterThan(0);
+    expect(screen.getByText(title)).toBeTruthy();
+    expect(screen.getByText(description)).toBeTruthy();
+    expect(container.querySelector('img')).toBeNull();
+  });
+
+  it('re-checks expiry when Approve is clicked', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      api.getAiToolApprovals.mockResolvedValue({ approvals: [{ ...PENDING, expiresAt: new Date(Date.now() + 1_000).toISOString() }] });
+      api.getAiToolReceipts.mockResolvedValue({ receipts: [] });
+      renderSection();
+      const approve = await screen.findByRole('button', { name: /^Approve/ });
+      vi.setSystemTime(Date.now() + 5_000);
+      fireEvent.click(approve);
+      expect((await screen.findByRole('alert')).textContent).toMatch(/expired/);
+      expect(api.approveAiToolAction).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('surfaces an approval error as an alert', async () => {

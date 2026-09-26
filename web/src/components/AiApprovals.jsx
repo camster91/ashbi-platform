@@ -1,7 +1,8 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import QueryErrorState from './QueryErrorState';
+import ConfirmDialog from './ConfirmDialog';
 import { Button, EmptyState, LoadingState } from './ui';
 
 // AI approvals (#413 slice 2, docs/ai-tool-registry.md): actions an AI caller
@@ -40,15 +41,61 @@ export function toolLabel(tool) {
   return TOOL_LABELS[tool] || String(tool || '').replace(/_/g, ' ');
 }
 
+/** Longest text shown inline in a list; the full text is in a disclosure. */
+export const SUMMARY_CHARS = 120;
+
+export function truncate(text, max = SUMMARY_CHARS) {
+  const value = String(text ?? '');
+  return value.length > max ? `${value.slice(0, max - 1)}…` : value;
+}
+
 /** One line describing what the action will do, from its preview. */
 export function describePreview(preview) {
   if (!preview || typeof preview !== 'object') return '';
   const project = preview.project?.name ? ` in ${preview.project.name}` : '';
   if (preview.kind === 'send_slack_message') {
-    return `“${preview.text}” to #${preview.mapping?.name ?? 'channel'}${project}${preview.replyTo ? ' (thread reply)' : ''}`;
+    return `“${truncate(preview.text)}” to #${preview.mapping?.name ?? 'channel'}${project}${preview.replyTo ? ' (thread reply)' : ''}`;
   }
-  if (preview.title) return `“${preview.title}”${project}`;
+  if (preview.title) return `“${truncate(preview.title)}”${project}`;
   return project.trim();
+}
+
+const DETAIL_FIELDS = [
+  ['title', 'Title'], ['text', 'Message'], ['description', 'Description'], ['location', 'Location'],
+  ['startTime', 'Starts'], ['endTime', 'Ends'], ['dueDate', 'Due'], ['priority', 'Priority'], ['type', 'Type'],
+];
+
+/** Everything the action will write, in full, as plain text. */
+export function PreviewDetails({ preview }) {
+  const rows = DETAIL_FIELDS.filter(([field]) => preview?.[field] !== undefined && preview?.[field] !== null && preview?.[field] !== '');
+  if (!rows.length) return null;
+  return (
+    <details className="text-sm">
+      <summary className="cursor-pointer text-primary">Show full details</summary>
+      <dl className="mt-2 grid grid-cols-[auto,1fr] gap-x-3 gap-y-1">
+        {rows.map(([field, label]) => (
+          <div key={field} className="contents">
+            <dt className="text-muted-foreground">{label}</dt>
+            <dd className="whitespace-pre-wrap break-words text-foreground">{String(preview[field])}</dd>
+          </div>
+        ))}
+      </dl>
+    </details>
+  );
+}
+
+/** The current time, refreshed every `intervalMs` so expiry labels stay true. */
+function useNow(intervalMs = 15_000) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(timer);
+  }, [intervalMs]);
+  return now;
+}
+
+export function isExpired(action, at = Date.now()) {
+  return Boolean(action.expired) || new Date(action.expiresAt).getTime() <= at;
 }
 
 function formatWhen(value) {
@@ -61,28 +108,47 @@ function receiptStatus(receipt) {
   return receipt.status.charAt(0) + receipt.status.slice(1).toLowerCase();
 }
 
-function PendingItem({ action, onDecided }) {
+function PendingItem({ action, onDecided, now }) {
   const reasonId = useId();
   const [reason, setReason] = useState('not_needed');
+  const [confirming, setConfirming] = useState(false);
+  const [expiredOnClick, setExpiredOnClick] = useState(false);
   const label = `${toolLabel(action.tool)}: ${describePreview(action.preview)}`;
   const approve = useMutation({ mutationFn: () => api.approveAiToolAction(action.id), onSuccess: onDecided });
   const reject = useMutation({ mutationFn: () => api.rejectAiToolAction(action.id, reason), onSuccess: onDecided });
   const busy = approve.isPending || reject.isPending;
   const error = approve.error || reject.error;
+  const expired = expiredOnClick || isExpired(action, now);
+  const needsConfirmation = action.external || action.irreversible;
+
+  const startApprove = () => {
+    // Re-check the clock at click time, not only at the last render.
+    if (isExpired(action, Date.now())) {
+      setExpiredOnClick(true);
+      return;
+    }
+    if (needsConfirmation) setConfirming(true);
+    else approve.mutate();
+  };
+
   return (
     <li className="rounded-lg border border-border p-3 space-y-2">
-      <div>
-        <p className="text-sm font-medium text-foreground">{toolLabel(action.tool)}</p>
+      <div className="space-y-1">
+        <p className="text-sm font-medium text-foreground">
+          {toolLabel(action.tool)}
+          {needsConfirmation && <span className="ml-2 text-xs font-normal text-warning">Leaves Ashbi · cannot be undone</span>}
+        </p>
         <p className="text-sm text-muted-foreground break-words">{describePreview(action.preview)}</p>
+        <PreviewDetails preview={action.preview} />
         <p className="text-xs text-muted-foreground">
           Requested by {action.requesterName || 'a team member'}
           {action.source === 'assistant' ? ' via the assistant' : ' via the AI bridge'}
           {' · '}
-          {action.expired ? 'Expired' : `Expires ${formatWhen(action.expiresAt)}`}
+          {expired ? 'Expired' : `Expires ${formatWhen(action.expiresAt)}`}
         </p>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" onClick={() => approve.mutate()} disabled={busy || action.expired} aria-label={`Approve ${label}`}>
+        <Button size="sm" onClick={startApprove} disabled={busy || expired} aria-label={`Approve ${label}`}>
           Approve
         </Button>
         <label htmlFor={reasonId} className="sr-only">Reason for rejecting</label>
@@ -93,7 +159,24 @@ function PendingItem({ action, onDecided }) {
           Reject
         </Button>
       </div>
+      {expiredOnClick && <p role="alert" className="text-sm text-destructive">This action expired before it was approved. Ask for it again.</p>}
       {error && <p role="alert" className="text-sm text-destructive">{error.message || 'The action could not be updated.'}</p>}
+      <ConfirmDialog
+        isOpen={confirming}
+        title={`Approve: ${toolLabel(action.tool)}?`}
+        description="This action reaches a service outside Ashbi and cannot be undone from here. Check the full details before approving."
+        confirmLabel="Approve"
+        destructive={false}
+        pending={approve.isPending}
+        error={approve.error?.message}
+        onCancel={() => setConfirming(false)}
+        onConfirm={() => approve.mutate(undefined, { onSettled: () => setConfirming(false) })}
+      >
+        <div className="mt-3 space-y-1 text-sm">
+          <p className="break-words text-foreground">{describePreview(action.preview)}</p>
+          <PreviewDetails preview={action.preview} />
+        </div>
+      </ConfirmDialog>
     </li>
   );
 }
@@ -103,6 +186,7 @@ export default function AiApprovals() {
   const filterId = useId();
   const [status, setStatus] = useState('');
   const [announcement, setAnnouncement] = useState('');
+  const now = useNow();
   const pending = useQuery({ queryKey: PENDING_KEY, queryFn: () => api.getAiToolApprovals() });
   const receipts = useQuery({ queryKey: [...RECEIPTS_KEY, status], queryFn: () => api.getAiToolReceipts({ status, limit: 25 }) });
 
@@ -129,7 +213,7 @@ export default function AiApprovals() {
         )}
         {approvals.length > 0 && (
           <ul className="space-y-2">
-            {approvals.map((action) => <PendingItem key={action.id} action={action} onDecided={onDecided} />)}
+            {approvals.map((action) => <PendingItem key={action.id} action={action} onDecided={onDecided} now={now} />)}
           </ul>
         )}
       </section>
@@ -157,6 +241,7 @@ export default function AiApprovals() {
                   {toolLabel(receipt.tool)} — {receiptStatus(receipt)}
                 </p>
                 <p className="text-muted-foreground break-words">{describePreview(receipt.preview)}</p>
+                <PreviewDetails preview={receipt.preview} />
                 <p className="text-xs text-muted-foreground">
                   Requested by {receipt.requesterName || 'a team member'}
                   {receipt.approverId ? (receipt.approvalEvidence?.requesterApproved ? ' · approved by the requester' : ' · decided by another user') : ''}

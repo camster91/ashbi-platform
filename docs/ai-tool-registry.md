@@ -63,7 +63,7 @@ stops the process at start-up instead of running.
 | `get_ai_usage_summary` | read | ADMIN | | Month-to-date BYOK usage (no key material) |
 | `create_task` | execute | ADMIN, TEAM | | AI bridge action |
 | `create_calendar_event` | execute | ADMIN, TEAM | | AI bridge action; Ashbi calendar only, never synced |
-| `send_slack_message` | execute | ADMIN, TEAM | **external** | AI bridge action (post or thread reply). On the allowlist |
+| `send_slack_message` | execute | ADMIN, TEAM | **external**, **irreversible** | AI bridge action (post or thread reply). On the allowlist |
 
 Staff may use every project of their organization (the same rule as project
 rooms, `src/auth/project-room-access.js`); the resolvers enforce the
@@ -81,7 +81,9 @@ confirm-gated by the AI bridge before this registry existed, it only posts to
 a channel an admin explicitly mapped to the project, and a failed delivery is
 kept for manual reconciliation, never retried
 ([slack-outbound-recovery-policy.md](slack-outbound-recovery-policy.md)). It
-is marked `external`. Adding any other external or irreversible tool is a
+is marked `external` and `irreversible` (a posted message cannot be recalled
+from Ashbi), and the web app asks for a second confirmation before approving
+it. Adding any other external or irreversible tool is a
 reviewed change to the allowlist, not to the tool.
 
 ## Approval flow
@@ -112,14 +114,28 @@ AI caller ──invoke──► validate input ─► role ─► kill switches 
    - through the AI bridge's `POST /api/ai-bridge/v1/actions/:actionId/confirm`
      (the API key's owner confirming their own action; evidence
      `method: api_key_confirm`). This is the bridge's existing public
-     contract and is unchanged; an API key cannot re-authenticate.
+     contract and is unchanged; an API key cannot re-authenticate. An
+     action an **assistant** proposed (`source: assistant`) can never be
+     approved this way (`403`): only in a step-up session.
 
    An ADMIN may approve any action in the organization. A TEAM member may
    approve only their own, and only when the tool has
    `requesterMayApprove: true` (all current tools; *Proposal*). A tool with
-   `requesterMayApprove: false` needs a different ADMIN. The action is claimed
-   with a compare-and-set (`PENDING_CONFIRMATION` → `EXECUTING`), so a double
-   click or two approvers execute it once.
+   `requesterMayApprove: false` needs a different ADMIN.
+
+   **Every status change is conditional on the status it expects**: the claim
+   is `PENDING_CONFIRMATION` → `EXECUTING` and also requires the action to be
+   unexpired at that instant; completion and failure expect `EXECUTING` (or
+   `PENDING_CONFIRMATION` when a transaction rolled the claim back); expiry is
+   `PENDING_CONFIRMATION` → `EXPIRED` only. An approver who loses a race gets
+   `409 ACTION_UNAVAILABLE`, never a 500 or a receipt that did not happen, so
+   a double click or two approvers execute an action once. The integration
+   test races two approvers against PostgreSQL in both execution modes.
+
+   **Approvers see everything that will be written.** Previews carry every
+   persisted, user-visible field in full (title, description, location,
+   dates, message text). Lists truncate long text; the web page shows the full
+   text in a "Show full details" disclosure, rendered as React text only.
 3. **Reject** (`executor.reject`): the requester may withdraw their own
    action and an ADMIN may reject any, with a reason from a closed list
    (`not_needed`, `incorrect`, `unsafe`, `other`). Rejecting is allowed while
@@ -132,10 +148,14 @@ There is no approval tool: a model cannot approve its own proposal.
 - Execution is idempotent by (tool, idempotency key, input hash), keyed per
   requester. The same key with the same input returns the stored action or
   receipt (`idempotent: true`); the same key with another tool or input is
-  `409 IDEMPOTENCY_CONFLICT`. The assistant session derives a key per
-  (session, tool, input), so a model repeating a proposal creates one action.
-- Approved actions are never retried. A database action that fails rolls back
-  and ends `FAILED` with `outcome: failed`. An external delivery that throws
+  `409 IDEMPOTENCY_CONFLICT`. In an assistant session the key is always
+  derived from the session id and the call's position (turn and index); a key
+  the model supplies is ignored, so a model cannot replay a person's key to
+  fetch a receipt or collide with their actions.
+- Approved actions are never retried. A database action that fails (or
+  exceeds its timeout: transaction-mode tools run under `timeoutMs` too) rolls
+  back and ends `FAILED` with `outcome: failed`; the receipt still records the
+  approver and `ai.tool_approved` precedes `ai.tool_failed`. An external delivery that throws
   or exceeds its timeout after it was attempted ends `FAILED` with
   `outcome: unknown` (and, for Slack, `result.deliveryState: UNKNOWN` with the
   target) so a person reconciles it; approving again answers `409`.
@@ -169,11 +189,17 @@ timestamps, and its prepare/confirm flow is the approval flow.
 status is `EXECUTED`, `FAILED`, `REJECTED` or `EXPIRED`, for every database
 role. CHECK constraints close the `status`, `outcome`, `source` and
 `toolClass` vocabularies. Deletes follow the organization and user lifecycle
-(`ON DELETE CASCADE`); retention is decided in #310.
+(`ON DELETE CASCADE`). **Until #310 decides retention, deleting an
+organization or a user erases their receipts** (the `ai.tool_*` audit events,
+which are append-only, remain).
 
-**No secrets.** Outputs and receipt results pass through `redactSecrets`
-(drops fields named like passwords, tokens, keys, ciphertext or hashes, and
-masks key- and token-shaped values). Execution failures log only the tool,
+**No secrets.** Outputs and receipt results pass through `redactSecrets`,
+which drops fields named like passwords, tokens, keys, ciphertext or hashes
+(and every field on the log redaction list, `src/utils/log-redaction.js`), and
+masks credential-shaped values wherever they appear in free text: provider,
+Stripe, Slack, GitHub, AWS, Google and Ashbi keys, Slack webhook URLs, JWTs,
+PEM private keys, bcrypt hashes, Ashbi ciphertext, passwords in URLs, bearer
+tokens and `password=`/`api_key=`/`token=` pairs. Execution failures log only the tool,
 action id, error code, outcome and error name, never the error object or
 message, because a provider error can echo a token back.
 
@@ -216,7 +242,7 @@ step-up prompt is the shared ReauthDialog.
 ## Assistant sessions
 
 `runToolSession` (`src/ai/tools/session.js`) runs a model that answers with
-`{"tool_calls":[{"name","arguments","idempotency_key"?}]}` or
+`{"tool_calls":[{"name","arguments"}]}` or
 `{"final": "..."}`. It advertises only the tools the caller's role may use,
 feeds tool results back marked as data rather than instructions, and bounds
 the loop (*Proposals*: 6 turns, 4 tool calls per turn, 32,000-character
