@@ -90,7 +90,7 @@ test('project collaboration routes are owned by an ordered domain registrar', as
   const registrarUrl = new URL('../../domains/client-delivery/register-collaboration-routes.js', import.meta.url);
   const registrar = fs.readFileSync(registrarUrl, 'utf8');
   const { registerCollaborationRoutes } = await import(registrarUrl.href);
-  const routeNames = ['message', 'revision', 'calendar', 'comment', 'attachment', 'time', 'milestone'];
+  const routeNames = ['message', 'revision', 'calendar', 'comment', 'attachment', 'time', 'milestone', 'review', 'review-portal'];
   const expectedPrefixes = [
     '/api/messages',
     '/api/revisions',
@@ -99,6 +99,8 @@ test('project collaboration routes are owned by an ordered domain registrar', as
     '/api/attachments',
     '/api/time',
     '/api/milestones',
+    '/api/reviews',
+    '/api/portal/review',
   ];
 
   assert.match(factory, /registerCollaborationRoutes\(fastify\)/);
@@ -350,8 +352,9 @@ test('every domain-registered route module has exactly one owner', () => {
   }
   // 21 modules from the earlier slices, 46 moved out of src/index.js, the
   // MFA routes (#416), the audit event log (#412), the BYOK AI
-  // connection (#413) and the AI tool approval queue (#413 slice 2).
-  assert.equal(owners.size, 71);
+  // connection (#413), the AI tool approval queue (#413 slice 2) and the
+  // media review staff and share-link APIs (#417).
+  assert.equal(owners.size, 73);
 });
 
 test('route modules stay encapsulated so cross-domain registration order cannot leak hooks', () => {

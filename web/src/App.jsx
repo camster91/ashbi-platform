@@ -24,6 +24,7 @@ const PortalInvoice = lazy(() => import('./pages/PortalInvoice'));
 const PortalBooking = lazy(() => import('./pages/PortalBooking'));
 const PortalIntakeForm = lazy(() => import('./pages/PortalIntakeForm'));
 const PortalEstimate = lazy(() => import('./pages/PortalEstimate'));
+const PortalReview = lazy(() => import('./pages/PortalReview'));
 const ClientPortal = lazy(() => import('./pages/ClientPortal'));
 const Layout = lazy(() => import('./components/Layout'));
 const QueryProvider = lazy(() => import('./components/QueryProvider'));
@@ -44,6 +45,7 @@ const Inbox = lazy(() => import('./pages/Inbox'));
 const Thread = lazy(() => import('./pages/Thread'));
 const Projects = lazy(() => import('./pages/Projects'));
 const Project = lazy(() => import('./pages/Project'));
+const ReviewSession = lazy(() => import('./pages/ReviewSession'));
 const Clients = lazy(() => import('./pages/Clients'));
 const Client = lazy(() => import('./pages/Client'));
 const Team = lazy(() => import('./pages/Team'));
@@ -192,6 +194,7 @@ function AppRoutes() {
           <Route path="/portal/book" element={<QueryRoute><PortalBooking /></QueryRoute>} />
           <Route path="/portal/form/:token" element={<QueryRoute><PortalIntakeForm /></QueryRoute>} />
           <Route path="/portal/estimate/:viewToken" element={<QueryRoute><PortalEstimate /></QueryRoute>} />
+          <Route path="/portal/review/:token" element={<QueryRoute><PortalReview /></QueryRoute>} />
           <Route path="/client-portal" element={<ClientPortal />} />
           <Route path="/client-portal/verify" element={<ClientPortal />} />
           <Route path="/client/login" element={<ClientPortal />} />
@@ -212,6 +215,7 @@ function AppRoutes() {
                   <Route path="/thread/:id" element={<Thread />} />
                   <Route path="/projects" element={<Projects />} />
                   <Route path="/project/:id" element={<Project />} />
+                  <Route path="/review/:id" element={<ReviewSession />} />
                   <Route path="/task/:id" element={<TaskPage />} />
                   <Route path="/project/:projectId/kanban" element={<TaskKanban />} />
                   <Route path="/project/:projectId/time" element={<TimeTracking />} />

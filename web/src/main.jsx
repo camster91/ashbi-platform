@@ -25,9 +25,12 @@ applyTheme(getInitialTheme());
 // @sentry/core to the entry chunk even though it was never initialised), and
 // builds with one fetch it alongside the first render instead of before it.
 const sentry = import.meta.env.VITE_SENTRY_DSN
-  ? import('@sentry/react').then((Sentry) => {
+  ? Promise.all([import('@sentry/react'), import('./lib/telemetry-scrub')]).then(([Sentry, { sentryScrubOptions }]) => {
     Sentry.init({
       dsn: import.meta.env.VITE_SENTRY_DSN,
+      // Capability links carry their secret in the URL (share links, portal
+      // documents, magic links): rewrite them to :token before anything is sent.
+      ...sentryScrubOptions,
       environment: import.meta.env.MODE,
       tracesSampleRate: import.meta.env.PROD ? 0.1 : 1.0,
       // We don't need session replay for an internal admin tool.

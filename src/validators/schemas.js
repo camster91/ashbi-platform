@@ -1788,3 +1788,62 @@ export const retainerGenerateInvoiceSchema = z.object({
   daysUntilDue: z.number().int().positive().max(180).default(30),
   resetHours: z.boolean().default(false),
 });
+
+// ── Media review (#417, docs/media-review.md) ─────────────────────────────
+// Text fields are plain text; the handlers also strip control characters
+// (src/services/media-review.service.js) after these bounds are checked.
+const reviewRegion = z.object({
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+  w: z.number().min(0).max(1),
+  h: z.number().min(0).max(1),
+}).strict();
+
+const reviewAnnotationFields = {
+  body: z.string().trim().min(1).max(5_000),
+  parentId: cuidId.optional(),
+  timecodeMs: z.number().int().min(0).max(86_400_000).optional(),
+  region: reviewRegion.optional(),
+  pageNumber: z.number().int().min(1).max(10_000).optional(),
+};
+
+const reviewGuestFields = {
+  name: z.string().trim().min(1).max(120),
+  email: z.string().trim().email().max(254).optional(),
+};
+
+export const reviewSessionListQuerySchema = z.object({
+  projectId: cuidId,
+});
+
+export const reviewSessionCreateSchema = z.object({
+  projectId: cuidId,
+  attachmentId: cuidId,
+  title: z.string().trim().min(1).max(200),
+  previousSessionId: cuidId.optional(),
+}).strict();
+
+export const reviewAnnotationCreateSchema = z.object(reviewAnnotationFields).strict();
+
+export const reviewAnnotationResolveSchema = z.object({
+  resolved: z.boolean(),
+}).strict();
+
+export const reviewDecisionCreateSchema = z.object({
+  decision: z.enum(['approved', 'changes_requested']),
+  note: z.string().trim().max(2_000).optional(),
+}).strict();
+
+export const reviewShareLinkCreateSchema = z.object({
+  label: z.string().trim().max(120).optional(),
+  expiresInDays: z.number().int().min(1).max(90).optional(),
+  allowDecision: z.boolean().optional(),
+}).strict();
+
+export const reviewGuestAnnotationSchema = z.object({ ...reviewGuestFields, ...reviewAnnotationFields }).strict();
+
+export const reviewGuestDecisionSchema = z.object({
+  ...reviewGuestFields,
+  decision: z.enum(['approved', 'changes_requested']),
+  note: z.string().trim().max(2_000).optional(),
+}).strict();

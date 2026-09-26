@@ -16,6 +16,7 @@ import { fileURLToPath } from 'url';
 import env from './config/env.js';
 import prisma from './config/db.js';
 import { apiRateLimitMax, isNonApiRequest } from './config/rateLimit.js';
+import { trustHops } from './config/trust-proxy.js';
 import { isCurrentUserSession } from './auth/session.js';
 import { createJoinProjectHandler } from './auth/project-room-access.js';
 import { clientAcquisitionCorsOptions, loadClientAcquisitionConfig } from './services/client-acquisition.contract.js';
@@ -38,7 +39,7 @@ import { registerClientCommunicationRoutes } from './domains/client-communicatio
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 import logger from './utils/logger.js';
-import { LOG_REDACT_OPTIONS } from './utils/log-redaction.js';
+import { LOG_REDACT_OPTIONS, serializeRequestForLog } from './utils/log-redaction.js';
 import { initSubscribers } from './subscribers/index.js';
 import { registerCallSignalling } from './services/call-signalling.service.js';
 import { tenancyMiddleware } from './middleware/tenancy.js';
@@ -53,7 +54,7 @@ import { getRequestPrisma } from './utils/request-context.js';
  * Construct the complete API application without binding a network port.
  * Runtime-only bridges can be disabled for isolated construction tests.
  */
-export async function buildApp({ initializeRuntime = true, jwtSecret = env.jwtSecret } = {}) {
+export async function buildApp({ initializeRuntime = true, jwtSecret = env.jwtSecret, trustProxy = env.trustProxy } = {}) {
 // Initialize Sentry error monitoring
 if (initializeRuntime && initSentry('api', [Sentry.fastifyIntegration()])) {
   logger.info('[Sentry] Error monitoring initialized');
@@ -63,12 +64,21 @@ if (initializeRuntime && initSentry('api', [Sentry.fastifyIntegration()])) {
 
 // Initialize Fastify
 const fastify = Fastify({
+  // Off by default; TRUST_PROXY=1 behind Traefik so per-IP rate limits and
+  // audit IP prefixes see the client, not the proxy.
+  trustProxy: typeof trustProxy === 'number' ? trustHops(trustProxy) : trustProxy,
   logger: {
     level: env.isDev ? 'debug' : 'info',
     // Never write API keys, session cookies or passwords to request logs.
     redact: { ...LOG_REDACT_OPTIONS, paths: [...LOG_REDACT_OPTIONS.paths] },
+    // Nor capability tokens carried in the URL (review share links).
+    serializers: { req: serializeRequestForLog },
   }
 });
+
+if (env.trustProxyInvalid) {
+  fastify.log.warn('TRUST_PROXY must be false, a hop count from 1 to 5, or a list of proxy addresses/CIDRs; ignoring it and trusting no proxy');
+}
 
 // Attach Sentry error handler (must be after Fastify creation, before plugins/routes)
 if (initializeRuntime && env.sentryDsn) {

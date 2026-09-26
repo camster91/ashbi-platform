@@ -6,7 +6,7 @@ const app = readFileSync(resolve(process.cwd(), 'src/App.jsx'), 'utf8');
 const publicPages = [
   'Login', 'ForgotPassword', 'ResetPassword', 'Portal', 'PortalProposal',
   'PortalContract', 'PortalInvoice', 'PortalBooking', 'PortalIntakeForm',
-  'PortalEstimate', 'ClientPortal',
+  'PortalEstimate', 'PortalReview', 'ClientPortal',
 ];
 
 describe('public route splitting contract', () => {

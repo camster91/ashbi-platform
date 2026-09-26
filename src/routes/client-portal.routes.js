@@ -9,6 +9,8 @@ import { randomUUID } from 'crypto';
 import bcrypt from 'bcrypt';
 import { isCurrentUserSession, revokeUserSessions, sessionCookieMaxAge, signUserSession } from '../auth/session.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
+import { contentDisposition } from '../utils/send-file.js';
+import { ATTACHMENT_UNDER_REVIEW, isAttachmentUnderReview, isForeignKeyViolation } from '../services/media-review.service.js';
 import { validateBody, validateParams, clientPortalMessageSchema, requestAccessSchema, fileUpload, clientPortalTokenRedeemSchema, clientPortalRevisionResponseSchema, clientPortalFeedbackSchema } from '../validators/schemas.js';
 
 const PORTAL_BASE = env.hubUrl;
@@ -589,10 +591,9 @@ export default async function clientPortalRoutes(fastify) {
     if (!project) return reply.status(404).send({ error: 'Document not found' });
     try {
       const file = await fs.readFile(path.join(process.cwd(), doc.path));
-      const downloadName = path.basename(doc.originalName).replace(/["\\\r\n]/g, '_');
       return reply
         .header('Content-Type', doc.mimeType || 'application/octet-stream')
-        .header('Content-Disposition', `attachment; filename="${downloadName}"`)
+        .header('Content-Disposition', contentDisposition('attachment', doc.originalName))
         .header('X-Content-Type-Options', 'nosniff')
         .header('Content-Security-Policy', "default-src 'none'; sandbox")
         .send(file);
@@ -702,6 +703,21 @@ export default async function clientPortalRoutes(fastify) {
       return reply.status(403).send({ error: 'Not authorized' });
     }
 
+    // A file under media review is approval evidence (docs/media-review.md):
+    // a client cannot approve through a share link and then delete the file.
+    if (await isAttachmentUnderReview(request.prisma, docId)) {
+      return reply.status(409).send(ATTACHMENT_UNDER_REVIEW);
+    }
+
+    // Remove the row first: if a review started in the meantime, the
+    // RESTRICT foreign key refuses and the file stays on disk.
+    try {
+      await request.prisma.attachment.delete({ where: { id: docId } });
+    } catch (err) {
+      if (isForeignKeyViolation(err)) return reply.status(409).send(ATTACHMENT_UNDER_REVIEW);
+      throw err;
+    }
+
     // Delete file from disk
     try {
       const filePath = path.join(process.cwd(), doc.path);
@@ -709,8 +725,6 @@ export default async function clientPortalRoutes(fastify) {
     } catch {
       // File may already be deleted, continue
     }
-
-    await request.prisma.attachment.delete({ where: { id: docId } });
 
     await recordRequestAuditEvent(request.prisma, request, {
       action: 'client_portal.document_deleted',

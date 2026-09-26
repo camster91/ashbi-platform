@@ -59,6 +59,10 @@ export const AUDIT_EVENT_CATALOG = Object.freeze({
   'ai.tool_denied': { entityType: 'ai_action', metadata: ['tool', 'reason', 'source', 'correlationId'] },
   'migration_import.applied': { entityType: 'import_run', metadata: ['source', 'created', 'unchanged', 'alreadyPresent', 'channels'] },
   'migration_import.rolled_back': { entityType: 'import_run', metadata: ['source', 'deletedMessages', 'deletedRecords'] },
+  'review.session_created': { entityType: 'review_session', metadata: ['projectId', 'attachmentId', 'version', 'previousSessionId', 'mediaKind'] },
+  'review.decision_recorded': { entityType: 'review_session', metadata: ['decisionId', 'decision', 'fromStatus', 'toStatus', 'via', 'shareLinkId'] },
+  'review.share_link_created': { entityType: 'review_share_link', metadata: ['sessionId', 'expiresAt', 'expiresInDays', 'allowDecision'] },
+  'review.share_link_revoked': { entityType: 'review_share_link', metadata: ['sessionId', 'wasExpired'] },
 });
 
 /** action -> entityType, derived from the catalog. */

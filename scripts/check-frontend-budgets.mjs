@@ -14,7 +14,7 @@ export const BUDGETS = Object.freeze({
 export const PUBLIC_ROUTES = Object.freeze([
   'Login', 'ForgotPassword', 'ResetPassword', 'Portal', 'PortalProposal',
   'PortalContract', 'PortalInvoice', 'PortalBooking', 'PortalIntakeForm',
-  'PortalEstimate', 'ClientPortal',
+  'PortalEstimate', 'PortalReview', 'ClientPortal',
 ]);
 
 function bytes(dist, file) {

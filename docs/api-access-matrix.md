@@ -47,10 +47,10 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | api-key + scope ai_bridge:read | 1 |
 | bot-secret | 41 |
 | client-portal | 19 |
-| public | 46 |
-| recent-auth + staff | 3 |
-| staff | 346 |
-| **total** | 508 |
+| public | 50 |
+| recent-auth + staff | 4 |
+| staff | 354 |
+| **total** | 521 |
 
 ## Routes by prefix
 
@@ -634,6 +634,10 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | GET | `/api/portal/proposal/:viewToken` | public | exempt | capability token: Proposal view link. |
 | POST | `/api/portal/proposal/:viewToken/approve` | public | exempt | capability token: Proposal approval via view link. |
 | POST | `/api/portal/proposal/:viewToken/decline` | public | exempt | capability token: Proposal decline via view link. |
+| GET | `/api/portal/review/:token` | public | exempt | capability token: Media review share link (docs/media-review.md): SHA-256-hashed 256-bit token, expiry and revocation checked; returns only that session, its annotations and decisions. Rate limited per IP. |
+| POST | `/api/portal/review/:token/annotations` | public | exempt | capability token: Named-guest comment on the session the review share link names; plain text, bounded, rate limited per IP. |
+| POST | `/api/portal/review/:token/decisions` | public | exempt | capability token: Approval decision via review share link, only when the link was created with allowDecision; append-only and audited. Rate limited per IP. |
+| GET | `/api/portal/review/:token/file` | public | exempt | capability token: Streams only the file of the session the review share link names; quarantined, unreviewable and scan-blocked files are withheld. Rate limited per IP. |
 
 ### /api/projects
 
@@ -750,6 +754,20 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | POST | `/api/retainers/retainer/:clientId/log-hours` | staff | scoped |  |
 | GET | `/api/retainers/retainer/:clientId/status` | staff | scoped |  |
 | POST | `/api/retainers/retainer/check-all` | staff | scoped |  |
+
+### /api/reviews
+
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/reviews` | staff | scoped |  |
+| POST | `/api/reviews` | staff | scoped |  |
+| GET | `/api/reviews/:id` | staff | scoped |  |
+| POST | `/api/reviews/:id/annotations` | staff | scoped |  |
+| POST | `/api/reviews/:id/annotations/:annotationId/resolve` | staff | scoped |  |
+| POST | `/api/reviews/:id/decisions` | staff | scoped |  |
+| GET | `/api/reviews/:id/share-links` | staff | scoped |  |
+| POST | `/api/reviews/:id/share-links` | recent-auth + staff | scoped |  |
+| POST | `/api/reviews/:id/share-links/:linkId/revoke` | staff | scoped |  |
 
 ### /api/revisions
 

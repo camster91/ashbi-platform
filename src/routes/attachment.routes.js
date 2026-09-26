@@ -4,6 +4,8 @@ import path from 'path';
 import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
 import { fileUpload } from '../validators/schemas.js';
+import { sendStoredFile } from '../utils/send-file.js';
+import { ATTACHMENT_UNDER_REVIEW, isAttachmentUnderReview, isForeignKeyViolation } from '../services/media-review.service.js';
 
 const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
 
@@ -135,6 +137,20 @@ export default async function attachmentRoutes(fastify) {
       return reply.status(403).send({ error: 'Cannot delete this attachment' });
     }
 
+    // A file under media review is approval evidence (docs/media-review.md).
+    if (await isAttachmentUnderReview(request.prisma, id)) {
+      return reply.status(409).send(ATTACHMENT_UNDER_REVIEW);
+    }
+
+    // Remove the row first: if a review started in the meantime, the
+    // RESTRICT foreign key refuses and the file stays on disk.
+    try {
+      await request.prisma.attachment.delete({ where: { id } });
+    } catch (err) {
+      if (isForeignKeyViolation(err)) return reply.status(409).send(ATTACHMENT_UNDER_REVIEW);
+      throw err;
+    }
+
     // Delete file from disk
     try {
       const filepath = path.join(process.cwd(), existing.path);
@@ -142,8 +158,6 @@ export default async function attachmentRoutes(fastify) {
     } catch (err) {
       // File may not exist
     }
-
-    await request.prisma.attachment.delete({ where: { id } });
 
     return { success: true };
   });
@@ -165,20 +179,18 @@ export default async function attachmentRoutes(fastify) {
         return reply.status(404).send({ error: 'File not found' });
       }
 
-      const stat = await fs.stat(filepath);
-      const file = await fs.readFile(filepath);
-
-      reply.header('Content-Type', attachment.mimeType || 'application/octet-stream');
-      reply.header('Content-Length', stat.size);
-      const safeOriginalName = path.basename(attachment.originalName).replace(/["\\\r\n]/g, '_');
-      const disposition = attachment.mimeType.startsWith('video/') || attachment.mimeType.startsWith('audio/')
-        ? 'inline'
-        : 'attachment';
-      reply.header('Content-Disposition', `${disposition}; filename="${safeOriginalName}"`);
-      reply.header('X-Content-Type-Options', 'nosniff');
-      reply.header('Content-Security-Policy', "default-src 'none'; sandbox");
-
-      return reply.send(file);
+      const media = attachment.mimeType.startsWith('video/') || attachment.mimeType.startsWith('audio/');
+      // Header-safe name for any filename, and byte ranges for media so the
+      // staff review player can seek.
+      const sent = await sendStoredFile(request, reply, {
+        filepath,
+        mimeType: attachment.mimeType,
+        fileName: attachment.originalName,
+        disposition: media ? 'inline' : 'attachment',
+        allowRanges: media,
+      });
+      if (sent === null) return reply.status(404).send({ error: 'File not found' });
+      return sent;
     } catch (err) {
       return reply.status(404).send({ error: 'File not found' });
     }

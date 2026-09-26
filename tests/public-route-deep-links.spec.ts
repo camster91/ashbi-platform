@@ -11,6 +11,7 @@ const routes = [
   ['/portal/book', 'PortalBooking'],
   ['/portal/form/test', 'PortalIntakeForm'],
   ['/portal/estimate/test', 'PortalEstimate'],
+  ['/portal/review/test', 'PortalReview'],
   ['/client-portal', 'ClientPortal'],
 ] as const;
 
