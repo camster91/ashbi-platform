@@ -7642,7 +7642,8 @@
                 "settings",
                 "attachment",
                 "ai_provider_connection",
-                "organization"
+                "organization",
+                "import_run"
               ],
               "type": "string"
             }
@@ -7692,7 +7693,9 @@
                 "ai.disabled",
                 "ai.enabled",
                 "ai.budget_alert",
-                "ai.budget_exceeded"
+                "ai.budget_exceeded",
+                "migration_import.applied",
+                "migration_import.rolled_back"
               ],
               "type": "string"
             }

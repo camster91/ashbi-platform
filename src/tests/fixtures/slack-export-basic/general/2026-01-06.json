@@ -1,0 +1,22 @@
+[
+  {
+    "type": "message",
+    "user": "U02BOB",
+    "text": "Day two <!here>",
+    "ts": "1767686400.000100"
+  },
+  {
+    "type": "message",
+    "user": "U01ALICE",
+    "text": "Late follow-up",
+    "ts": "1767686500.000200",
+    "thread_ts": "1767600000.000100"
+  },
+  {
+    "type": "message",
+    "user": "U02BOB",
+    "text": "Reply to a thread from before this export",
+    "ts": "1767686600.000300",
+    "thread_ts": "1767000000.000001"
+  }
+]

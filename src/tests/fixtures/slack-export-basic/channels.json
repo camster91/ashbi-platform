@@ -1,0 +1,4 @@
+[
+  { "id": "C01GENERAL", "name": "general", "created": 1767571200, "is_archived": false, "members": ["U01ALICE", "U02BOB"] },
+  { "id": "C02RANDOM", "name": "random", "created": 1767571200, "is_archived": false, "members": ["U01ALICE"] }
+]

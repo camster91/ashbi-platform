@@ -104,6 +104,8 @@ notes, signer names, email addresses, API key material or password hashes.
 | `ai.enabled` | `organization` (`settings` for the platform switch) | USER (admin, or platform operator) | `POST /api/ai-connections/enable`; `POST /api/settings/ai-kill-switch` with `disabled: false` | `scope` |
 | `ai.budget_alert` | `ai_provider_connection` | SYSTEM | The first BYOK call in a UTC month after which month-to-date estimated spend is at or above 80% of `monthlyBudgetCents`. Once per organization per month (checked in process and against `audit_events`) | `month` (`YYYY-MM`), `spentCents` (rounded), `budgetCents`, `thresholdPercent` |
 | `ai.budget_exceeded` | `ai_provider_connection` | SYSTEM | A BYOK call was refused because month-to-date estimated spend reached the budget. At most one per organization per hour per API instance (`AI_BUDGET_EXCEEDED_AUDIT_WINDOW_MS` in `src/ai/governance.js`) | `month`, `spentCents`, `budgetCents` |
+| `migration_import.applied` | `import_run` | SYSTEM | `scripts/import-slack-export.mjs --apply` after the import transaction commits; `entityId` is the `ImportRun` id (see [slack-export-migration.md](slack-export-migration.md)) | `source` (`SLACK_EXPORT`), `created`, `unchanged`, `alreadyPresent`, `channels` |
+| `migration_import.rolled_back` | `import_run` | SYSTEM | `scripts/import-slack-export.mjs --rollback <runId>` | `source`, `deletedMessages`, `deletedRecords` |
 
 `auth.login_failed` details:
 
