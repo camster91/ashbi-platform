@@ -58,7 +58,7 @@ function UsageBar({ spentCents, budgetCents, alertThresholdPercent }) {
   );
 }
 
-function ConnectForm({ onDone }) {
+function ConnectForm({ onDone, pricedModels = [] }) {
   const queryClient = useQueryClient();
   const [baseUrl, setBaseUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
@@ -69,7 +69,10 @@ function ConnectForm({ onDone }) {
   const allowedModels = parseModelList(models);
   const chosenDefault = defaultModel || allowedModels[0] || '';
   const budgetCents = dollarsToCents(budget);
-  const ready = baseUrl.trim() && apiKey && allowedModels.length > 0 && budgetCents;
+  // Budgets only count priced usage, so the server refuses unpriced models
+  // (MODEL_PRICE_UNKNOWN); say so before the admin submits.
+  const unpriced = allowedModels.filter((model) => !pricedModels.includes(model));
+  const ready = baseUrl.trim() && apiKey && allowedModels.length > 0 && budgetCents && unpriced.length === 0;
 
   const connect = useMutation({
     mutationFn: () => api.connectAiProvider({
@@ -105,7 +108,16 @@ function ConnectForm({ onDone }) {
         <div>
           <label htmlFor="ai-byok-models" className="block text-sm font-medium mb-1">Allowed models</label>
           <input id="ai-byok-models" aria-describedby="ai-byok-models-help" value={models} onChange={(e) => setModels(e.target.value)} className={inputClass} />
-          <p id="ai-byok-models-help" className="text-xs text-muted-foreground mt-1">Model ids, separated by commas.</p>
+          <p id="ai-byok-models-help" className="text-xs text-muted-foreground mt-1">
+            Model ids, separated by commas. {pricedModels.length
+              ? `Models with a configured price: ${pricedModels.join(', ')}.`
+              : 'No model prices are configured yet; the platform operator sets them (AI_MODEL_PRICES).'}
+          </p>
+          {unpriced.length > 0 && (
+            <p role="alert" className="text-xs text-destructive mt-1">
+              No price is configured for {unpriced.join(', ')}, so the budget could not count its usage. Choose priced models or ask the platform operator to add a price.
+            </p>
+          )}
         </div>
         <div>
           <label htmlFor="ai-byok-default-model" className="block text-sm font-medium mb-1">Default model</label>
@@ -226,7 +238,7 @@ export default function AiByokSettings() {
             <p className="text-sm text-muted-foreground">The previous key (••••{connection.keyLast4}) was revoked. AI uses the platform provider until you connect a new one.</p>
           )}
           {!connection && <p className="text-sm text-muted-foreground">No provider connected. AI features use the platform provider.</p>}
-          <ConnectForm />
+          <ConnectForm pricedModels={data?.pricedModels || []} />
         </div>
       )}
 

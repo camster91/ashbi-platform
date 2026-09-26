@@ -25,7 +25,7 @@ function renderSection() {
   );
 }
 
-const EMPTY = { connection: null, aiDisabled: false, platformAiDisabled: false, usage: { spentCents: 0, budgetCents: null, promptTokens: 0, completionTokens: 0, unpricedTokens: 0 } };
+const EMPTY = { connection: null, aiDisabled: false, platformAiDisabled: false, pricedModels: ['model-a', 'model-b'], usage: { spentCents: 0, budgetCents: null, promptTokens: 0, completionTokens: 0, unpricedTokens: 0 } };
 const CONNECTED = {
   aiDisabled: false,
   platformAiDisabled: false,
@@ -62,6 +62,21 @@ describe('Settings → AI provider (bring your own key)', () => {
       baseUrl: 'https://llm.example.com/v1', apiKey: 'sk-secret-1111', allowedModels: ['model-a', 'model-b'], defaultModel: 'model-a', monthlyBudgetCents: 2500,
     }));
     await waitFor(() => expect(keyInput).toHaveValue(''));
+  });
+
+  it('flags models without a configured price and blocks connecting', async () => {
+    api.getAiConnection.mockResolvedValue(EMPTY);
+    renderSection();
+
+    expect(await screen.findByText(/Models with a configured price: model-a, model-b/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Base URL'), { target: { value: 'https://llm.example.com' } });
+    fireEvent.change(screen.getByLabelText('API key'), { target: { value: 'sk-secret-1111' } });
+    fireEvent.change(screen.getByLabelText('Allowed models'), { target: { value: 'model-a, model-x' } });
+    fireEvent.change(screen.getByLabelText(/monthly budget/i), { target: { value: '5' } });
+
+    expect(screen.getByRole('alert')).toHaveTextContent(/No price is configured for model-x/);
+    expect(screen.getByRole('button', { name: /connect provider/i })).toBeDisabled();
+    expect(api.connectAiProvider).not.toHaveBeenCalled();
   });
 
   it('announces a failed validation accessibly', async () => {
