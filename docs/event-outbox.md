@@ -167,8 +167,9 @@ Each tick claims due events with one statement: `pending` events whose
 `nextAttemptAt` has passed, and `dispatching` events whose lease expired
 (their worker died), whose predecessors are all published, oldest first,
 `FOR UPDATE SKIP LOCKED`. Claimed rows become `dispatching` with a 2-minute
-lease (*Proposal*) and a fresh claim token, and `attempts` increases. Several
-worker replicas never claim the same row.
+lease (*Proposal*) and a fresh claim token, and `attempts` increases (so a
+claim abandoned by a crashed worker counts as an attempt). Several worker
+replicas never claim the same row.
 
 Each claimed event is delivered to the in-process subscribers registered for
 its type (`registerDomainEventSubscriber`), in registration order, inside a
