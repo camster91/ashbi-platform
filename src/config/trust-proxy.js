@@ -20,10 +20,25 @@
 // Anything else (notably `true`, which would let any client choose its own
 // address) is ignored and nothing is trusted.
 
+import { isIP } from 'node:net';
+
 export const MAX_TRUST_PROXY_HOPS = 5;
 const PROXY_KEYWORD = /^(loopback|linklocal|uniquelocal)$/i;
-const PROXY_IPV4 = /^\d{1,3}(\.\d{1,3}){3}(\/\d{1,2})?$/;
-const PROXY_IPV6 = /^[0-9a-f]*:[0-9a-f:.]*(\/\d{1,3})?$/i;
+
+/**
+ * A real IPv4/IPv6 address with an optional in-range CIDR prefix. Anything
+ * Fastify's proxy-addr compiler would reject (e.g. `999.999.999.999`,
+ * `10.0.0.0/99`) must be ignored here, not crash server construction.
+ */
+function isProxyAddress(entry) {
+  const [address, prefix, extra] = entry.split('/');
+  if (extra !== undefined) return false;
+  const family = isIP(address);
+  if (!family) return false;
+  if (prefix === undefined) return true;
+  if (!/^\d{1,3}$/.test(prefix)) return false;
+  return Number(prefix) <= (family === 4 ? 32 : 128);
+}
 
 /** Fastify trust function for `hops` proxies in front of the API. */
 export function trustHops(hops) {
@@ -44,7 +59,7 @@ export function parseTrustProxy(value) {
     return { trustProxy: false, invalid: true };
   }
   const entries = text.split(',').map((entry) => entry.trim()).filter(Boolean);
-  if (entries.length && entries.every((entry) => PROXY_KEYWORD.test(entry) || PROXY_IPV4.test(entry) || PROXY_IPV6.test(entry))) {
+  if (entries.length && entries.every((entry) => PROXY_KEYWORD.test(entry) || isProxyAddress(entry))) {
     return { trustProxy: entries.join(','), invalid: false };
   }
   return { trustProxy: false, invalid: true };

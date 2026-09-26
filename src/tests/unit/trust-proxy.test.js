@@ -19,8 +19,20 @@ test('TRUST_PROXY is off unless it is a small hop count', () => {
   assert.deepEqual(parseTrustProxy('172.16.0.0/12, loopback'), { trustProxy: '172.16.0.0/12,loopback', invalid: false });
   assert.deepEqual(parseTrustProxy('10.0.0.2'), { trustProxy: '10.0.0.2', invalid: false });
   // `true` would trust any client-supplied X-Forwarded-For.
-  for (const value of ['true', 'yes', 'bad', '6', '-1', '1.5', 'example.com']) {
+  assert.deepEqual(parseTrustProxy('fd00::1/64,::1'), { trustProxy: 'fd00::1/64,::1', invalid: false });
+  // Addresses proxy-addr would refuse at server construction are ignored instead.
+  for (const value of ['true', 'yes', 'bad', '6', '-1', '1.5', 'example.com', '999.999.999.999', '10.0.0.0/99', '10.0.0.0/', '10.0.0.0/8/8', '::1/129', 'fe80::zz', '10.0.0.1, 300.0.0.1']) {
     assert.deepEqual(parseTrustProxy(value), { trustProxy: false, invalid: true }, value);
+  }
+});
+
+test('every accepted TRUST_PROXY value builds the application', async () => {
+  const { buildApp } = await import('../../index.js');
+  for (const value of ['1', '172.16.0.0/12,loopback', '10.0.0.2', 'fd00::1/64,::1', '999.999.999.999', '10.0.0.0/99']) {
+    const { trustProxy } = parseTrustProxy(value);
+    const app = await buildApp({ initializeRuntime: false, jwtSecret: 'test-only-jwt-secret', trustProxy });
+    await app.ready();
+    await app.close();
   }
 });
 

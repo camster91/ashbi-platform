@@ -345,6 +345,21 @@ export async function applyDecisionStatus(tx, sessionId, decision) {
   if (moved.count !== 1) throw new ReviewSessionClosedError();
 }
 
+/**
+ * Lock a session row for the rest of the transaction, only while it is not
+ * closed. The conditional UPDATE takes the row lock, so an annotation insert
+ * that follows is serialized against a versioning transaction closing the
+ * session: either the close waits for the insert, or this sees `closed` and
+ * throws ReviewSessionClosedError to roll the write back.
+ */
+export async function lockOpenSession(tx, sessionId) {
+  const locked = await tx.reviewSession.updateMany({
+    where: { id: sessionId, status: { not: 'closed' } },
+    data: { updatedAt: new Date() },
+  });
+  if (locked.count !== 1) throw new ReviewSessionClosedError();
+}
+
 export function canWriteToSession(session) {
   return session.status !== 'closed';
 }

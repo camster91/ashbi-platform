@@ -23,6 +23,7 @@ import { scanReviewMedia } from '../services/media-scan.service.js';
 import {
   PUBLIC_THREAD_PAGE,
   ReviewSessionClosedError,
+  lockOpenSession,
   annotationLimitFailure,
   annotationPositionData,
   applyDecisionStatus,
@@ -239,18 +240,27 @@ export default async function reviewPortalRoutes(fastify) {
     }
     const limit = await annotationLimitFailure(request.prisma, { sessionId: session.id, shareLinkId: link.id });
     if (limit) return reply.status(409).send(limit);
-    const annotation = await request.prisma.reviewAnnotation.create({
-      data: {
-        sessionId: session.id,
-        parentId: input.parentId ?? null,
-        authorType: 'guest',
-        authorName: name,
-        authorEmail: email,
-        shareLinkId: link.id,
-        body,
-        ...annotationPositionData(input),
-      },
-    });
+    let annotation;
+    try {
+      annotation = await request.prisma.$transaction(async (tx) => {
+        await lockOpenSession(tx, session.id);
+        return tx.reviewAnnotation.create({
+          data: {
+            sessionId: session.id,
+            parentId: input.parentId ?? null,
+            authorType: 'guest',
+            authorName: name,
+            authorEmail: email,
+            shareLinkId: link.id,
+            body,
+            ...annotationPositionData(input),
+          },
+        });
+      });
+    } catch (err) {
+      if (err instanceof ReviewSessionClosedError) return reply.status(409).send({ error: 'This review is closed', code: err.code });
+      throw err;
+    }
     return reply.status(201).send({ annotation: publicAnnotation(annotation) });
   });
 

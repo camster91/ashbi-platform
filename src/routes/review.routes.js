@@ -22,6 +22,7 @@ import { scanReviewMedia } from '../services/media-scan.service.js';
 import {
   ANNOTATIONS_PER_SESSION_MAX,
   ReviewSessionClosedError,
+  lockOpenSession,
   annotationLimitFailure,
   annotationPositionData,
   applyDecisionStatus,
@@ -215,17 +216,26 @@ export default async function reviewRoutes(fastify) {
     if (!body) return reply.status(400).send({ error: 'body: Comment cannot be empty' });
     const limit = await annotationLimitFailure(request.prisma, { sessionId: session.id });
     if (limit) return reply.status(409).send(limit);
-    const annotation = await request.prisma.reviewAnnotation.create({
-      data: {
-        sessionId: session.id,
-        parentId: input.parentId ?? null,
-        authorType: 'staff',
-        authorUserId: request.user.id,
-        authorName: String(request.user.name || request.user.email || 'Staff').slice(0, 120),
-        body,
-        ...annotationPositionData(input),
-      },
-    });
+    let annotation;
+    try {
+      annotation = await request.prisma.$transaction(async (tx) => {
+        await lockOpenSession(tx, session.id);
+        return tx.reviewAnnotation.create({
+          data: {
+            sessionId: session.id,
+            parentId: input.parentId ?? null,
+            authorType: 'staff',
+            authorUserId: request.user.id,
+            authorName: String(request.user.name || request.user.email || 'Staff').slice(0, 120),
+            body,
+            ...annotationPositionData(input),
+          },
+        });
+      });
+    } catch (err) {
+      if (err instanceof ReviewSessionClosedError) return reply.status(409).send({ error: 'This review session is closed', code: err.code });
+      throw err;
+    }
     return reply.status(201).send({ annotation: staffAnnotation(annotation) });
   });
 

@@ -483,6 +483,28 @@ describe('media review guest write bounds', () => {
     assert.equal(db.tables.reviewSession[0].status, 'closed');
     assert.equal(db.tables.reviewDecision.length, 0, 'the decision was rolled back');
   });
+
+  it('rolls back a comment when the session closes after it was read (staff and share link)', async (t) => {
+    const { staff, guest, db, createSession, createLink } = await setup(t);
+    const session = await createSession();
+    const { token } = await createLink(session.id, 'teamA');
+    db.tables.reviewSession[0].status = 'closed';
+    const staleSession = db.reviewSession.findFirst;
+    db.reviewSession.findFirst = async (args) => {
+      const row = await staleSession(args);
+      return row ? { ...row, status: 'open' } : row;
+    };
+    const staleLink = db.reviewShareLink.findUnique;
+    db.reviewShareLink.findUnique = async (args) => {
+      const row = await staleLink(args);
+      return row?.session ? { ...row, session: { ...row.session, status: 'open' } } : row;
+    };
+    const staffComment = await staff('adminA', 'POST', `/${session.id}/annotations`, { body: 'Late note' });
+    assert.deepEqual([staffComment.statusCode, staffComment.json().code], [409, 'REVIEW_SESSION_CLOSED']);
+    const guestComment = await guest('POST', `${token}/annotations`, { name: 'Casey', body: 'Late note' });
+    assert.deepEqual([guestComment.statusCode, guestComment.json().code], [409, 'REVIEW_SESSION_CLOSED']);
+    assert.equal(db.tables.reviewAnnotation.length, 0, 'no comment was written to the closed session');
+  });
 });
 
 describe('media review share-link file downloads', () => {
