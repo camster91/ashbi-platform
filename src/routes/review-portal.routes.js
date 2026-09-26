@@ -11,9 +11,8 @@
 // (src/utils/log-redaction.js). A link reaches its own session, that
 // session's annotations and decisions, and that session's file, nothing else.
 
-import fs from 'node:fs';
-import fsp from 'node:fs/promises';
 import path from 'node:path';
+import { sendStoredFile } from '../utils/send-file.js';
 import {
   validateBody,
   reviewGuestAnnotationSchema,
@@ -194,25 +193,25 @@ export default async function reviewPortalRoutes(fastify) {
     if (scan.verdict === 'blocked') return reply.status(403).send({ error: 'This file did not pass the media scan', code: 'MEDIA_BLOCKED' });
     if (scan.verdict === 'pending') return reply.status(409).send({ error: 'This file is still being scanned', code: 'MEDIA_SCAN_PENDING' });
 
+    // Only this session's file; the stored path is reduced to its basename
+    // inside the upload directory. Video and audio honour single byte
+    // ranges so players can seek.
     const filepath = path.join(UPLOAD_DIR, path.basename(String(attachment.path)));
-    let stat;
     try {
-      stat = await fsp.stat(filepath);
+      const sent = await sendStoredFile(request, reply, {
+        filepath,
+        mimeType: attachment.mimeType,
+        fileName: attachment.originalName,
+        disposition: kind === 'pdf' ? 'attachment' : 'inline',
+        allowRanges: kind === 'video' || kind === 'audio',
+        headers: { 'Cross-Origin-Resource-Policy': 'same-origin' },
+      });
+      if (sent === null) return reply.status(404).send({ error: 'File not available' });
+      return sent;
     } catch (err) {
-      if (err?.code === 'ENOENT') return reply.status(404).send({ error: 'File not available' });
-      request.log.error({ err: { code: err?.code }, attachmentId: attachment.id }, 'review portal: file stat failed');
+      request.log.error({ err: { code: err?.code }, attachmentId: attachment.id }, 'review portal: file read failed');
       return reply.status(500).send({ error: 'Failed to load file' });
     }
-    const safeName = path.basename(attachment.originalName).replace(/["\\\r\n]/g, '_');
-    const disposition = kind === 'pdf' ? 'attachment' : 'inline';
-    return reply
-      .header('Content-Type', attachment.mimeType)
-      .header('Content-Length', stat.size)
-      .header('Content-Disposition', `${disposition}; filename="${safeName}"`)
-      .header('X-Content-Type-Options', 'nosniff')
-      .header('Content-Security-Policy', "default-src 'none'; sandbox")
-      .header('Cross-Origin-Resource-Policy', 'same-origin')
-      .send(fs.createReadStream(filepath));
   });
 
   // Add a comment (or a reply) as a named guest.

@@ -9,6 +9,7 @@ import { randomUUID } from 'crypto';
 import bcrypt from 'bcrypt';
 import { isCurrentUserSession, revokeUserSessions, sessionCookieMaxAge, signUserSession } from '../auth/session.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
+import { contentDisposition } from '../utils/send-file.js';
 import { ATTACHMENT_UNDER_REVIEW, isAttachmentUnderReview, isForeignKeyViolation } from '../services/media-review.service.js';
 import { validateBody, validateParams, clientPortalMessageSchema, requestAccessSchema, fileUpload, clientPortalTokenRedeemSchema, clientPortalRevisionResponseSchema, clientPortalFeedbackSchema } from '../validators/schemas.js';
 
@@ -590,10 +591,9 @@ export default async function clientPortalRoutes(fastify) {
     if (!project) return reply.status(404).send({ error: 'Document not found' });
     try {
       const file = await fs.readFile(path.join(process.cwd(), doc.path));
-      const downloadName = path.basename(doc.originalName).replace(/["\\\r\n]/g, '_');
       return reply
         .header('Content-Type', doc.mimeType || 'application/octet-stream')
-        .header('Content-Disposition', `attachment; filename="${downloadName}"`)
+        .header('Content-Disposition', contentDisposition('attachment', doc.originalName))
         .header('X-Content-Type-Options', 'nosniff')
         .header('Content-Security-Policy', "default-src 'none'; sandbox")
         .send(file);

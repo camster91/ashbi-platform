@@ -323,7 +323,7 @@ describe('media review share links', () => {
   });
 
   it('streams only the linked file, inline for media, with a sandbox CSP', async (t) => {
-    const { guest, db, createSession, createLink } = await setup(t);
+    const { app, guest, db, createSession, createLink } = await setup(t);
     const session = await createSession();
     const { token } = await createLink(session.id);
     const dir = path.join(process.cwd(), 'uploads');
@@ -336,7 +336,10 @@ describe('media review share links', () => {
     const response = await guest('GET', `${token}/file`);
     assert.equal(response.statusCode, 200);
     assert.equal(response.headers['content-type'], 'image/png');
-    assert.equal(response.headers['content-disposition'], 'inline; filename="Homepage.png"');
+    assert.equal(response.headers['content-disposition'], `inline; filename="Homepage.png"; filename*=UTF-8''Homepage.png`);
+    // Images do not advertise or honour byte ranges.
+    assert.equal(response.headers['accept-ranges'], undefined);
+    assert.equal((await app.inject({ method: 'GET', url: `/api/portal/review/${token}/file`, headers: { range: 'bytes=0-1' } })).statusCode, 200);
     assert.equal(response.headers['x-content-type-options'], 'nosniff');
     assert.equal(response.headers['content-security-policy'], "default-src 'none'; sandbox");
     assert.equal(response.rawPayload.length, 7);
@@ -478,6 +481,69 @@ describe('media review guest write bounds', () => {
     assert.deepEqual([guestDecision.statusCode, guestDecision.json().code], [409, 'REVIEW_SESSION_CLOSED']);
     assert.equal(db.tables.reviewSession[0].status, 'closed');
     assert.equal(db.tables.reviewDecision.length, 0, 'the decision was rolled back');
+  });
+});
+
+describe('media review share-link file downloads', () => {
+  function storedFile(t, name, bytes) {
+    const dir = path.join(process.cwd(), 'uploads');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, name);
+    fs.writeFileSync(file, bytes);
+    t.after(() => fs.rmSync(file, { force: true }));
+  }
+
+  it('serves non-Latin-1 file names with an ASCII fallback and RFC 5987 name', async (t) => {
+    const { guest, db, createSession, createLink } = await setup(t);
+    const session = await createSession();
+    const { token } = await createLink(session.id);
+    storedFile(t, 'image-a.bin', Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    const image = db.tables.attachment.find((row) => row.id === 'image-a');
+    image.originalName = '日本.png';
+    const japanese = await guest('GET', `${token}/file`);
+    assert.equal(japanese.statusCode, 200, japanese.body);
+    assert.equal(japanese.headers['content-disposition'], `inline; filename="__.png"; filename*=UTF-8''%E6%97%A5%E6%9C%AC.png`);
+
+    const pdf = await createSession('teamA', { attachmentId: 'pdf-a', title: 'Brief' });
+    const { token: pdfToken } = await createLink(pdf.id);
+    storedFile(t, 'pdf-a.bin', Buffer.from('%PDF-1.4'));
+    db.tables.attachment.find((row) => row.id === 'pdf-a').originalName = 'brief\u2014v2.pdf';
+    const brief = await guest('GET', `${pdfToken}/file`);
+    assert.equal(brief.statusCode, 200, brief.body);
+    assert.equal(brief.headers['content-disposition'], `attachment; filename="brief_v2.pdf"; filename*=UTF-8''brief%E2%80%94v2.pdf`);
+  });
+
+  it('honours single byte ranges for video, confined to the linked file', async (t) => {
+    const { app, createSession, createLink } = await setup(t);
+    const session = await createSession('teamA', { attachmentId: 'video-a', title: 'Walkthrough' });
+    const { token } = await createLink(session.id);
+    const bytes = Buffer.from('0123456789abcdefghij');
+    storedFile(t, 'video-a.bin', bytes);
+    const get = (range) => app.inject({ method: 'GET', url: `/api/portal/review/${token}/file`, headers: range ? { range } : {} });
+
+    const full = await get();
+    assert.deepEqual([full.statusCode, full.headers['accept-ranges'], full.headers['content-length']], [200, 'bytes', '20']);
+
+    const middle = await get('bytes=2-5');
+    assert.equal(middle.statusCode, 206);
+    assert.equal(middle.headers['content-range'], 'bytes 2-5/20');
+    assert.equal(middle.headers['content-length'], '4');
+    assert.equal(middle.rawPayload.toString(), '2345');
+
+    const open = await get('bytes=15-');
+    assert.deepEqual([open.statusCode, open.headers['content-range'], open.rawPayload.toString()], [206, 'bytes 15-19/20', 'fghij']);
+    const suffix = await get('bytes=-3');
+    assert.deepEqual([suffix.statusCode, suffix.rawPayload.toString()], [206, 'hij']);
+    const clamped = await get('bytes=18-999');
+    assert.deepEqual([clamped.statusCode, clamped.headers['content-range']], [206, 'bytes 18-19/20']);
+
+    for (const bad of ['bytes=20-', 'bytes=5-2', 'bytes=-0', 'items=0-1', 'bytes=abc']) {
+      const response = await get(bad);
+      assert.equal(response.statusCode, 416, bad);
+      assert.equal(response.headers['content-range'], 'bytes */20', bad);
+    }
+    // Multi-range may be ignored: the whole file.
+    assert.equal((await get('bytes=0-1,4-5')).statusCode, 200);
   });
 });
 
