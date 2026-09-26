@@ -117,6 +117,7 @@ notes, signer names, email addresses, API key material or password hashes.
 | `review.decision_recorded` | `review_session` | USER or CLIENT | `POST /api/reviews/:id/decisions` (`via: staff`) and `POST /api/portal/review/:token/decisions` (a client through a share link created with `allowDecision`, `via: share_link`, `actorUserId` null). The guest's name, email and note stay on the append-only `ReviewDecision` row, never in the event | `decisionId`, `decision` (`approved` or `changes_requested`), `fromStatus`, `toStatus`, `via`, `shareLinkId` |
 | `review.share_link_created` | `review_share_link` | USER | `POST /api/reviews/:id/share-links` (step-up re-authentication); never the token or its hash | `sessionId`, `expiresAt`, `expiresInDays`, `allowDecision` |
 | `review.share_link_revoked` | `review_share_link` | USER | `POST /api/reviews/:id/share-links/:linkId/revoke` (only the first revocation of a link) | `sessionId`, `wasExpired` |
+| `domain_event.replayed` | `domain_event` | USER | `POST /api/domain-events/replay` (admin, step-up); one event per requeued outbox row ([event-outbox.md](event-outbox.md)) | `type`, `aggregateType`, `aggregateId`, `sequence`, `fromStatus`, `toStatus`, `replayCount`, `previousAttempts` |
 
 `auth.login_failed` details:
 
