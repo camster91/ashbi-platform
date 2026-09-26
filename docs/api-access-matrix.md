@@ -49,8 +49,8 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | client-portal | 19 |
 | public | 50 |
 | recent-auth + staff | 4 |
-| staff | 354 |
-| **total** | 521 |
+| staff | 355 |
+| **total** | 522 |
 
 ## Routes by prefix
 
@@ -124,6 +124,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | POST | `/api/ai-tools/approvals/:id/reject` | recent-auth + staff | scoped |  |
 | GET | `/api/ai-tools/catalog` | staff | scoped |  |
 | GET | `/api/ai-tools/receipts` | staff | scoped |  |
+| POST | `/api/ai-tools/sessions` | staff | scoped |  |
 
 ### /api/api-keys
 
