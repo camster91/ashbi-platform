@@ -55,7 +55,7 @@ test('the session route yields only pending, scope-checked actions and leaks not
     ['get_project_summary', 'ok', null],
     ['send_slack_message', 'pending_approval', null],
     ['send_slack_message', 'denied', 'RECORD_NOT_FOUND'],
-    ['approve_action', 'denied', 'TOOL_UNKNOWN'],
+    [null, 'denied', 'TOOL_UNKNOWN'], // an invented name is never echoed
     ['create_task', 'denied', 'INVALID_INPUT'],
   ]);
   const pending = harness.db.tables.aiBridgeAction;

@@ -47,6 +47,15 @@ const STAFF_ROLES = ['ADMIN', 'TEAM'];
 export const AI_SESSION_RATE_LIMIT = Object.freeze({ max: 10, timeWindow: '1 minute' });
 
 /**
+ * Longest a session may run before it stops with `TIMEOUT`, below the web
+ * client's 120-second request timeout. Proposal (docs/ai-tool-registry.md).
+ */
+export const AI_SESSION_DEADLINE_MS = 90_000;
+
+/** Sessions one user may have running at once, per API process. Proposal. */
+export const AI_SESSION_MAX_IN_FLIGHT = 1;
+
+/**
  * preHandler enforcing AI_SESSION_RATE_LIMIT per user with
  * @fastify/rate-limit's `createRateLimit` (registered app-wide in
  * src/index.js). Fails closed at start-up if the limiter is missing.
@@ -75,10 +84,12 @@ function sessionRateLimiter(fastify) {
  * action to approve, and read output (tenant-scoped and secret-redacted by
  * the executor). Never the model's raw arguments.
  */
-export function sessionStepView(step) {
+export function sessionStepView(step, registry = toolRegistry) {
+  // A model-chosen name is echoed only when it names a registered tool.
+  const tool = typeof step.tool === 'string' && step.tool.length <= 64 && registry.get(step.tool) ? step.tool : null;
   return {
     turn: step.turn,
-    tool: step.tool ?? null,
+    tool,
     status: step.status,
     reason: step.reason ?? null,
     actionId: step.actionId ?? null,
@@ -141,6 +152,7 @@ function sendToolError(reply, error) {
  *   toolExecutor?: ReturnType<typeof createToolExecutor>,
  *   governance?: { resolve: (organizationId: string) => Promise<any>, chat: (options: any) => Promise<string> },
  *   now?: () => Date,
+ *   sessionDeadlineMs?: number,
  * }} [options]
  */
 export default async function aiToolRoutes(fastify, options = {}) {
@@ -148,6 +160,9 @@ export default async function aiToolRoutes(fastify, options = {}) {
   const governance = options.governance ?? aiGovernance;
   const now = options.now ?? (() => new Date());
   const sessionRateLimit = sessionRateLimiter(fastify);
+  const sessionDeadlineMs = options.sessionDeadlineMs ?? AI_SESSION_DEADLINE_MS;
+  /** Running sessions per user in this process (docs/ai-tool-registry.md). */
+  const inFlight = new Map();
   const visibleTo = (request) => (request.user.role === 'ADMIN' ? {} : { userId: request.user.id });
   const context = (request) => ({ prisma: request.prisma, user: request.user, requestId: request.id, ip: request.ip });
   const withRequester = { user: { select: { name: true } } };
@@ -252,7 +267,10 @@ export default async function aiToolRoutes(fastify, options = {}) {
       feature: 'ai_tools',
     };
     try {
-      return await requestStorage.run(store, () => governance.chat({ ...callOptions, feature: 'ai_tools' }));
+      // The providers take no abort signal: the session races the call
+      // against it instead (src/ai/tools/session.js).
+      const { signal: _signal, ...providerOptions } = callOptions;
+      return await requestStorage.run(store, () => governance.chat({ ...providerOptions, feature: 'ai_tools' }));
     } catch (error) {
       if (isAiControlError(error)) throw error;
       // A platform provider failure: never log the error object or message,
@@ -267,42 +285,89 @@ export default async function aiToolRoutes(fastify, options = {}) {
     onRequest: [fastify.authenticate],
     preHandler: [requireStaffRole, sessionRateLimit, validateBody(aiToolSessionSchema)],
   }, async (request, reply) => {
-    // Kill switches and a disabled connection answer with the usual AI error
-    // codes before anything runs.
-    try {
-      await governance.resolve(request.user.organizationId);
-    } catch (error) {
-      if (isAiControlError(error)) return sendAiError(reply, error);
-      throw error;
+    const userKey = `${request.user.organizationId}:${request.user.id}`;
+    if ((inFlight.get(userKey) ?? 0) >= AI_SESSION_MAX_IN_FLIGHT) {
+      return reply.status(409).send({ error: 'An assistant request is already running. Wait for it to finish.', code: 'AI_SESSION_IN_PROGRESS' });
     }
+    inFlight.set(userKey, (inFlight.get(userKey) ?? 0) + 1);
 
-    const sessionId = crypto.randomUUID();
-    const result = await runToolSession({
-      executor, ctx: context(request), chat: governedChat(request), prompt: request.body.prompt, sessionId,
-    });
-    const steps = result.steps.map(sessionStepView);
-    const count = (status) => steps.filter((step) => step.status === status).length;
-    // Ids and counts only: never the prompt, the answer or tool output.
-    await recordRequestAuditEvent(request.prisma, request, {
-      action: 'ai.tool_session_run',
-      entityId: sessionId,
-      metadata: {
-        turns: result.turns,
-        toolCalls: steps.length,
-        readCount: count('ok'),
-        pendingCount: count('pending_approval'),
-        deniedCount: count('denied'),
-        stoppedReason: result.stoppedReason ?? null,
-        answered: typeof result.final === 'string',
-        correlationId: request.id ?? null,
-      },
-    });
-    return {
-      sessionId,
-      turns: result.turns,
-      final: typeof result.final === 'string' ? redactSecrets(result.final) : null,
-      stoppedReason: result.stoppedReason ?? null,
-      steps,
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort('TIMEOUT'), sessionDeadlineMs);
+    // The client went away before the answer was sent: stop at the next check.
+    const onClose = () => {
+      if (!reply.raw.writableEnded) controller.abort('CLIENT_CLOSED');
     };
+    reply.raw.on('close', onClose);
+    try {
+      // Kill switches and a disabled connection answer with the usual AI
+      // error codes before anything runs.
+      try {
+        await governance.resolve(request.user.organizationId);
+      } catch (error) {
+        if (isAiControlError(error)) return sendAiError(reply, error);
+        throw error;
+      }
+
+      const sessionId = crypto.randomUUID();
+      const partial = [];
+      const chat = governedChat(request);
+      let turnsStarted = 0;
+      const audit = (result) => {
+        const steps = result.steps.map((step) => sessionStepView(step, executor.registry));
+        const count = (status) => steps.filter((step) => step.status === status).length;
+        // Ids and counts only: never the prompt, the answer or tool output.
+        return recordRequestAuditEvent(request.prisma, request, {
+          action: 'ai.tool_session_run',
+          entityId: sessionId,
+          metadata: {
+            turns: result.turns,
+            toolCalls: steps.length,
+            readCount: count('ok'),
+            pendingCount: count('pending_approval'),
+            deniedCount: count('denied'),
+            stoppedReason: result.stoppedReason ?? null,
+            answered: typeof result.final === 'string',
+            correlationId: request.id ?? null,
+          },
+        }).then(() => steps);
+      };
+
+      let result;
+      try {
+        result = await runToolSession({
+          executor,
+          ctx: context(request),
+          chat: (callOptions) => {
+            turnsStarted += 1;
+            return chat(callOptions);
+          },
+          prompt: request.body.prompt,
+          sessionId,
+          signal: controller.signal,
+          onStep: (step) => partial.push(step),
+        });
+      } catch (error) {
+        // Unexpected failure (a database error, a bug): audit what happened
+        // so far and answer without internals. Only the error's name is
+        // logged: a message could carry record contents.
+        request.log.error({ errorName: error?.name, sessionId }, 'Assistant session failed');
+        await audit({ turns: turnsStarted, steps: partial, final: null, stoppedReason: 'ERROR' });
+        return reply.status(500).send({ error: 'The assistant could not finish. Try again.', code: 'AI_SESSION_FAILED', sessionId });
+      }
+      const steps = await audit(result);
+      return {
+        sessionId,
+        turns: result.turns,
+        final: typeof result.final === 'string' ? redactSecrets(result.final) : null,
+        stoppedReason: result.stoppedReason ?? null,
+        steps,
+      };
+    } finally {
+      clearTimeout(timer);
+      reply.raw.off('close', onClose);
+      const remaining = (inFlight.get(userKey) ?? 1) - 1;
+      if (remaining > 0) inFlight.set(userKey, remaining);
+      else inFlight.delete(userKey);
+    }
   });
 }
