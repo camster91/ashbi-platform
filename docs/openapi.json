@@ -2205,19 +2205,14 @@
       },
       "GmailDraftReply": {
         "properties": {
-          "body": {
-            "maxLength": 50000,
-            "minLength": 1,
-            "type": "string"
-          },
-          "threadId": {
+          "hubThreadId": {
             "maxLength": 50,
             "minLength": 1,
             "type": "string"
           }
         },
         "required": [
-          "body"
+          "hubThreadId"
         ],
         "type": "object"
       },
