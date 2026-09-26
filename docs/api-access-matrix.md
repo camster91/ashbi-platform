@@ -48,9 +48,9 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | bot-secret | 41 |
 | client-portal | 19 |
 | public | 46 |
-| recent-auth + staff | 1 |
-| staff | 342 |
-| **total** | 502 |
+| recent-auth + staff | 3 |
+| staff | 346 |
+| **total** | 508 |
 
 ## Routes by prefix
 
@@ -113,6 +113,17 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | GET | `/api/ai-team/agents` | staff | scoped |  |
 | POST | `/api/ai-team/chat` | staff | scoped |  |
 | GET | `/api/ai-team/history/:agentRole` | staff | scoped |  |
+
+### /api/ai-tools
+
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/ai-tools/approvals` | staff | scoped |  |
+| GET | `/api/ai-tools/approvals/:id` | staff | scoped |  |
+| POST | `/api/ai-tools/approvals/:id/approve` | recent-auth + staff | scoped |  |
+| POST | `/api/ai-tools/approvals/:id/reject` | recent-auth + staff | scoped |  |
+| GET | `/api/ai-tools/catalog` | staff | scoped |  |
+| GET | `/api/ai-tools/receipts` | staff | scoped |  |
 
 ### /api/api-keys
 

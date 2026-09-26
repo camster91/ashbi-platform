@@ -21,7 +21,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | Model | Table | Tenant-scoped | Soft-deletable | Fields |
 | --- | --- | --- | --- | --- |
 | [Activity](#model-activity) | `activities` | no | no | 12 |
-| [AiBridgeAction](#model-aibridgeaction) | `ai_bridge_actions` | yes | no | 18 |
+| [AiBridgeAction](#model-aibridgeaction) | `ai_bridge_actions` | yes | no | 26 |
 | [AiContext](#model-aicontext) | `ai_context` | yes | no | 7 |
 | [AiProviderConnection](#model-aiproviderconnection) | `ai_provider_connections` | yes | no | 20 |
 | [AiTeamMessage](#model-aiteammessage) | `ai_team_messages` | no | no | 9 |
@@ -151,6 +151,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Constraints and indexes:
   - `@@unique([userId, idempotencyKey])`
   - `@@index([organizationId, status, createdAt])`
+  - `@@index([organizationId, action, createdAt])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -162,7 +163,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `input` | Json | required |  |  |  |
 | `inputHash` | String | required |  |  |  |
 | `preview` | Json | required |  |  |  |
-| `status` | String | required | `"PENDING_CONFIRMATION"` |  | PENDING_CONFIRMATION, EXECUTING, EXECUTED, FAILED, EXPIRED |
+| `status` | String | required | `"PENDING_CONFIRMATION"` |  | PENDING_CONFIRMATION, EXECUTING, EXECUTED, FAILED, REJECTED, EXPIRED |
 | `result` | Json | optional |  |  |  |
 | `errorCode` | String | optional |  |  |  |
 | `expiresAt` | DateTime | required |  |  |  |
@@ -170,6 +171,14 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `executedAt` | DateTime | optional |  |  |  |
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
+| `source` | String | required | `"ai_bridge"` |  | ai_bridge, assistant |
+| `toolClass` | String | required | `"execute"` |  | prepare, execute |
+| `correlationId` | String | optional |  |  |  |
+| `inputScope` | Json | optional |  |  | Record ids the scope resolver proved belong to the organization |
+| `approverId` | String | optional |  |  | No foreign key: the receipt outlives the approver's account |
+| `approvalEvidence` | Json | optional |  |  | { method, approverRole, requesterApproved, reauthenticated } |
+| `outcome` | String | optional |  |  | succeeded, failed, unknown (set when execution ends) |
+| `rejectedAt` | DateTime | optional |  |  |  |
 | `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
 | `user` | User | required |  | → User, via (userId) → (id), onDelete Cascade |  |
 

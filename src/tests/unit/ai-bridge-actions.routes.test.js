@@ -11,7 +11,9 @@ async function buildApp(prisma, options = {}) {
     request.apiKeyScopes = ['ai_bridge:read', 'ai_bridge:actions'];
   });
   app.addHook('preHandler', async (request) => { request.prisma = prisma; });
-  await app.register(aiBridgeRoutes, options);
+  // AI is on for this organization (the kill switches are covered in
+  // ai-tool-executor.test.js and src/tests/ai-eval).
+  await app.register(aiBridgeRoutes, { governance: { assertAllowed: async () => {} }, ...options });
   return app;
 }
 

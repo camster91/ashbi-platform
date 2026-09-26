@@ -50,6 +50,13 @@ export const AUDIT_EVENT_CATALOG = Object.freeze({
   'ai.enabled': { entityType: 'organization', metadata: ['scope'] },
   'ai.budget_alert': { entityType: 'ai_provider_connection', metadata: ['month', 'spentCents', 'budgetCents', 'thresholdPercent'] },
   'ai.budget_exceeded': { entityType: 'ai_provider_connection', metadata: ['month', 'spentCents', 'budgetCents'] },
+  'ai.tool_prepared': { entityType: 'ai_action', metadata: ['tool', 'toolClass', 'source', 'inputHash', 'correlationId'] },
+  'ai.tool_approved': { entityType: 'ai_action', metadata: ['tool', 'toolClass', 'source', 'requesterUserId', 'correlationId', 'method', 'reauthenticated', 'requesterApproved'] },
+  'ai.tool_rejected': { entityType: 'ai_action', metadata: ['tool', 'toolClass', 'source', 'requesterUserId', 'correlationId', 'reason'] },
+  'ai.tool_executed': { entityType: 'ai_action', metadata: ['tool', 'toolClass', 'source', 'requesterUserId', 'correlationId', 'outcome', 'approverUserId'] },
+  'ai.tool_failed': { entityType: 'ai_action', metadata: ['tool', 'toolClass', 'source', 'requesterUserId', 'correlationId', 'errorCode', 'outcome'] },
+  'ai.tool_expired': { entityType: 'ai_action', metadata: ['tool', 'toolClass', 'source', 'requesterUserId', 'correlationId'] },
+  'ai.tool_denied': { entityType: 'ai_action', metadata: ['tool', 'reason', 'source', 'correlationId'] },
   'migration_import.applied': { entityType: 'import_run', metadata: ['source', 'created', 'unchanged', 'alreadyPresent', 'channels'] },
   'migration_import.rolled_back': { entityType: 'import_run', metadata: ['source', 'deletedMessages', 'deletedRecords'] },
 });
