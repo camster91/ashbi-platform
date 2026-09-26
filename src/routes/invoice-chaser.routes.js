@@ -2,6 +2,7 @@
 
 import aiClient from '../ai/client.js';
 import { validateBody, invoiceChaserSchema } from '../validators/schemas.js';
+import { isAiControlError, sendAiError } from '../ai/errors.js';
 
 export default async function invoiceChaserRoutes(fastify) {
   const { prisma } = fastify;
@@ -85,6 +86,7 @@ Sign off as Cameron Ashley, Ashbi Design.`;
           ...result,
         });
       } catch (err) {
+        if (isAiControlError(err)) return sendAiError(reply, err);
         fastify.log.error(`Invoice chaser error for ${invoice.invoiceNumber}:`, err);
         reminders.push({
           invoiceId: invoice.id,

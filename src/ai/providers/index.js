@@ -1,84 +1,38 @@
-// AI Provider factory - picks provider based on AI_PROVIDER env var or runtime setting
+// AI provider entry point.
+//
+// getProvider() returns the governed provider: its chat / chatJSON resolve the
+// current request's or job's organization at call time and apply the AI kill
+// switches, the organization's BYOK connection and its budget before
+// delegating (src/ai/governance.js, docs/ai-byok.md). An organization with no
+// connection gets the platform provider exactly as before.
 
-import ClaudeProvider from './claude.js';
-import GeminiProvider, { GEMINI_CREATIVE_MODEL } from './gemini.js';
-import OllamaProvider from './ollama.js';
-import env from '../../config/env.js';
+import { aiGovernance } from '../governance.js';
+import { getPlatformProvider } from './platform.js';
 
-let currentProvider = null;
-let currentProviderName = null;
-let currentOllamaModel = null;
-let creativeProvider = null;
+export {
+  getPlatformProvider,
+  setProvider,
+  getOllamaModel,
+  getProviderName,
+  getCreativeProvider,
+} from './platform.js';
 
-const VALID_PROVIDERS = ['claude', 'gemini', 'ollama'];
+const governedProvider = Object.freeze({
+  /** Name of the platform provider (BYOK routing is decided per call). */
+  get name() {
+    return getPlatformProvider().name;
+  },
+  get modelName() {
+    return getPlatformProvider().modelName;
+  },
+  chat: (options) => aiGovernance.chat(options),
+  chatJSON: (options) => aiGovernance.chatJSON(options),
+});
 
 /**
- * Get the active AI provider instance.
- * Defaults to env.aiProvider ('claude' | 'gemini' | 'ollama'), can be switched at runtime.
+ * The provider every AI feature should call. Synchronous, like before; the
+ * organization is resolved when chat / chatJSON runs.
  */
 export function getProvider() {
-  const desiredProvider = currentProviderName || env.aiProvider;
-
-  if (currentProvider && currentProvider.name === desiredProvider) {
-    return currentProvider;
-  }
-
-  switch (desiredProvider) {
-    case 'gemini':
-      currentProvider = new GeminiProvider();
-      currentProviderName = 'gemini';
-      break;
-    case 'ollama':
-      currentProvider = new OllamaProvider(currentOllamaModel || undefined);
-      currentProviderName = 'ollama';
-      break;
-    case 'claude':
-    default:
-      currentProvider = new ClaudeProvider();
-      currentProviderName = 'claude';
-      break;
-  }
-
-  return currentProvider;
+  return governedProvider;
 }
-
-/**
- * Switch the AI provider at runtime. This is process-wide and affects every
- * organization, so callers must restrict it to platform operators.
- * @param {'claude' | 'gemini' | 'ollama'} providerName
- * @param {{ model?: string }} [options] Ollama model to use instead of OLLAMA_MODEL
- */
-export function setProvider(providerName, { model } = {}) {
-  if (!VALID_PROVIDERS.includes(providerName)) {
-    throw new Error(`Unknown AI provider: ${providerName}. Use ${VALID_PROVIDERS.join(', ')}.`);
-  }
-  currentProviderName = providerName;
-  if (providerName === 'ollama' && model) currentOllamaModel = model;
-  currentProvider = null; // Force re-creation on next getProvider()
-}
-
-/**
- * Get the Ollama model the provider uses, including any runtime override.
- */
-export function getOllamaModel() {
-  return currentOllamaModel || env.ollamaModel;
-}
-
-/**
- * Get the name of the current AI provider.
- */
-export function getProviderName() {
-  return currentProviderName || env.aiProvider;
-}
-
-/**
- * Get the creative/image AI provider (always Gemini with gemini-3-pro-image-preview).
- */
-export function getCreativeProvider() {
-  if (!creativeProvider) {
-    creativeProvider = new GeminiProvider(GEMINI_CREATIVE_MODEL);
-  }
-  return creativeProvider;
-}
-
-export default { getProvider, setProvider, getProviderName, getOllamaModel, getCreativeProvider };

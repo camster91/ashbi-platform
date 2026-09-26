@@ -118,7 +118,14 @@ export async function tenancyMiddleware(request, reply) {
   // Publish to AsyncLocalStorage so that any code calling `getRequestPrisma()`
   // (or accessing `db.js`'s default proxy / `fastify.prisma`) sees the same
   // scoped client for the duration of this request.
-  enterRequestContext({ prisma: scopedPrisma, organizationId });
+  // requestId and feature label AI usage records made during the request
+  // (src/ai/governance.js).
+  enterRequestContext({
+    prisma: scopedPrisma,
+    organizationId,
+    requestId: request.id,
+    feature: request.routeOptions?.url ?? null,
+  });
 
   logger.debug({ organizationId }, '🛡️ Tenancy: Request scoped via Proxy');
 }

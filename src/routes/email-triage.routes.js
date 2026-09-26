@@ -2,6 +2,7 @@
 
 import aiClient from '../ai/client.js';
 import { validateBody, emailTriageDraftUpdateSchema, emailTriageScanSchema } from '../validators/schemas.js';
+import { isAiControlError, sendAiError } from '../ai/errors.js';
 
 export default async function emailTriageRoutes(fastify) {
   const { prisma } = fastify;
@@ -72,6 +73,8 @@ Choose ALL applicable tags. "needs-reply" means Cameron should respond. "lead" m
 
         items.push(item);
       } catch (err) {
+        // Kill switch / budget / provider errors stop the scan for every thread.
+        if (isAiControlError(err)) return sendAiError(reply, err);
         fastify.log.error('Email triage scan error:', err);
       }
     }
@@ -130,6 +133,7 @@ Option 1: Standard professional reply. Option 2: Shorter/friendlier alternative.
 
       return { itemId: item.id, drafts };
     } catch (err) {
+      if (isAiControlError(err)) return sendAiError(reply, err);
       fastify.log.error('Email draft error:', err);
       return reply.status(500).send({ error: 'Failed to generate drafts', message: err.message });
     }

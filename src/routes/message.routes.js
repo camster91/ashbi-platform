@@ -2,6 +2,7 @@
 
 import aiClient from '../ai/client.js';
 import {validateBody, messagePasteSchema} from '../validators/schemas.js';
+import { isAiControlError, sendAiError } from '../ai/errors.js';
 
 export default async function messageRoutes(fastify) {
   // Paste content from any platform and extract structured data
@@ -136,6 +137,7 @@ Respond with JSON:
         projectId
       });
     } catch (error) {
+      if (isAiControlError(error)) return sendAiError(reply, error);
       console.error('Paste intake AI error:', error);
       return reply.status(500).send({ error: 'Failed to process pasted content' });
     }

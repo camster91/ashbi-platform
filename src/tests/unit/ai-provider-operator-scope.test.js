@@ -127,3 +127,26 @@ test('a platform operator must have re-authenticated recently to switch the prov
   assert.equal(response.json().code, 'REAUTH_REQUIRED');
   assert.deepEqual(snapshot(), before);
 });
+
+test('only a re-authenticated platform operator can flip the deployment AI kill switch', async (t) => {
+  const { getPlatformAiStatus, setPlatformAiDisabled } = await import('../../ai/governance.js');
+  t.after(() => setPlatformAiDisabled(false));
+
+  const orgAdmin = await buildApp(t, ORG_ADMIN);
+  const denied = await orgAdmin.inject({ method: 'POST', url: '/ai-kill-switch', cookies: reauthCookies(ORG_ADMIN), payload: { disabled: true } });
+  assert.equal(denied.statusCode, 403, denied.body);
+  assert.equal(getPlatformAiStatus().disabled, false);
+
+  const operator = await buildApp(t, OPERATOR);
+  const noStepUp = await operator.inject({ method: 'POST', url: '/ai-kill-switch', payload: { disabled: true } });
+  assert.equal(noStepUp.json().code, 'REAUTH_REQUIRED');
+  assert.equal(getPlatformAiStatus().disabled, false);
+
+  const off = await operator.inject({ method: 'POST', url: '/ai-kill-switch', cookies: reauthCookies(OPERATOR), payload: { disabled: true } });
+  assert.equal(off.statusCode, 200, off.body);
+  assert.equal(off.json().platformAi.disabled, true);
+  assert.equal((await operator.inject({ method: 'GET', url: '/ai-provider' })).json().platformAi.runtimeDisabled, true);
+
+  const on = await operator.inject({ method: 'POST', url: '/ai-kill-switch', cookies: reauthCookies(OPERATOR), payload: { disabled: false } });
+  assert.equal(on.json().platformAi.disabled, false);
+});

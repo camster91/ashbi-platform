@@ -36,7 +36,7 @@ const DIRECT_SCOPED_MODELS = new Set([
   'aicontext', 'ashconversation', 'projecttemplate', 'brandsettings',
   'pipelinestage', 'promptversion', 'credential', 'credentialaccessaudit',
   'onboardingprogress', 'slackinstallation', 'slackchannelmapping', 'slackeventreceipt', 'googlecalendarconnection', 'notionimportrecord', 'aibridgeaction',
-  'publicinquiry', 'auditevent'
+  'publicinquiry', 'auditevent', 'aiproviderconnection', 'aiusagerecord'
 ]);
 
 // Evidence tables that may only ever be appended to. Request-scoped code gets
@@ -88,6 +88,7 @@ const DIRECT_PARENT_RELATIONS = {
   aibridgeaction: [{ relation: 'user', field: 'userId', model: 'user', delegate: 'user', required: true }],
   onboardingprogress: [{ relation: 'user', field: 'userId', model: 'user', delegate: 'user', required: true }],
   publicinquiry: [{ relation: 'owner', field: 'ownerId', model: 'user', delegate: 'user' }],
+  aiusagerecord: [{ relation: 'connection', field: 'connectionId', model: 'aiproviderconnection', delegate: 'aiProviderConnection', required: true }],
 };
 
 const RESTRICTED_MODELS = new Set([]);

@@ -3,6 +3,7 @@
 import aiClient from '../ai/client.js';
 import { buildDraftResponsePrompt } from '../ai/prompts/draftResponse.js';
 import { buildAnalyzeMessagePrompt } from '../ai/prompts/analyzeMessage.js';
+import { isAiControlError, sendAiError } from '../ai/errors.js';
 import {
   validateBody,
   aiDraftResponseSchema,
@@ -85,6 +86,7 @@ export default async function aiRoutes(fastify) {
         personalTouchReason: result.personalTouchReason
       };
     } catch (error) {
+      if (isAiControlError(error)) return sendAiError(reply, error);
       fastify.log.error('AI draft error:', error);
       return reply.status(500).send({
         error: 'Failed to generate response',
@@ -156,6 +158,7 @@ Respond with JSON:
         changes: result.changes
       };
     } catch (error) {
+      if (isAiControlError(error)) return sendAiError(reply, error);
       fastify.log.error('AI refine error:', error);
       return reply.status(500).send({
         error: 'Failed to refine response',
@@ -244,6 +247,7 @@ Provide a helpful, concise answer.`;
 
       return { question, answer, context: context ? 'Context provided' : 'No context' };
     } catch (error) {
+      if (isAiControlError(error)) return sendAiError(reply, error);
       fastify.log.error('AI ask error:', error);
       return reply.status(500).send({
         error: 'Failed to get answer',
@@ -320,6 +324,7 @@ Respond with JSON:
       const result = await aiClient.chatJSON({ system, prompt, temperature: 0.5 });
       return result;
     } catch (error) {
+      if (isAiControlError(error)) return sendAiError(reply, error);
       fastify.log.error('AI draft-update error:', error);
       return reply.status(500).send({ error: 'Failed to draft update' });
     }
@@ -428,6 +433,7 @@ ${context ? `Additional context from user: ${context}` : ''}`;
 
       return { message: answer };
     } catch (error) {
+      if (isAiControlError(error)) return sendAiError(reply, error);
       fastify.log.error('AI chat error:', error);
       return reply.status(500).send({ error: 'Failed to get response' });
     }
@@ -476,6 +482,7 @@ Format the proposal as clean, professional text ready to be sent to a client. Do
 
       return { proposal, clientName, projectType };
     } catch (error) {
+      if (isAiControlError(error)) return sendAiError(reply, error);
       fastify.log.error('AI generate-proposal error:', error);
       return reply.status(500).send({ error: 'Failed to generate proposal' });
     }
@@ -655,6 +662,7 @@ Respond with JSON:
         threads: updateResults
       };
     } catch (error) {
+      if (isAiControlError(error)) return sendAiError(reply, error);
       fastify.log.error('AI triage error:', error);
       return reply.status(500).send({ error: 'Failed to triage inbox' });
     }
@@ -721,6 +729,7 @@ Provide a 2-3 sentence summary of the project's current state.`;
 
       return { projectId, summary };
     } catch (error) {
+      if (isAiControlError(error)) return sendAiError(reply, error);
       fastify.log.error('AI summarize error:', error);
       return reply.status(500).send({
         error: 'Failed to generate summary',
@@ -852,6 +861,7 @@ Provide a 2-3 sentence summary of the project's current state.`;
 
       return { results };
     } catch (error) {
+      if (isAiControlError(error)) return sendAiError(reply, error);
       fastify.log.error('AI query error:', error);
       return reply.status(500).send({ error: 'Query failed' });
     }

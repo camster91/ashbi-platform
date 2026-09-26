@@ -5,16 +5,22 @@ import {
 } from '../utils/crypto.js';
 
 export async function planCredentialKeyRotation(prisma, targetVersion) {
-  const [credentials, sites] = await Promise.all([
+  const [credentials, sites, aiConnections] = await Promise.all([
     prisma.credential.findMany({ select: { id: true, password: true, encryptionVersion: true } }),
     prisma.wPSite.findMany({
       where: { bridgeSecretEncrypted: { not: null } },
       select: { id: true, bridgeSecretEncrypted: true },
     }),
+    // BYOK AI provider keys (#413, docs/ai-byok.md); revoked rows have none.
+    prisma.aiProviderConnection.findMany({
+      where: { encryptedApiKey: { not: null } },
+      select: { id: true, encryptedApiKey: true },
+    }),
   ]);
   const records = [
     ...credentials.map((record) => ({ model: 'credential', id: record.id, ciphertext: record.password })),
     ...sites.map((record) => ({ model: 'wPSite', id: record.id, ciphertext: record.bridgeSecretEncrypted })),
+    ...aiConnections.map((record) => ({ model: 'aiProviderConnection', id: record.id, ciphertext: record.encryptedApiKey })),
   ];
   const versions = {};
   const planned = [];
@@ -41,6 +47,11 @@ export async function rotateCredentialKeys(prisma, targetVersion, { apply = fals
         await tx.credential.update({
           where: { id: record.id },
           data: { password: record.ciphertext, encryptionVersion: targetVersion },
+        });
+      } else if (record.model === 'aiProviderConnection') {
+        await tx.aiProviderConnection.update({
+          where: { id: record.id },
+          data: { encryptedApiKey: record.ciphertext },
         });
       } else {
         await tx.wPSite.update({

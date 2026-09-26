@@ -11,6 +11,7 @@ function fakePrisma({ failUpdate = false } = {}) {
   const state = {
     credentials: [{ id: 'cred-1', password: encryptWithVersion('credential-secret', 'legacy'), encryptionVersion: 'legacy' }],
     sites: [{ id: 'site-1', bridgeSecretEncrypted: encryptWithVersion('bridge-secret', 'legacy') }],
+    aiConnections: [{ id: 'ai-1', encryptedApiKey: encryptWithVersion('sk-byok-secret', 'legacy') }],
   };
   const client = {
     credential: {
@@ -24,12 +25,17 @@ function fakePrisma({ failUpdate = false } = {}) {
       findMany: async () => structuredClone(state.sites),
       update: async ({ where, data }) => Object.assign(state.sites.find((row) => row.id === where.id), data),
     },
+    aiProviderConnection: {
+      findMany: async () => structuredClone(state.aiConnections),
+      update: async ({ where, data }) => Object.assign(state.aiConnections.find((row) => row.id === where.id), data),
+    },
   };
   client.$transaction = async (callback) => {
     const snapshot = structuredClone(state);
     try { return await callback(client); } catch (error) {
       state.credentials = snapshot.credentials;
       state.sites = snapshot.sites;
+      state.aiConnections = snapshot.aiConnections;
       throw error;
     }
   };
@@ -39,7 +45,7 @@ function fakePrisma({ failUpdate = false } = {}) {
 test('old and new keys coexist through rotation and rollback', async () => {
   const { client, state } = fakePrisma();
   const dryRun = await rotateCredentialKeys(client, 'v2');
-  assert.equal(dryRun.rotate, 2);
+  assert.equal(dryRun.rotate, 3);
   assert.equal(getCiphertextKeyVersion(state.credentials[0].password), 'legacy');
 
   const applied = await rotateCredentialKeys(client, 'v2', { apply: true });
@@ -47,6 +53,8 @@ test('old and new keys coexist through rotation and rollback', async () => {
   assert.equal(getCiphertextKeyVersion(state.credentials[0].password), 'v2');
   assert.equal(decrypt(state.credentials[0].password), 'credential-secret');
   assert.equal(decrypt(state.sites[0].bridgeSecretEncrypted), 'bridge-secret');
+  assert.equal(getCiphertextKeyVersion(state.aiConnections[0].encryptedApiKey), 'v2');
+  assert.equal(decrypt(state.aiConnections[0].encryptedApiKey), 'sk-byok-secret');
 
   await rotateCredentialKeys(client, 'legacy', { apply: true });
   assert.equal(getCiphertextKeyVersion(state.credentials[0].password), 'legacy');

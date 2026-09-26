@@ -18,6 +18,9 @@ model Organization {
   slug      String   @unique
   logo      String?
   plan      String   @default("FREE") // FREE, PRO, ENTERPRISE
+  // Per-organization AI kill switch (#413): when true every AI call for this
+  // organization fails with AI_DISABLED before any provider is contacted.
+  aiDisabled Boolean @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -62,6 +65,8 @@ model Organization {
   aiBridgeActions AiBridgeAction[]
   publicInquiries PublicInquiry[]
   auditEvents     AuditEvent[]
+  aiProviderConnection AiProviderConnection?
+  aiUsageRecords  AiUsageRecord[]
 
   @@map("organizations")
 }
@@ -1203,6 +1208,59 @@ model AuditEvent {
   @@index([organizationId, action, createdAt])
   @@index([organizationId, actorUserId, createdAt])
   @@map("audit_events")
+}
+
+// Organization-scoped bring-your-own-key AI provider connection (#413,
+// docs/ai-byok.md). One row per organization: connecting again, rotating and
+// revoking update it in place. The API key is stored only as a
+// src/utils/crypto.js envelope and is wiped on revoke.
+model AiProviderConnection {
+  id                  String       @id @default(cuid())
+  organizationId      String       @unique
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  providerKind        String       @default("openai_compatible") // openai_compatible (CHECK constraint)
+  baseUrl             String
+  encryptedApiKey     String? // AES-256-GCM envelope; null once revoked
+  keyLast4            String?
+  allowedModels       String[]     @default([])
+  defaultModel        String
+  monthlyBudgetCents  Int
+  status              String       @default("active") // active, disabled, revoked (CHECK constraint)
+  disabledReason      String?
+  lastValidatedAt     DateTime?
+  lastValidationError String? // AiProviderError type only, never provider text
+  createdById         String? // No FK: history must outlive the actor account
+  rotatedAt           DateTime?
+  revokedAt           DateTime?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  usageRecords AiUsageRecord[]
+
+  @@map("ai_provider_connections")
+}
+
+// One row per AI call made through a BYOK connection (#413). Drives the
+// month-to-date spend shown to admins and the monthly budget check.
+model AiUsageRecord {
+  id                 String               @id @default(cuid())
+  organizationId     String
+  organization       Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connectionId       String
+  connection         AiProviderConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  model              String
+  promptTokens       Int                  @default(0)
+  completionTokens   Int                  @default(0)
+  estimatedCostCents Float? // null when the model has no configured price
+  feature            String? // route pattern or job label that made the call
+  requestId          String?
+  success            Boolean
+  errorType          String? // AiProviderError type when success is false
+  createdAt          DateTime             @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([connectionId, createdAt])
+  @@map("ai_usage_records")
 }
 
 model TaskTemplate {

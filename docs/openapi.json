@@ -322,6 +322,95 @@
         ],
         "type": "object"
       },
+      "AiConnectionConnect": {
+        "additionalProperties": false,
+        "properties": {
+          "allowedModels": {
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9_.:/@+-]+$",
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "type": "array"
+          },
+          "apiKey": {
+            "maxLength": 512,
+            "minLength": 8,
+            "pattern": "^\\S+$",
+            "type": "string"
+          },
+          "baseUrl": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "type": "string"
+          },
+          "defaultModel": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_.:/@+-]+$",
+            "type": "string"
+          },
+          "monthlyBudgetCents": {
+            "maximum": 100000000,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "baseUrl",
+          "apiKey",
+          "allowedModels",
+          "defaultModel",
+          "monthlyBudgetCents"
+        ],
+        "type": "object"
+      },
+      "AiConnectionRotate": {
+        "additionalProperties": false,
+        "properties": {
+          "apiKey": {
+            "maxLength": 512,
+            "minLength": 8,
+            "pattern": "^\\S+$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "apiKey"
+        ],
+        "type": "object"
+      },
+      "AiConnectionSettings": {
+        "additionalProperties": false,
+        "properties": {
+          "allowedModels": {
+            "items": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9_.:/@+-]+$",
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "type": "array"
+          },
+          "defaultModel": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_.:/@+-]+$",
+            "type": "string"
+          },
+          "monthlyBudgetCents": {
+            "maximum": 100000000,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
       "AiContextUpsert": {
         "properties": {
           "key": {
@@ -405,6 +494,18 @@
         },
         "required": [
           "clientId"
+        ],
+        "type": "object"
+      },
+      "AiKillSwitch": {
+        "additionalProperties": false,
+        "properties": {
+          "disabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "disabled"
         ],
         "type": "object"
       },
@@ -5321,6 +5422,338 @@
         "x-tenancy": "scoped"
       }
     },
+    "/api/ai-connections": {
+      "get": {
+        "operationId": "get_api_ai_connections",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/ai-connections",
+        "tags": [
+          "ai-connections"
+        ],
+        "x-access": "admin",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/ai-connections/connect": {
+      "post": {
+        "operationId": "post_api_ai_connections_connect",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiConnectionConnect"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/ai-connections/connect",
+        "tags": [
+          "ai-connections"
+        ],
+        "x-access": "admin + recent-auth",
+        "x-requires-recent-auth": true,
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/ai-connections/disable": {
+      "post": {
+        "operationId": "post_api_ai_connections_disable",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/ai-connections/disable",
+        "tags": [
+          "ai-connections"
+        ],
+        "x-access": "admin + recent-auth",
+        "x-requires-recent-auth": true,
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/ai-connections/enable": {
+      "post": {
+        "operationId": "post_api_ai_connections_enable",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/ai-connections/enable",
+        "tags": [
+          "ai-connections"
+        ],
+        "x-access": "admin + recent-auth",
+        "x-requires-recent-auth": true,
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/ai-connections/revoke": {
+      "post": {
+        "operationId": "post_api_ai_connections_revoke",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/ai-connections/revoke",
+        "tags": [
+          "ai-connections"
+        ],
+        "x-access": "admin + recent-auth",
+        "x-requires-recent-auth": true,
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/ai-connections/rotate": {
+      "post": {
+        "operationId": "post_api_ai_connections_rotate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiConnectionRotate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/ai-connections/rotate",
+        "tags": [
+          "ai-connections"
+        ],
+        "x-access": "admin + recent-auth",
+        "x-requires-recent-auth": true,
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/ai-connections/settings": {
+      "patch": {
+        "operationId": "patch_api_ai_connections_settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiConnectionSettings"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "PATCH /api/ai-connections/settings",
+        "tags": [
+          "ai-connections"
+        ],
+        "x-access": "admin",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/ai-connections/validate": {
+      "post": {
+        "operationId": "post_api_ai_connections_validate",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/ai-connections/validate",
+        "tags": [
+          "ai-connections"
+        ],
+        "x-access": "admin",
+        "x-tenancy": "scoped"
+      }
+    },
     "/api/ai-context": {
       "get": {
         "operationId": "get_api_ai_context",
@@ -7212,7 +7645,9 @@
                 "user",
                 "api_key",
                 "settings",
-                "attachment"
+                "attachment",
+                "ai_provider_connection",
+                "organization"
               ],
               "type": "string"
             }
@@ -7253,7 +7688,16 @@
                 "api_key.created",
                 "api_key.revoked",
                 "settings.ai_provider_changed",
-                "client_portal.document_deleted"
+                "client_portal.document_deleted",
+                "ai.connection_connected",
+                "ai.connection_validated",
+                "ai.connection_rotated",
+                "ai.connection_revoked",
+                "ai.connection_settings_changed",
+                "ai.disabled",
+                "ai.enabled",
+                "ai.budget_alert",
+                "ai.budget_exceeded"
               ],
               "type": "string"
             }
@@ -23894,6 +24338,56 @@
         "x-tenancy": "scoped"
       }
     },
+    "/api/settings/ai-kill-switch": {
+      "post": {
+        "operationId": "post_api_settings_ai_kill_switch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiKillSwitch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/settings/ai-kill-switch",
+        "tags": [
+          "settings"
+        ],
+        "x-access": "admin + recent-auth",
+        "x-requires-recent-auth": true,
+        "x-tenancy": "scoped"
+      }
+    },
     "/api/settings/ai-provider": {
       "get": {
         "operationId": "get_api_settings_ai_provider",
@@ -28079,6 +28573,9 @@
     },
     {
       "name": "ai-bridge"
+    },
+    {
+      "name": "ai-connections"
     },
     {
       "name": "ai-context"

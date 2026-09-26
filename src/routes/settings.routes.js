@@ -9,10 +9,12 @@ import {
   templateUpdateSchema,
   templateRenderSchema,
   aiProviderSwitchSchema,
+  aiKillSwitchSchema,
 } from '../validators/schemas.js';
 import env from '../config/env.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { requireRecentAuth } from '../auth/reauth.js';
+import { getPlatformAiStatus, setPlatformAiDisabled } from '../ai/governance.js';
 
 // Re-read the account so a demoted or deactivated operator loses the right
 // immediately, not when their session token expires.
@@ -280,7 +282,32 @@ export default async function settingsRoutes(fastify) {
       ollamaModel: getOllamaModel(),
       ollamaModels: OLLAMA_MODELS,
       canManage: await isPlatformOperator(request.prisma, request.user),
+      platformAi: getPlatformAiStatus(),
     };
+  });
+
+  // Deployment-wide AI kill switch (#413, docs/ai-byok.md). Turning it on
+  // makes every AI call, for every organization, fail with AI_DISABLED before
+  // any provider is contacted. AI_DISABLED=true in the environment keeps it on
+  // regardless of this toggle. Process-local, like the provider switch.
+  fastify.post('/ai-kill-switch', {
+    onRequest: [fastify.adminOnly],
+    preHandler: [requireRecentAuth, validateBody(aiKillSwitchSchema)],
+  }, async (request, reply) => {
+    if (!(await isPlatformOperator(request.prisma, request.user))) {
+      return reply.status(403).send({
+        error: 'The deployment AI kill switch can only be changed by a platform operator.',
+      });
+    }
+    const { disabled } = request.body;
+    setPlatformAiDisabled(disabled);
+    await recordRequestAuditEvent(request.prisma, request, {
+      action: disabled ? 'ai.disabled' : 'ai.enabled',
+      entityType: 'settings',
+      entityId: 'ai_platform',
+      metadata: { scope: 'platform' },
+    });
+    return { platformAi: getPlatformAiStatus() };
   });
 
   // Switch AI provider at runtime. The provider is shared by every

@@ -2,6 +2,8 @@
 
 import env from '../config/env.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { aiGovernance } from '../ai/governance.js';
+import { isAiControlError, sendAiError } from '../ai/errors.js';
 
 const ASH_SYSTEM_PROMPT = `You are Ash, Chief of Staff at Ashbi Design. You have access to the agency's Hub data. You are direct, smart, and get things done. Keep responses concise unless detail is needed.`;
 
@@ -94,6 +96,17 @@ export default async function ashChatRoutes(fastify) {
   }, async (request, reply) => {
     const { message, conversationId } = request.body;
 
+    // Kill switches first (#413): nothing is saved when AI is off. An
+    // organization with a BYOK connection is answered through it; others keep
+    // this route's own provider chain below.
+    let aiRoute;
+    try {
+      aiRoute = await aiGovernance.resolve(request.user?.organizationId ?? null);
+    } catch (err) {
+      if (isAiControlError(err)) return sendAiError(reply, err);
+      throw err;
+    }
+
     let conversation;
     if (conversationId) {
       conversation = await request.prisma.ashConversation.findUnique({ where: { id: conversationId } });
@@ -118,8 +131,12 @@ export default async function ashChatRoutes(fastify) {
     // Call AI
     let aiResponse;
     try {
-      aiResponse = await callAI(history.map(m => ({ role: m.role, content: m.content })));
+      const turns = history.map(m => ({ role: m.role, content: m.content }));
+      aiResponse = aiRoute.source === 'byok'
+        ? await aiGovernance.chat({ system: ASH_SYSTEM_PROMPT, messages: turns, temperature: 0.4, maxTokens: 2048 })
+        : await callAI(turns);
     } catch (err) {
+      if (isAiControlError(err)) return sendAiError(reply, err);
       fastify.log.error('AI call failed:', err);
       aiResponse = 'Sorry, I could not process that request. Please try again.';
     }

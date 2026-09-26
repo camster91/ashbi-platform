@@ -95,6 +95,15 @@ notes, signer names, email addresses, API key material or password hashes.
 | `api_key.revoked` | `api_key` | USER | `DELETE /api/api-keys/:id` | `ownerUserId` |
 | `settings.ai_provider_changed` | `settings` | USER (platform operator) | `POST /api/settings/ai-provider`; `entityId` is `ai_provider`. The provider is deployment-wide; the event is filed under the operator's organization | `fromProvider`, `toProvider`, `fromModel`, `toModel` |
 | `client_portal.document_deleted` | `attachment` | CLIENT | `DELETE /api/client-portal/documents/:docId` | `projectId`, `clientId`, `mimeType`, `size` |
+| `ai.connection_connected` | `ai_provider_connection` | USER (admin) | `POST /api/ai-connections/connect` after the provider accepted the key (see [ai-byok.md](ai-byok.md)) | `keyLast4`, `baseUrlHost` (host only, never the full URL or key), `defaultModel`, `allowedModelCount`, `monthlyBudgetCents`, `replacedStatus` (the previous connection's status, or `null`) |
+| `ai.connection_validated` | `ai_provider_connection` | USER (admin) | `POST /api/ai-connections/validate` | `keyLast4`, `baseUrlHost`, `result` (`ok` or `failed`), `errorType` (`auth`, `quota`, `rate_limit`, `timeout`, `invalid_request`, `upstream`, `invalid_response`, `unsafe_url`), `fromStatus`, `toStatus` |
+| `ai.connection_rotated` | `ai_provider_connection` | USER (admin) | `POST /api/ai-connections/rotate` after the new key was validated | `keyLast4`, `previousKeyLast4`, `baseUrlHost` |
+| `ai.connection_revoked` | `ai_provider_connection` | USER (admin) | `POST /api/ai-connections/revoke` (the ciphertext is wiped) | `keyLast4`, `baseUrlHost`, `fromStatus` |
+| `ai.connection_settings_changed` | `ai_provider_connection` | USER (admin) | `PATCH /api/ai-connections/settings` | `fromDefaultModel`, `toDefaultModel`, `fromMonthlyBudgetCents`, `toMonthlyBudgetCents`, `allowedModelCount` |
+| `ai.disabled` | `organization` (`settings` for the platform switch) | USER (admin, or platform operator) | `POST /api/ai-connections/disable` (`entityId` is the organization id); `POST /api/settings/ai-kill-switch` with `disabled: true` (`entityId` is `ai_platform`, filed under the operator's organization) | `scope` (`organization` or `platform`) |
+| `ai.enabled` | `organization` (`settings` for the platform switch) | USER (admin, or platform operator) | `POST /api/ai-connections/enable`; `POST /api/settings/ai-kill-switch` with `disabled: false` | `scope` |
+| `ai.budget_alert` | `ai_provider_connection` | SYSTEM | The first BYOK call in a UTC month after which month-to-date estimated spend is at or above 80% of `monthlyBudgetCents`. Once per organization per month (checked in process and against `audit_events`) | `month` (`YYYY-MM`), `spentCents` (rounded), `budgetCents`, `thresholdPercent` |
+| `ai.budget_exceeded` | `ai_provider_connection` | SYSTEM | A BYOK call was refused because month-to-date estimated spend reached the budget. At most one per organization per hour per API instance (`AI_BUDGET_EXCEEDED_AUDIT_WINDOW_MS` in `src/ai/governance.js`) | `month`, `spentCents`, `budgetCents` |
 
 `auth.login_failed` details:
 
