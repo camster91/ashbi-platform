@@ -118,7 +118,9 @@ ALTER TABLE "review_sessions" ADD CONSTRAINT "review_sessions_organizationId_fke
 ALTER TABLE "review_sessions" ADD CONSTRAINT "review_sessions_projectId_fkey" FOREIGN KEY ("projectId") REFERENCES "projects"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "review_sessions" ADD CONSTRAINT "review_sessions_attachmentId_fkey" FOREIGN KEY ("attachmentId") REFERENCES "attachments"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+-- RESTRICT: a file under review cannot be deleted, so approval evidence can
+-- never disappear with it. The delete routes answer 409 ATTACHMENT_UNDER_REVIEW.
+ALTER TABLE "review_sessions" ADD CONSTRAINT "review_sessions_attachmentId_fkey" FOREIGN KEY ("attachmentId") REFERENCES "attachments"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "review_sessions" ADD CONSTRAINT "review_sessions_previousSessionId_fkey" FOREIGN KEY ("previousSessionId") REFERENCES "review_sessions"("id") ON DELETE SET NULL ON UPDATE CASCADE;

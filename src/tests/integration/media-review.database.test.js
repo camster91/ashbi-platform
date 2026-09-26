@@ -177,7 +177,15 @@ test('review share links stay inside their session and review data inside its te
     assert.equal((await raw.reviewSession.findUnique({ where: { id: a1.id } })).status, 'closed');
     assert.equal((await staff('a', 'POST', '', { projectId: fixtures.a.project.id, attachmentId: fixtures.a.image.id, title: 'fork', previousSessionId: a1.id })).statusCode, 409);
 
-    // Deleting the project removes its review data, decisions included.
+    // A reviewed file cannot be deleted: the foreign key is RESTRICT, so the
+    // approval evidence can never go with it.
+    await assert.rejects(raw.attachment.delete({ where: { id: fixtures.a.image.id } }), /foreign key|P2003|violates/i);
+    await assert.rejects(raw.attachment.delete({ where: { id: fixtures.a.video.id } }), /foreign key|P2003|violates/i);
+    assert.equal(await raw.reviewDecision.count({ where: { sessionId: a1.id } }), 1);
+
+    // Hard-deleting the project (trash purge) is the deliberate lifecycle
+    // path: it removes its review data, decisions included; the audit events
+    // stay (docs/media-review.md).
     await raw.project.delete({ where: { id: fixtures.a.project.id } });
     assert.equal(await raw.reviewDecision.count({ where: { sessionId: a1.id } }), 0);
     assert.equal(await raw.reviewSession.count({ where: { organizationId: orgA } }), 0);

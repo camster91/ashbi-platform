@@ -462,6 +462,7 @@ test('a client deleting a portal document is audited as a CLIENT actor', async (
       delete: async () => ({}),
     },
     project: { findFirst: async () => ({ id: 'proj-1' }) },
+    reviewSession: { count: async () => 0 },
   };
   const app = await buildApp(t, clientPortalRoutes, prisma, { user: null, jwtPlugins: true });
   const token = app.jwt.sign({ ...portalUser, contactId: 'contact-a' }, { expiresIn: '1h' });

@@ -2374,7 +2374,7 @@ model ReviewSession {
   projectId         String
   project           Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
   attachmentId      String
-  attachment        Attachment     @relation(fields: [attachmentId], references: [id], onDelete: Cascade)
+  attachment        Attachment     @relation(fields: [attachmentId], references: [id], onDelete: Restrict) // a reviewed file cannot be deleted (evidence)
   title             String
   status            String         @default("open") // open, approved, changes_requested, closed (CHECK constraint)
   version           Int            @default(1)

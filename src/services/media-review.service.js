@@ -250,6 +250,27 @@ export function mediaSummary(attachment) {
   };
 }
 
+export const ATTACHMENT_UNDER_REVIEW = Object.freeze({
+  error: 'This file is part of a media review and cannot be deleted',
+  code: 'ATTACHMENT_UNDER_REVIEW',
+});
+
+/**
+ * Whether any review session references the attachment. Reviewed files are
+ * approval evidence: the foreign key is ON DELETE RESTRICT, and the delete
+ * routes check this first so they answer 409 before touching the disk.
+ * @param {any} prisma
+ * @param {string} attachmentId
+ */
+export async function isAttachmentUnderReview(prisma, attachmentId) {
+  return (await prisma.reviewSession.count({ where: { attachmentId } })) > 0;
+}
+
+/** Prisma foreign-key violation (the RESTRICT above, on a race). */
+export function isForeignKeyViolation(err) {
+  return err?.code === 'P2003' || /foreign key/i.test(String(err?.message || ''));
+}
+
 export function canWriteToSession(session) {
   return session.status !== 'closed';
 }

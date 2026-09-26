@@ -59,9 +59,21 @@ rules, text lengths, the region bounds, the token-hash format and the
 90-day expiry ceiling. Actor and creator ids have no foreign keys, like
 `audit_events`, so the history outlives user accounts.
 
-Deleting a project (hard delete, e.g. trash purge) or its attachment deletes
-its review sessions and everything under them. The `review.*` audit events
-remain.
+A file under review cannot be deleted: `review_sessions.attachmentId` is
+`ON DELETE RESTRICT`, and both delete routes (`DELETE
+/api/attachments/attachments/:id` and the client portal's `DELETE
+/api/client-portal/documents/:docId`) answer `409 ATTACHMENT_UNDER_REVIEW`
+while any review session references it. A client therefore cannot approve
+through a share link and then delete the file, and the approval with it.
+
+Projects are soft-deleted; while a project is in the trash its reviews answer
+`404` (staff and share links) but are kept. Purging the project from the trash
+(a hard delete by an administrator) is the one deliberate path that removes
+its review sessions, annotations, share links and decisions (the decision
+trigger allows a delete only once its session is gone). The `review.*` audit
+events remain as the durable record. Attachments have no foreign key to their
+project, so a purge leaves the files; an organization cannot be hard-deleted
+while it has attachments or audit history.
 
 ## API
 

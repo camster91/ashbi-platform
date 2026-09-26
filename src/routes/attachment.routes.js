@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
 import { fileUpload } from '../validators/schemas.js';
+import { ATTACHMENT_UNDER_REVIEW, isAttachmentUnderReview, isForeignKeyViolation } from '../services/media-review.service.js';
 
 const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
 
@@ -135,6 +136,20 @@ export default async function attachmentRoutes(fastify) {
       return reply.status(403).send({ error: 'Cannot delete this attachment' });
     }
 
+    // A file under media review is approval evidence (docs/media-review.md).
+    if (await isAttachmentUnderReview(request.prisma, id)) {
+      return reply.status(409).send(ATTACHMENT_UNDER_REVIEW);
+    }
+
+    // Remove the row first: if a review started in the meantime, the
+    // RESTRICT foreign key refuses and the file stays on disk.
+    try {
+      await request.prisma.attachment.delete({ where: { id } });
+    } catch (err) {
+      if (isForeignKeyViolation(err)) return reply.status(409).send(ATTACHMENT_UNDER_REVIEW);
+      throw err;
+    }
+
     // Delete file from disk
     try {
       const filepath = path.join(process.cwd(), existing.path);
@@ -142,8 +157,6 @@ export default async function attachmentRoutes(fastify) {
     } catch (err) {
       // File may not exist
     }
-
-    await request.prisma.attachment.delete({ where: { id } });
 
     return { success: true };
   });

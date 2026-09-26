@@ -2066,7 +2066,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `projectId` | String | required |  |  |  |
 | `project` | Project | required |  | → Project, via (projectId) → (id), onDelete Cascade |  |
 | `attachmentId` | String | required |  |  |  |
-| `attachment` | Attachment | required |  | → Attachment, via (attachmentId) → (id), onDelete Cascade |  |
+| `attachment` | Attachment | required |  | → Attachment, via (attachmentId) → (id), onDelete Restrict | a reviewed file cannot be deleted (evidence) |
 | `title` | String | required |  |  |  |
 | `status` | String | required | `"open"` |  | open, approved, changes_requested, closed (CHECK constraint) |
 | `version` | Int | required | `1` |  |  |
