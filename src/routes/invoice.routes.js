@@ -7,6 +7,7 @@ import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-d
 import { validateBody, createInvoiceSchema, updateInvoiceSchema, markInvoicePaidSchema, sendInvoiceSchema, lineItemTemplateCreateSchema, invoiceBulkIdsSchema, invoiceBulkArchiveSchema, bulkMarkPaidSchema } from '../validators/schemas.js';
 import { sendInvoiceDeliveryEmail } from '../services/email.service.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
+import { recordInvoicePaid } from '../services/domain-event-producers.js';
 
 const HST_RATE = 13; // Ontario HST
 const VOID_UNDO_WINDOW_MS = 10_000;
@@ -505,6 +506,10 @@ export default async function invoiceRoutes(fastify) {
           paidAt: paidDate,
         }
       });
+      // Outbox event commits with the payment (docs/event-outbox.md).
+      await recordInvoicePaid(tx, {
+        invoice, paymentId: payment.id, method: paymentMethod, source: 'manual', paidAt: paidDate, correlationId: request.id,
+      });
       return { paidInvoice, payment };
     });
 
@@ -704,7 +709,7 @@ export default async function invoiceRoutes(fastify) {
       const event = await handleWebhook(request.rawBody || request.body, signature);
 
       if (event.type === 'checkout.session.completed') {
-        const result = await recordCompletedCheckout(fastify.prisma, event);
+        const result = await recordCompletedCheckout(fastify.prisma, event, { correlationId: request.id });
         await recordCheckoutAuditEvents(fastify.prisma, request, event, result);
       }
 
@@ -733,15 +738,19 @@ export default async function invoiceRoutes(fastify) {
       const invoice = await fastify.prisma.invoice.findUnique({ where: { id } });
       if (!invoice || invoice.status === 'PAID' || invoice.status === 'VOID') continue;
 
-      const [, payment] = await fastify.prisma.$transaction([
-        fastify.prisma.invoice.update({
+      const payment = await fastify.prisma.$transaction(async (tx) => {
+        await tx.invoice.update({
           where: { id },
           data: { status: 'PAID', paidAt: paidDate, paymentMethod: method }
-        }),
-        fastify.prisma.invoicePayment.create({
+        });
+        const created = await tx.invoicePayment.create({
           data: { invoiceId: id, amount: invoice.total, method, paidAt: paidDate }
-        })
-      ]);
+        });
+        await recordInvoicePaid(tx, {
+          invoice, paymentId: created.id, method, source: 'manual', paidAt: paidDate, correlationId: request.id,
+        });
+        return created;
+      });
       await recordPaymentAudit(request, { invoice, paymentId: payment?.id, amount: invoice.total, method, bulk: true });
       updated++;
     }

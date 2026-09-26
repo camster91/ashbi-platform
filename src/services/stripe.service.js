@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import Stripe from 'stripe';
 import env from '../config/env.js';
 import { recordAuditEvent } from './audit-event.service.js';
+import { recordInvoicePaid } from './domain-event-producers.js';
 
 let stripe = null;
 
@@ -153,7 +154,15 @@ export async function handleWebhook(payload, signature) {
   return event;
 }
 
-export async function recordCompletedCheckout(prisma, event) {
+/**
+ * Settle an invoice from a verified checkout.session.completed event. The
+ * invoice transition, the payment row and the invoice.paid domain event
+ * (docs/event-outbox.md) commit together or not at all.
+ * @param {any} prisma
+ * @param {any} event Verified Stripe event
+ * @param {{ correlationId?: string | null }} [options] Request id of the webhook delivery
+ */
+export async function recordCompletedCheckout(prisma, event, { correlationId = null } = {}) {
   const session = event.data.object;
   const invoiceId = session.metadata?.invoiceId;
   if (!invoiceId) throw new Error('Stripe invoice metadata is missing');
@@ -188,15 +197,25 @@ export async function recordCompletedCheckout(prisma, event) {
         throw new Error('Invoice was already paid by another transaction');
       }
 
-      await tx.invoicePayment.create({
+      const paidAt = new Date(event.created * 1000);
+      const payment = await tx.invoicePayment.create({
         data: {
           invoiceId,
           amount: invoice.total,
           method: 'STRIPE',
           transactionId,
-          paidAt: new Date(event.created * 1000),
+          paidAt,
           notes: `Paid via Stripe Checkout event ${event.id}`,
         },
+      });
+      await recordInvoicePaid(tx, {
+        invoice,
+        paymentId: payment.id,
+        method: 'STRIPE',
+        source: 'stripe_checkout',
+        paidAt,
+        correlationId,
+        causationId: typeof event.id === 'string' ? `stripe:${event.id}` : null,
       });
       return { duplicate: false, invoiceId };
     });

@@ -200,7 +200,7 @@ async function defaultRunInTenant(prisma, organizationId, callback) {
  * @param {{
  *   now?: () => Date, batchSize?: number, maxRounds?: number, leaseMs?: number,
  *   maxAttempts?: number, baseDelayMs?: number, maxDelayMs?: number,
- *   random?: () => number, subscribers?: Iterable<any>,
+ *   random?: () => number, subscribers?: Iterable<any>, claim?: typeof claimDomainEvents,
  *   runInTenant?: (prisma: any, organizationId: string, callback: (tenantPrisma: any) => Promise<unknown>) => Promise<unknown>,
  *   logger?: { info: Function, warn: Function, error: Function },
  * }} [options]
@@ -217,12 +217,13 @@ export async function dispatchDomainEvents(prisma, options = {}) {
     random = Math.random,
     subscribers,
     runInTenant = defaultRunInTenant,
+    claim = claimDomainEvents,
     logger = defaultLogger,
   } = options;
   const summary = { claimed: 0, published: 0, retried: 0, dead: 0, leaseLost: 0 };
 
   for (let round = 0; round < maxRounds; round += 1) {
-    const claimed = await claimDomainEvents(prisma, { now: now(), limit: batchSize, leaseMs });
+    const claimed = await claim(prisma, { now: now(), limit: batchSize, leaseMs });
     if (claimed.length === 0) break;
     summary.claimed += claimed.length;
 
@@ -288,8 +289,8 @@ export async function dispatchDomainEvents(prisma, options = {}) {
         } else summary.leaseLost += 1;
       }
     }
-
-    if (claimed.length < batchSize) break;
+    // No early exit on a short batch: publishing event N of an aggregate makes
+    // N+1 claimable, so keep claiming until nothing is due (or maxRounds).
   }
 
   return summary;
@@ -330,13 +331,14 @@ export async function replayDeadDomainEvents(tenantPrisma, eventIds, { now = new
     if (!event) { skipped.push({ id, reason: 'not_found' }); continue; }
     if (event.status !== 'dead') { skipped.push({ id, reason: 'not_dead' }); continue; }
     if (event.replayCount >= maxReplays) { skipped.push({ id, reason: 'replay_limit' }); continue; }
+    const { attempts: previousAttempts, replayCount } = event;
     const result = await tenantPrisma.domainEvent.updateMany({
-      where: { id, status: 'dead', replayCount: event.replayCount },
+      where: { id, status: 'dead', replayCount },
       data: { status: 'pending', attempts: 0, nextAttemptAt: now, replayCount: { increment: 1 } },
     });
     if (result.count === 1) {
       requeued.push({
-        ...event, status: 'pending', attempts: 0, previousAttempts: event.attempts, replayCount: event.replayCount + 1,
+        ...event, status: 'pending', attempts: 0, previousAttempts, replayCount: replayCount + 1,
       });
     } else {
       skipped.push({ id, reason: 'changed' });

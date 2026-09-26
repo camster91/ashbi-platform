@@ -8304,7 +8304,8 @@
                 "ai_action",
                 "import_run",
                 "review_session",
-                "review_share_link"
+                "review_share_link",
+                "domain_event"
               ],
               "type": "string"
             }
@@ -8367,7 +8368,8 @@
                 "review.session_created",
                 "review.decision_recorded",
                 "review.share_link_created",
-                "review.share_link_revoked"
+                "review.share_link_revoked",
+                "domain_event.replayed"
               ],
               "type": "string"
             }
@@ -14762,6 +14764,191 @@
           "dashboard"
         ],
         "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/domain-events": {
+      "get": {
+        "operationId": "get_api_domain_events",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "enum": [
+                "pending",
+                "dispatching",
+                "published",
+                "dead"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "enum": [
+                "invoice.paid",
+                "proposal.approved",
+                "contract.signed"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "aggregateType",
+            "required": false,
+            "schema": {
+              "enum": [
+                "invoice",
+                "proposal",
+                "contract"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "aggregateId",
+            "required": false,
+            "schema": {
+              "maxLength": 191,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "correlationId",
+            "required": false,
+            "schema": {
+              "maxLength": 191,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 400,
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "maxLength": 6,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/domain-events",
+        "tags": [
+          "domain-events"
+        ],
+        "x-access": "admin",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/domain-events/replay": {
+      "post": {
+        "operationId": "post_api_domain_events_replay",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "eventIds": {
+                    "items": {
+                      "maxLength": 191,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "maxItems": 50,
+                    "minItems": 1,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "eventIds"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/domain-events/replay",
+        "tags": [
+          "domain-events"
+        ],
+        "x-access": "admin + recent-auth",
+        "x-requires-recent-auth": true,
         "x-tenancy": "scoped"
       }
     },
@@ -30011,6 +30198,9 @@
     },
     {
       "name": "dashboard"
+    },
+    {
+      "name": "domain-events"
     },
     {
       "name": "draft"

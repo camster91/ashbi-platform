@@ -38,8 +38,8 @@ queries; the test keeps a reviewed list of those routes with the reason.
 
 | Access | Routes |
 | --- | --- |
-| admin | 32 |
-| admin + recent-auth | 10 |
+| admin | 33 |
+| admin + recent-auth | 11 |
 | admin + recent-auth (access change) | 1 |
 | admin + staff | 6 |
 | api-key | 1 |
@@ -50,7 +50,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | public | 50 |
 | recent-auth + staff | 4 |
 | staff | 354 |
-| **total** | 521 |
+| **total** | 523 |
 
 ## Routes by prefix
 
@@ -399,6 +399,13 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | Method | Path | Access | Tenancy | Notes |
 | --- | --- | --- | --- | --- |
 | GET | `/api/dashboard/stats` | staff | scoped |  |
+
+### /api/domain-events
+
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/domain-events` | admin | scoped |  |
+| POST | `/api/domain-events/replay` | admin + recent-auth | scoped |  |
 
 ### /api/draft
 

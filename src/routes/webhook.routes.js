@@ -141,7 +141,7 @@ export default async function webhookRoutes(fastify) {
     switch (event.type) {
       case 'checkout.session.completed': {
         try {
-          const result = await recordCompletedCheckout(fastify.prisma, event);
+          const result = await recordCompletedCheckout(fastify.prisma, event, { correlationId: request.id });
           await recordCheckoutAuditEvents(fastify.prisma, request, event, result);
           fastify.log.info({ invoiceId: result.invoiceId, duplicate: result.duplicate }, 'Stripe checkout processed');
         } catch (error) {

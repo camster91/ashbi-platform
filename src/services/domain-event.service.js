@@ -44,13 +44,13 @@ export class DomainEventIdempotencyConflictError extends Error {
   }
 }
 
-function boundedTraceId(value, field) {
+// Trace ids are diagnostics, not business data: one that is too long or has
+// unexpected characters is dropped (and the next fallback used) rather than
+// failing the business transaction.
+function traceIdOrNull(value) {
   if (value === undefined || value === null || value === '') return null;
   const text = String(value);
-  if (text.length > MAX_ID_LENGTH || !TRACE_ID_FORMAT.test(text)) {
-    throw new DomainEventValidationError(`${field} must be an id of at most ${MAX_ID_LENGTH} characters`);
-  }
-  return text;
+  return text.length <= MAX_ID_LENGTH && TRACE_ID_FORMAT.test(text) ? text : null;
 }
 
 function requiredId(value, field, max = MAX_ID_LENGTH) {
@@ -117,10 +117,8 @@ export async function recordDomainEvent(tx, input) {
   const aggregateType = spec.aggregateType;
   const aggregateId = requiredId(input.aggregateId, 'aggregateId');
   const idempotencyKey = requiredId(input.idempotencyKey, 'idempotencyKey', MAX_IDEMPOTENCY_KEY_LENGTH);
-  const correlationId = boundedTraceId(input.correlationId, 'correlationId')
-    ?? boundedTraceId(getRequestId(), 'correlationId')
-    ?? randomUUID();
-  const causationId = boundedTraceId(input.causationId, 'causationId');
+  const correlationId = traceIdOrNull(input.correlationId) ?? traceIdOrNull(getRequestId()) ?? randomUUID();
+  const causationId = traceIdOrNull(input.causationId);
   const occurredAt = input.occurredAt instanceof Date && !Number.isNaN(input.occurredAt.getTime())
     ? input.occurredAt
     : new Date();
