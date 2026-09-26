@@ -1536,9 +1536,8 @@ export const emailTriageDraftUpdateSchema = z.object({
 });
 
 export const gmailDraftReplySchema = z.object({
-  // Body text for the reply draft — bodyText takes a single string
-  body: z.string().min(1).max(50_000),
-  threadId: cuidId.optional(),
+  // The hub thread to draft a reply for; the route generates the body itself.
+  hubThreadId: cuidId,
 });
 
 export const inboxUnmatchedAssignSchema = z.object({
