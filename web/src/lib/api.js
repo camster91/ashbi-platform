@@ -670,6 +670,21 @@ export const api = {
     request('/settings/ai-provider', { method: 'POST', body: { provider, model } }),
   getOllamaModels: () =>
     request('/settings/ai-provider/ollama-models'),
+  setPlatformAiKillSwitch: (disabled) =>
+    request('/settings/ai-kill-switch', { method: 'POST', body: { disabled } }),
+
+  // ===== ORGANIZATION AI PROVIDER (BYOK, docs/ai-byok.md) =====
+  // Connect, rotate, revoke and disable/enable answer REAUTH_REQUIRED until
+  // the admin re-authenticates; request() prompts and retries once.
+  getAiConnection: () => request('/ai-connections'),
+  connectAiProvider: ({ baseUrl, apiKey, allowedModels, defaultModel, monthlyBudgetCents }) =>
+    request('/ai-connections/connect', { method: 'POST', body: { baseUrl, apiKey, allowedModels, defaultModel, monthlyBudgetCents } }),
+  validateAiConnection: () => request('/ai-connections/validate', { method: 'POST' }),
+  rotateAiConnectionKey: (apiKey) => request('/ai-connections/rotate', { method: 'POST', body: { apiKey } }),
+  revokeAiConnection: () => request('/ai-connections/revoke', { method: 'POST' }),
+  updateAiConnectionSettings: (settings) => request('/ai-connections/settings', { method: 'PATCH', body: settings }),
+  setOrganizationAiDisabled: (disabled) =>
+    request(disabled ? '/ai-connections/disable' : '/ai-connections/enable', { method: 'POST' }),
 
   // ===== PROPOSALS =====
   getProposals: (params = {}) => {
