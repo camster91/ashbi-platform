@@ -6,15 +6,17 @@
 // route, and every tool call goes through the real registry and executor
 // against the in-memory two-organization database behind the tenant proxy.
 import assert from 'node:assert/strict';
+import http from 'node:http';
 import { Writable } from 'node:stream';
-import { afterEach, describe, it } from 'node:test';
+import { after, afterEach, before, describe, it } from 'node:test';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 
 process.env.CREDENTIALS_KEY = process.env.CREDENTIALS_KEY || 'unit-test-credentials-key';
 
-const { default: aiToolRoutes, AI_SESSION_RATE_LIMIT } = await import('../../routes/ai-tool.routes.js');
+const { default: aiToolRoutes, AI_SESSION_RATE_LIMIT, AI_SESSION_DEADLINE_MS } = await import('../../routes/ai-tool.routes.js');
+const { MAX_TRANSCRIPT_CHARS, boundedTranscript } = await import('../../ai/tools/session.js');
 const { createToolExecutor } = await import('../../ai/tools/executor.js');
 const { createAiGovernance, createByokProvider } = await import('../../ai/governance.js');
 const { recordAuditEvent } = await import('../../services/audit-event.service.js');
@@ -30,6 +32,16 @@ const USERS = {
   teamA: { id: 'team-a', role: 'TEAM', organizationId: 'org-a' },
   team2A: { id: 'team2-a', role: 'TEAM', organizationId: 'org-a' },
   clientA: { id: 'client-user-a', role: 'CLIENT', organizationId: 'org-a' },
+  adminB: { id: 'admin-b', role: 'ADMIN', organizationId: 'org-b' },
+};
+
+const delay = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+const until = async (check, timeoutMs = 3_000) => {
+  const start = Date.now();
+  while (!check()) {
+    if (Date.now() - start > timeoutMs) throw new Error('condition not met in time');
+    await delay(10);
+  }
 };
 
 const PROMPT = 'Summarise project status for the weekly note please';
@@ -38,9 +50,16 @@ afterEach(() => { delete process.env.AI_DISABLED; });
 
 /**
  * @param {import('node:test').TestContext} t
- * @param {{ replies?: Array<object | string>, byok?: { monthlyBudgetCents: number } | null, platformChat?: (options: any) => Promise<string> }} [options]
+ * @param {{
+ *   replies?: Array<object | string>,
+ *   byok?: { monthlyBudgetCents: number } | null,
+ *   platformChat?: (options: any) => Promise<string>,
+ *   usage?: { prompt_tokens: number, completion_tokens: number },
+ *   routeOptions?: Record<string, unknown>,
+ *   wrapExecutor?: (executor: any) => any,
+ * }} [options]
  */
-async function setup(t, { replies = [], byok = null, platformChat } = {}) {
+async function setup(t, { replies = [], byok = null, platformChat, usage, routeOptions = {}, wrapExecutor = (executor) => executor } = {}) {
   const db = seedTwoOrganizations(createFakeToolDb());
   if (byok) {
     db.tables.aiProviderConnection.push({
@@ -49,7 +68,7 @@ async function setup(t, { replies = [], byok = null, platformChat } = {}) {
       monthlyBudgetCents: byok.monthlyBudgetCents, status: 'active', createdAt: new Date(), updatedAt: new Date(),
     });
   }
-  const model = scriptedModel(replies);
+  const model = scriptedModel(replies, usage ? { usage } : undefined);
   const { lines, logger } = captureLogger();
   const audit = (client, event) => recordAuditEvent(client, event, { logger });
   // Default getContext: the request context the route pins for each call.
@@ -74,7 +93,7 @@ async function setup(t, { replies = [], byok = null, platformChat } = {}) {
     request.prisma = createScopedPrisma(db, user.organizationId);
     return undefined;
   });
-  await app.register(aiToolRoutes, { toolExecutor: executor, governance });
+  await app.register(aiToolRoutes, { toolExecutor: wrapExecutor(executor), governance, ...routeOptions });
   t.after(() => app.close());
   const post = (key, payload) => app.inject({
     method: 'POST', url: '/sessions', payload, headers: key ? { 'x-test-user': key } : {},
@@ -278,5 +297,177 @@ describe('POST /api/ai-tools/sessions', () => {
     app.decorate('authenticate', async () => {});
     await assert.rejects(app.register(aiToolRoutes, {}).ready(), /rate-limit/);
     await app.close();
+  });
+  it('stops with TIMEOUT at the deadline and keeps the steps already taken', async (t) => {
+    assert.ok(AI_SESSION_DEADLINE_MS < 120_000, 'below the web client timeout');
+    let calls = 0;
+    const { post, audits } = await setup(t, {
+      routeOptions: { sessionDeadlineMs: 80 },
+      platformChat: async () => {
+        calls += 1;
+        if (calls === 1) return JSON.stringify({ tool_calls: [{ name: 'list_projects', arguments: {} }] });
+        await delay(1_000);
+        return JSON.stringify({ final: 'too late' });
+      },
+    });
+    const started = Date.now();
+    const response = await post('teamA', { prompt: PROMPT });
+    assert.ok(Date.now() - started < 900, 'answered at the deadline, not when the model finished');
+    const body = response.json();
+    assert.deepEqual([response.statusCode, body.stoppedReason, body.final, body.turns], [200, 'TIMEOUT', null, 2]);
+    assert.deepEqual(body.steps.map((step) => step.status), ['ok']);
+    assert.equal(audits('ai.tool_session_run')[0].metadata.stoppedReason, 'TIMEOUT');
+  });
+
+  it('stops with CLIENT_CLOSED when the client disconnects, and still audits', async (t) => {
+    let calls = 0;
+    let secondTurnStarted = false;
+    const { app, audits } = await setup(t, {
+      platformChat: async () => {
+        calls += 1;
+        if (calls === 1) return JSON.stringify({ tool_calls: [{ name: 'list_projects', arguments: {} }] });
+        secondTurnStarted = true;
+        await delay(500);
+        return JSON.stringify({ tool_calls: [{ name: 'list_my_tasks', arguments: {} }] });
+      },
+    });
+    await app.listen({ port: 0, host: '127.0.0.1' });
+    const { port } = app.server.address();
+    const payload = JSON.stringify({ prompt: PROMPT });
+    const request = http.request({
+      host: '127.0.0.1', port, path: '/sessions', method: 'POST',
+      headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(payload), 'x-test-user': 'teamA' },
+    });
+    request.on('error', () => {});
+    request.end(payload);
+    await until(() => secondTurnStarted);
+    request.destroy();
+    await until(() => audits('ai.tool_session_run').length === 1);
+    const [event] = audits('ai.tool_session_run');
+    assert.deepEqual([event.metadata.stoppedReason, event.metadata.readCount, event.metadata.turns], ['CLIENT_CLOSED', 1, 2]);
+    await delay(600);
+    assert.equal(calls, 2, 'no further model turn after the disconnect');
+  });
+
+  it('allows one running session per user and releases it afterwards', async (t) => {
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    let entered = 0;
+    const { post } = await setup(t, {
+      platformChat: async () => {
+        entered += 1;
+        if (entered === 1) await gate;
+        return JSON.stringify({ final: 'ok' });
+      },
+    });
+    const first = post('teamA', { prompt: PROMPT });
+    await until(() => entered === 1);
+    const second = await post('teamA', { prompt: PROMPT });
+    assert.deepEqual([second.statusCode, second.json().code], [409, 'AI_SESSION_IN_PROGRESS']);
+    assert.equal((await post('team2A', { prompt: PROMPT })).statusCode, 200, 'per user');
+    release();
+    assert.equal((await first).statusCode, 200);
+    assert.equal((await post('teamA', { prompt: PROMPT })).statusCode, 200, 'released after the run');
+  });
+
+  it('bounds the transcript sent each turn, dropping the oldest tool results', async (t) => {
+    const summaryCalls = Array.from({ length: 4 }, () => ({ name: 'get_project_summary', arguments: { projectId: 'project-a' } }));
+    const { db, model, post } = await setup(t, {
+      replies: [{ tool_calls: summaryCalls }, { tool_calls: summaryCalls }, { final: 'Done.' }],
+    });
+    db.tables.project.find((row) => row.id === 'project-a').aiSummary = 'S'.repeat(7_500);
+    const body = (await post('adminA', { prompt: PROMPT })).json();
+    assert.equal(body.final, 'Done.');
+    for (const call of model.prompts) {
+      assert.ok(call.prompt.length <= MAX_TRANSCRIPT_CHARS, `turn prompt is ${call.prompt.length} characters`);
+      assert.ok(call.prompt.startsWith(`USER: ${PROMPT}`), 'the person\'s prompt is always kept');
+    }
+    assert.match(model.prompts[2].prompt, /\[\d+ earlier tool results? omitted to fit the limit\]/);
+
+    assert.equal(boundedTranscript(['USER: q', 'a'.repeat(10), 'b'.repeat(10)], 30), `USER: q\n\n[1 earlier tool result omitted to fit the limit]\n\n${'b'.repeat(10)}`);
+    assert.equal(boundedTranscript(['USER: q', 'a'], 100), 'USER: q\n\na');
+  });
+
+  it('audits an unexpected failure as ERROR with partial counts and answers without internals', async (t) => {
+    const { post, audits, appLogLines } = await setup(t, {
+      replies: [{ tool_calls: [{ name: 'list_projects', arguments: {} }, { name: 'list_my_tasks', arguments: {} }] }],
+      wrapExecutor: (executor) => {
+        let calls = 0;
+        return { ...executor, invoke: async (...args) => {
+          calls += 1;
+          if (calls === 2) throw new Error('connection to db-internal-host:5432 lost');
+          return executor.invoke(...args);
+        } };
+      },
+    });
+    const response = await post('teamA', { prompt: PROMPT });
+    assert.equal(response.statusCode, 500);
+    assert.equal(response.json().code, 'AI_SESSION_FAILED');
+    assert.doesNotMatch([response.body, ...appLogLines].join('\n'), /db-internal-host/);
+    const [event] = audits('ai.tool_session_run');
+    assert.deepEqual(
+      [event.metadata.stoppedReason, event.metadata.turns, event.metadata.readCount, event.metadata.answered],
+      ['ERROR', 1, 1, false],
+    );
+    // The in-flight slot was released.
+    assert.notEqual((await post('teamA', { prompt: PROMPT })).statusCode, 409);
+  });
+
+  it('echoes only registered tool names in steps', async (t) => {
+    const { post } = await setup(t, {
+      replies: [{ tool_calls: [{ name: `evil_${'x'.repeat(200)}`, arguments: {} }, { name: 'list_projects', arguments: {} }] }, { final: 'ok' }],
+    });
+    const body = (await post('adminA', { prompt: PROMPT })).json();
+    assert.deepEqual(body.steps.map((step) => [step.tool, step.reason]), [[null, 'TOOL_UNKNOWN'], ['list_projects', null]]);
+  });
+
+  describe('with priced BYOK usage', () => {
+    let previousPrices;
+    before(() => {
+      previousPrices = process.env.AI_MODEL_PRICES;
+      // 1 cent per 1,000 tokens.
+      process.env.AI_MODEL_PRICES = JSON.stringify({ [MODEL]: { input: 1_000, output: 1_000 } });
+    });
+    after(() => {
+      if (previousPrices === undefined) delete process.env.AI_MODEL_PRICES;
+      else process.env.AI_MODEL_PRICES = previousPrices;
+    });
+
+    it('stops with AI_BUDGET_EXCEEDED when the budget runs out after the first turn', async (t) => {
+      const { db, model, post } = await setup(t, {
+        byok: { monthlyBudgetCents: 1 },
+        usage: { prompt_tokens: 900, completion_tokens: 100 },
+        replies: [{ tool_calls: [{ name: 'list_projects', arguments: {} }] }, { final: 'never reached' }],
+      });
+      const body = (await post('teamA', { prompt: PROMPT })).json();
+      assert.deepEqual([body.stoppedReason, body.turns, body.final], ['AI_BUDGET_EXCEEDED', 2, null]);
+      assert.deepEqual(body.steps.map((step) => [step.tool, step.status]), [['list_projects', 'ok']]);
+      assert.equal(model.prompts.length, 1, 'the second turn never reached the provider');
+      assert.equal(db.tables.aiUsageRecord.length, 1);
+    });
+  });
+
+  it('pins each concurrent session to its own organization\'s routing and budget', async (t) => {
+    const platformPrompts = [];
+    const { db, model, post } = await setup(t, {
+      byok: { monthlyBudgetCents: 10_000 },
+      replies: [{ tool_calls: [{ name: 'list_projects', arguments: {} }] }, { final: 'org A answer' }],
+      platformChat: async (options) => {
+        platformPrompts.push(options.prompt);
+        await delay(15);
+        return JSON.stringify(platformPrompts.length === 1 ? { tool_calls: [{ name: 'list_projects', arguments: {} }] } : { final: 'org B answer' });
+      },
+    });
+    const [a, b] = await Promise.all([post('teamA', { prompt: 'org A question' }), post('adminB', { prompt: 'org B question' })]);
+    assert.equal(a.json().final, 'org A answer');
+    assert.equal(b.json().final, 'org B answer');
+    assert.deepEqual(a.json().steps[0].output.map((row) => row.id), ['project-a']);
+    assert.deepEqual(b.json().steps[0].output.map((row) => row.id), ['project-b']);
+    // Org A went through its BYOK connection, org B through the platform.
+    assert.equal(model.prompts.length, 2);
+    assert.ok(model.prompts.every((call) => /org A question/.test(call.prompt)));
+    assert.equal(platformPrompts.length, 2);
+    assert.ok(platformPrompts.every((prompt) => /org B question/.test(prompt)));
+    assert.deepEqual(db.tables.aiUsageRecord.map((row) => row.organizationId), ['org-a', 'org-a']);
   });
 });
