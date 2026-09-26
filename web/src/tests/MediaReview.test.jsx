@@ -63,6 +63,15 @@ function withProviders(path, route, element) {
   );
 }
 
+describe('media review PDF', () => {
+  it('offers the PDF as a labelled download, not a new tab', () => {
+    renderReview({ media: { kind: 'pdf', fileName: 'Brochure.pdf', url: '/file.pdf' }, annotations: [] });
+    const link = screen.getByRole('link', { name: 'Download PDF (Brochure.pdf)' });
+    expect(link).toHaveAttribute('download', 'Brochure.pdf');
+    expect(link).not.toHaveAttribute('target');
+  });
+});
+
 describe('media review anchors', () => {
   it('describes every anchor in words for the list view', () => {
     expect(formatTimecode(65_432)).toBe('1:05');
@@ -191,11 +200,19 @@ describe('client review page', () => {
     expect(screen.queryByRole('button', { name: /Resolve/ })).not.toBeInTheDocument();
   });
 
-  it('explains an expired or revoked link', async () => {
-    api.getPortalReview.mockRejectedValue(Object.assign(new Error('This review link has expired'), { status: 410 }));
+  it('shows one generic not-available state for unknown, expired and revoked links', async () => {
+    api.getPortalReview.mockRejectedValue(Object.assign(new Error('Review link not found'), { status: 404 }));
     withProviders('/portal/review/tok', '/portal/review/:token', <PortalReview />);
-    expect(await screen.findByRole('heading', { name: 'This review link is no longer active' })).toBeInTheDocument();
-    expect(screen.getByText(/This review link has expired/)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'This review link is not available' })).toBeInTheDocument();
+    expect(screen.getByText(/may have expired or been revoked/)).toBeInTheDocument();
+  });
+
+  it('labels client authors as coming through a share link', async () => {
+    api.getPortalReview.mockResolvedValue({ ...portalData, decisions: [{ id: 'd1', decision: 'approved', actorType: 'guest', actorName: 'Casey', note: null, createdAt: NOW }] });
+    withProviders('/portal/review/tok', '/portal/review/:token', <PortalReview />);
+    await screen.findByRole('heading', { name: 'Homepage v1', level: 1 });
+    expect(screen.getAllByText(/Client \(via share link\)/).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText(/Team ·/)).toBeInTheDocument();
   });
 });
 

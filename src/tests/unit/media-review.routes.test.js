@@ -284,17 +284,18 @@ describe('media review share links', () => {
 
     db.tables.reviewShareLink[0].expiresAt = new Date(Date.now() - 1000);
     const expired = await guest('GET', token);
-    assert.deepEqual([expired.statusCode, expired.json().error], [410, 'This review link has expired']);
-    assert.equal((await guest('POST', `${token}/annotations`, { name: 'x', body: 'x' })).statusCode, 410);
+    const unknownBody = (await guest('GET', unknown)).json();
+    assert.deepEqual([expired.statusCode, expired.json()], [404, unknownBody]);
+    assert.equal((await guest('POST', `${token}/annotations`, { name: 'x', body: 'x' })).statusCode, 404);
     db.tables.reviewShareLink[0].expiresAt = new Date(Date.now() + 86_400_000);
     assert.equal((await guest('GET', token)).statusCode, 200);
 
     const revoked = await staff('teamA', 'POST', `/${session.id}/share-links/${shareLink.id}/revoke`);
     assert.equal(revoked.json().shareLink.state, 'revoked');
     const gone = await guest('GET', token);
-    assert.deepEqual([gone.statusCode, gone.json().error], [410, 'This review link has been revoked']);
-    assert.equal((await guest('GET', `${token}/file`)).statusCode, 410);
-    assert.equal((await guest('POST', `${token}/decisions`, { name: 'x', decision: 'approved' })).statusCode, 410);
+    assert.deepEqual([gone.statusCode, gone.json()], [404, unknownBody]);
+    assert.equal((await guest('GET', `${token}/file`)).statusCode, 404);
+    assert.equal((await guest('POST', `${token}/decisions`, { name: 'x', decision: 'approved' })).statusCode, 404);
     assert.equal(db.tables.reviewDecision.length, 0);
     assert.deepEqual(db.tables.auditEvent.filter((e) => e.action === 'review.share_link_revoked').map((e) => e.metadata), [{ sessionId: session.id, wasExpired: false }]);
     // Another organization cannot revoke it.

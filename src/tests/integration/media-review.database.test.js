@@ -146,15 +146,15 @@ test('review share links stay inside their session and review data inside its te
     // Wrong, expired and revoked tokens are refused.
     assert.equal((await guest('GET', 'x'.repeat(43))).statusCode, 404);
     await raw.reviewShareLink.update({ where: { id: shareLink.id }, data: { expiresAt: new Date(Date.now() - 1000), createdAt: new Date(Date.now() - 5000) } });
-    assert.equal((await guest('GET', token)).statusCode, 410);
-    assert.equal((await guest('POST', `${token}/decisions`, { name: 'x', decision: 'approved' })).statusCode, 410);
+    assert.equal((await guest('GET', token)).statusCode, 404);
+    assert.equal((await guest('POST', `${token}/decisions`, { name: 'x', decision: 'approved' })).statusCode, 404);
     await raw.reviewShareLink.update({ where: { id: shareLink.id }, data: { expiresAt: new Date(Date.now() + 86_400_000) } });
     assert.equal((await guest('GET', token)).statusCode, 200);
     // Tenant B cannot revoke tenant A's link; tenant A can.
     assert.equal((await staff('b', 'POST', `/${a1.id}/share-links/${shareLink.id}/revoke`)).statusCode, 404);
     assert.equal((await staff('a', 'POST', `/${a1.id}/share-links/${shareLink.id}/revoke`)).statusCode, 200);
-    assert.equal((await guest('GET', token)).statusCode, 410);
-    assert.equal((await guest('GET', `${token}/file`)).statusCode, 410);
+    assert.equal((await guest('GET', token)).statusCode, 404);
+    assert.equal((await guest('GET', `${token}/file`)).statusCode, 404);
 
     // Decisions are append-only at the database level; only the session's
     // own deletion removes them.

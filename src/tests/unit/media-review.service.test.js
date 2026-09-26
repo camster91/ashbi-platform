@@ -37,9 +37,11 @@ test('share links default to 14 days and never exceed 90', () => {
   for (const bad of [0, 91, 1.5, -1]) assert.ok(review.shareLinkExpiry(bad, now).error, String(bad));
   const link = { expiresAt: new Date(now.getTime() + 1000), revokedAt: null };
   assert.equal(review.shareLinkFailure(link, now), null);
-  assert.equal(review.shareLinkFailure({ ...link, expiresAt: now }, now).statusCode, 410);
-  assert.equal(review.shareLinkFailure({ ...link, revokedAt: now }, now).error, 'This review link has been revoked');
-  assert.equal(review.shareLinkFailure(null, now).statusCode, 404);
+  // Unknown, expired and revoked links are indistinguishable.
+  const unknown = review.shareLinkFailure(null, now);
+  assert.deepEqual(unknown, { statusCode: 404, error: 'Review link not found' });
+  assert.deepEqual(review.shareLinkFailure({ ...link, expiresAt: now }, now), unknown);
+  assert.deepEqual(review.shareLinkFailure({ ...link, revokedAt: now }, now), unknown);
 });
 
 test('comments and guest names are plain text without control or bidi characters', () => {

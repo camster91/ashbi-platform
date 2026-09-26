@@ -96,14 +96,16 @@ export async function findShareLinkByToken(prisma, token, include) {
   return link;
 }
 
+const LINK_NOT_AVAILABLE = Object.freeze({ statusCode: 404, error: 'Review link not found' });
+
 /**
- * Why a share link cannot be used, or null when it can. Mirrors
- * publicAccessFailure (src/utils/public-document-access.js).
+ * Why a share link cannot be used, or null when it can. Unknown, expired and
+ * revoked links get the same 404 and message, so a response never confirms
+ * that a token once existed; the client page explains the possible reasons
+ * generically.
  */
 export function shareLinkFailure(link, now = new Date()) {
-  if (!link) return { statusCode: 404, error: 'Review link not found' };
-  if (link.revokedAt) return { statusCode: 410, error: 'This review link has been revoked' };
-  if (!link.expiresAt || new Date(link.expiresAt) <= now) return { statusCode: 410, error: 'This review link has expired' };
+  if (!link || link.revokedAt || !link.expiresAt || new Date(link.expiresAt) <= now) return { ...LINK_NOT_AVAILABLE };
   return null;
 }
 

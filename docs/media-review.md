@@ -21,8 +21,8 @@ deferred to #310.
    - **images**: pinned to a point on the image, stored as a normalized
      region `{x, y, w, h}` with each value in `0..1`, so it survives any
      display size;
-   - **PDF**: pinned to a page number (the file opens in the browser's own
-     viewer; there is no inline PDF renderer in this slice);
+   - **PDF**: pinned to a page number (the PDF is downloaded to read it;
+     there is no inline PDF renderer in this slice);
    - or unpinned, as a general comment.
    Replies are one level deep (`parentId` must be a top-level annotation of
    the same session) and carry no anchor. Staff resolve and reopen top-level
@@ -123,9 +123,9 @@ links (`src/utils/public-document-access.js`), with a stricter storage rule.
 | --- | --- |
 | Unguessable | 32 random bytes (`crypto.randomBytes`), base64url: 256 bits. |
 | Hashed at rest | Only the SHA-256 hex digest is stored. The token is returned once, in the create response (`Cache-Control: no-store`), and is never written to the database, audit events or logs. |
-| Constant-time lookup | Malformed tokens are refused before any query. The lookup is by digest through a unique index, so the database never compares secret material, and the stored digest is re-checked with `crypto.timingSafeEqual`. Malformed and unknown tokens get the same `404`. |
-| Expiry | 14 days by default, at most 90 (*Proposal*: both numbers). Enforced by the API and by a CHECK constraint. Expired links answer `410`. |
-| Revocation | `POST …/revoke` sets `revokedAt`; revoked links answer `410`. |
+| Constant-time lookup | Malformed tokens are refused before any query. The lookup is by digest through a unique index, so the database never compares secret material, and the stored digest is re-checked with `crypto.timingSafeEqual`. Malformed, unknown, expired and revoked tokens all get the same `404` and message. |
+| Expiry | 14 days by default, at most 90 (*Proposal*: both numbers). Enforced by the API and by a CHECK constraint. Expired links answer `404`, exactly like an unknown token. |
+| Revocation | `POST …/revoke` sets `revokedAt`; revoked links answer `404`, exactly like an unknown token, so a response never confirms that a token once existed. The client page's not-available state says the link may be mistyped, expired or revoked. |
 | Scope | A link names one session. Every query is keyed by that session: its own annotations and decisions, replies only to its own annotations, and only its own file. No project, client, organization, user or storage details are returned. Deleted projects answer `404`. Closed sessions are read-only. |
 | Decisions opt-in | A guest decision needs a link created with `allowDecision`; otherwise `403`. A link records **at most one** decision (`409 SHARE_LINK_DECISION_RECORDED`, backed by a unique index on `review_decisions.shareLinkId`); staff can still decide, and a new link can be issued. |
 | Write bounds | At most 500 comments per share link and 2,000 per session (staff included): further comments answer `409 ANNOTATION_LIMIT_REACHED` (*Proposal*). The share-link view returns the newest 500 threads with all their replies, plus `annotationTotal` and `annotationsTruncated`, so recent comments are never hidden. |

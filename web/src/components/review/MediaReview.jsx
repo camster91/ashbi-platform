@@ -28,6 +28,11 @@ const STATUS_STYLES = {
   closed: 'bg-muted text-muted-foreground',
 };
 
+/** Who wrote a comment or decision: team members, or clients via a share link. */
+export function authorRole(type) {
+  return type === 'guest' ? 'Client (via share link)' : 'Team';
+}
+
 const control = 'min-h-11 rounded-lg border border-border bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 const buttonBase = 'min-h-11 inline-flex items-center justify-center gap-2 rounded-lg px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50';
 const buttonOutline = cn(buttonBase, 'border border-border text-foreground hover:bg-muted');
@@ -133,8 +138,9 @@ function MediaViewer({ media, pins, selectedId, onSelectPin, draftPoint, onPickP
     <div className="flex flex-col items-start gap-3 rounded-lg border border-border bg-muted/40 p-4">
       <FileText className="h-8 w-8 text-muted-foreground" aria-hidden="true" />
       <p className="text-sm text-foreground">{media.fileName}</p>
-      <a href={media.url} target="_blank" rel="noreferrer" className={buttonOutline}>
-        <span aria-hidden="true">Open PDF</span><span className="sr-only">Open PDF (opens in a new tab)</span>
+      {/* The file route sends the PDF as a download (Content-Disposition: attachment). */}
+      <a href={media.url} download={media.fileName} rel="noreferrer" className={buttonOutline}>
+        <span aria-hidden="true">Download PDF</span><span className="sr-only">Download PDF ({media.fileName})</span>
       </a>
       <p className="text-xs text-muted-foreground">Comments can name the page they refer to.</p>
     </div>
@@ -317,7 +323,7 @@ function AnnotationItem({ annotation, number, replies, selected, onSelect, canCo
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 id={`annotation-${annotation.id}-heading`} className="text-sm font-semibold text-foreground">{`Comment ${number} by ${annotation.authorName}`}</h3>
-          <p className="text-xs text-muted-foreground">{annotation.authorType === 'guest' ? 'Client' : 'Team'} · {formatDateTime(annotation.createdAt)}</p>
+          <p className="text-xs text-muted-foreground">{authorRole(annotation.authorType)} · {formatDateTime(annotation.createdAt)}</p>
         </div>
         {annotation.resolved && <span className="inline-flex items-center gap-1 text-xs font-medium text-foreground"><CheckCircle2 className="h-3.5 w-3.5 text-success" aria-hidden="true" />Resolved</span>}
       </div>
@@ -340,7 +346,7 @@ function AnnotationItem({ annotation, number, replies, selected, onSelect, canCo
         <ul className="mt-3 space-y-2 border-l-2 border-border pl-3" aria-label={`Replies to comment ${number}`}>
           {replies.map((reply) => (
             <li key={reply.id} ref={(node) => { itemRefs.current[reply.id] = node; }} tabIndex={-1} className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-              <p className="text-xs text-muted-foreground"><span className="font-semibold text-foreground">{reply.authorName}</span> · {reply.authorType === 'guest' ? 'Client' : 'Team'} · {formatDateTime(reply.createdAt)}</p>
+              <p className="text-xs text-muted-foreground"><span className="font-semibold text-foreground">{reply.authorName}</span> · {authorRole(reply.authorType)} · {formatDateTime(reply.createdAt)}</p>
               <p className="whitespace-pre-wrap break-words text-sm text-foreground">{reply.body}</p>
             </li>
           ))}
@@ -520,7 +526,7 @@ export default function MediaReview({ media, status, annotations, decisions, can
                     <li key={decision.id} className="rounded-lg border border-border p-3 text-sm">
                       <p className="text-foreground">
                         <span className="font-semibold">{decision.decision === 'approved' ? 'Approved' : 'Changes requested'}</span> by {decision.actorName}
-                        <span className="text-muted-foreground"> ({decision.actorType === 'guest' ? 'Client' : 'Team'}) · {formatDateTime(decision.createdAt)}</span>
+                        <span className="text-muted-foreground"> ({authorRole(decision.actorType)}) · {formatDateTime(decision.createdAt)}</span>
                       </p>
                       {decision.note && <p className="mt-1 whitespace-pre-wrap break-words text-muted-foreground">{decision.note}</p>}
                     </li>

@@ -10,15 +10,16 @@ import LoadingState from '../components/ui/LoadingState';
 // Client review page reached through a share link (#417,
 // docs/media-review.md). No sign-in: the token in the URL is the capability.
 
-function Unavailable({ error }) {
-  const gone = error?.status === 410;
+function Unavailable() {
+  // The API answers the same 404 for unknown, expired and revoked links, so
+  // the page explains all three without claiming which one applies.
   return (
     <main className="flex min-h-screen items-center justify-center bg-background p-6">
       <div className="max-w-md text-center">
         <FileText className="mx-auto mb-4 h-12 w-12 text-muted-foreground" aria-hidden="true" />
-        <h1 className="mb-2 text-2xl font-bold text-foreground">{gone ? 'This review link is no longer active' : 'Review not found'}</h1>
+        <h1 className="mb-2 text-2xl font-bold text-foreground">This review link is not available</h1>
         <p className="text-muted-foreground">
-          {gone ? `${error.message}. Ask the team that sent it for a new link.` : 'This link may be mistyped, expired or revoked. Ask the team that sent it for a new link.'}
+          It may have expired or been revoked, or the address may be incomplete. Ask the team that sent it for a new link.
         </p>
       </div>
     </main>
@@ -35,7 +36,7 @@ export default function PortalReview() {
   const refresh = () => queryClient.invalidateQueries({ queryKey });
 
   if (isLoading) return <LoadingState label="Loading review…" className="min-h-screen bg-background text-foreground" />;
-  if (error || !data) return <Unavailable error={error} />;
+  if (error || !data) return <Unavailable />;
 
   const { session, link, annotations, decisions } = data;
   const identity = () => ({ name: name.trim(), ...(email.trim() ? { email: email.trim() } : {}) });
