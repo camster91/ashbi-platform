@@ -25,6 +25,7 @@ const { default: clientPortalRoutes } = await import('../../routes/client-portal
 const { recordCheckoutAuditEvents } = await import('../../services/stripe.service.js');
 const providers = await import('../../ai/providers/index.js');
 const { reauthCookies, withSession } = await import('../helpers/reauth.js');
+const { outboxStore } = await import('../helpers/domain-event-fake.js');
 
 const ADMIN = { id: 'admin-1', role: 'ADMIN', organizationId: 'org-1' };
 const FUTURE = new Date(Date.now() + 86_400_000);
@@ -69,7 +70,7 @@ async function buildApp(t, routes, prisma, { user = ADMIN, prefix, decorate = {}
 
 function draftInvoice(overrides = {}) {
   return {
-    id: 'inv-1', status: 'DRAFT', total: 113, currency: 'CAD', invoiceNumber: 'INV-1', dueDate: FUTURE,
+    id: 'inv-1', clientId: 'client-1', status: 'DRAFT', total: 113, currency: 'CAD', invoiceNumber: 'INV-1', dueDate: FUTURE,
     client: { id: 'client-1', name: 'Acme', contacts: [] }, lineItems: [], ...overrides,
   };
 }
@@ -113,9 +114,21 @@ test('a failing audit store does not fail the invoice send', async (t) => {
 test('marking an invoice paid emits invoice.paid and payment.recorded', async (t) => {
   const audit = auditStore();
   const invoice = draftInvoice({ status: 'SENT' });
+  const outbox = outboxStore();
+  let stored = { ...invoice };
   const tx = {
-    invoice: { update: async ({ data }) => ({ ...invoice, ...data }) },
+    invoice: {
+      updateMany: async ({ where, data }) => {
+        if (where.status.notIn.includes(stored.status)) return { count: 0 };
+        stored = { ...stored, ...data };
+        return { count: 1 };
+      },
+      findUnique: async () => stored,
+    },
     invoicePayment: { create: async ({ data }) => ({ id: 'pay-1', ...data }) },
+    client: { findUnique: async () => ({ organizationId: 'org-1' }) },
+    domainEvent: outbox.domainEvent,
+    $executeRaw: outbox.$executeRaw,
   };
   const app = await buildApp(t, invoiceRoutes, {
     auditEvent: audit,
@@ -131,26 +144,58 @@ test('marking an invoice paid emits invoice.paid and payment.recorded', async (t
   ]);
   assert.deepEqual(audit.events[1].metadata, { invoiceId: 'inv-1', amount: 113, method: 'CHEQUE', source: 'manual', bulk: false, currency: 'CAD' });
   assert.doesNotMatch(JSON.stringify(audit.events), /cheque #12/, 'free-text payment notes are not copied into the audit log');
+
+  // The outbox event is written inside the payment transaction.
+  assert.equal(outbox.events.length, 1);
+  const [domainEvent] = outbox.events;
+  assert.deepEqual(
+    [domainEvent.type, domainEvent.aggregateType, domainEvent.aggregateId, domainEvent.sequence, domainEvent.idempotencyKey, domainEvent.organizationId],
+    ['invoice.paid', 'invoice', 'inv-1', 1, 'invoice.paid:inv-1:pay-1', 'org-1'],
+  );
+  assert.match(domainEvent.correlationId, /^req-/);
+  assert.deepEqual({ ...domainEvent.payload, paidAt: undefined }, {
+    invoiceId: 'inv-1', clientId: 'client-1', paymentId: 'pay-1', amount: 113, total: 113, currency: 'CAD', method: 'CHEQUE', source: 'manual', paidAt: undefined,
+  });
+  assert.doesNotMatch(JSON.stringify(outbox.events), /cheque #12/, 'free-text payment notes are not copied into the outbox');
+
+  // A second mark-paid that read the invoice before the first committed loses
+  // the compare-and-set: 409, and no second payment, audit or outbox event.
+  stored = { ...stored, status: 'PAID' };
+  const raced = await app.inject({ method: 'POST', url: '/inv-1/mark-paid', payload: { paymentMethod: 'CHEQUE' } });
+  assert.equal(raced.statusCode, 409, raced.body);
+  assert.equal(raced.json().code, 'INVOICE_NOT_PAYABLE');
+  assert.equal(audit.events.length, 2);
+  assert.equal(outbox.events.length, 1);
 });
 
 test('bulk actions emit one event per changed invoice', async (t) => {
   const audit = auditStore();
-  const invoices = { 'inv-a': draftInvoice({ id: 'inv-a', status: 'SENT' }), 'inv-b': draftInvoice({ id: 'inv-b', status: 'PAID' }) };
-  const app = await buildApp(t, invoiceRoutes, {
+  const invoices = { 'inv-a': draftInvoice({ id: 'inv-a', status: 'SENT', clientId: 'client-1' }), 'inv-b': draftInvoice({ id: 'inv-b', status: 'PAID' }) };
+  const outbox = outboxStore();
+  /** @type {any} */
+  const prisma = {
     auditEvent: audit,
     invoice: {
       findUnique: async ({ where }) => invoices[where.id] ?? null,
       update: async ({ where, data }) => ({ ...invoices[where.id], ...data }),
+      updateMany: async ({ where }) => ({ count: where.status.notIn.includes(invoices[where.id]?.status) ? 0 : 1 }),
     },
     invoicePayment: { create: async ({ data }) => ({ id: `pay-${data.invoiceId}`, ...data }) },
-    $transaction: async (operations) => Promise.all(operations),
-  });
+    client: { findUnique: async () => ({ organizationId: 'org-1' }) },
+    domainEvent: outbox.domainEvent,
+    $executeRaw: outbox.$executeRaw,
+  };
+  prisma.$transaction = async (fn) => fn(prisma);
+  const app = await buildApp(t, invoiceRoutes, prisma);
   const response = await app.inject({ method: 'POST', url: '/bulk/mark-paid', payload: { ids: ['inv-a', 'inv-b'] } });
   assert.equal(response.statusCode, 200, response.body);
-  assert.deepEqual(response.json(), { updated: 1 });
+  assert.deepEqual(response.json(), { updated: 1, skipped: [{ id: 'inv-b', reason: 'already_paid' }] });
   assert.deepEqual(audit.events.map((event) => [event.action, event.entityId, event.metadata.bulk]), [
     ['invoice.paid', 'inv-a', true],
     ['payment.recorded', 'pay-inv-a', true],
+  ]);
+  assert.deepEqual(outbox.events.map((event) => [event.type, event.aggregateId, event.payload.paymentId]), [
+    ['invoice.paid', 'inv-a', 'pay-inv-a'],
   ]);
 
   audit.events.length = 0;
@@ -184,10 +229,12 @@ test('a settled Stripe checkout is audited as a webhook actor; a replay is not',
 function racingProposalDatabase(audit) {
   const snapshot = { id: 'prop-1', clientId: 'client-1', status: 'SENT', total: 5000, publicAccessExpiresAt: FUTURE, publicAccessRevokedAt: null };
   const state = { status: 'SENT', revoked: false, updateManyCalls: [] };
-  return {
-    state,
-    prisma: {
+  const outbox = outboxStore();
+  /** @type {any} */
+  const prisma = {
       auditEvent: audit,
+      domainEvent: outbox.domainEvent,
+      $executeRaw: outbox.$executeRaw,
       client: { findUnique: async ({ where }) => (where.id === 'client-1' ? { organizationId: 'org-owner' } : null) },
       proposal: {
         findUnique: async () => ({ ...snapshot }),
@@ -201,8 +248,9 @@ function racingProposalDatabase(audit) {
           return { count: 1 };
         },
       },
-    },
   };
+  prisma.$transaction = async (fn) => fn(prisma);
+  return { state, outbox, prisma };
 }
 
 for (const [label, routes, prefix, url] of [
@@ -211,7 +259,7 @@ for (const [label, routes, prefix, url] of [
 ]) {
   test(`a client approving via the ${label} emits proposal.approved once, even when approvals race`, async (t) => {
     const audit = auditStore();
-    const { prisma, state } = racingProposalDatabase(audit);
+    const { prisma, state, outbox } = racingProposalDatabase(audit);
     const app = await buildApp(t, routes, prisma, { user: null, prefix });
     const first = await app.inject({ method: 'POST', url });
     const second = await app.inject({ method: 'POST', url });
@@ -227,6 +275,12 @@ for (const [label, routes, prefix, url] of [
     );
     assert.equal(event.metadata.fromStatus, 'SENT');
     assert.equal(event.metadata.toStatus, 'APPROVED');
+    // Exactly one outbox event, only for the approval that won.
+    assert.equal(outbox.events.length, 1);
+    assert.deepEqual(
+      [outbox.events[0].type, outbox.events[0].aggregateId, outbox.events[0].organizationId, outbox.events[0].payload.via],
+      ['proposal.approved', 'prop-1', 'org-owner', url.includes('/portal/') ? 'portal_link' : 'public_link'],
+    );
   });
 }
 
@@ -234,8 +288,12 @@ test('signing a contract through the SPA portal link emits contract.signed witho
   const audit = auditStore();
   const contract = { id: 'k-2', clientId: 'client-1', status: 'SENT', content: 'terms', publicAccessExpiresAt: FUTURE, publicAccessRevokedAt: null };
   let signed = false;
-  const app = await buildApp(t, portalRoutes, {
+  const outbox = outboxStore();
+  /** @type {any} */
+  const prisma = {
     auditEvent: audit,
+    domainEvent: outbox.domainEvent,
+    $executeRaw: outbox.$executeRaw,
     client: { findUnique: async () => ({ organizationId: 'org-owner' }) },
     contract: {
       findUnique: async () => contract,
@@ -245,7 +303,9 @@ test('signing a contract through the SPA portal link emits contract.signed witho
         return { count: 1 };
       },
     },
-  }, { user: null, prefix: '/api/portal' });
+  };
+  prisma.$transaction = async (fn) => fn(prisma);
+  const app = await buildApp(t, portalRoutes, prisma, { user: null, prefix: '/api/portal' });
   const payload = { signerName: 'Jane Portal', signatureType: 'type', agreement: true };
   const response = await app.inject({ method: 'POST', url: '/api/portal/contract/sign-token/sign', payload });
   const replay = await app.inject({ method: 'POST', url: '/api/portal/contract/sign-token/sign', payload });
@@ -259,16 +319,25 @@ test('signing a contract through the SPA portal link emits contract.signed witho
   assert.equal(audit.events[0].metadata.via, 'portal_link');
   assert.match(audit.events[0].metadata.documentHash, /^[0-9a-f]{64}$/);
   assert.doesNotMatch(JSON.stringify(audit.events), /Jane Portal/);
+  assert.equal(outbox.events.length, 1);
+  assert.deepEqual([outbox.events[0].type, outbox.events[0].aggregateId, outbox.events[0].payload.via], ['contract.signed', 'k-2', 'portal_link']);
+  assert.doesNotMatch(JSON.stringify(outbox.events), /Jane Portal/);
 });
 
 test('signing a contract emits contract.signed without the signer name', async (t) => {
   const audit = auditStore();
   const contract = { id: 'k-1', clientId: 'client-1', status: 'SENT', content: 'terms', publicAccessExpiresAt: FUTURE, publicAccessRevokedAt: null };
-  const app = await buildApp(t, contractRoutes, {
+  const outbox = outboxStore();
+  /** @type {any} */
+  const prisma = {
     auditEvent: audit,
+    domainEvent: outbox.domainEvent,
+    $executeRaw: outbox.$executeRaw,
     client: { findUnique: async () => ({ organizationId: 'org-owner' }) },
     contract: { findUnique: async () => contract, updateMany: async () => ({ count: 1 }) },
-  }, { user: null });
+  };
+  prisma.$transaction = async (fn) => fn(prisma);
+  const app = await buildApp(t, contractRoutes, prisma, { user: null });
   const response = await app.inject({ method: 'POST', url: '/sign/sign-token', payload: { signerName: 'Jane Signer', agreement: true } });
   assert.equal(response.statusCode, 200, response.body);
   assert.equal(audit.events.length, 1);
@@ -277,6 +346,12 @@ test('signing a contract emits contract.signed without the signer name', async (
   assert.equal(audit.events[0].metadata.signingMethod, 'type');
   assert.match(audit.events[0].metadata.documentHash, /^[0-9a-f]{64}$/);
   assert.doesNotMatch(JSON.stringify(audit.events), /Jane Signer/);
+  assert.equal(outbox.events.length, 1);
+  assert.deepEqual(
+    [outbox.events[0].type, outbox.events[0].organizationId, outbox.events[0].payload.signingMethod, outbox.events[0].payload.via],
+    ['contract.signed', 'org-owner', 'type', 'public_link'],
+  );
+  assert.doesNotMatch(JSON.stringify(outbox.events), /Jane Signer/);
 });
 
 test('team changes emit role, deactivation and password-reset events only on real transitions', async (t) => {

@@ -6,6 +6,7 @@ import apiKeyRoutes from '../../routes/api-key.routes.js';
 import credentialRoutes from '../../routes/credential.routes.js';
 import teamRoutes from '../../routes/team.routes.js';
 import auditEventRoutes from '../../routes/audit-event.routes.js';
+import domainEventRoutes from '../../routes/domain-event.routes.js';
 
 // The application factory decorates `authenticateWithApiKey` with this
 // verifier; re-exporting it keeps src/index.js free of route-module imports.
@@ -14,7 +15,8 @@ export { authenticateApiKey } from '../../routes/api-key.routes.js';
 /**
  * Register identity and access routes: authentication, workspace settings,
  * API keys, the credential vault, team membership, the admin audit log, and
- * support impersonation / break-glass recovery.
+ * the domain event outbox's admin inspection/replay API, and support
+ * impersonation / break-glass recovery.
  *
  * Every route module here is an encapsulated Fastify plugin (none uses
  * fastify-plugin or skip-override), so its hooks cannot affect other domains.
@@ -31,4 +33,5 @@ export async function registerIdentityRoutes(fastify) {
   await fastify.register(credentialRoutes, { prefix: '/api/credentials' });
   await fastify.register(teamRoutes, { prefix: '/api/team' });
   await fastify.register(auditEventRoutes, { prefix: '/api/audit-events' });
+  await fastify.register(domainEventRoutes, { prefix: '/api/domain-events' });
 }

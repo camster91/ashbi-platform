@@ -136,13 +136,35 @@ test.describe('Client portal accessibility', () => {
     const subtitle = page.getByText('Client Portal', { exact: true });
     const email = page.getByPlaceholder('your@email.com');
 
-    await expect(subtitle).toHaveCSS('color', 'rgb(107, 102, 127)');
-    await expect(email).toHaveCSS('border-color', 'rgb(145, 140, 159)');
+    // The portal is built on the shared primitives (#316): muted text and field
+    // boundaries come from the light design tokens, whose contrast is pinned by
+    // web/src/tests/contrast-policy.test.js (#317).
+    const tokenColor = (name: string) => page.evaluate((token) => {
+      const probe = document.createElement('span');
+      probe.style.color = `hsl(var(${token}))`;
+      document.body.appendChild(probe);
+      const color = getComputedStyle(probe).color;
+      probe.remove();
+      return color;
+    }, name);
+    await expect(subtitle).toHaveCSS('color', await tokenColor('--muted-foreground'));
+    await expect(email).toHaveCSS('border-color', await tokenColor('--border'));
 
     await email.focus();
     await expect(email).toBeFocused();
     await expect(email).toHaveCSS('outline-width', '3px');
     await expect(email).toHaveCSS('outline-style', 'solid');
+  });
+
+  test('stays on the light token set when the OS prefers dark', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.goto('/client-portal');
+    await expect(page.getByRole('heading', { name: 'Ashbi Design' })).toBeVisible();
+    await expect(page.locator('html')).not.toHaveClass(/(^|\s)dark(\s|$)/);
+    const results = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .analyze();
+    expect(results.violations).toEqual([]);
   });
 
   test('login has no automatically detectable WCAG A or AA violations', async ({ page }) => {

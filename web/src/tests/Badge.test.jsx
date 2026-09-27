@@ -45,4 +45,11 @@ describe('Badge Component', () => {
     rerender(<Badge size="lg">Large</Badge>);
     expect(screen.getByText('Large').className).toContain('px-3');
   });
+
+  it('pairs the brand-lime accent colour with the dark accent foreground', () => {
+    render(<Badge color="accent" variant="subtle">In Progress</Badge>);
+    const badge = screen.getByText('In Progress');
+    expect(badge.className).toContain('bg-accent/40');
+    expect(badge.className).toContain('text-accent-foreground');
+  });
 });
