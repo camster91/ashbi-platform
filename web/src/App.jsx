@@ -4,6 +4,7 @@ import { useAuth, AuthProvider } from './hooks/useAuth';
 import ErrorBoundary from './components/ErrorBoundary';
 import { getPreloadedLogin } from './lib/initial-route';
 import { ToastProvider, useToast } from './hooks/useToast';
+import { apiErrorToast } from './lib/apiErrorToast';
 
 // Public entry points are split so each deep link loads only its route module.
 const Login = lazy(() => import('./pages/Login'));
@@ -282,38 +283,10 @@ function GlobalErrorHandler({ children }) {
 
     const handleApiError = (event) => {
       const { error, retry } = event.detail;
-      // Show error toast for failed requests (but not 401s - those are handled separately)
-      if (error.status !== 401) {
-        // Don't show toast for network errors or timeouts in development
-        // as they can be noisy during development
-        const isNetworkError = error.name === 'NetworkError';
-        const isTimeout = error.name === 'TimeoutError';
-
-        if (isNetworkError) {
-          toast.error({
-            title: 'Network error',
-            message: retry ? 'Check your connection, then try this read-only request again.' : 'Check your connection. Your action was not retried to avoid a duplicate change.',
-            duration: 0,
-            action: retry ? { label: 'Try again', onClick: retry } : undefined,
-          });
-        } else if (isTimeout) {
-          toast.error({
-            title: 'Request timed out',
-            message: retry ? 'The server took too long. You can safely retry this read-only request.' : 'The result is uncertain, so the action was not retried. Check the page before trying again.',
-            duration: 0,
-            action: retry ? { label: 'Try again', onClick: retry } : undefined,
-          });
-        } else if (error.status >= 500) {
-          toast.error({
-            title: 'Server error',
-            message: retry ? 'The request failed on the server. Try this read-only request again.' : 'The action may not have completed. Check the current record before trying again.',
-            duration: 0,
-            action: retry ? { label: 'Try again', onClick: retry } : undefined,
-          });
-        } else if (error.status >= 400) {
-          toast.error('Request Failed', error.message || 'Please check your input and try again.');
-        }
-      }
+      // 401s are handled by handleUnauthorized; background reads show inline
+      // error states instead of toasts (see lib/apiErrorToast.js).
+      const options = apiErrorToast(error, retry);
+      if (options) toast.error(options);
     };
 
     window.addEventListener('api:unauthorized', handleUnauthorized);
