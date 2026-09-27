@@ -192,9 +192,16 @@ if ! start_worker_container "$WORKER_CONTAINER" "$IMAGE" "$REVISION" "$IMAGE_ID"
   die 'candidate worker container failed to start'
 fi
 
+# The detailed, strict readiness view (worker heartbeat, image digest) is not
+# public. It is served to container-loopback callers, so read it through
+# `docker exec` inside the candidate API container.
+strict_readiness() {
+  docker exec "$CONTAINER" wget -qO- -T 5 "http://127.0.0.1:3002/api/health/details?strict=1" 2>/dev/null || true
+}
+
 READY=false
 for _ in $(seq 1 30); do
-  BODY=$(curl -fsS --max-time 5 "http://127.0.0.1:${HOST_PORT}/api/health" || true)
+  BODY=$(strict_readiness)
   WORKER_HEALTH=$(docker exec "$WORKER_CONTAINER" npm run --silent health:worker 2>/dev/null || true)
   if [[ $BODY == *"\"ready\":true"* \
     && $BODY == *"\"database\":{\"status\":\"ok\"}"* \

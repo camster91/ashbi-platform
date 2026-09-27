@@ -56,9 +56,11 @@ ENV APP_REVISION=$APP_REVISION
 # Expose port
 EXPOSE 3002
 
-# Health check
+# Health check: process liveness only. Dependency readiness is /api/health
+# (database + Redis; a stale worker is reported as degraded, not down) and the
+# deploy controller's strict gate is /api/health/details?strict=1.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3002/api/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://127.0.0.1:3002/api/live || exit 1
 
 # Use dumb-init to handle signals properly
 ENTRYPOINT ["dumb-init", "--"]

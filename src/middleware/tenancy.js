@@ -56,8 +56,9 @@ export function isTenancyExemptUrl(url) {
     url.startsWith('/api/mailgun') ||
     url.startsWith('/api/slack/events') ||
     url.startsWith('/api/slack/oauth/callback') ||
-    url === '/api/health' ||
-    url === '/api/live'
+    // Probes read no tenant data; match the path so `?strict=1` and the
+    // staff/loopback detail view are covered too.
+    /^\/api\/(?:live|health(?:\/details)?)(?:\?|$)/.test(url)
   );
 }
 

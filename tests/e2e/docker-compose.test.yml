@@ -5,7 +5,8 @@
 # Services:
 #   postgres  — fresh DB per test run (no volume)
 #   redis     — required for BullMQ queues and the /api/health readiness
-#               check (database + redis + worker heartbeat must all be ok).
+#               check (database + redis; setup.sh uses ?strict=1, which also
+#               requires the worker heartbeat).
 #   migrate   — one-shot `npx prisma migrate deploy` against the test DB.
 #               Prisma 7 reads the URL through prisma.config.ts, which only
 #               sees vars present in .env, so the entrypoint materializes
@@ -13,8 +14,9 @@
 #   seed      — one-shot `node prisma/seed.js` after migrate completes.
 #               Creates cameron@ashbi.ca with the role ADMIN so the test
 #               can log in via /api/auth/login.
-#   worker    — BullMQ worker. Writes the redis heartbeat that /api/health
-#               requires for readiness; without it hub never reports ready.
+#   worker    — BullMQ worker. Writes the redis heartbeat that
+#               /api/health?strict=1 requires; without it the strict probe
+#               never reports ready (plain /api/health reports "degraded").
 #   hub       — ashbi-platform image running Fastify. depends_on
 #               postgres (healthy) + redis (healthy) + migrate (succeeded)
 #               + seed (succeeded).

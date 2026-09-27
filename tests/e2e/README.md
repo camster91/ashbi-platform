@@ -9,7 +9,7 @@ over HTTP. This is the required "Full-stack E2E smoke" release gate.
 | `redis` | BullMQ queues and readiness |
 | `migrate` | `prisma migrate deploy` |
 | `seed` | `prisma/seed.js` (admin `cameron@ashbi.ca`) |
-| `worker` | BullMQ worker; writes the heartbeat `/api/health` requires |
+| `worker` | BullMQ worker; writes the heartbeat `/api/health?strict=1` requires |
 | `hub` | Fastify API on host port 3001 |
 
 `hub-smoke.test.mjs` checks readiness (database, redis, worker), anonymous
@@ -42,7 +42,7 @@ through the admin API, the portal magic link is minted from the claims
 database.
 
 ```bash
-npm run test:e2e:setup     # build + boot, wait for /api/health, verify login
+npm run test:e2e:setup     # build + boot, wait for /api/health?strict=1, verify login
 npm run test:e2e
 npx playwright install chromium   # once
 npm run test:e2e:journeys

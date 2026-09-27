@@ -47,7 +47,15 @@ import { getAuthProvider } from './auth/index.js';
 import { toClientErrorBody } from './utils/http-errors.js';
 import { buildHelmetOptions, permissionsPolicy } from './config/security-headers.js';
 import { initSentry, Sentry } from './observability/sentry.js';
-import { checkRuntimeHealth, closeRuntimeHealth } from './services/runtime-health.service.js';
+import {
+  checkRuntimeHealth,
+  closeRuntimeHealth,
+  HEALTH_DETAIL_ROLES,
+  healthStatusCode,
+  isLoopbackPeer,
+  isStrictHealthQuery,
+  publicHealthView,
+} from './services/runtime-health.service.js';
 import { getRequestPrisma } from './utils/request-context.js';
 
 /**
@@ -219,9 +227,29 @@ fastify.get('/api/live', async () => ({
   revision: process.env.APP_REVISION || 'unknown',
 }));
 
-fastify.get('/api/health', async (_request, reply) => {
+// Public readiness: database + Redis decide the status code; a stale worker
+// is reported as degraded (still 200). `?strict=1` also requires the worker.
+fastify.get('/api/health', async (request, reply) => {
   const report = await checkRuntimeHealth();
-  return reply.code(report.ready ? 200 : 503).send(report);
+  const strict = isStrictHealthQuery(request.query);
+  return reply.code(healthStatusCode(report, { strict })).send(publicHealthView(report));
+});
+
+// Detailed report (failed jobs, backup, alerting, image digest): staff
+// sessions, or the deploy controller via `docker exec` on container loopback.
+fastify.get('/api/health/details', {
+  onRequest: [async function healthDetailsGuard(request, reply) {
+    if (isLoopbackPeer(request)) return;
+    await fastify.authenticate(request, reply);
+    if (reply.sent) return reply;
+    if (!HEALTH_DETAIL_ROLES.includes(request.user?.role)) {
+      return reply.status(403).send({ error: 'Staff access required', code: 'FORBIDDEN' });
+    }
+  }],
+}, async (request, reply) => {
+  const report = await checkRuntimeHealth();
+  const strict = isStrictHealthQuery(request.query);
+  return reply.code(healthStatusCode(report, { strict })).send(report);
 });
 
 // Static files
