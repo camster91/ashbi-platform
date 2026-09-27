@@ -362,20 +362,6 @@ export const api = {
   getDashboardStats: () =>
     request('/dashboard/stats'),
 
-  // Analytics (legacy)
-  getDashboard: () =>
-    request('/analytics/dashboard'),
-  getOverview: (days = 30) =>
-    request(`/analytics/overview?days=${days}`),
-  getResponseTimes: (days = 30) =>
-    request(`/analytics/response-times?days=${days}`),
-  getTeamAnalytics: (days = 30) =>
-    request(`/analytics/team?days=${days}`),
-  getAnalyticsTrends: (days = 30) =>
-    request(`/analytics/trends?days=${days}`),
-  getAiAccuracy: (days = 30) =>
-    request(`/analytics/ai-accuracy?days=${days}`),
-
   // AI
   draftResponse: (threadId) =>
     request('/ai/draft-response', { method: 'POST', body: { threadId } }),
@@ -389,16 +375,6 @@ export const api = {
     request('/ai/generate-proposal', { method: 'POST', body: data }),
   getClientHealth: () =>
     request('/ai/client-health', { method: 'POST' }),
-  getClientHealthDashboard: (status = 'ACTIVE') =>
-    request(`/client-health/health/dashboard?status=${status}`),
-  getClientHealthAtRisk: () =>
-    request('/client-health/health/at-risk'),
-  getClientHealthRecommendations: () =>
-    request('/client-health/health/recommendations'),
-  recalculateClientHealth: (clientId) =>
-    request('/client-health/health/recalculate', { method: 'POST', body: clientId ? { clientId } : {} }),
-  getSingleClientHealth: (clientId) =>
-    request(`/client-health/health/${clientId}`),
   triageInbox: () =>
     request('/ai/triage-inbox', { method: 'POST' }),
   aiQuery: (query) =>
@@ -521,11 +497,12 @@ export const api = {
     return request(`/time-entries/my${query ? `?${query}` : ''}`);
   },
   createTimeEntry: (data) =>
-    request('/time-tracking', { method: 'POST', body: data }),
+    request('/time-entries', { method: 'POST', body: data }),
   updateTimeEntry: (id, data) =>
-    request(`/time-tracking/${id}`, { method: 'PUT', body: data }),
+    request(`/time-entries/${id}`, { method: 'PUT', body: data }),
+  // Deletes a TimeEntry. (DELETE /time-tracking/:id deletes a timer session.)
   deleteTimeEntry: (id) =>
-    request(`/time-tracking/${id}`, { method: 'DELETE' }),
+    request(`/time-entries/${id}`, { method: 'DELETE' }),
   getTimeSummary: (params = {}) => {
     const query = new URLSearchParams(params).toString();
     return request(`/time-tracking/summary${query ? `?${query}` : ''}`);
@@ -548,22 +525,6 @@ export const api = {
     request(`/time-sessions/${id}/stop`, { method: 'POST' }),
   getRunningTimeSession: () =>
     request('/time-sessions/running'),
-
-  // Activity Feed
-  getProjectActivity: (projectId, params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/projects/${projectId}/activity${query ? `?${query}` : ''}`);
-  },
-  getActivity: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/activity${query ? `?${query}` : ''}`);
-  },
-  getMyActivity: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/activity/my${query ? `?${query}` : ''}`);
-  },
-  getActivitySummary: (days = 7) =>
-    request(`/activity/summary?days=${days}`),
 
   // Task Comments
   getTaskComments: (taskId) =>
@@ -939,60 +900,6 @@ export const api = {
   deleteTaskTemplate: (id) =>
     request(`/templates/${id}`, { method: 'DELETE' }),
 
-  // ===== OUTREACH =====
-  getOutreachLeads: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/outreach/leads${query ? `?${query}` : ''}`);
-  },
-  addOutreachLead: (data) =>
-    request('/outreach/leads', { method: 'POST', body: data }),
-  searchOutreachLeads: (data) =>
-    request('/outreach/leads/search', { method: 'POST', body: data }),
-  updateOutreachLead: (id, data) =>
-    request(`/outreach/leads/${id}`, { method: 'PATCH', body: data }),
-  generateOutreachEmail: (data) =>
-    request('/outreach/email/generate', { method: 'POST', body: data }),
-  getOutreachSequences: () =>
-    request('/outreach/sequences'),
-  createOutreachSequence: (data) =>
-    request('/outreach/sequences', { method: 'POST', body: data }),
-  updateOutreachSequence: (id, data) =>
-    request(`/outreach/sequences/${id}`, { method: 'PATCH', body: data }),
-  runOutreachSequence: (id) =>
-    request(`/outreach/sequences/${id}/run`, { method: 'POST' }),
-
-  // ===== SOCIAL =====
-  getSocialPosts: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/social/posts${query ? `?${query}` : ''}`);
-  },
-  generateSocialPost: (data) =>
-    request('/social/generate', { method: 'POST', body: data }),
-  saveSocialPost: (data) =>
-    request('/social/posts', { method: 'POST', body: data }),
-  updateSocialPost: (id, data) =>
-    request(`/social/posts/${id}`, { method: 'PUT', body: data }),
-  deleteSocialPost: (id) =>
-    request(`/social/posts/${id}`, { method: 'DELETE' }),
-
-  // ===== BLOG =====
-  getBlogPosts: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/blog/posts${query ? `?${query}` : ''}`);
-  },
-  getBlogPost: (id) =>
-    request(`/blog/posts/${id}`),
-  generateBlogPost: (data) =>
-    request('/blog/generate', { method: 'POST', body: data }),
-  generateBlogKeywords: (topic) =>
-    request('/blog/keywords', { method: 'POST', body: { topic } }),
-  updateBlogPost: (id, data) =>
-    request(`/blog/posts/${id}`, { method: 'PUT', body: data }),
-  publishBlogPost: (id) =>
-    request(`/blog/publish/${id}`, { method: 'POST' }),
-  deleteBlogPost: (id) =>
-    request(`/blog/posts/${id}`, { method: 'DELETE' }),
-
   // AI Team
   getAiTeamAgents: () =>
     request('/ai-team/agents'),
@@ -1017,118 +924,6 @@ export const api = {
   archiveEmailItem: (itemId) =>
     request(`/email-triage/archive/${itemId}`, { method: 'PUT' }),
 
-  // ===== CONTENT WRITER AGENT =====
-  generateContentBlog: (data) =>
-    request('/content-writer/blog', { method: 'POST', body: data }),
-  generateContentSocial: (data) =>
-    request('/content-writer/social', { method: 'POST', body: data }),
-  generateContentLinkedIn: (data) =>
-    request('/content-writer/linkedin-article', { method: 'POST', body: data }),
-  getContentDrafts: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/content-writer/drafts${query ? `?${query}` : ''}`);
-  },
-  getContentDraft: (id) =>
-    request(`/content-writer/drafts/${id}`),
-  updateContentDraft: (id, data) =>
-    request(`/content-writer/drafts/${id}`, { method: 'PUT', body: data }),
-  deleteContentDraft: (id) =>
-    request(`/content-writer/drafts/${id}`, { method: 'DELETE' }),
-
-  // ===== LINKEDIN OUTREACH AGENT =====
-  generateLinkedInSequence: (data) =>
-    request('/linkedin-outreach/sequence', { method: 'POST', body: data }),
-  getLinkedInSequences: () =>
-    request('/linkedin-outreach/sequences'),
-  getLinkedInSequence: (id) =>
-    request(`/linkedin-outreach/sequences/${id}`),
-  deleteLinkedInSequence: (id) =>
-    request(`/linkedin-outreach/sequences/${id}`, { method: 'DELETE' }),
-  importLinkedInProspects: (data) =>
-    request('/linkedin-outreach/prospects', { method: 'POST', body: data }),
-  getLinkedInProspects: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/linkedin-outreach/prospects${query ? `?${query}` : ''}`);
-  },
-
-  // ===== COLD EMAIL AGENT =====
-  generateColdEmailSequence: (data) =>
-    request('/cold-email/sequence', { method: 'POST', body: data }),
-  getColdEmailSequences: () =>
-    request('/cold-email/sequences'),
-  getColdEmailSequence: (id) =>
-    request(`/cold-email/sequences/${id}`),
-  updateColdEmailSequence: (id, data) =>
-    request(`/cold-email/sequences/${id}`, { method: 'PUT', body: data }),
-  deleteColdEmailSequence: (id) =>
-    request(`/cold-email/sequences/${id}`, { method: 'DELETE' }),
-  importColdEmailProspects: (data) =>
-    request('/cold-email/prospects', { method: 'POST', body: data }),
-  getColdEmailProspects: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/cold-email/prospects${query ? `?${query}` : ''}`);
-  },
-  // Sequence engine
-  activateColdEmailSequence: (sequenceId) =>
-    request(`/cold-email/sequences/${sequenceId}/activate`, { method: 'POST' }),
-  pauseColdEmailSequence: (sequenceId) =>
-    request(`/cold-email/sequences/${sequenceId}/pause`, { method: 'POST' }),
-  sendColdEmailToProspect: (prospectId, stepIndex) =>
-    request(`/cold-email/send-to-prospect/${prospectId}`, { method: 'POST', body: { stepIndex } }),
-  getColdEmailStats: (sequenceId) =>
-    request(`/cold-email/stats/${sequenceId}`),
-  processColdEmailQueue: () =>
-    request('/cold-email/process-queue', { method: 'POST' }),
-  // ===== LEAD GEN — Lead Pipeline =====
-  leadGenFindLeads: (data) =>
-    request('/lead-gen/find-leads', { method: 'POST', body: data }),
-  leadGenGenerateSequence: (prospectId) =>
-    request(`/lead-gen/sequence/${prospectId}`, { method: 'POST' }),
-  leadGenGetPipeline: () =>
-    request('/lead-gen/pipeline'),
-  leadGenUpdateStatus: (id, data) =>
-    request(`/lead-gen/status/${id}`, { method: 'PUT', body: data }),
-
-  // ===== SOCIAL CONTENT — Content Studio =====
-  socialContentGenerate: (data) =>
-    request('/social-content/generate', { method: 'POST', body: data }),
-  socialContentGetCalendar: () =>
-    request('/social-content/calendar'),
-  socialContentSchedule: (data) =>
-    request('/social-content/schedule', { method: 'POST', body: data }),
-  socialContentPublish: (id) =>
-    request(`/social-content/publish/${id}`, { method: 'POST' }),
-  socialContentGetPosts: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/social-content/posts${query ? `?${query}` : ''}`);
-  },
-  socialContentSave: (data) =>
-    request('/social-content/save', { method: 'POST', body: data }),
-  socialContentApprove: (id) =>
-    request(`/social-content/approve/${id}`, { method: 'PUT' }),
-  socialContentUpdatePost: (id, data) =>
-    request(`/social-content/posts/${id}`, { method: 'PUT', body: data }),
-  socialContentDeletePost: (id) =>
-    request(`/social-content/posts/${id}`, { method: 'DELETE' }),
-
-  // ===== SEO BLOG =====
-  seoBlogGenerateBlog: (data) =>
-    request('/seo-blog/blog', { method: 'POST', body: data }),
-  seoBlogGetPosts: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/seo-blog/posts${query ? `?${query}` : ''}`);
-  },
-  seoBlogGetPost: (id) =>
-    request(`/seo-blog/posts/${id}`),
-  seoBlogUpdatePost: (id, data) =>
-    request(`/seo-blog/posts/${id}`, { method: 'PUT', body: data }),
-  seoBlogApprove: (id) =>
-    request(`/seo-blog/approve/${id}`, { method: 'PUT' }),
-  seoBlogPublish: (id) =>
-    request(`/seo-blog/publish/${id}`, { method: 'POST' }),
-  seoBlogDelete: (id) =>
-    request(`/seo-blog/posts/${id}`, { method: 'DELETE' }),
-
   // ===== PROPOSAL AI =====
   generateProposalAI: (data) =>
     request('/proposals-ai/generate', { method: 'POST', body: data }),
@@ -1143,73 +938,19 @@ export const api = {
 
   // ===== AI CONTEXT SETTINGS =====
   getAiContext: () =>
-    request('/settings/ai-context'),
+    request('/ai-context'),
   getAiContextPrompt: () =>
-    request('/settings/ai-context/prompt'),
+    request('/ai-context/prompt'),
   saveAiContext: ({ key, value }) =>
-    request('/settings/ai-context', { method: 'POST', body: { key, value } }),
+    request('/ai-context', { method: 'POST', body: { key, value } }),
   deleteAiContext: (key) =>
-    request(`/settings/ai-context/${encodeURIComponent(key)}`, { method: 'DELETE' }),
+    request(`/ai-context/${encodeURIComponent(key)}`, { method: 'DELETE' }),
 
   // ===== COMMAND CENTER =====
   getCommandCenter: () =>
     request('/command-center'),
   pingCommandCenter: () =>
     request('/command-center/ping'),
-
-  // GitHub integration
-  getGithubRepos: () =>
-    request('/integrations/github/repos'),
-  getGithubPulls: () =>
-    request('/integrations/github/pulls'),
-  getGithubDeploys: () =>
-    request('/integrations/github/deploys'),
-  triggerDeploy: (appUuid) =>
-    request(`/integrations/github/deploy/${appUuid}`, { method: 'POST' }),
-
-  // VPS / Coolify
-  getVpsHealth: () =>
-    request('/integrations/vps/health'),
-  restartApp: (uuid) =>
-    request(`/integrations/vps/restart/${uuid}`, { method: 'POST' }),
-  stopApp: (uuid) =>
-    request(`/integrations/vps/stop/${uuid}`, { method: 'POST' }),
-  startApp: (uuid) =>
-    request(`/integrations/vps/start/${uuid}`, { method: 'POST' }),
-  getAppLogs: (uuid, lines = 100) =>
-    request(`/integrations/vps/logs/${uuid}?lines=${lines}`),
-
-  // Hostinger sites
-  getHostingerSites: () =>
-    request('/integrations/hostinger/sites'),
-  getHostingerStores: () =>
-    request('/integrations/hostinger/stores'),
-  probeSite: (domain) =>
-    request(`/integrations/hostinger/sites/${encodeURIComponent(domain)}`),
-
-  // Agents
-  getAgentsStatus: () =>
-    request('/agents/status'),
-  runAgent: (name) =>
-    request(`/agents/run/${name}`, { method: 'POST' }),
-  getAgentLogs: () =>
-    request('/agents/logs'),
-  getAgentLog: (date) =>
-    request(`/agents/logs/${date}`),
-
-  // ===== UPWORK CONTRACT TRACKER =====
-  getUpworkContracts: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/upwork-contracts${query ? `?${query}` : ''}`);
-  },
-  getUpworkContract: (id) =>
-    request(`/upwork-contracts/${id}`),
-  createUpworkContract: (data) =>
-    request('/upwork-contracts', { method: 'POST', body: data }),
-  updateUpworkContract: (id, data) =>
-    request(`/upwork-contracts/${id}`, { method: 'PUT', body: data }),
-  deleteUpworkContract: (id) =>
-    request(`/upwork-contracts/${id}`, { method: 'DELETE' }),
 
   // ===== APPROVALS =====
   getApprovals: (filters = {}) => {
@@ -1249,18 +990,7 @@ export const api = {
   gmailSyncNow: () =>
     request('/gmail/sync-now', { method: 'POST' }),
 
-  // ===== INTAKE FORMS =====
-  getIntakeForms: () =>
-    request('/intake-forms'),
-  getIntakeForm: (id) =>
-    request(`/intake-forms/${id}`),
-  createIntakeForm: (data) =>
-    request('/intake-forms', { method: 'POST', body: data }),
-  updateIntakeForm: (id, data) =>
-    request(`/intake-forms/${id}`, { method: 'PUT', body: data }),
-  deleteIntakeForm: (id) =>
-    request(`/intake-forms/${id}`, { method: 'DELETE' }),
-  // Public portal form
+  // ===== INTAKE FORMS (public portal) =====
   getPortalForm: (token) =>
     request(`/portal/form/${token}`),
   submitPortalForm: (token, data) =>
@@ -1287,14 +1017,6 @@ export const api = {
     return res.json();
   },
 
-  // ===== REVENUE =====
-  getRevenueDashboard: (refresh = false) =>
-    request(`/revenue/dashboard${refresh ? '?refresh=true' : ''}`),
-  getRevenueMrr: () =>
-    request('/revenue/mrr'),
-  getRevenueTrends: () =>
-    request('/revenue/trends'),
-
   // ===== ONBOARDING =====
   onboardClient: (data) =>
     request('/onboarding/client', { method: 'POST', body: data }),
@@ -1315,33 +1037,19 @@ export const api = {
 
   // ===== RETAINERS =====
   getRetainerList: () =>
-    request('/retainer'),
+    request('/retainers'),
   getRetainerStatus: (clientId) =>
-    request(`/retainer/${clientId}/status`),
+    request(`/retainers/${clientId}/status`),
   getAllRetainers: () =>
-    request('/retainer/check-all', { method: 'POST' }),
+    request('/retainers/check-all', { method: 'POST' }),
   logRetainerHours: (clientId, data) =>
-    request(`/retainer/${clientId}/log-hours`, { method: 'POST', body: data }),
+    request(`/retainers/${clientId}/log-hours`, { method: 'POST', body: data }),
   createRetainerPlan: (data) =>
-    request('/retainer', { method: 'POST', body: data }),
+    request('/retainers', { method: 'POST', body: data }),
   updateRetainerPlan: (clientId, data) =>
-    request(`/retainer/${clientId}`, { method: 'PUT', body: data }),
+    request(`/retainers/${clientId}`, { method: 'PUT', body: data }),
   generateRetainerInvoice: (clientId, data) =>
-    request(`/retainer/${clientId}/generate-invoice`, { method: 'POST', body: data }),
-
-  // ===== FINANCIAL REPORTS =====
-  getReportsPnl: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/reports/pnl${query ? `?${query}` : ''}`);
-  },
-  getClientProfitability: () =>
-    request('/reports/client-profitability'),
-  getTeamUtilization: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/reports/team-utilization${query ? `?${query}` : ''}`);
-  },
-  getPipeline: () =>
-    request('/reports/pipeline'),
+    request(`/retainers/${clientId}/generate-invoice`, { method: 'POST', body: data }),
 
   // ===== DEAL PIPELINE =====
   getPipelineStages: () =>
@@ -1378,20 +1086,6 @@ export const api = {
   deleteEmbedding: (source, sourceId) =>
     request(`/semantic-search/embeddings/${encodeURIComponent(source)}/${encodeURIComponent(sourceId)}`, { method: 'DELETE' }),
 
-  // ===== AD COPY GENERATOR =====
-  generateAdCopy: (data) =>
-    request('/ad-copy/generate', { method: 'POST', body: data }),
-  getAdCopies: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/ad-copy${query ? `?${query}` : ''}`);
-  },
-  getAdCopy: (id) =>
-    request(`/ad-copy/${id}`),
-  updateAdCopyStatus: (id, status) =>
-    request(`/ad-copy/${id}/status`, { method: 'PATCH', body: { status } }),
-  deleteAdCopy: (id) =>
-    request(`/ad-copy/${id}`, { method: 'DELETE' }),
-
   // ===== CREATIVE BRIEF =====
   generateCreativeBrief: (data) =>
     request('/creative-brief/generate', { method: 'POST', body: data }),
@@ -1407,74 +1101,6 @@ export const api = {
     request(`/creative-brief/${id}`, { method: 'PATCH', body: data }),
   deleteCreativeBrief: (id) =>
     request(`/creative-brief/${id}`, { method: 'DELETE' }),
-
-  // ===== SEO AUDIT =====
-  runSeoAudit: (data) =>
-    request('/seo/audit', { method: 'POST', body: data }),
-  getAllSeoAudits: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/seo${query ? `?${query}` : ''}`);
-  },
-  getSeoAudits: (clientId) =>
-    request(`/seo/client/${clientId}`),
-  getSeoAudit: (id) =>
-    request(`/seo/${id}`),
-  deleteSeoAudit: (id) =>
-    request(`/seo/${id}`, { method: 'DELETE' }),
-
-  // ===== CONTENT CALENDAR =====
-  getContentEvents: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/content/events${query ? `?${query}` : ''}`);
-  },
-  getContentEvent: (id) =>
-    request(`/content/events/${id}`),
-  createContentEvent: (data) =>
-    request('/content/events', { method: 'POST', body: data }),
-  updateContentEvent: (id, data) =>
-    request(`/content/events/${id}`, { method: 'PATCH', body: data }),
-  updateContentEventStatus: (id, status) =>
-    request(`/content/events/${id}/status`, { method: 'PATCH', body: { status } }),
-  deleteContentEvent: (id) =>
-    request(`/content/events/${id}`, { method: 'DELETE' }),
-  getUpcomingContent: (limit = 10) =>
-    request(`/content/upcoming?limit=${limit}`),
-
-  // ===== SOCIAL SCHEDULER =====
-  generateSocialPosts: (data) =>
-    request('/scheduler/generate', { method: 'POST', body: data }),
-  scheduleSocialPost: (data) =>
-    request('/scheduler/schedule', { method: 'POST', body: data }),
-  getScheduledPosts: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/scheduler/posts${query ? `?${query}` : ''}`);
-  },
-  getSocialPost: (id) =>
-    request(`/scheduler/posts/${id}`),
-  updateSocialPostStatus: (id, status) =>
-    request(`/scheduler/posts/${id}/status`, { method: 'PATCH', body: { status } }),
-  deleteSchedulerPost: (id) =>
-    request(`/scheduler/posts/${id}`, { method: 'DELETE' }),
-  getSocialAnalytics: () =>
-    request('/scheduler/analytics'),
-
-  // ===== SNIPPET LIBRARY =====
-  getSnippets: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/snippets${query ? `?${query}` : ''}`);
-  },
-  searchSnippets: (q, limit = 20) =>
-    request(`/snippets/search?q=${encodeURIComponent(q)}&limit=${limit}`),
-  getPopularSnippets: (limit = 10) =>
-    request(`/snippets/popular?limit=${limit}`),
-  getSnippet: (id) =>
-    request(`/snippets/${id}`),
-  createSnippet: (data) =>
-    request('/snippets', { method: 'POST', body: data }),
-  updateSnippet: (id, data) =>
-    request(`/snippets/${id}`, { method: 'PATCH', body: data }),
-  deleteSnippet: (id) =>
-    request(`/snippets/${id}`, { method: 'DELETE' }),
 
   // ===== ASSET LIBRARY =====
   getAssets: (clientId, params = {}) => {
@@ -1495,26 +1121,6 @@ export const api = {
     request('/assets/guidelines'),
   updateAssetGuidelines: (data) =>
     request('/assets/guidelines', { method: 'POST', body: data }),
-
-  // ===== SURVEYS / NPS =====
-  submitSurvey: (data) =>
-    request('/surveys/submit', { method: 'POST', body: data }),
-  getSurveyResponses: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/surveys/responses${query ? `?${query}` : ''}`);
-  },
-  getNpsMetrics: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/surveys/metrics${query ? `?${query}` : ''}`);
-  },
-  getAtRiskClients: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/surveys/at-risk-clients${query ? `?${query}` : ''}`);
-  },
-  getClientSurveyHistory: (clientId, params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/surveys/clients/${clientId}${query ? `?${query}` : ''}`);
-  },
 
   // Ash Chat
   getAshChatConversations: () => request('/ash-chat/conversations'),
@@ -1559,17 +1165,6 @@ export const api = {
   updateRateCard: (id, data) => request(`/rate-cards/${id}`, { method: 'PUT', body: data }),
   deleteRateCard: (id) => request(`/rate-cards/${id}`, { method: 'DELETE' }),
 
-  // ===== BOOKKEEPING =====
-  getBookkeepingTransactions: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/bookkeeping/transactions${query ? `?${query}` : ''}`);
-  },
-  getBookkeepingSummary: (params = {}) => {
-    const query = new URLSearchParams(params).toString();
-    return request(`/bookkeeping/summary${query ? `?${query}` : ''}`);
-  },
-  getBookkeepingBalance: () => request('/bookkeeping/balance'),
-
   // ===== BUDGET =====
   getProjectBudget: (projectId) => request(`/projects/${projectId}/budget`),
 
@@ -1585,10 +1180,10 @@ export const api = {
   // ===== TIMESHEETS =====
   getWeeklyTimesheet: (weekStart) => {
     const query = weekStart ? `?weekStart=${weekStart}` : '';
-    return request(`/time-entries/timesheets/weekly${query}`);
+    return request(`/timesheets/weekly${query}`);
   },
-  approveTimesheetEntry: (id) => request(`/time-entries/timesheets/${id}/approve`, { method: 'PATCH' }),
-  rejectTimesheetEntry: (id, reason) => request(`/time-entries/timesheets/${id}/reject`, { method: 'PATCH', body: { reason } }),
+  approveTimesheetEntry: (id) => request(`/timesheets/${id}/approve`, { method: 'PATCH' }),
+  rejectTimesheetEntry: (id, reason) => request(`/timesheets/${id}/reject`, { method: 'PATCH', body: { reason } }),
 
   // ===== AUTOSAVE DRAFT =====
   saveDraft: (entity, id, data, expectedRevision, baseUpdatedAt) =>

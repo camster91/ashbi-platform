@@ -1243,6 +1243,14 @@
               "SYSTEM"
             ],
             "type": "string"
+          },
+          "visibility": {
+            "default": "INTERNAL",
+            "enum": [
+              "INTERNAL",
+              "CLIENT"
+            ],
+            "type": "string"
           }
         },
         "required": [
@@ -7404,9 +7412,9 @@
         "x-tenancy": "scoped"
       }
     },
-    "/api/approvals/approvals": {
+    "/api/approvals": {
       "get": {
-        "operationId": "get_api_approvals_approvals",
+        "operationId": "get_api_approvals",
         "responses": {
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -7432,7 +7440,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET /api/approvals/approvals",
+        "summary": "GET /api/approvals",
         "tags": [
           "approvals"
         ],
@@ -7440,9 +7448,9 @@
         "x-tenancy": "scoped"
       }
     },
-    "/api/approvals/approvals/pending-count": {
+    "/api/approvals/pending-count": {
       "get": {
-        "operationId": "get_api_approvals_approvals_pending_count",
+        "operationId": "get_api_approvals_pending_count",
         "responses": {
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -7468,7 +7476,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET /api/approvals/approvals/pending-count",
+        "summary": "GET /api/approvals/pending-count",
         "tags": [
           "approvals"
         ],
@@ -7476,9 +7484,9 @@
         "x-tenancy": "scoped"
       }
     },
-    "/api/approvals/approvals/{id}": {
+    "/api/approvals/{id}": {
       "get": {
-        "operationId": "get_api_approvals_approvals_id",
+        "operationId": "get_api_approvals_id",
         "parameters": [
           {
             "in": "path",
@@ -7520,7 +7528,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET /api/approvals/approvals/:id",
+        "summary": "GET /api/approvals/:id",
         "tags": [
           "approvals"
         ],
@@ -7528,7 +7536,7 @@
         "x-tenancy": "scoped"
       },
       "patch": {
-        "operationId": "patch_api_approvals_approvals_id",
+        "operationId": "patch_api_approvals_id",
         "parameters": [
           {
             "in": "path",
@@ -7580,7 +7588,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "PATCH /api/approvals/approvals/:id",
+        "summary": "PATCH /api/approvals/:id",
         "tags": [
           "approvals"
         ],
@@ -7788,9 +7796,9 @@
         "x-tenancy": "scoped"
       }
     },
-    "/api/asset-library/assets": {
+    "/api/assets": {
       "post": {
-        "operationId": "post_api_asset_library_assets",
+        "operationId": "post_api_assets",
         "requestBody": {
           "content": {
             "application/json": {
@@ -7829,17 +7837,17 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST /api/asset-library/assets",
+        "summary": "POST /api/assets",
         "tags": [
-          "asset-library"
+          "assets"
         ],
         "x-access": "staff",
         "x-tenancy": "scoped"
       }
     },
-    "/api/asset-library/assets/client/{clientId}": {
+    "/api/assets/client/{clientId}": {
       "get": {
-        "operationId": "get_api_asset_library_assets_client_clientId",
+        "operationId": "get_api_assets_client_clientId",
         "parameters": [
           {
             "in": "path",
@@ -7881,17 +7889,17 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET /api/asset-library/assets/client/:clientId",
+        "summary": "GET /api/assets/client/:clientId",
         "tags": [
-          "asset-library"
+          "assets"
         ],
         "x-access": "staff",
         "x-tenancy": "scoped"
       }
     },
-    "/api/asset-library/assets/search": {
+    "/api/assets/guidelines": {
       "get": {
-        "operationId": "get_api_asset_library_assets_search",
+        "operationId": "get_api_assets_guidelines",
         "responses": {
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -7917,17 +7925,100 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET /api/asset-library/assets/search",
+        "summary": "GET /api/assets/guidelines",
         "tags": [
-          "asset-library"
+          "assets"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      },
+      "post": {
+        "operationId": "post_api_assets_guidelines",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssetGuidelineCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/assets/guidelines",
+        "tags": [
+          "assets"
         ],
         "x-access": "staff",
         "x-tenancy": "scoped"
       }
     },
-    "/api/asset-library/assets/{id}": {
+    "/api/assets/search": {
+      "get": {
+        "operationId": "get_api_assets_search",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/assets/search",
+        "tags": [
+          "assets"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/assets/{id}": {
       "delete": {
-        "operationId": "delete_api_asset_library_assets_id",
+        "operationId": "delete_api_assets_id",
         "parameters": [
           {
             "in": "path",
@@ -7969,15 +8060,15 @@
             "bearerAuth": []
           }
         ],
-        "summary": "DELETE /api/asset-library/assets/:id",
+        "summary": "DELETE /api/assets/:id",
         "tags": [
-          "asset-library"
+          "assets"
         ],
         "x-access": "staff",
         "x-tenancy": "scoped"
       },
       "get": {
-        "operationId": "get_api_asset_library_assets_id",
+        "operationId": "get_api_assets_id",
         "parameters": [
           {
             "in": "path",
@@ -8019,15 +8110,15 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET /api/asset-library/assets/:id",
+        "summary": "GET /api/assets/:id",
         "tags": [
-          "asset-library"
+          "assets"
         ],
         "x-access": "staff",
         "x-tenancy": "scoped"
       },
       "patch": {
-        "operationId": "patch_api_asset_library_assets_id",
+        "operationId": "patch_api_assets_id",
         "parameters": [
           {
             "in": "path",
@@ -8079,92 +8170,9 @@
             "bearerAuth": []
           }
         ],
-        "summary": "PATCH /api/asset-library/assets/:id",
+        "summary": "PATCH /api/assets/:id",
         "tags": [
-          "asset-library"
-        ],
-        "x-access": "staff",
-        "x-tenancy": "scoped"
-      }
-    },
-    "/api/asset-library/guidelines": {
-      "get": {
-        "operationId": "get_api_asset_library_guidelines",
-        "responses": {
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "2XX": {
-            "description": "Success. Response bodies are not yet described by this contract."
-          }
-        },
-        "security": [
-          {
-            "cookieAuth": []
-          },
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "GET /api/asset-library/guidelines",
-        "tags": [
-          "asset-library"
-        ],
-        "x-access": "staff",
-        "x-tenancy": "scoped"
-      },
-      "post": {
-        "operationId": "post_api_asset_library_guidelines",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AssetGuidelineCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "2XX": {
-            "description": "Success. Response bodies are not yet described by this contract."
-          }
-        },
-        "security": [
-          {
-            "cookieAuth": []
-          },
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "POST /api/asset-library/guidelines",
-        "tags": [
-          "asset-library"
+          "assets"
         ],
         "x-access": "staff",
         "x-tenancy": "scoped"
@@ -8240,58 +8248,6 @@
         "x-tenancy": "scoped"
       }
     },
-    "/api/attachments/attachments/{id}": {
-      "delete": {
-        "operationId": "delete_api_attachments_attachments_id",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "2XX": {
-            "description": "Success. Response bodies are not yet described by this contract."
-          }
-        },
-        "security": [
-          {
-            "cookieAuth": []
-          },
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "DELETE /api/attachments/attachments/:id",
-        "tags": [
-          "attachments"
-        ],
-        "x-access": "staff",
-        "x-tenancy": "scoped"
-      }
-    },
     "/api/attachments/uploads/{filename}": {
       "get": {
         "operationId": "get_api_attachments_uploads_filename",
@@ -8337,6 +8293,58 @@
           }
         ],
         "summary": "GET /api/attachments/uploads/:filename",
+        "tags": [
+          "attachments"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/attachments/{id}": {
+      "delete": {
+        "operationId": "delete_api_attachments_id",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "DELETE /api/attachments/:id",
         "tags": [
           "attachments"
         ],
@@ -10938,9 +10946,9 @@
         "x-tenancy": "scoped"
       }
     },
-    "/api/calendar/calendar": {
+    "/api/calendar": {
       "get": {
-        "operationId": "get_api_calendar_calendar",
+        "operationId": "get_api_calendar",
         "responses": {
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -10966,7 +10974,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET /api/calendar/calendar",
+        "summary": "GET /api/calendar",
         "tags": [
           "calendar"
         ],
@@ -10974,7 +10982,7 @@
         "x-tenancy": "scoped"
       },
       "post": {
-        "operationId": "post_api_calendar_calendar",
+        "operationId": "post_api_calendar",
         "requestBody": {
           "content": {
             "application/json": {
@@ -11013,7 +11021,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST /api/calendar/calendar",
+        "summary": "POST /api/calendar",
         "tags": [
           "calendar"
         ],
@@ -11021,9 +11029,9 @@
         "x-tenancy": "scoped"
       }
     },
-    "/api/calendar/calendar/my": {
+    "/api/calendar/my": {
       "get": {
-        "operationId": "get_api_calendar_calendar_my",
+        "operationId": "get_api_calendar_my",
         "responses": {
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -11049,7 +11057,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET /api/calendar/calendar/my",
+        "summary": "GET /api/calendar/my",
         "tags": [
           "calendar"
         ],
@@ -11057,9 +11065,9 @@
         "x-tenancy": "scoped"
       }
     },
-    "/api/calendar/calendar/upcoming": {
+    "/api/calendar/upcoming": {
       "get": {
-        "operationId": "get_api_calendar_calendar_upcoming",
+        "operationId": "get_api_calendar_upcoming",
         "responses": {
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -11085,7 +11093,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET /api/calendar/calendar/upcoming",
+        "summary": "GET /api/calendar/upcoming",
         "tags": [
           "calendar"
         ],
@@ -11093,9 +11101,9 @@
         "x-tenancy": "scoped"
       }
     },
-    "/api/calendar/calendar/{id}": {
+    "/api/calendar/{id}": {
       "delete": {
-        "operationId": "delete_api_calendar_calendar_id",
+        "operationId": "delete_api_calendar_id",
         "parameters": [
           {
             "in": "path",
@@ -11137,7 +11145,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "DELETE /api/calendar/calendar/:id",
+        "summary": "DELETE /api/calendar/:id",
         "tags": [
           "calendar"
         ],
@@ -11145,7 +11153,7 @@
         "x-tenancy": "scoped"
       },
       "get": {
-        "operationId": "get_api_calendar_calendar_id",
+        "operationId": "get_api_calendar_id",
         "parameters": [
           {
             "in": "path",
@@ -11187,7 +11195,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET /api/calendar/calendar/:id",
+        "summary": "GET /api/calendar/:id",
         "tags": [
           "calendar"
         ],
@@ -11195,7 +11203,7 @@
         "x-tenancy": "scoped"
       },
       "put": {
-        "operationId": "put_api_calendar_calendar_id",
+        "operationId": "put_api_calendar_id",
         "parameters": [
           {
             "in": "path",
@@ -11247,7 +11255,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "PUT /api/calendar/calendar/:id",
+        "summary": "PUT /api/calendar/:id",
         "tags": [
           "calendar"
         ],
@@ -11255,9 +11263,9 @@
         "x-tenancy": "scoped"
       }
     },
-    "/api/calendar/calendar/{id}/rsvp": {
+    "/api/calendar/{id}/rsvp": {
       "post": {
-        "operationId": "post_api_calendar_calendar_id_rsvp",
+        "operationId": "post_api_calendar_id_rsvp",
         "parameters": [
           {
             "in": "path",
@@ -11309,7 +11317,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST /api/calendar/calendar/:id/rsvp",
+        "summary": "POST /api/calendar/:id/rsvp",
         "tags": [
           "calendar"
         ],
@@ -11326,6 +11334,34 @@
             "name": "projectId",
             "required": true,
             "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "format": "date-time",
               "type": "string"
             }
           }
@@ -12358,6 +12394,34 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "before",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "after",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -13249,9 +13313,9 @@
         "x-tenancy": "scoped"
       }
     },
-    "/api/comments/comments/{id}": {
+    "/api/comments/{id}": {
       "delete": {
-        "operationId": "delete_api_comments_comments_id",
+        "operationId": "delete_api_comments_id",
         "parameters": [
           {
             "in": "path",
@@ -13293,7 +13357,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "DELETE /api/comments/comments/:id",
+        "summary": "DELETE /api/comments/:id",
         "tags": [
           "comments"
         ],
@@ -13301,7 +13365,7 @@
         "x-tenancy": "scoped"
       },
       "put": {
-        "operationId": "put_api_comments_comments_id",
+        "operationId": "put_api_comments_id",
         "parameters": [
           {
             "in": "path",
@@ -13353,155 +13417,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "PUT /api/comments/comments/:id",
-        "tags": [
-          "comments"
-        ],
-        "x-access": "staff",
-        "x-tenancy": "scoped"
-      }
-    },
-    "/api/comments/tasks/{taskId}/comments": {
-      "get": {
-        "operationId": "get_api_comments_tasks_taskId_comments",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "taskId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "2XX": {
-            "description": "Success. Response bodies are not yet described by this contract."
-          }
-        },
-        "security": [
-          {
-            "cookieAuth": []
-          },
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "GET /api/comments/tasks/:taskId/comments",
-        "tags": [
-          "comments"
-        ],
-        "x-access": "staff",
-        "x-tenancy": "scoped"
-      },
-      "post": {
-        "operationId": "post_api_comments_tasks_taskId_comments",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "taskId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CommentCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "2XX": {
-            "description": "Success. Response bodies are not yet described by this contract."
-          }
-        },
-        "security": [
-          {
-            "cookieAuth": []
-          },
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "POST /api/comments/tasks/:taskId/comments",
-        "tags": [
-          "comments"
-        ],
-        "x-access": "staff",
-        "x-tenancy": "scoped"
-      }
-    },
-    "/api/comments/users/mentionable": {
-      "get": {
-        "operationId": "get_api_comments_users_mentionable",
-        "responses": {
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "2XX": {
-            "description": "Success. Response bodies are not yet described by this contract."
-          }
-        },
-        "security": [
-          {
-            "cookieAuth": []
-          },
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "GET /api/comments/users/mentionable",
+        "summary": "PUT /api/comments/:id",
         "tags": [
           "comments"
         ],
@@ -18434,9 +18350,9 @@
         "x-tenancy": "exempt"
       }
     },
-    "/api/messages/messages/paste": {
+    "/api/messages/paste": {
       "post": {
-        "operationId": "post_api_messages_messages_paste",
+        "operationId": "post_api_messages_paste",
         "requestBody": {
           "content": {
             "application/json": {
@@ -18475,7 +18391,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST /api/messages/messages/paste",
+        "summary": "POST /api/messages/paste",
         "tags": [
           "messages"
         ],
@@ -18483,9 +18399,9 @@
         "x-tenancy": "scoped"
       }
     },
-    "/api/milestones/milestones/{id}": {
+    "/api/milestones/{id}": {
       "delete": {
-        "operationId": "delete_api_milestones_milestones_id",
+        "operationId": "delete_api_milestones_id",
         "parameters": [
           {
             "in": "path",
@@ -18527,7 +18443,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "DELETE /api/milestones/milestones/:id",
+        "summary": "DELETE /api/milestones/:id",
         "tags": [
           "milestones"
         ],
@@ -18535,7 +18451,7 @@
         "x-tenancy": "scoped"
       },
       "get": {
-        "operationId": "get_api_milestones_milestones_id",
+        "operationId": "get_api_milestones_id",
         "parameters": [
           {
             "in": "path",
@@ -18577,7 +18493,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET /api/milestones/milestones/:id",
+        "summary": "GET /api/milestones/:id",
         "tags": [
           "milestones"
         ],
@@ -18585,7 +18501,7 @@
         "x-tenancy": "scoped"
       },
       "put": {
-        "operationId": "put_api_milestones_milestones_id",
+        "operationId": "put_api_milestones_id",
         "parameters": [
           {
             "in": "path",
@@ -18637,7 +18553,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "PUT /api/milestones/milestones/:id",
+        "summary": "PUT /api/milestones/:id",
         "tags": [
           "milestones"
         ],
@@ -18645,9 +18561,9 @@
         "x-tenancy": "scoped"
       }
     },
-    "/api/milestones/milestones/{id}/tasks/{taskId}": {
+    "/api/milestones/{id}/tasks/{taskId}": {
       "delete": {
-        "operationId": "delete_api_milestones_milestones_id_tasks_taskId",
+        "operationId": "delete_api_milestones_id_tasks_taskId",
         "parameters": [
           {
             "in": "path",
@@ -18697,7 +18613,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "DELETE /api/milestones/milestones/:id/tasks/:taskId",
+        "summary": "DELETE /api/milestones/:id/tasks/:taskId",
         "tags": [
           "milestones"
         ],
@@ -18705,7 +18621,7 @@
         "x-tenancy": "scoped"
       },
       "post": {
-        "operationId": "post_api_milestones_milestones_id_tasks_taskId",
+        "operationId": "post_api_milestones_id_tasks_taskId",
         "parameters": [
           {
             "in": "path",
@@ -18755,119 +18671,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST /api/milestones/milestones/:id/tasks/:taskId",
-        "tags": [
-          "milestones"
-        ],
-        "x-access": "staff",
-        "x-tenancy": "scoped"
-      }
-    },
-    "/api/milestones/projects/{projectId}/milestones": {
-      "get": {
-        "operationId": "get_api_milestones_projects_projectId_milestones",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "2XX": {
-            "description": "Success. Response bodies are not yet described by this contract."
-          }
-        },
-        "security": [
-          {
-            "cookieAuth": []
-          },
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "GET /api/milestones/projects/:projectId/milestones",
-        "tags": [
-          "milestones"
-        ],
-        "x-access": "staff",
-        "x-tenancy": "scoped"
-      },
-      "post": {
-        "operationId": "post_api_milestones_projects_projectId_milestones",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MilestoneCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "2XX": {
-            "description": "Success. Response bodies are not yet described by this contract."
-          }
-        },
-        "security": [
-          {
-            "cookieAuth": []
-          },
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "POST /api/milestones/projects/:projectId/milestones",
+        "summary": "POST /api/milestones/:id/tasks/:taskId",
         "tags": [
           "milestones"
         ],
@@ -21683,6 +21487,118 @@
         "x-tenancy": "scoped"
       }
     },
+    "/api/projects/{projectId}/milestones": {
+      "get": {
+        "operationId": "get_api_projects_projectId_milestones",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/projects/:projectId/milestones",
+        "tags": [
+          "projects"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      },
+      "post": {
+        "operationId": "post_api_projects_projectId_milestones",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MilestoneCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/projects/:projectId/milestones",
+        "tags": [
+          "projects"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
     "/api/projects/{projectId}/notes": {
       "get": {
         "operationId": "get_api_projects_projectId_notes",
@@ -21858,6 +21774,170 @@
           }
         ],
         "summary": "POST /api/projects/:projectId/notes/from-template/:templateId",
+        "tags": [
+          "projects"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/projects/{projectId}/revisions": {
+      "get": {
+        "operationId": "get_api_projects_projectId_revisions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/projects/:projectId/revisions",
+        "tags": [
+          "projects"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      },
+      "post": {
+        "operationId": "post_api_projects_projectId_revisions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevisionCreateNew"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/projects/:projectId/revisions",
+        "tags": [
+          "projects"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/projects/{projectId}/time-entries": {
+      "get": {
+        "operationId": "get_api_projects_projectId_time_entries",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/projects/:projectId/time-entries",
         "tags": [
           "projects"
         ],
@@ -24204,9 +24284,9 @@
         "x-tenancy": "scoped"
       }
     },
-    "/api/retainers/retainer": {
+    "/api/retainers": {
       "get": {
-        "operationId": "get_api_retainers_retainer",
+        "operationId": "get_api_retainers",
         "responses": {
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -24232,7 +24312,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET /api/retainers/retainer",
+        "summary": "GET /api/retainers",
         "tags": [
           "retainers"
         ],
@@ -24240,7 +24320,7 @@
         "x-tenancy": "scoped"
       },
       "post": {
-        "operationId": "post_api_retainers_retainer",
+        "operationId": "post_api_retainers",
         "requestBody": {
           "content": {
             "application/json": {
@@ -24279,7 +24359,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST /api/retainers/retainer",
+        "summary": "POST /api/retainers",
         "tags": [
           "retainers"
         ],
@@ -24287,9 +24367,9 @@
         "x-tenancy": "scoped"
       }
     },
-    "/api/retainers/retainer/check-all": {
+    "/api/retainers/check-all": {
       "post": {
-        "operationId": "post_api_retainers_retainer_check_all",
+        "operationId": "post_api_retainers_check_all",
         "responses": {
           "401": {
             "$ref": "#/components/responses/Unauthorized"
@@ -24315,7 +24395,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST /api/retainers/retainer/check-all",
+        "summary": "POST /api/retainers/check-all",
         "tags": [
           "retainers"
         ],
@@ -24323,9 +24403,9 @@
         "x-tenancy": "scoped"
       }
     },
-    "/api/retainers/retainer/{clientId}": {
+    "/api/retainers/{clientId}": {
       "get": {
-        "operationId": "get_api_retainers_retainer_clientId",
+        "operationId": "get_api_retainers_clientId",
         "parameters": [
           {
             "in": "path",
@@ -24367,7 +24447,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET /api/retainers/retainer/:clientId",
+        "summary": "GET /api/retainers/:clientId",
         "tags": [
           "retainers"
         ],
@@ -24375,7 +24455,7 @@
         "x-tenancy": "scoped"
       },
       "put": {
-        "operationId": "put_api_retainers_retainer_clientId",
+        "operationId": "put_api_retainers_clientId",
         "parameters": [
           {
             "in": "path",
@@ -24427,7 +24507,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "PUT /api/retainers/retainer/:clientId",
+        "summary": "PUT /api/retainers/:clientId",
         "tags": [
           "retainers"
         ],
@@ -24435,9 +24515,9 @@
         "x-tenancy": "scoped"
       }
     },
-    "/api/retainers/retainer/{clientId}/generate-invoice": {
+    "/api/retainers/{clientId}/generate-invoice": {
       "post": {
-        "operationId": "post_api_retainers_retainer_clientId_generate_invoice",
+        "operationId": "post_api_retainers_clientId_generate_invoice",
         "parameters": [
           {
             "in": "path",
@@ -24489,7 +24569,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST /api/retainers/retainer/:clientId/generate-invoice",
+        "summary": "POST /api/retainers/:clientId/generate-invoice",
         "tags": [
           "retainers"
         ],
@@ -24497,9 +24577,9 @@
         "x-tenancy": "scoped"
       }
     },
-    "/api/retainers/retainer/{clientId}/log-hours": {
+    "/api/retainers/{clientId}/log-hours": {
       "post": {
-        "operationId": "post_api_retainers_retainer_clientId_log_hours",
+        "operationId": "post_api_retainers_clientId_log_hours",
         "parameters": [
           {
             "in": "path",
@@ -24551,7 +24631,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST /api/retainers/retainer/:clientId/log-hours",
+        "summary": "POST /api/retainers/:clientId/log-hours",
         "tags": [
           "retainers"
         ],
@@ -24559,9 +24639,9 @@
         "x-tenancy": "scoped"
       }
     },
-    "/api/retainers/retainer/{clientId}/status": {
+    "/api/retainers/{clientId}/status": {
       "get": {
-        "operationId": "get_api_retainers_retainer_clientId_status",
+        "operationId": "get_api_retainers_clientId_status",
         "parameters": [
           {
             "in": "path",
@@ -24603,7 +24683,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET /api/retainers/retainer/:clientId/status",
+        "summary": "GET /api/retainers/:clientId/status",
         "tags": [
           "retainers"
         ],
@@ -25128,121 +25208,9 @@
         "x-tenancy": "scoped"
       }
     },
-    "/api/revisions/projects/{projectId}/revisions": {
-      "get": {
-        "operationId": "get_api_revisions_projects_projectId_revisions",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "2XX": {
-            "description": "Success. Response bodies are not yet described by this contract."
-          }
-        },
-        "security": [
-          {
-            "cookieAuth": []
-          },
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "GET /api/revisions/projects/:projectId/revisions",
-        "tags": [
-          "revisions"
-        ],
-        "x-access": "staff",
-        "x-tenancy": "scoped"
-      },
-      "post": {
-        "operationId": "post_api_revisions_projects_projectId_revisions",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RevisionCreateNew"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "2XX": {
-            "description": "Success. Response bodies are not yet described by this contract."
-          }
-        },
-        "security": [
-          {
-            "cookieAuth": []
-          },
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "POST /api/revisions/projects/:projectId/revisions",
-        "tags": [
-          "revisions"
-        ],
-        "x-access": "staff",
-        "x-tenancy": "scoped"
-      }
-    },
-    "/api/revisions/revisions/{id}": {
+    "/api/revisions/{id}": {
       "put": {
-        "operationId": "put_api_revisions_revisions_id",
+        "operationId": "put_api_revisions_id",
         "parameters": [
           {
             "in": "path",
@@ -25294,7 +25262,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "PUT /api/revisions/revisions/:id",
+        "summary": "PUT /api/revisions/:id",
         "tags": [
           "revisions"
         ],
@@ -25302,9 +25270,9 @@
         "x-tenancy": "scoped"
       }
     },
-    "/api/revisions/revisions/{id}/approve": {
+    "/api/revisions/{id}/approve": {
       "post": {
-        "operationId": "post_api_revisions_revisions_id_approve",
+        "operationId": "post_api_revisions_id_approve",
         "parameters": [
           {
             "in": "path",
@@ -25346,7 +25314,7 @@
             "bearerAuth": []
           }
         ],
-        "summary": "POST /api/revisions/revisions/:id/approve",
+        "summary": "POST /api/revisions/:id/approve",
         "tags": [
           "revisions"
         ],
@@ -27680,6 +27648,118 @@
         "x-tenancy": "scoped"
       }
     },
+    "/api/tasks/{taskId}/comments": {
+      "get": {
+        "operationId": "get_api_tasks_taskId_comments",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "taskId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/tasks/:taskId/comments",
+        "tags": [
+          "tasks"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      },
+      "post": {
+        "operationId": "post_api_tasks_taskId_comments",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "taskId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommentCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/tasks/:taskId/comments",
+        "tags": [
+          "tasks"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
     "/api/team": {
       "get": {
         "operationId": "get_api_team",
@@ -28813,6 +28893,239 @@
         "x-tenancy": "scoped"
       }
     },
+    "/api/time-entries": {
+      "post": {
+        "operationId": "post_api_time_entries",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TimeEntryCreateNew"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/time-entries",
+        "tags": [
+          "time-entries"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/time-entries/my": {
+      "get": {
+        "operationId": "get_api_time_entries_my",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/time-entries/my",
+        "tags": [
+          "time-entries"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/time-entries/summary": {
+      "get": {
+        "operationId": "get_api_time_entries_summary",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/time-entries/summary",
+        "tags": [
+          "time-entries"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/time-entries/{id}": {
+      "delete": {
+        "operationId": "delete_api_time_entries_id",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "DELETE /api/time-entries/:id",
+        "tags": [
+          "time-entries"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      },
+      "put": {
+        "operationId": "put_api_time_entries_id",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TimeEntryUpdateNew"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "PUT /api/time-entries/:id",
+        "tags": [
+          "time-entries"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
     "/api/time-sessions": {
       "post": {
         "operationId": "post_api_time_sessions",
@@ -29260,31 +29573,15 @@
         "x-tenancy": "scoped"
       }
     },
-    "/api/time/projects/{projectId}/time-entries": {
+    "/api/timesheets/weekly": {
       "get": {
-        "operationId": "get_api_time_projects_projectId_time_entries",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "projectId",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
+        "operationId": "get_api_timesheets_weekly",
         "responses": {
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
             "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
           },
           "429": {
             "$ref": "#/components/responses/TooManyRequests"
@@ -29304,286 +29601,17 @@
             "bearerAuth": []
           }
         ],
-        "summary": "GET /api/time/projects/:projectId/time-entries",
+        "summary": "GET /api/timesheets/weekly",
         "tags": [
-          "time"
+          "timesheets"
         ],
         "x-access": "staff",
         "x-tenancy": "scoped"
       }
     },
-    "/api/time/time-entries": {
-      "post": {
-        "operationId": "post_api_time_time_entries",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TimeEntryCreateNew"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "2XX": {
-            "description": "Success. Response bodies are not yet described by this contract."
-          }
-        },
-        "security": [
-          {
-            "cookieAuth": []
-          },
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "POST /api/time/time-entries",
-        "tags": [
-          "time"
-        ],
-        "x-access": "staff",
-        "x-tenancy": "scoped"
-      }
-    },
-    "/api/time/time-entries/my": {
-      "get": {
-        "operationId": "get_api_time_time_entries_my",
-        "responses": {
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "2XX": {
-            "description": "Success. Response bodies are not yet described by this contract."
-          }
-        },
-        "security": [
-          {
-            "cookieAuth": []
-          },
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "GET /api/time/time-entries/my",
-        "tags": [
-          "time"
-        ],
-        "x-access": "staff",
-        "x-tenancy": "scoped"
-      }
-    },
-    "/api/time/time-entries/summary": {
-      "get": {
-        "operationId": "get_api_time_time_entries_summary",
-        "responses": {
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "2XX": {
-            "description": "Success. Response bodies are not yet described by this contract."
-          }
-        },
-        "security": [
-          {
-            "cookieAuth": []
-          },
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "GET /api/time/time-entries/summary",
-        "tags": [
-          "time"
-        ],
-        "x-access": "staff",
-        "x-tenancy": "scoped"
-      }
-    },
-    "/api/time/time-entries/{id}": {
-      "delete": {
-        "operationId": "delete_api_time_time_entries_id",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "2XX": {
-            "description": "Success. Response bodies are not yet described by this contract."
-          }
-        },
-        "security": [
-          {
-            "cookieAuth": []
-          },
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "DELETE /api/time/time-entries/:id",
-        "tags": [
-          "time"
-        ],
-        "x-access": "staff",
-        "x-tenancy": "scoped"
-      },
-      "put": {
-        "operationId": "put_api_time_time_entries_id",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TimeEntryUpdateNew"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "400": {
-            "$ref": "#/components/responses/BadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/NotFound"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "2XX": {
-            "description": "Success. Response bodies are not yet described by this contract."
-          }
-        },
-        "security": [
-          {
-            "cookieAuth": []
-          },
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "PUT /api/time/time-entries/:id",
-        "tags": [
-          "time"
-        ],
-        "x-access": "staff",
-        "x-tenancy": "scoped"
-      }
-    },
-    "/api/time/timesheets/weekly": {
-      "get": {
-        "operationId": "get_api_time_timesheets_weekly",
-        "responses": {
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "2XX": {
-            "description": "Success. Response bodies are not yet described by this contract."
-          }
-        },
-        "security": [
-          {
-            "cookieAuth": []
-          },
-          {
-            "bearerAuth": []
-          }
-        ],
-        "summary": "GET /api/time/timesheets/weekly",
-        "tags": [
-          "time"
-        ],
-        "x-access": "staff",
-        "x-tenancy": "scoped"
-      }
-    },
-    "/api/time/timesheets/{id}/approve": {
+    "/api/timesheets/{id}/approve": {
       "patch": {
-        "operationId": "patch_api_time_timesheets_id_approve",
+        "operationId": "patch_api_timesheets_id_approve",
         "parameters": [
           {
             "in": "path",
@@ -29625,17 +29653,17 @@
             "bearerAuth": []
           }
         ],
-        "summary": "PATCH /api/time/timesheets/:id/approve",
+        "summary": "PATCH /api/timesheets/:id/approve",
         "tags": [
-          "time"
+          "timesheets"
         ],
         "x-access": "staff",
         "x-tenancy": "scoped"
       }
     },
-    "/api/time/timesheets/{id}/reject": {
+    "/api/timesheets/{id}/reject": {
       "patch": {
-        "operationId": "patch_api_time_timesheets_id_reject",
+        "operationId": "patch_api_timesheets_id_reject",
         "parameters": [
           {
             "in": "path",
@@ -29687,9 +29715,9 @@
             "bearerAuth": []
           }
         ],
-        "summary": "PATCH /api/time/timesheets/:id/reject",
+        "summary": "PATCH /api/timesheets/:id/reject",
         "tags": [
-          "time"
+          "timesheets"
         ],
         "x-access": "staff",
         "x-tenancy": "scoped"
@@ -29871,6 +29899,42 @@
         "x-tenancy": "scoped"
       }
     },
+    "/api/users/mentionable": {
+      "get": {
+        "operationId": "get_api_users_mentionable",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/users/mentionable",
+        "tags": [
+          "users"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
     "/api/webhooks/email": {
       "post": {
         "operationId": "post_api_webhooks_email",
@@ -30024,7 +30088,7 @@
       "name": "ash-chat"
     },
     {
-      "name": "asset-library"
+      "name": "assets"
     },
     {
       "name": "attachments"
@@ -30198,7 +30262,7 @@
       "name": "threads"
     },
     {
-      "name": "time"
+      "name": "time-entries"
     },
     {
       "name": "time-sessions"
@@ -30207,7 +30271,13 @@
       "name": "time-tracking"
     },
     {
+      "name": "timesheets"
+    },
+    {
       "name": "trash"
+    },
+    {
+      "name": "users"
     },
     {
       "name": "webhooks"

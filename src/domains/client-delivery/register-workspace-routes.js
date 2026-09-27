@@ -24,7 +24,7 @@ export async function registerClientWorkspaceRoutes(fastify) {
   await fastify.register(timeTrackingRoutes, { prefix: '/api/time-tracking' });
   await fastify.register(timeSessionRoutes, { prefix: '/api/time-sessions' });
   await fastify.register(creativeBriefRoutes, { prefix: '/api/creative-brief' });
-  await fastify.register(assetLibraryRoutes, { prefix: '/api/asset-library' });
+  await fastify.register(assetLibraryRoutes, { prefix: '/api/assets' });
   await fastify.register(templateRoutes, { prefix: '/api/templates' });
   await fastify.register(portalRoutes, { prefix: '/api/portal' });
   await fastify.register(onboardingRoutes, { prefix: '/api/onboarding' });

@@ -138,10 +138,10 @@ queries; the test keeps a reviewed list of those routes with the reason.
 
 | Method | Path | Access | Tenancy | Notes |
 | --- | --- | --- | --- | --- |
-| GET | `/api/approvals/approvals` | staff | scoped |  |
-| GET | `/api/approvals/approvals/:id` | staff | scoped |  |
-| PATCH | `/api/approvals/approvals/:id` | admin + staff | scoped |  |
-| GET | `/api/approvals/approvals/pending-count` | staff | scoped |  |
+| GET | `/api/approvals` | staff | scoped |  |
+| GET | `/api/approvals/:id` | staff | scoped |  |
+| PATCH | `/api/approvals/:id` | admin + staff | scoped |  |
+| GET | `/api/approvals/pending-count` | staff | scoped |  |
 
 ### /api/ash-chat
 
@@ -152,18 +152,18 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | GET | `/api/ash-chat/conversations/:id/messages` | staff | scoped |  |
 | POST | `/api/ash-chat/message` | staff | scoped |  |
 
-### /api/asset-library
+### /api/assets
 
 | Method | Path | Access | Tenancy | Notes |
 | --- | --- | --- | --- | --- |
-| POST | `/api/asset-library/assets` | staff | scoped |  |
-| DELETE | `/api/asset-library/assets/:id` | staff | scoped |  |
-| GET | `/api/asset-library/assets/:id` | staff | scoped |  |
-| PATCH | `/api/asset-library/assets/:id` | staff | scoped |  |
-| GET | `/api/asset-library/assets/client/:clientId` | staff | scoped |  |
-| GET | `/api/asset-library/assets/search` | staff | scoped |  |
-| GET | `/api/asset-library/guidelines` | staff | scoped |  |
-| POST | `/api/asset-library/guidelines` | staff | scoped |  |
+| POST | `/api/assets` | staff | scoped |  |
+| DELETE | `/api/assets/:id` | staff | scoped |  |
+| GET | `/api/assets/:id` | staff | scoped |  |
+| PATCH | `/api/assets/:id` | staff | scoped |  |
+| GET | `/api/assets/client/:clientId` | staff | scoped |  |
+| GET | `/api/assets/guidelines` | staff | scoped |  |
+| POST | `/api/assets/guidelines` | staff | scoped |  |
+| GET | `/api/assets/search` | staff | scoped |  |
 
 ### /api/attachments
 
@@ -171,7 +171,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | --- | --- | --- | --- | --- |
 | GET | `/api/attachments` | staff | scoped |  |
 | POST | `/api/attachments` | staff | scoped |  |
-| DELETE | `/api/attachments/attachments/:id` | staff | scoped |  |
+| DELETE | `/api/attachments/:id` | staff | scoped |  |
 | GET | `/api/attachments/uploads/:filename` | staff | scoped |  |
 
 ### /api/audit-events
@@ -269,14 +269,14 @@ queries; the test keeps a reviewed list of those routes with the reason.
 
 | Method | Path | Access | Tenancy | Notes |
 | --- | --- | --- | --- | --- |
-| GET | `/api/calendar/calendar` | staff | scoped |  |
-| POST | `/api/calendar/calendar` | staff | scoped |  |
-| DELETE | `/api/calendar/calendar/:id` | staff | scoped |  |
-| GET | `/api/calendar/calendar/:id` | staff | scoped |  |
-| PUT | `/api/calendar/calendar/:id` | staff | scoped |  |
-| POST | `/api/calendar/calendar/:id/rsvp` | staff | scoped |  |
-| GET | `/api/calendar/calendar/my` | staff | scoped |  |
-| GET | `/api/calendar/calendar/upcoming` | staff | scoped |  |
+| GET | `/api/calendar` | staff | scoped |  |
+| POST | `/api/calendar` | staff | scoped |  |
+| DELETE | `/api/calendar/:id` | staff | scoped |  |
+| GET | `/api/calendar/:id` | staff | scoped |  |
+| PUT | `/api/calendar/:id` | staff | scoped |  |
+| POST | `/api/calendar/:id/rsvp` | staff | scoped |  |
+| GET | `/api/calendar/my` | staff | scoped |  |
+| GET | `/api/calendar/upcoming` | staff | scoped |  |
 
 ### /api/chat
 
@@ -348,11 +348,8 @@ queries; the test keeps a reviewed list of those routes with the reason.
 
 | Method | Path | Access | Tenancy | Notes |
 | --- | --- | --- | --- | --- |
-| DELETE | `/api/comments/comments/:id` | staff | scoped |  |
-| PUT | `/api/comments/comments/:id` | staff | scoped |  |
-| GET | `/api/comments/tasks/:taskId/comments` | staff | scoped |  |
-| POST | `/api/comments/tasks/:taskId/comments` | staff | scoped |  |
-| GET | `/api/comments/users/mentionable` | staff | scoped |  |
+| DELETE | `/api/comments/:id` | staff | scoped |  |
+| PUT | `/api/comments/:id` | staff | scoped |  |
 
 ### /api/contracts
 
@@ -559,19 +556,17 @@ queries; the test keeps a reviewed list of those routes with the reason.
 
 | Method | Path | Access | Tenancy | Notes |
 | --- | --- | --- | --- | --- |
-| POST | `/api/messages/messages/paste` | staff | scoped |  |
+| POST | `/api/messages/paste` | staff | scoped |  |
 
 ### /api/milestones
 
 | Method | Path | Access | Tenancy | Notes |
 | --- | --- | --- | --- | --- |
-| DELETE | `/api/milestones/milestones/:id` | staff | scoped |  |
-| GET | `/api/milestones/milestones/:id` | staff | scoped |  |
-| PUT | `/api/milestones/milestones/:id` | staff | scoped |  |
-| DELETE | `/api/milestones/milestones/:id/tasks/:taskId` | staff | scoped |  |
-| POST | `/api/milestones/milestones/:id/tasks/:taskId` | staff | scoped |  |
-| GET | `/api/milestones/projects/:projectId/milestones` | staff | scoped |  |
-| POST | `/api/milestones/projects/:projectId/milestones` | staff | scoped |  |
+| DELETE | `/api/milestones/:id` | staff | scoped |  |
+| GET | `/api/milestones/:id` | staff | scoped |  |
+| PUT | `/api/milestones/:id` | staff | scoped |  |
+| DELETE | `/api/milestones/:id/tasks/:taskId` | staff | scoped |  |
+| POST | `/api/milestones/:id/tasks/:taskId` | staff | scoped |  |
 
 ### /api/notes
 
@@ -659,9 +654,14 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | POST | `/api/projects/:id/plan/refresh` | staff | scoped |  |
 | GET | `/api/projects/:id/tasks` | staff | scoped |  |
 | POST | `/api/projects/:id/tasks` | staff | scoped |  |
+| GET | `/api/projects/:projectId/milestones` | staff | scoped |  |
+| POST | `/api/projects/:projectId/milestones` | staff | scoped |  |
 | GET | `/api/projects/:projectId/notes` | staff | scoped |  |
 | POST | `/api/projects/:projectId/notes` | staff | scoped |  |
 | POST | `/api/projects/:projectId/notes/from-template/:templateId` | staff | scoped |  |
+| GET | `/api/projects/:projectId/revisions` | staff | scoped |  |
+| POST | `/api/projects/:projectId/revisions` | staff | scoped |  |
+| GET | `/api/projects/:projectId/time-entries` | staff | scoped |  |
 | POST | `/api/projects/from-template` | staff | scoped |  |
 | GET | `/api/projects/templates` | staff | scoped |  |
 | POST | `/api/projects/templates` | staff | scoped |  |
@@ -747,14 +747,14 @@ queries; the test keeps a reviewed list of those routes with the reason.
 
 | Method | Path | Access | Tenancy | Notes |
 | --- | --- | --- | --- | --- |
-| GET | `/api/retainers/retainer` | staff | scoped |  |
-| POST | `/api/retainers/retainer` | staff | scoped |  |
-| GET | `/api/retainers/retainer/:clientId` | staff | scoped |  |
-| PUT | `/api/retainers/retainer/:clientId` | staff | scoped |  |
-| POST | `/api/retainers/retainer/:clientId/generate-invoice` | staff | scoped |  |
-| POST | `/api/retainers/retainer/:clientId/log-hours` | staff | scoped |  |
-| GET | `/api/retainers/retainer/:clientId/status` | staff | scoped |  |
-| POST | `/api/retainers/retainer/check-all` | staff | scoped |  |
+| GET | `/api/retainers` | staff | scoped |  |
+| POST | `/api/retainers` | staff | scoped |  |
+| GET | `/api/retainers/:clientId` | staff | scoped |  |
+| PUT | `/api/retainers/:clientId` | staff | scoped |  |
+| POST | `/api/retainers/:clientId/generate-invoice` | staff | scoped |  |
+| POST | `/api/retainers/:clientId/log-hours` | staff | scoped |  |
+| GET | `/api/retainers/:clientId/status` | staff | scoped |  |
+| POST | `/api/retainers/check-all` | staff | scoped |  |
 
 ### /api/reviews
 
@@ -774,10 +774,8 @@ queries; the test keeps a reviewed list of those routes with the reason.
 
 | Method | Path | Access | Tenancy | Notes |
 | --- | --- | --- | --- | --- |
-| GET | `/api/revisions/projects/:projectId/revisions` | staff | scoped |  |
-| POST | `/api/revisions/projects/:projectId/revisions` | staff | scoped |  |
-| PUT | `/api/revisions/revisions/:id` | staff | scoped |  |
-| POST | `/api/revisions/revisions/:id/approve` | admin | scoped |  |
+| PUT | `/api/revisions/:id` | staff | scoped |  |
+| POST | `/api/revisions/:id/approve` | admin | scoped |  |
 
 ### /api/search
 
@@ -846,6 +844,8 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | GET | `/api/tasks/:id/page` | staff | scoped |  |
 | POST | `/api/tasks/:id/subpage` | staff | scoped |  |
 | POST | `/api/tasks/:projectId/quick` | staff | scoped |  |
+| GET | `/api/tasks/:taskId/comments` | staff | scoped |  |
+| POST | `/api/tasks/:taskId/comments` | staff | scoped |  |
 | POST | `/api/tasks/bulk-update` | staff | scoped |  |
 | GET | `/api/tasks/gantt` | staff | scoped |  |
 | GET | `/api/tasks/kanban/:projectId` | staff | scoped |  |
@@ -889,19 +889,15 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | POST | `/api/threads/:id/resolve` | staff | scoped |  |
 | POST | `/api/threads/:id/snooze` | staff | scoped |  |
 
-### /api/time
+### /api/time-entries
 
 | Method | Path | Access | Tenancy | Notes |
 | --- | --- | --- | --- | --- |
-| GET | `/api/time/projects/:projectId/time-entries` | staff | scoped |  |
-| POST | `/api/time/time-entries` | staff | scoped |  |
-| DELETE | `/api/time/time-entries/:id` | staff | scoped |  |
-| PUT | `/api/time/time-entries/:id` | staff | scoped |  |
-| GET | `/api/time/time-entries/my` | staff | scoped |  |
-| GET | `/api/time/time-entries/summary` | staff | scoped |  |
-| PATCH | `/api/time/timesheets/:id/approve` | staff | scoped |  |
-| PATCH | `/api/time/timesheets/:id/reject` | staff | scoped |  |
-| GET | `/api/time/timesheets/weekly` | staff | scoped |  |
+| POST | `/api/time-entries` | staff | scoped |  |
+| DELETE | `/api/time-entries/:id` | staff | scoped |  |
+| PUT | `/api/time-entries/:id` | staff | scoped |  |
+| GET | `/api/time-entries/my` | staff | scoped |  |
+| GET | `/api/time-entries/summary` | staff | scoped |  |
 
 ### /api/time-sessions
 
@@ -923,6 +919,14 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | POST | `/api/time-tracking/stop-all` | staff | scoped |  |
 | GET | `/api/time-tracking/summary` | staff | scoped |  |
 
+### /api/timesheets
+
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| PATCH | `/api/timesheets/:id/approve` | staff | scoped |  |
+| PATCH | `/api/timesheets/:id/reject` | staff | scoped |  |
+| GET | `/api/timesheets/weekly` | staff | scoped |  |
+
 ### /api/trash
 
 | Method | Path | Access | Tenancy | Notes |
@@ -931,6 +935,12 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | DELETE | `/api/trash/:id/permanent` | admin | scoped |  |
 | POST | `/api/trash/:id/restore` | staff | scoped |  |
 | DELETE | `/api/trash/empty` | admin | scoped |  |
+
+### /api/users
+
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/users/mentionable` | staff | scoped |  |
 
 ### /api/webhooks
 

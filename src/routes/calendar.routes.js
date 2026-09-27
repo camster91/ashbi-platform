@@ -9,7 +9,7 @@ export default async function calendarRoutes(fastify, options = {}) {
     createCalendarClient: createGoogleCalendarClient, decryptSecret: decrypt, ...input,
   }));
   // Get calendar events
-  fastify.get('/calendar', {
+  fastify.get('/', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
     const { startDate, endDate, projectId, type } = request.query;
@@ -58,7 +58,7 @@ export default async function calendarRoutes(fastify, options = {}) {
   });
 
   // Get my calendar events
-  fastify.get('/calendar/my', {
+  fastify.get('/my', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
     const { startDate, endDate } = request.query;
@@ -91,7 +91,7 @@ export default async function calendarRoutes(fastify, options = {}) {
   });
 
   // Get single event
-  fastify.get('/calendar/:id', {
+  fastify.get('/:id', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const { id } = request.params;
@@ -120,7 +120,7 @@ export default async function calendarRoutes(fastify, options = {}) {
   });
 
   // Create event / meeting
-  fastify.post('/calendar', {
+  fastify.post('/', {
     onRequest: [fastify.authenticate],
     preHandler: validateBody(calendarEventCreateSchema),
   }, async (request, reply) => {
@@ -208,7 +208,7 @@ export default async function calendarRoutes(fastify, options = {}) {
   });
 
   // Update event
-  fastify.put('/calendar/:id', {
+  fastify.put('/:id', {
     onRequest: [fastify.authenticate],
     preHandler: validateBody(calendarEventUpdateSchema),
   }, async (request, reply) => {
@@ -298,7 +298,7 @@ export default async function calendarRoutes(fastify, options = {}) {
   });
 
   // Delete event
-  fastify.delete('/calendar/:id', {
+  fastify.delete('/:id', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const { id } = request.params;
@@ -328,7 +328,7 @@ export default async function calendarRoutes(fastify, options = {}) {
   });
 
   // RSVP to event
-  fastify.post('/calendar/:id/rsvp', {
+  fastify.post('/:id/rsvp', {
     onRequest: [fastify.authenticate],
     preHandler: validateBody(calendarRsvpSchema),
   }, async (request, reply) => {
@@ -379,7 +379,7 @@ export default async function calendarRoutes(fastify, options = {}) {
   });
 
   // Get upcoming events (widget/dashboard)
-  fastify.get('/calendar/upcoming', {
+  fastify.get('/upcoming', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
     const { limit: limitParam = '5' } = request.query;

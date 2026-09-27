@@ -36,7 +36,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [AuditEvent](#model-auditevent) | `audit_events` | yes | no | 12 |
 | [BrandSettings](#model-brandsettings) | `brand_settings` | yes | no | 15 |
 | [CalendarEvent](#model-calendarevent) | `calendar_events` | no | no | 22 |
-| [ChatMessage](#model-chatmessage) | `chat_messages` | no | no | 20 |
+| [ChatMessage](#model-chatmessage) | `chat_messages` | no | no | 22 |
 | [ChatReaction](#model-chatreaction) | `chat_reactions` | no | no | 7 |
 | [Client](#model-client) | `clients` | yes | yes | 53 |
 | [ClientEmailMapping](#model-clientemailmapping) | `client_email_mappings` | no | no | 8 |
@@ -530,6 +530,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Constraints and indexes:
   - `@@index([projectId])`
   - `@@index([projectId, createdAt])`
+  - `@@index([projectId, visibility, createdAt])`
   - `@@index([projectId, externalSource, externalMessageId])`
   - `@@index([projectId, externalSource, externalThreadId])`
 
@@ -543,8 +544,10 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `externalAuthorName` | String | optional |  |  |  |
 | `externalMessageId` | String | optional |  |  | Provider-native message identifier for durable reconciliation |
 | `externalThreadId` | String | optional |  |  | Provider-native root-thread identifier |
+| `visibility` | String | required | `"INTERNAL"` |  |  |
 | `isEdited` | Boolean | required | `false` |  |  |
 | `editedAt` | DateTime | optional |  |  |  |
+| `removedAt` | DateTime | optional |  |  |  |
 | `parentId` | String | optional |  |  | For thread replies |
 | `projectId` | String | required |  |  |  |
 | `authorId` | String | optional |  |  |  |
