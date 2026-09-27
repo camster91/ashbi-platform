@@ -1856,3 +1856,19 @@ export const reviewGuestDecisionSchema = z.object({
   decision: z.enum(['approved', 'changes_requested']),
   note: z.string().trim().max(2_000).optional(),
 }).strict();
+
+// ── Security hardening (audit at 8687cf9) ─────────────────────────────────
+
+// PATCH /api/bot/task/:id: only these task fields, nothing relational beyond
+// the assignee (the tenant proxy verifies it belongs to the bot's workspace).
+export const botTaskUpdateSchema = z.object({
+  title: z.string().trim().min(1).max(500).optional(),
+  description: z.string().max(10000).nullable().optional(),
+  status: z.enum(['PENDING', 'UPCOMING', 'IMMEDIATE', 'IN_PROGRESS', 'BLOCKED', 'WAITING_US', 'WAITING_CLIENT', 'COMPLETED']).optional(),
+  priority: z.enum(['CRITICAL', 'HIGH', 'NORMAL', 'LOW']).optional(),
+  category: z.string().max(50).optional(),
+  tags: z.array(z.string().max(50)).max(10).optional(),
+  assigneeId: cuidId.nullable().optional(),
+  dueDate: z.string().datetime().nullable().optional(),
+  blockedBy: z.string().max(2000).nullable().optional(),
+}).strict();
