@@ -1,0 +1,180 @@
+// Thread SLA escalation checks (escalation queue).
+//
+// Each escalation level notifies at most once per thread per quiet period:
+// the level reached is stored on the thread (`lastEscalationLevel`,
+// `lastEscalatedAt`) and claimed with a conditional update, so the
+// quarter-hourly sweep, the per-thread delayed check and concurrent workers
+// cannot re-send the same SLA_WARNING / ESCALATION. Any thread activity after
+// the last escalation (a response, a new message) starts a new cycle, the same
+// clock `hoursSinceActivity` is measured on; sending a response also resets the
+// level explicitly (src/routes/response.routes.js).
+
+export const ESCALATION_LEVELS = Object.freeze({ NONE: 0, SLA_WARNING: 1, ESCALATION: 2 });
+
+const HOUR_MS = 60 * 60 * 1000;
+
+/** The level already notified in the current activity cycle. */
+export function currentEscalationLevel(thread) {
+  const level = Number.isInteger(thread?.lastEscalationLevel) ? thread.lastEscalationLevel : 0;
+  if (!level || !thread.lastEscalatedAt) return 0;
+  const escalatedAt = new Date(thread.lastEscalatedAt).getTime();
+  const activityAt = new Date(thread.lastActivityAt).getTime();
+  return activityAt > escalatedAt ? 0 : level;
+}
+
+/**
+ * Atomically record that `level` was reached. Returns false when another
+ * check already claimed this (or a higher) level for the current cycle.
+ */
+async function claimEscalationLevel(prisma, thread, level, now) {
+  const alreadyClaimed = currentEscalationLevel(thread);
+  if (alreadyClaimed >= level) return false;
+  const where = { id: thread.id };
+  if (alreadyClaimed > 0) {
+    where.lastEscalationLevel = { lt: level };
+  } else if (thread.lastEscalatedAt) {
+    // Level from a previous activity cycle: claim only if nobody re-claimed
+    // since this thread was read.
+    where.lastEscalatedAt = new Date(thread.lastEscalatedAt);
+  } else {
+    where.lastEscalatedAt = null;
+  }
+  const result = await prisma.thread.updateMany({
+    where,
+    data: { lastEscalationLevel: level, lastEscalatedAt: now },
+  });
+  return result.count === 1;
+}
+
+async function activeAdmins(prisma) {
+  return prisma.user.findMany({ where: { role: 'ADMIN', isActive: true }, select: { id: true } });
+}
+
+/**
+ * Check one thread. `prisma` is the tenant-scoped client of the running job.
+ */
+export async function checkThreadEscalation(threadId, {
+  prisma,
+  slaDefaults,
+  existingThread = null,
+  now = new Date(),
+}) {
+  const thread = existingThread || await prisma.thread.findUnique({ where: { id: threadId } });
+
+  if (!thread || thread.status === 'RESOLVED') {
+    return { skipped: true, reason: 'Thread not found or resolved' };
+  }
+
+  const hoursSinceActivity = (now - new Date(thread.lastActivityAt)) / HOUR_MS;
+  const slaHours = slaDefaults[thread.priority] || 24;
+  const notifications = [];
+  let admins;
+  const getAdmins = async () => {
+    admins ??= await activeAdmins(prisma);
+    return admins;
+  };
+
+  if (hoursSinceActivity >= 4 && hoursSinceActivity < 8 && thread.assignedToId
+    && await claimEscalationLevel(prisma, thread, ESCALATION_LEVELS.SLA_WARNING, now)) {
+    notifications.push({
+      userId: thread.assignedToId,
+      type: 'SLA_WARNING',
+      title: 'Response needed soon',
+      message: `Thread "${thread.subject}" needs attention (${Math.round(hoursSinceActivity)}h without response)`,
+      data: { threadId: thread.id },
+    });
+  }
+
+  if (hoursSinceActivity >= 8
+    && await claimEscalationLevel(prisma, thread, ESCALATION_LEVELS.ESCALATION, now)) {
+    for (const admin of await getAdmins()) {
+      notifications.push({
+        userId: admin.id,
+        type: 'ESCALATION',
+        title: 'Thread escalation',
+        message: `Thread "${thread.subject}" has had no response for ${Math.round(hoursSinceActivity)} hours`,
+        data: { threadId: thread.id, assigneeId: thread.assignedToId },
+      });
+    }
+  }
+
+  if (hoursSinceActivity >= slaHours && !thread.slaBreached) {
+    // slaBreached is the once-only marker for the breach notification.
+    const claimed = await prisma.thread.updateMany({
+      where: { id: thread.id, slaBreached: false },
+      data: { slaBreached: true },
+    });
+    if (claimed.count === 1) {
+      for (const admin of await getAdmins()) {
+        notifications.push({
+          userId: admin.id,
+          type: 'SLA_BREACH',
+          title: 'SLA BREACH',
+          message: `Thread "${thread.subject}" has breached SLA (${Math.round(hoursSinceActivity)}h without response)`,
+          data: { threadId: thread.id, priority: thread.priority },
+        });
+      }
+    }
+  }
+
+  // One round-trip for the whole fan-out; notifications are independent.
+  if (notifications.length > 0) {
+    await prisma.notification.createMany({ data: notifications });
+  }
+
+  return {
+    escalated: notifications.length > 0,
+    notifications: notifications.length,
+    hoursSinceActivity: Math.round(hoursSinceActivity),
+  };
+}
+
+/** Sweep one tenant's overdue threads; a failing thread does not stop the sweep. */
+export async function checkAllEscalations({ prisma, slaDefaults, now = new Date(), logger }) {
+  const threads = await prisma.thread.findMany({
+    where: { status: 'AWAITING_RESPONSE', slaBreached: false },
+  });
+
+  let escalated = 0;
+  let failed = 0;
+  for (const thread of threads) {
+    try {
+      const result = await checkThreadEscalation(thread.id, { prisma, slaDefaults, existingThread: thread, now });
+      if (result.escalated) escalated++;
+    } catch (error) {
+      failed++;
+      logger?.error({ err: error, threadId: thread.id }, 'Escalation check failed for thread');
+    }
+  }
+  return { checked: threads.length, escalated, failed };
+}
+
+/**
+ * Run `checkOrganization` for every organization in isolation: one tenant's
+ * failure is logged and reported, the others still run, and the job fails at
+ * the end (so BullMQ retries and alerts) only after every tenant was tried.
+ * Retries are safe because each level is claimed once per thread.
+ */
+export async function runForEachOrganization(organizationIds, checkOrganization, { logger, onError } = {}) {
+  const organizations = [];
+  const failures = [];
+  for (const organizationId of organizationIds) {
+    try {
+      organizations.push({ organizationId, ...(await checkOrganization(organizationId)) });
+    } catch (error) {
+      failures.push({ organizationId, error });
+      logger?.error({ err: error, organizationId }, 'Escalation sweep failed for organization');
+      onError?.(error, organizationId);
+    }
+  }
+  if (failures.length > 0) {
+    const error = new AggregateError(
+      failures.map(({ error: cause }) => cause),
+      `Escalation sweep failed for ${failures.length} of ${organizationIds.length} organizations`,
+    );
+    error.organizations = organizations;
+    error.failedOrganizationIds = failures.map(({ organizationId }) => organizationId);
+    throw error;
+  }
+  return { organizations };
+}

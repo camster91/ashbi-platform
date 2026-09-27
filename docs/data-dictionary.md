@@ -105,7 +105,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [TaskComment](#model-taskcomment) | `task_comments` | no | no | 9 |
 | [TaskTemplate](#model-tasktemplate) | `task_templates` | yes | no | 8 |
 | [Template](#model-template) | `templates` | yes | no | 11 |
-| [Thread](#model-thread) | `threads` | no | no | 26 |
+| [Thread](#model-thread) | `threads` | no | no | 28 |
 | [TimeEntry](#model-timeentry) | `time_entries` | no | yes | 23 |
 | [TimeSession](#model-timesession) | `time_sessions` | no | no | 15 |
 | [TrashedItem](#model-trasheditem) | `trashed_items` | yes | yes | 9 |
@@ -2421,6 +2421,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `snoozedUntil` | DateTime | optional |  |  |  |
 | `slaDeadline` | DateTime | optional |  |  |  |
 | `slaBreached` | Boolean | required | `false` |  |  |
+| `lastEscalationLevel` | Int | required | `0` |  |  |
+| `lastEscalatedAt` | DateTime | optional |  |  |  |
 | `aiAnalysis` | String | optional |  |  | JSON: full AI analysis result |
 | `matchConfidence` | Float | required | `0` |  |  |
 | `matchReason` | String | optional |  |  |  |

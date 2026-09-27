@@ -399,6 +399,10 @@ model Thread {
   snoozedUntil    DateTime?
   slaDeadline     DateTime?
   slaBreached     Boolean   @default(false)
+  // Escalation dedupe: highest level notified (1 = SLA_WARNING,
+  // 2 = ESCALATION) in the activity cycle that began before lastEscalatedAt.
+  lastEscalationLevel Int       @default(0)
+  lastEscalatedAt     DateTime?
   aiAnalysis      String? // JSON: full AI analysis result
   matchConfidence Float     @default(0)
   matchReason     String?
