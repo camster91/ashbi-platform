@@ -342,6 +342,47 @@ test('a dispatcher that lost its lease does not overwrite the newer claim', asyn
   assert.equal(events[0].claimToken, 'someone-else');
 });
 
+test('each event in a batch gets a fresh lease just before delivery', async () => {
+  let clock = new Date('2026-09-26T00:00:00Z');
+  const leaseMs = 120_000;
+  const { events, claim, prisma } = memoryOutbox([
+    { aggregateId: 'inv-1', sequence: 1, type: 'invoice.paid' },
+    { aggregateId: 'inv-2', sequence: 1, type: 'invoice.paid' },
+  ]);
+  const leaseAtDelivery = [];
+  const subscribers = [{
+    name: 'slow', types: null,
+    handle: (event) => {
+      leaseAtDelivery.push(events.find((row) => row.id === event.id).lockedUntil.getTime() - clock.getTime());
+      clock = new Date(clock.getTime() + 100_000); // each delivery takes 100 s of a 120 s lease
+    },
+  }];
+  const summary = await dispatchDomainEvents(prisma, {
+    claim, subscribers, runInTenant: inTenant, logger: silent, now: () => clock, leaseMs, subscriberTimeoutMs: 110_000,
+  });
+  assert.deepEqual(leaseAtDelivery, [leaseMs, leaseMs], 'the second event did not start on a nearly expired lease');
+  assert.equal(summary.published, 2);
+});
+
+test('an event whose claim was taken before its turn is skipped, not delivered', async () => {
+  const { events, claim, prisma } = memoryOutbox([
+    { aggregateId: 'inv-1', sequence: 1, type: 'invoice.paid' },
+    { aggregateId: 'inv-2', sequence: 1, type: 'invoice.paid' },
+  ]);
+  const delivered = [];
+  const subscribers = [{
+    name: 'spy', types: null,
+    handle: (event) => {
+      delivered.push(event.aggregateId);
+      // Another replica reclaims the second event while the first is delivered.
+      events.find((row) => row.aggregateId === 'inv-2').claimToken = 'someone-else';
+    },
+  }];
+  const summary = await dispatchDomainEvents(prisma, { claim, subscribers, runInTenant: inTenant, logger: silent, batchSize: 10 });
+  assert.deepEqual(delivered, ['inv-1']);
+  assert.equal(summary.leaseLost, 1);
+});
+
 test('a claim abandoned on its final attempt is dead-lettered, not reclaimed forever', async () => {
   const now = new Date('2026-09-26T00:00:00Z');
   const expired = new Date(now.getTime() - 1);

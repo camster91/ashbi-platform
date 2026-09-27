@@ -146,6 +146,8 @@ export default async function webhookRoutes(fastify) {
           fastify.log.info({ invoiceId: result.invoiceId, duplicate: result.duplicate }, 'Stripe checkout processed');
         } catch (error) {
           const failure = handleCheckoutFailure(error, { event, route: '/api/webhooks/stripe', log: fastify.log });
+          // Permanent rejections are acknowledged so Stripe stops retrying them.
+          if (failure.acknowledged) return reply.status(200).send({ received: true, recorded: false, code: failure.code });
           return reply.status(failure.statusCode).send({ error: failure.error, code: failure.code });
         }
         break;

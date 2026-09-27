@@ -250,9 +250,11 @@ export async function recordCompletedCheckout(prisma, event, { correlationId = n
  * recorded, log it with a distinct code, alert where a human must act, and
  * return the HTTP answer for Stripe.
  *
- * - CHECKOUT_MISMATCH (400): the session does not match the invoice.
- * - INVOICE_ALREADY_PAID (400, alerted): the customer paid an invoice another
- *   payment already settled; a refund decision is needed.
+ * - CHECKOUT_MISMATCH (200, not recorded): the session does not match the
+ *   invoice. Retrying cannot help, so the delivery is acknowledged (Stripe
+ *   retries every non-2xx answer).
+ * - INVOICE_ALREADY_PAID (200, not recorded, alerted once): the customer paid
+ *   an invoice another payment already settled; a refund decision is needed.
  * - DOMAIN_EVENT_INVALID (500, alerted): the outbox event was rejected, so the
  *   payment transaction rolled back. Producers normalize data, so this is a
  *   code defect; Stripe keeps retrying the delivery until it is fixed.
@@ -261,7 +263,7 @@ export async function recordCompletedCheckout(prisma, event, { correlationId = n
  *
  * @param {any} err
  * @param {{ event?: any, route?: string, log?: { warn: Function, error: Function }, alert?: typeof sendOperationalAlert }} [context]
- * @returns {{ statusCode: number, code: string, error: string }}
+ * @returns {{ statusCode: number, code: string, error: string, acknowledged: boolean }}
  */
 export function handleCheckoutFailure(err, { event, route, log = defaultLogger, alert = sendOperationalAlert } = {}) {
   const invoiceId = event?.data?.object?.metadata?.invoiceId ?? null;
@@ -269,15 +271,15 @@ export function handleCheckoutFailure(err, { event, route, log = defaultLogger, 
   let result;
   let alertEvent = null;
   if (err instanceof StripeCheckoutRejectedError && err.code === 'INVOICE_ALREADY_PAID') {
-    result = { statusCode: 400, code: err.code, error: 'Invoice was already paid by another transaction' };
+    result = { statusCode: 200, acknowledged: true, code: err.code, error: 'Invoice was already paid by another transaction' };
     alertEvent = 'stripe_checkout_invoice_already_paid';
   } else if (err instanceof StripeCheckoutRejectedError) {
-    result = { statusCode: 400, code: 'CHECKOUT_MISMATCH', error: 'Stripe payment did not match an invoice' };
+    result = { statusCode: 200, acknowledged: true, code: 'CHECKOUT_MISMATCH', error: 'Stripe payment did not match an invoice' };
   } else if (err?.code === 'DOMAIN_EVENT_INVALID' || err?.code === 'DOMAIN_EVENT_IDEMPOTENCY_CONFLICT') {
-    result = { statusCode: 500, code: 'DOMAIN_EVENT_INVALID', error: 'Stripe payment could not be recorded' };
+    result = { statusCode: 500, acknowledged: false, code: 'DOMAIN_EVENT_INVALID', error: 'Stripe payment could not be recorded' };
     alertEvent = 'domain_event_invalid';
   } else {
-    result = { statusCode: 500, code: 'CHECKOUT_RECORDING_FAILED', error: 'Stripe payment could not be recorded' };
+    result = { statusCode: 500, acknowledged: false, code: 'CHECKOUT_RECORDING_FAILED', error: 'Stripe payment could not be recorded' };
   }
   const logFn = result.statusCode >= 500 || alertEvent ? log.error : log.warn;
   logFn.call(log, { ...fields, code: result.code }, 'Stripe checkout not recorded');

@@ -146,12 +146,12 @@ for (const [label, routes, url] of [
     assert.doesNotMatch(response.body, /did not match/);
   });
 
-  test(`${label}: a session that does not match the invoice stays a 400 mismatch`, async (t) => {
+  test(`${label}: a session that does not match the invoice is acknowledged (200) as a mismatch, unrecorded`, async (t) => {
     const { db, state } = database({ ...LEGACY_INVOICE, currency: 'CAD' });
     const app = await buildApp(t, routes, db);
     const response = await app.inject({ method: 'POST', url, ...signedDelivery(checkoutEvent({ ...LEGACY_INVOICE, currency: 'CAD' }, { amount_total: 1 })) });
-    assert.equal(response.statusCode, 400, response.body);
-    assert.deepEqual(response.json(), { error: 'Stripe payment did not match an invoice', code: 'CHECKOUT_MISMATCH' });
+    assert.equal(response.statusCode, 200, response.body);
+    assert.deepEqual(response.json(), { received: true, recorded: false, code: 'CHECKOUT_MISMATCH' });
     assert.equal(state.payments.length, 0);
   });
 }
@@ -165,8 +165,8 @@ test('handleCheckoutFailure logs a distinct code and alerts where a human must a
 
   const cases = [
     [new DomainEventValidationError('Invalid invoice.paid v1 payload'), 500, 'DOMAIN_EVENT_INVALID'],
-    [new StripeCheckoutRejectedError('Stripe paid amount does not match invoice'), 400, 'CHECKOUT_MISMATCH'],
-    [new StripeCheckoutRejectedError('Invoice was already paid by another transaction', 'INVOICE_ALREADY_PAID'), 400, 'INVOICE_ALREADY_PAID'],
+    [new StripeCheckoutRejectedError('Stripe paid amount does not match invoice'), 200, 'CHECKOUT_MISMATCH'],
+    [new StripeCheckoutRejectedError('Invoice was already paid by another transaction', 'INVOICE_ALREADY_PAID'), 200, 'INVOICE_ALREADY_PAID'],
     [new Error('connect ECONNREFUSED'), 500, 'CHECKOUT_RECORDING_FAILED'],
   ];
   for (const [err, statusCode, code] of cases) {

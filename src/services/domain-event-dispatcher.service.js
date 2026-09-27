@@ -249,6 +249,22 @@ async function settle(prisma, event, data) {
 }
 
 /**
+ * Extend this dispatcher's lease on one claimed event right before it is
+ * delivered. A batch is claimed together but delivered one event at a time,
+ * so without this, events late in a slow batch could see their lease expire
+ * before their turn and be reclaimed (and delivered twice) by another
+ * replica. Returns false when the claim was already lost; the event is then
+ * left to whoever holds it.
+ */
+async function renewLease(prisma, event, lockedUntil) {
+  const result = await prisma.domainEvent.updateMany({
+    where: { id: event.id, status: 'dispatching', claimToken: event.claimToken },
+    data: { lockedUntil },
+  });
+  return result.count === 1;
+}
+
+/**
  * Run every subscriber of the event's type, in order, inside a tenant scope
  * for the event's organization. The first failure stops the run and fails
  * the attempt; the whole event is retried later.
@@ -304,6 +320,11 @@ export async function dispatchDomainEvents(prisma, options = {}) {
     summary.claimed += claimed.length;
 
     for (const event of claimed) {
+      if (!(await renewLease(prisma, event, new Date(now().getTime() + leaseMs)))) {
+        summary.leaseLost += 1;
+        logger.warn({ domainEventId: event.id }, 'Domain event lease lost before delivery; skipped');
+        continue;
+      }
       const targets = subscribersFor(event.type, subscribers ?? registry.values());
       let failure = null;
       try {
