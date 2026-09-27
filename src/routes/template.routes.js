@@ -7,7 +7,7 @@ export default async function templateRoutes(fastify) {
   // List all templates
   fastify.get('/', {
     onRequest: [fastify.authenticate]
-  }, async () => {
+  }, async (request) => {
     const templates = await request.prisma.taskTemplate.findMany({
       orderBy: { name: 'asc' }
     });
