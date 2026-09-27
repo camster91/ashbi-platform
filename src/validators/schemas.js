@@ -781,6 +781,8 @@ const proposalLineItemInput = z.object({
   category: z.string().min(1).max(50).optional(),
 });
 
+const proposalDiscount = z.number().nonnegative().max(10_000_000);
+
 export const proposalCreateSchema = z.object({
   clientId: cuidId,
   title: z.string().min(1).max(200),
@@ -788,6 +790,8 @@ export const proposalCreateSchema = z.object({
   // a $0 quote and likely a misuse. The handler also checks this manually
   // but we surface it at validation time too.
   lineItems: z.array(proposalLineItemInput).min(1).max(100),
+  // Flat amount off the subtotal; the server clamps the total at zero.
+  discount: proposalDiscount.optional(),
   notes: z.string().max(10_000).optional(),
   validUntil: z.string().datetime().optional(),
   projectId: cuidId.optional(),
@@ -801,6 +805,9 @@ export const proposalUpdateSchema = z.object({
   validUntil: z.string().datetime().optional(),
   projectId: cuidId.optional(),
   status: z.enum(['DRAFT', 'SENT', 'VIEWED', 'APPROVED', 'DECLINED']).optional(),
+  // Replacing line items or the discount recomputes subtotal/total server-side.
+  lineItems: z.array(proposalLineItemInput).min(1).max(100).optional(),
+  discount: proposalDiscount.optional(),
 });
 
 // Bulk operations take a list of IDs

@@ -69,6 +69,30 @@ async function recordProposalDelivery(prisma, proposalId, delivery) {
   return data;
 }
 
+function roundMoney(value) {
+  return Math.round((Number(value) || 0) * 100) / 100;
+}
+
+function computeProposalLineItems(lineItems) {
+  return lineItems.map(item => {
+    const quantity = item.quantity ?? 1;
+    return {
+      description: item.description,
+      quantity,
+      unitPrice: item.unitPrice,
+      total: roundMoney(quantity * item.unitPrice),
+    };
+  });
+}
+
+// Subtotal from the line items; a discount can reduce the total to zero but
+// never below it.
+function proposalTotals(lineItems, discount = 0) {
+  const subtotal = roundMoney(lineItems.reduce((sum, item) => sum + (Number(item.total) || 0), 0));
+  const total = roundMoney(Math.max(0, subtotal - (Number(discount) || 0)));
+  return { subtotal, total };
+}
+
 export default async function proposalRoutes(fastify) {
   // List all proposals
   fastify.get('/', {
@@ -128,16 +152,9 @@ export default async function proposalRoutes(fastify) {
   }, async (request, reply) => {
     const { clientId, title, lineItems, notes, validUntil, projectId } = request.body;
 
-    const computedLineItems = lineItems.map(item => ({
-      description: item.description,
-      quantity: item.quantity ?? 1,
-      unitPrice: item.unitPrice,
-      total: (item.quantity ?? 1) * item.unitPrice
-    }));
-
-    const subtotal = computedLineItems.reduce((sum, item) => sum + item.total, 0);
+    const computedLineItems = computeProposalLineItems(lineItems);
     const discount = request.body.discount || 0;
-    const total = subtotal - discount;
+    const { subtotal, total } = proposalTotals(computedLineItems, discount);
 
     const proposal = await request.prisma.$transaction(async (tx) => {
       const created = await tx.proposal.create({
@@ -181,7 +198,7 @@ export default async function proposalRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const existing = await request.prisma.proposal.findUnique({ where: { id } });
+    const existing = await request.prisma.proposal.findUnique({ where: { id }, include: { lineItems: true } });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Proposal not found' });
@@ -200,25 +217,31 @@ export default async function proposalRoutes(fastify) {
     if (projectId !== undefined) data.projectId = projectId || null;
     if (discount !== undefined) data.discount = discount;
 
+    // The snapshot records the line items the proposal has after this edit:
+    // the replacements when provided, otherwise the unchanged stored ones.
+    const computedLineItems = lineItems ? computeProposalLineItems(lineItems) : null;
+    const snapshotLineItems = (computedLineItems || existing.lineItems || []).map(item => ({
+      description: item.description,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      total: item.total,
+    }));
+
     const proposal = await request.prisma.$transaction(async (tx) => {
       // If lineItems provided, replace them
-      if (lineItems) {
+      if (computedLineItems) {
         await tx.proposalLineItem.deleteMany({ where: { proposalId: id } });
-
-        const computedLineItems = lineItems.map(item => ({
-          description: item.description,
-          quantity: item.quantity ?? 1,
-          unitPrice: item.unitPrice,
-          total: (item.quantity ?? 1) * item.unitPrice,
-          proposalId: id
-        }));
-
-        await tx.proposalLineItem.createMany({ data: computedLineItems });
-
-        const subtotal = computedLineItems.reduce((sum, item) => sum + item.total, 0);
-        const currentDiscount = discount !== undefined ? discount : existing.discount;
-        data.subtotal = subtotal;
-        data.total = subtotal - currentDiscount;
+        await tx.proposalLineItem.createMany({ data: computedLineItems.map(item => ({ ...item, proposalId: id })) });
+      }
+      if (computedLineItems || discount !== undefined) {
+        // Totals are always derived on the server from the line items and
+        // discount that will be stored, never taken from the request.
+        const effectiveDiscount = discount !== undefined ? discount : (existing.discount || 0);
+        const totals = computedLineItems
+          ? proposalTotals(computedLineItems, effectiveDiscount)
+          : proposalTotals(existing.lineItems || [], effectiveDiscount);
+        data.subtotal = totals.subtotal;
+        data.total = totals.total;
       }
 
       const updated = await tx.proposal.update({
@@ -244,7 +267,7 @@ export default async function proposalRoutes(fastify) {
             subtotal: updated.subtotal,
             total: updated.total,
             status: updated.status,
-            lineItems: computedLineItems || existing.lineItems
+            lineItems: snapshotLineItems
           }
         }
       });

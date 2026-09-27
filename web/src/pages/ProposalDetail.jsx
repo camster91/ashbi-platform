@@ -150,7 +150,8 @@ export default function ProposalDetail() {
   const subtotal = editing
     ? lineItems.reduce((sum, li) => sum + (parseFloat(li.quantity) || 1) * (parseFloat(li.unitPrice) || 0), 0)
     : proposal.subtotal;
-  const total = subtotal - (editing ? parseFloat(discount) || 0 : proposal.discount);
+  // Mirrors the server: a discount never takes the total below zero.
+  const total = Math.max(0, subtotal - (editing ? parseFloat(discount) || 0 : proposal.discount));
   const isDraft = proposal.status === 'DRAFT';
 
   return (

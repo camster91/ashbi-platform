@@ -97,6 +97,7 @@ after(async () => {
   if (skip) return;
   try {
     await rawPrisma.contract.deleteMany({ where: { clientId: testClientId } });
+    await rawPrisma.proposalVersion.deleteMany({ where: { proposal: { clientId: testClientId } } });
     await rawPrisma.proposalLineItem.deleteMany({ where: { proposal: { clientId: testClientId } } });
     await rawPrisma.proposal.deleteMany({ where: { clientId: testClientId } });
     await rawPrisma.task.deleteMany({ where: { project: { clientId: testClientId } } });
@@ -179,6 +180,49 @@ describe('Proposal CRUD', { skip }, () => {
     assert.equal(body.id, createdProposalId);
     assert.ok(body.lineItems.length > 0);
     console.log(`  ✓ Got proposal detail`);
+  });
+
+  test('PUT /api/proposals/:id — edits title, line items and discount with server totals', async () => {
+    const titleOnly = await fastify.inject({
+      method: 'PUT',
+      url: `/api/proposals/${createdProposalId}`,
+      headers: authHeaders(),
+      payload: { title: 'Brand Redesign Proposal (rev)' },
+    });
+    assert.equal(titleOnly.statusCode, 200, titleOnly.body);
+
+    const res = await fastify.inject({
+      method: 'PUT',
+      url: `/api/proposals/${createdProposalId}`,
+      headers: authHeaders(),
+      payload: {
+        title: 'Brand Redesign Proposal',
+        discount: 500,
+        lineItems: [
+          { description: 'Brand Strategy', quantity: 1, unitPrice: 5000 },
+          { description: 'Visual Identity', quantity: 1, unitPrice: 3000 },
+        ],
+      },
+    });
+    assert.equal(res.statusCode, 200, res.body);
+    const body = JSON.parse(res.body);
+    assert.equal(body.subtotal, 8000);
+    assert.equal(body.discount, 500);
+    assert.equal(body.total, 7500);
+    assert.equal(body.lineItems.length, 2);
+
+    const versions = await rawPrisma.proposalVersion.findMany({ where: { proposalId: createdProposalId } });
+    assert.equal(versions.length, 2);
+
+    // Restore the discount-free shape the rest of this suite expects.
+    const reset = await fastify.inject({
+      method: 'PUT',
+      url: `/api/proposals/${createdProposalId}`,
+      headers: authHeaders(),
+      payload: { discount: 0 },
+    });
+    assert.equal(reset.statusCode, 200, reset.body);
+    assert.equal(JSON.parse(reset.body).total, 8000);
   });
 
   test('POST /api/proposals/:id/send — send proposal', async () => {
