@@ -45,7 +45,7 @@ import { initSubscribers } from './subscribers/index.js';
 import { registerCallSignalling } from './services/call-signalling.service.js';
 import { tenancyMiddleware } from './middleware/tenancy.js';
 import { getAuthProvider } from './auth/index.js';
-import { toClientErrorBody } from './utils/http-errors.js';
+import { clientErrorStatus, toClientErrorBody } from './utils/http-errors.js';
 import { buildHelmetOptions, permissionsPolicy } from './config/security-headers.js';
 import { initSentry, Sentry } from './observability/sentry.js';
 import { checkRuntimeHealth, closeRuntimeHealth } from './services/runtime-health.service.js';
@@ -130,6 +130,36 @@ await fastify.register(rateLimit, {
   allowList: isNonApiRequest,
 });
 await fastify.register(jwt, { secret: jwtSecret, cookie: { cookieName: 'token', signed: false } });
+
+// Global Error Handler. Registered before any route plugin: an encapsulated
+// plugin keeps the error handler its parent had when it was registered, so a
+// handler set after the routes would never apply to them and they would fall
+// back to Fastify's default, which sends raw error messages (Prisma
+// invocations, tenancy details) to clients.
+fastify.setErrorHandler((error, request, reply) => {
+  const statusCode = clientErrorStatus(error);
+  const logFields = {
+    errorName: error.name,
+    errorCode: typeof error.code === 'string' ? error.code : undefined,
+    statusCode,
+    route: request.routeOptions?.url || 'unknown',
+    method: request.method,
+    traceId: request.id,
+  };
+  if (statusCode >= 500) {
+    request.log.error(logFields, 'Global request error');
+    Sentry.captureException(error, {
+      extra: {
+        route: request.routeOptions?.url || 'unknown',
+        method: request.method,
+        traceId: request.id,
+      },
+    });
+  } else {
+    request.log.info(logFields, 'Request rejected');
+  }
+  reply.status(statusCode).send(toClientErrorBody(error, { traceId: request.id }));
+});
 
 // JWT verification hook — runs for ALL /api/* requests BEFORE tenancyMiddleware
 fastify.addHook('onRequest', async (request, reply) => {
@@ -238,26 +268,6 @@ if (env.serveBuiltSpa) {
 
 // Proposal PDFs are served only via authenticated /api/proposal-builder/:id/pdf
 // (and portal token routes). Do not expose storage/proposals/ as public static files.
-
-// Global Error Handler (Enterprise Grade)
-fastify.setErrorHandler((error, request, reply) => {
-  const statusCode = error.statusCode || 500;
-  request.log.error({
-    errorName: error.name,
-    statusCode,
-    route: request.routeOptions?.url || 'unknown',
-    method: request.method,
-    traceId: request.id,
-  }, 'Global request error');
-  Sentry.captureException(error, {
-    extra: {
-      route: request.routeOptions?.url || 'unknown',
-      method: request.method,
-      traceId: request.id,
-    },
-  });
-  reply.status(statusCode).send(toClientErrorBody(error, { traceId: request.id }));
-});
 
 // Socket.IO
 const io = new SocketIO(fastify.server, { cors: { origin: env.isDev ? 'http://localhost:*' : env.corsOrigins, credentials: true } });
