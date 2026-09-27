@@ -126,6 +126,7 @@ export const notificationQueue = createQueue(QUEUES.NOTIFICATIONS);
 export const weeklyDigestQueue = createQueue(QUEUES.WEEKLY_DIGEST);
 export const embeddingQueue = createQueue(QUEUES.EMBEDDING);
 export const scheduledQueue = createQueue(QUEUES.SCHEDULED);
+export const domainEventsQueue = createQueue(QUEUES.DOMAIN_EVENTS);
 export const ALL_QUEUES = Object.freeze([
   emailQueue,
   healthQueue,
@@ -134,6 +135,7 @@ export const ALL_QUEUES = Object.freeze([
   weeklyDigestQueue,
   embeddingQueue,
   scheduledQueue,
+  domainEventsQueue,
 ]);
 
 /**
@@ -197,6 +199,8 @@ export async function queueEmbedding(clientId, content, source, sourceId = null,
  * Set up recurring jobs
  */
 // Retired schedules: queued copies are removed, or completed as no-ops by the worker.
+export const DOMAIN_EVENT_DISPATCH_INTERVAL_MS = 15 * 1000;
+
 export const RETIRED_SCHEDULED_JOBS = new Set(['scheduled-workflows', 'fleet-digest']);
 
 export async function setupRecurringJobs() {
@@ -272,6 +276,15 @@ export async function setupRecurringJobs() {
       { name, data: {}, opts: defaults },
     );
   }
+
+  // Outbox dispatcher tick (#412). One attempt per tick: the dispatcher keeps
+  // its own per-event retry/backoff state in domain_events, so a failed tick
+  // is simply retried by the next one. Replicas are safe (SKIP LOCKED claims).
+  await domainEventsQueue.upsertJobScheduler(
+    'domain-events-dispatch',
+    { every: DOMAIN_EVENT_DISPATCH_INTERVAL_MS },
+    { name: 'dispatch-domain-events', data: {}, opts: { attempts: 1, removeOnComplete: 100, removeOnFail: 500 } },
+  );
 
   console.log('Recurring jobs scheduled');
 }
