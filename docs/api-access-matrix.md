@@ -49,8 +49,8 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | client-portal | 19 |
 | public | 50 |
 | recent-auth + staff | 4 |
-| staff | 355 |
-| **total** | 522 |
+| staff | 356 |
+| **total** | 523 |
 
 ## Routes by prefix
 
@@ -430,6 +430,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | GET | `/api/estimates/:id` | staff | scoped |  |
 | PUT | `/api/estimates/:id` | staff | scoped |  |
 | POST | `/api/estimates/:id/convert` | staff | scoped |  |
+| POST | `/api/estimates/:id/revoke-link` | staff | scoped |  |
 | POST | `/api/estimates/:id/send` | staff | scoped |  |
 | GET | `/api/estimates/view/:viewToken` | public | exempt | capability token: Estimate view link. |
 | POST | `/api/estimates/view/:viewToken/approve` | public | exempt | capability token: Estimate approval via view link. |
