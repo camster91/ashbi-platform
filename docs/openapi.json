@@ -1701,10 +1701,11 @@
             "type": "string"
           },
           "currency": {
-            "default": "CAD",
             "enum": [
               "CAD",
-              "USD"
+              "USD",
+              "EUR",
+              "GBP"
             ],
             "type": "string"
           },
@@ -1714,8 +1715,14 @@
             "type": "number"
           },
           "dueDate": {
-            "format": "date-time",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "internalNotes": {
             "maxLength": 2000,
@@ -1725,7 +1732,6 @@
             "type": "boolean"
           },
           "issueDate": {
-            "format": "date-time",
             "type": "string"
           },
           "lineItems": {
@@ -1744,6 +1750,7 @@
                     "MATERIALS",
                     "EXPENSE",
                     "DISCOUNT",
+                    "CUSTOM",
                     "OTHER"
                   ],
                   "type": "string"
@@ -1808,14 +1815,11 @@
           },
           "title": {
             "maxLength": 200,
-            "minLength": 1,
             "type": "string"
           }
         },
         "required": [
           "clientId",
-          "title",
-          "dueDate",
           "lineItems"
         ],
         "type": "object"
@@ -3298,6 +3302,11 @@
             "minLength": 1,
             "type": "string"
           },
+          "discount": {
+            "maximum": 10000000,
+            "minimum": 0,
+            "type": "number"
+          },
           "lineItems": {
             "items": {
               "properties": {
@@ -3379,6 +3388,51 @@
             "maxLength": 50,
             "minLength": 1,
             "type": "string"
+          },
+          "discount": {
+            "maximum": 10000000,
+            "minimum": 0,
+            "type": "number"
+          },
+          "lineItems": {
+            "items": {
+              "properties": {
+                "category": {
+                  "maxLength": 50,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "description": {
+                  "maxLength": 500,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "quantity": {
+                  "default": 1,
+                  "exclusiveMinimum": 0,
+                  "maximum": 10000,
+                  "type": "number"
+                },
+                "unit": {
+                  "maxLength": 20,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "unitPrice": {
+                  "maximum": 10000000,
+                  "minimum": 0,
+                  "type": "number"
+                }
+              },
+              "required": [
+                "description",
+                "unitPrice"
+              ],
+              "type": "object"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "type": "array"
           },
           "notes": {
             "maxLength": 10000,
@@ -5078,7 +5132,9 @@
           "currency": {
             "enum": [
               "CAD",
-              "USD"
+              "USD",
+              "EUR",
+              "GBP"
             ],
             "type": "string"
           },
@@ -5087,8 +5143,14 @@
             "type": "number"
           },
           "dueDate": {
-            "format": "date-time",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "internalNotes": {
             "maxLength": 2000,
@@ -5098,7 +5160,6 @@
             "type": "boolean"
           },
           "issueDate": {
-            "format": "date-time",
             "type": "string"
           },
           "lineItems": {
@@ -5117,6 +5178,7 @@
                     "MATERIALS",
                     "EXPENSE",
                     "DISCOUNT",
+                    "CUSTOM",
                     "OTHER"
                   ],
                   "type": "string"
@@ -5204,7 +5266,6 @@
           },
           "title": {
             "maxLength": 200,
-            "minLength": 1,
             "type": "string"
           }
         },
