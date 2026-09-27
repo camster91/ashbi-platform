@@ -1379,17 +1379,23 @@ export const taskTemplateSchema = z.object({
 });
 
 // ── Time tracking ────────────────────────────────────────────────────────
+// `duration` is stored and reported in MINUTES (TimeEntry.duration, timer
+// sessions and the /summary hours maths all use minutes). NOTE: the 86_400
+// ceiling is a seconds-based leftover — 24h is 1_440 minutes; tightening it is
+// a server validation change left to the time-tracking owners.
+const timeEntryDurationMinutes = z.number().positive().max(86_400)
+  .describe('Duration in minutes (not seconds).');
 export const timeEntryCreateSchema = z.object({
   projectId: cuidId,
   taskId: cuidId.optional(),
-  duration: z.number().positive().max(86_400), // max 24h
+  duration: timeEntryDurationMinutes,
   description: z.string().max(2_000).optional(),
   date: z.string().datetime().optional(),
   billable: z.boolean().default(true),
 });
 
 export const timeEntryUpdateSchema = z.object({
-  duration: z.number().positive().max(86_400).optional(),
+  duration: timeEntryDurationMinutes.optional(),
   description: z.string().max(2_000).optional(),
   date: z.string().datetime().optional(),
   billable: z.boolean().optional(),
