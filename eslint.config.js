@@ -45,15 +45,4 @@ export default defineConfig([
       '@typescript-eslint/no-explicit-any': 'off',
     },
   },
-  {
-    // TEMPORARY, tracked separately: proposal.routes.js reads an undeclared
-    // `computedLineItems` in the version snapshot of PUT /api/proposals/:id.
-    // That fix lands on its own branch; this override only silences that
-    // single identifier in that single file so `no-undef` stays an error
-    // everywhere else. Delete this block once the fix is merged.
-    files: ['src/routes/proposal.routes.js'],
-    languageOptions: {
-      globals: { computedLineItems: 'readonly' },
-    },
-  },
 ])

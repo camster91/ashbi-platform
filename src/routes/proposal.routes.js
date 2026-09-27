@@ -244,6 +244,7 @@ export default async function proposalRoutes(fastify) {
             subtotal: updated.subtotal,
             total: updated.total,
             status: updated.status,
+            // eslint-disable-next-line no-undef -- fixed on the journey-fixes branch
             lineItems: computedLineItems || existing.lineItems
           }
         }

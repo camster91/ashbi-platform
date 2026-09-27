@@ -299,9 +299,10 @@ export function createScopedPrisma(prisma, organizationId) {
       }
 
       return new Proxy(model, {
-        // Prisma delegate methods are string keys; symbol lookups return
-        // before any methodName comparison below.
-        get(modelTarget, /** @type {string} */ methodName) {
+        get(modelTarget, methodName) {
+          // Prisma delegate methods are string keys; pass symbol lookups
+          // (inspection, iteration, Promise checks) straight through.
+          if (typeof methodName !== 'string') return modelTarget[methodName];
           const method = modelTarget[methodName];
           if (typeof method !== 'function') return method;
           if (APPEND_ONLY_MODELS.has(modelKey) && APPEND_ONLY_BLOCKED_METHODS.has(methodName)) {

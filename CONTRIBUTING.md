@@ -55,9 +55,10 @@ configured to see. Both are ratchets: tighten them, never loosen them.
 
 - **ESLint (`npm run lint`)**: `no-undef` is an error with Node globals, so a missing
   import or handler parameter fails lint instead of returning 500 at runtime. Unused
-  variables are warnings (`@typescript-eslint/no-unused-vars`); do not add new ones, and
-  prefix intentionally unused names with `_`. Do not add file-wide `eslint-disable`
-  comments for `no-undef`.
+  variables are warnings (`@typescript-eslint/no-unused-vars`), capped by
+  `--max-warnings` in the `lint` script: do not add new ones, prefix intentionally unused
+  names with `_`, and lower the cap when you remove some. Do not add file-wide
+  `eslint-disable` comments for `no-undef`.
 - **Type-check (`npm run type-check`)**: `tsconfig.json` has `allowJs` but not
   `checkJs`, so only files that start with `// @ts-check` are type-checked. The current
   allowlist is `src/config/env.js`, `src/config/db.js`, `src/config/trust-proxy.js`,
