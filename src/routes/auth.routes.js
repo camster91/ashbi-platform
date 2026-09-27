@@ -7,7 +7,7 @@ import env from '../config/env.js';
 import logger from '../utils/logger.js';
 import { isCurrentUserSession, revokeUserSessions, sessionCookieOptions, signUserSession } from '../auth/session.js';
 import { recordAuditEvent, recordRequestAuditEvent } from '../services/audit-event.service.js';
-import { clearReauthCookieOptions, REAUTH_COOKIE } from '../auth/reauth.js';
+import { clearReauthCookieOptions, REAUTH_COOKIE, recentAuthProblem, sendReauthRequired } from '../auth/reauth.js';
 import { dummyPasswordCheck, hashPassword, upgradeLegacyHash, verifyPassword, warmDummyPasswordHash } from '../auth/password.js';
 import { accountThrottle } from '../auth/credential-throttle.js';
 import { AccountWithoutOrganizationError } from '../auth/providers/local.provider.js';
@@ -273,6 +273,11 @@ export default async function authRoutes(fastify) {
       } catch (err) {
         return reply.status(401).send({ error: 'Unauthorized — admin login required' });
       }
+      // Minting another administrator is a privileged action: step-up
+      // re-authentication, like promoting a member (docs/privileged-actions.md).
+      if (role === 'ADMIN' && recentAuthProblem(request) !== null) {
+        return sendReauthRequired(reply);
+      }
     }
 
     // Check if email already exists
@@ -305,6 +310,11 @@ export default async function authRoutes(fastify) {
       const user = await request.prisma.user.create({
         data: { ...userData, organizationId: request.user.organizationId },
         select,
+      });
+      await recordRequestAuditEvent(request.prisma, request, {
+        action: 'user.created',
+        entityId: user.id,
+        metadata: { role: user.role, via: 'register' },
       });
       return reply.status(201).send(user);
     }

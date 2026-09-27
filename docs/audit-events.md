@@ -80,6 +80,7 @@ notes, signer names, email addresses, API key material or password hashes.
 | `proposal.approved` | `proposal` | CLIENT | `POST /api/portal/proposal/:viewToken/approve` (the SPA portal, `via: portal_link`) and `POST /api/proposals/client/:viewToken/approve` (`via: public_link`) | `fromStatus`, `toStatus`, `total`, `via` |
 | `contract.signed` | `contract` | CLIENT | `POST /api/portal/contract/:signToken/sign` (the SPA portal, `via: portal_link`) and `POST /api/contracts/sign/:signToken` (`via: public_link`) | `fromStatus`, `toStatus`, `signingMethod` (`type` or `draw`), `documentHash` (SHA-256 of the signed content), `via` |
 | `user.role_changed` | `user` | USER (admin) | `PUT /api/team/:id` when the role actually changes | `fromRole`, `toRole` |
+| `user.created` | `user` | USER | `POST /api/auth/register` after bootstrap (`via: register`) and `POST /api/team` (`via: team`); creating an `ADMIN` requires step-up re-authentication | `role`, `via` |
 | `user.deactivated` | `user` | USER (admin) | `PUT /api/team/:id` when `isActive` goes true → false | `fromActive`, `toActive` |
 | `user.reactivated` | `user` | USER (admin) | `PUT /api/team/:id` when `isActive` goes false → true | `fromActive`, `toActive` |
 | `auth.login_failed` | `user` | USER or CLIENT | `POST /api/auth/login` (any failure) and `POST /api/auth/client/login` (wrong password) for an **existing** account; unknown emails have no tenant and are not logged | `portal` (`staff` or `client`), `accountActive` |

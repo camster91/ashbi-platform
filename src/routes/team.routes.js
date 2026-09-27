@@ -12,6 +12,15 @@ import { requireRecentAuth } from '../auth/reauth.js';
  * capacity) do not. Compares against the stored state, so a form that
  * resubmits the unchanged role is not prompted.
  */
+/**
+ * preHandler for POST /: creating an ADMIN requires step-up
+ * re-authentication; other roles are not prompted.
+ */
+async function requireRecentAuthForAdminCreation(request, reply) {
+  if ((request.body?.role ?? 'TEAM') !== 'ADMIN') return undefined;
+  return requireRecentAuth(request, reply);
+}
+
 async function requireRecentAuthForAccessChange(request, reply) {
   const { role, isActive } = request.body || {};
   if (!role && isActive === undefined) return undefined;
@@ -77,7 +86,7 @@ export default async function teamRoutes(fastify) {
   // Create team member (admin only)
   fastify.post('/', {
     onRequest: [fastify.adminOnly],
-    preHandler: validateBody(teamInviteSchema),
+    preHandler: [validateBody(teamInviteSchema), requireRecentAuthForAdminCreation],
   }, async (request, reply) => {
     const { email, password, name, role = 'TEAM', skills = [], capacity = 100 } = request.body;
 
@@ -105,6 +114,12 @@ export default async function teamRoutes(fastify) {
         capacity: true,
         isActive: true
       }
+    });
+
+    await recordRequestAuditEvent(request.prisma, request, {
+      action: 'user.created',
+      entityId: user.id,
+      metadata: { role: user.role, via: 'team' },
     });
 
     return reply.status(201).send({

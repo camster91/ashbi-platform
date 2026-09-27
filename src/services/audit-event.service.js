@@ -26,6 +26,7 @@ export const AUDIT_EVENT_CATALOG = Object.freeze({
   'proposal.approved': { entityType: 'proposal', metadata: ['fromStatus', 'toStatus', 'total', 'via'] },
   'contract.signed': { entityType: 'contract', metadata: ['fromStatus', 'toStatus', 'signingMethod', 'documentHash', 'via'] },
   'user.role_changed': { entityType: 'user', metadata: ['fromRole', 'toRole'] },
+  'user.created': { entityType: 'user', metadata: ['role', 'via'] },
   'user.deactivated': { entityType: 'user', metadata: ['fromActive', 'toActive'] },
   'user.reactivated': { entityType: 'user', metadata: ['fromActive', 'toActive'] },
   'auth.login_failed': { entityType: 'user', metadata: ['portal', 'accountActive'] },
