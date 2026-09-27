@@ -10547,36 +10547,6 @@
         "x-tenancy": "exempt"
       }
     },
-    "/api/bot/system/restart-gateway": {
-      "post": {
-        "operationId": "post_api_bot_system_restart_gateway",
-        "responses": {
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "2XX": {
-            "description": "Success. Response bodies are not yet described by this contract."
-          }
-        },
-        "security": [
-          {
-            "botBearer": []
-          }
-        ],
-        "summary": "POST /api/bot/system/restart-gateway",
-        "tags": [
-          "bot"
-        ],
-        "x-access": "bot-secret",
-        "x-tenancy": "exempt"
-      }
-    },
     "/api/bot/task": {
       "post": {
         "operationId": "post_api_bot_task",

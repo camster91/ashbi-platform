@@ -45,12 +45,12 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | api-key | 1 |
 | api-key + scope ai_bridge:actions | 2 |
 | api-key + scope ai_bridge:read | 1 |
-| bot-secret | 41 |
+| bot-secret | 40 |
 | client-portal | 19 |
 | public | 50 |
 | recent-auth + staff | 4 |
 | staff | 355 |
-| **total** | 522 |
+| **total** | 521 |
 
 ## Routes by prefix
 
@@ -248,7 +248,6 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | GET | `/api/bot/retainer/:clientId` | bot-secret | exempt |  |
 | GET | `/api/bot/sync` | bot-secret | exempt |  |
 | GET | `/api/bot/system/gateway-status` | bot-secret | exempt |  |
-| POST | `/api/bot/system/restart-gateway` | bot-secret | exempt |  |
 | POST | `/api/bot/task` | bot-secret | exempt |  |
 | PATCH | `/api/bot/task/:id` | bot-secret | exempt |  |
 | POST | `/api/bot/tasks/bulk` | bot-secret | exempt |  |
