@@ -7,6 +7,9 @@ import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import crypto from 'crypto';
 import { resolveTenantOrganizationIds, runTenantJob } from '../jobs/tenant-iteration.js';
+import { sendInvoiceOverdueEmail } from './email.service.js';
+import { formatMoney } from '../utils/money.js';
+import { invoicePublicAccessFailure } from '../utils/public-document-access.js';
 
 // ==================== EMAIL HELPER ====================
 
@@ -65,25 +68,34 @@ async function createAdminNotification(type, title, message, data = null, organi
 
 // ==================== ACTIVITY LOG HELPER ====================
 
-async function logAutomation(type, action, entityType, entityId, entityName, metadata = {}, organizationId = null) {
-  const admin = await prisma.user.findFirst({
-    where: { role: 'ADMIN', ...(organizationId ? { organizationId } : {}) },
-    select: { id: true }
-  });
+// Best-effort: the activity feed is project-scoped, so an entity without a
+// project (e.g. an invoice with no project) cannot be logged under tenant
+// scope. A logging failure is reported and never aborts the automation.
+async function logAutomation(type, action, entityType, entityId, entityName, metadata = {}, organizationId = null, projectId = null) {
+  try {
+    const admin = await prisma.user.findFirst({
+      where: { role: 'ADMIN', ...(organizationId ? { organizationId } : {}) },
+      select: { id: true }
+    });
 
-  if (!admin) return null;
+    if (!admin) return null;
 
-  return prisma.activity.create({
-    data: {
-      type,
-      action,
-      entityType,
-      entityId,
-      entityName,
-      metadata: JSON.stringify({ ...metadata, automatedBy: 'WORKFLOW_ENGINE' }),
-      userId: admin.id
-    }
-  });
+    return await prisma.activity.create({
+      data: {
+        type,
+        action,
+        entityType,
+        entityId,
+        entityName,
+        metadata: JSON.stringify({ ...metadata, automatedBy: 'WORKFLOW_ENGINE' }),
+        userId: admin.id,
+        ...(projectId ? { projectId } : {}),
+      }
+    });
+  } catch (err) {
+    console.warn(`[Automation] Activity log skipped for ${entityType} ${entityId}:`, err?.message);
+    return null;
+  }
 }
 
 // ==================== CLIENT EMAIL HELPER ====================
@@ -298,161 +310,135 @@ export async function onContractSigned(contractId) {
 
 // ==================== TRIGGER: CHECK OVERDUE INVOICES ====================
 
-export async function checkOverdueInvoices() {
-  console.log(`[Automation] Checking overdue invoices...`);
+const OVERDUE_ESCALATION_DAYS = 7;
 
+function hubUrl() {
+  return process.env.APP_URL || process.env.HUB_URL || 'https://hub.ashbi.ca';
+}
+
+// Best-effort side effect: log and continue so one failing step (activity
+// log, notification) never stops the remaining invoices.
+async function bestEffort(label, invoiceId, fn) {
   try {
-    const now = new Date();
-
-    // Find invoices that are SENT and past dueDate
-    const overdueInvoices = await prisma.invoice.findMany({
-      where: {
-        status: 'SENT',
-        dueDate: { lt: now }
-      },
-      include: {
-        client: { select: { id: true, name: true, relationshipStatus: true } }
-      }
-    });
-
-    if (overdueInvoices.length === 0) {
-      console.log(`[Automation] No overdue invoices found`);
-      return;
-    }
-
-    console.log(`[Automation] Found ${overdueInvoices.length} overdue invoice(s)`);
-
-    for (const invoice of overdueInvoices) {
-      const daysOverdue = Math.floor((now - new Date(invoice.dueDate)) / (1000 * 60 * 60 * 24));
-      const hubUrl = process.env.HUB_URL || 'https://hub.ashbi.ca';
-      const portalLink = invoice.viewToken
-        ? `${hubUrl}/portal/invoice/${invoice.viewToken}`
-        : null;
-
-      // Mark as OVERDUE
-      await prisma.invoice.update({
-        where: { id: invoice.id },
-        data: { status: 'OVERDUE' }
-      });
-
-      const contact = await getClientEmail(invoice.clientId);
-
-      if (daysOverdue >= 7) {
-        // ==================== INVOICE_OVERDUE_7D ====================
-        // Only escalate if we haven't already (check reminderSentAt as a flag)
-        const reminderSent = invoice.reminderSentAt;
-        const reminderDate = reminderSent ? new Date(reminderSent) : null;
-        const alreadyEscalated = reminderDate && (now - reminderDate) > (6 * 24 * 60 * 60 * 1000);
-
-        // Action 1: Send escalation email
-        if (contact) {
-          await sendEmail(
-            contact.email,
-            `URGENT: Invoice ${invoice.invoiceNumber} is ${daysOverdue} days overdue`,
-            `
-              <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #dc2626;">Payment Overdue — Immediate Attention Required</h2>
-                <p>Dear ${contact.name || invoice.client.name},</p>
-                <p>Invoice <strong>${invoice.invoiceNumber}</strong>${invoice.title ? ` (${invoice.title})` : ''} for <strong>$${invoice.total.toFixed(2)}</strong> was due on <strong>${new Date(invoice.dueDate).toLocaleDateString('en-CA')}</strong> and is now <strong>${daysOverdue} days overdue</strong>.</p>
-                <p>Please arrange payment at your earliest convenience to avoid any disruption to ongoing work.</p>
-                ${portalLink ? `
-                  <p style="margin-top: 24px;">
-                    <a href="${portalLink}" style="background-color: #dc2626; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: 600;">Pay Now</a>
-                  </p>
-                ` : ''}
-                <p style="color: #666; font-size: 14px; margin-top: 32px;">
-                  If you've already sent payment, please disregard this notice.<br/>
-                  — Ashbi Design
-                </p>
-              </div>
-            `
-          );
-        }
-
-        // Action 2: Flag client health as AT_RISK
-        // Update client's payment status
-        await prisma.client.update({
-          where: { id: invoice.clientId },
-          data: { paymentStatus: 'AT_RISK' }
-        });
-
-        // Notify admin
-        await createAdminNotification(
-          'INVOICE_OVERDUE_7D',
-          `Invoice ${daysOverdue}+ Days Overdue`,
-          `${invoice.invoiceNumber} for ${invoice.client.name} ($${invoice.total.toFixed(2)}) is ${daysOverdue} days overdue. Client flagged as AT_RISK.`,
-          { invoiceId: invoice.id, daysOverdue, clientId: invoice.clientId }
-        );
-
-        await logAutomation(
-          'AUTOMATION_RAN',
-          'escalated',
-          'INVOICE',
-          invoice.id,
-          invoice.invoiceNumber,
-          { trigger: 'INVOICE_OVERDUE_7D', daysOverdue, clientName: invoice.client.name }
-        );
-
-      } else {
-        // ==================== INVOICE_OVERDUE (just became overdue) ====================
-        // Only send reminder if we haven't recently
-        if (!invoice.reminderSentAt) {
-          // Action 1: Send reminder email
-          if (contact) {
-            await sendEmail(
-              contact.email,
-              `Friendly Reminder: Invoice ${invoice.invoiceNumber} is past due`,
-              `
-                <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-                  <h2 style="color: #1a1a2e;">Payment Reminder</h2>
-                  <p>Dear ${contact.name || invoice.client.name},</p>
-                  <p>This is a friendly reminder that invoice <strong>${invoice.invoiceNumber}</strong>${invoice.title ? ` (${invoice.title})` : ''} for <strong>$${invoice.total.toFixed(2)}</strong> was due on <strong>${new Date(invoice.dueDate).toLocaleDateString('en-CA')}</strong>.</p>
-                  <p>If you've already sent payment, thank you! Otherwise, we'd appreciate it if you could arrange payment at your convenience.</p>
-                  ${portalLink ? `
-                    <p style="margin-top: 24px;">
-                      <a href="${portalLink}" style="background-color: #c9a84c; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: 600;">View & Pay Invoice</a>
-                    </p>
-                  ` : ''}
-                  <p style="color: #666; font-size: 14px; margin-top: 32px;">
-                    Questions? Just reply to this email.<br/>
-                    — Ashbi Design
-                  </p>
-                </div>
-              `
-            );
-          }
-
-          // Mark reminder as sent
-          await prisma.invoice.update({
-            where: { id: invoice.id },
-            data: { reminderSentAt: now }
-          });
-
-          // Action 2: Notify admin
-          await createAdminNotification(
-            'INVOICE_OVERDUE',
-            'Invoice Overdue',
-            `${invoice.invoiceNumber} for ${invoice.client.name} ($${invoice.total.toFixed(2)}) is now overdue. Reminder sent.`,
-            { invoiceId: invoice.id, daysOverdue, clientId: invoice.clientId }
-          );
-
-          await logAutomation(
-            'AUTOMATION_RAN',
-            'reminded',
-            'INVOICE',
-            invoice.id,
-            invoice.invoiceNumber,
-            { trigger: 'INVOICE_OVERDUE', daysOverdue, clientName: invoice.client.name }
-          );
-        }
-      }
-    }
-
-    console.log(`[Automation] Overdue invoice check complete`);
+    return await fn();
   } catch (err) {
-    console.error(`[Automation] checkOverdueInvoices failed:`, err);
-    throw err;
+    console.warn(`[Automation] ${label} failed for invoice ${invoiceId}:`, err?.message);
+    return null;
   }
+}
+
+/**
+ * Which reminder, if any, an overdue invoice is due for. A first reminder is
+ * sent once; a single escalation follows once the invoice is at least
+ * OVERDUE_ESCALATION_DAYS late (the recorded reminderSentAt tells which one
+ * already went out), so repeated runs are idempotent.
+ */
+export function overdueReminderStage(invoice, now = new Date()) {
+  const dueAt = new Date(invoice.dueDate).getTime();
+  const daysOverdue = Math.floor((now.getTime() - dueAt) / (24 * 60 * 60 * 1000));
+  const escalationStart = dueAt + OVERDUE_ESCALATION_DAYS * 24 * 60 * 60 * 1000;
+  const lastReminder = invoice.reminderSentAt ? new Date(invoice.reminderSentAt).getTime() : null;
+  if (daysOverdue >= OVERDUE_ESCALATION_DAYS) {
+    if (lastReminder && lastReminder >= escalationStart) return { stage: null, daysOverdue };
+    return { stage: 'ESCALATION', daysOverdue };
+  }
+  if (!lastReminder) return { stage: 'REMINDER', daysOverdue };
+  return { stage: null, daysOverdue };
+}
+
+async function processOverdueInvoice(db, invoice, { now, sendOverdueEmail }) {
+  // Compare-and-set: never overwrite a payment or void that just landed.
+  if (invoice.status === 'SENT') {
+    await db.invoice.updateMany({ where: { id: invoice.id, status: 'SENT' }, data: { status: 'OVERDUE' } });
+  }
+  const { stage, daysOverdue } = overdueReminderStage(invoice, now);
+  if (!stage) return { reminded: false };
+
+  const contact = await getClientEmail(invoice.clientId);
+  // The pay link is the public invoice page, which creates or refreshes a
+  // Checkout session on demand; only link it while the link is valid.
+  const linkUsable = invoice.viewToken && !invoicePublicAccessFailure({ ...invoice, status: 'OVERDUE' }, now);
+  let delivered = false;
+  if (contact?.email && linkUsable) {
+    const delivery = await sendOverdueEmail({
+      to: contact.email,
+      clientName: contact.name || invoice.client?.name,
+      invoiceNumber: invoice.invoiceNumber,
+      total: invoice.total,
+      currency: invoice.currency,
+      daysOverdue,
+      viewUrl: `${hubUrl()}/portal/invoice/${invoice.viewToken}`,
+      invoiceId: invoice.id,
+    });
+    delivered = Boolean(delivery?.ok);
+    if (!delivered) {
+      // Not recorded, so the next run retries the reminder.
+      console.warn(`[Automation] Overdue reminder for invoice ${invoice.id} was not accepted by the email provider`);
+      return { reminded: false };
+    }
+  }
+  await db.invoice.update({ where: { id: invoice.id }, data: { reminderSentAt: now } });
+
+  const amount = formatMoney(invoice.total, invoice.currency);
+  const organizationId = invoice.organizationId || null;
+  if (stage === 'ESCALATION') {
+    await bestEffort('Client payment-status flag', invoice.id, () => db.client.update({
+      where: { id: invoice.clientId },
+      data: { paymentStatus: 'AT_RISK' },
+    }));
+  }
+  await bestEffort('Admin notification', invoice.id, () => createAdminNotification(
+    stage === 'ESCALATION' ? 'INVOICE_OVERDUE_7D' : 'INVOICE_OVERDUE',
+    stage === 'ESCALATION' ? `Invoice ${daysOverdue}+ Days Overdue` : 'Invoice Overdue',
+    stage === 'ESCALATION'
+      ? `${invoice.invoiceNumber} for ${invoice.client?.name} (${amount}) is ${daysOverdue} days overdue. Client flagged as AT_RISK.`
+      : `${invoice.invoiceNumber} for ${invoice.client?.name} (${amount}) is now overdue.${delivered ? ' Reminder sent.' : ' No reminder could be sent (no contact email or link).'}`,
+    { invoiceId: invoice.id, daysOverdue, clientId: invoice.clientId },
+    organizationId,
+  ));
+  await logAutomation(
+    'AUTOMATION_RAN',
+    stage === 'ESCALATION' ? 'escalated' : 'reminded',
+    'INVOICE',
+    invoice.id,
+    invoice.invoiceNumber,
+    { trigger: stage === 'ESCALATION' ? 'INVOICE_OVERDUE_7D' : 'INVOICE_OVERDUE', daysOverdue, clientName: invoice.client?.name, emailSent: delivered },
+    organizationId,
+    invoice.projectId,
+  );
+  return { reminded: delivered };
+}
+
+/**
+ * Mark past-due invoices OVERDUE and send templated reminders. Runs inside a
+ * tenant job (db defaults to the request-context client, which runTenantJob
+ * scopes to one organization). Each invoice is isolated: a failure is logged
+ * and reported, and the remaining invoices are still processed.
+ */
+export async function checkOverdueInvoices(db = prisma, { now = new Date(), sendOverdueEmail = sendInvoiceOverdueEmail } = {}) {
+  const overdueInvoices = await db.invoice.findMany({
+    where: {
+      status: { in: ['SENT', 'OVERDUE'] },
+      dueDate: { lt: now },
+    },
+    include: {
+      client: { select: { id: true, name: true } },
+    },
+    take: 1000,
+  });
+
+  const result = { processed: 0, reminded: 0, failed: [] };
+  for (const invoice of overdueInvoices) {
+    try {
+      const outcome = await processOverdueInvoice(db, invoice, { now, sendOverdueEmail });
+      result.processed += 1;
+      if (outcome.reminded) result.reminded += 1;
+    } catch (err) {
+      console.error(`[Automation] Overdue processing failed for invoice ${invoice.id}:`, err?.message);
+      result.failed.push({ invoiceId: invoice.id, error: err?.message });
+    }
+  }
+  return result;
 }
 
 // ==================== WORKFLOW ENGINE ====================
@@ -759,12 +745,42 @@ function getNestedValue(obj, path) {
 
 // ==================== SCHEDULE CHECKER ====================
 
+/**
+ * Run the overdue check for the given organizations, each in its own tenant
+ * job. A failing organization (or invoice) is reported and the rest still
+ * run; the call throws at the end if anything failed so the queue retries
+ * (every step is idempotent).
+ */
+export async function checkOverdueInvoicesForOrganizations(organizationIds, { db = null, sendOverdueEmail, now } = {}) {
+  const failed = [];
+  let processed = 0;
+  for (const organizationId of organizationIds) {
+    try {
+      const result = await runTenantJob(
+        db || prisma,
+        organizationId,
+        (tenantPrisma) => checkOverdueInvoices(tenantPrisma, { sendOverdueEmail, now }),
+        db || backgroundPrisma,
+      );
+      processed += result.processed;
+      for (const failure of result.failed) failed.push({ organizationId, ...failure });
+    } catch (err) {
+      console.error(`[Automation] Overdue check failed for organization ${organizationId}:`, err?.message);
+      failed.push({ organizationId, error: err?.message });
+    }
+  }
+  return { organizations: organizationIds.length, processed, failed };
+}
+
 export async function checkOverdueInvoicesForAllOrganizations() {
   const organizationIds = await resolveTenantOrganizationIds(prisma);
-  for (const organizationId of organizationIds) {
-    await runTenantJob(prisma, organizationId, () => checkOverdueInvoices(), backgroundPrisma);
+  const result = await checkOverdueInvoicesForOrganizations(organizationIds);
+  if (result.failed.length > 0) {
+    const error = new Error(`Overdue invoice check failed for ${result.failed.length} item(s)`);
+    error.failures = result.failed;
+    throw error;
   }
-  return { organizations: organizationIds.length };
+  return result;
 }
 
 // ==================== WORKFLOW ENGINE ====================
