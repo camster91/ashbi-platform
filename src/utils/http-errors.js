@@ -1,10 +1,36 @@
 // Client-safe HTTP error shaping — never leak internal error.message in production.
 
+// Prisma's known request errors carry a P-prefixed code and a message that
+// names models, fields and the failing query; none of it may reach a client.
+function isPrismaKnownError(error) {
+  return typeof error?.code === 'string' && /^P\d{4}$/.test(error.code);
+}
+
+/**
+ * HTTP status for an error thrown by a route. A unique-constraint violation
+ * (P2002) is a conflict the client can retry, not a server fault.
+ */
+export function statusCodeForError(error) {
+  if (error?.code === 'P2002') return 409;
+  return error?.statusCode || 500;
+}
+
 /**
  * Build a response body safe to send to API clients.
  * Server errors return a generic message; 4xx may expose `error.expose` messages.
  */
 export function toClientErrorBody(error, { traceId } = {}) {
+  if (isPrismaKnownError(error)) {
+    const statusCode = statusCodeForError(error);
+    return {
+      error: statusCode === 409 ? 'Conflict' : 'InternalServerError',
+      message: statusCode === 409
+        ? 'The record conflicts with an existing one. Please retry.'
+        : 'An unexpected error occurred',
+      statusCode,
+      ...(traceId ? { traceId } : {}),
+    };
+  }
   const statusCode = error.statusCode || 500;
   // AI control-plane errors (src/ai/errors.js: AI_DISABLED, AI_BUDGET_EXCEEDED,
   // AI_PROVIDER_*) carry fixed, caller-safe messages even when they are 5xx,

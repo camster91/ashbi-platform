@@ -44,7 +44,7 @@ import { initSubscribers } from './subscribers/index.js';
 import { registerCallSignalling } from './services/call-signalling.service.js';
 import { tenancyMiddleware } from './middleware/tenancy.js';
 import { getAuthProvider } from './auth/index.js';
-import { toClientErrorBody } from './utils/http-errors.js';
+import { statusCodeForError, toClientErrorBody } from './utils/http-errors.js';
 import { buildHelmetOptions, permissionsPolicy } from './config/security-headers.js';
 import { initSentry, Sentry } from './observability/sentry.js';
 import { checkRuntimeHealth, closeRuntimeHealth } from './services/runtime-health.service.js';
@@ -238,7 +238,7 @@ if (env.serveBuiltSpa) {
 
 // Global Error Handler (Enterprise Grade)
 fastify.setErrorHandler((error, request, reply) => {
-  const statusCode = error.statusCode || 500;
+  const statusCode = statusCodeForError(error);
   request.log.error({
     errorName: error.name,
     statusCode,

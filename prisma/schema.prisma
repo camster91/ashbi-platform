@@ -70,6 +70,8 @@ model Organization {
   aiProviderConnection AiProviderConnection?
   aiUsageRecords  AiUsageRecord[]
   reviewSessions  ReviewSession[]
+  invoices        Invoice[]
+  documentNumberSequences DocumentNumberSequence[]
 
   @@map("organizations")
 }
@@ -1007,7 +1009,13 @@ model Contract {
 
 model Invoice {
   id            String    @id @default(cuid())
-  invoiceNumber String    @unique
+  // Unique per organization (see @@unique below), allocated from
+  // DocumentNumberSequence inside the create transaction.
+  invoiceNumber String
+  // Owning organization, always equal to client.organizationId: the app sets
+  // it and a database trigger (invoices_set_organization_id) derives it from
+  // the client on insert/client change. Nullable only for rollout safety.
+  organizationId String?
   status        String    @default("DRAFT") // DRAFT | SENT | PAID | OVERDUE | VOID
   title         String?
   dueDate       DateTime?
@@ -1064,21 +1072,40 @@ model Invoice {
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 
-  client      Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  createdBy   User              @relation("InvoiceCreator", fields: [createdById], references: [id])
-  lineItems   InvoiceLineItem[]
-  payments    InvoicePayment[]
-  timeEntries TimeEntry[]
-  expenses    Expense[]
+  client       Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  organization Organization?     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User              @relation("InvoiceCreator", fields: [createdById], references: [id])
+  lineItems    InvoiceLineItem[]
+  payments     InvoicePayment[]
+  timeEntries  TimeEntry[]
+  expenses     Expense[]
   // Soft delete
   deletedAt   DateTime?
 
   // Autosave draft
   draftData String? // JSON of unsaved form data
 
+  @@unique([organizationId, invoiceNumber])
   @@index([status, dueDate])
   @@index([clientId, status])
   @@map("invoices")
+}
+
+// Per-organization document counters (invoice numbers today). A row is
+// incremented atomically (INSERT ... ON CONFLICT DO UPDATE ... RETURNING)
+// inside the transaction that creates the document, so concurrent creates
+// get distinct consecutive numbers and a rolled-back create frees its number.
+model DocumentNumberSequence {
+  organizationId String
+  kind           String // INVOICE
+  period         Int // calendar year (UTC) the numbers belong to
+  lastValue      Int
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@id([organizationId, kind, period])
+  @@map("document_number_sequences")
 }
 
 model InvoiceLineItem {
