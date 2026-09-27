@@ -16,9 +16,12 @@ import { recordDomainEvent } from '../../services/domain-event.service.js';
 import { recordInvoicePaid } from '../../services/domain-event-producers.js';
 import {
   claimDomainEvents,
+  discardDeadDomainEvents,
   dispatchDomainEvents,
   replayDeadDomainEvents,
 } from '../../services/domain-event-dispatcher.service.js';
+import { settleInvoiceManually } from '../../services/invoice-payment.service.js';
+import { recordCompletedCheckout } from '../../services/stripe.service.js';
 
 const databaseUrl = process.env.TENANT_INTEGRATION_DATABASE_URL;
 const silent = { info() {}, warn() {}, error() {} };
@@ -31,7 +34,7 @@ function paidEvent(organizationId, invoiceId, paymentId, overrides = {}) {
     idempotencyKey: `invoice.paid:${invoiceId}:${paymentId}`,
     correlationId: `req-${paymentId}`,
     payload: {
-      invoiceId, clientId: 'client-x', paymentId, total: 10, currency: 'CAD', method: 'OTHER', source: 'manual',
+      invoiceId, clientId: 'client-x', paymentId, amount: 10, total: 10, currency: 'CAD', method: 'OTHER', source: 'manual',
       paidAt: '2026-09-26T00:00:00.000Z',
     },
     ...overrides,
@@ -201,6 +204,162 @@ test('the domain event outbox is transactional, ordered, idempotent and tenant-s
     await raw.user.deleteMany({ where: { organizationId: { in: [orgA, orgB] } } }).catch(() => {});
     await raw.organization.deleteMany({ where: { id: { in: [orgA, orgB] } } }).catch(() => {});
     assert.equal(await raw.domainEvent.count({ where: ours }), 0, 'outbox rows cascade with their organization');
+    await raw.$disconnect();
+  }
+});
+
+test('payments are never double-recorded or blocked by the outbox, and dead events can be discarded', {
+  skip: !databaseUrl && 'TENANT_INTEGRATION_DATABASE_URL is not configured',
+  timeout: 180_000,
+}, async () => {
+  const { PrismaClient } = prismaPkg;
+  const raw = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl, max: 20 }) });
+  const db = withSoftDelete(raw);
+  const suffix = randomUUID();
+  const orgId = `outbox-pay-${suffix}`;
+  const txOptions = { timeout: 30_000, maxWait: 30_000 };
+
+  try {
+    await raw.organization.create({ data: { id: orgId, name: 'Outbox Payments', slug: `outbox-pay-${suffix}` } });
+    const user = await raw.user.create({ data: { organizationId: orgId, email: `outbox-pay-${suffix}@example.test`, name: 'Pay', password: 'x' } });
+    const client = await raw.client.create({ data: { name: 'Pay Client', organizationId: orgId } });
+    let counter = 0;
+    const newInvoice = (overrides = {}) => raw.invoice.create({ data: {
+      invoiceNumber: `PAY-${suffix}-${counter += 1}`, clientId: client.id, createdById: user.id, total: 113, currency: 'CAD', status: 'SENT', ...overrides,
+    } });
+    const stripeEvent = (invoice, id) => ({
+      id, created: Math.floor(Date.now() / 1000),
+      data: { object: {
+        id: `cs_${id}`, payment_intent: `pi_${id}`, payment_status: 'paid',
+        amount_total: Math.round(invoice.total * 100), currency: String(invoice.currency).toLowerCase(),
+        metadata: { invoiceId: invoice.id, invoiceNumber: invoice.invoiceNumber },
+      } },
+    });
+    const outcome = async (invoiceId) => ({
+      payments: await raw.invoicePayment.count({ where: { invoiceId } }),
+      events: await raw.domainEvent.count({ where: { organizationId: orgId, aggregateId: invoiceId, type: 'invoice.paid' } }),
+      status: (await raw.invoice.findUnique({ where: { id: invoiceId } })).status,
+    });
+
+    // ── Five concurrent manual mark-paids: one payment, one event.
+    const manual = await newInvoice();
+    const settled = await Promise.all(Array.from({ length: 5 }, () => settleInvoiceManually(db, {
+      invoice: manual, method: 'BANK', amount: 113, paidAt: new Date(), correlationId: 'req-race',
+    })));
+    assert.equal(settled.filter(Boolean).length, 1, 'exactly one settlement wins the compare-and-set');
+    assert.deepEqual(await outcome(manual.id), { payments: 1, events: 1, status: 'PAID' });
+
+    // ── Manual mark-paid racing a Stripe checkout completion: one payment, one event.
+    const raced = await newInvoice();
+    const [manualResult, stripeResult] = await Promise.allSettled([
+      settleInvoiceManually(db, { invoice: raced, method: 'BANK', amount: 113, paidAt: new Date(), correlationId: 'req-manual' }),
+      recordCompletedCheckout(db, stripeEvent(raced, `evt_race_${suffix}`), { correlationId: 'req-stripe' }),
+    ]);
+    const manualWon = manualResult.status === 'fulfilled' && manualResult.value !== null;
+    const stripeWon = stripeResult.status === 'fulfilled' && stripeResult.value?.duplicate === false;
+    assert.equal(Number(manualWon) + Number(stripeWon), 1, 'exactly one path settles the invoice');
+    if (manualWon) assert.equal(stripeResult.status === 'rejected' && stripeResult.reason?.code, 'INVOICE_ALREADY_PAID');
+    assert.deepEqual(await outcome(raced.id), { payments: 1, events: 1, status: 'PAID' });
+
+    // ── An infrastructure failure writing the event rolls the payment back.
+    const failing = await newInvoice();
+    const failingCreate = async () => { throw Object.assign(new Error('Connection terminated'), { code: 'P1017' }); };
+    const brokenOutbox = {
+      $transaction: (callback, options) => db.$transaction((tx) => callback(new Proxy(tx, {
+        get(target, property) {
+          const value = target[property];
+          if (property === 'domainEvent') {
+            return new Proxy(value, {
+              get(delegate, method) {
+                if (method === 'create') return failingCreate;
+                const member = delegate[method];
+                return typeof member === 'function' ? member.bind(delegate) : member;
+              },
+            });
+          }
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      })), options),
+      invoicePayment: db.invoicePayment,
+    };
+    await assert.rejects(recordCompletedCheckout(brokenOutbox, stripeEvent(failing, `evt_fail_${suffix}`)), /Connection terminated/);
+    assert.deepEqual(await outcome(failing.id), { payments: 0, events: 0, status: 'SENT' }, 'nothing committed; Stripe retries');
+    // Stripe's retry after recovery records it once.
+    await recordCompletedCheckout(db, stripeEvent(failing, `evt_fail_${suffix}`));
+    assert.deepEqual(await outcome(failing.id), { payments: 1, events: 1, status: 'PAID' });
+
+    // ── Odd legacy data still records the Stripe payment and a valid event.
+    const legacy = await newInvoice({ currency: 'Euro', total: 42 });
+    const legacyResult = await recordCompletedCheckout(db, stripeEvent(legacy, `evt_legacy_${suffix}`), { correlationId: 'req-legacy' });
+    assert.equal(legacyResult.duplicate, false);
+    const legacyEvent = await raw.domainEvent.findFirst({ where: { organizationId: orgId, aggregateId: legacy.id } });
+    assert.equal(legacyEvent.payload.currency, 'XXX');
+    assert.equal(legacyEvent.payload.amount, 42);
+    assert.deepEqual(legacyEvent.payload.dataIssues, ['currency']);
+    assert.deepEqual(await outcome(legacy.id), { payments: 1, events: 1, status: 'PAID' });
+
+    // Deliver everything recorded so far, so the aggregates below start clean.
+    const onlyOurs = (event) => event.organizationId === orgId;
+    await dispatchDomainEvents(raw, { subscribers: [], logger: silent, maxRounds: 50 });
+    assert.equal(await raw.domainEvent.count({ where: { organizationId: orgId, status: { not: 'published' } } }), 0);
+
+    // ── Crash-loop: a claim abandoned on its final attempt is dead-lettered.
+    const crashed = await db.$transaction((tx) => recordDomainEvent(tx, paidEvent(orgId, 'inv-crash', 'pay-1')), txOptions);
+    await raw.domainEvent.update({ where: { id: crashed.event.id }, data: {
+      status: 'dispatching', attempts: 3, lockedUntil: new Date(Date.now() - 1000), claimToken: 'crashed-worker',
+    } });
+    const reclaimed = [];
+    const crashSummary = await dispatchDomainEvents(raw, {
+      subscribers: [{ name: 'spy', types: null, handle: (event) => { if (onlyOurs(event)) reclaimed.push(event.id); } }],
+      logger: silent, maxAttempts: 3,
+    });
+    assert.ok(crashSummary.abandoned >= 1);
+    assert.deepEqual(reclaimed, [], 'not delivered again');
+    const crashedRow = await raw.domainEvent.findUnique({ where: { id: crashed.event.id } });
+    assert.deepEqual([crashedRow.status, crashedRow.claimToken], ['dead', null]);
+    assert.match(crashedRow.lastError, /^LeaseExpired/);
+    // Even without the sweep, the claim itself refuses an exhausted expired lease.
+    const exhausted = await db.$transaction((tx) => recordDomainEvent(tx, paidEvent(orgId, 'inv-crash-2', 'pay-1')), txOptions);
+    await raw.domainEvent.update({ where: { id: exhausted.event.id }, data: {
+      status: 'dispatching', attempts: 3, lockedUntil: new Date(Date.now() - 1000), claimToken: 'crashed-worker',
+    } });
+    const claimedNow = await claimDomainEvents(raw, { limit: 100, maxAttempts: 3 });
+    assert.equal(claimedNow.some((row) => row.id === exhausted.event.id), false);
+    if (claimedNow.length) {
+      await raw.domainEvent.updateMany({ where: { id: { in: claimedNow.map((row) => row.id) } }, data: { status: 'pending', lockedUntil: null, claimToken: null } });
+    }
+
+    // ── Discard: a dead head blocks its successor until an admin discards it.
+    const tenant = createScopedPrisma(raw, orgId);
+    const successor = await db.$transaction((tx) => recordDomainEvent(tx, paidEvent(orgId, 'inv-crash', 'pay-2')), txOptions);
+    const delivered = [];
+    const spy = [{ name: 'spy', types: null, handle: (event) => { if (onlyOurs(event)) delivered.push(event.id); } }];
+    await dispatchDomainEvents(raw, { subscribers: spy, logger: silent, maxAttempts: 3 });
+    assert.equal(delivered.includes(successor.event.id), false, 'dead predecessor blocks');
+    const discard = await discardDeadDomainEvents(tenant, [crashed.event.id, successor.event.id]);
+    assert.deepEqual(discard.discarded.map((event) => event.id), [crashed.event.id]);
+    assert.deepEqual(discard.skipped, [{ id: successor.event.id, reason: 'not_dead' }]);
+    delivered.length = 0;
+    await dispatchDomainEvents(raw, { subscribers: spy, logger: silent, maxAttempts: 3 });
+    assert.ok(delivered.includes(successor.event.id), 'successor proceeds after the discard');
+    assert.equal(delivered.includes(crashed.event.id), false, 'discarded events are never delivered');
+    const discardedRow = await raw.domainEvent.findUnique({ where: { id: crashed.event.id } });
+    assert.equal(discardedRow.status, 'discarded');
+    assert.ok(discardedRow.discardedAt instanceof Date);
+    assert.equal((await replayDeadDomainEvents(tenant, [crashed.event.id])).skipped[0].reason, 'not_dead');
+
+    // ── Constraints added for discard and the organization key.
+    await assert.rejects(raw.domainEvent.update({ where: { id: successor.event.id }, data: { status: 'discarded' } }), /discarded_at_check/);
+    await assert.rejects(
+      raw.$executeRawUnsafe('UPDATE "organizations" SET "id" = $1 WHERE "id" = $2', `${orgId}-renamed`, orgId),
+      /foreign key|domain_events_organizationId_fkey|violates/i,
+    );
+  } finally {
+    await raw.invoicePayment.deleteMany({ where: { invoice: { client: { organizationId: orgId } } } }).catch(() => {});
+    await raw.invoice.deleteMany({ where: { client: { organizationId: orgId } } }).catch(() => {});
+    await raw.client.deleteMany({ where: { organizationId: orgId } }).catch(() => {});
+    await raw.user.deleteMany({ where: { organizationId: orgId } }).catch(() => {});
+    await raw.organization.deleteMany({ where: { id: orgId } }).catch(() => {});
     await raw.$disconnect();
   }
 });
