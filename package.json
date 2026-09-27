@@ -81,7 +81,6 @@
     "@fastify/multipart": "^10.1.1",
     "@fastify/rate-limit": "^11.2.0",
     "@fastify/static": "^10.1.4",
-    "@fastify/websocket": "^11.3.1",
     "@google/generative-ai": "^0.24.1",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/auto-instrumentations-node": "^0.80.0",
