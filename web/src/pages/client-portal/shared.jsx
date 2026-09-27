@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import SlowNotice, { SLOW_WRITE_INLINE as slowWrite } from '../../components/ui/SlowNotice';
+import { formatMoney } from '../../lib/money';
 
 export const API = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '') : '';
 export const SOCKET_URL = import.meta.env.PROD ? window.location.origin : 'http://localhost:3000';
@@ -75,8 +76,10 @@ export const BRAND = {
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+// Invoice amounts always carry their own currency code ("$1,250.00 CAD"); a
+// missing currency means the invoice default (CAD), never USD.
 export function fmt(amount, currency) {
-  return new Intl.NumberFormat('en-CA', { style: 'currency', currency: currency || 'USD' }).format(amount || 0);
+  return formatMoney(amount, currency);
 }
 export function fmtDate(d) {
   if (!d) return '—';

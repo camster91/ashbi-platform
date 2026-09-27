@@ -413,6 +413,7 @@ export default async function invoiceRoutes(fastify) {
           clientName: primaryContact.name || invoice.client.name,
           invoiceNumber: invoice.invoiceNumber,
           total: invoice.total,
+          currency: invoice.currency,
           dueDate: invoice.dueDate,
           viewUrl,
           paymentLink: updateData.stripePaymentLink,
@@ -596,6 +597,8 @@ export default async function invoiceRoutes(fastify) {
         data: {
           invoiceNumber,
           title: `Invoice for: ${proposal.title}`,
+          // Proposals carry no currency; use the organization default.
+          currency: defaultInvoiceCurrency(),
           clientId: proposal.clientId,
           projectId: proposal.projectId || null,
           proposalId: proposal.id,
@@ -681,6 +684,7 @@ export default async function invoiceRoutes(fastify) {
       clientName: contact.name || invoice.client.name,
       invoiceNumber: invoice.invoiceNumber,
       total: invoice.total,
+      currency: invoice.currency,
       dueDate: invoice.dueDate,
       viewUrl,
       paymentLink: invoice.stripePaymentLink,
@@ -813,169 +817,4 @@ export default async function invoiceRoutes(fastify) {
 
     return { archived };
   });
-}
-
-// ─── Invoice HTML/PDF generator ──────────────────────────────────────────────
-function generateInvoiceHTML(invoice) {
-  const client = invoice.client;
-  const lineItems = invoice.lineItems || [];
-  const issueDate = new Date(invoice.issueDate || invoice.createdAt).toLocaleDateString('en-CA', { dateStyle: 'long' });
-  const dueDate = invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString('en-CA', { dateStyle: 'long' }) : 'Upon receipt';
-
-  const fmt = (n) => `$${(n || 0).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-  const lineItemsHTML = lineItems.map(li => `
-    <tr>
-      <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;">${li.description}</td>
-      <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;text-align:center;">${li.quantity}</td>
-      <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;text-align:right;">${fmt(li.unitPrice)}</td>
-      <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;text-align:right;font-weight:500;">${fmt(li.total)}</td>
-    </tr>
-  `).join('');
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Invoice ${invoice.invoiceNumber}</title>
-  <style>
-    * { margin:0; padding:0; box-sizing:border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color:#1e293b; background:#fff; }
-    .page { max-width:800px; margin:40px auto; padding:48px; }
-    .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:48px; }
-    .brand { font-size:24px; font-weight:700; color:#2563eb; letter-spacing:-0.5px; }
-    .brand-sub { font-size:12px; color:#64748b; margin-top:2px; }
-    .invoice-meta { text-align:right; }
-    .invoice-number { font-size:28px; font-weight:700; color:#1e293b; }
-    .status-badge { display:inline-block; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; margin-top:6px; }
-    .status-DRAFT { background:#f1f5f9; color:#64748b; }
-    .status-SENT { background:#dbeafe; color:#1d4ed8; }
-    .status-PAID { background:#dcfce7; color:#16a34a; }
-    .status-OVERDUE { background:#fee2e2; color:#dc2626; }
-    .status-VOID { background:#f1f5f9; color:#94a3b8; }
-    .parties { display:grid; grid-template-columns:1fr 1fr; gap:32px; margin-bottom:40px; }
-    .party-label { font-size:11px; font-weight:600; text-transform:uppercase; color:#64748b; letter-spacing:0.5px; margin-bottom:8px; }
-    .party-name { font-size:16px; font-weight:600; margin-bottom:4px; }
-    .party-detail { font-size:13px; color:#64748b; }
-    .dates { display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-bottom:40px; padding:20px 24px; background:#f8fafc; border-radius:8px; }
-    .date-label { font-size:11px; color:#64748b; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px; }
-    .date-value { font-size:14px; font-weight:500; }
-    table { width:100%; border-collapse:collapse; margin-bottom:24px; }
-    thead th { background:#f8fafc; padding:10px 12px; text-align:left; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#64748b; }
-    thead th:not(:first-child) { text-align:right; }
-    thead th:nth-child(2) { text-align:center; }
-    .totals { margin-left:auto; width:280px; }
-    .totals-row { display:flex; justify-content:space-between; padding:6px 0; font-size:14px; }
-    .totals-row.discount { color:#16a34a; }
-    .totals-row.total { border-top:2px solid #1e293b; margin-top:8px; padding-top:12px; font-size:18px; font-weight:700; }
-    .notes { margin-top:40px; padding:20px 24px; background:#f8fafc; border-radius:8px; }
-    .notes-label { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#64748b; margin-bottom:8px; }
-    .notes-text { font-size:14px; color:#475569; line-height:1.6; }
-    .footer { margin-top:48px; padding-top:24px; border-top:1px solid #e2e8f0; text-align:center; font-size:12px; color:#94a3b8; }
-    .pay-btn { display:inline-block; margin-top:24px; padding:14px 32px; background:#2563eb; color:#fff; text-decoration:none; border-radius:8px; font-weight:600; font-size:15px; }
-    @media print {
-      .page { margin:0; padding:32px; }
-      .no-print { display:none; }
-    }
-  </style>
-</head>
-<body>
-  <div class="page">
-    <div class="header">
-      <div>
-        <div class="brand">Ashbi Design</div>
-        <div class="brand-sub">ashbi.ca · hello@ashbi.ca</div>
-      </div>
-      <div class="invoice-meta">
-        <div class="invoice-number">INVOICE</div>
-        <div style="font-size:16px;color:#64748b;margin-top:4px;">${invoice.invoiceNumber}</div>
-        <span class="status-badge status-${invoice.status}">${invoice.status}</span>
-      </div>
-    </div>
-
-    <div class="parties">
-      <div>
-        <div class="party-label">From</div>
-        <div class="party-name">Ashbi Design</div>
-        <div class="party-detail">Toronto, Ontario, Canada</div>
-        <div class="party-detail">HST: 123456789 RT 0001</div>
-      </div>
-      <div>
-        <div class="party-label">Bill To</div>
-        <div class="party-name">${client?.name || 'Client'}</div>
-        ${client?.domain ? `<div class="party-detail">${client.domain}</div>` : ''}
-      </div>
-    </div>
-
-    <div class="dates">
-      <div>
-        <div class="date-label">Issue Date</div>
-        <div class="date-value">${issueDate}</div>
-      </div>
-      <div>
-        <div class="date-label">Due Date</div>
-        <div class="date-value">${dueDate}</div>
-      </div>
-    </div>
-
-    ${invoice.title ? `<h2 style="margin-bottom:16px;font-size:18px;color:#1e293b;">${invoice.title}</h2>` : ''}
-
-    <table>
-      <thead>
-        <tr>
-          <th style="width:50%">Description</th>
-          <th style="width:12%;text-align:center;">Qty</th>
-          <th style="width:19%;text-align:right;">Unit Price</th>
-          <th style="width:19%;text-align:right;">Amount</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${lineItemsHTML}
-      </tbody>
-    </table>
-
-    <div class="totals">
-      <div class="totals-row">
-        <span>Subtotal</span>
-        <span>${fmt(invoice.subtotal)}</span>
-      </div>
-      ${invoice.discountAmount > 0 ? `
-      <div class="totals-row discount">
-        <span>Discount</span>
-        <span>-${fmt(invoice.discountAmount)}</span>
-      </div>` : ''}
-      <div class="totals-row">
-        <span>${invoice.taxType || 'HST'} (${invoice.taxRate || 13}%)</span>
-        <span>${fmt(invoice.tax)}</span>
-      </div>
-      <div class="totals-row total">
-        <span>Total Due</span>
-        <span>${fmt(invoice.total)} CAD</span>
-      </div>
-      ${invoice.status === 'PAID' && invoice.payments?.length > 0 ? `
-      <div class="totals-row" style="color:#16a34a;margin-top:8px;">
-        <span>✓ Paid</span>
-        <span>${fmt(invoice.total)}</span>
-      </div>` : ''}
-    </div>
-
-    ${invoice.notes ? `
-    <div class="notes">
-      <div class="notes-label">Notes</div>
-      <div class="notes-text">${invoice.notes}</div>
-    </div>` : ''}
-
-    ${invoice.stripePaymentLink && invoice.status === 'SENT' ? `
-    <div style="text-align:center;margin-top:40px;" class="no-print">
-      <a href="${invoice.stripePaymentLink}" class="pay-btn">Pay Now — ${fmt(invoice.total)} CAD</a>
-    </div>` : ''}
-
-    <div class="footer">
-      <p>Thank you for your business!</p>
-      <p style="margin-top:4px;">Ashbi Design · Toronto, Ontario · ashbi.ca</p>
-    </div>
-  </div>
-</body>
-</html>`;
 }

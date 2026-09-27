@@ -4,7 +4,6 @@ import {
   Sparkles,
   CheckCircle,
   FileText,
-  DollarSign,
   Calendar,
   AlertCircle,
   Loader2,
@@ -12,7 +11,8 @@ import {
   Clock,
 } from 'lucide-react';
 import { api } from '../lib/api';
-import { cn, formatDate } from '../lib/utils';
+import { cn } from '../lib/utils';
+import { formatMoney, formatInvoiceDate } from '../lib/money';
 import LoadingState from '../components/ui/LoadingState';
 
 const statusConfig = {
@@ -20,8 +20,13 @@ const statusConfig = {
   SENT: { label: 'Awaiting Payment', color: 'bg-blue-100 text-blue-700', icon: Clock },
   OVERDUE: { label: 'Overdue', color: 'bg-red-100 text-red-700', icon: AlertCircle },
   PAID: { label: 'Paid', color: 'bg-green-100 text-green-700', icon: CheckCircle },
+  VOID: { label: 'Void', color: 'bg-slate-100 text-slate-500', icon: FileText },
   CANCELLED: { label: 'Cancelled', color: 'bg-slate-100 text-slate-500', icon: FileText },
 };
+
+function formatDate(date) {
+  return formatInvoiceDate(date, { month: 'long' });
+}
 
 export default function PortalInvoice() {
   const { token } = useParams();
@@ -67,6 +72,7 @@ export default function PortalInvoice() {
   }, 0) || 0;
   const tax = Number(invoice.tax || 0);
   const total = Number(invoice.total || invoice.amount || (subtotal + tax));
+  const currency = invoice.currency;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -161,8 +167,8 @@ export default function PortalInvoice() {
                     <tr key={i} className="hover:bg-slate-50/50">
                       <td className="px-6 py-4 text-sm text-slate-700">{item.description}</td>
                       <td className="px-6 py-4 text-sm text-slate-600 text-right">{qty}</td>
-                      <td className="px-6 py-4 text-sm text-slate-600 text-right">${rate.toFixed(2)}</td>
-                      <td className="px-6 py-4 text-sm font-medium text-slate-800 text-right">${amount.toFixed(2)}</td>
+                      <td className="px-6 py-4 text-sm text-slate-600 text-right">{formatMoney(rate, currency)}</td>
+                      <td className="px-6 py-4 text-sm font-medium text-slate-800 text-right">{formatMoney(amount, currency)}</td>
                     </tr>
                   );
                 })}
@@ -174,20 +180,17 @@ export default function PortalInvoice() {
           <div className="border-t border-slate-200 bg-slate-50 px-6 py-4 space-y-2">
             <div className="flex items-center justify-between text-sm">
               <span className="text-slate-500">Subtotal</span>
-              <span className="text-slate-700">${subtotal.toFixed(2)}</span>
+              <span className="text-slate-700">{formatMoney(subtotal, currency)}</span>
             </div>
             {tax > 0 && (
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-500">Tax</span>
-                <span className="text-slate-700">${tax.toFixed(2)}</span>
+                <span className="text-slate-700">{formatMoney(tax, currency)}</span>
               </div>
             )}
             <div className="flex items-center justify-between pt-2 border-t border-slate-200">
               <span className="text-sm font-semibold text-slate-700">Total</span>
-              <span className="text-xl font-bold text-slate-800 flex items-center gap-1">
-                <DollarSign className="w-5 h-5" />
-                {total.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-              </span>
+              <span className="text-xl font-bold text-slate-800">{formatMoney(total, currency)}</span>
             </div>
           </div>
         </div>
@@ -213,7 +216,7 @@ export default function PortalInvoice() {
               ) : (
                 <CreditCard className="w-4 h-4" />
               )}
-              Pay Now - ${total.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+              Pay Now - {formatMoney(total, currency)}
             </button>
             {payMutation.isError && (
               <p role="alert" className="text-sm text-red-600 text-center mt-3">Payment initiation failed. Please try again.</p>

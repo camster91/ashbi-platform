@@ -1015,7 +1015,7 @@ model Invoice {
 
   // Bonsai migration fields
   bonsaiInvoiceId String? // Original Bonsai invoice ID
-  currency        String  @default("USD") // USD | CAD
+  currency        String  @default("CAD") // ISO 4217 (src/utils/money.js); shown on UI/PDF/email and charged by Stripe
   amountUsd       Float? // For multi-currency tracking
   amountCad       Float?
   daysToPayActual Int? // Historical: actual days client took to pay

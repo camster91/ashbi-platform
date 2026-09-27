@@ -114,9 +114,20 @@ function LoginScreen() {
 function OverviewTab({ projects, invoices, retainer, unread, setActiveTab, setSelectedProject }) {
   const activeProjects = projects.filter(p => !['LAUNCHED', 'CANCELLED', 'ON_HOLD'].includes(p.status));
   const overdueInvoices = invoices.filter(i => i.status?.toUpperCase() === 'OVERDUE');
-  const unpaidTotal = invoices
+  // Outstanding amounts are summed per currency; different currencies are
+  // never added together.
+  const unpaidByCurrency = invoices
     .filter(i => ['SENT', 'OVERDUE', 'PENDING'].includes(i.status?.toUpperCase()))
-    .reduce((s, i) => s + (i.total || 0), 0);
+    .reduce((totals, i) => {
+      const currency = (i.currency || 'CAD').toUpperCase();
+      totals[currency] = (totals[currency] || 0) + (i.total || 0);
+      return totals;
+    }, {});
+  const unpaidEntries = Object.entries(unpaidByCurrency);
+  const unpaidTotal = unpaidEntries.reduce((sum, [, amount]) => sum + amount, 0);
+  const unpaidLabel = unpaidEntries.length === 0
+    ? fmt(0)
+    : unpaidEntries.map(([currency, amount]) => fmt(amount, currency)).join(' · ');
 
   return (
     <div className="cp-space-y-6">
@@ -144,7 +155,7 @@ function OverviewTab({ projects, invoices, retainer, unread, setActiveTab, setSe
         <div className="cp-card cp-stat">
           <p className="cp-stat-label">Outstanding</p>
           <p className="cp-stat-value" style={{ color: unpaidTotal > 0 ? '#b45309' : '#15803d' }}>
-            {fmt(unpaidTotal, 'USD')}
+            {unpaidLabel}
           </p>
         </div>
         <div className="cp-card cp-stat">
