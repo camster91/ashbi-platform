@@ -1,6 +1,6 @@
 // Task routes
 
-import { validateBody, createTaskSchema, updateTaskSchema, taskUpdateSchema, taskBulkUpdateSchema, taskPageContentUpdateSchema, taskSubpageCreateSchema, taskDependencyCreateSchema, taskCreateQuickSchema } from '../validators/schemas.js';
+import { validateBody, createTaskSchema, updateTaskSchema, taskUpdateSchema, taskBulkUpdateSchema, taskPageContentUpdateSchema, taskSubpageCreateSchema, taskDependencyCreateSchema, taskCreateQuickSchema, TASK_STATUS_VALUES } from '../validators/schemas.js';
 import { z } from 'zod';
 import bus, { EVENTS } from '../utils/events.js';
 
@@ -632,13 +632,14 @@ export default async function taskRoutes(fastify) {
       ]
     });
 
-    // Group by status
-    const board = {
-      PENDING: tasks.filter(t => t.status === 'PENDING'),
-      IN_PROGRESS: tasks.filter(t => t.status === 'IN_PROGRESS'),
-      BLOCKED: tasks.filter(t => t.status === 'BLOCKED'),
-      COMPLETED: tasks.filter(t => t.status === 'COMPLETED')
-    };
+    // Group by status. The four core columns are always present; any other
+    // stored status (WAITING_CLIENT, UPCOMING, REVIEW, …) gets its own key so
+    // no task disappears from the board.
+    const board = { PENDING: [], IN_PROGRESS: [], BLOCKED: [], COMPLETED: [] };
+    for (const task of tasks) {
+      const key = task.status || 'PENDING';
+      (board[key] ??= []).push(task);
+    }
 
     return board;
   });
@@ -646,7 +647,7 @@ export default async function taskRoutes(fastify) {
   // Move task between Kanban columns
   fastify.post('/:id/move', {
     onRequest: [fastify.authenticate],
-    preHandler: validateBody(z.object({ status: z.enum(['TODO', 'PENDING', 'IN_PROGRESS', 'BLOCKED', 'REVIEW', 'COMPLETED']) })),
+    preHandler: validateBody(z.object({ status: z.enum(TASK_STATUS_VALUES) })),
   }, async (request) => {
     const { id } = request.params;
     const { status } = request.body;

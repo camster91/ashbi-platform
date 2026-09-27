@@ -104,13 +104,26 @@ export const inviteClientSchema = z.object({
 });
 
 // ── Project schemas ────────────────────────────────────────────────────────
+// Status vocabularies still differ between the DB model comments and older API
+// enums (#405, owner decision pending). Until they are unified, accept the
+// union: every value the DB model documents plus every value the API already
+// accepted, so no existing client breaks and DB-valid values are not rejected.
+export const PROJECT_STATUS_VALUES = [
+  'STARTING_UP', 'DESIGN_DEV', 'ADDING_CONTENT', 'FINALIZING', 'LAUNCHED', 'ON_HOLD', 'CANCELLED',
+  'ACTIVE', 'COMPLETED', 'DRAFT',
+];
+export const PROJECT_HEALTH_VALUES = ['ON_TRACK', 'NEEDS_ATTENTION', 'AT_RISK', 'OFF_TRACK', 'CRITICAL'];
+export const TASK_STATUS_VALUES = [
+  'PENDING', 'UPCOMING', 'IMMEDIATE', 'IN_PROGRESS', 'BLOCKED', 'WAITING_US', 'WAITING_CLIENT', 'COMPLETED',
+  'TODO', 'REVIEW',
+];
 export const createProjectSchema = z.object({
   name: z.string().min(1).max(200),
   description: z.string().max(5000).optional(),
   clientId: cuidId,
   defaultOwnerId: cuidId.optional(),
-  status: z.enum(['ACTIVE', 'ON_HOLD', 'COMPLETED', 'CANCELLED', 'DRAFT']).optional(),
-  health: z.enum(['ON_TRACK', 'AT_RISK', 'OFF_TRACK', 'CRITICAL']).optional(),
+  status: z.enum(PROJECT_STATUS_VALUES).optional(),
+  health: z.enum(PROJECT_HEALTH_VALUES).optional(),
   hourlyBudget: z.number().positive().optional(),
   startDate: z.string().datetime().optional(),
   endDate: z.string().datetime().optional(),
@@ -119,8 +132,8 @@ export const createProjectSchema = z.object({
 export const updateProjectSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   description: z.string().max(5000).optional(),
-  status: z.enum(['ACTIVE', 'ON_HOLD', 'COMPLETED', 'CANCELLED', 'DRAFT']).optional(),
-  health: z.enum(['ON_TRACK', 'AT_RISK', 'OFF_TRACK', 'CRITICAL']).optional(),
+  status: z.enum(PROJECT_STATUS_VALUES).optional(),
+  health: z.enum(PROJECT_HEALTH_VALUES).optional(),
   clientId: cuidId.optional(),
   hourlyBudget: z.number().positive().optional(),
   startDate: z.string().datetime().nullable().optional(),
@@ -906,6 +919,7 @@ export const bulkMarkPaidSchema = invoiceBulkIdsSchema.extend({
 export const taskCreateSchema = z.object({
   title: z.string().min(1).max(500),
   projectId: cuidId,
+  status: z.enum(TASK_STATUS_VALUES).optional(),
   description: z.string().max(50_000).optional(),
   priority: z.enum(['LOW', 'NORMAL', 'HIGH', 'CRITICAL']).default('NORMAL'),
   dueDate: z.string().datetime().nullable().optional(),
@@ -971,7 +985,7 @@ export const taskCreateQuickSchema = z.object({
   title: z.string().min(1).max(500),
   assigneeId: cuidId.optional(),
   priority: z.enum(['LOW', 'NORMAL', 'HIGH', 'CRITICAL']).default('NORMAL'),
-  status: z.enum(['PENDING', 'IN_PROGRESS', 'BLOCKED', 'REVIEW', 'COMPLETED']).default('PENDING'),
+  status: z.enum(TASK_STATUS_VALUES).default('PENDING'),
 });
 
 export const projectCreateSchema = z.object({

@@ -83,16 +83,20 @@ export default async function projectRoutes(fastify) {
     onRequest: [fastify.authenticate],
     preHandler: [validateBody(createProjectSchema)],
   }, async (request, reply) => {
-    const { name, description, clientId, defaultOwnerId } = request.body;
+    const {
+      name, description, clientId, defaultOwnerId,
+      status, health, hourlyBudget, startDate, endDate,
+    } = request.body;
 
-    const project = await fastify.prisma.project.create({
-      data: {
-        name,
-        description,
-        clientId,
-        defaultOwnerId
-      }
-    });
+    const data = { name, description, clientId, defaultOwnerId };
+    // Optional fields the schema validates; omitted ones keep the DB defaults.
+    if (status) data.status = status;
+    if (health) data.health = health;
+    if (hourlyBudget !== undefined) data.hourlyBudget = hourlyBudget;
+    if (startDate) data.startDate = new Date(startDate);
+    if (endDate) data.endDate = new Date(endDate);
+
+    const project = await fastify.prisma.project.create({ data });
 
     // Decoupled side-effects via Event Bus
     bus.emit(EVENTS.PROJECT_CREATED, { project, user: request.user });
@@ -270,6 +274,7 @@ export default async function projectRoutes(fastify) {
     const {
       title,
       description,
+      status,
       priority = 'NORMAL',
       category = 'UPCOMING',
       estimatedTime,
@@ -282,6 +287,7 @@ export default async function projectRoutes(fastify) {
       data: {
         title,
         description,
+        ...(status ? { status } : {}),
         priority,
         category,
         estimatedTime,

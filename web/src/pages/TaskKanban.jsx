@@ -5,13 +5,44 @@ import { Plus, ArrowLeft } from 'lucide-react';
 import { api } from '../lib/api';
 import LoadingState from '../components/ui/LoadingState';
 import QueryErrorState from '../components/QueryErrorState';
+import { formatDate } from '../lib/format';
 
-const STATUS_COLUMNS = [
-  { key: 'PENDING', label: 'To Do', headerColor: 'text-muted-foreground border-muted-foreground/30' },
-  { key: 'IN_PROGRESS', label: 'In Progress', headerColor: 'text-blue-600 border-blue-400' },
-  { key: 'BLOCKED', label: 'Blocked', headerColor: 'text-yellow-600 border-yellow-400' },
-  { key: 'COMPLETED', label: 'Done', headerColor: 'text-green-600 border-green-400' },
-];
+// Core columns are always shown. Other stored task statuses (the task status
+// vocabulary is not yet unified, #405) get their own column when any task has
+// them, so no task ever disappears from the board.
+const CORE_STATUSES = ['PENDING', 'IN_PROGRESS', 'BLOCKED', 'COMPLETED'];
+const STATUS_META = {
+  PENDING: { label: 'To Do', headerColor: 'text-muted-foreground border-muted-foreground/30' },
+  TODO: { label: 'To Do (legacy)', headerColor: 'text-muted-foreground border-muted-foreground/30' },
+  UPCOMING: { label: 'Upcoming', headerColor: 'text-muted-foreground border-muted-foreground/30' },
+  IMMEDIATE: { label: 'Immediate', headerColor: 'text-orange-800 dark:text-orange-300 border-orange-400' },
+  IN_PROGRESS: { label: 'In Progress', headerColor: 'text-blue-700 dark:text-blue-300 border-blue-400' },
+  WAITING_US: { label: 'Waiting on us', headerColor: 'text-purple-700 dark:text-purple-300 border-purple-400' },
+  WAITING_CLIENT: { label: 'Waiting on client', headerColor: 'text-purple-700 dark:text-purple-300 border-purple-400' },
+  REVIEW: { label: 'In Review', headerColor: 'text-sky-800 dark:text-sky-300 border-sky-400' },
+  BLOCKED: { label: 'Blocked', headerColor: 'text-yellow-800 dark:text-yellow-300 border-yellow-400' },
+  COMPLETED: { label: 'Done', headerColor: 'text-green-800 dark:text-green-300 border-green-400' },
+};
+const STATUS_ORDER = ['PENDING', 'TODO', 'UPCOMING', 'IMMEDIATE', 'IN_PROGRESS', 'WAITING_US', 'WAITING_CLIENT', 'REVIEW', 'BLOCKED', 'COMPLETED'];
+
+function titleCase(status) {
+  return String(status).toLowerCase().split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+}
+
+export function buildKanbanColumns(board = {}) {
+  const present = Object.keys(board).filter((key) => Array.isArray(board[key]) && board[key].length > 0);
+  const keys = [...new Set([...CORE_STATUSES, ...present])].sort((a, b) => {
+    const ia = STATUS_ORDER.indexOf(a);
+    const ib = STATUS_ORDER.indexOf(b);
+    return (ia === -1 ? STATUS_ORDER.length : ia) - (ib === -1 ? STATUS_ORDER.length : ib);
+  });
+  return keys.map((key) => ({
+    key,
+    label: STATUS_META[key]?.label || titleCase(key),
+    headerColor: STATUS_META[key]?.headerColor || 'text-muted-foreground border-border',
+    tasks: Array.isArray(board[key]) ? board[key] : [],
+  }));
+}
 
 const PRIORITY_COLORS = {
   LOW: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
@@ -39,6 +70,8 @@ export default function TaskKanban() {
     queryFn: () => api.getProject(projectId),
   });
 
+  const columns = buildKanbanColumns(board);
+
   const moveMutation = useMutation({
     mutationFn: ({ taskId, status }) => api.moveTask(taskId, status),
     onSuccess: () => {
@@ -58,6 +91,29 @@ export default function TaskKanban() {
     },
     onError: (_, variables) => setCreateError(variables),
   });
+
+  const [announcement, setAnnouncement] = useState('');
+
+  const moveTaskTo = (task, fromStatus, toStatus) => {
+    if (!toStatus || fromStatus === toStatus) return;
+    setMoveError(null);
+    const label = columns.find((c) => c.key === toStatus)?.label || titleCase(toStatus);
+    moveMutation.mutate(
+      { taskId: task.id, status: toStatus },
+      {
+        onSuccess: () => setAnnouncement(`Moved "${task.title}" to ${label}.`),
+        onError: () => setAnnouncement(`Could not move "${task.title}".`),
+      },
+    );
+  };
+
+  const handleCardKeyDown = (event, task, columnIndex) => {
+    if (event.target !== event.currentTarget) return;
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    const target = columns[columnIndex + (event.key === 'ArrowRight' ? 1 : -1)];
+    if (target) moveTaskTo(task, columns[columnIndex].key, target.key);
+  };
 
   const handleDrop = (toStatus) => {
     if (draggedTask && draggedTask.fromStatus !== toStatus) {
@@ -98,35 +154,44 @@ export default function TaskKanban() {
       </div>
       {moveError && <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"><span>Task move was not saved. Try again.</span><button type="button" onClick={() => moveMutation.mutate(moveError)} disabled={moveMutation.isPending} className="underline">Try again</button></div>}
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 overflow-x-auto">
-        {STATUS_COLUMNS.map(({ key, label, headerColor }) => {
-          const tasks = board[key] || [];
+      <p className="sr-only" aria-live="polite" role="status">{announcement}</p>
+      <p id="kanban-keyboard-help" className="sr-only">
+        Focus a task card and press the left or right arrow key to move it to the neighbouring column, or use its Move to menu.
+      </p>
+
+      <div className="flex flex-col gap-4 lg:flex-row lg:overflow-x-auto lg:pb-2 min-w-0 [contain:inline-size]" role="region" aria-label="Task board">
+        {columns.map(({ key, label, headerColor, tasks }, columnIndex) => {
           return (
-            <div
+            <section
               key={key}
+              aria-labelledby={`kanban-col-${key}`}
               onDragOver={e => e.preventDefault()}
               onDrop={() => handleDrop(key)}
-              className="bg-muted/30 rounded-xl border border-border flex flex-col min-h-[500px]"
+              className="bg-muted/30 rounded-xl border border-border flex flex-col lg:min-h-[420px] lg:w-72 lg:flex-shrink-0"
             >
               {/* Column header */}
               <div className={`px-4 py-3 border-b-2 ${headerColor} flex items-center justify-between`}>
-                <span className={`font-semibold text-sm ${headerColor.split(' ')[0]}`}>{label}</span>
-                <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
+                <h2 id={`kanban-col-${key}`} className={`font-semibold text-sm ${headerColor.split(' ').filter((c) => c.startsWith('text-') || c.startsWith('dark:text-')).join(' ')}`}>{label}</h2>
+                <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full" aria-label={`${tasks.length} tasks`}>
                   {tasks.length}
                 </span>
               </div>
 
               {/* Tasks */}
-              <div className="flex-1 p-3 space-y-2 overflow-y-auto">
+              <ul className="flex-1 p-3 space-y-2 overflow-y-auto" aria-labelledby={`kanban-col-${key}`}>
                 {tasks.map(task => (
-                  <div
+                  <li
                     key={task.id}
                     draggable
+                    tabIndex={0}
+                    aria-label={`${task.title}, ${label}`}
+                    aria-describedby="kanban-keyboard-help"
+                    onKeyDown={(e) => handleCardKeyDown(e, task, columnIndex)}
                     onDragStart={() => setDraggedTask({ ...task, fromStatus: key })}
-                    className="bg-card border border-border rounded-lg p-3 cursor-grab active:cursor-grabbing hover:shadow-md hover:border-primary/40 transition-all"
+                    className="bg-card border border-border rounded-lg p-3 cursor-grab active:cursor-grabbing hover:shadow-md hover:border-primary/40 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
-                    <Link to={`/task/${task.id}`} className="block">
-                      <p className="text-sm font-medium text-foreground leading-snug">{task.title}</p>
+                    <Link to={`/task/${task.id}`} className="block rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                      <p className="text-sm font-medium text-foreground leading-snug break-words">{task.title}</p>
                     </Link>
                     <div className="mt-2 flex items-center justify-between flex-wrap gap-1">
                       <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${PRIORITY_COLORS[task.priority] || PRIORITY_COLORS.MEDIUM}`}>
@@ -140,12 +205,25 @@ export default function TaskKanban() {
                     </div>
                     {task.dueDate && (
                       <p className="text-xs text-muted-foreground mt-1.5">
-                        Due {new Date(task.dueDate).toLocaleDateString({ month: 'short', day: 'numeric' })}
+                        Due {formatDate(task.dueDate)}
                       </p>
                     )}
-                  </div>
+                    <label className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                      <span>Move to</span>
+                      <select
+                        value={key}
+                        onChange={(e) => moveTaskTo(task, key, e.target.value)}
+                        aria-label={`Move "${task.title}" to column`}
+                        className="min-h-8 flex-1 rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        {columns.map((col) => (
+                          <option key={col.key} value={col.key}>{col.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </li>
                 ))}
-              </div>
+              </ul>
 
               {/* Add task */}
               {showNewTask === key ? (
@@ -184,7 +262,7 @@ export default function TaskKanban() {
                   <Plus className="w-3.5 h-3.5" /> Add task
                 </button>
               )}
-            </div>
+            </section>
           );
         })}
       </div>
