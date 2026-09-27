@@ -331,7 +331,7 @@ export default function Expenses() {
               className="pl-8 pr-3 py-2 text-sm bg-background border border-border rounded-md focus:ring-2 focus:ring-primary/20 focus:border-primary w-48"
             />
           </div>
-          <select
+          <select aria-label="Filter by category"
             value={filterCategory}
             onChange={(e) => setFilterCategory(e.target.value)}
             className="py-2 px-3 text-sm bg-background border border-border rounded-md focus:ring-2 focus:ring-primary/20 focus:border-primary"
@@ -341,7 +341,7 @@ export default function Expenses() {
               <option key={c.value} value={c.value}>{c.label}</option>
             ))}
           </select>
-          <select
+          <select aria-label="Filter by client"
             value={filterClient}
             onChange={(e) => setFilterClient(e.target.value)}
             className="py-2 px-3 text-sm bg-background border border-border rounded-md focus:ring-2 focus:ring-primary/20 focus:border-primary"
@@ -427,7 +427,7 @@ export default function Expenses() {
                     className="flex-1 px-3 py-2 text-sm bg-background border border-border rounded-md focus:ring-2 focus:ring-primary/20 focus:border-primary"
                     placeholder="0.00"
                   />
-                  <select
+                  <select aria-label="Currency"
                     value={form.currency}
                     onChange={(e) => setForm({ ...form, currency: e.target.value })}
                     className="px-2 py-2 text-sm bg-background border border-border rounded-md"
@@ -441,7 +441,7 @@ export default function Expenses() {
               {/* Category */}
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">Category</label>
-                <select
+                <select aria-label="Category"
                   value={form.category}
                   onChange={(e) => setForm({ ...form, category: e.target.value })}
                   className="w-full px-3 py-2 text-sm bg-background border border-border rounded-md focus:ring-2 focus:ring-primary/20 focus:border-primary"
@@ -466,7 +466,7 @@ export default function Expenses() {
               {/* Client */}
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">Client (optional)</label>
-                <select
+                <select aria-label="Client"
                   value={form.clientId}
                   onChange={(e) => setForm({ ...form, clientId: e.target.value })}
                   className="w-full px-3 py-2 text-sm bg-background border border-border rounded-md focus:ring-2 focus:ring-primary/20 focus:border-primary"
@@ -481,7 +481,7 @@ export default function Expenses() {
               {/* Project */}
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">Project (optional)</label>
-                <select
+                <select aria-label="Project"
                   value={form.projectId}
                   onChange={(e) => setForm({ ...form, projectId: e.target.value })}
                   className="w-full px-3 py-2 text-sm bg-background border border-border rounded-md focus:ring-2 focus:ring-primary/20 focus:border-primary"

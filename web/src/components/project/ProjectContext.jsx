@@ -54,7 +54,7 @@ export default function ProjectContextCard({ projectId }) {
 
   return (
     <div className="bg-card rounded-lg shadow-sm border border-border">
-      <div className="px-4 py-3 border-b flex items-center justify-between">
+      <div className="px-4 py-3 border-b border-border flex items-center justify-between">
         <h3 className="font-semibold flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-accent" />
           Project Context
@@ -80,7 +80,7 @@ export default function ProjectContextCard({ projectId }) {
                 </span>
               )}
             </div>
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded text-sm text-muted-foreground whitespace-pre-wrap">
+            <div className="p-3 bg-muted/60 border border-border rounded text-sm text-foreground whitespace-pre-wrap">
               {context.aiSummary}
             </div>
           </div>
@@ -107,7 +107,8 @@ export default function ProjectContextCard({ projectId }) {
             }}
             onBlur={handleBlur}
             rows={4}
-            className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 resize-y"
+            aria-label="Project notes"
+            className="w-full border border-border bg-background text-foreground placeholder:text-muted-foreground rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 resize-y"
             placeholder="Add notes about this project's communications..."
           />
         </div>

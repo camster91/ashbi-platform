@@ -25,8 +25,8 @@ export default function UpcomingEventsWidget({ events = [] }) {
             <li key={event.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
               <div className="flex items-start gap-3">
                 <div
-                  className="w-10 h-10 rounded-lg flex flex-col items-center justify-center flex-shrink-0 text-xs font-bold border"
-                  style={{ borderColor: event.color || '#3B82F6', color: event.color || '#3B82F6' }}
+                  className="w-10 h-10 rounded-lg flex flex-col items-center justify-center flex-shrink-0 text-xs font-bold border-2 text-foreground"
+                  style={{ borderColor: event.color || '#3B82F6' }}
                 >
                   <span className="text-[10px] uppercase leading-none">{start.toLocaleDateString('en-CA', { month: 'short' })}</span>
                   <span className="text-sm leading-none">{start.getDate()}</span>

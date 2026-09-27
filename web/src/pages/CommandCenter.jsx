@@ -121,10 +121,10 @@ function GithubPanel({ data, loading, onRefresh }) {
         </button>
       }
     >
-      {data?.error && <p className="text-red-400 text-sm">{data.error}</p>}
+      {data?.error && <p className="text-red-700 dark:text-red-400 text-sm">{data.error}</p>}
       <div className="flex gap-4 mb-3 text-sm">
-        <span className="text-muted-foreground">Open PRs: <strong className={data?.openPRCount > 0 ? 'text-yellow-400' : 'text-foreground'}>{data?.openPRCount ?? '—'}</strong></span>
-        <span className="text-muted-foreground">Failing CI: <strong className={data?.failingCI > 0 ? 'text-red-400' : 'text-foreground'}>{data?.failingCI ?? 0}</strong></span>
+        <span className="text-muted-foreground">Open PRs: <strong className={data?.openPRCount > 0 ? 'text-yellow-800 dark:text-yellow-400' : 'text-foreground'}>{data?.openPRCount ?? '—'}</strong></span>
+        <span className="text-muted-foreground">Failing CI: <strong className={data?.failingCI > 0 ? 'text-red-700 dark:text-red-400' : 'text-foreground'}>{data?.failingCI ?? 0}</strong></span>
       </div>
       {data?.recentRepos?.length > 0 && (
         <div className="space-y-1.5">
@@ -167,7 +167,7 @@ function VpsPanel({ data, loading, onRefresh, onRestart }) {
         </button>
       }
     >
-      {data?.error && <p className="text-red-400 text-sm">{data.error}</p>}
+      {data?.error && <p className="text-red-700 dark:text-red-400 text-sm">{data.error}</p>}
       {data && !data.error && (
         <>
           <div className="flex gap-3 mb-3 text-sm flex-wrap">
@@ -230,7 +230,7 @@ function SitesPanel({ data, loading, onRefresh }) {
         </button>
       }
     >
-      {data?.error && <p className="text-red-400 text-sm">{data.error}</p>}
+      {data?.error && <p className="text-red-700 dark:text-red-400 text-sm">{data.error}</p>}
       {data?.summary && (
         <div className="flex gap-3 mb-3 flex-wrap">
           <CommandBadge variant="green">✓ {data.summary.healthy} up</CommandBadge>
@@ -298,9 +298,9 @@ function AgentsPanel({ data, loading, onRefresh, onRunAgent }) {
     >
       <div className="flex items-center gap-2 mb-3">
         {data?.openclawRunning ? (
-          <><Wifi className="w-3.5 h-3.5 text-green-500" /><span className="text-sm text-green-500">OpenClaw online</span></>
+          <><Wifi className="w-3.5 h-3.5 text-green-800 dark:text-green-400" /><span className="text-sm text-green-800 dark:text-green-400">OpenClaw online</span></>
         ) : (
-          <><WifiOff className="w-3.5 h-3.5 text-yellow-400" /><span className="text-sm text-yellow-400">OpenClaw status unknown</span></>
+          <><WifiOff className="w-3.5 h-3.5 text-yellow-800 dark:text-yellow-400" /><span className="text-sm text-yellow-800 dark:text-yellow-400">OpenClaw status unknown</span></>
         )}
       </div>
       <div className="space-y-2">
@@ -500,7 +500,7 @@ export default function CommandCenter() {
       </div>
 
       {error && (
-        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+        <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-700 dark:text-red-400 text-sm">
           ⚠ {error}
         </div>
       )}

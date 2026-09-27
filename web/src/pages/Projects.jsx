@@ -33,7 +33,7 @@ const KANBAN_COLUMNS = [
     key: 'REVIEW',
     label: 'Review',
     emptyText: 'Nothing is waiting for review.',
-    headerColor: 'border-yellow-400 text-yellow-800 dark:text-yellow-300',
+    headerColor: 'border-yellow-400 text-yellow-700 dark:text-yellow-300',
     bgColor: 'bg-muted/40',
     statuses: ['FINALIZING'],
   },

@@ -200,7 +200,7 @@ export default function PortalEstimate() {
           <div className="px-6 py-4 border-b border-slate-100">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Line Items</h3>
           </div>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" tabIndex={0} role="region" aria-label="Estimate line items">
             <table className="w-full">
               <thead>
                 <tr style={{ backgroundColor: '#2e2958' }}>

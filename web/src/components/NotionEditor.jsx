@@ -153,6 +153,7 @@ function Block({
     );
 
     const placeholder = block.type === 'paragraph' ? "Type '/' for commands" : '';
+    const blockLabel = `${BLOCK_TYPES[block.type]?.label || 'Text'} block ${index + 1}`;
 
     switch (block.type) {
       case 'todo':
@@ -162,10 +163,12 @@ function Block({
               type="checkbox"
               checked={block.checked || false}
               onChange={(e) => onChange(index, { ...block, checked: e.target.checked })}
+              aria-label={`Mark to-do ${index + 1} as done`}
               className="w-5 h-5 rounded border-border text-primary focus:ring-primary"
             />
             <input
               ref={contentRef}
+              aria-label={blockLabel}
               type="text"
               value={localContent}
               onChange={handleInput}
@@ -183,6 +186,7 @@ function Block({
             <span className="mt-2 w-1.5 h-1.5 rounded-full bg-foreground flex-shrink-0" />
             <input
               ref={contentRef}
+              aria-label={blockLabel}
               type="text"
               value={localContent}
               onChange={handleInput}
@@ -200,6 +204,7 @@ function Block({
             <span className="text-muted-foreground font-medium min-w-[1.5rem]">{index + 1}.</span>
             <input
               ref={contentRef}
+              aria-label={blockLabel}
               type="text"
               value={localContent}
               onChange={handleInput}
@@ -215,6 +220,7 @@ function Block({
         return (
           <input
             ref={contentRef}
+            aria-label={blockLabel}
             type="text"
             value={localContent}
             onChange={handleInput}

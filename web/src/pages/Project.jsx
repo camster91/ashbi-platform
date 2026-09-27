@@ -378,7 +378,7 @@ export default function Project() {
           {project.risks?.length > 0 && (
             <div className="bg-card rounded-lg border border-border">
               <div className="px-4 py-3 border-b">
-                <h3 className="font-semibold text-red-600">Risks</h3>
+                <h3 className="font-semibold text-red-700 dark:text-red-400">Risks</h3>
               </div>
               <ul className="divide-y">
                 {project.risks.map((risk, i) => (

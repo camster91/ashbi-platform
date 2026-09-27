@@ -151,7 +151,7 @@ export default function PortalProposal() {
           <div className="px-6 py-4 border-b border-slate-100">
             <h3 className="text-sm font-medium text-slate-500 uppercase tracking-wider">Line Items</h3>
           </div>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" tabIndex={0} role="region" aria-label="Proposal line items">
             <table className="w-full">
               <thead>
                 <tr className="bg-slate-50 text-left">

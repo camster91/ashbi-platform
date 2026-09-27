@@ -104,12 +104,12 @@ export default function AssetLibrary() {
               placeholder="Search assets..."
               className="pl-10 pr-4 py-2 rounded-lg border border-border bg-background text-sm w-48" />
           </div>
-          <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
+          <select aria-label="Filter by type" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
             className="px-3 py-2 rounded-lg border border-border bg-background text-sm">
             <option value="">All Types</option>
             {ASSET_TYPES.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
           </select>
-          <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}
+          <select aria-label="Filter by category" value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}
             className="px-3 py-2 rounded-lg border border-border bg-background text-sm">
             <option value="">All Categories</option>
             {CATEGORIES.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}

@@ -340,7 +340,7 @@ export default function Layout({ children }) {
               <div className="w-8 h-8 rounded-lg bg-[#e6f354] flex items-center justify-center shrink-0">
                 <Sparkles className="w-5 h-5 text-[#2e2958]" />
               </div>
-              {!sidebarCollapsed && <h1 className="text-xl font-heading font-bold text-white">Ashbi</h1>}
+              {!sidebarCollapsed && <p className="text-xl font-heading font-bold text-white">Ashbi</p>}
             </Link>
             {!sidebarCollapsed && (
               <>
@@ -592,7 +592,7 @@ export default function Layout({ children }) {
       </main>
 
       {/* Mobile bottom nav with More menu */}
-      <nav className="fixed bottom-0 inset-x-0 z-40 bg-card/80 backdrop-blur-lg border-t border-border/60 flex lg:hidden safe-area-inset-bottom shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.05)]" role="navigation" aria-label="Mobile navigation">
+      <nav className="fixed bottom-0 inset-x-0 z-40 bg-card border-t border-border/60 flex lg:hidden safe-area-inset-bottom shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.05)]" role="navigation" aria-label="Mobile navigation">
         {[
           { href: '/dashboard', icon: LayoutDashboard, label: 'Home', exact: true },
           { href: '/inbox', icon: Inbox, label: 'Inbox', badge: stats?.needsResponse },

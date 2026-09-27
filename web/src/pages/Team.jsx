@@ -28,9 +28,9 @@ const roleColors = {
 };
 
 const statusColor = (status) => {
-  if (status === 'overloaded') return 'text-red-600 bg-red-50 dark:bg-red-900/20';
-  if (status === 'busy') return 'text-amber-600 bg-amber-50 dark:bg-amber-900/20';
-  return 'text-green-600 bg-green-50 dark:bg-green-900/20';
+  if (status === 'overloaded') return 'text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20';
+  if (status === 'busy') return 'text-amber-800 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20';
+  return 'text-green-800 dark:text-green-400 bg-green-50 dark:bg-green-900/20';
 };
 
 const barColor = (status) => {
@@ -133,7 +133,7 @@ export default function Team() {
           <p className="text-sm text-muted-foreground mt-1">
             {activeCount} active member{activeCount !== 1 ? 's' : ''}
             {overloadedCount > 0 && (
-              <span className="ml-2 text-amber-600">· {overloadedCount} overloaded</span>
+              <span className="ml-2 text-amber-800 dark:text-amber-400">· {overloadedCount} overloaded</span>
             )}
           </p>
         </div>
@@ -202,7 +202,7 @@ export default function Team() {
                       <div>
                         <div className="flex justify-between text-xs text-muted-foreground mb-1">
                           <span>Utilization</span>
-                          <span className={member.utilizationPercent > 80 ? 'text-amber-600 font-semibold' : ''}>
+                          <span className={member.utilizationPercent > 80 ? 'text-amber-800 dark:text-amber-400 font-semibold' : ''}>
                             {member.utilizationPercent}%
                           </span>
                         </div>
@@ -359,7 +359,7 @@ export default function Team() {
                           </button>
                           <button
                             onClick={() => handleToggleActive(member)}
-                            className={cn('p-1.5 rounded', member.isActive ? 'text-green-600 hover:text-red-500' : 'text-muted-foreground hover:text-green-600')}
+                            className={cn('p-1.5 rounded', member.isActive ? 'text-green-800 dark:text-green-400 hover:text-red-500' : 'text-muted-foreground hover:text-green-600')}
                             title={member.isActive ? 'Deactivate' : 'Activate'}
                           >
                             {member.isActive ? <ToggleRight className="w-5 h-5" /> : <ToggleLeft className="w-5 h-5" />}
@@ -406,7 +406,7 @@ export default function Team() {
                 </Card>
                 <Card className="p-4">
                   <p className="text-xs text-muted-foreground">Overloaded</p>
-                  <p className="text-2xl font-bold text-red-600">{allocations.filter(a => a.utilization > 90).length}</p>
+                  <p className="text-2xl font-bold text-red-700 dark:text-red-400">{allocations.filter(a => a.utilization > 90).length}</p>
                 </Card>
               </div>
 
@@ -423,7 +423,7 @@ export default function Team() {
                         </div>
                         <div className="flex items-center gap-3 text-xs text-muted-foreground">
                           <span>{a.weeklyHours.toFixed(1)}h/week</span>
-                          <span className={cn('px-2 py-0.5 rounded-full font-medium', a.utilization > 90 ? 'text-red-600 bg-red-50 dark:bg-red-900/20' : a.utilization > 70 ? 'text-amber-600 bg-amber-50 dark:bg-amber-900/20' : 'text-green-600 bg-green-50 dark:bg-green-900/20')}>
+                          <span className={cn('px-2 py-0.5 rounded-full font-medium', a.utilization > 90 ? 'text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20' : a.utilization > 70 ? 'text-amber-800 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20' : 'text-green-800 dark:text-green-400 bg-green-50 dark:bg-green-900/20')}>
                             {a.utilization}%
                           </span>
                         </div>

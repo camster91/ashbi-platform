@@ -216,7 +216,7 @@ export default function Credentials() {
             className="w-full pl-10 pr-4 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
         </div>
-        <select
+        <select aria-label="Filter by category"
           value={filterCategory}
           onChange={(e) => setFilterCategory(e.target.value)}
           className="px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -226,7 +226,7 @@ export default function Credentials() {
             <option key={c.value} value={c.value}>{c.label}</option>
           ))}
         </select>
-        <select
+        <select aria-label="Filter by client"
           value={filterClient}
           onChange={(e) => setFilterClient(e.target.value)}
           className="px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -259,7 +259,7 @@ export default function Credentials() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">Category</label>
-                <select
+                <select aria-label="Category"
                   value={form.category}
                   onChange={(e) => setForm({ ...form, category: e.target.value })}
                   className="w-full px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -302,7 +302,7 @@ export default function Credentials() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-foreground mb-1">Client</label>
-                <select
+                <select aria-label="Client"
                   value={form.clientId}
                   onChange={(e) => setForm({ ...form, clientId: e.target.value })}
                   className="w-full px-3 py-2 text-sm bg-muted border-0 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20"

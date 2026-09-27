@@ -142,7 +142,7 @@ export default function PortalInvoice() {
 
         {/* Line Items */}
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" tabIndex={0} role="region" aria-label="Invoice line items">
             <table className="w-full">
               <thead>
                 <tr className="bg-slate-50 text-left">
