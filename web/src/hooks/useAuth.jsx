@@ -16,6 +16,7 @@ export function safeReturnPath(value) {
 
 export function authFailureReason(error) {
   if (error?.status === 401) return 'signed_out';
+  if (error?.status === 429) return 'rate_limited';
   if (error?.status === 403) return 'forbidden';
   if (error?.name === 'NetworkError' || (typeof navigator !== 'undefined' && navigator.onLine === false)) return 'offline';
   if (error?.name === 'TimeoutError') return 'timeout';
@@ -26,6 +27,17 @@ export function authFailureReason(error) {
 export function sessionEndReason(message) {
   const normalized = typeof message === 'string' ? message.toLowerCase() : '';
   return normalized.includes('revoked') && !normalized.includes('expired') ? 'revoked' : 'expired';
+}
+
+const RATE_LIMIT_RETRY_DEFAULT_MS = 5_000;
+const RATE_LIMIT_RETRY_MAX_MS = 60_000;
+
+// How long to wait before re-checking the session after a 429: the server's
+// Retry-After when present, bounded so the app never waits indefinitely.
+export function rateLimitRetryDelayMs(error) {
+  const seconds = error?.retryAfterSeconds;
+  if (!Number.isFinite(seconds)) return RATE_LIMIT_RETRY_DEFAULT_MS;
+  return Math.min(Math.max(seconds * 1000, 1_000), RATE_LIMIT_RETRY_MAX_MS);
 }
 
 function isSignInScreen(pathname) {
@@ -82,21 +94,29 @@ export function AuthProvider({ children }) {
   const location = useLocation();
   const mountedRef = useRef(true);
   const authCheckSequenceRef = useRef(0);
+  const userRef = useRef(null);
+  const retryTimerRef = useRef(null);
+  const checkAuthRef = useRef(null);
+  userRef.current = user;
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
       authCheckSequenceRef.current += 1;
+      clearTimeout(retryTimerRef.current);
     };
   }, []);
 
   const checkAuth = useCallback(async () => {
     const sequence = ++authCheckSequenceRef.current;
     const isCurrentCheck = () => mountedRef.current && sequence === authCheckSequenceRef.current;
+    clearTimeout(retryTimerRef.current);
+    let waitingToRetry = false;
     if (mountedRef.current) {
-      setIsLoading(true);
-      setAuthState((current) => ({ ...current, status: 'checking' }));
+      // A re-check keeps an already signed-in app on screen.
+      if (!userRef.current) setIsLoading(true);
+      setAuthState((current) => ({ ...current, status: userRef.current ? 'authenticated' : 'checking' }));
     }
     try {
       const userData = await api.me();
@@ -107,7 +127,22 @@ export function AuthProvider({ children }) {
     } catch (error) {
       if (isCurrentCheck()) {
         const reason = authFailureReason(error);
-        if (reason === 'signed_out') {
+        if (reason === 'rate_limited') {
+          // Too many requests is "retry later", never "signed out" or a
+          // blocking error: keep any session on screen, show a notice, and
+          // re-check after Retry-After.
+          const retryInMs = rateLimitRetryDelayMs(error);
+          waitingToRetry = !userRef.current;
+          setAuthState({
+            status: userRef.current ? 'authenticated' : 'checking',
+            reason,
+            message: error.message || '',
+            retryInMs,
+          });
+          retryTimerRef.current = setTimeout(() => {
+            if (isCurrentCheck()) checkAuthRef.current?.();
+          }, retryInMs);
+        } else if (reason === 'signed_out') {
           await purgePrivateCaches();
           if (isCurrentCheck()) {
             setUser(null);
@@ -118,9 +153,10 @@ export function AuthProvider({ children }) {
         }
       }
     } finally {
-      if (isCurrentCheck()) setIsLoading(false);
+      if (isCurrentCheck() && !waitingToRetry) setIsLoading(false);
     }
   }, []);
+  checkAuthRef.current = checkAuth;
 
   useEffect(() => {
     if (!isSignInScreen(window.location.pathname)) {

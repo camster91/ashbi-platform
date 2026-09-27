@@ -15,7 +15,7 @@ import { fileURLToPath } from 'url';
 
 import env from './config/env.js';
 import prisma from './config/db.js';
-import { apiRateLimitMax, isNonApiRequest } from './config/rateLimit.js';
+import { apiRateLimitKey, createApiRateLimitMax, createRateLimitRedis, isNonApiRequest } from './config/rateLimit.js';
 import { trustHops } from './config/trust-proxy.js';
 import { isCurrentUserSession } from './auth/session.js';
 import { createJoinProjectHandler } from './auth/project-room-access.js';
@@ -127,9 +127,17 @@ await fastify.register(cors, {
 });
 await fastify.register(cookie);
 await fastify.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } });
+const rateLimitRedis = createRateLimitRedis();
+if (rateLimitRedis) fastify.addHook('onClose', async () => { rateLimitRedis.disconnect(); });
 await fastify.register(rateLimit, {
   global: true,
-  max: apiRateLimitMax(),
+  // Signed-in traffic is keyed by the verified user (higher limit); anonymous
+  // traffic stays per IP. Route-level limits (login, MFA, share links) keep
+  // their own keys. Counters live in Redis when available so every API
+  // replica shares them; skipOnError keeps the API up if Redis is not.
+  keyGenerator: apiRateLimitKey,
+  max: createApiRateLimitMax(),
+  ...(rateLimitRedis ? { redis: rateLimitRedis, nameSpace: 'ashbi-rate-limit:' } : {}),
   timeWindow: '1 minute',
   skipOnError: true,
   // Frontend navigation loads many immutable chunks in parallel. Counting those

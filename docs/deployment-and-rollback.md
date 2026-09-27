@@ -113,6 +113,18 @@ future migration needs longer (for example
 `PGOPTIONS='-c statement_timeout=0' npx prisma migrate deploy`), and keep the
 API `REQUEST_TIMEOUT_MS` (default 30000) at or below `statement_timeout`.
 
+## API rate limits
+
+The global `/api` limiter keys signed-in traffic (a verified staff or portal
+session cookie/bearer token) by user id at `API_USER_RATE_LIMIT_MAX` requests
+per minute (default 600, clamped to 100–5000), and anonymous traffic by client
+IP at 100 per minute. Route-level limits (login, MFA, public intake, review
+share links) keep their own keys. Counters live in Redis (`ashbi-rate-limit:*`
+keys) when `REDIS_URL` is set, so all API replicas share them; tests and a
+Redis-less development setup use the in-memory store. A Redis outage skips the
+limiter rather than failing requests. The SPA treats a 429 from
+`/api/auth/me` as "retry later" (keeps the session and shows a notice).
+
 ## Client IP behind a proxy (`TRUST_PROXY`)
 
 Production is reached through Traefik (`docker-compose.prod.yml`), so every

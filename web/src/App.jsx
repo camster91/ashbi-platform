@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth, AuthProvider } from './hooks/useAuth';
+import RateLimitNotice from './components/RateLimitNotice';
 import ErrorBoundary from './components/ErrorBoundary';
 import { getPreloadedLogin } from './lib/initial-route';
 import { ToastProvider, useToast } from './hooks/useToast';
@@ -35,7 +36,7 @@ function QueryRoute({ children }) {
 
 function RootRedirect() {
   const { user, isLoading, authState, checkAuth } = useAuth();
-  if (isLoading) return <PageLoader />;
+  if (isLoading) return <PageLoader authState={authState} />;
   if (authState.status === 'error') return <AuthCheckFailure authState={authState} onRetry={checkAuth} />;
   return user ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />;
 }
@@ -92,11 +93,14 @@ const RateCards = lazy(() => import('./pages/RateCards'));
 // Side-nav targets that previously had no route (UX audit finding)
 const Trash = lazy(() => import('./pages/Trash'));
 
-function PageLoader() {
+function PageLoader({ authState }) {
   return (
-    <div role="status" aria-live="polite" aria-label="Checking your session" className="flex items-center justify-center min-h-[60vh] gap-3 text-muted-foreground">
-      <div aria-hidden="true" className="animate-spin motion-reduce:animate-none rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      <span>Checking your session…</span>
+    <div className="min-h-[60vh] flex flex-col items-center justify-center gap-2">
+      <div role="status" aria-live="polite" aria-label="Checking your session" className="flex items-center justify-center gap-3 text-muted-foreground">
+        <div aria-hidden="true" className="animate-spin motion-reduce:animate-none rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <span>Checking your session…</span>
+      </div>
+      <RateLimitNotice authState={authState} />
     </div>
   );
 }
@@ -135,9 +139,11 @@ function AuthCheckFailure({ authState, onRetry }) {
 function PrivateRoute({ children }) {
   const { user, isLoading, authState, checkAuth } = useAuth();
   const location = useLocation();
-  if (isLoading) return <PageLoader />;
+  if (isLoading) return <PageLoader authState={authState} />;
   if (authState.status === 'error') return <AuthCheckFailure authState={authState} onRetry={checkAuth} />;
-  return user ? children : <Navigate to="/login" replace state={{ reason: authState.reason, message: authState.message, returnTo: safePrivateReturn(location) }} />;
+  return user
+    ? <><RateLimitNotice authState={authState} />{children}</>
+    : <Navigate to="/login" replace state={{ reason: authState.reason, message: authState.message, returnTo: safePrivateReturn(location) }} />;
 }
 
 function safePrivateReturn(location) {
@@ -147,7 +153,7 @@ function safePrivateReturn(location) {
 function AdminRoute({ children }) {
   const { user, isLoading, authState, checkAuth } = useAuth();
   const location = useLocation();
-  if (isLoading) return <PageLoader />;
+  if (isLoading) return <PageLoader authState={authState} />;
   if (authState.status === 'error') return <AuthCheckFailure authState={authState} onRetry={checkAuth} />;
   if (!user) return <Navigate to="/login" replace state={{ reason: authState.reason, message: authState.message, returnTo: safePrivateReturn(location) }} />;
   if (user.role !== 'ADMIN') return (

@@ -7,11 +7,18 @@ const API_BASE = import.meta.env.VITE_API_URL || '/api';
 const DEFAULT_TIMEOUT = 30000;
 
 class ApiError extends Error {
-  constructor(message, status, data) {
+  constructor(message, status, data, retryAfterSeconds = null) {
     super(message);
     this.status = status;
     this.data = data;
+    // Seconds from a 429/503 Retry-After header, when the server sent one.
+    this.retryAfterSeconds = retryAfterSeconds;
   }
+}
+
+function retryAfterSeconds(response) {
+  const value = Number.parseInt(response.headers?.get?.('retry-after') ?? '', 10);
+  return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
 class TimeoutError extends Error {
@@ -145,7 +152,8 @@ async function request(endpoint, options = {}) {
       const error = new ApiError(
         data.error || 'Request failed',
         response.status,
-        data
+        data,
+        retryAfterSeconds(response)
       );
       if (response.status === 403 && data.code === REAUTH_REQUIRED && onReauthRequired && !options.reauthRetried) {
         if (await requestReauth(endpoint)) {
