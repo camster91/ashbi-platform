@@ -110,8 +110,14 @@ ALTER ROLE ashbihub SET lock_timeout = '10s';
 New sessions pick these up; restart the API and worker to recycle pooled
 connections. Run `npx prisma migrate deploy` with a session override if a
 future migration needs longer (for example
-`PGOPTIONS='-c statement_timeout=0' npx prisma migrate deploy`), and keep the
-API `REQUEST_TIMEOUT_MS` (default 30000) at or below `statement_timeout`.
+`PGOPTIONS='-c statement_timeout=0' npx prisma migrate deploy`).
+
+`REQUEST_TIMEOUT_MS` (default 120000, clamped to 10s-15min) is Node's
+`requestTimeout`: the time a client has to finish *sending* a request, which
+closes slow-body connections. It does not cap handler time (the AI session has
+its own 90s deadline), and it must stay long enough for 50 MB uploads on slow
+links. Job enqueues fail within 5s with 503 `QUEUE_UNAVAILABLE` while Redis is
+down instead of hanging the request.
 
 ## API rate limits
 

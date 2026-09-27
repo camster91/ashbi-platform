@@ -79,3 +79,21 @@ test('closeQueueInfrastructure is idempotent', async () => {
   assert.equal(closeQueueInfrastructure(), first);
   await first;
 });
+
+test('the API bounds slow request bodies without capping long handlers', async () => {
+  const { DEFAULT_REQUEST_TIMEOUT_MS, requestTimeoutMs } = await import('../../config/http.js');
+  assert.equal(requestTimeoutMs(undefined), DEFAULT_REQUEST_TIMEOUT_MS);
+  assert.ok(DEFAULT_REQUEST_TIMEOUT_MS >= 90_000, 'uploads and the 90s AI session fit');
+  assert.equal(requestTimeoutMs('30000'), 30_000);
+  assert.equal(requestTimeoutMs('5'), 10_000);
+  assert.equal(requestTimeoutMs('999999999'), 15 * 60_000);
+  assert.equal(requestTimeoutMs('nope'), DEFAULT_REQUEST_TIMEOUT_MS);
+
+  const { buildApp } = await import('../../index.js');
+  const app = await buildApp({ initializeRuntime: false, jwtSecret: 'test-only-jwt-secret' });
+  try {
+    assert.equal(app.initialConfig.requestTimeout, DEFAULT_REQUEST_TIMEOUT_MS);
+  } finally {
+    await app.close();
+  }
+});

@@ -17,6 +17,7 @@ import env from './config/env.js';
 import prisma from './config/db.js';
 import { apiRateLimitKey, createApiRateLimitMax, createRateLimitRedis, isNonApiRequest } from './config/rateLimit.js';
 import { trustHops } from './config/trust-proxy.js';
+import { requestTimeoutMs } from './config/http.js';
 import { isCurrentUserSession } from './auth/session.js';
 import { createJoinProjectHandler } from './auth/project-room-access.js';
 import { clientAcquisitionCorsOptions, loadClientAcquisitionConfig } from './services/client-acquisition.contract.js';
@@ -72,6 +73,8 @@ if (initializeRuntime && initSentry('api', [Sentry.fastifyIntegration()])) {
 
 // Initialize Fastify
 const fastify = Fastify({
+  // Bound slow request bodies (see src/config/http.js); handler time is not limited.
+  requestTimeout: requestTimeoutMs(),
   // Off by default; TRUST_PROXY=1 behind Traefik so per-IP rate limits and
   // audit IP prefixes see the client, not the proxy.
   trustProxy: typeof trustProxy === 'number' ? trustHops(trustProxy) : trustProxy,
