@@ -18,6 +18,7 @@ import prisma from './config/db.js';
 import { apiRateLimitKey, createApiRateLimitMax, createRateLimitRedis, isNonApiRequest } from './config/rateLimit.js';
 import { trustHops } from './config/trust-proxy.js';
 import { requestTimeoutMs } from './config/http.js';
+import { spaStaticOptions } from './config/static-cache.js';
 import { isCurrentUserSession } from './auth/session.js';
 import { createJoinProjectHandler } from './auth/project-room-access.js';
 import { clientAcquisitionCorsOptions, loadClientAcquisitionConfig } from './services/client-acquisition.contract.js';
@@ -265,7 +266,8 @@ fastify.get('/api/health/details', {
 
 // Static files
 if (env.serveBuiltSpa) {
-  await fastify.register(fastifyStatic, { root: path.join(__dirname, '../dist'), prefix: '/' });
+  // Hashed /assets/* are immutable; index.html, sw.js and the manifest revalidate.
+  await fastify.register(fastifyStatic, spaStaticOptions(path.join(__dirname, '../dist')));
   fastify.setNotFoundHandler((request, reply) => {
     if (!request.url.startsWith('/api/')) return reply.sendFile('index.html');
     reply.status(404).send({ error: 'Not found' });
