@@ -43,7 +43,7 @@ test('REDIS_URL forms are passed to ioredis intact (auth, ACL user, db index, TL
 });
 
 test('production fails fast on a missing or invalid REDIS_URL; development falls back to localhost', () => {
-  for (const bad of [undefined, '', 'localhost:6379', 'http://redis:6379', 'redis://', 'not a url']) {
+  for (const bad of [null, '', 'localhost:6379', 'http://redis:6379', 'redis://', 'not a url']) {
     assert.throws(() => resolveRedisUrl(bad, { production: true }), /REDIS_URL/, String(bad));
     assert.deepEqual(resolveRedisUrl(bad, { production: false }), { url: 'redis://localhost:6379', tls: false });
   }
