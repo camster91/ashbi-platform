@@ -210,6 +210,18 @@ test.describe('UI quality', () => {
     }
   });
 
+  test('the Cmd/Ctrl+K shortcut is advertised on Create and opens Quick add', async ({ page, isMobile }) => {
+    await page.goto('/dashboard');
+    await expect(page.getByRole('heading', { name: /Cameron/, level: 1 })).toBeVisible();
+    const search = page.getByPlaceholder('Search threads, clients, projects...');
+    await expect(search.locator('xpath=..').locator('kbd')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Open quick create menu' })).toHaveAccessibleDescription(/Command K or Control K opens Quick add/);
+    if (!isMobile) {
+      await page.keyboard.press('Control+k');
+      await expect(page.getByRole('dialog', { name: 'Quick add' })).toBeVisible();
+    }
+  });
+
   test('task title wraps instead of clipping', async ({ page }) => {
     await page.goto('/task/task-a');
     const title = page.getByLabel('Task title');

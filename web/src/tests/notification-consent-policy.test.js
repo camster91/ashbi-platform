@@ -20,6 +20,12 @@ describe('notification consent policy', () => {
     expect(layout).toContain('push-prompt-snoozed:');
   });
 
+  it('shows the invitation once: leaving the page or dismissing retires it for good', () => {
+    expect(layout).toContain('push-prompt-shown:');
+    expect(layout).toContain('aria-label="Dismiss notification invitation"');
+    expect(layout).toMatch(/pushPromptShownOnRef\.current !== location\.pathname/);
+  });
+
   it('exposes reversible and actionable settings states', () => {
     for (const copy of [
       'Disable notifications',

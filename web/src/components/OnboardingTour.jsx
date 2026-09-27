@@ -38,7 +38,7 @@ const FEATURE_INTRO_STEPS = [
     icon: Sparkles,
     title: 'Create anything in seconds',
     description:
-      'Press ⌘K (or Ctrl+K) to jump to clients, projects, invoices, and more. It is the fastest way to move work forward.',
+      'Press ⌘K (or Ctrl+K) anywhere to open Quick add and create a project, task or client in seconds. Use the search bar to find existing work.',
   },
 ];
 
