@@ -18,7 +18,7 @@ import prisma from './config/db.js';
 import { apiRateLimitMax, isNonApiRequest } from './config/rateLimit.js';
 import { trustHops } from './config/trust-proxy.js';
 import { isCurrentUserSession } from './auth/session.js';
-import { createJoinProjectHandler } from './auth/project-room-access.js';
+import { createJoinProjectHandler, createLeaveProjectHandler } from './auth/project-room-access.js';
 import { clientAcquisitionCorsOptions, loadClientAcquisitionConfig } from './services/client-acquisition.contract.js';
 import { initHermesBridge } from './agents/hub-hermes.integration.js';
 
@@ -293,9 +293,11 @@ io.on('connection', (socket) => {
     if (userId && userId === socket.userId) socket.join(`user:${userId}`);
   });
 
-  // Join a project room only if the caller is staff in the project's org or
-  // the project's own client (see canJoinProjectRoom). Acknowledges the result
-  // so a reconnecting call can wait for the room before re-signalling.
+  // Staff in the project's org join the internal `project:{id}` room; the
+  // project's own client joins only `project:{id}:client` (see
+  // project-room-access.js), which never carries internal chat or fields.
+  // Acknowledges the result so a reconnecting call can wait for the room
+  // before re-signalling.
   socket.on('join-project', createJoinProjectHandler(socket, {
     findProject: (projectId) => prisma.project.findUnique({
       where: { id: projectId },
@@ -304,9 +306,7 @@ io.on('connection', (socket) => {
     logger,
   }));
 
-  socket.on('leave-project', (projectId) => {
-    if (projectId) socket.leave(`project:${projectId}`);
-  });
+  socket.on('leave-project', createLeaveProjectHandler(socket));
 
   registerCallSignalling(io, socket);
 });

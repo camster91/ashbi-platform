@@ -575,8 +575,14 @@ model ChatMessage {
   externalAuthorName String?
   externalMessageId  String? // Provider-native message identifier for durable reconciliation
   externalThreadId   String? // Provider-native root-thread identifier
+  // INTERNAL: staff-only team chat (default, includes Slack imports).
+  // CLIENT: part of the client-portal conversation, readable by the client.
+  visibility String   @default("INTERNAL")
   isEdited  Boolean   @default(false)
   editedAt  DateTime?
+  // Tombstone for a deleted message that still has replies: the content is
+  // cleared and the thread stays intact. Messages without replies are removed.
+  removedAt DateTime?
   parentId  String? // For thread replies
   projectId String
   authorId  String?
@@ -592,6 +598,7 @@ model ChatMessage {
 
   @@index([projectId])
   @@index([projectId, createdAt])
+  @@index([projectId, visibility, createdAt])
   @@index([projectId, externalSource, externalMessageId])
   @@index([projectId, externalSource, externalThreadId])
   @@map("chat_messages")

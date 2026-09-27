@@ -1404,11 +1404,26 @@ export const calendarRsvpSchema = z.object({
 });
 
 // ── Chat (Ash chat + simple chat) ─────────────────────────────────────────
+// INTERNAL messages are staff-only team chat; CLIENT messages are part of the
+// client-portal conversation. Staff messages default to INTERNAL; a reply
+// always takes its parent's visibility.
+export const CHAT_VISIBILITIES = /** @type {const} */ (['INTERNAL', 'CLIENT']);
+
 export const chatMessageCreateSchema = z.object({
   content: z.string().min(1).max(50_000),
   type: z.enum(['TEXT', 'IMAGE', 'FILE', 'SYSTEM']).default('TEXT'),
   metadata: z.record(z.string(), z.unknown()).optional(),
   parentId: cuidId.optional(),
+  visibility: z.enum(CHAT_VISIBILITIES).default('INTERNAL'),
+});
+
+// Chat history pages: non-numeric or non-positive limits are rejected, large
+// ones are capped so one request cannot pull a project's whole history.
+export const CHAT_PAGE_MAX = 100;
+export const chatMessageListQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).default(50).transform((limit) => Math.min(limit, CHAT_PAGE_MAX)),
+  before: z.string().datetime({ offset: true }).optional(),
+  after: z.string().datetime({ offset: true }).optional(),
 });
 
 export const chatMessageUpdateSchema = z.object({
