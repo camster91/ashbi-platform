@@ -17,6 +17,7 @@ import {
   Reply,
   ExternalLink,
   Loader2,
+  Mail,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import LoadingState from '../components/ui/LoadingState';
