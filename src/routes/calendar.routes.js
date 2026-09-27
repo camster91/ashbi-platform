@@ -190,17 +190,12 @@ export default async function calendarRoutes(fastify, options = {}) {
     // Notify attendees
     for (const attendeeId of attendeeIds) {
       if (attendeeId !== request.user.id) {
-        await request.prisma.notification.create({
-          data: {
-            type: 'EVENT_INVITE',
-            title: 'Meeting Invitation',
-            message: `${request.user.name} invited you to "${title}"`,
-            data: JSON.stringify({ eventId: event.id, projectId }),
-            userId: attendeeId
-          }
+        await fastify.notify(attendeeId, {
+          type: 'EVENT_INVITE',
+          title: 'Meeting Invitation',
+          message: `${request.user.name} invited you to "${title}"`,
+          data: { eventId: event.id, projectId },
         });
-
-        fastify.notify(attendeeId, 'EVENT_INVITE', { eventId: event.id });
       }
     }
 
@@ -266,14 +261,11 @@ export default async function calendarRoutes(fastify, options = {}) {
 
         for (const attendeeId of newAttendeeIds) {
           if (attendeeId !== request.user.id) {
-            await request.prisma.notification.create({
-              data: {
-                type: 'EVENT_INVITE',
-                title: 'Meeting Invitation',
-                message: `${request.user.name} invited you to "${title || existing.title}"`,
-                data: JSON.stringify({ eventId: id }),
-                userId: attendeeId
-              }
+            await fastify.notify(attendeeId, {
+              type: 'EVENT_INVITE',
+              title: 'Meeting Invitation',
+              message: `${request.user.name} invited you to "${title || existing.title}"`,
+              data: { eventId: id },
             });
           }
         }
@@ -364,14 +356,11 @@ export default async function calendarRoutes(fastify, options = {}) {
     });
 
     if (event && event.createdById !== request.user.id) {
-      await request.prisma.notification.create({
-        data: {
-          type: 'EVENT_RSVP',
-          title: 'Meeting RSVP',
-          message: `${request.user.name} ${status.toLowerCase()} your meeting "${event.title}"`,
-          data: JSON.stringify({ eventId: id, status }),
-          userId: event.createdById
-        }
+      await fastify.notify(event.createdById, {
+        type: 'EVENT_RSVP',
+        title: 'Meeting RSVP',
+        message: `${request.user.name} ${status.toLowerCase()} your meeting "${event.title}"`,
+        data: { eventId: id, status },
       });
     }
 

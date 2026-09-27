@@ -91,47 +91,22 @@ export default async function commentRoutes(fastify) {
     // Notify mentioned users
     for (const user of mentionedUsers) {
       if (user.id !== request.user.id) {
-        await request.prisma.notification.create({
-          data: {
-            type: 'MENTION',
-            title: 'You were mentioned in a comment',
-            message: `${request.user.name} mentioned you in a comment on "${task.title}"`,
-            data: JSON.stringify({
-              taskId,
-              commentId: comment.id,
-              projectId: task.projectId
-            }),
-            userId: user.id
-          }
-        });
-
-        fastify.notify(user.id, 'MENTION', {
-          taskId,
-          commentId: comment.id,
-          projectId: task.projectId
+        await fastify.notify(user.id, {
+          type: 'MENTION',
+          title: 'You were mentioned in a comment',
+          message: `${request.user.name} mentioned you in a comment on "${task.title}"`,
+          data: { taskId, commentId: comment.id, projectId: task.projectId },
         });
       }
     }
 
     // Notify task assignee if not the commenter
     if (task.assigneeId && task.assigneeId !== request.user.id && !mentionIds.includes(task.assigneeId)) {
-      await request.prisma.notification.create({
-        data: {
-          type: 'TASK_COMMENT',
-          title: 'New comment on your task',
-          message: `${request.user.name} commented on "${task.title}"`,
-          data: JSON.stringify({
-            taskId,
-            commentId: comment.id,
-            projectId: task.projectId
-          }),
-          userId: task.assigneeId
-        }
-      });
-
-      fastify.notify(task.assigneeId, 'TASK_COMMENT', {
-        taskId,
-        commentId: comment.id
+      await fastify.notify(task.assigneeId, {
+        type: 'TASK_COMMENT',
+        title: 'New comment on your task',
+        message: `${request.user.name} commented on "${task.title}"`,
+        data: { taskId, commentId: comment.id, projectId: task.projectId },
       });
     }
 

@@ -18,6 +18,7 @@ import prisma from './config/db.js';
 import { apiRateLimitMax, isNonApiRequest } from './config/rateLimit.js';
 import { trustHops } from './config/trust-proxy.js';
 import { isCurrentUserSession } from './auth/session.js';
+import { createNotifier } from './services/notification.service.js';
 import { createJoinProjectHandler, createLeaveProjectHandler } from './auth/project-room-access.js';
 import { clientAcquisitionCorsOptions, loadClientAcquisitionConfig } from './services/client-acquisition.contract.js';
 import { initHermesBridge } from './agents/hub-hermes.integration.js';
@@ -312,13 +313,12 @@ io.on('connection', (socket) => {
 });
 
 fastify.decorate('io', io);
-fastify.decorate('notify', async (userId, type, data) => {
-  try {
-    const { createNotification } = await import('./services/notification.service.js');
-    await createNotification({ userId, type, title: type, message: JSON.stringify(data), data }, { io });
-  } catch (err) { logger.error({ err }, '[notify] Failed to persist notification'); }
-  io.to(`user:${userId}`).emit('notification', { type, data });
-});
+// The single notification path (H4, see notification.service.js): notify()
+// persists exactly one human-readable row and emits it; emitNotification()
+// only emits a row already persisted inside a transaction.
+const notifier = createNotifier(io, logger);
+fastify.decorate('notify', notifier.notify);
+fastify.decorate('emitNotification', notifier.emit);
 
 // Initialization
 if (initializeRuntime) initSubscribers({ fastify, io });

@@ -19,7 +19,12 @@ const TYPE_ROUTES = {
   'RESPONSE_APPROVED': (data) => data?.threadId ? `/thread/${data.threadId}` : '/inbox',
   'RESPONSE_REJECTED': (data) => data?.threadId ? `/thread/${data.threadId}` : '/inbox',
   'TASK_COMMENT': (data) => data?.taskId ? `/task/${data.taskId}` : null,
-  'MENTION': (data) => data?.projectId ? `/project/${data.projectId}` : null,
+  'TASK_BLOCKED': (data) => data?.taskId ? `/task/${data.taskId}` : null,
+  'MENTION': (data) => data?.taskId ? `/task/${data.taskId}` : data?.projectId ? `/project/${data.projectId}` : null,
+  'RESPONSE_PENDING': (data) => data?.threadId ? `/thread/${data.threadId}` : '/inbox',
+  'EVENT_INVITE': () => '/schedule',
+  'EVENT_RSVP': () => '/schedule',
+  'CLIENT_ONBOARDED': (data) => data?.clientId ? `/client/${data.clientId}` : '/clients',
   'SLA_WARNING': () => '/inbox',
   'SLA_BREACH': () => '/inbox',
   'ESCALATION': () => '/inbox',
@@ -40,9 +45,16 @@ const TYPE_BADGES = {
   'ESCALATION': 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
 };
 
-function getNotificationLink(notification) {
+// Rows written before the single notify() path stored `data` as a JSON
+// string; newer rows store an object.
+function notificationData(data) {
+  if (typeof data !== 'string') return data;
+  try { return JSON.parse(data); } catch { return null; }
+}
+
+export function getNotificationLink(notification) {
   const resolver = TYPE_ROUTES[notification.type];
-  if (resolver) return resolver(notification.data);
+  if (resolver) return resolver(notificationData(notification.data));
   return null;
 }
 

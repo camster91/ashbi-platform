@@ -146,16 +146,12 @@ export default async function chatRoutes(fastify) {
 
       for (const user of mentionedUsers) {
         if (user.id !== request.user.id) {
-          await request.prisma.notification.create({
-            data: {
-              type: 'MENTION',
-              title: 'You were mentioned',
-              message: `${request.user.name} mentioned you in a chat message`,
-              data: JSON.stringify({ projectId, messageId: message.id }),
-              userId: user.id
-            }
+          await fastify.notify(user.id, {
+            type: 'MENTION',
+            title: 'You were mentioned',
+            message: `${request.user.name} mentioned you in a chat message`,
+            data: { projectId, messageId: message.id },
           });
-          fastify.notify(user.id, 'MENTION', { projectId, messageId: message.id });
         }
       }
     }
