@@ -183,7 +183,7 @@ export async function recordCompletedCheckout(prisma, event) {
       });
 
       if (transitioned.count === 0) {
-        const prior = await tx.invoicePayment.findUnique({ where: { transactionId } });
+        const prior = await tx.invoicePayment.findUnique({ where: { transactionId, method: 'STRIPE' } });
         if (prior?.invoiceId === invoiceId) return { duplicate: true, invoiceId };
         throw new Error('Invoice was already paid by another transaction');
       }
@@ -202,7 +202,7 @@ export async function recordCompletedCheckout(prisma, event) {
     });
   } catch (err) {
     if (err?.code === 'P2002') {
-      const prior = await prisma.invoicePayment.findUnique({ where: { transactionId } });
+      const prior = await prisma.invoicePayment.findUnique({ where: { transactionId, method: 'STRIPE' } });
       if (prior?.invoiceId === invoiceId) return { duplicate: true, invoiceId };
     }
     throw err;
@@ -224,7 +224,7 @@ export async function recordCheckoutAuditEvents(prisma, request, event, result) 
   let payment = null;
   try {
     payment = await prisma.invoicePayment.findUnique({
-      where: { transactionId },
+      where: { transactionId, method: 'STRIPE' },
       select: { id: true, amount: true },
     });
   } catch {

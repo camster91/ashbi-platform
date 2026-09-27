@@ -1232,6 +1232,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Table: `invoice_payments`
 - Tenant-scoped: no
 - Soft-deletable: no
+- Constraints and indexes:
+  - `@@unique([transactionId], map: "invoice_payments_stripe_transactionId_key", where: raw("method = 'STRIPE'"))`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -1239,7 +1241,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `amount` | Float | required |  |  |  |
 | `method` | String | required | `"BANK"` |  | STRIPE \| BANK \| TRANSFER \| CHEQUE \| CASH \| OTHER (legacy rows may hold CHECK) |
 | `notes` | String | optional |  |  |  |
-| `transactionId` | String | unique, optional |  |  |  |
+| `transactionId` | String | optional |  |  |  |
 | `paidAt` | DateTime | required | `now()` |  |  |
 | `invoiceId` | String | required |  |  |  |
 | `createdAt` | DateTime | required | `now()` |  |  |

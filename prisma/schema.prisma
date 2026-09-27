@@ -2,7 +2,7 @@
 
 generator client {
   provider        = "prisma-client-js"
-  previewFeatures = ["postgresqlExtensions"]
+  previewFeatures = ["postgresqlExtensions", "partialIndexes"]
 }
 
 datasource db {
@@ -1127,12 +1127,17 @@ model InvoicePayment {
   amount        Float
   method        String   @default("BANK") // STRIPE | BANK | TRANSFER | CHEQUE | CASH | OTHER (legacy rows may hold CHECK)
   notes         String?
-  transactionId String?  @unique
+  // Stripe payment intent/session id, or a manual bank/cheque reference.
+  // Only Stripe ids are unique (partial index below): manual references may
+  // legitimately repeat across invoices.
+  transactionId String?
   paidAt        DateTime @default(now())
   invoiceId     String
   createdAt     DateTime @default(now())
 
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@unique([transactionId], map: "invoice_payments_stripe_transactionId_key", where: raw("method = 'STRIPE'"))
 
   @@map("invoice_payments")
 }
