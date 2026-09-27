@@ -32,8 +32,10 @@ Code:
 - Dispatcher, subscriber registry and replay:
   `src/services/domain-event-dispatcher.service.js`; scheduled by the worker
   on the `domain-events` BullMQ queue (`src/jobs/queue.js`, `worker.js`).
-- Admin API: `GET /api/domain-events`, `POST /api/domain-events/replay`
-  (`src/routes/domain-event.routes.js`).
+- Manual settlement (compare-and-set mark-paid):
+  `src/services/invoice-payment.service.js`.
+- Admin API: `GET /api/domain-events`, `POST /api/domain-events/replay`,
+  `POST /api/domain-events/discard` (`src/routes/domain-event.routes.js`).
 
 ## Event envelope
 
@@ -53,17 +55,17 @@ Code:
 | `occurredAt` | timestamp | When the event was recorded, inside the business transaction. |
 
 Dispatch bookkeeping (the only mutable columns): `status` (`pending`,
-`dispatching`, `published`, `dead`), `attempts`, `nextAttemptAt`,
+`dispatching`, `published`, `dead`, `discarded`), `attempts`, `nextAttemptAt`,
 `lastAttemptAt`, `lockedUntil` (claim lease), `claimToken`, `publishedAt`,
-`lastError` (error name, code and message, at most 300 characters; never a
-stack or payload), `replayCount`.
+`discardedAt`, `lastError` (error name, code and message, at most 300
+characters; never a stack or payload), `replayCount`.
 
 ## Writing an event
 
 ```js
 await prisma.$transaction(async (tx) => {
   const payment = await tx.invoicePayment.create({ data });
-  await recordInvoicePaid(tx, { invoice, paymentId: payment.id, method, source: 'manual', paidAt, correlationId: request.id });
+  await recordInvoicePaid(tx, { invoice, paymentId: payment.id, amount: payment.amount, method, source: 'manual', paidAt, correlationId: request.id });
 });
 ```
 
@@ -73,12 +75,16 @@ Rules, enforced in code:
    interactive transaction client of the write it describes. It refuses a
    client without `$executeRaw`/`domainEvent`. Do not catch its errors inside
    the transaction.
-2. **It throws.** Unknown types, payloads that fail the catalog schema, a
-   missing organization, and an idempotency key reused for a different fact
-   abort the business transaction. This is deliberate: a payment without its
-   event is the failure the outbox exists to prevent. Trace ids are the
-   exception: a malformed correlation or causation id is dropped (a new
-   correlation id is generated), never fatal.
+2. **Data never blocks the write; code defects do.** The journey producers
+   (`domain-event-producers.js`) normalize what they read from the database
+   before validation, so a valid business write always yields a valid event
+   (see [Normalized data](#normalized-data)). `recordDomainEvent` itself
+   stays strict and throws on programmer errors: an unknown type, a payload
+   that fails the catalog schema, a missing organization, or an idempotency
+   key reused for a different fact. Those abort the business transaction,
+   deliberately: a payment without its event is the failure the outbox exists
+   to prevent. Trace ids are never fatal: a malformed correlation or
+   causation id is dropped (a new correlation id is generated).
 3. **Tenant.** Defaults to the request context's organization; inside a
    tenant request an event naming another organization is rejected. Public
    capability-link and webhook producers resolve it from the owning client,
@@ -91,6 +97,39 @@ Rules, enforced in code:
    order (e.g. sorted by aggregate id) so two transactions cannot deadlock on
    the per-aggregate locks.
 
+### Normalized data
+
+Legacy or out-of-shape rows must not stop a payment, approval or signature.
+The producers therefore map each field to a valid value and list every field
+they had to change in the payload's optional `dataIssues` array:
+
+| Field kind | Out of shape | Becomes |
+| --- | --- | --- |
+| Currency | not three letters after upper-casing (e.g. `Euro`, `C$`) | `XXX` (ISO 4217 "no currency"); missing currency becomes `CAD`, like Stripe checkout, without a data issue |
+| Amounts (`amount`, `total`) | `NaN`, `Infinity`, missing | `0` |
+| Ids | outside `^[A-Za-z0-9_:.-]+$` or over 191 characters | `invalid-<first 32 hex of sha256(value)>`, the same for the same value |
+| Codes (`method`) | outside `^[A-Za-z0-9_-]{1,40}$` | `UNKNOWN` |
+| Enums (`signingMethod`) | not an allowed value | the first allowed value (`type`) |
+| Hashes (`documentHash`) | not a sha256 hex digest | sha256 of the value |
+| Timestamps | invalid date | the time the event is recorded |
+
+A payload with `dataIssues` is a prompt to repair the source row; consumers
+must not trust the normalized fields for money decisions. Idempotency keys
+longer than 255 characters become `<type>:sha256:<hex>`, deterministically.
+
+### Stripe webhook failures
+
+A verified `checkout.session.completed` delivery that is not recorded answers
+Stripe with a distinct code (`handleCheckoutFailure` in
+`src/services/stripe.service.js`, both webhook routes):
+
+| Code | HTTP | Meaning | Action |
+| --- | --- | --- | --- |
+| `CHECKOUT_MISMATCH` | 400 | The session does not match the invoice (amount, currency, number, unpaid) | Logged as a warning |
+| `INVOICE_ALREADY_PAID` | 400 | Another payment settled the invoice first (e.g. a manual mark-paid won the race) | Logged and alerted (`stripe_checkout_invoice_already_paid`): the customer may need a refund |
+| `DOMAIN_EVENT_INVALID` | 500 | The outbox event was rejected, so the payment transaction rolled back | Logged and alerted (`domain_event_invalid`): a code defect; Stripe keeps retrying until fixed |
+| `CHECKOUT_RECORDING_FAILED` | 500 | Anything else, e.g. the database was unavailable | Logged; nothing was committed and Stripe retries the delivery |
+
 ## Catalog, versioning and deprecation
 
 The catalog (`DOMAIN_EVENT_CATALOG`) is closed: each type lists its aggregate
@@ -98,9 +137,9 @@ type, its current version and a strict Zod schema per version.
 
 | Type | Aggregate | v1 payload | Producers | Idempotency key |
 | --- | --- | --- | --- | --- |
-| `invoice.paid` | `invoice` | `invoiceId`, `clientId`, `paymentId`, `total`, `currency` (upper-case ISO 4217), `method`, `source` (`manual` or `stripe_checkout`), `paidAt` | `POST /api/invoices/:id/mark-paid`, `POST /api/invoices/bulk/mark-paid` (one event per paid invoice), Stripe `checkout.session.completed` on `/api/webhooks/stripe` and `/api/invoices/stripe-webhook` (causation `stripe:<event id>`; a replayed delivery records nothing) | `invoice.paid:<invoiceId>:<paymentId>` |
-| `proposal.approved` | `proposal` | `proposalId`, `clientId`, `projectId`, `total`, `via` (`portal_link` or `public_link`), `approvedAt` | `POST /api/portal/proposal/:viewToken/approve`, `POST /api/proposals/client/:viewToken/approve`; only the compare-and-set winner | `proposal.approved:<proposalId>` |
-| `contract.signed` | `contract` | `contractId`, `clientId`, `proposalId`, `signingMethod` (`type` or `draw`), `documentHash` (sha256 of the signed content), `via`, `signedAt` | `POST /api/portal/contract/:signToken/sign`, `POST /api/contracts/sign/:signToken`; only the compare-and-set winner | `contract.signed:<contractId>` |
+| `invoice.paid` | `invoice` | `invoiceId`, `clientId`, `paymentId`, `amount` (from the payment row), `total` (invoice total), `currency` (upper-case ISO 4217), `method`, `source` (`manual` or `stripe_checkout`), `paidAt`, optional `dataIssues` | `POST /api/invoices/:id/mark-paid`, `POST /api/invoices/bulk/mark-paid` (one event per paid invoice; both compare-and-set, so a concurrent mark-paid or Stripe settlement cannot double-pay: the loser gets `409 INVOICE_NOT_PAYABLE`, or a bulk `skipped` entry with reason `changed`), Stripe `checkout.session.completed` on `/api/webhooks/stripe` and `/api/invoices/stripe-webhook` (causation `stripe:<event id>`; a replayed delivery records nothing) | `invoice.paid:<invoiceId>:<paymentId>` |
+| `proposal.approved` | `proposal` | `proposalId`, `clientId`, `projectId`, `total`, `via` (`portal_link` or `public_link`), `approvedAt`, optional `dataIssues` | `POST /api/portal/proposal/:viewToken/approve`, `POST /api/proposals/client/:viewToken/approve`; only the compare-and-set winner | `proposal.approved:<proposalId>` |
+| `contract.signed` | `contract` | `contractId`, `clientId`, `proposalId`, `signingMethod` (`type` or `draw`), `documentHash` (sha256 of the signed content), `via`, `signedAt`, optional `dataIssues` | `POST /api/portal/contract/:signToken/sign`, `POST /api/contracts/sign/:signToken`; only the compare-and-set winner | `contract.signed:<contractId>` |
 
 Payloads never carry names, email addresses, notes, signature images, IP
 addresses or free text; every schema is `.strict()`, so an unlisted field is
@@ -128,8 +167,10 @@ Versioning rules:
 - **Producer side.** `idempotencyKey` is unique per organization. Recording
   the same key again (e.g. a retried request that reaches the event write)
   returns the first event with `duplicate: true` and writes nothing. The same
-  key for a different type or aggregate is an error. Keys name the business
-  fact (table above), so they are stable across retries.
+  key with a different type, aggregate, schema version or payload is an error
+  (payloads are compared with object keys sorted, since JSONB does not keep
+  key order). Keys name the business fact (table above), so they are stable
+  across retries.
 - **Consumer side.** Delivery is at least once. A subscriber can receive the
   same event again after a sibling subscriber failed, a worker crashed after
   delivering but before marking the row, a claim lease expired, or an admin
@@ -147,9 +188,10 @@ Guaranteed:
   `MAX(sequence)`, and a unique index on
   `(organizationId, aggregateType, aggregateId, sequence)` is the backstop.
 - The dispatcher only claims event N when every earlier event of the same
-  aggregate is `published`, so subscribers see an aggregate's events in
-  sequence order. An in-flight or `dead` predecessor blocks its successors
-  until it is published (for a dead one, after a replay).
+  aggregate is settled (`published` or `discarded`), so subscribers see an
+  aggregate's events in sequence order. An in-flight or `dead` predecessor
+  blocks its successors until it is published (for a dead one, after a
+  replay) or discarded by an admin.
 
 Not guaranteed:
 
@@ -157,15 +199,23 @@ Not guaranteed:
   dispatcher claims oldest-first, but concurrent dispatchers and retries
   interleave).
 - Exactly-once delivery (see idempotency).
+- Strict order under redelivery: a dispatcher that lost its lease (a
+  delivery slower than the lease, a paused process) can still deliver event
+  N after the next claimer published N and delivered N+1. Subscribers that
+  care must compare `sequence` with the last one they applied.
 - Delivery latency: the dispatch tick runs every 15 seconds (*Proposal*,
   `DOMAIN_EVENT_DISPATCH_INTERVAL_MS`) and each run keeps claiming until
   nothing is due, up to 10 rounds of 25.
 
 ## Dispatch
 
-Each tick claims due events with one statement: `pending` events whose
-`nextAttemptAt` has passed, and `dispatching` events whose lease expired
-(their worker died), whose predecessors are all published, oldest first,
+Each run first dead-letters claims abandoned on their final attempt:
+`dispatching` rows whose lease expired with `attempts` already at the maximum
+(a worker that crashes or hangs on an event every time would otherwise be
+reclaimed forever). It then claims due events with one statement: `pending`
+events whose `nextAttemptAt` has passed, and `dispatching` events whose lease
+expired with attempts left (their worker died), whose predecessors are all
+settled, oldest first,
 `FOR UPDATE SKIP LOCKED`. Claimed rows become `dispatching` with a 2-minute
 lease (*Proposal*) and a fresh claim token, and `attempts` increases (so a
 claim abandoned by a crashed worker counts as an attempt). Several worker
@@ -173,8 +223,12 @@ replicas never claim the same row.
 
 Each claimed event is delivered to the in-process subscribers registered for
 its type (`registerDomainEventSubscriber`), in registration order, inside a
-tenant scope for the event's organization. There is no external delivery in
-this slice. The built-in `journal` subscriber writes one structured log line
+tenant scope for the event's organization. All subscribers of one event must
+finish within 60 seconds (`SUBSCRIBER_TIMEOUT_MS`, *Proposal*), which the
+dispatcher requires to be shorter than the lease; a timeout counts as a failed
+attempt. The timed-out work cannot be cancelled and may still finish, which
+is one more reason subscribers must be idempotent. There is no external
+delivery in this slice. The built-in `journal` subscriber writes one structured log line
 per delivered event (ids and envelope fields, never the payload).
 
 Outcomes are conditional on `(id, status = 'dispatching', claimToken)`, so a
@@ -184,7 +238,8 @@ worker that lost its lease cannot overwrite a newer claim:
 | --- | --- |
 | Every subscriber succeeded | `published`, `publishedAt` set |
 | A subscriber threw, attempts < 10 (*Proposal*) | `pending`, `nextAttemptAt` = now + backoff, `lastError` set |
-| A subscriber threw on attempt 10 | `dead`, logged as `Domain event dead-lettered` (alert on it) |
+| A subscriber threw or timed out on attempt 10 | `dead`, logged as `Domain event dead-lettered` (alert on it) |
+| The lease expired after attempt 10 without an outcome (crash or hang) | `dead` with `lastError` `LeaseExpired: ...`, logged as `Domain events dead-lettered after an abandoned final attempt` |
 
 Backoff (*Proposal*): exponential from 10 seconds, doubling, capped at 1 hour,
 with equal jitter (the delay is between half and all of the capped value). Ten
@@ -210,7 +265,34 @@ dead-lettered events:
   (see [audit-events.md](audit-events.md)).
 
 A replay resets `attempts` to 0 and makes the event due immediately; it keeps
-`lastError` until the next attempt. `GET /api/domain-events?status=dead`
+`lastError` until the next attempt.
+
+## Discarding a dead event
+
+A dead event blocks every later event of its aggregate. When it will never be
+deliverable, `POST /api/domain-events/discard` with
+`{ "eventIds": [...], "reason": "poison_payload" | "consumer_retired" | "superseded" | "other" }`
+moves it to `discarded`:
+
+- Admin only, with step-up re-authentication; tenant-scoped; `dead` events
+  only (`not_dead` otherwise); at most 50 ids per call; conditional update.
+- `discarded` is terminal: the event is never delivered or replayed, but the
+  row, its payload, `lastError` and a `discardedAt` timestamp are kept.
+- It counts as settled for ordering, so the aggregate's next event becomes
+  claimable on the next dispatch tick.
+- Each discard writes a `domain_event.discarded` audit event with the reason.
+
+Operator procedure for a dead event:
+
+1. `GET /api/domain-events?status=dead` and read `lastError`; find the
+   subscriber in the logs by `domainEventId` / `correlationId`.
+2. If the cause was transient or has been fixed (deploy, configuration,
+   downstream outage over), replay it (`POST /api/domain-events/replay`).
+3. If it keeps dying after replays (the limit is 5), or the event can never
+   succeed (a consumer was retired, the payload is poison, a later event
+   supersedes it), discard it with the matching reason, and record in the
+   incident notes what, if anything, must be done by hand for its effect.
+4. Check that the aggregate's later events publish on the next tick. `GET /api/domain-events?status=dead`
 lists candidates (admin only, tenant-scoped, filterable by status, type,
 aggregate and correlation id, keyset-paginated).
 
@@ -234,8 +316,11 @@ aggregate and correlation id, keyset-paginated).
 - A `BEFORE UPDATE` trigger rejects any change to the envelope columns
   (`domain event envelope is immutable`) for every database role. CHECK
   constraints cover the type format, status values, non-negative counters,
-  an object payload, field lengths, `publishedAt` for published rows, and a
-  lease and token for claimed rows.
+  an object payload, field lengths, `publishedAt` for published rows,
+  `discardedAt` for discarded rows, and a lease and token for claimed rows.
+- The organization foreign key is `ON DELETE CASCADE` and `ON UPDATE
+  RESTRICT`: `organizationId` is part of the immutable envelope, so an
+  organization id change is refused rather than cascaded into the trigger.
 - The dispatcher runs as a background job with the unscoped client and
   scopes each delivery to the event's organization.
 

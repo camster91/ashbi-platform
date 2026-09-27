@@ -47,7 +47,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [CreativeBrief](#model-creativebrief) | `creative_briefs` | no | no | 16 |
 | [Credential](#model-credential) | `credentials` | yes | no | 16 |
 | [CredentialAccessAudit](#model-credentialaccessaudit) | `credential_access_audits` | yes | no | 11 |
-| [DomainEvent](#model-domainevent) | `domain_events` | yes | no | 22 |
+| [DomainEvent](#model-domainevent) | `domain_events` | yes | no | 23 |
 | [EmailTriageDraft](#model-emailtriagedraft) | `email_triage_drafts` | no | no | 10 |
 | [EmailTriageItem](#model-emailtriageitem) | `email_triage_items` | yes | no | 14 |
 | [Estimate](#model-estimate) | `estimates` | no | yes | 21 |
@@ -868,13 +868,14 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `causationId` | String | optional |  |  | Id of the message that caused this event, if any |
 | `idempotencyKey` | String | required |  |  | Unique per organization; a repeat returns the first event |
 | `occurredAt` | DateTime | required | `now()` |  |  |
-| `status` | String | required | `"pending"` |  | pending, dispatching, published, dead |
+| `status` | String | required | `"pending"` |  | pending, dispatching, published, dead, discarded |
 | `attempts` | Int | required | `0` |  |  |
 | `nextAttemptAt` | DateTime | required | `now()` |  |  |
 | `lastAttemptAt` | DateTime | optional |  |  |  |
 | `lockedUntil` | DateTime | optional |  |  | Claim lease; an expired lease is reclaimed |
 | `claimToken` | String | optional |  |  |  |
 | `publishedAt` | DateTime | optional |  |  |  |
+| `discardedAt` | DateTime | optional |  |  | Set when an admin discards a dead event |
 | `lastError` | String | optional |  |  | Error name and truncated message only |
 | `replayCount` | Int | required | `0` |  |  |
 

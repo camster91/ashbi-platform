@@ -8369,7 +8369,8 @@
                 "review.decision_recorded",
                 "review.share_link_created",
                 "review.share_link_revoked",
-                "domain_event.replayed"
+                "domain_event.replayed",
+                "domain_event.discarded"
               ],
               "type": "string"
             }
@@ -14780,7 +14781,8 @@
                 "pending",
                 "dispatching",
                 "published",
-                "dead"
+                "dead",
+                "discarded"
               ],
               "type": "string"
             }
@@ -14883,6 +14885,82 @@
           "domain-events"
         ],
         "x-access": "admin",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/domain-events/discard": {
+      "post": {
+        "operationId": "post_api_domain_events_discard",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "eventIds": {
+                    "items": {
+                      "maxLength": 191,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "maxItems": 50,
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  "reason": {
+                    "enum": [
+                      "poison_payload",
+                      "consumer_retired",
+                      "superseded",
+                      "other"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "eventIds",
+                  "reason"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/domain-events/discard",
+        "tags": [
+          "domain-events"
+        ],
+        "x-access": "admin + recent-auth",
+        "x-requires-recent-auth": true,
         "x-tenancy": "scoped"
       }
     },
