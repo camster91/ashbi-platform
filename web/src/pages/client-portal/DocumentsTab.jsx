@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import ConfirmDialog from '../../components/ConfirmDialog';
-import SlowNotice, { SlowLoadingStatus, SLOW_WRITE_INLINE as slowWrite } from '../../components/ui/SlowNotice';
-import { portalFetch, downloadPortalDocument, deletePortalDocument, BRAND, fmtDate, Icons } from './shared';
+import { LoadingState } from '../../components/ui';
+import SlowNotice, { SLOW_WRITE_INLINE as slowWrite } from '../../components/ui/SlowNotice';
+import { portalFetch, downloadPortalDocument, deletePortalDocument, PortalDocumentList, PortalUploadZone, portalFieldStyles, pageTitleClass } from './shared';
 
 // ── Documents Tab ─────────────────────────────────────────────────────────────
 export default function DocumentsTab({ projects, token }) {
@@ -79,8 +80,8 @@ export default function DocumentsTab({ projects, token }) {
   }
 
   return (
-    <div className="cp-space-y-4">
-      <h2 className="cp-page-title">Documents</h2>
+    <div className="space-y-4">
+      <h2 className={pageTitleClass}>Documents</h2>
 
       {/* Project selector */}
       {projects.length > 1 && (
@@ -88,8 +89,7 @@ export default function DocumentsTab({ projects, token }) {
           aria-label="Project for documents"
           value={selectedProjectId}
           onChange={e => setSelectedProjectId(e.target.value)}
-          className="cp-input"
-          style={{ maxWidth: 300 }}
+          className={portalFieldStyles('max-w-[300px]')}
         >
           {projects.map(p => (
             <option key={p.id} value={p.id}>{p.name}</option>
@@ -98,68 +98,26 @@ export default function DocumentsTab({ projects, token }) {
       )}
 
       {/* Upload area */}
-      <input
-        type="file"
-        ref={fileInputRef}
-        multiple
-        className="cp-visually-hidden"
-        aria-label="Choose documents to upload"
-        // The visible upload button opens this picker; keep the visually
-        // hidden input out of the tab order so keyboard focus never lands
-        // on an invisible control.
-        tabIndex={-1}
-        onChange={e => { if (e.target.files.length > 0) handleFileUpload(e.target.files); }}
-      />
-      <button
-        type="button"
-        className="cp-upload-zone"
-        aria-describedby="documents-upload-help"
-        onClick={() => fileInputRef.current?.click()}
+      <PortalUploadZone
+        inputRef={fileInputRef}
+        inputLabel="Choose documents to upload"
+        helpId="documents-upload-help"
+        uploading={uploading}
         disabled={uploading || !selectedProjectId}
-        onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = BRAND.primary; }}
-        onDragLeave={e => { e.currentTarget.style.borderColor = BRAND.border; }}
-        onDrop={e => {
-          e.preventDefault();
-          e.currentTarget.style.borderColor = BRAND.border;
-          if (e.dataTransfer.files.length > 0) handleFileUpload(e.dataTransfer.files);
-        }}
-      >
-        {Icons.upload}
-        <p className="cp-text" style={{ fontWeight: 600, marginTop: '0.5rem' }}>
-          {uploading ? 'Uploading...' : 'Drop files here or click to upload'}
-        </p>
-        <p id="documents-upload-help" className="cp-text-muted" style={{ fontSize: '0.8rem' }}>PDF, images, documents — up to 50MB</p>
-      </button>
+        onFiles={handleFileUpload}
+      />
       <SlowNotice active={uploading} {...slowWrite} />
 
       {/* Document list */}
       {loading ? (
-        <SlowLoadingStatus label="Loading documents..." className="cp-loading" />
-      ) : documents.length === 0 ? (
-        <div className="cp-card" style={{ padding: '2rem', textAlign: 'center' }}>
-          <p className="cp-text-muted">No documents yet. Upload one above.</p>
-        </div>
+        <LoadingState label="Loading documents..." />
       ) : (
-        <div className="cp-space-y-2">
-          {documents.map(doc => (
-            <div key={doc.id} className="cp-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.875rem 1.25rem' }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p className="cp-text" style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.originalName}</p>
-                <p className="cp-text-muted" style={{ fontSize: '0.75rem' }}>
-                  {(doc.size / 1024).toFixed(1)} KB &middot; {fmtDate(doc.createdAt)} &middot; {doc.uploadedBy?.name || 'Unknown'}
-                </p>
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem', marginLeft: '0.75rem' }}>
-                <button type="button" onClick={() => handleDownloadDoc(doc)} className="cp-btn-secondary" style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }}>
-                  {Icons.download} Download
-                </button>
-                <button type="button" onClick={() => { setDeleteError(''); setDocumentToDelete(doc); }} disabled={deletingDocument} className="cp-btn-danger" style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem', minWidth: 44, minHeight: 44 }} aria-label={`Delete ${doc.originalName}`}>
-                  {Icons.trash}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+        <PortalDocumentList
+          documents={documents}
+          onDownload={handleDownloadDoc}
+          onDelete={doc => { setDeleteError(''); setDocumentToDelete(doc); }}
+          deleting={deletingDocument}
+        />
       )}
       <ConfirmDialog
         isOpen={Boolean(documentToDelete)}
