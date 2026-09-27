@@ -255,6 +255,7 @@ model Contact {
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@unique([email, clientId])
+  @@index([clientId])
   @@map("contacts")
 }
 
@@ -384,6 +385,7 @@ model Task {
   @@index([dependsOnId])
   @@index([assigneeId])
   @@index([projectId, status])
+  @@index([milestoneId])
   @@map("tasks")
 }
 
@@ -449,7 +451,7 @@ model Message {
   // Relations
   thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
 
-  @@index([threadId])
+  @@index([threadId, receivedAt])
   @@index([receivedAt])
   @@map("messages")
 }
@@ -465,6 +467,7 @@ model InternalNote {
   thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
   author User   @relation(fields: [authorId], references: [id])
 
+  @@index([threadId])
   @@map("internal_notes")
 }
 
@@ -492,6 +495,7 @@ model Response {
 
   @@index([status])
   @@index([createdAt])
+  @@index([threadId])
   @@map("responses")
 }
 
@@ -598,6 +602,7 @@ model ChatMessage {
   @@index([projectId, createdAt])
   @@index([projectId, externalSource, externalMessageId])
   @@index([projectId, externalSource, externalThreadId])
+  @@index([parentId])
   @@map("chat_messages")
 }
 
@@ -613,6 +618,7 @@ model ChatReaction {
   user    User        @relation(fields: [userId], references: [id])
 
   @@unique([messageId, userId, emoji])
+  @@index([userId])
   @@map("chat_reactions")
 }
 
@@ -641,6 +647,7 @@ model Note {
 
   @@index([projectId, parentId])
   @@index([projectId, isTemplate])
+  @@index([parentId])
   @@map("notes")
 }
 
@@ -662,6 +669,7 @@ model Milestone {
   tasks   Task[]  @relation("MilestoneTasks")
 
   @@index([deletedAt])
+  @@index([projectId])
   @@map("milestones")
 }
 
@@ -698,6 +706,7 @@ model TimeEntry {
   @@index([invoiceId])
   @@index([reviewStatus])
   @@index([userId, date])
+  @@index([taskId])
   @@map("time_entries")
 }
 
@@ -759,6 +768,7 @@ model TaskComment {
   task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
   author User @relation("CommentAuthor", fields: [authorId], references: [id])
 
+  @@index([taskId])
   @@map("task_comments")
 }
 
@@ -805,6 +815,7 @@ model EventAttendee {
   user  User          @relation(fields: [userId], references: [id])
 
   @@unique([eventId, userId])
+  @@index([userId])
   @@map("event_attendees")
 }
 
@@ -858,6 +869,7 @@ model Report {
   // Relations
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
+  @@index([clientId])
   @@map("reports")
 }
 
@@ -951,6 +963,7 @@ model Proposal {
   @@index([status])
   @@index([clientId, status])
   @@index([validUntil])
+  @@index([projectId])
   @@map("proposals")
 }
 
@@ -963,6 +976,7 @@ model ProposalLineItem {
   proposalId  String
   proposal    Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
 
+  @@index([proposalId])
   @@map("proposal_line_items")
 }
 
@@ -1096,6 +1110,7 @@ model InvoiceLineItem {
   invoiceId   String
   invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
+  @@index([invoiceId])
   @@map("invoice_line_items")
 }
 
@@ -1111,6 +1126,7 @@ model InvoicePayment {
 
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
+  @@index([invoiceId])
   @@map("invoice_payments")
 }
 
@@ -1355,6 +1371,7 @@ model EmailTriageDraft {
 
   item EmailTriageItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
+  @@index([itemId])
   @@map("email_triage_drafts")
 }
 
@@ -1371,6 +1388,8 @@ model AiTeamMessage {
   project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
   @@index([agentRole, createdAt])
+  @@index([clientId])
+  @@index([projectId])
   @@map("ai_team_messages")
 }
 
@@ -1440,6 +1459,7 @@ model RevenueSnapshot {
   client Client? @relation(fields: [clientId], references: [id])
 
   @@unique([month, clientId])
+  @@index([clientId])
   @@map("revenue_snapshots")
 }
 
@@ -1465,6 +1485,7 @@ model Approval {
   @@index([status])
   @@index([type])
   @@index([createdAt])
+  @@index([projectId])
   @@map("approvals")
 }
 
@@ -1522,6 +1543,7 @@ model ClientEmailMapping {
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@unique([emailAddress, clientId])
+  @@index([clientId])
   @@map("client_email_mappings")
 }
 
@@ -1535,6 +1557,7 @@ model PushSubscription {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("push_subscriptions")
 }
 
@@ -1559,6 +1582,7 @@ model AshChatMessage {
   content        String          @db.Text
   createdAt      DateTime        @default(now())
 
+  @@index([conversationId])
   @@map("ash_chat_messages")
 }
 
@@ -1592,6 +1616,7 @@ model IntakeForm {
   client    Client?              @relation(fields: [clientId], references: [id])
   responses IntakeFormResponse[]
 
+  @@index([clientId])
   @@map("intake_forms")
 }
 
@@ -1606,6 +1631,7 @@ model IntakeFormResponse {
 
   form IntakeForm @relation(fields: [formId], references: [id], onDelete: Cascade)
 
+  @@index([formId])
   @@map("intake_form_responses")
 }
 
@@ -1712,6 +1738,7 @@ model CreativeBrief {
   project Project? @relation(fields: [projectId], references: [id])
 
   @@index([clientId])
+  @@index([projectId])
   @@map("creative_briefs")
 }
 
@@ -1752,6 +1779,7 @@ model Asset {
 
   client Client? @relation(fields: [clientId], references: [id])
 
+  @@index([clientId])
   @@map("assets")
 }
 
@@ -1794,6 +1822,7 @@ model TimeSession {
   @@index([userId])
   @@index([projectId])
   @@index([isRunning])
+  @@index([taskId])
   @@map("time_sessions")
 }
 
@@ -1826,6 +1855,7 @@ model ClientInvitation {
 
   client Client @relation(fields: [clientId], references: [id])
 
+  @@index([clientId])
   @@map("client_invitations")
 }
 
@@ -1849,6 +1879,7 @@ model ApiKey {
 
   user User @relation(fields: [userId], references: [id])
 
+  @@index([userId])
   @@map("api_keys")
 }
 
@@ -1936,6 +1967,7 @@ model RateCard {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([clientId])
   @@map("rate_cards")
 }
 
@@ -2056,6 +2088,7 @@ model SlackImportRecord {
   @@index([organizationId, projectId])
   @@index([runId])
   @@index([chatMessageId])
+  @@index([projectId])
   @@map("slack_import_records")
 }
 
@@ -2102,6 +2135,7 @@ model SlackChannelMapping {
 
   @@unique([installationId, channelId])
   @@index([organizationId, projectId])
+  @@index([projectId])
   @@map("slack_channel_mappings")
 }
 
@@ -2184,6 +2218,7 @@ model WPSite {
 
   @@index([organizationId])
   @@index([status])
+  @@index([clientId])
   @@map("wp_sites")
 }
 
@@ -2255,6 +2290,7 @@ model WPAlert {
   @@index([siteUrl])
   @@index([alertType])
   @@index([createdAt])
+  @@index([siteId])
   @@map("wp_alerts")
 }
 
@@ -2395,6 +2431,7 @@ model ReviewSession {
 
   @@index([organizationId, projectId, createdAt])
   @@index([attachmentId])
+  @@index([projectId])
   @@map("review_sessions")
 }
 
