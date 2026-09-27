@@ -90,7 +90,7 @@ before(async () => {
   });
   testProjectId = project.id;
 
-  authToken = fastify.jwt.sign({ id: user.id, email: user.email, role: 'ADMIN', organizationId: organization.id });
+  authToken = fastify.jwt.sign({ typ: 'session', id: user.id, email: user.email, role: 'ADMIN', organizationId: organization.id, sessionVersion: user.sessionVersion });
 });
 
 after(async () => {
