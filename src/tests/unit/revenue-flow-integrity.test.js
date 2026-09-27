@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { publicAccessFailure, createPublicAccessWindow } from '../../utils/public-document-access.js';
 import { createPaymentLinkWithClient, recordCompletedCheckout } from '../../services/stripe.service.js';
+import { outboxStore } from '../helpers/domain-event-fake.js';
 
 function checkoutEvent(overrides = {}) {
   return {
@@ -23,10 +24,14 @@ function checkoutEvent(overrides = {}) {
 
 function paymentHarness() {
   const state = {
-    invoice: { id: 'invoice-1', invoiceNumber: 'INV-001', total: 113, currency: 'CAD', status: 'SENT' },
+    invoice: { id: 'invoice-1', clientId: 'client-1', invoiceNumber: 'INV-001', total: 113, currency: 'CAD', status: 'SENT' },
     payments: [],
   };
+  const outbox = outboxStore();
   const tx = {
+    client: { findUnique: async ({ where }) => (where.id === 'client-1' ? { organizationId: 'org-1' } : null) },
+    domainEvent: outbox.domainEvent,
+    $executeRaw: outbox.$executeRaw,
     invoice: {
       findUnique: async ({ where }) => where.id === state.invoice.id ? { ...state.invoice } : null,
       updateMany: async () => {
@@ -38,12 +43,13 @@ function paymentHarness() {
     invoicePayment: {
       findUnique: async ({ where }) => state.payments.find(payment => payment.transactionId === where.transactionId) || null,
       create: async ({ data }) => {
-        state.payments.push({ ...data });
-        return data;
+        const payment = { id: `payment-${state.payments.length + 1}`, ...data };
+        state.payments.push(payment);
+        return payment;
       },
     },
   };
-  return { state, prisma: { $transaction: callback => callback(tx) } };
+  return { state, outbox, prisma: { $transaction: callback => callback(tx) } };
 }
 
 test('public document access windows are high entropy, expiring, and revocable', () => {
@@ -55,14 +61,26 @@ test('public document access windows are high entropy, expiring, and revocable',
 });
 
 test('Stripe checkout completion transitions an invoice and records payment exactly once', async () => {
-  const { state, prisma } = paymentHarness();
-  const first = await recordCompletedCheckout(prisma, checkoutEvent());
-  const replay = await recordCompletedCheckout(prisma, checkoutEvent());
+  const { state, outbox, prisma } = paymentHarness();
+  const first = await recordCompletedCheckout(prisma, checkoutEvent(), { correlationId: 'req-7' });
+  const replay = await recordCompletedCheckout(prisma, checkoutEvent(), { correlationId: 'req-8' });
   assert.deepEqual(first, { duplicate: false, invoiceId: 'invoice-1' });
   assert.deepEqual(replay, { duplicate: true, invoiceId: 'invoice-1' });
   assert.equal(state.invoice.status, 'PAID');
   assert.equal(state.payments.length, 1);
   assert.equal(state.payments[0].transactionId, 'pi_123');
+  // One invoice.paid outbox event in the same transaction; the replayed
+  // delivery records none. The Stripe event is the causation.
+  assert.equal(outbox.events.length, 1);
+  const [event] = outbox.events;
+  assert.deepEqual(
+    [event.type, event.organizationId, event.aggregateId, event.correlationId, event.causationId, event.idempotencyKey],
+    ['invoice.paid', 'org-1', 'invoice-1', 'req-7', 'stripe:evt_123', 'invoice.paid:invoice-1:payment-1'],
+  );
+  assert.deepEqual(event.payload, {
+    invoiceId: 'invoice-1', clientId: 'client-1', paymentId: 'payment-1', amount: 113, total: 113, currency: 'CAD',
+    method: 'STRIPE', source: 'stripe_checkout', paidAt: new Date(1_786_240_000 * 1000).toISOString(),
+  });
 });
 
 test('Stripe checkout creation keys the request by invoice, attempt, amount and currency', async () => {
@@ -100,9 +118,10 @@ for (const [name, override, message] of [
   ['wrong invoice number', { metadata: { invoiceId: 'invoice-1', invoiceNumber: 'INV-OTHER' } }, /invoice number/],
 ]) {
   test(`Stripe checkout rejects ${name} without changing invoice state`, async () => {
-    const { state, prisma } = paymentHarness();
+    const { state, outbox, prisma } = paymentHarness();
     await assert.rejects(recordCompletedCheckout(prisma, checkoutEvent(override)), message);
     assert.equal(state.invoice.status, 'SENT');
     assert.equal(state.payments.length, 0);
+    assert.equal(outbox.events.length, 0);
   });
 }
