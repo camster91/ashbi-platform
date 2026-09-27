@@ -58,7 +58,9 @@ const APPEND_ONLY_BLOCKED_METHODS = new Set([
 // only platform operators write it (settings.routes.js).
 // clientportallinkredemption only stores the random jti of redeemed portal
 // magic links (single-use guard), written from the unauthenticated redeem route.
-const GLOBAL_MODELS = new Set(['organization', 'mailgunwebhookreceipt', 'platformsetting', 'clientportallinkredemption']);
+// emailwebhookreceipt only stores accepted signatures of the signed inbound
+// email webhook (replay guard).
+const GLOBAL_MODELS = new Set(['organization', 'mailgunwebhookreceipt', 'platformsetting', 'clientportallinkredemption', 'emailwebhookreceipt']);
 
 // Direct-owned records can also reference another tenant-owned root. The
 // redundant organizationId is not enough: the referenced parent must belong
