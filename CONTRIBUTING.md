@@ -48,6 +48,24 @@ npm run test:e2e:teardown
 Do not report a command as passing if it did not run. Record failures and distinguish a
 change regression from a confirmed default-branch failure.
 
+### Static-check ratchet
+
+The backend is plain JavaScript, so lint and type-checking only catch what they are
+configured to see. Both are ratchets: tighten them, never loosen them.
+
+- **ESLint (`npm run lint`)**: `no-undef` is an error with Node globals, so a missing
+  import or handler parameter fails lint instead of returning 500 at runtime. Unused
+  variables are warnings (`@typescript-eslint/no-unused-vars`); do not add new ones, and
+  prefix intentionally unused names with `_`. Do not add file-wide `eslint-disable`
+  comments for `no-undef`.
+- **Type-check (`npm run type-check`)**: `tsconfig.json` has `allowJs` but not
+  `checkJs`, so only files that start with `// @ts-check` are type-checked. The current
+  allowlist is `src/config/env.js`, `src/config/db.js`, `src/config/trust-proxy.js`,
+  `src/auth/session.js`, `src/utils/logger.js`, `src/utils/log-redaction.js`,
+  `src/utils/request-context.js` and `src/utils/prisma-tenant-proxy.js`. When a change
+  touches a core module, add `// @ts-check` to it if it passes (or passes with small JSDoc
+  fixes). Never remove the directive from a file on the allowlist to make a change pass.
+
 ## Required pull-request gates
 
 Every pull request records the applicable result for:

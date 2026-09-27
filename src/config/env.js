@@ -1,3 +1,4 @@
+// @ts-check
 // Environment configuration
 import { parseTrustProxy } from './trust-proxy.js';
 

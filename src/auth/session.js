@@ -1,3 +1,4 @@
+// @ts-check
 import env from '../config/env.js';
 
 export function sessionCookieMaxAge(value = env.jwtExpiresIn) {

@@ -1,3 +1,4 @@
+// @ts-check
 import pino from 'pino';
 import env from '../config/env.js';
 import { LOG_REDACT_OPTIONS } from './log-redaction.js';
