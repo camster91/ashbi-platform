@@ -96,4 +96,12 @@ describe('Button Component', () => {
     expect(classes).toContain('w-full');
     expect(buttonStyles({ variant: 'nope' })).toContain('bg-primary');
   });
+
+  it('offers an outlined destructive variant for delete triggers', () => {
+    render(<Button variant="danger-outline" aria-label="Delete brief.pdf">x</Button>);
+    const button = screen.getByRole('button', { name: 'Delete brief.pdf' });
+    expect(button.className).toContain('border-destructive');
+    expect(button.className).toContain('text-destructive');
+    expect(button.className).not.toContain('bg-destructive ');
+  });
 });

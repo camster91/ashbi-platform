@@ -1,8 +1,11 @@
 // Helpers, brand tokens, icons and chat primitives shared by the client
 // portal route and its lazily loaded sections.
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
+import { Badge, Button, Card, Input } from '../../components/ui';
+import { inputStyles } from '../../components/ui/Input';
 import SlowNotice, { SLOW_WRITE_INLINE as slowWrite } from '../../components/ui/SlowNotice';
+import { cn } from '../../lib/utils';
 
 export const API = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '') : '';
 export const SOCKET_URL = import.meta.env.PROD ? window.location.origin : 'http://localhost:3000';
@@ -60,19 +63,24 @@ export async function deletePortalDocument(token, documentId) {
   if (!response.ok) throw new Error(`Delete failed (${response.status}) — the file remains available.`);
 }
 
-// ── Ashbi Design Brand ────────────────────────────────────────────────────────
-export const BRAND = {
-  primary: '#2e2958',
-  accent: '#e6f354',
-  bg: '#faf9f2',
-  white: '#ffffff',
-  text: '#2e2958',
-  textMuted: '#6b667f',
-  danger: '#b91c1c',
-  border: '#918c9f',
-  cardBg: '#ffffff',
-  hoverBg: '#f5f3ea',
-};
+// ── Theme ─────────────────────────────────────────────────────────────────────
+// The client portal is a light-only, client-facing surface. main.jsx applies
+// the visitor's stored or OS theme to <html> before React renders, which on
+// a dark OS would flip every design token (primary becomes lime, cards turn
+// indigo). While the portal is mounted it pins the light token set by
+// removing `.dark`, and restores the previous theme when it unmounts. Every
+// portal colour is a design token (`bg-primary`, `text-muted-foreground`,
+// `border-border`, …), so this one switch keeps the whole route light.
+export function usePortalLightTheme() {
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    const wasDark = root.classList.contains('dark');
+    root.classList.remove('dark');
+    return () => {
+      if (wasDark) root.classList.add('dark');
+    };
+  }, []);
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 export function fmt(amount, currency) {
@@ -95,13 +103,23 @@ export function fmtRelative(d) {
   return fmtDate(d);
 }
 
+// Status badges use the shared Badge primitive (subtle treatment). The
+// label text always states the status, so colour is never the only signal.
+function PortalBadge({ color, children }) {
+  return <Badge variant="subtle" color={color} className="whitespace-nowrap font-semibold">{children}</Badge>;
+}
+
 export function statusBadge(status) {
   const s = (status || '').toUpperCase();
-  if (s === 'PAID') return <span className="cp-badge cp-badge--green">PAID</span>;
-  if (s === 'OVERDUE') return <span className="cp-badge cp-badge--red">OVERDUE</span>;
-  if (s === 'SENT' || s === 'PENDING' || s === 'DRAFT') return <span className="cp-badge cp-badge--orange">DUE</span>;
-  if (s === 'VOID') return <span className="cp-badge cp-badge--muted">VOID</span>;
-  return <span className="cp-badge cp-badge--muted">{s}</span>;
+  if (s === 'PAID') return <PortalBadge color="success">PAID</PortalBadge>;
+  if (s === 'OVERDUE') return <PortalBadge color="danger">OVERDUE</PortalBadge>;
+  if (s === 'SENT' || s === 'PENDING' || s === 'DRAFT') return <PortalBadge color="warning">DUE</PortalBadge>;
+  if (s === 'VOID') return <PortalBadge color="default">VOID</PortalBadge>;
+  return <PortalBadge color="default">{s}</PortalBadge>;
+}
+
+export function StatusBadge({ color, children }) {
+  return <PortalBadge color={color}>{children}</PortalBadge>;
 }
 
 export function projectStatusLabel(s) {
@@ -113,14 +131,15 @@ export function projectStatusLabel(s) {
   return map[s] || s;
 }
 
+// Badge `color` for each status (see docs/ui-primitives.md, Badge).
 export function projectStatusColor(s) {
   const map = {
-    STARTING_UP: 'cp-badge--blue', DESIGN_DEV: 'cp-badge--purple',
-    ADDING_CONTENT: 'cp-badge--lime', FINALIZING: 'cp-badge--orange',
-    LAUNCHED: 'cp-badge--green', ON_HOLD: 'cp-badge--muted',
-    CANCELLED: 'cp-badge--red', ACTIVE: 'cp-badge--green',
+    STARTING_UP: 'info', DESIGN_DEV: 'primary',
+    ADDING_CONTENT: 'accent', FINALIZING: 'warning',
+    LAUNCHED: 'success', ON_HOLD: 'default',
+    CANCELLED: 'danger', ACTIVE: 'success',
   };
-  return map[s] || 'cp-badge--muted';
+  return map[s] || 'default';
 }
 
 export function taskStatusLabel(s) {
@@ -129,8 +148,8 @@ export function taskStatusLabel(s) {
 }
 
 export function taskStatusColor(s) {
-  const map = { PENDING: 'cp-badge--orange', UPCOMING: 'cp-badge--orange', IMMEDIATE: 'cp-badge--orange', IN_PROGRESS: 'cp-badge--lime', COMPLETED: 'cp-badge--green', BLOCKED: 'cp-badge--red' };
-  return map[s] || 'cp-badge--muted';
+  const map = { PENDING: 'warning', UPCOMING: 'warning', IMMEDIATE: 'warning', IN_PROGRESS: 'accent', COMPLETED: 'success', BLOCKED: 'danger' };
+  return map[s] || 'default';
 }
 
 export function priorityLabel(p) {
@@ -139,13 +158,38 @@ export function priorityLabel(p) {
 }
 
 export function priorityColor(p) {
-  const map = { CRITICAL: 'cp-badge--red', HIGH: 'cp-badge--orange', NORMAL: 'cp-badge--muted', LOW: 'cp-badge--muted' };
-  return map[p] || 'cp-badge--muted';
+  const map = { CRITICAL: 'danger', HIGH: 'warning', NORMAL: 'default', LOW: 'default' };
+  return map[p] || 'default';
+}
+
+// Portal form fields use the shared Input look. Text is 16px below the `sm`
+// breakpoint so iOS Safari does not zoom the page on focus, and the white
+// card fill keeps fields distinct from the cream page.
+export const portalFieldClass = 'min-h-11 bg-card text-base text-foreground sm:text-sm';
+
+// The same look for <select> and <textarea> fields.
+export const portalFieldStyles = (className) => inputStyles(cn(portalFieldClass, className));
+
+// Portal typography on design tokens.
+export const pageTitleClass = 'mb-4 text-xl font-bold text-foreground';
+export const sectionTitleClass = 'mb-3 text-base font-semibold text-foreground';
+export const labelClass = 'mb-1.5 block text-sm font-medium text-foreground';
+
+// Progress track + fill. `tone` is a token background utility.
+export function PortalProgress({ value, tone = 'bg-primary', className }) {
+  return (
+    <div className={cn('h-2 w-full overflow-hidden rounded-full bg-border', className)}>
+      <div
+        className={cn('h-full rounded-full transition-[width] duration-300 motion-reduce:transition-none', tone)}
+        style={{ width: `${Math.max(0, Math.min(Number(value) || 0, 100))}%` }}
+      />
+    </div>
+  );
 }
 
 // ── Icons (inline SVG — no dependency needed) ──────────────────────────────────
 export const Icons = {
-  logo: <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="4" fill={BRAND.accent}/><text x="4" y="18" fontSize="16" fontWeight="bold" fill={BRAND.primary}>A</text></svg>,
+  logo: <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="4" className="fill-accent"/><text x="4" y="18" fontSize="16" fontWeight="bold" className="fill-primary">A</text></svg>,
   overview: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>,
   projects: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>,
   invoices: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>,
@@ -260,19 +304,95 @@ export function useProjectChat(projectId, token) {
 
 export function PortalChatComposer({ value, onChange, onSubmit, connected, sending, sendError }) {
   return (
-    <form onSubmit={onSubmit} className="cp-chat-input-bar">
-      <div role="status" aria-live="polite" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.7rem', color: connected ? '#15803d' : '#b91c1c' }}>
-        <span aria-hidden="true" style={{ width: 6, height: 6, borderRadius: '50%', background: connected ? '#15803d' : '#b91c1c', display: 'inline-block' }} />
+    <form onSubmit={onSubmit} className="flex flex-col gap-2 rounded-b-2xl border border-border bg-card px-4 py-3">
+      <div role="status" aria-live="polite" className={cn('flex items-center gap-1 text-xs', connected ? 'text-success' : 'text-destructive')}>
+        <span aria-hidden="true" className={cn('inline-block h-1.5 w-1.5 rounded-full', connected ? 'bg-success' : 'bg-destructive')} />
         {connected ? 'Connected' : 'Reconnecting...'}
       </div>
-      <div style={{ display: 'flex', gap: '0.5rem' }}>
-        <input type="text" value={value} onChange={onChange} placeholder="Type a message..." aria-label="Message to project team" className="cp-input" style={{ flex: 1 }} />
-        <button type="submit" className="cp-btn-primary" style={{ padding: '0.5rem 1rem' }} disabled={!value.trim() || sending} aria-busy={sending || undefined} aria-label="Send message">
+      <div className="flex gap-2">
+        <Input type="text" value={value} onChange={onChange} placeholder="Type a message..." aria-label="Message to project team" className={cn(portalFieldClass, 'flex-1')} />
+        <Button type="submit" className="shrink-0" disabled={!value.trim() || sending} aria-busy={sending || undefined} aria-label="Send message" slowAfterMs={false}>
           {sending ? 'Sending…' : Icons.send}
-        </button>
+        </Button>
       </div>
       <SlowNotice active={sending} {...slowWrite} />
-      {sendError && <p role="alert" className="cp-error" style={{ fontSize: '0.8rem' }}>{sendError} Your text is still in the composer.</p>}
+      {sendError && <p role="alert" className="text-sm text-destructive">{sendError} Your text is still in the composer.</p>}
     </form>
+  );
+}
+
+// ── Documents ─────────────────────────────────────────────────────────────────
+// Upload drop zone shared by the Documents tab and the project Documents view.
+// There is no shared dropzone primitive yet, so the zone keeps the
+// portal-specific `.cp-upload-zone` layout (portal.css). It is a native
+// <button> that opens a visually hidden, named file input kept out of the tab
+// order so keyboard focus never lands on an invisible control.
+export function PortalUploadZone({ inputRef, inputLabel, helpId, uploading, disabled, onFiles }) {
+  const [dragging, setDragging] = useState(false);
+  return (
+    <>
+      <input
+        type="file"
+        ref={inputRef}
+        multiple
+        className="sr-only"
+        aria-label={inputLabel}
+        tabIndex={-1}
+        onChange={e => { if (e.target.files.length > 0) onFiles(e.target.files); }}
+      />
+      <button
+        type="button"
+        className="cp-upload-zone"
+        data-dragging={dragging || undefined}
+        aria-describedby={helpId}
+        onClick={() => inputRef.current?.click()}
+        disabled={disabled}
+        onDragOver={e => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={e => {
+          e.preventDefault();
+          setDragging(false);
+          if (e.dataTransfer.files.length > 0) onFiles(e.dataTransfer.files);
+        }}
+      >
+        <span className="flex justify-center">{Icons.upload}</span>
+        <p className="mt-2 font-semibold text-foreground">
+          {uploading ? 'Uploading...' : 'Drop files here or click to upload'}
+        </p>
+        <p id={helpId} className="text-sm text-muted-foreground">PDF, images, documents — up to 50MB</p>
+      </button>
+    </>
+  );
+}
+
+export function PortalDocumentList({ documents, onDownload, onDelete, deleting }) {
+  if (documents.length === 0) {
+    return (
+      <Card padding="none" className="p-8 text-center">
+        <p className="text-muted-foreground">No documents yet. Upload one above.</p>
+      </Card>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {documents.map(doc => (
+        <Card key={doc.id} padding="none" className="flex items-center justify-between px-5 py-3.5">
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-medium text-foreground">{doc.originalName}</p>
+            <p className="text-xs text-muted-foreground">
+              {(doc.size / 1024).toFixed(1)} KB &middot; {fmtDate(doc.createdAt)} &middot; {doc.uploadedBy?.name || 'Unknown'}
+            </p>
+          </div>
+          <div className="ml-3 flex gap-2">
+            <Button type="button" variant="outline" size="xs" leftIcon={Icons.download} onClick={() => onDownload(doc)}>
+              Download
+            </Button>
+            <Button type="button" variant="danger-outline" size="xs" className="min-w-11" onClick={() => onDelete(doc)} disabled={deleting} aria-label={`Delete ${doc.originalName}`}>
+              {Icons.trash}
+            </Button>
+          </div>
+        </Card>
+      ))}
+    </div>
   );
 }

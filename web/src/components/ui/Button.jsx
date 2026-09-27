@@ -12,6 +12,9 @@ const variants = {
   ghost: 'bg-transparent text-foreground hover:bg-muted focus:ring-muted',
   danger: 'bg-destructive text-destructive-foreground hover:bg-destructive/90 focus:ring-destructive/20',
   destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90 focus:ring-destructive/20',
+  // Lower-emphasis destructive trigger (for example a row's delete icon that
+  // opens a ConfirmDialog, whose confirm button is the solid `danger`).
+  'danger-outline': 'border-2 border-destructive bg-transparent text-destructive hover:bg-destructive/10 focus:ring-destructive/20',
   success: 'bg-success text-success-foreground hover:bg-success/90 focus:ring-success/20',
   warning: 'bg-warning text-warning-foreground hover:bg-warning/90 focus:ring-warning/20',
   // Text-only action (the client portal's inline "View all …" links). Keeps
