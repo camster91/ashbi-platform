@@ -106,6 +106,18 @@ OPENCLAW_API_KEY=your-api-key
 WEBHOOK_SECRET=your-webhook-secret
 ```
 
+### Inbound email webhook (`POST /api/webhooks/email`)
+Every delivery must carry two headers (contract changed by the security audit
+at 8687cf9; senders using the old body-only signature are refused with 401):
+
+- `X-Webhook-Timestamp`: Unix time in seconds when the request was signed.
+- `X-Webhook-Signature`: lower-case hex `HMAC-SHA256(WEBHOOK_SECRET, "<timestamp>.<raw request body>")`,
+  over the exact body bytes sent (not a re-serialised JSON object).
+
+A request is accepted only within 5 minutes of its timestamp and each signature
+only once (`409` for a replay). A `500` releases the signature, so a retry of
+the same delivery is accepted.
+
 ### Discord Webhook URLs
 Store Discord webhook URLs only in the deployment secret store and expose them
 through `DISCORD_AGENCY_HUB_WEBHOOK_URL`, `DISCORD_DEPLOYMENTS_WEBHOOK_URL`,
