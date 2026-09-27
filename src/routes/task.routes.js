@@ -1,6 +1,6 @@
 // Task routes
 
-import { validateBody, createTaskSchema, updateTaskSchema, taskUpdateSchema, taskBulkUpdateSchema, taskNoteCreateSchema, taskNoteUpdateSchema, taskDependencyCreateSchema, taskCreateQuickSchema } from '../validators/schemas.js';
+import { validateBody, createTaskSchema, updateTaskSchema, taskUpdateSchema, taskBulkUpdateSchema, taskPageContentUpdateSchema, taskSubpageCreateSchema, taskDependencyCreateSchema, taskCreateQuickSchema } from '../validators/schemas.js';
 import { z } from 'zod';
 import bus, { EVENTS } from '../utils/events.js';
 
@@ -329,7 +329,7 @@ export default async function taskRoutes(fastify) {
   // Update task content (Notion-style blocks)
   fastify.put('/:id/content', {
     onRequest: [fastify.authenticate],
-    preHandler: validateBody(taskNoteCreateSchema),
+    preHandler: validateBody(taskPageContentUpdateSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { content, title, icon, coverImage, properties } = request.body;
@@ -356,7 +356,7 @@ export default async function taskRoutes(fastify) {
   // Create subpage (Notion-style)
   fastify.post('/:id/subpage', {
     onRequest: [fastify.authenticate],
-    preHandler: validateBody(taskNoteUpdateSchema),
+    preHandler: validateBody(taskSubpageCreateSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { title, icon, content } = request.body;

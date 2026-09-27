@@ -930,19 +930,37 @@ export const taskBulkUpdateSchema = z.object({
   })).min(1).max(100),
 });
 
-export const taskNoteCreateSchema = z.object({
-  content: z.string().min(1).max(10_000),
-  title: z.string().max(200).optional(),
+// Task page body: the canonical format is an array of editor blocks
+// (`[{ type, content, checked?, mentions? }]`). The route stores it as a JSON
+// string in `Task.content` and `GET /api/tasks/:id/page` parses it back to the
+// same array, so clients must send the block array — not a pre-serialised string.
+export const TASK_CONTENT_MAX_BLOCKS = 1000;
+export const TASK_CONTENT_MAX_BYTES = 200_000;
+export const taskContentBlockSchema = z.object({
+  type: z.enum(['paragraph', 'heading1', 'heading2', 'bulletList', 'numberedList', 'todo', 'quote', 'code', 'image']),
+  content: z.string().max(20_000).default(''),
+  checked: z.boolean().optional(),
+  mentions: z.array(z.unknown()).max(50).optional(),
+}).strip();
+export const taskContentBlocksSchema = z
+  .array(taskContentBlockSchema)
+  .max(TASK_CONTENT_MAX_BLOCKS)
+  .refine((blocks) => JSON.stringify(blocks).length <= TASK_CONTENT_MAX_BYTES, {
+    message: `Task content must be at most ${TASK_CONTENT_MAX_BYTES} characters once serialised`,
+  });
+
+export const taskPageContentUpdateSchema = z.object({
+  content: taskContentBlocksSchema.optional(),
+  title: z.string().min(1).max(200).optional(),
   icon: z.string().max(20).optional(),
-  coverImage: z.string().url().max(2048).optional(),
-  // Notion-style properties block (objects keyed by name)
+  coverImage: z.string().url().max(2048).nullable().optional(),
   properties: z.record(z.string(), z.unknown()).optional(),
 });
 
-export const taskNoteUpdateSchema = z.object({
+export const taskSubpageCreateSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   icon: z.string().max(20).optional(),
-  content: z.string().min(1).max(50_000).optional(),
+  content: taskContentBlocksSchema.optional(),
 });
 
 export const taskDependencyCreateSchema = z.object({
