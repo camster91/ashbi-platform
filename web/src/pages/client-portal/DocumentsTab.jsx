@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import ConfirmDialog from '../../components/ConfirmDialog';
-import { LoadingState } from '../../components/ui';
+import { Alert, LoadingState } from '../../components/ui';
 import SlowNotice, { SLOW_WRITE_INLINE as slowWrite } from '../../components/ui/SlowNotice';
 import { portalFetch, downloadPortalDocument, deletePortalDocument, PortalDocumentList, PortalUploadZone, portalFieldStyles, pageTitleClass } from './shared';
 
@@ -107,6 +107,13 @@ export default function DocumentsTab({ projects, token }) {
         onFiles={handleFileUpload}
       />
       <SlowNotice active={uploading} {...slowWrite} />
+
+      {/* Upload and download failures, announced like the project Documents view */}
+      {uploadError && (
+        <Alert variant="error" onDismiss={() => setUploadError(null)} dismissLabel="Dismiss upload error">
+          {uploadError}
+        </Alert>
+      )}
 
       {/* Document list */}
       {loading ? (
