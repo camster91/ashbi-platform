@@ -458,7 +458,7 @@ test('a client deleting a portal document is audited as a CLIENT actor', async (
     contact: { findFirst: async () => ({ id: 'contact-a', email: portalUser.email, clientId: 'client-a' }) },
     client: { findFirst: async () => ({ id: 'client-a', organizationId: 'org-a' }) },
     attachment: {
-      findUnique: async () => ({ id: 'doc-1', entityType: 'PROJECT', entityId: 'proj-1', path: 'uploads/none-such-file', mimeType: 'application/pdf', size: 42, filename: 'secret-plan.pdf' }),
+      findUnique: async () => ({ id: 'doc-1', entityType: 'PROJECT', entityId: 'proj-1', path: 'uploads/none-such-file', mimeType: 'application/pdf', size: 42, filename: '0b6c7a4e-stored.pdf', originalName: 'secret-plan.pdf', uploadedById: 'portal-user' }),
       delete: async () => ({}),
     },
     project: { findFirst: async () => ({ id: 'proj-1' }) },
@@ -473,5 +473,6 @@ test('a client deleting a portal document is audited as a CLIENT actor', async (
     [audit.events[0].action, audit.events[0].actorType, audit.events[0].actorUserId, audit.events[0].organizationId, audit.events[0].entityType],
     ['client_portal.document_deleted', 'CLIENT', 'portal-user', 'org-a', 'attachment'],
   );
-  assert.deepEqual(audit.events[0].metadata, { projectId: 'proj-1', clientId: 'client-a', mimeType: 'application/pdf', size: 42 });
+  assert.deepEqual(audit.events[0].metadata, { projectId: 'proj-1', clientId: 'client-a', mimeType: 'application/pdf', size: 42, storedFilename: '0b6c7a4e-stored.pdf', fileRetained: true });
+  assert.doesNotMatch(JSON.stringify(audit.events[0]), /secret-plan/);
 });

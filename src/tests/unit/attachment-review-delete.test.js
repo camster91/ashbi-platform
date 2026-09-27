@@ -13,13 +13,13 @@ const { withSession } = await import('../helpers/reauth.js');
 
 const DOC = { id: 'doc-1', entityType: 'PROJECT', entityId: 'proj-1', path: '/uploads/none-such-review-file.png', mimeType: 'image/png', size: 42, uploadedById: 'admin-1', filename: 'none-such-review-file.png' };
 
-function fakeDb({ reviews = 0, deleteError = null } = {}) {
+function fakeDb({ reviews = 0, deleteError = null, uploadedById = DOC.uploadedById } = {}) {
   const deleted = [];
   return {
     deleted,
     auditEvent: { create: async ({ data }) => ({ id: 'audit-1', ...data }) },
     attachment: {
-      findUnique: async () => ({ ...DOC }),
+      findUnique: async () => ({ ...DOC, uploadedById }),
       delete: async ({ where }) => {
         if (deleteError) throw deleteError;
         deleted.push(where.id);
@@ -57,9 +57,13 @@ async function portalApp(t, db) {
   return () => app.inject({ method: 'DELETE', url: `/documents/${DOC.id}`, headers: { authorization: `Bearer ${token}` } });
 }
 
+// The portal route only lets a client delete a file they uploaded (M3).
+const uploaderFor = { 'staff attachment route': DOC.uploadedById, 'client portal document route': PORTAL_USER.id };
+
 for (const [name, build] of [['staff attachment route', staffApp], ['client portal document route', portalApp]]) {
+  const fakeDbFor = (options = {}) => fakeDb({ uploadedById: uploaderFor[name], ...options });
   test(`${name} refuses to delete a file under review`, async (t) => {
-    const db = fakeDb({ reviews: 1 });
+    const db = fakeDbFor({ reviews: 1 });
     const response = await (await build(t, db))();
     assert.equal(response.statusCode, 409, response.body);
     assert.equal(response.json().code, 'ATTACHMENT_UNDER_REVIEW');
@@ -67,14 +71,14 @@ for (const [name, build] of [['staff attachment route', staffApp], ['client port
   });
 
   test(`${name} answers 409 when a review starts before the delete (foreign key)`, async (t) => {
-    const db = fakeDb({ deleteError: FK_ERROR });
+    const db = fakeDbFor({ deleteError: FK_ERROR });
     const response = await (await build(t, db))();
     assert.equal(response.statusCode, 409, response.body);
     assert.equal(response.json().code, 'ATTACHMENT_UNDER_REVIEW');
   });
 
   test(`${name} still deletes a file that is not under review`, async (t) => {
-    const db = fakeDb();
+    const db = fakeDbFor();
     const response = await (await build(t, db))();
     assert.equal(response.statusCode, 200, response.body);
     assert.deepEqual(db.deleted, [DOC.id]);

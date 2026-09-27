@@ -718,6 +718,12 @@ export default async function clientPortalRoutes(fastify) {
       return reply.status(403).send({ error: 'Not authorized' });
     }
 
+    // Clients may remove only files they uploaded themselves: agency
+    // deliverables and other contacts' files on the project stay put.
+    if (doc.uploadedById !== request.clientUser.id) {
+      return reply.status(403).send({ error: 'You can only delete files you uploaded', code: 'NOT_UPLOADER' });
+    }
+
     // A file under media review is approval evidence (docs/media-review.md):
     // a client cannot approve through a share link and then delete the file.
     if (await isAttachmentUnderReview(request.prisma, docId)) {
@@ -733,21 +739,17 @@ export default async function clientPortalRoutes(fastify) {
       throw err;
     }
 
-    // Delete file from disk
-    try {
-      const filePath = path.join(process.cwd(), doc.path);
-      await fs.unlink(filePath);
-    } catch {
-      // File may already be deleted, continue
-    }
-
+    // The stored file is deliberately NOT unlinked: a client delete removes
+    // the file from the portal only. The bytes stay on disk (named in the
+    // audit event) so staff can recover a mistaken or malicious deletion; the
+    // orphaned-upload audit (npm run audit:uploads) is where they are purged.
     await recordRequestAuditEvent(request.prisma, request, {
       action: 'client_portal.document_deleted',
       actorType: 'CLIENT',
       actorUserId: request.clientUser.id ?? null,
       organizationId: request.clientUser.organizationId,
       entityId: docId,
-      metadata: { projectId: doc.entityId, clientId, mimeType: doc.mimeType, size: doc.size },
+      metadata: { projectId: doc.entityId, clientId, mimeType: doc.mimeType, size: doc.size, storedFilename: doc.filename, fileRetained: true },
     });
 
     return { success: true };

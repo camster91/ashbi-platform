@@ -40,7 +40,7 @@ export const AUDIT_EVENT_CATALOG = Object.freeze({
   'api_key.created': { entityType: 'api_key', metadata: ['ownerUserId', 'expires', 'expiresAt', 'scopes'] },
   'api_key.revoked': { entityType: 'api_key', metadata: ['ownerUserId'] },
   'settings.ai_provider_changed': { entityType: 'settings', metadata: ['fromProvider', 'toProvider', 'fromModel', 'toModel'] },
-  'client_portal.document_deleted': { entityType: 'attachment', metadata: ['projectId', 'clientId', 'mimeType', 'size'] },
+  'client_portal.document_deleted': { entityType: 'attachment', metadata: ['projectId', 'clientId', 'mimeType', 'size', 'storedFilename', 'fileRetained'] },
   'ai.connection_connected': { entityType: 'ai_provider_connection', metadata: ['keyLast4', 'baseUrlHost', 'defaultModel', 'allowedModelCount', 'monthlyBudgetCents', 'replacedStatus'] },
   'ai.connection_validated': { entityType: 'ai_provider_connection', metadata: ['keyLast4', 'baseUrlHost', 'result', 'errorType', 'fromStatus', 'toStatus'] },
   'ai.connection_rotated': { entityType: 'ai_provider_connection', metadata: ['keyLast4', 'previousKeyLast4', 'baseUrlHost'] },
