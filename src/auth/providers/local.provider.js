@@ -1,10 +1,16 @@
-import bcrypt from 'bcrypt';
-import crypto from 'crypto';
-import env from '../../config/env.js';
+import { dummyPasswordCheck, hashPassword, upgradeLegacyHash, verifyPassword } from '../password.js';
 import { isCurrentUserSession, signUserSession } from '../session.js';
 import { createMfaChallenge, isMfaRequired, MFA_CHALLENGE_TTL_SECONDS } from '../mfa.js';
 
-const BCRYPT_ROUNDS = 12;
+/** Sign-in refused: the credentials are right but the account has no workspace. */
+export class AccountWithoutOrganizationError extends Error {
+  constructor() {
+    super('This account is not assigned to a workspace. Ask an administrator to add it to one.');
+    this.name = 'AccountWithoutOrganizationError';
+    this.code = 'ACCOUNT_WITHOUT_ORGANIZATION';
+    this.statusCode = 403;
+  }
+}
 
 /**
  * Local Auth Provider
@@ -24,6 +30,9 @@ export class LocalAuthProvider {
     });
 
     if (!user || !user.isActive) {
+      // Same bcrypt cost as a real check, so timing does not reveal whether
+      // the email is registered (or the account inactive).
+      await dummyPasswordCheck(password);
       throw new Error('Invalid credentials or inactive account');
     }
 
@@ -32,22 +41,16 @@ export class LocalAuthProvider {
       throw new Error('Invalid credentials');
     }
 
-    // Auto-upgrade legacy hashes if needed
-    if (!user.password.startsWith('$2')) {
-      const newHash = await this.hashPassword(password);
-      await this.prisma.user.update({ where: { id: user.id }, data: { password: newHash } });
-    }
+    // A legacy unsalted SHA-256 hash is accepted once: it is replaced with
+    // bcrypt before any session is issued, and the sign-in fails if it
+    // cannot be.
+    await upgradeLegacyHash(this.prisma, user, password);
 
-    // Enterprise Graceful Migration: Ensure user has an organization
-    let organizationId = user.organizationId;
+    // Every account belongs to an organization. An account without one is a
+    // data error for an operator to fix; never guess a workspace for it.
+    const organizationId = user.organizationId;
     if (!organizationId) {
-      const defaultOrg = await this.prisma.organization.upsert({
-        where: { slug: 'ashbi-agency' },
-        create: { name: 'Ashbi Agency', slug: 'ashbi-agency' },
-        update: {}
-      });
-      organizationId = defaultOrg.id;
-      await this.prisma.user.update({ where: { id: user.id }, data: { organizationId } });
+      throw new AccountWithoutOrganizationError();
     }
 
     // Staff accounts with MFA enabled get only a short-lived challenge here;
@@ -83,27 +86,10 @@ export class LocalAuthProvider {
   }
 
   async hashPassword(password) {
-    return bcrypt.hash(password, BCRYPT_ROUNDS);
+    return hashPassword(password);
   }
 
   async verifyPassword(password, hash) {
-    if (!hash.startsWith('$2')) {
-      // SECURITY (audit 2026-07-09, swarm finding): legacy SHA-256 hashes
-      // are unsalted — the real risk is rainbow-table attacks, not timing.
-      // Auto-upgrade (lines 33-37 above) re-hashes with bcrypt on the
-      // next successful login, so the window of exposure is "until each
-      // user logs in once". Still, use timingSafeEqual for the legacy
-      // path so the comparison doesn't leak the matching prefix length.
-      const expected = crypto.createHash('sha256').update(password).digest();
-      let actual;
-      try {
-        actual = Buffer.from(hash, 'hex');
-      } catch {
-        return false;
-      }
-      if (expected.length !== actual.length) return false;
-      return crypto.timingSafeEqual(expected, actual);
-    }
-    return bcrypt.compare(password, hash);
+    return verifyPassword(password, hash);
   }
 }

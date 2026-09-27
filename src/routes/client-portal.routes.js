@@ -9,6 +9,7 @@ import { randomUUID } from 'crypto';
 import bcrypt from 'bcrypt';
 import { CLIENT_SESSION_TOKEN_TYPE, isCurrentUserSession, revokeUserSessions, sessionCookieMaxAge, signUserSession } from '../auth/session.js';
 import { MAGIC_LINK_TOKEN_TYPE, redeemMagicLink } from '../auth/magic-link.js';
+import { accountThrottle } from '../auth/credential-throttle.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { contentDisposition } from '../utils/send-file.js';
 import { ATTACHMENT_UNDER_REVIEW, isAttachmentUnderReview, isForeignKeyViolation } from '../services/media-review.service.js';
@@ -153,10 +154,15 @@ export default async function clientPortalRoutes(fastify) {
 
   // ── Auth ─────────────────────────────────────────────────────────────────────
 
+  // Per-email budget for magic-link requests, on top of the per-IP route
+  // limit, so one inbox cannot be flooded from many addresses.
+  const requestAccessAccountThrottle = accountThrottle(fastify, { name: 'portal-link', max: 5, timeWindow: '15 minutes' });
+
   // POST /api/client-portal/request-access
   // Sends a magic link email — link points to /verify-token which sets a secure cookie
   fastify.post('/request-access', {
-    preHandler: [validateBody(requestAccessSchema)],
+    config: { rateLimit: { max: 10, timeWindow: '15 minutes' } },
+    preHandler: [validateBody(requestAccessSchema), requestAccessAccountThrottle],
   }, async (request, reply) => {
     const { email } = request.body;
 
@@ -207,6 +213,7 @@ export default async function clientPortalRoutes(fastify) {
   // Exchanges a magic-link token for an httpOnly secure cookie
   // This avoids JWT tokens appearing in browser history / Referer headers
   fastify.post('/verify-token', {
+    config: { rateLimit: { max: 20, timeWindow: '15 minutes' } },
     preHandler: validateBody(clientPortalTokenRedeemSchema),
   }, async (request, reply) => {
     const { token } = request.body || {};
