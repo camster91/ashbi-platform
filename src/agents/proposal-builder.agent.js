@@ -6,6 +6,7 @@
 import { createDraft, createDraftWithAttachment } from './gmail-draft.agent.js';
 import prisma from '../config/db.js';
 import logger from '../utils/logger.js';
+import PDFDocument from 'pdfkit';
 
 // Pricing tiers (hardcoded for now, can be updated via UI)
 const PRICING_TIERS = {
