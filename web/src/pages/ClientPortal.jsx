@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { preferredScrollBehavior } from '../lib/motion';
 import './client-portal/portal.css';
-import { API, portalFetch, downloadPortalInvoice, downloadPortalContract, fmt, fmtDate, statusBadge, StatusBadge, projectStatusLabel, projectStatusColor, Icons, useProjectChat, PortalChatComposer, PortalProgress, usePortalLightTheme, portalFieldClass, portalFieldStyles, pageTitleClass, sectionTitleClass, labelClass } from './client-portal/shared';
+import { API, portalFetch, downloadPortalInvoice, downloadPortalContract, fmt, fmtDate, statusBadge, StatusBadge, projectStatusLabel, projectStatusColor, Icons, useProjectChat, PortalChatComposer, PortalProgress, usePortalLightTheme, portalFieldClass, portalFieldStyles, busyLabelButtonClass, pageTitleClass, sectionTitleClass, labelClass } from './client-portal/shared';
 import { Alert, Button, Card, CardDescription, CardTitle, Input, LoadingState, StatCard } from '../components/ui';
 import { buttonStyles } from '../components/ui/Button';
 import SlowNotice, { SLOW_WRITE_INLINE as slowWrite } from '../components/ui/SlowNotice';
@@ -12,6 +12,12 @@ import { cn } from '../lib/utils';
 // Their Suspense fallback is a named polite status with the slow-state copy.
 const ProjectDetail = lazy(() => import('./client-portal/ProjectDetail'));
 const DocumentsTab = lazy(() => import('./client-portal/DocumentsTab'));
+
+// Interactive cards keep a full-strength boundary (#317): Card's default
+// `border-border/60` is below 3:1 on the cream page.
+const interactiveCardClass = 'block w-full border-border text-left';
+// Non-interactive stat tiles: no hover lift or hover shadow.
+const staticStatClass = 'hover:translate-y-0 hover:shadow-none';
 
 // ── Login Screen ─────────────────────────────────────────────────────────────
 function LoginScreen() {
@@ -102,7 +108,7 @@ function LoginScreen() {
               className={portalFieldClass}
             />
             {error && <p id="client-portal-login-error" role="alert" className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" disabled={loading} className="w-full" slowAfterMs={false}>
+            <Button type="submit" disabled={loading} className={cn('w-full', busyLabelButtonClass)} slowAfterMs={false}>
               {loading ? 'Sending...' : 'Send Login Link'}
             </Button>
             <SlowNotice active={loading} {...slowWrite} />
@@ -146,9 +152,10 @@ function OverviewTab({ projects, invoices, retainer, unread, setActiveTab, setSe
 
       {/* Stats row */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <StatCard label="Active Projects" value={activeProjects.length} />
-        <StatCard label="Outstanding" value={fmt(unpaidTotal, 'USD')} variant={unpaidTotal > 0 ? 'warning' : 'success'} />
-        <StatCard label="Upcoming Deadlines" value={unread?.upcomingDeadlines ?? 0} variant={(unread?.upcomingDeadlines || 0) > 0 ? 'warning' : 'default'} />
+        {/* The tiles are not interactive, so they drop StatCard's hover lift. */}
+        <StatCard label="Active Projects" value={activeProjects.length} className={staticStatClass} />
+        <StatCard label="Outstanding" value={fmt(unpaidTotal, 'USD')} variant={unpaidTotal > 0 ? 'warning' : 'success'} className={staticStatClass} />
+        <StatCard label="Upcoming Deadlines" value={unread?.upcomingDeadlines ?? 0} variant={(unread?.upcomingDeadlines || 0) > 0 ? 'warning' : 'default'} className={staticStatClass} />
       </div>
 
       {/* Retainer (if exists) */}
@@ -187,7 +194,7 @@ function OverviewTab({ projects, invoices, retainer, unread, setActiveTab, setSe
           <h3 className={sectionTitleClass}>Active Projects</h3>
           <div className="space-y-3">
             {activeProjects.slice(0, 4).map(p => (
-              <Card as="button" type="button" isInteractive key={p.id} aria-label={`Open project ${p.name}`} onClick={() => { setSelectedProject(p.id); setActiveTab('projects'); }} className="block w-full text-left">
+              <Card as="button" type="button" isInteractive key={p.id} aria-label={`Open project ${p.name}`} onClick={() => { setSelectedProject(p.id); setActiveTab('projects'); }} className={interactiveCardClass}>
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <span className="font-semibold text-foreground">{p.name}</span>
                   <StatusBadge color={projectStatusColor(p.status)}>{projectStatusLabel(p.status)}</StatusBadge>
@@ -252,7 +259,7 @@ function ProjectsTab({ projects, setSelectedProject }) {
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
           {projects.map(p => (
-            <Card as="button" type="button" isInteractive key={p.id} aria-label={`Open project ${p.name}`} onClick={() => setSelectedProject(p.id)} className="block w-full text-left">
+            <Card as="button" type="button" isInteractive key={p.id} aria-label={`Open project ${p.name}`} onClick={() => setSelectedProject(p.id)} className={interactiveCardClass}>
               <div className="mb-3 flex items-start justify-between gap-2">
                 <div>
                   <h3 className="mb-0.5 font-heading font-semibold text-foreground">{p.name}</h3>
@@ -394,6 +401,7 @@ function ContractsTab({ contracts, token }) {
                     variant="outline"
                     size="sm"
                     leftIcon={Icons.download}
+                    className={busyLabelButtonClass}
                   >
                     {downloadingId === contract.id ? 'Preparing…' : 'Download PDF'}
                   </Button>

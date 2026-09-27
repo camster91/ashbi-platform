@@ -20,7 +20,7 @@ describe('client portal action accessibility contract', () => {
     // control (#316 convergence keeps the #305/#317 focus contract).
     expect(source).toContain('.cp-root :is(a, button, input, select, textarea, [tabindex]):focus-visible');
     expect(source).toContain('outline: 3px solid hsl(var(--ring))');
-    expect(source).toContain('return <div className="cp-root">{content}</div>;');
+    expect(source).toContain('className="cp-root"');
     expect(source).toContain('min-height: 44px');
   });
 

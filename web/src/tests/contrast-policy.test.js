@@ -84,10 +84,16 @@ describe('WCAG contrast policy', () => {
   });
 
   it('portal and shell control boundaries meet 3:1', () => {
-    expect(ratio(rgb('918c9f'), white)).toBeGreaterThanOrEqual(3);
-    expect(ratio(rgb('918c9f'), cream)).toBeGreaterThanOrEqual(3);
-    expect(ratio(hsl(250, 12, 60), white)).toBeGreaterThanOrEqual(3);
-    expect(ratio(hsl(250, 12, 60), cream)).toBeGreaterThanOrEqual(3);
+    // The portal and shell draw control and interactive-card boundaries with
+    // the full `--border` token (#316/#317), read from the light theme.
+    const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');
+    const light = css.slice(css.indexOf(':root {'), css.indexOf('.dark {'));
+    const [, h, s, l] = light.match(/--border:\s*(\d+)\s+(\d+)%\s+(\d+)%/).map(Number);
+    const border = hsl(h, s, l);
+    const [, bh, bs, bl] = light.match(/--background:\s*(\d+)\s+(\d+)%\s+(\d+)%/).map(Number);
+    expect(ratio(border, white)).toBeGreaterThanOrEqual(3);
+    expect(ratio(border, cream)).toBeGreaterThanOrEqual(3);
+    expect(ratio(border, hsl(bh, bs, bl))).toBeGreaterThanOrEqual(3);
     expect(ratio(hsl(250, 15, 45), hsl(250, 39, 10))).toBeGreaterThanOrEqual(3);
   });
 

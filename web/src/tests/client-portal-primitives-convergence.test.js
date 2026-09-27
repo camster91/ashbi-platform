@@ -71,10 +71,14 @@ describe('client portal primitive convergence (#316)', () => {
     // Native form controls only where no primitive exists (select, textarea,
     // the hidden file input) and native tabs/upload zone buttons.
     expect(all).not.toMatch(/<input(?![^>]*type="file")/);
-    const nativeButtons = [...all.matchAll(/<button\s[^>]*>/g)].map((m) => m[0]);
-    for (const button of nativeButtons) {
-      expect(button).toMatch(/className="cp-(?:tab|upload-zone)"/);
-    }
+    // Count native <button> tags against the allowed classes rather than
+    // parsing each tag (attribute expressions such as `onClick={() => …}`
+    // contain `>`). Every native button must be a tab or the upload zone.
+    const code = all.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const nativeButtons = (code.match(/<button\b/g) || []).length;
+    const allowedButtons = (code.match(/className="cp-(?:tab|upload-zone)"/g) || []).length;
+    expect(nativeButtons).toBeGreaterThan(0);
+    expect(nativeButtons).toBe(allowedButtons);
   });
 
   it('takes every portal colour from design tokens', () => {
@@ -94,6 +98,21 @@ describe('client portal primitive convergence (#316)', () => {
     const all = jsx.map(({ source }) => source).join('\n');
     expect(all).toContain("root.classList.remove('dark')");
     expect(all).toContain('usePortalLightTheme();');
+  });
+
+  it('keeps busy-label buttons opaque while disabled', () => {
+    const all = jsx.map(({ source }) => source).join('\n');
+    expect(all).toContain("busyLabelButtonClass = 'disabled:opacity-100'");
+    // Login "Sending...", chat send "Sending…", contract "Preparing…".
+    expect(all.match(/busyLabelButtonClass\)|\{busyLabelButtonClass\}/g)).toHaveLength(3);
+  });
+
+  it('gives interactive cards the full-strength border token and static stat tiles no hover lift', () => {
+    const portal = jsx.find(({ file }) => file.endsWith('ClientPortal.jsx')).source;
+    expect(portal).toMatch(/interactiveCardClass = '[^']*\bborder-border\b(?!\/)/);
+    expect(portal.match(/isInteractive[^\n]*className=\{interactiveCardClass\}/g)).toHaveLength(2);
+    expect(portal.match(/<StatCard\b[^\n]*className=\{staticStatClass\}/g)).toHaveLength(3);
+    expect(portal).toContain("staticStatClass = 'hover:translate-y-0 hover:shadow-none'");
   });
 
   it('keeps 16px mobile text on portal form fields', () => {

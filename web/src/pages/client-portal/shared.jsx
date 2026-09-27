@@ -167,6 +167,11 @@ export function priorityColor(p) {
 // card fill keeps fields distinct from the cream page.
 export const portalFieldClass = 'min-h-11 bg-card text-base text-foreground sm:text-sm';
 
+// Buttons whose label changes while busy ("Sending…", "Preparing…") stay at
+// full opacity when disabled. Button's default `disabled:opacity-50` would
+// drop the busy label to ~2.9:1; the old portal kept disabled buttons opaque.
+export const busyLabelButtonClass = 'disabled:opacity-100';
+
 // The same look for <select> and <textarea> fields.
 export const portalFieldStyles = (className) => inputStyles(cn(portalFieldClass, className));
 
@@ -311,7 +316,7 @@ export function PortalChatComposer({ value, onChange, onSubmit, connected, sendi
       </div>
       <div className="flex gap-2">
         <Input type="text" value={value} onChange={onChange} placeholder="Type a message..." aria-label="Message to project team" className={cn(portalFieldClass, 'flex-1')} />
-        <Button type="submit" className="shrink-0" disabled={!value.trim() || sending} aria-busy={sending || undefined} aria-label="Send message" slowAfterMs={false}>
+        <Button type="submit" className={cn('shrink-0', busyLabelButtonClass)} disabled={!value.trim() || sending} aria-busy={sending || undefined} aria-label="Send message" slowAfterMs={false}>
           {sending ? 'Sending…' : Icons.send}
         </Button>
       </div>
@@ -348,7 +353,12 @@ export function PortalUploadZone({ inputRef, inputLabel, helpId, uploading, disa
         onClick={() => inputRef.current?.click()}
         disabled={disabled}
         onDragOver={e => { e.preventDefault(); setDragging(true); }}
-        onDragLeave={() => setDragging(false)}
+        onDragLeave={e => {
+          // Moving over the zone's own children fires dragleave; ignore it so
+          // the highlight does not flicker.
+          if (e.currentTarget.contains(e.relatedTarget)) return;
+          setDragging(false);
+        }}
         onDrop={e => {
           e.preventDefault();
           setDragging(false);
