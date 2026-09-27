@@ -4,12 +4,37 @@ import { parseTrustProxy } from './trust-proxy.js';
 
 const trustProxyConfig = parseTrustProxy(process.env.TRUST_PROXY);
 
+// NODE_ENV is an explicit allowlist. `development` and `test` are local
+// environments that may start without deployment secrets; every other
+// supported value is a deployed environment and is validated like
+// production. An unrecognised value (a typo such as `prod`, or an ad-hoc
+// name) fails closed rather than silently skipping secret validation.
+// Unset means `development`, matching `npm run dev`.
+export const LOCAL_NODE_ENVS = Object.freeze(['development', 'test']);
+export const DEPLOYED_NODE_ENVS = Object.freeze(['staging', 'production']);
+const nodeEnv = process.env.NODE_ENV || 'development';
+if (!LOCAL_NODE_ENVS.includes(nodeEnv) && !DEPLOYED_NODE_ENVS.includes(nodeEnv)) {
+  throw new Error(
+    `Unsupported NODE_ENV "${nodeEnv}". Set NODE_ENV to one of: ` +
+    `${[...LOCAL_NODE_ENVS, ...DEPLOYED_NODE_ENVS].join(', ')}.`
+  );
+}
+const isDevelopment = nodeEnv === 'development';
+const isTest = nodeEnv === 'test';
+
 const env = {
   // Server
   port: parseInt(process.env.PORT || '3000', 10),
-  nodeEnv: process.env.NODE_ENV || 'development',
-  isDev: process.env.NODE_ENV !== 'production',
-  isProduction: process.env.NODE_ENV === 'production',
+  nodeEnv,
+  isDevelopment,
+  isTest,
+  isStaging: nodeEnv === 'staging',
+  isProduction: nodeEnv === 'production',
+  // True only for the local environments (development, test). Deployed
+  // environments, including staging, get production behaviour.
+  isDev: isDevelopment || isTest,
+  // Whether deployment secrets are validated at startup.
+  requiresDeploymentSecrets: !(isDevelopment || isTest),
   // Serve the built SPA (dist/) from Fastify. Always on in production; the
   // full-stack E2E stack opts in with SERVE_BUILT_SPA=true so browser journeys
   // run against the real API origin without a Vite dev server.
@@ -175,8 +200,9 @@ const env = {
   }
 };
 
-// Validate required env vars in production
-if (!env.isDev) {
+// Validate required env vars in every deployed environment (staging and
+// production). Only explicit `development` and `test` skip this.
+if (env.requiresDeploymentSecrets) {
   // Critical secrets — app must not start without these
   const critical = ['JWT_SECRET', 'CREDENTIALS_KEY'];
   const missingCritical = critical.filter(key => !process.env[key]);
@@ -217,7 +243,7 @@ if (!env.isDev) {
   if (placeholderHits.length > 0) {
     throw new Error(
       `Refusing to start with placeholder env values: ${placeholderHits.join(', ')}. ` +
-      `Replace these in your production env (see .env.example).`
+      `Replace these in your ${env.nodeEnv} env (see .env.example).`
     );
   }
 
@@ -234,7 +260,7 @@ if (!env.isDev) {
   ];
   const missing = requiredInProduction.filter(key => !process.env[key]);
   if (missing.length > 0) {
-    console.warn(`[env] Missing recommended environment variables in production: ${missing.join(', ')}`);
+    console.warn(`[env] Missing recommended environment variables in ${env.nodeEnv}: ${missing.join(', ')}`);
   }
 }
 
