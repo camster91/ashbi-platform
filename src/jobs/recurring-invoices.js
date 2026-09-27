@@ -2,7 +2,7 @@
 
 import { prisma } from '../config/db.js';
 import logger from '../utils/logger.js';
-import { generateInvoiceNumber } from '../utils/invoice.js';
+import { allocateInvoiceNumber } from '../utils/invoice.js';
 import { resolveTenantOrganizationIds, runTenantJob } from './tenant-iteration.js';
 
 export function getNextRecurringDate(currentDate, interval) {
@@ -30,7 +30,7 @@ export function getNextRecurringDate(currentDate, interval) {
   return d;
 }
 
-export async function processRecurringInvoices(tenantPrisma, invoiceNumberGenerator = generateInvoiceNumber) {
+export async function processRecurringInvoices(tenantPrisma, invoiceNumberAllocator = allocateInvoiceNumber) {
   const now = new Date();
   logger.debug({ now: now.toISOString() }, '[recurring-invoices] checking for due invoices');
 
@@ -74,11 +74,6 @@ export async function processRecurringInvoices(tenantPrisma, invoiceNumberGenera
         const total = parseFloat((discounted + tax).toFixed(2));
 
         const nextDate = getNextRecurringDate(invoice.recurringNextDate, invoice.recurringInterval);
-        // Invoice numbers are globally unique, so this lookup intentionally
-        // uses the raw client rather than the tenant-scoped transaction.
-        // A concurrent collision rolls the transaction back and BullMQ retries.
-        const invoiceNumber = await invoiceNumberGenerator(prisma);
-
         // Claim and generate in one serializable transaction. A competing
         // worker either observes the advanced date or receives a retryable
         // serialization conflict; it cannot commit a second invoice.
@@ -94,8 +89,13 @@ export async function processRecurringInvoices(tenantPrisma, invoiceNumberGenera
           });
           if (claimed.count !== 1) return null;
 
+          // Numbers are allocated from the organization's counter inside this
+          // transaction; a serialization conflict rolls both back and BullMQ
+          // retries.
+          const { invoiceNumber, organizationId } = await invoiceNumberAllocator(tx, { clientId: invoice.clientId });
           return tx.invoice.create({ data: {
             invoiceNumber,
+            organizationId,
             status: 'DRAFT',
             title: invoice.title,
             notes: invoice.notes,

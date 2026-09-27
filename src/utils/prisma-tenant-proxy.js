@@ -37,7 +37,7 @@ const DIRECT_SCOPED_MODELS = new Set([
   'pipelinestage', 'promptversion', 'credential', 'credentialaccessaudit',
   'onboardingprogress', 'slackinstallation', 'slackchannelmapping', 'slackeventreceipt', 'googlecalendarconnection', 'notionimportrecord', 'importrun', 'slackimportrecord', 'aibridgeaction',
   'publicinquiry', 'auditevent', 'aiproviderconnection', 'aiusagerecord',
-  'reviewsession'
+  'reviewsession', 'documentnumbersequence'
 ]);
 
 // Evidence tables that may only ever be appended to. Request-scoped code gets

@@ -59,7 +59,7 @@ test('recurring invoice occurrence is claimed once across competing workers', as
     }),
   };
 
-  const invoiceNumberGenerator = async () => 'INV-2026-0002';
+  const invoiceNumberGenerator = async () => ({ invoiceNumber: 'INV-2026-0002', organizationId: 'org-1' });
   const results = await Promise.all([
     processRecurringInvoices(client, invoiceNumberGenerator),
     processRecurringInvoices(client, invoiceNumberGenerator),

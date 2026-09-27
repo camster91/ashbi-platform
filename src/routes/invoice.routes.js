@@ -2,7 +2,7 @@
 import { CLEARED_CHECKOUT_FIELDS, checkoutPersistenceData, createPaymentLink, ensureCheckoutSession, handleWebhook, recordCheckoutAuditEvents, recordCompletedCheckout } from '../services/stripe.service.js';
 import { generateInvoicePdf } from '../utils/generate-invoice-pdf.js';
 import { deliveryFieldsFromSend, withDeliveryState } from '../services/mailgun-delivery.service.js';
-import { generateInvoiceNumber } from '../utils/invoice.js';
+import { createNumberedInvoice } from '../utils/invoice.js';
 import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
 import { validateBody, createInvoiceSchema, updateInvoiceSchema, markInvoicePaidSchema, sendInvoiceSchema, lineItemTemplateCreateSchema, invoiceBulkIdsSchema, invoiceBulkArchiveSchema, bulkMarkPaidSchema } from '../validators/schemas.js';
 import { sendInvoiceDeliveryEmail } from '../services/email.service.js';
@@ -216,13 +216,14 @@ export default async function invoiceRoutes(fastify) {
     const client = await fastify.prisma.client.findFirst({ where: { id: clientId }, select: { id: true, name: true } });
     if (!client) return reply.status(404).send({ error: 'Client not found' });
 
-    const invoiceNumber = await generateInvoiceNumber(fastify.prisma);
     const processedItems = processLineItems(lineItems);
     const { subtotal, tax, total } = calcTotals(processedItems, taxRate, discountAmount);
 
-    return fastify.prisma.invoice.create({
+    // The number is allocated from the organization's counter inside the
+    // same transaction as the insert (src/utils/invoice.js).
+    return createNumberedInvoice(fastify.prisma, {
+      organizationId: request.user.organizationId,
       data: {
-        invoiceNumber,
         title: title || `Invoice for ${client.name}`,
         currency: normalizeInvoiceCurrency(currency) || defaultInvoiceCurrency(),
         clientId,
@@ -580,7 +581,6 @@ export default async function invoiceRoutes(fastify) {
     });
     if (existing) return existing;
 
-    const invoiceNumber = await generateInvoiceNumber(fastify.prisma);
     const processedItems = proposal.lineItems.map((li, idx) => ({
       description: li.description,
       itemType: 'LABOR',
@@ -593,9 +593,9 @@ export default async function invoiceRoutes(fastify) {
     const { subtotal, tax, total } = calcTotals(processedItems, HST_RATE, proposal.discount || 0);
 
     try {
-      return await fastify.prisma.invoice.create({
+      return await createNumberedInvoice(fastify.prisma, {
+        organizationId: request.user.organizationId,
         data: {
-          invoiceNumber,
           title: `Invoice for: ${proposal.title}`,
           // Proposals carry no currency; use the organization default.
           currency: defaultInvoiceCurrency(),

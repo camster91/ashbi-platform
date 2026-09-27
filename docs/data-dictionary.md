@@ -14,7 +14,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   which reads hide soft-deleted rows is in [soft-delete-policy.md](soft-delete-policy.md).
 - **Notes** combine `///` doc comments and trailing `//` comments from the schema.
 
-99 models, 0 enums, 45 tenant-scoped, 13 soft-deletable.
+100 models, 0 enums, 47 tenant-scoped, 13 soft-deletable.
 
 ## Model index
 
@@ -47,6 +47,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [CreativeBrief](#model-creativebrief) | `creative_briefs` | no | no | 16 |
 | [Credential](#model-credential) | `credentials` | yes | no | 16 |
 | [CredentialAccessAudit](#model-credentialaccessaudit) | `credential_access_audits` | yes | no | 11 |
+| [DocumentNumberSequence](#model-documentnumbersequence) | `document_number_sequences` | yes | no | 6 |
 | [EmailTriageDraft](#model-emailtriagedraft) | `email_triage_drafts` | no | no | 10 |
 | [EmailTriageItem](#model-emailtriageitem) | `email_triage_items` | yes | no | 14 |
 | [Estimate](#model-estimate) | `estimates` | no | yes | 21 |
@@ -59,7 +60,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [IntakeFormResponse](#model-intakeformresponse) | `intake_form_responses` | no | no | 8 |
 | [Integration](#model-integration) | `integrations` | yes | no | 11 |
 | [InternalNote](#model-internalnote) | `internal_notes` | no | no | 7 |
-| [Invoice](#model-invoice) | `invoices` | no | yes | 58 |
+| [Invoice](#model-invoice) | `invoices` | yes | yes | 60 |
 | [InvoiceLineItem](#model-invoicelineitem) | `invoice_line_items` | no | no | 9 |
 | [InvoicePayment](#model-invoicepayment) | `invoice_payments` | no | no | 9 |
 | [LineItemTemplate](#model-lineitemtemplate) | `line_item_templates` | yes | no | 11 |
@@ -70,7 +71,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Notification](#model-notification) | `notifications` | no | no | 10 |
 | [NotionImportRecord](#model-notionimportrecord) | `notion_import_records` | yes | no | 14 |
 | [OnboardingProgress](#model-onboardingprogress) | `onboarding_progress` | yes | no | 12 |
-| [Organization](#model-organization) | `organizations` | no | no | 53 |
+| [Organization](#model-organization) | `organizations` | no | no | 55 |
 | [OutreachSequence](#model-outreachsequence) | `outreach_sequences` | yes | no | 10 |
 | [PipelineDeal](#model-pipelinedeal) | `pipeline_deals` | no | no | 15 |
 | [PipelineStage](#model-pipelinestage) | `pipeline_stages` | yes | no | 10 |
@@ -840,6 +841,23 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `keyVersion` | String | optional |  |  |  |
 | `createdAt` | DateTime | required | `now()` |  |  |
 
+### Model DocumentNumberSequence
+
+- Table: `document_number_sequences`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@id([organizationId, kind, period])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `organizationId` | String | required |  |  |  |
+| `kind` | String | required |  |  | INVOICE |
+| `period` | Int | required |  |  | calendar year (UTC) the numbers belong to |
+| `lastValue` | Int | required |  |  |  |
+| `updatedAt` | DateTime | required, updatedAt |  |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
+
 ### Model EmailTriageDraft
 
 - Table: `email_triage_drafts`
@@ -1121,22 +1139,24 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 ### Model Invoice
 
 - Table: `invoices`
-- Tenant-scoped: no
+- Tenant-scoped: yes (`organizationId`)
 - Soft-deletable: yes (`deletedAt`)
 - Constraints and indexes:
+  - `@@unique([organizationId, invoiceNumber])`
   - `@@index([status, dueDate])`
   - `@@index([clientId, status])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `id` | String | id, required | `cuid()` |  |  |
-| `invoiceNumber` | String | unique, required |  |  |  |
+| `invoiceNumber` | String | required |  |  |  |
+| `organizationId` | String | optional |  |  |  |
 | `status` | String | required | `"DRAFT"` |  | DRAFT \| SENT \| PAID \| OVERDUE \| VOID |
 | `title` | String | optional |  |  |  |
 | `dueDate` | DateTime | optional |  |  |  |
 | `issueDate` | DateTime | required | `now()` |  |  |
 | `bonsaiInvoiceId` | String | optional |  |  | Original Bonsai invoice ID |
-| `currency` | String | required | `"USD"` |  | USD \| CAD |
+| `currency` | String | required | `"CAD"` |  | ISO 4217 (src/utils/money.js); shown on UI/PDF/email and charged by Stripe |
 | `amountUsd` | Float | optional |  |  | For multi-currency tracking |
 | `amountCad` | Float | optional |  |  |  |
 | `daysToPayActual` | Int | optional |  |  | Historical: actual days client took to pay |
@@ -1180,6 +1200,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 | `client` | Client | required |  | → Client, via (clientId) → (id), onDelete Cascade |  |
+| `organization` | Organization | optional |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
 | `createdBy` | User | required |  | → User, via (createdById) → (id), "InvoiceCreator" |  |
 | `lineItems` | InvoiceLineItem[] | list, required |  | → InvoiceLineItem |  |
 | `payments` | InvoicePayment[] | list, required |  | → InvoicePayment |  |
@@ -1474,6 +1495,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `aiProviderConnection` | AiProviderConnection | optional |  | → AiProviderConnection |  |
 | `aiUsageRecords` | AiUsageRecord[] | list, required |  | → AiUsageRecord |  |
 | `reviewSessions` | ReviewSession[] | list, required |  | → ReviewSession |  |
+| `invoices` | Invoice[] | list, required |  | → Invoice |  |
+| `documentNumberSequences` | DocumentNumberSequence[] | list, required |  | → DocumentNumberSequence |  |
 
 ### Model OutreachSequence
 

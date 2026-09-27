@@ -1,6 +1,6 @@
 import { validateBody, createRetainerSchema, updateRetainerSchema, logRetainerHoursSchema, generateRetainerInvoiceSchema, retainerGenerateInvoiceSchema } from '../validators/schemas.js';
 // Retainer plan routes — track hours & revision rounds per client
-import { generateInvoiceNumber } from '../utils/invoice.js';
+import { createNumberedInvoice } from '../utils/invoice.js';
 import { clampTake } from '../utils/query-limits.js';
 
 export default async function retainerRoutes(fastify) {
@@ -245,7 +245,6 @@ export default async function retainerRoutes(fastify) {
       return reply.status(400).send({ error: 'No monthly rate set on this retainer plan' });
     }
 
-    const invoiceNumber = await generateInvoiceNumber(fastify.prisma);
     const now = new Date();
     const dueDate = new Date(now);
     dueDate.setDate(dueDate.getDate() + daysUntilDue);
@@ -258,10 +257,11 @@ export default async function retainerRoutes(fastify) {
     const tax = Math.round((subtotal * taxRate / 100) * 100) / 100;
     const total = Math.round((subtotal + tax) * 100) / 100;
 
-    const invoice = await fastify.prisma.invoice.create({
+    const invoice = await createNumberedInvoice(fastify.prisma, {
+      organizationId: request.user.organizationId,
       data: {
-        invoiceNumber,
         clientId,
+        createdById: request.user.id,
         status: 'DRAFT',
         currency,
         title: `Monthly Retainer — ${monthLabel}`,
@@ -297,7 +297,7 @@ export default async function retainerRoutes(fastify) {
     return {
       invoice,
       resetHours,
-      message: `Invoice ${invoiceNumber} created for ${plan.client.name}`
+      message: `Invoice ${invoice.invoiceNumber} created for ${plan.client.name}`
     };
   });
 
