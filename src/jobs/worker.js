@@ -5,7 +5,7 @@ import os from 'node:os';
 
 import {
   closeQueueInfrastructure,
-  connection,
+  getWorkerConnection,
   QUEUES,
   scheduleEscalationCheck,
   setupRecurringJobs,
@@ -29,6 +29,10 @@ import { initSentry, Sentry } from '../observability/sentry.js';
 import { sendOperationalAlert } from '../observability/alerts.js';
 
 initSentry('worker');
+
+// Workers and the heartbeat use the blocking-safe connection; producers in
+// queue.js keep their own fail-fast connection.
+const connection = getWorkerConnection();
 
 // Helper to create workers with error handling for Redis unavailability
 function createWorker(queueName, processor, options = {}) {
