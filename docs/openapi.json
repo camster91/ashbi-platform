@@ -1843,6 +1843,7 @@
           "health": {
             "enum": [
               "ON_TRACK",
+              "NEEDS_ATTENTION",
               "AT_RISK",
               "OFF_TRACK",
               "CRITICAL"
@@ -1864,10 +1865,15 @@
           },
           "status": {
             "enum": [
-              "ACTIVE",
+              "STARTING_UP",
+              "DESIGN_DEV",
+              "ADDING_CONTENT",
+              "FINALIZING",
+              "LAUNCHED",
               "ON_HOLD",
-              "COMPLETED",
               "CANCELLED",
+              "ACTIVE",
+              "COMPLETED",
               "DRAFT"
             ],
             "type": "string"
@@ -4282,6 +4288,21 @@
             "minLength": 1,
             "type": "string"
           },
+          "status": {
+            "enum": [
+              "PENDING",
+              "UPCOMING",
+              "IMMEDIATE",
+              "IN_PROGRESS",
+              "BLOCKED",
+              "WAITING_US",
+              "WAITING_CLIENT",
+              "COMPLETED",
+              "TODO",
+              "REVIEW"
+            ],
+            "type": "string"
+          },
           "title": {
             "maxLength": 500,
             "minLength": 1,
@@ -4315,10 +4336,15 @@
             "default": "PENDING",
             "enum": [
               "PENDING",
+              "UPCOMING",
+              "IMMEDIATE",
               "IN_PROGRESS",
               "BLOCKED",
-              "REVIEW",
-              "COMPLETED"
+              "WAITING_US",
+              "WAITING_CLIENT",
+              "COMPLETED",
+              "TODO",
+              "REVIEW"
             ],
             "type": "string"
           },
@@ -4346,17 +4372,58 @@
         ],
         "type": "object"
       },
-      "TaskNoteCreate": {
+      "TaskPageContentUpdate": {
         "properties": {
           "content": {
-            "maxLength": 10000,
-            "minLength": 1,
-            "type": "string"
+            "items": {
+              "properties": {
+                "checked": {
+                  "type": "boolean"
+                },
+                "content": {
+                  "default": "",
+                  "maxLength": 20000,
+                  "type": "string"
+                },
+                "mentions": {
+                  "items": {},
+                  "maxItems": 50,
+                  "type": "array"
+                },
+                "type": {
+                  "enum": [
+                    "paragraph",
+                    "heading1",
+                    "heading2",
+                    "bulletList",
+                    "numberedList",
+                    "todo",
+                    "quote",
+                    "code",
+                    "image"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "type": "object"
+            },
+            "maxItems": 1000,
+            "type": "array"
           },
           "coverImage": {
-            "format": "uri",
-            "maxLength": 2048,
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "uri",
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "icon": {
             "maxLength": 20,
@@ -4368,20 +4435,52 @@
           },
           "title": {
             "maxLength": 200,
+            "minLength": 1,
             "type": "string"
           }
         },
-        "required": [
-          "content"
-        ],
         "type": "object"
       },
-      "TaskNoteUpdate": {
+      "TaskSubpageCreate": {
         "properties": {
           "content": {
-            "maxLength": 50000,
-            "minLength": 1,
-            "type": "string"
+            "items": {
+              "properties": {
+                "checked": {
+                  "type": "boolean"
+                },
+                "content": {
+                  "default": "",
+                  "maxLength": 20000,
+                  "type": "string"
+                },
+                "mentions": {
+                  "items": {},
+                  "maxItems": 50,
+                  "type": "array"
+                },
+                "type": {
+                  "enum": [
+                    "paragraph",
+                    "heading1",
+                    "heading2",
+                    "bulletList",
+                    "numberedList",
+                    "todo",
+                    "quote",
+                    "code",
+                    "image"
+                  ],
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "type": "object"
+            },
+            "maxItems": 1000,
+            "type": "array"
           },
           "icon": {
             "maxLength": 20,
@@ -4866,6 +4965,7 @@
             "type": "string"
           },
           "duration": {
+            "description": "Duration in minutes (not seconds).",
             "exclusiveMinimum": 0,
             "maximum": 86400,
             "type": "number"
@@ -4901,6 +5001,7 @@
             "type": "string"
           },
           "duration": {
+            "description": "Duration in minutes (not seconds).",
             "exclusiveMinimum": 0,
             "maximum": 86400,
             "type": "number"
@@ -5258,6 +5359,7 @@
           "health": {
             "enum": [
               "ON_TRACK",
+              "NEEDS_ATTENTION",
               "AT_RISK",
               "OFF_TRACK",
               "CRITICAL"
@@ -5286,10 +5388,15 @@
           },
           "status": {
             "enum": [
-              "ACTIVE",
+              "STARTING_UP",
+              "DESIGN_DEV",
+              "ADDING_CONTENT",
+              "FINALIZING",
+              "LAUNCHED",
               "ON_HOLD",
-              "COMPLETED",
               "CANCELLED",
+              "ACTIVE",
+              "COMPLETED",
               "DRAFT"
             ],
             "type": "string"
@@ -27319,7 +27426,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/TaskNoteCreate"
+                "$ref": "#/components/schemas/TaskPageContentUpdate"
               }
             }
           },
@@ -27446,12 +27553,16 @@
                 "properties": {
                   "status": {
                     "enum": [
-                      "TODO",
                       "PENDING",
+                      "UPCOMING",
+                      "IMMEDIATE",
                       "IN_PROGRESS",
                       "BLOCKED",
-                      "REVIEW",
-                      "COMPLETED"
+                      "WAITING_US",
+                      "WAITING_CLIENT",
+                      "COMPLETED",
+                      "TODO",
+                      "REVIEW"
                     ],
                     "type": "string"
                   }
@@ -27573,7 +27684,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/TaskNoteUpdate"
+                "$ref": "#/components/schemas/TaskSubpageCreate"
               }
             }
           },
