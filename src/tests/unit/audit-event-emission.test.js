@@ -156,7 +156,9 @@ test('bulk actions emit one event per changed invoice', async (t) => {
   audit.events.length = 0;
   invoices['inv-a'] = draftInvoice({ id: 'inv-a' });
   const sent = await app.inject({ method: 'POST', url: '/bulk/send', payload: { ids: ['inv-a', 'inv-b'] } });
-  assert.deepEqual(sent.json(), { sent: 1 });
+  // Bulk send goes through the single-send path and reports each item.
+  assert.equal(sent.json().sent, 1);
+  assert.deepEqual(sent.json().results.map((result) => [result.id, result.ok]), [['inv-a', true], ['inv-b', false]]);
   assert.deepEqual(audit.events.map((event) => [event.action, event.entityId]), [['invoice.sent', 'inv-a']]);
 });
 
