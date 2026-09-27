@@ -197,8 +197,15 @@ export const HEALTH_HISTORY_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;
 export const HEALTH_INACTIVE_STATUSES = Object.freeze(['LAUNCHED', 'CANCELLED']);
 const HEALTH_UPDATE_CONCURRENCY = 10;
 
-/** The stored Json? history as an array of points (tolerates legacy shapes). */
+/**
+ * The stored Json? history as an array of points. Earlier code wrote
+ * `{ push: point }` (Prisma stored the literal object on the Json column),
+ * so that legacy shape is recovered as a one-point history.
+ */
 export function normalizeHealthHistory(value) {
+  if (value && !Array.isArray(value) && typeof value === 'object' && value.push && typeof value.push === 'object') {
+    value = [value.push];
+  }
   if (!Array.isArray(value)) return [];
   return value.filter((point) => point && typeof point === 'object' && typeof point.timestamp === 'string');
 }
@@ -219,8 +226,9 @@ export function nextHealthHistory(history, point, { now = Date.now() } = {}) {
 
 /**
  * Update health scores for active projects (called by the hourly health job).
- * `healthHistory` is a Json? column, so it is read, extended and capped here
- * (Prisma's `push` only exists for scalar lists and made every update throw).
+ * `healthHistory` is a Json? column, so it is read, extended and capped here.
+ * (`{ push }` only works on scalar lists; on Json Prisma stored the literal
+ * `{"push": point}` object, overwriting the history every hour.)
  * Projects whose score, status and history are unchanged are not written.
  */
 export async function updateAllProjectHealth(prismaClient, { now = new Date() } = {}) {

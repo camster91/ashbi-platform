@@ -81,6 +81,8 @@ test('history appends on change or after a day, never on an unchanged hour', () 
   const dayOld = [point('ON_TRACK', 100, hoursAgo(25))];
   assert.equal(nextHealthHistory(dayOld, point('ON_TRACK', 100, NOW), { now: NOW.getTime() }).length, 2);
   assert.deepEqual(normalizeHealthHistory({ not: 'an array' }), []);
+  // The legacy `{ push: point }` value the old code stored is recovered.
+  assert.deepEqual(normalizeHealthHistory({ push: point('AT_RISK', 40, NOW) }), [point('AT_RISK', 40, NOW)]);
   assert.deepEqual(normalizeHealthHistory([null, { score: 1 }, point('AT_RISK', 1, NOW)]), [point('AT_RISK', 1, NOW)]);
 });
 
