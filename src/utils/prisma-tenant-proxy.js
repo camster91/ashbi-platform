@@ -55,7 +55,9 @@ const APPEND_ONLY_BLOCKED_METHODS = new Set([
 // protection and is written from the unauthenticated, signed webhook route.
 // platformsetting is the single deployment-wide settings row (AI kill switch);
 // only platform operators write it (settings.routes.js).
-const GLOBAL_MODELS = new Set(['organization', 'mailgunwebhookreceipt', 'platformsetting']);
+// clientportallinkredemption only stores the random jti of redeemed portal
+// magic links (single-use guard), written from the unauthenticated redeem route.
+const GLOBAL_MODELS = new Set(['organization', 'mailgunwebhookreceipt', 'platformsetting', 'clientportallinkredemption']);
 
 // Direct-owned records can also reference another tenant-owned root. The
 // redundant organizationId is not enough: the referenced parent must belong

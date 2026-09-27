@@ -53,7 +53,7 @@ async function portalApp(t, db) {
   app.addHook('onRequest', async (request) => { request.prisma = db; });
   await app.register(clientPortalRoutes);
   t.after(() => app.close());
-  const token = app.jwt.sign({ ...PORTAL_USER, contactId: 'contact-a' }, { expiresIn: '1h' });
+  const token = app.jwt.sign({ ...PORTAL_USER, contactId: 'contact-a', typ: 'client_session' }, { expiresIn: '1h' });
   return () => app.inject({ method: 'DELETE', url: `/documents/${DOC.id}`, headers: { authorization: `Bearer ${token}` } });
 }
 

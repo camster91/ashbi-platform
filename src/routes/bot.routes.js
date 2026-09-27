@@ -71,8 +71,11 @@ export default async function botRoutes(fastify) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
 
+    // Typed `bot_access`: it is not a user session, so session verifiers
+    // (fastify.authenticate, the /api hook, sockets) refuse it. Bot routes
+    // authenticate with the BOT_SECRET bearer itself.
     const token = fastify.jwt.sign(
-      { id: 'bot', role: 'BOT', email: 'bot@system' },
+      { typ: 'bot_access', id: 'bot', role: 'BOT', email: 'bot@system' },
       { expiresIn: '30d' }
     );
 

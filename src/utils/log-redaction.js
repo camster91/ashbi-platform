@@ -39,7 +39,9 @@ const CAPABILITY_URL_PATTERNS = Object.freeze([
   new RegExp(`(/api/(?:proposals/client|contracts/sign|estimates/view|invoices/client)/)${SEGMENT}`, 'g'),
   // The project status link /portal/:token (not the named portal pages).
   new RegExp(`(/(?:api/)?portal/)(?!(?:review|proposal|contract|invoice|form|estimate|book|booking)(?=[/?#\\s"'<>]|$))${SEGMENT}`, 'g'),
-  /([?&](?:token|viewToken|signToken)=)[^&#\s"'<>]+/g,
+  // OAuth callbacks carry the signed `state` and the one-time authorization
+  // `code` in the query string.
+  /([?&](?:token|viewToken|signToken|state|code)=)[^&#\s"'<>]+/g,
 ]);
 
 /**

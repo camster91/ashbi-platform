@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import Fastify from 'fastify';
 import jwt from '@fastify/jwt';
 import googleCalendarRoutes from '../../routes/google-calendar.routes.js';
+import { signOAuthState, verifyOAuthState } from '../../auth/oauth-state.js';
+
+// OAuth state is signed with a key derived from JWT_SECRET (src/auth/oauth-state.js).
+process.env.JWT_SECRET ||= 'oauth-state-unit-test-secret';
 
 async function buildApp(prisma, options = {}) {
   const app = Fastify();
@@ -37,7 +41,8 @@ test('starts user-scoped Google OAuth with calendar-events scope and signed stat
   assert.equal(url.searchParams.get('scope'), 'https://www.googleapis.com/auth/calendar.events');
   assert.equal(url.searchParams.get('access_type'), 'offline');
   assert.equal(url.searchParams.get('prompt'), 'consent');
-  const state = app.jwt.verify(url.searchParams.get('state'));
+  assert.throws(() => app.jwt.verify(url.searchParams.get('state')), 'OAuth state must not verify with the session key');
+  const state = verifyOAuthState('google_calendar_oauth', url.searchParams.get('state'));
   assert.equal(state.type, 'google_calendar_oauth');
   assert.equal(state.userId, 'user-1');
   assert.equal(state.organizationId, 'org-1');
@@ -57,7 +62,7 @@ test('exchanges OAuth code, stores an encrypted refresh token, and returns to Se
     createOAuthClient: () => ({ getToken: async () => ({ tokens: { refresh_token: 'sensitive-refresh-token', scope: 'https://www.googleapis.com/auth/calendar.events' } }) }),
   });
   t.after(() => app.close());
-  const state = app.jwt.sign({ type: 'google_calendar_oauth', organizationId: 'org-1', userId: 'user-1' }, { expiresIn: '10m' });
+  const state = signOAuthState('google_calendar_oauth', { organizationId: 'org-1', userId: 'user-1' });
 
   const response = await app.inject({ method: 'GET', url: `/oauth/callback?code=code-1&state=${encodeURIComponent(state)}` });
   assert.equal(response.statusCode, 302);

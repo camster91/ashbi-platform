@@ -2482,3 +2482,15 @@ model MailgunWebhookReceipt {
   @@index([receivedAt])
   @@map("mailgun_webhook_receipts")
 }
+
+// Single-use guard for client-portal magic links: the jti of each redeemed
+// link. Holds no tenant data (only the random link id), so it is global.
+model ClientPortalLinkRedemption {
+  id         String   @id @default(cuid())
+  jti        String   @unique
+  expiresAt  DateTime
+  redeemedAt DateTime @default(now())
+
+  @@index([expiresAt])
+  @@map("client_portal_link_redemptions")
+}

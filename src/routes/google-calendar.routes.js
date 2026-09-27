@@ -1,4 +1,5 @@
 import { decrypt, encrypt } from '../utils/crypto.js';
+import { signOAuthState, verifyOAuthState } from '../auth/oauth-state.js';
 import env from '../config/env.js';
 import {
   GOOGLE_SYNC_STALE_LOCK_MS,
@@ -38,9 +39,8 @@ export default async function googleCalendarRoutes(fastify, options = {}) {
     if (!googleClientId || !googleClientSecret || !googleRedirectUri) {
       return reply.status(503).send({ error: 'Google Calendar OAuth is not configured', code: 'GOOGLE_CALENDAR_OAUTH_UNAVAILABLE' });
     }
-    const state = fastify.jwt.sign({
-      type: 'google_calendar_oauth', organizationId: request.user.organizationId, userId: request.user.id,
-    }, { expiresIn: '10m' });
+    // Signed with a purpose-derived key, never the session key (src/auth/oauth-state.js).
+    const state = signOAuthState('google_calendar_oauth', { organizationId: request.user.organizationId, userId: request.user.id });
     const authorizeUrl = createOAuthClient().generateAuthUrl({
       access_type: 'offline', prompt: 'consent', scope: GOOGLE_CALENDAR_SCOPES, state,
     });
@@ -55,13 +55,8 @@ export default async function googleCalendarRoutes(fastify, options = {}) {
     if (typeof code !== 'string' || typeof state !== 'string') {
       return reply.status(400).send({ error: 'Missing Google OAuth callback data', code: 'GOOGLE_CALENDAR_OAUTH_INVALID' });
     }
-    let oauthState;
-    try {
-      oauthState = fastify.jwt.verify(state);
-    } catch {
-      return reply.status(401).send({ error: 'Invalid Google OAuth state', code: 'GOOGLE_CALENDAR_OAUTH_STATE_INVALID' });
-    }
-    if (oauthState.type !== 'google_calendar_oauth' || typeof oauthState.organizationId !== 'string' || typeof oauthState.userId !== 'string') {
+    const oauthState = verifyOAuthState('google_calendar_oauth', state);
+    if (!oauthState) {
       return reply.status(401).send({ error: 'Invalid Google OAuth state', code: 'GOOGLE_CALENDAR_OAUTH_STATE_INVALID' });
     }
 

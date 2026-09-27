@@ -7,7 +7,8 @@ import path from 'path';
 import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
 import bcrypt from 'bcrypt';
-import { isCurrentUserSession, revokeUserSessions, sessionCookieMaxAge, signUserSession } from '../auth/session.js';
+import { CLIENT_SESSION_TOKEN_TYPE, isCurrentUserSession, revokeUserSessions, sessionCookieMaxAge, signUserSession } from '../auth/session.js';
+import { MAGIC_LINK_TOKEN_TYPE, redeemMagicLink } from '../auth/magic-link.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { contentDisposition } from '../utils/send-file.js';
 import { ATTACHMENT_UNDER_REVIEW, isAttachmentUnderReview, isForeignKeyViolation } from '../services/media-review.service.js';
@@ -98,6 +99,10 @@ export async function resolvePortalPrincipal(prisma, payload) {
  */
 export function magicLinkClaims(user, contact) {
   return {
+    // Typed and single-use: never a session (session verifiers require a
+    // session typ) and redeemable once (its jti is recorded on redemption).
+    typ: MAGIC_LINK_TOKEN_TYPE,
+    jti: randomUUID(),
     id: user.id,
     contactId: contact.id,
     clientId: contact.clientId,
@@ -127,7 +132,11 @@ export default async function clientPortalRoutes(fastify) {
 
       const payload = fastify.jwt.verify(rawToken);
 
-      if (!(await isCurrentUserSession(request.prisma, payload))) return reply.status(401).send({ error: 'Session expired or revoked' });
+      // Only a client-portal session: a staff session, a magic link or any
+      // other token signed with this key is refused.
+      if (!(await isCurrentUserSession(request.prisma, payload, { types: [CLIENT_SESSION_TOKEN_TYPE] }))) {
+        return reply.status(401).send({ error: 'Session expired or revoked' });
+      }
       const principal = await resolvePortalPrincipal(request.prisma, payload);
       if (!principal) return reply.status(401).send({ error: 'Session expired or revoked' });
 
@@ -208,9 +217,15 @@ export default async function clientPortalRoutes(fastify) {
 
     try {
       const payload = fastify.jwt.verify(token);
+      if (payload?.typ !== MAGIC_LINK_TOKEN_TYPE || typeof payload.jti !== 'string') {
+        return reply.status(401).send({ error: 'Invalid, expired, or revoked token' });
+      }
 
       const principal = await resolvePortalPrincipal(request.prisma, payload);
       if (!principal) return reply.status(401).send({ error: 'Invalid, expired, or revoked token' });
+      if (!(await redeemMagicLink(request.prisma, payload))) {
+        return reply.status(401).send({ error: 'This sign-in link has already been used. Request a new one.', code: 'MAGIC_LINK_USED' });
+      }
 
       const sessionToken = signUserSession(fastify.jwt, principal.user, { contactId: principal.contact.id });
 

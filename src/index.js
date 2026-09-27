@@ -19,6 +19,7 @@ import { apiRateLimitMax, isNonApiRequest } from './config/rateLimit.js';
 import { trustHops } from './config/trust-proxy.js';
 import { isCurrentUserSession } from './auth/session.js';
 import { createJoinProjectHandler } from './auth/project-room-access.js';
+import { createSocketAuthMiddleware } from './auth/socket-auth.js';
 import { clientAcquisitionCorsOptions, loadClientAcquisitionConfig } from './services/client-acquisition.contract.js';
 import { initHermesBridge } from './agents/hub-hermes.integration.js';
 
@@ -150,6 +151,8 @@ fastify.addHook('onRequest', async (request, reply) => {
     // No valid token — let route-specific auth handle 401
   }
   if (jwtVerified) {
+    // A verified signature is not enough: only a current staff or client
+    // session (typed, with a user id and sessionVersion) may set request.user.
     try {
       if (!(await isCurrentUserSession(prisma, request.user))) {
         return reply.status(401).send({ error: 'Session expired or revoked' });
@@ -261,25 +264,11 @@ const io = new SocketIO(fastify.server, { cors: { origin: env.isDev ? 'http://lo
 fastify.addHook('onClose', async () => {
   await new Promise((resolve) => io.close(resolve));
 });
-io.use(async (socket, next) => {
-  try {
-    // Accept an explicit auth payload for native/non-browser clients or the
-    // same httpOnly cookie used by browser sessions. Never accept query-string
-    // tokens: WebSocket upgrade URLs are routinely logged by proxies.
-    const cookieToken = fastify.parseCookie(socket.handshake.headers.cookie || '').token;
-    const token = socket.handshake.auth?.token || cookieToken;
-    if (!token) return next(new Error('Authentication required'));
-    const decoded = await fastify.jwt.verify(token);
-    if (!(await isCurrentUserSession(prisma, decoded))) {
-      return next(new Error('Invalid token'));
-    }
-    socket.userId = decoded.id || decoded.contactId;
-    socket.userRole = decoded.role;
-    socket.organizationId = decoded.organizationId;
-    socket.clientId = decoded.clientId;
-    next();
-  } catch (err) { next(new Error('Invalid token')); }
-});
+io.use(createSocketAuthMiddleware({
+  verifyToken: (token) => fastify.jwt.verify(token),
+  parseCookie: (header) => fastify.parseCookie(header),
+  prisma,
+}));
 
 // Socket.IO connection handling. Without this, the client-emitted `join` /
 // `join-project` events were never handled, so room-scoped notifications
