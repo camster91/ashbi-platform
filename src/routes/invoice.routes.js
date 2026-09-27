@@ -410,10 +410,12 @@ export default async function invoiceRoutes(fastify) {
     }, { isolationLevel: 'Serializable' });
   });
 
-  // ─── POST /:id/send — send invoice to client ───────────────────────────────
-  fastify.post('/:id/send', { onRequest: [fastify.authenticate], preHandler: [validateBody(sendInvoiceSchema)] }, async (request, reply) => {
+  // Single path for sending a draft (used by POST /:id/send and bulk send):
+  // issue the public link, try a Checkout session, email the client, audit.
+  // Returns { statusCode, body } so bulk send can report per item.
+  async function sendDraftInvoice(request, invoiceId) {
     const invoice = await fastify.prisma.invoice.findUnique({
-      where: { id: request.params.id },
+      where: { id: invoiceId },
       include: {
         client: {
           include: { contacts: { where: { isPrimary: true }, take: 1 } }
@@ -421,8 +423,8 @@ export default async function invoiceRoutes(fastify) {
         lineItems: { orderBy: { position: 'asc' } }
       }
     });
-    if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
-    if (invoice.status !== 'DRAFT') return reply.status(400).send({ error: 'Only draft invoices can be sent' });
+    if (!invoice) return { statusCode: 404, body: { error: 'Invoice not found' } };
+    if (invoice.status !== 'DRAFT') return { statusCode: 400, body: { error: 'Only draft invoices can be sent' } };
 
     // The link is not tied to the due date: it stays valid while the invoice
     // is open (see invoicePublicAccessFailure), so overdue reminders work.
@@ -472,7 +474,7 @@ export default async function invoiceRoutes(fastify) {
     }
 
     const updated = await fastify.prisma.invoice.update({
-      where: { id: request.params.id },
+      where: { id: invoice.id },
       data: updateData,
       include: {
         client: { select: { id: true, name: true } },
@@ -493,7 +495,13 @@ export default async function invoiceRoutes(fastify) {
       },
     });
 
-    return { ...flagOverdue(updated), emailSent };
+    return { statusCode: 200, body: { ...flagOverdue(updated), emailSent } };
+  }
+
+  // ─── POST /:id/send — send invoice to client ───────────────────────────────
+  fastify.post('/:id/send', { onRequest: [fastify.authenticate], preHandler: [validateBody(sendInvoiceSchema)] }, async (request, reply) => {
+    const { statusCode, body } = await sendDraftInvoice(request, request.params.id);
+    return reply.status(statusCode).send(body);
   });
 
   // ─── GET /:id/pdf — generate and download PDF ──────────────────────────────
@@ -812,27 +820,22 @@ export default async function invoiceRoutes(fastify) {
       return reply.status(400).send({ error: 'ids array is required' });
     }
 
-    let sent = 0;
+    // Each invoice goes through the same path as a single send (public link,
+    // Checkout, email, audit); one failure never stops the rest.
+    const results = [];
     for (const id of ids) {
-      const invoice = await fastify.prisma.invoice.findUnique({
-        where: { id },
-        include: { client: { include: { contacts: { where: { isPrimary: true }, take: 1 } } } }
-      });
-      if (!invoice || invoice.status !== 'DRAFT') continue;
-
-      await fastify.prisma.invoice.update({
-        where: { id },
-        data: { status: 'SENT', sentAt: new Date() }
-      });
-      await recordRequestAuditEvent(fastify.prisma, request, {
-        action: 'invoice.sent',
-        entityId: id,
-        metadata: { fromStatus: invoice.status, toStatus: 'SENT', bulk: true, deliveryAccepted: false, total: invoice.total, currency: invoice.currency },
-      });
-      sent++;
+      try {
+        const { statusCode, body } = await sendDraftInvoice(request, id);
+        results.push(statusCode === 200
+          ? { id, ok: true, statusCode, invoiceNumber: body.invoiceNumber, emailSent: body.emailSent }
+          : { id, ok: false, statusCode, error: body.error });
+      } catch (err) {
+        fastify.log.error({ err, invoiceId: id }, 'Bulk invoice send failed for one invoice');
+        results.push({ id, ok: false, statusCode: 500, error: 'Invoice could not be sent' });
+      }
     }
 
-    return { sent };
+    return { sent: results.filter((result) => result.ok).length, results };
   });
 
   // ─── POST /bulk/archive — archive (void) multiple invoices ──────────────────

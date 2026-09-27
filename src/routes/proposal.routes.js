@@ -304,23 +304,21 @@ export default async function proposalRoutes(fastify) {
     return { success: true, trashId: trashedItem.id };
   });
 
-  // Send proposal (mark as SENT)
-  fastify.post('/:id/send', {
-    onRequest: [fastify.authenticate]
-  }, async (request, reply) => {
-    const { id } = request.params;
-
+  // Single path for sending a draft proposal (POST /:id/send and bulk send):
+  // issue the public link, email the primary contact, record delivery.
+  // Returns { statusCode, body } so bulk send can report per item.
+  async function sendDraftProposal(request, id) {
     const existing = await request.prisma.proposal.findUnique({ where: { id } });
 
     if (!existing) {
-      return reply.status(404).send({ error: 'Proposal not found' });
+      return { statusCode: 404, body: { error: 'Proposal not found' } };
     }
 
     if (existing.status !== 'DRAFT') {
-      return reply.status(400).send({ error: 'Only draft proposals can be sent' });
+      return { statusCode: 400, body: { error: 'Only draft proposals can be sent' } };
     }
     if (existing.validUntil && new Date(existing.validUntil) <= new Date()) {
-      return reply.status(409).send({ error: 'Proposal validity date must be extended before sending' });
+      return { statusCode: 409, body: { error: 'Proposal validity date must be extended before sending' } };
     }
     const access = createPublicAccessWindow(existing.validUntil);
     const proposal = await request.prisma.proposal.update({
@@ -356,7 +354,15 @@ export default async function proposalRoutes(fastify) {
       deliveryFields = await recordProposalDelivery(request.prisma, proposal.id, delivery);
     }
 
-    return withDeliveryState({ ...proposal, ...deliveryFields, emailSent });
+    return { statusCode: 200, body: withDeliveryState({ ...proposal, ...deliveryFields, emailSent }) };
+  }
+
+  // Send proposal (mark as SENT)
+  fastify.post('/:id/send', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { statusCode, body } = await sendDraftProposal(request, request.params.id);
+    return reply.status(statusCode).send(body);
   });
 
   fastify.post('/:id/resend', { onRequest: [fastify.authenticate] }, async (request, reply) => {
@@ -675,11 +681,21 @@ export default async function proposalRoutes(fastify) {
       return reply.status(400).send({ error: 'ids array is required' });
     }
 
-    const result = await request.prisma.proposal.updateMany({
-      where: { id: { in: ids }, status: 'DRAFT' },
-      data: { status: 'SENT', sentAt: new Date() }
-    });
+    // Same path as a single send for each proposal; one failure never stops
+    // the rest.
+    const results = [];
+    for (const id of ids) {
+      try {
+        const { statusCode, body } = await sendDraftProposal(request, id);
+        results.push(statusCode === 200
+          ? { id, ok: true, statusCode, emailSent: body.emailSent }
+          : { id, ok: false, statusCode, error: body.error });
+      } catch (err) {
+        logger.error({ err, proposalId: id }, 'Bulk proposal send failed for one proposal');
+        results.push({ id, ok: false, statusCode: 500, error: 'Proposal could not be sent' });
+      }
+    }
 
-    return { sent: result.count };
+    return { sent: results.filter((result) => result.ok).length, results };
   });
 }
