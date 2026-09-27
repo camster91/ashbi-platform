@@ -680,6 +680,12 @@ Accessibility kept through the convergence:
 
 - The 3px solid focus outline (`.cp-root`) and 44px targets (`min-h-11` in
   `Button` and portal fields, `min-height: 44px` on `.cp-tab`).
+- Buttons whose label changes while busy ("Sending…", "Preparing…") add
+  `busyLabelButtonClass` (`disabled:opacity-100`) so the busy label keeps
+  full contrast instead of Button's `disabled:opacity-50`.
+- Interactive cards use the full `border-border` token (Card's default
+  `border-border/60` is below 3:1 on the cream page). Portal stat tiles are
+  not interactive, so they override StatCard's hover lift and shadow.
 - Portal fields are 16px below the `sm` breakpoint (`portalFieldClass`), so
   iOS Safari does not zoom on focus.
 - Reduced motion: `portal.css` has no transforms and stops its transitions;
