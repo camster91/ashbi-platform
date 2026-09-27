@@ -231,6 +231,7 @@ const DOMAIN_REGISTRARS = [
       ['credential', '/api/credentials'],
       ['team', '/api/team'],
       ['audit-event', '/api/audit-events'],
+      ['domain-event', '/api/domain-events'],
     ],
   },
   {
@@ -365,8 +366,9 @@ test('every domain-registered route module has exactly one owner', () => {
   // 21 modules from the earlier slices, 46 moved out of src/index.js, the
   // MFA routes (#416), the audit event log (#412), the BYOK AI
   // connection (#413), the AI tool approval queue (#413 slice 2) and the
-  // media review staff and share-link APIs (#417).
-  assert.equal(owners.size, 73);
+  // media review staff and share-link APIs (#417), and the domain event
+  // outbox admin API (#412).
+  assert.equal(owners.size, 74);
 });
 
 test('route modules stay encapsulated so cross-domain registration order cannot leak hooks', () => {

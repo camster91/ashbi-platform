@@ -25,6 +25,7 @@ import {
   checkOverdueInvoicesForAllOrganizations,
 } from '../services/automation.service.js';
 import { resolveEmbeddingOrganizationId } from './embedding-ownership.js';
+import { dispatchDomainEvents } from '../services/domain-event-dispatcher.service.js';
 import { initSentry, Sentry } from '../observability/sentry.js';
 import { sendOperationalAlert } from '../observability/alerts.js';
 
@@ -379,6 +380,17 @@ const scheduledWorker = createWorker(
   { concurrency: 1 },
 );
 
+// Domain event outbox dispatcher (#412, docs/event-outbox.md). Concurrency 1
+// per replica; several replicas never double-claim thanks to SKIP LOCKED.
+const domainEventsWorker = createWorker(
+  QUEUES.DOMAIN_EVENTS,
+  async (job) => {
+    if (job.name !== 'dispatch-domain-events') throw new Error(`Unknown domain events job: ${job.name}`);
+    return dispatchDomainEvents(backgroundPrisma);
+  },
+  { concurrency: 1 },
+);
+
 const activeWorkers = [
   emailWorker,
   healthWorker,
@@ -387,10 +399,11 @@ const activeWorkers = [
   weeklyDigestWorker,
   embeddingWorker,
   scheduledWorker,
+  domainEventsWorker,
 ].filter(Boolean);
 
-if (activeWorkers.length !== 7) {
-  throw new Error(`Worker startup incomplete (${activeWorkers.length}/7 active)`);
+if (activeWorkers.length !== 8) {
+  throw new Error(`Worker startup incomplete (${activeWorkers.length}/8 active)`);
 }
 
 await setupRecurringJobs();
@@ -411,7 +424,7 @@ const heartbeatInterval = setInterval(() => {
 }, 15_000);
 heartbeatInterval.unref();
 
-console.log(`Workers started (${activeWorkers.length}/7 active)`);
+console.log(`Workers started (${activeWorkers.length}/8 active)`);
 
 let shuttingDown = false;
 async function shutdown(signal) {

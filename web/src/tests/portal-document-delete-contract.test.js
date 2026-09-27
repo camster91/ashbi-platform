@@ -13,7 +13,10 @@ describe('client portal document deletion contract', () => {
   it('names the selected document and guards duplicate deletion requests', () => {
     expect(source.match(/documentToDelete/g).length).toBeGreaterThanOrEqual(10);
     expect(source.match(/pending=\{deletingDocument\}/g)).toHaveLength(2);
-    expect(source.match(/disabled=\{deletingDocument\}/g)).toHaveLength(2);
+    // Both surfaces render the shared PortalDocumentList, which disables every
+    // delete trigger while a deletion is pending.
+    expect(source.match(/deleting=\{deletingDocument\}/g)).toHaveLength(2);
+    expect(source.match(/disabled=\{deleting\}/g)).toHaveLength(1);
   });
 
   it('keeps delete failures in the open dialog instead of reporting success', () => {
