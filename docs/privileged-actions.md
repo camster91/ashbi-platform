@@ -73,6 +73,7 @@ once.
 | Action | Route | How it is protected |
 | --- | --- | --- |
 | Create an API key | `POST /api/api-keys` | `requireRecentAuth` |
+| Create an administrator | `POST /api/team` with `role: ADMIN`, `POST /api/auth/register` (after bootstrap) with `role: ADMIN` | `requireRecentAuth` only for the `ADMIN` role (other roles are not prompted); every created account emits `user.created { role, via }`. The bootstrap admin (first user, `ADMIN_INVITE_TOKEN`) is unchanged |
 | Change a member's role, or deactivate / reactivate a member | `PUT /api/team/:id` | `requireRecentAuthForAccessChange`: `requireRecentAuth` only when the role or active state actually changes; name, skills and capacity edits are not prompted |
 | Reset another member's password | `POST /api/team/:id/reset-password` | `requireRecentAuth` (added beyond the issue's list: it hands the admin the member's account) |
 | Reveal a stored credential | `GET /api/credentials/:id`, `GET /api/credentials/:id/password` | `requireRecentAuth` (in addition to the existing purpose-tagged credential-access audit) |
@@ -121,6 +122,31 @@ The guarded actions keep emitting their own events (`api_key.created`,
 `ai.tool_executed`, `ai.tool_failed`, `review.share_link_created`, and the
 credential vault's access records). See [audit-events.md](audit-events.md).
 
+## Session token types
+
+Every JWT signed with `JWT_SECRET` carries an explicit `typ`, and only two of
+them are sessions (`src/auth/session.js`):
+
+| `typ` | Issued by | Accepted by |
+| --- | --- | --- |
+| `session` | staff sign-in (`/api/auth/login`, `/api/auth/login/mfa`), recovery-code reissue | the `/api` hook, `fastify.authenticate` / `adminOnly`, Socket.IO |
+| `client_session` | `/api/client-portal/verify-token`, `/api/auth/client/login`, `/api/auth/client/signup` | the same verifiers (tenancy still refuses CLIENT sessions on staff APIs) and the client-portal guard, which accepts **only** this type |
+| `client_magic_link` | `/api/client-portal/request-access` (emailed) | only `/api/client-portal/verify-token`, **once**: its `jti` is recorded in `client_portal_link_redemptions` |
+| `bot_access` | `/api/bot/auth` | nothing (bot routes authenticate with the `BOT_SECRET` bearer) |
+
+A session must also carry a user `id` and an integer `sessionVersion`, and the
+`typ` must match the role (`client_session` exactly for `CLIENT`). OAuth
+`state` (Google Calendar, Slack), re-authentication cookies and MFA challenge
+tokens are signed with keys *derived* from `JWT_SECRET` per purpose
+(`src/auth/oauth-state.js`, `src/auth/reauth.js`, `src/auth/mfa.js`), so they
+never verify as a session at all. Request logs and browser telemetry redact
+OAuth `state` and `code` query parameters.
+
+**Migration:** session tokens issued before `typ` existed are refused, so every
+signed-in user (staff and portal clients) signs in once more after the
+release. Magic links emailed before the release no longer work; clients
+request a new one.
+
 ## API keys (service credentials)
 
 API keys authenticate the AI bridge (`/api/ai-bridge/*`, see
@@ -168,6 +194,11 @@ key's access, and gives keys without an expiry a sunset date:
   `adminOnly` trusts the role carried in the session token.
 
 ## Known limitations
+
+- **Organization-level MFA enforcement** is not implemented: creating or
+  promoting an administrator requires step-up re-authentication, but an
+  organization cannot yet require every administrator to enrol in two-factor
+  authentication. Tracked as a follow-up to the security audit at 8687cf9.
 
 - Two-factor re-authentication shares the sign-in attempt budget. Someone
   holding only a stolen session cookie can therefore use bad codes to lock the
