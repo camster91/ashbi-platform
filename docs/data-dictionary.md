@@ -106,8 +106,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [TaskTemplate](#model-tasktemplate) | `task_templates` | yes | no | 8 |
 | [Template](#model-template) | `templates` | yes | no | 11 |
 | [Thread](#model-thread) | `threads` | no | no | 26 |
-| [TimeEntry](#model-timeentry) | `time_entries` | no | yes | 23 |
-| [TimeSession](#model-timesession) | `time_sessions` | no | no | 15 |
+| [TimeEntry](#model-timeentry) | `time_entries` | no | yes | 25 |
+| [TimeSession](#model-timesession) | `time_sessions` | no | no | 16 |
 | [TrashedItem](#model-trasheditem) | `trashed_items` | yes | yes | 9 |
 | [UnmatchedEmail](#model-unmatchedemail) | `unmatched_emails` | yes | no | 15 |
 | [User](#model-user) | `users` | yes | no | 52 |
@@ -2460,7 +2460,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `date` | DateTime | required | `now()` |  |  |
 | `billable` | Boolean | required | `true` |  |  |
 | `hourlyRate` | Float | optional |  |  | Override rate for this entry |
-| `source` | String | required | `"MANUAL"` |  |  |
+| `source` | String | required | `"MANUAL"` |  | MANUAL, TIMER |
+| `timeSessionId` | String | unique, optional |  |  |  |
 | `invoiced` | Boolean | required | `false` |  | Has this been included in an invoice? |
 | `invoiceId` | String | optional |  |  | Link to invoice if billed |
 | `reviewStatus` | String | required | `"PENDING"` |  | PENDING, APPROVED, REJECTED |
@@ -2477,6 +2478,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `project` | Project | required |  | → Project, via (projectId) → (id), onDelete Cascade |  |
 | `user` | User | required |  | → User, via (userId) → (id) |  |
 | `invoice` | Invoice | optional |  | → Invoice, via (invoiceId) → (id), onDelete SetNull |  |
+| `timeSession` | TimeSession | optional |  | → TimeSession, via (timeSessionId) → (id), onDelete SetNull |  |
 
 ### Model TimeSession
 
@@ -2499,12 +2501,13 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `duration` | Int | required | `0` |  | Duration in minutes (calculated on stop) |
 | `description` | String | optional |  |  |  |
 | `billable` | Boolean | required | `true` |  |  |
-| `isRunning` | Boolean | required | `false` |  | True if timer is currently running |
+| `isRunning` | Boolean | required | `false` |  |  |
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 | `user` | User | required |  | → User, via (userId) → (id) |  |
 | `project` | Project | required |  | → Project, via (projectId) → (id), onDelete Cascade |  |
 | `task` | Task | optional |  | → Task, via (taskId) → (id), onDelete SetNull |  |
+| `timeEntry` | TimeEntry | optional |  | → TimeEntry |  |
 
 ### Model TrashedItem
 

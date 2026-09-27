@@ -7,7 +7,8 @@ import { validateBody, timeSessionStartSchema } from '../validators/schemas.js';
 import {
   startTimer,
   stopTimer,
-  getRunningTimer
+  getRunningTimer,
+  sendTimerError
 } from '../services/timeTracking.service.js';
 
 export default async function timeSessionRoutes(fastify) {
@@ -19,16 +20,25 @@ export default async function timeSessionRoutes(fastify) {
     const { projectId, taskId, description } = request.body;
     const userId = request.user.id;
 
-    const session = await startTimer(userId, projectId, taskId, description);
-    return reply.status(201).send(session);
+    try {
+      const session = await startTimer(userId, projectId, taskId, description);
+      return reply.status(201).send(session);
+    } catch (err) {
+      return sendTimerError(reply, err);
+    }
   });
 
-  // Stop a running timer — creates a completed TimeEntry
+  // Stop the caller's running timer — creates a completed TimeEntry
+  // (source TIMER) in the same transaction.
   fastify.post('/:id/stop', {
     onRequest: [fastify.authenticate]
-  }, async (request) => {
+  }, async (request, reply) => {
     const { id } = request.params;
-    return stopTimer(id);
+    try {
+      return await stopTimer(id, request.user.id);
+    } catch (err) {
+      return sendTimerError(reply, err);
+    }
   });
 
   // Get currently running timer for the current user
