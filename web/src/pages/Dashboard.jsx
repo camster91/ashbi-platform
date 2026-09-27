@@ -25,6 +25,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useSocket } from '../hooks/useSocket';
 import { Card, Skeleton } from '../components/ui';
 import { formatRelativeTime, cn } from '../lib/utils';
+import { formatDate, formatMoney } from '../lib/format';
 import TimeTrackerWidget from '../components/widgets/TimeTrackerWidget';
 import UpcomingEventsWidget from '../components/widgets/UpcomingEventsWidget';
 import OutreachFunnelWidget from '../components/widgets/OutreachFunnelWidget';
@@ -131,17 +132,19 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-3">
           <button
+            type="button"
             onClick={() => navigate('/projects?create=true')}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition-all shadow-md active:scale-95"
+            className="flex min-h-11 items-center gap-2 px-4 py-2 text-sm font-semibold bg-primary text-primary-foreground rounded-full hover:bg-primary/90 transition-all shadow-md active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
-            <Plus className="w-4 h-4" /> New Project
+            <Plus className="w-4 h-4" aria-hidden="true" /> New Project
           </button>
           {isAdmin && (
             <button
+              type="button"
               onClick={() => navigate('/invoices?create=true')}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-card border border-border text-foreground rounded-full hover:bg-muted transition-all active:scale-95"
+              className="flex min-h-11 items-center gap-2 px-4 py-2 text-sm font-semibold bg-card border border-border text-foreground rounded-full hover:bg-muted transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
-              <Receipt className="w-4 h-4" /> New Invoice
+              <Receipt className="w-4 h-4" aria-hidden="true" /> New Invoice
             </button>
           )}
         </div>
@@ -156,7 +159,14 @@ export default function Dashboard() {
             iconColor="text-emerald-600"
             iconBg="bg-emerald-100 dark:bg-emerald-900/30"
             label="MRR"
-            value={`$${(stats?.mrr || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}
+            value={formatMoney(stats?.mrr || 0, 'USD', { compact: true })}
+            subtitle={
+              <span className="text-xs text-muted-foreground">
+                {stats?.activeRetainerCount > 0
+                  ? `${stats.activeRetainerCount} active retainer${stats.activeRetainerCount === 1 ? '' : 's'}`
+                  : 'No active retainers'}
+              </span>
+            }
             onClick={() => navigate('/retainers')}
           />
         )}
@@ -167,14 +177,25 @@ export default function Dashboard() {
             icon={DollarSign}
             iconColor={stats?.overdueCount > 0 ? 'text-red-600' : 'text-green-600'}
             iconBg={stats?.overdueCount > 0 ? 'bg-red-100 dark:bg-red-900/30' : 'bg-green-100 dark:bg-green-900/30'}
-            label="Outstanding"
-            value={`$${(stats?.totalOutstanding || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}
-            subtitle={stats?.overdueCount > 0 ? (
-              <span className="text-xs text-red-700 dark:text-red-400 flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3" />
-                {stats.overdueCount} overdue (${(stats.overdueAmount || 0).toLocaleString()})
+            label="Outstanding (sent)"
+            value={formatMoney(stats?.totalOutstanding || 0, undefined, { compact: true })}
+            subtitle={
+              <span className="flex flex-col gap-0.5 text-xs">
+                {stats?.overdueCount > 0 && (
+                  <span className="text-red-700 dark:text-red-400 flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3" aria-hidden="true" />
+                    {stats.overdueCount} overdue ({formatMoney(stats.overdueAmount || 0, undefined, { compact: true })})
+                  </span>
+                )}
+                {stats?.draftInvoiceCount > 0 ? (
+                  <span className="text-muted-foreground">
+                    Drafts {formatMoney(stats.draftInvoiceTotal || 0, undefined, { compact: true })} · {stats.draftInvoiceCount} not sent
+                  </span>
+                ) : stats?.overdueCount > 0 ? null : (
+                  <span className="text-muted-foreground">Sent, unpaid invoices</span>
+                )}
               </span>
-            ) : null}
+            }
             onClick={() => navigate('/invoices')}
           />
         )}
@@ -263,7 +284,7 @@ export default function Dashboard() {
                 tracks the "valid destinations" requirement. */}
           </div>
           {stats?.recentActivity?.length > 0 ? (
-            <ul className="divide-y divide-border max-h-[400px] overflow-y-auto">
+            <ul className="divide-y divide-border max-h-[400px] overflow-y-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring" tabIndex={0} aria-label="Recent activity">
               {stats.recentActivity.map(activity => (
                 <li key={activity.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
                   <div className="flex items-start gap-3">
@@ -315,7 +336,7 @@ export default function Dashboard() {
             </div>
           </div>
           {allNotifications.length > 0 ? (
-            <ul className="divide-y divide-border max-h-[400px] overflow-y-auto">
+            <ul className="divide-y divide-border max-h-[400px] overflow-y-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring" tabIndex={0} aria-label="Unread notifications">
               {allNotifications.map(notif => (
                 <li key={notif.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
                   <div className="flex items-start gap-3">
@@ -452,7 +473,7 @@ export default function Dashboard() {
                         )}
                       </div>
                       {project.endDate && (
-                        <p className="text-xs text-muted-foreground mt-1">Due {new Date(project.endDate).toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })}</p>
+                        <p className="text-xs text-muted-foreground mt-1">Due {formatDate(project.endDate)}</p>
                       )}
                     </div>
                     <div className="text-right ml-3">
@@ -558,7 +579,7 @@ export default function Dashboard() {
                       )}
                     </div>
                     <span className="text-xs text-red-700 dark:text-red-400 font-medium ml-2">
-                      {new Date(task.dueDate).toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })}
+                      {formatDate(task.dueDate)}
                     </span>
                   </div>
                 </li>
@@ -628,7 +649,7 @@ export default function Dashboard() {
                       new Date(task.dueDate) < new Date() ? 'text-red-700 dark:text-red-400' : 'text-muted-foreground'
                     )}>
                       <Clock className="w-3 h-3" />
-                      {new Date(task.dueDate).toLocaleDateString({ month: 'short', day: 'numeric' })}
+                      {formatDate(task.dueDate)}
                     </span>
                   )}
                 </Link>
@@ -644,21 +665,16 @@ export default function Dashboard() {
 /* ─── Stat Card Component ─── */
 function StatCard({ icon: Icon, iconColor, iconBg, label, value, subtitle, badge, onClick }) {
   const Component = onClick ? 'button' : 'div';
-  const ariaAttrs = onClick ? {
-    'aria-label': `${label}: ${value}`,
-  } : {};
+  // The button's accessible name is its visible text (label, value and the
+  // subtitle context such as "Drafts $12.2K · 2 not sent").
   return (
     <Component
+      type={onClick ? 'button' : undefined}
       className={cn(
         'p-5 rounded-2xl bg-card border border-border/60 transition-all relative group hover-lift w-full text-left',
-        onClick && 'cursor-pointer hover:border-primary/20 shadow-sm'
+        onClick && 'cursor-pointer hover:border-primary/20 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
       )}
       onClick={onClick}
-      role={onClick ? 'button' : undefined}
-      tabIndex={onClick ? 0 : undefined}
-      aria-label={onClick ? label : undefined}
-      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(e); } } : undefined}
-      {...ariaAttrs}
     >
       {badge && (
         <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-lg border-2 border-background animate-pulse motion-reduce:animate-none">
@@ -720,7 +736,7 @@ function ClientHealthCard({ client, navigate }) {
             retainerBadge[client.retainerStatus] || 'bg-muted text-muted-foreground'
           )}>
             {client.retainerStatus.replace('_', ' ')}
-            {client.monthlyAmount > 0 && ` · $${client.monthlyAmount.toLocaleString()}/mo`}
+            {client.monthlyAmount > 0 && ` · ${formatMoney(client.monthlyAmount, 'USD')}/mo`}
           </span>
         )}
 

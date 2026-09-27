@@ -1,30 +1,14 @@
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { formatDate } from './format';
 
 export function cn(...inputs) {
   return twMerge(clsx(inputs));
 }
 
-export function formatDate(date) {
-  if (!date) return '';
-  const d = new Date(date);
-  return d.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: d.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined,
-  });
-}
-
-export function formatDateTime(date) {
-  if (!date) return '';
-  const d = new Date(date);
-  return d.toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
+// Dates render through the shared Intl formatters in ./format so every screen
+// uses one shape ("Sep 27, 2026" / "Sep 27, 2026, 3:04 p.m.").
+export { formatDate, formatDateTime, formatMoney } from './format';
 
 export function formatRelativeTime(date) {
   if (!date) return '';

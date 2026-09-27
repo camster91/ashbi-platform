@@ -1,14 +1,14 @@
 // Shared display formatters (dates and money) so every screen renders the same
-// shape: "Sep 27, 2026", "Sep 27, 2026, 3:04 p.m." and "$10,170.00".
+// shape: "Sep 27, 2026", "Sep 27, 2026, 3:04 PM" and "$10,170.00".
 //
 // There is no per-organization locale setting yet, so the workspace locale is
-// a single module-level value (Canadian English by default). Call
+// a single module-level value (en-US by default, matching the USD default currency of the data model). Call
 // setFormatLocale() once an organization locale exists; every helper reads it.
 //
 // Invoice, client-portal, PDF and email currency rendering still use their own
 // formatting and should adopt formatMoney() in a follow-up.
 
-export const DEFAULT_LOCALE = 'en-CA';
+export const DEFAULT_LOCALE = 'en-US';
 export const DEFAULT_CURRENCY = 'USD';
 
 let activeLocale = DEFAULT_LOCALE;
@@ -39,7 +39,7 @@ export function formatDate(value, options = {}) {
   }).format(date);
 }
 
-/** "Sep 27, 2026, 3:04 p.m." — empty string for missing/invalid input. */
+/** "Sep 27, 2026, 3:04 PM" — empty string for missing/invalid input. */
 export function formatDateTime(value, options = {}) {
   const date = toDate(value);
   if (!date) return '';
@@ -54,7 +54,7 @@ export function formatDateTime(value, options = {}) {
 }
 
 /**
- * "$10,170.00" (or "US$10,170.00" when the currency differs from the locale's
+ * "$10,170.00" (or "CA$10,170.00" when the currency differs from the locale's
  * own). `compact: true` gives "$12.2K" for KPI tiles. Non-numeric input renders
  * as a zero amount so a missing total never shows "NaN".
  */
