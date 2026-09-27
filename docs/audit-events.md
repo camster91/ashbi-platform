@@ -12,6 +12,9 @@ actions; mutable presentation records are not sufficient evidence").
 - Reader: `GET /api/audit-events` (admin only), shown in the web app under
   **Settings → Activity log**.
 
+Domain events for integration (transactional, delivered to subscribers) live
+in a separate outbox: [event-outbox.md](event-outbox.md).
+
 Related #412 references, all generated and checked for drift:
 
 - [data-dictionary.md](data-dictionary.md): every model, its table, tenant
@@ -111,12 +114,15 @@ notes, signer names, email addresses, API key material or password hashes.
 | `ai.tool_failed` | `ai_action` | USER (the approver) | An approved action failed. Never retried | `tool`, `toolClass`, `source`, `requesterUserId`, `correlationId`, `errorCode` (`ACTION_TARGET_UNAVAILABLE`, `ACTION_EXECUTION_FAILED`, `ACTION_TIMEOUT`), `outcome` (`failed`, or `unknown` when an external delivery was attempted) |
 | `ai.tool_expired` | `ai_action` | USER | An approval was attempted after the action's approval window (10 minutes, *Proposal*) | `tool`, `toolClass`, `source`, `requesterUserId`, `correlationId` |
 | `ai.tool_denied` | `ai_action` | USER | The executor refused a tool call or an approval. `entityId` is the action id when there is one | `tool`, `reason` (`TOOL_UNKNOWN`, `INPUT_TOO_LARGE`, `INVALID_INPUT`, `MALFORMED_TOOL_CALL`, `TOO_MANY_TOOL_CALLS`, `ROLE_DENIED`, `AI_DISABLED`, `IDEMPOTENCY_KEY_REQUIRED`, `IDEMPOTENCY_CONFLICT`, `RECORD_NOT_FOUND`, `TARGET_UNAVAILABLE`, `APPROVER_NOT_ALLOWED`), `source`, `correlationId` |
+| `ai.tool_session_run` | `ai_session` | USER | `POST /api/ai-tools/sessions` ran an assistant tool session (see [ai-tool-registry.md](ai-tool-registry.md#assistant-sessions)); `entityId` is the server-generated session id. Ids and counts only: never the prompt, the answer or tool output. Not written when the kill switch refuses the request before the session starts | `turns`, `toolCalls`, `readCount`, `pendingCount`, `deniedCount`, `stoppedReason` (`null`, `MAX_TURNS`, `TIMEOUT`, `CLIENT_CLOSED`, `ERROR` (an unexpected failure; counts are those reached so far), `AI_DISABLED`, `AI_BUDGET_EXCEEDED`, `AI_CONNECTION_DISABLED`, `AI_CONNECTION_UNAVAILABLE` or an `AI_PROVIDER_*` code), `answered`, `correlationId` (the request id) |
 | `migration_import.applied` | `import_run` | SYSTEM | `scripts/import-slack-export.mjs --apply` after the import transaction commits; `entityId` is the `ImportRun` id (see [slack-export-migration.md](slack-export-migration.md)) | `source` (`SLACK_EXPORT`), `created`, `unchanged`, `alreadyPresent`, `channels` |
 | `migration_import.rolled_back` | `import_run` | SYSTEM | `scripts/import-slack-export.mjs --rollback <runId>` | `source`, `deletedMessages`, `deletedRecords` |
 | `review.session_created` | `review_session` | USER | `POST /api/reviews` (see [media-review.md](media-review.md)); `entityId` is the `ReviewSession` id | `projectId`, `attachmentId`, `version`, `previousSessionId` (the version it replaces, or `null`), `mediaKind` (`image`, `pdf`, `video`, `audio`) |
 | `review.decision_recorded` | `review_session` | USER or CLIENT | `POST /api/reviews/:id/decisions` (`via: staff`) and `POST /api/portal/review/:token/decisions` (a client through a share link created with `allowDecision`, `via: share_link`, `actorUserId` null). The guest's name, email and note stay on the append-only `ReviewDecision` row, never in the event | `decisionId`, `decision` (`approved` or `changes_requested`), `fromStatus`, `toStatus`, `via`, `shareLinkId` |
 | `review.share_link_created` | `review_share_link` | USER | `POST /api/reviews/:id/share-links` (step-up re-authentication); never the token or its hash | `sessionId`, `expiresAt`, `expiresInDays`, `allowDecision` |
 | `review.share_link_revoked` | `review_share_link` | USER | `POST /api/reviews/:id/share-links/:linkId/revoke` (only the first revocation of a link) | `sessionId`, `wasExpired` |
+| `domain_event.replayed` | `domain_event` | USER | `POST /api/domain-events/replay` (admin, step-up); one event per requeued outbox row ([event-outbox.md](event-outbox.md)) | `type`, `aggregateType`, `aggregateId`, `sequence`, `fromStatus`, `toStatus`, `replayCount`, `previousAttempts` |
+| `domain_event.discarded` | `domain_event` | USER | `POST /api/domain-events/discard` (admin, step-up); one event per discarded dead outbox row ([event-outbox.md](event-outbox.md)) | `type`, `aggregateType`, `aggregateId`, `sequence`, `fromStatus`, `toStatus`, `reason`, `replayCount`, `previousAttempts` |
 
 `auth.login_failed` details:
 
