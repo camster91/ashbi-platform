@@ -8,6 +8,7 @@
 // a written event can never be altered or removed.
 import { isIP } from 'node:net';
 import defaultLogger from '../utils/logger.js';
+import { getRequestImpersonation } from '../utils/request-context.js';
 
 export const AUDIT_ACTOR_TYPES = Object.freeze(['USER', 'CLIENT', 'SYSTEM', 'WEBHOOK', 'BOT']);
 const ACTOR_TYPE_SET = new Set(AUDIT_ACTOR_TYPES);
@@ -63,7 +64,20 @@ export const AUDIT_EVENT_CATALOG = Object.freeze({
   'review.decision_recorded': { entityType: 'review_session', metadata: ['decisionId', 'decision', 'fromStatus', 'toStatus', 'via', 'shareLinkId'] },
   'review.share_link_created': { entityType: 'review_share_link', metadata: ['sessionId', 'expiresAt', 'expiresInDays', 'allowDecision'] },
   'review.share_link_revoked': { entityType: 'review_share_link', metadata: ['sessionId', 'wasExpired'] },
+  // Support impersonation and break-glass recovery (#416, docs/privileged-actions.md).
+  'impersonation.started': { entityType: 'impersonation_session', metadata: ['subjectUserId', 'subjectRole', 'expiresAt', 'ttlSeconds', 'readOnly'] },
+  'impersonation.ended': { entityType: 'impersonation_session', metadata: ['reason', 'subjectUserId', 'durationSeconds'] },
+  'break_glass.granted': { entityType: 'break_glass_grant', metadata: ['targetUserId', 'operatorId', 'expiresAt', 'promoteToAdmin'] },
+  'break_glass.redeemed': { entityType: 'break_glass_grant', metadata: ['targetUserId', 'operatorId', 'promoted', 'reactivated', 'mfaReset', 'apiKeysRevoked'] },
+  'break_glass.revoked': { entityType: 'break_glass_grant', metadata: ['targetUserId', 'operatorId'] },
 });
+
+/**
+ * Metadata fields every action may carry. An event written while an admin is
+ * viewing as another person (#416) records the admin as the actor and the
+ * viewed person here, whichever action it is.
+ */
+export const AUDIT_UNIVERSAL_METADATA = Object.freeze(['impersonatedUserId', 'impersonationSessionId']);
 
 /** action -> entityType, derived from the catalog. */
 export const AUDIT_ACTIONS = Object.freeze(Object.fromEntries(
@@ -130,7 +144,8 @@ export function truncateIp(ip) {
  * @returns {Record<string, string | number | boolean | null>}
  */
 export function sanitizeAuditMetadata(metadata, action) {
-  const allowed = AUDIT_EVENT_CATALOG[action]?.metadata;
+  const actionFields = AUDIT_EVENT_CATALOG[action]?.metadata;
+  const allowed = actionFields ? [...actionFields, ...AUDIT_UNIVERSAL_METADATA] : null;
   if (!allowed || !metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return {};
   const source = /** @type {Record<string, unknown>} */ (metadata);
   /** @type {Record<string, string | number | boolean | null>} */
@@ -163,10 +178,15 @@ export function actorTypeForRole(role) {
  */
 export function auditContextFromRequest(request, overrides = {}) {
   const user = request?.user;
+  // While an admin views as another person the admin is the actor; the viewed
+  // person is added to the metadata by recordAuditEvent.
+  const impersonation = request?.impersonation;
   return {
     organizationId: user?.organizationId ?? null,
-    actorUserId: overrides.actorUserId !== undefined ? overrides.actorUserId : (user?.id ?? null),
-    actorType: overrides.actorType ?? actorTypeForRole(user?.role),
+    actorUserId: overrides.actorUserId !== undefined
+      ? overrides.actorUserId
+      : (impersonation?.actorUserId ?? user?.id ?? null),
+    actorType: overrides.actorType ?? (impersonation ? 'USER' : actorTypeForRole(user?.role)),
     requestId: request?.id ?? null,
     ip: request?.ip ?? null,
   };
@@ -223,17 +243,33 @@ export async function recordAuditEvent(prisma, event, { logger = defaultLogger }
       logger.warn({ auditAction: action }, 'Audit event rejected: no owning organization');
       return null;
     }
+    let { actorUserId, actorType } = event;
+    let metadata = event.metadata;
+    // Written during an impersonated request (#416): whoever the caller named
+    // as the actor, record the real admin and the viewed person.
+    const impersonation = getRequestImpersonation();
+    if (impersonation && impersonation.organizationId === organizationId) {
+      if (!actorUserId || actorUserId === impersonation.subjectUserId) {
+        actorUserId = impersonation.actorUserId;
+        actorType = 'USER';
+      }
+      metadata = {
+        ...(metadata && typeof metadata === 'object' ? metadata : {}),
+        impersonatedUserId: impersonation.subjectUserId,
+        impersonationSessionId: impersonation.sessionId,
+      };
+    }
     return await prisma.auditEvent.create({
       data: {
         organizationId,
-        actorUserId: boundedString(event.actorUserId),
-        actorType: event.actorType,
+        actorUserId: boundedString(actorUserId),
+        actorType,
         action,
         entityType: event.entityType ?? entityType,
         entityId: boundedString(event.entityId),
         requestId: boundedString(event.requestId, 100),
         ip: truncateIp(event.ip),
-        metadata: sanitizeAuditMetadata(event.metadata, action),
+        metadata: sanitizeAuditMetadata(metadata, action),
       },
     });
   } catch (err) {

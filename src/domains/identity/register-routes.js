@@ -1,5 +1,6 @@
 import authRoutes from '../../routes/auth.routes.js';
 import mfaRoutes from '../../routes/mfa.routes.js';
+import privilegedAccessRoutes from '../../routes/privileged-access.routes.js';
 import settingsRoutes from '../../routes/settings.routes.js';
 import apiKeyRoutes from '../../routes/api-key.routes.js';
 import credentialRoutes from '../../routes/credential.routes.js';
@@ -12,7 +13,8 @@ export { authenticateApiKey } from '../../routes/api-key.routes.js';
 
 /**
  * Register identity and access routes: authentication, workspace settings,
- * API keys, the credential vault, team membership, and the admin audit log.
+ * API keys, the credential vault, team membership, the admin audit log, and
+ * support impersonation / break-glass recovery.
  *
  * Every route module here is an encapsulated Fastify plugin (none uses
  * fastify-plugin or skip-override), so its hooks cannot affect other domains.
@@ -23,6 +25,7 @@ export { authenticateApiKey } from '../../routes/api-key.routes.js';
 export async function registerIdentityRoutes(fastify) {
   await fastify.register(authRoutes, { prefix: '/api/auth' });
   await fastify.register(mfaRoutes, { prefix: '/api/auth' });
+  await fastify.register(privilegedAccessRoutes, { prefix: '/api/auth' });
   await fastify.register(settingsRoutes, { prefix: '/api/settings' });
   await fastify.register(apiKeyRoutes, { prefix: '/api/api-keys' });
   await fastify.register(credentialRoutes, { prefix: '/api/credentials' });

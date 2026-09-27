@@ -18,6 +18,7 @@ import prisma from './config/db.js';
 import { apiRateLimitMax, isNonApiRequest } from './config/rateLimit.js';
 import { trustHops } from './config/trust-proxy.js';
 import { isCurrentUserSession } from './auth/session.js';
+import { applyImpersonation, createImpersonationHook } from './auth/impersonation.js';
 import { createJoinProjectHandler } from './auth/project-room-access.js';
 import { clientAcquisitionCorsOptions, loadClientAcquisitionConfig } from './services/client-acquisition.contract.js';
 import { initHermesBridge } from './agents/hub-hermes.integration.js';
@@ -160,11 +161,18 @@ fastify.addHook('onRequest', async (request, reply) => {
   }
 });
 
-// Auth decorators
+// Support impersonation (#416, docs/privileged-actions.md): when the `imp`
+// cookie names a live, read-only view, swap request.user for the viewed
+// person and refuse writes and sensitive areas. Runs for /api/auth too.
+fastify.addHook('onRequest', createImpersonationHook({ prisma, isCurrentUserSession }));
+
+// Auth decorators. Re-verifying the session cookie resets request.user to the
+// signed-in admin, so an active impersonation is re-applied afterwards.
 fastify.decorate('authenticate', async (request, reply) => {
   try {
     await request.jwtVerify();
     if (!(await isCurrentUserSession(prisma, request.user))) throw new Error('Revoked session');
+    applyImpersonation(request);
   } catch (err) { return reply.status(401).send({ error: 'Unauthorized' }); }
 });
 
@@ -172,6 +180,7 @@ fastify.decorate('adminOnly', async (request, reply) => {
   try {
     await request.jwtVerify();
     if (!(await isCurrentUserSession(prisma, request.user))) throw new Error('Revoked session');
+    applyImpersonation(request);
     if (request.user.role !== 'ADMIN') return reply.status(403).send({ error: 'Admin access required' });
   } catch (err) { return reply.status(401).send({ error: 'Unauthorized' }); }
 });
