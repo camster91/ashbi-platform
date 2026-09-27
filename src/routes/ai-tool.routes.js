@@ -291,6 +291,10 @@ export default async function aiToolRoutes(fastify, options = {}) {
     }
     inFlight.set(userKey, (inFlight.get(userKey) ?? 0) + 1);
 
+    // Provider and tool calls abandoned at the deadline keep running in the
+    // background; the user's in-flight slot stays taken until they settle so
+    // timed-out sessions can't pile up calls.
+    const abandoned = [];
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort('TIMEOUT'), sessionDeadlineMs);
     // The client went away before the answer was sent: stop at the next check.
@@ -345,6 +349,7 @@ export default async function aiToolRoutes(fastify, options = {}) {
           sessionId,
           signal: controller.signal,
           onStep: (step) => partial.push(step),
+          onAbandon: (settled) => abandoned.push(settled),
         });
       } catch (error) {
         // Unexpected failure (a database error, a bug): audit what happened
@@ -365,9 +370,13 @@ export default async function aiToolRoutes(fastify, options = {}) {
     } finally {
       clearTimeout(timer);
       reply.raw.off('close', onClose);
-      const remaining = (inFlight.get(userKey) ?? 1) - 1;
-      if (remaining > 0) inFlight.set(userKey, remaining);
-      else inFlight.delete(userKey);
+      const release = () => {
+        const remaining = (inFlight.get(userKey) ?? 1) - 1;
+        if (remaining > 0) inFlight.set(userKey, remaining);
+        else inFlight.delete(userKey);
+      };
+      if (abandoned.length) Promise.allSettled(abandoned).then(release);
+      else release();
     }
   });
 }

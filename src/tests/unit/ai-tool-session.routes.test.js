@@ -349,6 +349,52 @@ describe('POST /api/ai-tools/sessions', () => {
     assert.equal(calls, 2, 'no further model turn after the disconnect');
   });
 
+  it('stops with TIMEOUT while a slow tool call is still running', async (t) => {
+    let invoked = false;
+    const { post, audits } = await setup(t, {
+      routeOptions: { sessionDeadlineMs: 80 },
+      replies: [{ tool_calls: [{ name: 'list_projects', arguments: {} }] }, { final: 'too late' }],
+      wrapExecutor: (executor) => ({
+        ...executor,
+        registry: executor.registry,
+        recordDenial: executor.recordDenial,
+        invoke: async (...args) => {
+          invoked = true;
+          await delay(1_000);
+          return executor.invoke(...args);
+        },
+      }),
+    });
+    const started = Date.now();
+    const response = await post('teamA', { prompt: PROMPT });
+    assert.ok(invoked, 'the tool call had started');
+    assert.ok(Date.now() - started < 900, 'answered at the deadline, not when the tool finished');
+    assert.deepEqual([response.statusCode, response.json().stoppedReason], [200, 'TIMEOUT']);
+    assert.equal(audits('ai.tool_session_run')[0].metadata.stoppedReason, 'TIMEOUT');
+  });
+
+  it('keeps the in-flight slot until an abandoned model call settles', async (t) => {
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    let calls = 0;
+    const { post } = await setup(t, {
+      routeOptions: { sessionDeadlineMs: 80 },
+      platformChat: async () => {
+        calls += 1;
+        if (calls === 1) await gate;
+        return JSON.stringify({ final: 'ok' });
+      },
+    });
+    const timedOut = await post('teamA', { prompt: PROMPT });
+    assert.equal(timedOut.json().stoppedReason, 'TIMEOUT');
+    const blocked = await post('teamA', { prompt: PROMPT });
+    assert.deepEqual([blocked.statusCode, blocked.json().code], [409, 'AI_SESSION_IN_PROGRESS'], 'the abandoned call still counts');
+    release();
+    await delay(20);
+    const after = await post('teamA', { prompt: PROMPT });
+    assert.equal(after.statusCode, 200, 'released once the abandoned call settled');
+  });
+
   it('allows one running session per user and releases it afterwards', async (t) => {
     let release;
     const gate = new Promise((resolve) => { release = resolve; });

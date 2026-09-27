@@ -252,10 +252,12 @@ replies). The transcript sent in one turn is capped at 24,000 characters
 the oldest tool results are dropped, with a marker, once the rest would not
 fit (each tool result is already cut to 8,000 characters). An optional
 `AbortSignal` is checked before every model turn and every tool call, and a
-model call in flight is raced against it; the session then stops with the
-signal's reason and keeps the steps already taken. The providers take no
-signal, so a model call already sent still completes in the background (and
-a BYOK call is still metered); its answer is discarded.
+model or tool call in flight is raced against it; the session then stops
+with the signal's reason and keeps the steps already taken. The providers and
+tools take no signal, so a call already sent still completes in the
+background (a BYOK call is still metered, and a proposed action still lands
+in the approval queue); a model answer is discarded. Abandoned calls are
+reported through `onAbandon`.
 
 ### `POST /api/ai-tools/sessions`
 
@@ -289,8 +291,9 @@ queue.
   `stoppedReason: TIMEOUT`, and as soon as the client disconnects with
   `CLIENT_CLOSED` (the answer is not delivered but the run is audited). Both
   keep the steps already taken; the check runs before each model turn and
-  each tool call, and the model call in flight is abandoned rather than
-  cancelled (see above).
+  each tool call, and the model or tool call in flight is abandoned rather
+  than cancelled (see above). The user's in-flight slot stays taken until an
+  abandoned call settles, so timed-out sessions cannot pile up calls.
 - **Governance**: before anything runs, the kill switches and connection
   state are checked and a refusal answers with the usual AI error
   (`503 AI_DISABLED`, `503 AI_CONNECTION_DISABLED`,
