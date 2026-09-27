@@ -134,7 +134,7 @@ export default function Notes({ projectId }) {
 
       {/* Notes Grid */}
       {notes.length === 0 ? (
-        <div className="text-center py-12 text-gray-500">
+        <div className="text-center py-12 text-muted-foreground">
           <p className="text-lg">No notes yet</p>
           <p className="text-sm mt-1">Create your first note to get started</p>
         </div>
@@ -147,30 +147,30 @@ export default function Notes({ projectId }) {
               onClick={() => setSelectedNote(note)}
               aria-label={`Open note ${note.title}`}
               aria-pressed={selectedNote?.id === note.id}
-              className={`w-full min-h-11 bg-white rounded-lg border p-4 text-left cursor-pointer hover:shadow-md active:bg-gray-50 transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 ${
+              className={`w-full min-h-11 bg-card rounded-lg border p-4 text-left cursor-pointer hover:shadow-md active:bg-muted/50 transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 ${
                 note.isPinned ? 'border-yellow-400 border-2' : ''
               }`}
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-2">
                   <span>{getTypeInfo(note.type).icon}</span>
-                  <h3 className="font-medium text-gray-900 truncate">{note.title}</h3>
+                  <h3 className="font-medium text-foreground truncate">{note.title}</h3>
                 </div>
                 {note.isPinned && (
                   <span className="text-yellow-500">📌</span>
                 )}
               </div>
-              <p className="text-sm text-gray-500 mt-2 line-clamp-3">
+              <p className="text-sm text-muted-foreground mt-2 line-clamp-3">
                 {note.content.replace(/[#*`]/g, '').substring(0, 150)}...
               </p>
-              <div className="flex items-center justify-between mt-3 text-xs text-gray-500">
+              <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
                 <span>{note.author?.name}</span>
                 <span>{new Date(note.updatedAt).toLocaleDateString('en-CA')}</span>
               </div>
               {note.tags?.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-2">
                   {note.tags.slice(0, 3).map((tag, i) => (
-                    <span key={i} className="text-xs bg-gray-100 px-2 py-0.5 rounded">
+                    <span key={i} className="text-xs bg-muted px-2 py-0.5 rounded">
                       {tag}
                     </span>
                   ))}
@@ -239,7 +239,7 @@ function NoteEditor({ note, onSave, onDelete, onPin, onClose, isLoading, isDelet
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="flex gap-4">
           <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Title</label>
             <input
               type="text"
               value={formData.title}
@@ -249,7 +249,7 @@ function NoteEditor({ note, onSave, onDelete, onPin, onClose, isLoading, isDelet
             />
           </div>
           <div className="w-48">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Type</label>
             <select
               value={formData.type}
               onChange={(e) => setFormData({ ...formData, type: e.target.value })}
@@ -265,7 +265,7 @@ function NoteEditor({ note, onSave, onDelete, onPin, onClose, isLoading, isDelet
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-foreground mb-1">
             Content (Markdown supported)
           </label>
           <textarea
@@ -278,7 +278,7 @@ function NoteEditor({ note, onSave, onDelete, onPin, onClose, isLoading, isDelet
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Tags</label>
+          <label className="block text-sm font-medium text-foreground mb-1">Tags</label>
           <div className="flex gap-2">
             <input
               type="text"
@@ -291,7 +291,7 @@ function NoteEditor({ note, onSave, onDelete, onPin, onClose, isLoading, isDelet
             <button
               type="button"
               onClick={addTag}
-              className="bg-gray-100 px-4 py-2 rounded-lg hover:bg-gray-200"
+              className="bg-muted px-4 py-2 rounded-lg hover:bg-muted/70"
             >
               Add
             </button>
@@ -343,7 +343,7 @@ function NoteEditor({ note, onSave, onDelete, onPin, onClose, isLoading, isDelet
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+              className="px-4 py-2 text-muted-foreground hover:bg-muted rounded-lg"
             >
               Cancel
             </button>

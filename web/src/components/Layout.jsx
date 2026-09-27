@@ -498,7 +498,7 @@ export default function Layout({ children }) {
             >
               <Search className={cn(
                 'absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-200',
-                isSearchFocused ? 'text-[#2e2958]' : 'text-muted-foreground'
+                isSearchFocused ? 'text-foreground' : 'text-muted-foreground'
               )} />
               <input
                 type="text"
@@ -510,7 +510,7 @@ export default function Layout({ children }) {
                 className={cn(
                   'w-full pl-10 pr-20 py-2 text-sm bg-muted border-0 rounded-xl',
                   'placeholder:text-muted-foreground',
-                  'focus:outline-none focus:ring-2 focus:ring-[#2e2958]/20 focus:bg-card',
+                  'focus:outline-none focus:ring-2 focus:ring-ring/40 focus:bg-card',
                   'transition-all duration-200'
                 )}
               />

@@ -7,7 +7,9 @@ const source = readFileSync(resolve(process.cwd(), 'src/pages/Project.jsx'), 'ut
 describe('project actions accessibility contract', () => {
   it('keeps project toolbar actions explicit and focus-visible', () => {
     expect(source).toContain('aria-label="Share project with client"');
-    expect(source).toContain('aria-label="Apply project template"');
+    // Secondary actions (template, paste, refresh) live in a named overflow menu.
+    expect(source).toContain('aria-label="More project actions"');
+    expect(source).toContain("label: 'Apply template'");
     expect(source).toContain('aria-label="Draft project update"');
     expect(source).toContain('type="button"');
     expect(source).toContain('focus-visible:ring-2');

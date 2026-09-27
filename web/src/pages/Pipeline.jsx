@@ -89,13 +89,13 @@ function CreateDealModal({ isOpen, onClose, stages }) {
         {error && <div className="mb-4 p-3 text-sm text-red-600 bg-red-50 rounded-lg">{error}</div>}
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Deal Name *</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Deal Name *</label>
             <input type="text" name="name" value={formData.name} onChange={handleChange}
               className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2"
               style={{ '--tw-ring-color': ACCENT }} placeholder="Website Redesign" autoFocus />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Client</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Client</label>
             <select name="clientId" value={formData.clientId} onChange={handleChange}
               className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2">
               <option value="">-- No client --</option>
@@ -105,13 +105,13 @@ function CreateDealModal({ isOpen, onClose, stages }) {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Value ($)</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Value ($)</label>
             <input type="number" name="value" value={formData.value} onChange={handleChange}
               className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2"
               placeholder="5000" min="0" step="100" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Stage</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Stage</label>
             <select name="stageId" value={formData.stageId} onChange={handleChange}
               className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2">
               {stages.map(s => (
@@ -122,7 +122,7 @@ function CreateDealModal({ isOpen, onClose, stages }) {
         </div>
         <ModalFooter>
           <button type="button" onClick={onClose}
-            className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-lg">Cancel</button>
+            className="px-4 py-2 text-sm text-muted-foreground hover:bg-muted rounded-lg">Cancel</button>
           <button type="submit" disabled={mutation.isPending}
             className="px-4 py-2 text-sm text-white rounded-lg hover:opacity-90 disabled:opacity-50"
             style={{ backgroundColor: PRIMARY }}>
@@ -158,11 +158,11 @@ function MoveToDropdown({ deal, stages, currentStageId, onMove }) {
         <MoveRight className="w-4 h-4 text-muted-foreground" />
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-30 w-48 bg-white rounded-lg shadow-lg border py-1 text-sm">
+        <div className="absolute right-0 top-full mt-1 z-30 w-48 bg-card rounded-lg shadow-lg border py-1 text-sm">
           <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground">Move to</div>
           {otherStages.map(s => (
             <button key={s.id} type="button" role="menuitem"
-              className="min-h-11 w-full text-left px-3 py-1.5 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="min-h-11 w-full text-left px-3 py-1.5 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onClick={(e) => { e.stopPropagation(); setOpen(false); onMove(deal.id, s.id); }}>
               {s.label || s.name}
             </button>
@@ -214,13 +214,13 @@ function AIScoreButton({ deal, stageLabel }) {
           : <Sparkles className="w-4 h-4" style={{ color: ACCENT }} />}
       </button>
       {show && (
-        <div className="absolute right-0 top-full mt-1 z-30 w-64 bg-white rounded-lg shadow-lg border p-3 text-sm">
+        <div className="absolute right-0 top-full mt-1 z-30 w-64 bg-card rounded-lg shadow-lg border p-3 text-sm">
           {loading ? (
             <div className="flex items-center gap-2 text-muted-foreground">
               <Loader2 className="w-4 h-4 animate-spin" /> Scoring...
             </div>
           ) : (
-            <p className="text-gray-700 whitespace-pre-wrap">{score}</p>
+            <p className="text-muted-foreground whitespace-pre-wrap">{score}</p>
           )}
         </div>
       )}
@@ -412,7 +412,7 @@ export default function Pipeline() {
             return (
               <div key={key} className="text-center p-3 rounded-lg bg-muted/50">
                 <p className="text-xs text-muted-foreground mb-1">{label}</p>
-                <p className={`text-xl font-bold ${rate >= 50 ? 'text-emerald-500' : rate >= 25 ? 'text-amber-500' : 'text-red-400'}`}>
+                <p className={`text-xl font-bold ${rate >= 50 ? 'text-emerald-700 dark:text-emerald-400' : rate >= 25 ? 'text-amber-700 dark:text-amber-400' : 'text-red-700 dark:text-red-400'}`}>
                   {rate}%
                 </p>
                 <div className="w-full h-1.5 bg-muted rounded-full mt-2 overflow-hidden">
