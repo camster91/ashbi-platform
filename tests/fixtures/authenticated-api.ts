@@ -349,7 +349,7 @@ export async function mockAuthenticatedApi(page: Page, { user = adminUser, signe
 export const portalFixture = {
   me: { client: { id: client.id, name: client.name }, contact: { id: 'contact-a', name: 'Dana Rivera', email: 'dana@northwind.example' } },
   projects: [{ id: project.id, name: project.name, status: 'DESIGN_DEV', updatedAt: YESTERDAY, totalTasks: 3, completedTasks: 1, progressPct: 33 }],
-  invoices: [{ id: invoice.id, invoiceNumber: invoice.invoiceNumber, title: invoice.title, status: 'SENT', total: invoice.total, dueDate: invoice.dueDate, issueDate: invoice.issueDate, viewToken: invoice.viewToken }],
+  invoices: [{ id: invoice.id, invoiceNumber: invoice.invoiceNumber, title: invoice.title, status: 'SENT', total: invoice.total, currency: 'CAD', dueDate: invoice.dueDate, issueDate: invoice.issueDate, viewUrl: `/portal/invoice/${invoice.viewToken}`, payUrl: `/portal/invoice/${invoice.viewToken}` }],
   contracts: [{ id: 'contract-a', title: 'Project agreement', status: 'SENT', signToken: 'sign-a', canReview: true }],
   documents: [{ id: 'document-a', originalName: 'brand-guidelines.pdf', size: 204800, createdAt: YESTERDAY, uploadedBy: { name: 'Dana Rivera' } }],
   messages: [{ id: 'portal-message-a', content: 'Homepage draft is ready for review.', createdAt: YESTERDAY, author: { name: adminUser.name }, authorId: adminUser.id }],

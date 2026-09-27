@@ -150,7 +150,13 @@ function formatInvoiceDueDate(dueDate) {
     : 'upon receipt';
 }
 
-export function buildInvoiceDeliveryEmail({ to, clientName, invoiceNumber, total, currency, dueDate, viewUrl, paymentLink, invoiceId }) {
+/**
+ * The "Pay" link always opens the public invoice page (/portal/invoice/:token),
+ * which creates or refreshes a Stripe Checkout session on demand. A stored
+ * Checkout URL expires within 24 hours, so it is never emailed (a
+ * `paymentLink` argument is ignored).
+ */
+export function buildInvoiceDeliveryEmail({ to, clientName, invoiceNumber, total, currency, dueDate, viewUrl, invoiceId }) {
   return {
     to,
     subject: `Invoice ${invoiceNumber} from Ashbi`,
@@ -160,7 +166,7 @@ export function buildInvoiceDeliveryEmail({ to, clientName, invoiceNumber, total
       invoiceNumber,
       amount: formatMoney(total, currency),
       dueDate: formatInvoiceDueDate(dueDate),
-      payLink: paymentLink || viewUrl,
+      payLink: viewUrl,
     },
     ...(invoiceId ? { tracking: { documentType: 'invoice', documentId: invoiceId } } : {}),
   };

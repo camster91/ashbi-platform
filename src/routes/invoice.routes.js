@@ -460,7 +460,6 @@ export default async function invoiceRoutes(fastify) {
           currency: invoice.currency,
           dueDate: invoice.dueDate,
           viewUrl,
-          paymentLink: updateData.stripePaymentLink,
           invoiceId: invoice.id,
         });
         emailSent = delivery.ok;
@@ -730,7 +729,6 @@ export default async function invoiceRoutes(fastify) {
       currency: invoice.currency,
       dueDate: invoice.dueDate,
       viewUrl,
-      paymentLink: invoice.stripePaymentLink,
       invoiceId: invoice.id,
     });
     await request.prisma.invoice.update({ where: { id: invoice.id }, data: deliveryFieldsFromSend(delivery) });

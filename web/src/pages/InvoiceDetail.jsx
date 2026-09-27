@@ -256,6 +256,11 @@ export default function InvoiceDetail() {
   const isDraft = invoice.status === 'DRAFT';
   const isSent = invoice.status === 'SENT' || invoice.isOverdue;
   const isPaid = invoice.status === 'PAID';
+  // Clients pay from the public invoice page, which creates or refreshes a
+  // Stripe Checkout session on demand; stored Checkout URLs expire in 24h.
+  const clientInvoiceUrl = invoice.viewToken && (isSent || isPaid)
+    ? `${window.location.origin}/portal/invoice/${invoice.viewToken}`
+    : null;
 
   // Edit form calculations
   const editSubtotal = editForm
@@ -335,12 +340,13 @@ export default function InvoiceDetail() {
               </span>
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(invoice.stripePaymentLink);
+                  navigator.clipboard.writeText(clientInvoiceUrl || '');
                   setCopyLinkMsg('Copied!');
                   setTimeout(() => setCopyLinkMsg(''), 2000);
                 }}
                 className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 rounded border border-border"
-                title="Copy payment link"
+                title="Copy the client's pay link (public invoice page)"
+                disabled={!clientInvoiceUrl}
               >
                 {copyLinkMsg || 'Copy Link'}
               </button>
@@ -816,16 +822,16 @@ export default function InvoiceDetail() {
               )}
 
               {/* Quick Actions */}
-              {invoice.stripePaymentLink && (
+              {clientInvoiceUrl && isSent && (
                 <Card className="p-4">
                   <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Payment Link</p>
-                  <a href={invoice.stripePaymentLink} target="_blank" rel="noopener noreferrer"
+                  <a href={clientInvoiceUrl} target="_blank" rel="noopener noreferrer"
                     className="text-sm text-primary hover:underline flex items-center gap-1">
                     <CreditCard className="w-3.5 h-3.5" />
-                    Pay via Stripe
+                    Open client pay page
                   </a>
                   <button
-                    onClick={() => navigator.clipboard.writeText(invoice.stripePaymentLink)}
+                    onClick={() => navigator.clipboard.writeText(clientInvoiceUrl)}
                     className="text-xs text-muted-foreground hover:text-foreground mt-1 block">
                     Copy link
                   </button>

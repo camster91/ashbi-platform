@@ -4,6 +4,7 @@ import { preferredScrollBehavior } from '../lib/motion';
 import './client-portal/portal.css';
 import { API, portalFetch, downloadPortalInvoice, downloadPortalContract, BRAND, fmt, fmtDate, statusBadge, projectStatusLabel, projectStatusColor, Icons, useProjectChat, PortalChatComposer } from './client-portal/shared';
 import SlowNotice, { SlowLoadingStatus, SLOW_WRITE_INLINE as slowWrite } from '../components/ui/SlowNotice';
+import { formatInvoiceDate } from '../lib/money';
 
 // Heavy sections load on demand so the portal route chunk stays in budget.
 // Their Suspense fallback is a named polite status with the slow-state copy.
@@ -249,7 +250,7 @@ function OverviewTab({ projects, invoices, retainer, unread, setActiveTab, setSe
                     {statusBadge(inv.status)}
                   </div>
                   {inv.dueDate && inv.status !== 'PAID' && (
-                    <p className="cp-text-muted" style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>Due {fmtDate(inv.dueDate)}</p>
+                    <p className="cp-text-muted" style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>Due {formatInvoiceDate(inv.dueDate)}</p>
                   )}
                 </div>
                 <span className="cp-text" style={{ fontWeight: 700, fontSize: '1.1rem' }}>{fmt(inv.total, inv.currency)}</span>
@@ -336,7 +337,9 @@ function InvoicesTab({ invoices, token }) {
         <div className="cp-space-y-3">
           {invoices.map(inv => {
             const isPaid = inv.status?.toUpperCase() === 'PAID';
-            const canPay = !isPaid && ['SENT', 'OVERDUE', 'PENDING', 'DRAFT'].includes(inv.status?.toUpperCase());
+            // Pay opens the public invoice page, which starts a fresh Stripe
+            // Checkout session; void and draft invoices are never payable.
+            const canPay = !isPaid && ['SENT', 'OVERDUE'].includes(inv.status?.toUpperCase()) && Boolean(inv.payUrl);
             return (
               <div key={inv.id} className="cp-card" style={{ padding: '1.25rem' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -350,16 +353,16 @@ function InvoicesTab({ invoices, token }) {
                         <p className="cp-text-muted" style={{ fontSize: '0.85rem', marginTop: '0.25rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inv.title || inv.notes}</p>
                       )}
                       <div className="cp-text-muted" style={{ fontSize: '0.75rem', marginTop: '0.25rem', display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
-                        {inv.issueDate && <span>Issued: {fmtDate(inv.issueDate)}</span>}
-                        {inv.dueDate && !isPaid && <span>Due: {fmtDate(inv.dueDate)}</span>}
+                        {inv.issueDate && <span>Issued: {formatInvoiceDate(inv.issueDate)}</span>}
+                        {inv.dueDate && !isPaid && <span>Due: {formatInvoiceDate(inv.dueDate)}</span>}
                         {inv.paidAt && <span>Paid: {fmtDate(inv.paidAt)}</span>}
                       </div>
                     </div>
                     <span className="cp-text" style={{ fontWeight: 700, fontSize: '1.25rem', marginLeft: '1rem' }}>{fmt(inv.total, inv.currency)}</span>
                   </div>
                   <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    {canPay && inv.stripePaymentLink && (
-                      <a href={inv.stripePaymentLink} target="_blank" rel="noopener noreferrer" className="cp-btn-primary" style={{ fontSize: '0.8rem' }}>
+                    {canPay && (
+                      <a href={inv.payUrl} className="cp-btn-primary" style={{ fontSize: '0.8rem' }}>
                         Pay Now
                       </a>
                     )}

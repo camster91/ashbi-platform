@@ -484,10 +484,10 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
               Mark Paid
             </Button>
           )}
-          {invoice.stripePaymentLink && (
-            <a href={invoice.stripePaymentLink} target="_blank" rel="noopener noreferrer"
+          {invoice.viewToken && (invoice.status === 'SENT' || invoice.isOverdue) && (
+            <a href={`/portal/invoice/${invoice.viewToken}`} target="_blank" rel="noopener noreferrer"
               className="p-1.5 text-muted-foreground hover:text-foreground rounded"
-              onClick={(e) => e.stopPropagation()} title="Stripe payment link">
+              onClick={(e) => e.stopPropagation()} title="Client pay page">
               <CreditCard className="w-4 h-4" />
             </a>
           )}

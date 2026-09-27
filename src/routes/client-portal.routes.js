@@ -12,6 +12,9 @@ import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { contentDisposition } from '../utils/send-file.js';
 import { ATTACHMENT_UNDER_REVIEW, isAttachmentUnderReview, isForeignKeyViolation } from '../services/media-review.service.js';
 import { validateBody, validateParams, clientPortalMessageSchema, requestAccessSchema, fileUpload, clientPortalTokenRedeemSchema, clientPortalRevisionResponseSchema, clientPortalFeedbackSchema } from '../validators/schemas.js';
+import { invoicePublicAccessFailure, INVOICE_OPEN_STATUSES } from '../utils/public-document-access.js';
+
+const CLIENT_VISIBLE_INVOICE_STATUSES = [...INVOICE_OPEN_STATUSES, 'PAID'];
 
 const PORTAL_BASE = env.hubUrl;
 const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
@@ -805,8 +808,12 @@ export default async function clientPortalRoutes(fastify) {
   fastify.get('/invoices', { preHandler: clientAuth }, async (request, reply) => {
     const { clientId } = request.clientUser;
 
+    // Only invoices the client was actually sent: drafts are internal and
+    // void invoices are not owed. Pay/view go through the public invoice page
+    // (/portal/invoice/:token), which creates or refreshes a Stripe Checkout
+    // session on demand; stored Checkout URLs expire and are never exposed.
     const invoices = await request.prisma.invoice.findMany({
-      where: { clientId },
+      where: { clientId, status: { in: CLIENT_VISIBLE_INVOICE_STATUSES } },
       select: {
         id: true,
         invoiceNumber: true,
@@ -816,14 +823,26 @@ export default async function clientPortalRoutes(fastify) {
         issueDate: true,
         dueDate: true,
         paidAt: true,
-        stripePaymentLink: true,
+        updatedAt: true,
         title: true,
-        notes: true
+        notes: true,
+        viewToken: true,
+        publicAccessExpiresAt: true,
+        publicAccessRevokedAt: true,
       },
       orderBy: { issueDate: 'desc' }
     });
 
-    return invoices;
+    return invoices.map(({ viewToken, publicAccessExpiresAt, publicAccessRevokedAt, ...invoice }) => {
+      const linkUsable = Boolean(viewToken)
+        && !invoicePublicAccessFailure({ ...invoice, viewToken, publicAccessExpiresAt, publicAccessRevokedAt });
+      const viewUrl = linkUsable ? `/portal/invoice/${viewToken}` : null;
+      return {
+        ...invoice,
+        viewUrl,
+        payUrl: linkUsable && INVOICE_OPEN_STATUSES.includes(invoice.status) ? viewUrl : null,
+      };
+    });
   });
 
   // GET /api/client-portal/invoices/:id/pdf
