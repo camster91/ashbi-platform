@@ -108,11 +108,14 @@ services:
     environment:
       # Not "test": src/jobs/queue.js swaps in mock queues with no Redis
       # connection when NODE_ENV=test, so the heartbeat would never be written.
-      # src/config/env.js only accepts development/test/staging/production.
-      NODE_ENV: development
+      # staging runs the worker with deployed-environment startup validation,
+      # so it needs real (test-only, non-placeholder) JWT_SECRET and
+      # CREDENTIALS_KEY values.
+      NODE_ENV: staging
       DATABASE_URL: postgresql://ashbi_test:ashbi_test@postgres:5432/ashbi_test
       REDIS_URL: redis://redis:6379
       JWT_SECRET: test-jwt-secret-do-not-use-in-prod
+      CREDENTIALS_KEY: e2e-credentials-key-do-not-use-in-prod
 
   hub:
     build:
@@ -132,6 +135,8 @@ services:
         condition: service_started
     environment:
       NODE_ENV: test
+      # NODE_ENV=test silences the app logger; keep hub logs in CI output.
+      LOG_LEVEL: info
       PORT: 3000
       DATABASE_URL: postgresql://ashbi_test:ashbi_test@postgres:5432/ashbi_test
       REDIS_URL: redis://redis:6379
