@@ -14,9 +14,13 @@ describe('client portal action accessibility contract', () => {
 
   it('keeps document actions explicitly named and keyboard-visible', () => {
     expect(source).toContain('type="button" aria-label="Download invoice PDF"');
-    expect(source).toContain('aria-label="Dismiss upload error"');
-    expect(source).toContain('.cp-btn-primary:focus-visible');
-    expect(source).toContain('.cp-btn-danger:focus-visible');
+    expect(source).toContain('dismissLabel="Dismiss upload error"');
+    // Portal controls are shared primitives (44px `min-h-11` targets); the
+    // portal scope adds a 3px solid ring-token outline to every focusable
+    // control (#316 convergence keeps the #305/#317 focus contract).
+    expect(source).toContain('.cp-root :is(a, button, input, select, textarea, [tabindex]):focus-visible');
+    expect(source).toContain('outline: 3px solid hsl(var(--ring))');
+    expect(source).toContain('return <div className="cp-root">{content}</div>;');
     expect(source).toContain('min-height: 44px');
   });
 

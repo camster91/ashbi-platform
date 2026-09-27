@@ -57,6 +57,32 @@ describe('WCAG contrast policy', () => {
     expect(ratio(rgb(foreground), rgb(background))).toBeGreaterThanOrEqual(4.5);
   });
 
+  it('portal primitive colour pairs on the light tokens meet 4.5:1 (#316)', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');
+    const light = css.slice(css.indexOf(':root {'), css.indexOf('.dark {'));
+    const token = (name) => {
+      const [, h, s, l] = light.match(new RegExp(`--${name}:\\s*(\\d+)\\s+(\\d+)%\\s+(\\d+)%`)).map(Number);
+      return hsl(h, s, l);
+    };
+    const over = (color, alpha, base = white) => color.map((c, i) => Math.round(c * alpha + base[i] * (1 - alpha)));
+    const pairs = [
+      ['muted text on card', token('muted-foreground'), token('card')],
+      ['muted text on background', token('muted-foreground'), token('background')],
+      ['muted badge', token('muted-foreground'), token('muted')],
+      ['success badge', token('success'), over(token('success'), 0.1)],
+      ['warning badge', token('warning'), over(token('warning'), 0.1)],
+      ['danger badge', token('destructive'), over(token('destructive'), 0.1)],
+      ['info badge', token('info'), over(token('info'), 0.1)],
+      ['primary badge', token('primary'), over(token('primary'), 0.1)],
+      ['accent badge', token('accent-foreground'), over(token('accent'), 0.4)],
+      ['warning stat on tinted card', token('warning'), over(token('warning'), 0.05)],
+      ['success stat on tinted card', token('success'), over(token('success'), 0.05)],
+    ];
+    for (const [label, foreground, background] of pairs) {
+      expect(ratio(foreground, background), label).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it('portal and shell control boundaries meet 3:1', () => {
     expect(ratio(rgb('918c9f'), white)).toBeGreaterThanOrEqual(3);
     expect(ratio(rgb('918c9f'), cream)).toBeGreaterThanOrEqual(3);

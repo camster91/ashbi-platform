@@ -36,6 +36,7 @@ colours as `hsl(var(--token))`. Light values live in `:root` and dark values in
 | `secondary` / `secondary-foreground` | `--secondary`, `--secondary-foreground` | Button |
 | `destructive` / `destructive-foreground` | `--destructive`, `--destructive-foreground` | Button, Badge, StatCard, Alert (`error`) |
 | `success`, `warning`, `info` (+ `-foreground`) | `--success`, `--warning`, `--info` (+ `-foreground`) | Button, Badge, StatCard |
+| `accent` / `accent-foreground` | `--accent`, `--accent-foreground` | Badge (`accent`) |
 | `muted` / `muted-foreground` | `--muted`, `--muted-foreground` | nearly all primitives |
 | `card` / `card-foreground` | `--card`, `--card-foreground` | Card, Modal, skeleton cards |
 | `background`, `foreground` | `--background`, `--foreground` | Input, Button (`outline`/`ghost`), Alert |
@@ -76,11 +77,14 @@ Source: `web/src/components/ui/Button.jsx`
 A `forwardRef` `<button>` with variants, sizes, icons, a loading state and a
 built-in slow-state notice.
 
-**Variants:** `primary`, `secondary`, `outline`, `ghost`, `danger`, `destructive`, `success`, `warning`, `link`
+**Variants:** `primary`, `secondary`, `outline`, `ghost`, `danger`, `destructive`, `success`, `warning`, `danger-outline`, `link`
 
 **Sizes:** `xs`, `sm`, `md`, `lg`, `xl`
 
-`danger` and `destructive` are aliases. An unknown variant falls back to
+`danger` and `destructive` are aliases. `danger-outline` is a
+lower-emphasis destructive trigger (red text and border on a transparent
+fill), for example a row's delete icon that opens a `ConfirmDialog` whose
+confirm button is the solid `danger`. An unknown variant falls back to
 `primary`, and an unknown size falls back to `md`. `link` is a text-only
 action (primary text, underline on hover) that drops the horizontal padding
 but keeps the size's 44px minimum height.
@@ -499,7 +503,8 @@ The file also exports these constants:
 
 - `SLOW_MESSAGE`: the main slow-state sentence.
 - `SLOW_GUIDANCE`: guidance text keyed by `read` and `write`.
-- `SLOW_WRITE_INLINE`: a preset for the client portal's own palette.
+- `SLOW_WRITE_INLINE`: a small inline preset whose copy inherits the
+  surrounding text colour (used by the client portal's `SlowNotice`s).
 
 Components:
 
@@ -511,8 +516,9 @@ Components:
     `aria-live="polite"` `<p>`, then fills it after the threshold. This makes
     the announcement reliable.
 - `SlowLoadingStatus({ label, className, style })`:
-  - A spinner-free polite status for surfaces with their own styling, such as
-    the client portal.
+  - A spinner-free polite status for surfaces with their own styling. The
+    client portal used it before converging on `LoadingState` (#316); it
+    currently has no callers.
   - The slow copy inherits the surrounding text colour.
 
 `SlowNotice` is re-exported from `components/ui` as the default, and
@@ -579,78 +585,106 @@ if (isLoading) return <TablePageSkeleton rows={8} showStats label="Loading invoi
 ## Portal convergence
 
 The client portal (`web/src/pages/ClientPortal.jsx`,
-`web/src/pages/client-portal/*`) has its own stylesheet,
-`web/src/pages/client-portal/portal.css`. It hardcodes hex values that mirror
-the brand tokens: `#2e2958` for `--primary` / `--foreground`, `#918c9f` for
-`--border`, `#6b667f` for `--muted-foreground` and `#faf9f2` for
-`--background`. The table below shows which primitive or token each `.cp-*`
-class should converge to. It is a plan only: the portal has not been
-refactored.
+`web/src/pages/client-portal/*`) used to have its own `.cp-*` component
+system with hardcoded hex colours. It now uses the shared primitives above
+and design tokens (#316). `web/src/pages/client-portal/portal.css` keeps only
+portal-specific layout that has no shared primitive yet.
 
-| `.cp-*` class | Converge to |
+`web/src/tests/client-portal-primitives-convergence.test.js` guards this. It
+fails if a `.cp-*` class outside the kept list appears in portal JSX or CSS,
+if a retired class comes back, if portal JSX or `portal.css` uses a colour
+literal or inline colour style, or if a native `<button>`/`<input>` appears
+where a primitive exists.
+
+#### Light-only surface
+
+`main.jsx` applies the visitor's stored or OS theme to `<html>` before React
+renders. The portal is client-facing and light-only, so `usePortalLightTheme`
+(in `client-portal/shared.jsx`) removes `.dark` while the portal is mounted
+and restores it on unmount. Every portal colour is a token, so this one
+switch keeps the whole route, including `ConfirmDialog`, on the light token
+set. The other public portal pages (`Portal*.jsx`) still use a hardcoded
+light slate palette; see `portal-text-contrast-guard.test.js`.
+
+#### Converged
+
+| Former `.cp-*` class | Now |
 |---|---|
-| `.cp-btn-primary` | `Button variant="primary"` |
+| `.cp-btn-primary` | `Button` (`primary`); `buttonStyles()` for the "Pay Now" and "Review and sign" links |
 | `.cp-btn-secondary` | `Button variant="outline"` |
-| `.cp-btn-danger` | `Button variant="danger"`. The portal version is outlined red, so it may need an outline-danger variant |
-| `.cp-btn-ghost` | `Button variant="ghost"` |
-| `.cp-link` | `Button variant="ghost"` or a link-style Button variant (none exists yet) |
-| `.cp-input` | `Input` |
-| `.cp-card` | `Card variant="default"` |
-| `.cp-card--interactive` | `Card isInteractive`, plus a real button or link for keyboard access |
-| `.cp-card-title` | `CardTitle` |
+| `.cp-btn-danger` | `Button variant="danger-outline"` (document delete trigger; the dialog's confirm is the solid `danger`) |
+| `.cp-btn-ghost` | `Button variant="ghost"` (header logout, with on-primary token utilities) |
+| `.cp-link` | `Button variant="link"`; `buttonStyles({ variant: 'link' })` for `<a href>` |
+| `.cp-input` | `Input`; `inputStyles()` for `<select>` and `<textarea>` (via `portalFieldStyles`) |
+| `.cp-label` | Label utilities (`labelClass`: `block text-sm font-medium text-foreground`) |
+| `.cp-card` | `Card` (`as="article"` / `as="section"` where the old markup was an article or section) |
+| `.cp-card--interactive` | `Card as="button" type="button" isInteractive` |
+| `.cp-card-title` | `CardTitle` (sized down to `text-base font-semibold`) |
 | `.cp-stat` | `StatCard` |
-| `.cp-stat-label` | `StatCard` `label` |
-| `.cp-stat-value` | `StatCard` `value` |
-| `.cp-badge` | `Badge variant="subtle"` |
+| `.cp-stat-label` | `StatCard` `label` (retainer figures use `text-xs uppercase` utilities) |
+| `.cp-stat-value` | `StatCard` `value`; the old conditional colour is now the `variant` (`warning` / `success`) |
+| `.cp-badge` | `Badge variant="subtle"` (`StatusBadge` / `statusBadge` in `shared.jsx`) |
 | `.cp-badge--green` | `Badge color="success"` |
-| `.cp-badge--lime` | `Badge color="success"`, or a new brand-lime (`--accent`) colour |
+| `.cp-badge--lime` | `Badge color="accent"` (new brand-lime colour) |
 | `.cp-badge--orange` | `Badge color="warning"` |
 | `.cp-badge--red` | `Badge color="danger"` |
 | `.cp-badge--blue` | `Badge color="info"` |
 | `.cp-badge--purple` | `Badge color="primary"` |
 | `.cp-badge--muted` | `Badge color="default"` |
 | `.cp-alert` | `Alert` |
-| `.cp-alert--red` | `Alert variant="error"` |
-| `.cp-error` | `Alert variant="error"`, or `text-destructive` for inline errors |
-| `.cp-error-box` | `Alert variant="error"` inside an `EmptyState`-style centred container |
-| `.cp-loading` | `LoadingState`, or `SlowLoadingStatus` while the portal keeps its own palette |
-| `.cp-text` | `text-foreground` token |
-| `.cp-text-muted` | `text-muted-foreground` token |
-| `.cp-page-title` | Page heading utilities (`font-heading text-xl font-bold text-foreground`) |
-| `.cp-section-title` | `CardTitle`, or section heading utilities |
-| `.cp-grid-2` | Tailwind `grid` utilities (layout, no primitive) |
-| `.cp-grid-3` | Tailwind `grid` utilities (layout, no primitive) |
-| `.cp-space-y-2` | Tailwind `space-y-2` |
-| `.cp-space-y-3` | Tailwind `space-y-3` |
-| `.cp-space-y-4` | Tailwind `space-y-4` |
-| `.cp-space-y-6` | Tailwind `space-y-6` |
-| `.cp-visually-hidden` | Tailwind `sr-only` |
-| `.cp-tab` | No shared primitive yet. A future Tabs primitive |
-| `.cp-kanban` | No shared primitive yet. Align with `KanbanBoard` / `KanbanPageSkeleton` layout |
-| `.cp-kanban-col` | No shared primitive yet (kanban column) |
-| `.cp-kanban-col-header` | No shared primitive yet (kanban column) |
-| `.cp-kanban-col-body` | No shared primitive yet (kanban column) |
+| `.cp-alert--red` | `Alert variant="error"`; the on-load overdue banner uses `live={false}` so it keeps no role |
+| `.cp-error` | `Alert variant="error"` for page errors that were `role="alert"`; `text-destructive` for inline errors |
+| `.cp-error-box` | Centred container utilities with `text-destructive` and a `link` Button |
+| `.cp-loading` | `LoadingState` |
+| `.cp-text` | `text-foreground` |
+| `.cp-text-muted` | `text-muted-foreground` |
+| `.cp-page-title` | `pageTitleClass` (`mb-4 text-xl font-bold text-foreground`) |
+| `.cp-section-title` | `sectionTitleClass` (`mb-3 text-base font-semibold text-foreground`) |
+| `.cp-grid-2` | `grid gap-4 md:grid-cols-2` |
+| `.cp-grid-3` | `grid gap-4 sm:grid-cols-2 lg:grid-cols-3` |
+| `.cp-space-y-2` | `space-y-2` |
+| `.cp-space-y-3` | `space-y-3` |
+| `.cp-space-y-4` | `space-y-4` |
+| `.cp-space-y-6` | `space-y-6` |
+| `.cp-visually-hidden` | `sr-only` |
 | `.cp-kanban-card` | `Card padding="sm"` |
-| `.cp-chat-container` | No shared primitive yet (chat layout) |
-| `.cp-chat-messages` | No shared primitive yet (chat layout) |
-| `.cp-chat-bubble` | `Card padding="sm"` |
-| `.cp-chat-input-bar` | `Input` + `Button` in a `CardFooter`-style row |
-| `.cp-upload-zone` | No shared primitive yet. A future dropzone primitive (it is a native `<button>` today) |
-| `.cp-login-bg` | Auth layout. Align with the SPA login screen, not a primitive |
-| `.cp-login-card` | `Card padding="lg"` |
-| `.cp-login-logo` | Auth layout, not a primitive |
-| `.cp-login-title` | `CardTitle` |
+| `.cp-chat-bubble` | `Card padding="none"` with `px-4 py-3` |
+| `.cp-chat-input-bar` | `Input` + `Button` in a token-styled form row |
+| `.cp-login-bg` | Auth layout utilities (`min-h-screen bg-primary`, centred) |
+| `.cp-login-card` | `Card` |
+| `.cp-login-logo` | Layout utilities |
+| `.cp-login-title` | Heading utilities on the page `<h1>` (`CardTitle` is an `h3`, so it is not used here) |
 | `.cp-login-subtitle` | `CardDescription` |
-| `.cp-label` | Form label utilities (`block text-sm font-medium`) |
-| `.cp-login-form` | Form layout (`flex flex-col gap-3`) |
-| `.cp-login-sent` | `Alert variant="success"` |
+| `.cp-login-form` | `flex flex-col gap-3` |
+| `.cp-login-sent` | Layout utilities (`py-4`). It stays a static message, not an `Alert`, so no live region is added |
 
+#### Kept (portal-specific)
 
+These stay in `portal.css`, written with tokens only, because no shared
+primitive covers them yet. Remove each one when its primitive lands.
 
-The portal's accessibility rules are:
+| `.cp-*` class | Why it stays |
+|---|---|
+| `.cp-root` | Scopes the portal focus contract: a 3px solid `--ring` outline on every focusable control, stronger than the primitives' `ring-4` at 20% opacity. Aligning `Button`'s own focus ring is follow-up work |
+| `.cp-header` | Switches that outline to `--accent` on the indigo header, where the ring colour would be invisible |
+| `.cp-tab` | No Tabs primitive. Native `role="tab"` buttons; selected styling follows `aria-selected` |
+| `.cp-kanban` | No kanban primitive for read-only client boards (`KanbanBoard` is the staff drag-and-drop board) |
+| `.cp-kanban-col` | Kanban column surface |
+| `.cp-kanban-col-header` | Kanban column header row |
+| `.cp-kanban-col-body` | Kanban column card stack |
+| `.cp-chat-container` | No chat-layout primitive: fixed-height message pane + composer |
+| `.cp-chat-messages` | Scrolling message pane |
+| `.cp-upload-zone` | No dropzone primitive. It is a native `<button>` (`PortalUploadZone`) |
 
-- `:focus-visible` outlines with `3px solid #2e2958`.
-- 44px minimum targets.
-- `prefers-reduced-motion` resets.
+Accessibility kept through the convergence:
 
-They match the primitives' contract. Keep them when converging.
+- The 3px solid focus outline (`.cp-root`) and 44px targets (`min-h-11` in
+  `Button` and portal fields, `min-height: 44px` on `.cp-tab`).
+- Portal fields are 16px below the `sm` breakpoint (`portalFieldClass`), so
+  iOS Safari does not zoom on focus.
+- Reduced motion: `portal.css` has no transforms and stops its transitions;
+  the primitives' hover motion (`hover-lift`, StatCard's translate) is reset by
+  the global block in `index.css`.
+- Contrast: token text colours (`--foreground`, `--muted-foreground`,
+  `--destructive`, `--success`, `--warning`, `--info`) are at least as dark as
+  the old portal hex values.
