@@ -1,3 +1,4 @@
+import { outboundSignal } from '../utils/outbound-timeouts.js';
 /**
  * Gmail Draft Agent for ashbi-platform
  * Connects to Maton API to create Gmail drafts with attachments and search inbox
@@ -216,6 +217,7 @@ async function createDraft(toEmail, subject, body) {
   const rawEncoded = toBase64Url(rfc2822Message);
 
   const response = await fetch(`${BASE_URL}/drafts`, {
+    signal: outboundSignal('api'),
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${MATON_API_KEY}`,
@@ -281,6 +283,7 @@ async function createDraftWithAttachment(toEmail, subject, body, pdfBuffer, atta
   const rawEncoded = toBase64Url(multipartBody);
 
   const response = await fetch(`${BASE_URL}/drafts`, {
+    signal: outboundSignal('api'),
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${MATON_API_KEY}`,
@@ -341,6 +344,7 @@ async function sendEmail(toEmail, subject, body, pdfBuffer = null, attachmentNam
   // Try to send directly; if API doesn't support, create draft instead
   try {
     const sendResponse = await fetch(`${BASE_URL}/messages/send`, {
+      signal: outboundSignal('api'),
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${MATON_API_KEY}`,
@@ -375,6 +379,7 @@ async function searchInbox(query) {
 
   const encodedQuery = encodeURIComponent(query);
   const response = await fetch(`${BASE_URL}/messages?q=${encodedQuery}`, {
+    signal: outboundSignal('api'),
     method: 'GET',
     headers: {
       'Authorization': `Bearer ${MATON_API_KEY}`

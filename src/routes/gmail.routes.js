@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import env from '../config/env.js';
 import { validateBody, gmailDraftReplySchema, gmailSendSchema } from '../validators/schemas.js';
+import { outboundSignal } from '../utils/outbound-timeouts.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -37,6 +38,7 @@ async function getGmailAccessToken() {
 
   if (now >= expiresAt - 300) {
     const resp = await fetch('https://oauth2.googleapis.com/token', {
+      signal: outboundSignal('oauth'),
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -131,6 +133,7 @@ export default async function gmailRoutes(fastify) {
       }
 
       const resp = await fetch(`${GMAIL_API}/messages/send`, {
+        signal: outboundSignal('api'),
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -277,6 +280,7 @@ Write a helpful, professional reply that addresses the client's needs. Be concis
     try {
       const token = await getGmailAccessToken();
       const resp = await fetch(`${GMAIL_API}/profile`, {
+        signal: outboundSignal('api'),
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!resp.ok) {
