@@ -228,7 +228,7 @@ export async function onContractSigned(contractId) {
       where: { id: contractId },
       include: {
         client: { select: { id: true, name: true, organizationId: true } },
-        proposal: { select: { id: true, title: true, total: true } },
+        proposal: { select: { id: true, title: true, total: true, projectId: true } },
         createdBy: { select: { id: true, name: true } }
       }
     });
@@ -238,21 +238,37 @@ export async function onContractSigned(contractId) {
       return;
     }
 
-    // Action 1: Auto-create project linked to contract's client
+    // Action 1: the signed work's project. Reuse the proposal's project when
+    // it has one (the proposal was scoped to it); only create a project when
+    // there is none, and link it back to the proposal so a retry or a later
+    // invoice from the proposal uses the same project instead of forking.
     const projectName = contract.proposal?.title || contract.title.replace('Contract: ', '');
+    let project = contract.proposal?.projectId
+      ? await prisma.project.findFirst({
+        where: { id: contract.proposal.projectId, clientId: contract.clientId },
+        select: { id: true, name: true },
+      })
+      : null;
+    const projectCreated = !project;
 
-    const project = await prisma.project.create({
-      data: {
-        name: projectName,
-        description: `Auto-created from signed contract: ${contract.title}`,
-        status: 'STARTING_UP',
-        health: 'ON_TRACK',
-        clientId: contract.clientId,
-        organizationId: contract.client.organizationId,
+    if (!project) {
+      project = await prisma.project.create({
+        data: {
+          name: projectName,
+          description: `Auto-created from signed contract: ${contract.title}`,
+          status: 'STARTING_UP',
+          health: 'ON_TRACK',
+          clientId: contract.clientId,
+          organizationId: contract.client.organizationId,
+        }
+      });
+      if (contract.proposal?.id) {
+        await prisma.proposal.update({ where: { id: contract.proposal.id }, data: { projectId: project.id } });
       }
-    });
-
-    console.log(`[Automation] Project created: ${project.id} from contract ${contractId}`);
+      console.log(`[Automation] Project created: ${project.id} from contract ${contractId}`);
+    } else {
+      console.log(`[Automation] Contract ${contractId} continues existing project ${project.id}`);
+    }
 
     // Action 2: Send welcome email to client
     const contact = await getClientEmail(contract.clientId);
@@ -260,14 +276,14 @@ export async function onContractSigned(contractId) {
       const hubUrl = process.env.HUB_URL || 'https://hub.ashbi.ca';
       await sendEmail(
         contact.email,
-        `Welcome! Your project "${projectName}" is underway - Ashbi Design`,
+        `Welcome! Your project "${project.name}" is underway - Ashbi Design`,
         `
           <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
             <h2 style="color: #1a1a2e;">Welcome aboard, ${contact.name || contract.client.name}!</h2>
             <p>Great news — your contract for <strong>${contract.title}</strong> has been signed and your project is now officially underway.</p>
             <p>Here's what happens next:</p>
             <ul>
-              <li>Your project <strong>"${projectName}"</strong> has been created in our system</li>
+              <li>Your project <strong>"${project.name}"</strong> is set up in our system</li>
               <li>Our team will reach out shortly with next steps and a kickoff plan</li>
               <li>You'll receive access to your client portal where you can track progress</li>
             </ul>
@@ -287,7 +303,7 @@ export async function onContractSigned(contractId) {
     await createAdminNotification(
       'CONTRACT_SIGNED',
       'Contract Signed',
-      `${contract.client.name} signed "${contract.title}". Project "${projectName}" auto-created.`,
+      `${contract.client.name} signed "${contract.title}". Project "${project.name}" ${projectCreated ? 'auto-created' : 'continues'}.`,
       { contractId, projectId: project.id, clientName: contract.client.name },
       contract.client.organizationId,
     );
@@ -295,12 +311,13 @@ export async function onContractSigned(contractId) {
     // Log activity
     await logAutomation(
       'AUTOMATION_RAN',
-      'created',
+      projectCreated ? 'created' : 'linked',
       'PROJECT',
       project.id,
       project.name,
       { trigger: 'CONTRACT_SIGNED', contractId, contractTitle: contract.title },
       contract.client.organizationId,
+      project.id,
     );
 
   } catch (err) {

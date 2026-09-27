@@ -103,6 +103,7 @@ after(async () => {
     await rawPrisma.task.deleteMany({ where: { project: { clientId: testClientId } } });
     await rawPrisma.project.deleteMany({ where: { clientId: testClientId } });
     await rawPrisma.activity.deleteMany({ where: { userId: testUserId } });
+    await rawPrisma.notification.deleteMany({ where: { userId: testUserId } });
     await rawPrisma.contact.deleteMany({ where: { clientId: testClientId } });
     await rawPrisma.client.delete({ where: { id: testClientId } }).catch(() => null);
     await rawPrisma.user.delete({ where: { id: testUserId } }).catch(() => null);
@@ -338,14 +339,21 @@ describe('Contract CRUD', { skip }, () => {
     assert.ok(body.signedAt);
     assert.equal(body.signerName, 'Jane Prop');
     assert.ok(body.signedContentHash);
-    let createdProject;
-    for (let attempt = 0; attempt < 20 && !createdProject; attempt += 1) {
-      createdProject = await rawPrisma.project.findFirst({
-        where: { clientId: testClientId, id: { not: testProjectId } },
-      });
-      if (!createdProject) await new Promise(resolve => setTimeout(resolve, 25));
+    // The proposal was scoped to testProjectId, so signing continues that
+    // project instead of forking a new one (creation when the proposal has no
+    // project is covered by contract-signed-project.database.test.js). Wait
+    // for the fire-and-forget automation to finish (its admin notification).
+    let signedNotice;
+    for (let attempt = 0; attempt < 40 && !signedNotice; attempt += 1) {
+      const notices = await rawPrisma.notification.findMany({ where: { userId: testUserId, type: 'CONTRACT_SIGNED' } });
+      signedNotice = notices.map((notice) => (typeof notice.data === 'string' ? JSON.parse(notice.data) : notice.data))
+        .find((data) => data?.contractId === createdContractId);
+      if (!signedNotice) await new Promise(resolve => setTimeout(resolve, 25));
     }
-    assert.equal(createdProject?.organizationId, testOrganizationId);
+    assert.ok(signedNotice, 'the contract-signed automation ran');
+    assert.equal(signedNotice.projectId, testProjectId);
+    const projects = await rawPrisma.project.findMany({ where: { clientId: testClientId } });
+    assert.deepEqual(projects.map((project) => project.id), [testProjectId]);
     console.log(`  ✓ Signed contract`);
   });
 
