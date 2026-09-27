@@ -5,7 +5,7 @@ import { ensureCheckoutSession } from '../services/stripe.service.js';
 import { onProposalApproved, onContractSigned } from '../services/automation.service.js';
 import crypto from 'crypto';
 import { validateBody, bookingSchema, contractSignSchema, formSubmitSchema, proposalDeclineSchema } from '../validators/schemas.js';
-import { publicAccessFailure } from '../utils/public-document-access.js';
+import { invoicePublicAccessFailure, INVOICE_OPEN_STATUSES, publicAccessFailure } from '../utils/public-document-access.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import env from '../config/env.js';
 
@@ -377,7 +377,7 @@ export default async function portalRoutes(fastify) {
     if (!invoice) {
       return reply.status(404).send({ error: 'Invoice not found' });
     }
-    const accessFailure = publicAccessFailure(invoice);
+    const accessFailure = invoicePublicAccessFailure(invoice);
     if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
 
     return {
@@ -424,13 +424,16 @@ export default async function portalRoutes(fastify) {
     if (!invoice) {
       return reply.status(404).send({ error: 'Invoice not found' });
     }
-    const accessFailure = publicAccessFailure(invoice);
+    const accessFailure = invoicePublicAccessFailure(invoice);
     if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
     if (invoice.status === 'PAID') {
       return reply.status(400).send({ error: 'Invoice already paid' });
     }
     if (invoice.status === 'VOID') {
       return reply.status(400).send({ error: 'Invoice has been voided' });
+    }
+    if (!INVOICE_OPEN_STATUSES.includes(invoice.status)) {
+      return reply.status(409).send({ error: 'Invoice is not awaiting payment' });
     }
 
     try {

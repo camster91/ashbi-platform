@@ -31,6 +31,18 @@ function fmt(n, currency) {
   return formatMoney(n, currency);
 }
 
+// Stats money: one formatted amount when every invoice shares a currency,
+// otherwise one amount per currency (the API never adds currencies together).
+// `key` is a bucket (draft/sent/paid/overdue/void) or 'totalOutstanding'.
+export function statMoney(stats, key) {
+  const pick = (buckets) => (key === 'totalOutstanding' ? buckets?.totalOutstanding : buckets?.[key]?.amount) || 0;
+  const currencies = stats?.currencies || [];
+  if (stats?.mixedCurrency && stats.byCurrency) {
+    return currencies.map((currency) => fmt(pick(stats.byCurrency[currency]), currency)).join(' · ');
+  }
+  return fmt(pick(stats), currencies[0]);
+}
+
 export default function Invoices() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -254,10 +266,10 @@ export default function Invoices() {
         <>
           {/* Stats Cards */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <StatCard label="Outstanding" value={fmt(stats.totalOutstanding || 0)} icon={DollarSign} color="blue" />
-            <StatCard label="Paid (all time)" value={fmt(stats.paid?.amount || 0)} icon={CheckCircle} color="green" />
-            <StatCard label="Overdue" value={stats.overdue?.count || 0} sub={stats.overdue?.count > 0 ? fmt(stats.overdue?.amount || 0) : undefined} icon={AlertTriangle} color="red" />
-            <StatCard label="Draft" value={stats.draft?.count || 0} sub={fmt(stats.draft?.amount || 0)} icon={FileText} color="gray" />
+            <StatCard label="Outstanding" value={statMoney(stats, 'totalOutstanding')} icon={DollarSign} color="blue" />
+            <StatCard label="Paid (all time)" value={statMoney(stats, 'paid')} icon={CheckCircle} color="green" />
+            <StatCard label="Overdue" value={stats.overdue?.count || 0} sub={stats.overdue?.count > 0 ? statMoney(stats, 'overdue') : undefined} icon={AlertTriangle} color="red" />
+            <StatCard label="Draft" value={stats.draft?.count || 0} sub={statMoney(stats, 'draft')} icon={FileText} color="gray" />
           </div>
 
           {/* Filters */}
@@ -782,19 +794,19 @@ function InvoiceCreateForm({
 
 // ─── Collections Dashboard ────────────────────────────────────────────────────
 function CollectionsDashboard({ stats, invoices, onMarkPaid }) {
-  const overdue = invoices.filter(i => i.isOverdue || (i.status === 'SENT' && i.dueDate && new Date(i.dueDate) < new Date()));
+  const overdue = invoices.filter(i => i.isOverdue || i.status === 'OVERDUE' || (i.status === 'SENT' && i.dueDate && new Date(i.dueDate) < new Date()));
 
   return (
     <div className="space-y-6">
       {/* KPI Row */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <BigStat label="Total Outstanding" value={fmt((stats.sent?.amount || 0) + (stats.overdue?.amount || 0))}
+        <BigStat label="Total Outstanding" value={statMoney(stats, 'totalOutstanding')}
           sub={`${(stats.sent?.count || 0) + (stats.overdue?.count || 0)} invoices`} color="blue" />
-        <BigStat label="Overdue" value={fmt(stats.overdue?.amount || 0)}
+        <BigStat label="Overdue" value={statMoney(stats, 'overdue')}
           sub={`${stats.overdue?.count || 0} invoices`} color="red" urgent={stats.overdue?.count > 0} />
-        <BigStat label="Paid (all time)" value={fmt(stats.paid?.amount || 0)}
+        <BigStat label="Paid (all time)" value={statMoney(stats, 'paid')}
           sub={`${stats.paid?.count || 0} invoices`} color="green" />
-        <BigStat label="Draft / Unbilled" value={fmt(stats.draft?.amount || 0)}
+        <BigStat label="Draft / Unbilled" value={statMoney(stats, 'draft')}
           sub={`${stats.draft?.count || 0} invoices`} color="gray" />
       </div>
 

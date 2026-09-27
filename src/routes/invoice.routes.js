@@ -3,7 +3,7 @@ import { CLEARED_CHECKOUT_FIELDS, checkoutPersistenceData, createPaymentLink, en
 import { generateInvoicePdf } from '../utils/generate-invoice-pdf.js';
 import { deliveryFieldsFromSend, withDeliveryState } from '../services/mailgun-delivery.service.js';
 import { createNumberedInvoice } from '../utils/invoice.js';
-import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
+import { createPublicAccessWindow, invoicePublicAccessFailure, INVOICE_OPEN_STATUSES } from '../utils/public-document-access.js';
 import { validateBody, createInvoiceSchema, updateInvoiceSchema, markInvoicePaidSchema, sendInvoiceSchema, lineItemTemplateCreateSchema, invoiceBulkIdsSchema, invoiceBulkArchiveSchema, bulkMarkPaidSchema } from '../validators/schemas.js';
 import { sendInvoiceDeliveryEmail } from '../services/email.service.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
@@ -12,6 +12,10 @@ import { defaultInvoiceCurrency, normalizeInvoiceCurrency } from '../utils/money
 const HST_RATE = 13; // Ontario HST
 const VOID_UNDO_WINDOW_MS = 10_000;
 const VOIDABLE_STATUSES = new Set(['DRAFT', 'SENT', 'OVERDUE']);
+
+function roundMoney(value) {
+  return Math.round((Number(value) || 0) * 100) / 100;
+}
 
 export default async function invoiceRoutes(fastify) {
 
@@ -49,10 +53,14 @@ export default async function invoiceRoutes(fastify) {
     });
   }
 
+  // Overdue = stored OVERDUE (set by the overdue job) or SENT past its due
+  // date (before the job has run).
+  function isOverdueInvoice(inv, now = new Date()) {
+    return inv.status === 'OVERDUE' || Boolean(inv.status === 'SENT' && inv.dueDate && new Date(inv.dueDate) < now);
+  }
+
   function flagOverdue(inv) {
-    const now = new Date();
-    const isOverdue = inv.status === 'SENT' && inv.dueDate && new Date(inv.dueDate) < now;
-    return withDeliveryState({ ...inv, isOverdue });
+    return withDeliveryState({ ...inv, isOverdue: isOverdueInvoice(inv) });
   }
 
   // ─── GET / — list invoices ──────────────────────────────────────────────────
@@ -63,18 +71,22 @@ export default async function invoiceRoutes(fastify) {
     if (clientId) where.clientId = clientId;
     if (projectId) where.projectId = projectId;
     if (status && status !== 'OVERDUE') where.status = status;
+    const and = [];
     if (status === 'OVERDUE') {
-      where.status = 'SENT';
-      where.dueDate = { lt: new Date() };
+      and.push({ OR: [
+        { status: 'OVERDUE' },
+        { status: 'SENT', dueDate: { lt: new Date() } },
+      ] });
     }
     if (search) {
-      where.OR = [
+      and.push({ OR: [
         { invoiceNumber: { contains: search, mode: 'insensitive' } },
         { title: { contains: search, mode: 'insensitive' } },
         { notes: { contains: search, mode: 'insensitive' } },
         { client: { name: { contains: search, mode: 'insensitive' } } },
-      ];
+      ] });
     }
+    if (and.length) where.AND = and;
 
     const [invoices, total] = await Promise.all([
       fastify.prisma.invoice.findMany({
@@ -98,45 +110,74 @@ export default async function invoiceRoutes(fastify) {
     };
   });
 
+  // Collection stats. Buckets are disjoint so no invoice is counted twice:
+  //   sent    = SENT and not yet past due
+  //   overdue = stored OVERDUE, or SENT past its due date
+  //   totalOutstanding = sent + overdue (every open invoice once)
+  // Money is grouped by currency in `byCurrency`; the top-level amounts are
+  // only filled when every invoice shares one currency (`mixedCurrency`
+  // false), otherwise they are null because adding currencies is meaningless.
+  // Counts are always totals across currencies.
   async function getStats() {
-    // Performance: previously this ran `findMany({ select })` with no `where`
-    // and pulled every invoice row to compute aggregates in JS — a full table
-    // scan on every GET /api/invoices call. Replace with `groupBy` so the
-    // database does the aggregation server-side. The overdue total still
-    // needs a separate aggregation since it depends on `dueDate < now`.
     const now = new Date();
-    const [byStatus, overdueAgg] = await Promise.all([
+    const [byStatus, sentPastDue] = await Promise.all([
       fastify.prisma.invoice.groupBy({
-        by: ['status'],
+        by: ['status', 'currency'],
         _count: { _all: true },
         _sum: { total: true },
       }),
-      fastify.prisma.invoice.aggregate({
+      fastify.prisma.invoice.groupBy({
+        by: ['currency'],
         where: { status: 'SENT', dueDate: { lt: now } },
         _count: { _all: true },
         _sum: { total: true },
       }),
     ]);
 
-    const stats = {
+    const emptyBuckets = () => ({
       draft: { count: 0, amount: 0 },
       sent: { count: 0, amount: 0 },
       paid: { count: 0, amount: 0 },
-      overdue: { count: overdueAgg._count._all, amount: overdueAgg._sum.total ?? 0 },
+      overdue: { count: 0, amount: 0 },
       void: { count: 0, amount: 0 },
       totalOutstanding: 0,
+    });
+    const totals = emptyBuckets();
+    const byCurrency = {};
+    const bucketFor = (currency) => (byCurrency[currency || 'CAD'] ??= emptyBuckets());
+    const add = (buckets, key, count, amount) => {
+      buckets[key].count += count;
+      buckets[key].amount = roundMoney(buckets[key].amount + amount);
     };
 
     for (const row of byStatus) {
-      const key = row.status.toLowerCase();
-      if (stats[key]) {
-        stats[key].count = row._count._all;
-        stats[key].amount = row._sum.total ?? 0;
+      const key = row.status === 'OVERDUE' ? 'overdue' : row.status.toLowerCase();
+      if (!totals[key]) continue;
+      const count = row._count._all;
+      const amount = row._sum.total ?? 0;
+      add(totals, key, count, amount);
+      add(bucketFor(row.currency), key, count, amount);
+    }
+    // Move SENT-but-past-due from "sent" to "overdue".
+    for (const row of sentPastDue) {
+      const count = row._count._all;
+      const amount = row._sum.total ?? 0;
+      for (const buckets of [totals, bucketFor(row.currency)]) {
+        add(buckets, 'sent', -count, -amount);
+        add(buckets, 'overdue', count, amount);
       }
     }
+    for (const buckets of [totals, ...Object.values(byCurrency)]) {
+      buckets.totalOutstanding = roundMoney(buckets.sent.amount + buckets.overdue.amount);
+    }
 
-    stats.totalOutstanding = stats.sent.amount + stats.overdue.amount;
-    return stats;
+    const currencies = Object.keys(byCurrency).sort();
+    const mixedCurrency = currencies.length > 1;
+    if (mixedCurrency) {
+      for (const key of ['draft', 'sent', 'paid', 'overdue', 'void']) totals[key].amount = null;
+      totals.totalOutstanding = null;
+    }
+    return { ...totals, currencies, mixedCurrency, byCurrency };
   }
 
   // ─── GET /stats — collections dashboard ────────────────────────────────────
@@ -383,7 +424,9 @@ export default async function invoiceRoutes(fastify) {
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
     if (invoice.status !== 'DRAFT') return reply.status(400).send({ error: 'Only draft invoices can be sent' });
 
-    const access = createPublicAccessWindow(invoice.dueDate);
+    // The link is not tied to the due date: it stays valid while the invoice
+    // is open (see invoicePublicAccessFailure), so overdue reminders work.
+    const access = createPublicAccessWindow();
     const updateData = {
       status: 'SENT',
       sentAt: new Date(),
@@ -532,8 +575,8 @@ export default async function invoiceRoutes(fastify) {
       include: { client: true, lineItems: true }
     });
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
-    if (invoice.status !== 'SENT') return reply.status(409).send({ error: 'Only sent invoices can have a payment link' });
-    const accessFailure = publicAccessFailure(invoice);
+    if (!INVOICE_OPEN_STATUSES.includes(invoice.status)) return reply.status(409).send({ error: 'Only sent or overdue invoices can have a payment link' });
+    const accessFailure = invoicePublicAccessFailure(invoice);
     if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
 
     try {
@@ -633,7 +676,7 @@ export default async function invoiceRoutes(fastify) {
         createdBy: { select: { name: true } }
       }
     });
-    const accessFailure = publicAccessFailure(invoice);
+    const accessFailure = invoicePublicAccessFailure(invoice);
     if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
     // Don't expose internal notes in public view
     const {
@@ -673,8 +716,8 @@ export default async function invoiceRoutes(fastify) {
       },
     });
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
-    if (invoice.status !== 'SENT') return reply.status(409).send({ error: 'Only sent invoices can be resent' });
-    const accessFailure = publicAccessFailure(invoice);
+    if (!INVOICE_OPEN_STATUSES.includes(invoice.status)) return reply.status(409).send({ error: 'Only sent or overdue invoices can be resent' });
+    const accessFailure = invoicePublicAccessFailure(invoice);
     if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
     const contact = invoice.client?.contacts?.[0];
     if (!contact?.email) return reply.status(409).send({ error: 'Primary client email is missing' });
@@ -698,7 +741,7 @@ export default async function invoiceRoutes(fastify) {
   fastify.post('/:id/public-link/rotate', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     const invoice = await request.prisma.invoice.findUnique({ where: { id: request.params.id } });
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
-    if (!['SENT', 'PAID'].includes(invoice.status)) return reply.status(409).send({ error: 'Invoice has not been sent' });
+    if (![...INVOICE_OPEN_STATUSES, 'PAID'].includes(invoice.status)) return reply.status(409).send({ error: 'Invoice has not been sent' });
     const access = createPublicAccessWindow();
     return request.prisma.invoice.update({
       where: { id: invoice.id },
