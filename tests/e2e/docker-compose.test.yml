@@ -108,7 +108,8 @@ services:
     environment:
       # Not "test": src/jobs/queue.js swaps in mock queues with no Redis
       # connection when NODE_ENV=test, so the heartbeat would never be written.
-      NODE_ENV: e2e
+      # src/config/env.js only accepts development/test/staging/production.
+      NODE_ENV: development
       DATABASE_URL: postgresql://ashbi_test:ashbi_test@postgres:5432/ashbi_test
       REDIS_URL: redis://redis:6379
       JWT_SECRET: test-jwt-secret-do-not-use-in-prod

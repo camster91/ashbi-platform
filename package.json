@@ -26,7 +26,7 @@
     "test": "node scripts/run-node-tests.mjs src/tests/unit src/tests/ai-eval",
     "test:ai-eval": "node scripts/run-node-tests.mjs src/tests/ai-eval",
     "test:integration": "node scripts/run-node-tests.mjs src/tests/integration",
-    "test:watch": "NODE_ENV=test CI=${CI:-1} node --test --watch src/tests/unit",
+    "test:watch": "NODE_ENV=test CI=${CI:-1} node --import ./scripts/test-stdout-guard.mjs --test --watch src/tests/unit",
     "test:web": "npm --prefix web test",
     "check:dependencies": "npm ls --all && npm --prefix web ls --all",
     "check:boundaries": "node scripts/check-package-boundaries.mjs",
