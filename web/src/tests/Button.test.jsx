@@ -3,7 +3,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import Button from '../components/ui/Button';
+import Button, { buttonStyles } from '../components/ui/Button';
 
 describe('Button Component', () => {
   it('renders children correctly', () => {
@@ -78,5 +78,22 @@ describe('Button Component', () => {
     button = screen.getByRole('button');
     expect(button.className).toContain('bg-warning');
     expect(button.className).toContain('motion-reduce:transition-none');
+  });
+
+  it('offers a text-only link variant that keeps the 44px target', () => {
+    render(<Button variant="link">View all invoices</Button>);
+    const button = screen.getByRole('button');
+    expect(button.className).toContain('text-primary');
+    expect(button.className).toContain('min-h-11');
+    expect(button.className).toContain('px-0');
+    expect(button.className).not.toContain('px-4');
+  });
+
+  it('exposes buttonStyles so real links can share the Button look', () => {
+    const classes = buttonStyles({ variant: 'outline', size: 'sm', className: 'w-full' });
+    expect(classes).toContain('border-border');
+    expect(classes).toContain('min-h-11');
+    expect(classes).toContain('w-full');
+    expect(buttonStyles({ variant: 'nope' })).toContain('bg-primary');
   });
 });

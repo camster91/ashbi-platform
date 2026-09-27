@@ -76,12 +76,19 @@ Source: `web/src/components/ui/Button.jsx`
 A `forwardRef` `<button>` with variants, sizes, icons, a loading state and a
 built-in slow-state notice.
 
-**Variants:** `primary`, `secondary`, `outline`, `ghost`, `danger`, `destructive`, `success`, `warning`
+**Variants:** `primary`, `secondary`, `outline`, `ghost`, `danger`, `destructive`, `success`, `warning`, `link`
 
 **Sizes:** `xs`, `sm`, `md`, `lg`, `xl`
 
 `danger` and `destructive` are aliases. An unknown variant falls back to
-`primary`, and an unknown size falls back to `md`.
+`primary`, and an unknown size falls back to `md`. `link` is a text-only
+action (primary text, underline on hover) that drops the horizontal padding
+but keeps the size's 44px minimum height.
+
+The file also exports `buttonStyles({ variant, size, className })`, which
+returns the same class list. Use it to style a real `<a href>` as a Button
+(for example the portal's "Pay Now" and "Review and sign" links) instead of
+nesting a `<button>` inside a link.
 
 | Prop | Type / values | Default | Notes |
 |---|---|---|---|
@@ -330,14 +337,14 @@ A `forwardRef` `<span>` pill. Its look comes from `color` × `variant`.
 
 **Variants:** `default`, `outline`, `subtle`, `solid`
 
-**Colors:** `default`, `primary`, `success`, `warning`, `danger`, `info`
+**Colors:** `default`, `primary`, `success`, `warning`, `danger`, `accent`, `info`
 
 **Sizes:** `xs`, `sm`, `md`, `lg`
 
 | Prop | Type / values | Default | Notes |
 |---|---|---|---|
 | `variant` | see Variants | `'default'` | `outline` adds `border-2` |
-| `color` | see Colors | `'default'` | `danger` maps to the `destructive` token |
+| `color` | see Colors | `'default'` | `danger` maps to the `destructive` token. `accent` is brand lime and always uses `accent-foreground` text, because lime is too light for coloured text |
 | `size` | see Sizes | `'sm'` | |
 | `dot` | boolean | `false` | Adds a leading colour dot (`aria-hidden`) |
 | `className`, `ref`, `...props` | | | Passed through to `<span>` |
@@ -369,6 +376,8 @@ dismiss button.
 | `children` | node | none | Body text |
 | `action` | node | none | Rendered below the body |
 | `onDismiss` | function | none | Shows a dismiss button when set |
+| `dismissLabel` | string | `'Dismiss'` | Accessible name of the dismiss button. Name what is dismissed, for example "Dismiss upload error" |
+| `live` | boolean | `true` | `false` renders a static banner with no role and no `aria-live`, for content that is already on screen at load and must not be announced |
 | `role` | string | derived | Overrides the default role |
 | `className`, `ref`, `...props` | | | Passed through to the root `<div>` |
 
@@ -376,7 +385,10 @@ Accessibility:
 
 - `error` and `warning` get `role="alert"` and `aria-live="assertive"`.
 - `success` and `info` get `role="status"` and `aria-live="polite"`.
-- The dismiss button is `type="button"`, labelled "Dismiss", at least 44×44px,
+- With `live={false}` there is no role and no live region: use it only for
+  static banners that are part of the page on load.
+- The dismiss button is `type="button"`, labelled by `dismissLabel`
+  ("Dismiss" by default), at least 44×44px,
   with a `focus-visible:ring-2 ring-ring` focus ring.
 - The icon is `aria-hidden`, and the entrance animation respects
   `motion-reduce`.

@@ -33,17 +33,24 @@ const Alert = forwardRef(({
   action,
   className,
   role,
+  live = true,
+  dismissLabel = 'Dismiss',
   ...props
 }, ref) => {
   const config = VARIANTS[variant] || VARIANTS.info;
   const Icon = config.Icon;
   const isAssertive = variant === 'error' || variant === 'warning';
+  // `live={false}` renders a static banner (no role, no live region) for
+  // content that is present on page load and must not be announced, such as
+  // the client portal's overdue-invoice notice.
+  const liveRole = live ? (role || (isAssertive ? 'alert' : 'status')) : role;
+  const ariaLive = live ? (isAssertive ? 'assertive' : 'polite') : undefined;
 
   return (
     <div
       ref={ref}
-      role={role || (isAssertive ? 'alert' : 'status')}
-      aria-live={isAssertive ? 'assertive' : 'polite'}
+      role={liveRole}
+      aria-live={ariaLive}
       className={cn(
         'flex gap-3 rounded-xl border px-4 py-3 animate-fade-in motion-reduce:animate-none text-foreground',
         config.container,
@@ -65,7 +72,7 @@ const Alert = forwardRef(({
         <button
           type="button"
           onClick={onDismiss}
-          aria-label="Dismiss"
+          aria-label={dismissLabel}
           className="min-h-11 min-w-11 -m-2 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <X className="w-4 h-4" aria-hidden="true" />
