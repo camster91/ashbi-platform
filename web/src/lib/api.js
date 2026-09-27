@@ -724,6 +724,10 @@ export const api = {
   approveAiToolAction: (id) => request(`/ai-tools/approvals/${encodeURIComponent(id)}/approve`, { method: 'POST', body: {} }),
   rejectAiToolAction: (id, reason = 'other') =>
     request(`/ai-tools/approvals/${encodeURIComponent(id)}/reject`, { method: 'POST', body: { reason } }),
+  // One assistant tool session: up to six governed model turns, so allow
+  // longer than the default timeout. Errors are shown inline by the form.
+  runAiToolSession: (prompt) =>
+    request('/ai-tools/sessions', { method: 'POST', body: { prompt }, timeout: 120_000, silent: true }),
 
   // ===== PROPOSALS =====
   getProposals: (params = {}) => {

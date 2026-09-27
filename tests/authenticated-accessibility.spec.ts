@@ -88,6 +88,18 @@ test.describe('Authenticated accessibility', () => {
     await expectNoAxeViolations(page, 'project draft-update dialog');
   });
 
+  test('settings "Ask the assistant" answer has no automatically detectable WCAG A/AA violations', async ({ page }) => {
+    await mockAuthenticatedApi(page);
+    await page.goto('/settings');
+    const question = page.getByLabel('Question for the assistant');
+    await expect(question).toBeVisible();
+    await question.fill('How is the website project going?');
+    await page.getByRole('button', { name: 'Ask', exact: true }).click();
+    await expect(page.getByText('Website Redesign is on track with one open high-priority task.')).toBeVisible();
+    await page.getByText('Show data').click();
+    await expectNoAxeViolations(page, 'settings assistant answer');
+  });
+
   test('client portal tabs have no automatically detectable WCAG A/AA violations for a CLIENT user', async ({ page }) => {
     await mockClientPortalApi(page);
     await page.goto('/client-portal/verify?token=portal-a11y-token');

@@ -676,6 +676,20 @@
         },
         "type": "object"
       },
+      "AiToolSession": {
+        "additionalProperties": false,
+        "properties": {
+          "prompt": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "type": "object"
+      },
       "AiTriageInbox": {
         "properties": {
           "maxThreads": {
@@ -6715,6 +6729,55 @@
         "x-tenancy": "scoped"
       }
     },
+    "/api/ai-tools/sessions": {
+      "post": {
+        "operationId": "post_api_ai_tools_sessions",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiToolSession"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/ai-tools/sessions",
+        "tags": [
+          "ai-tools"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
     "/api/ai/ask": {
       "post": {
         "operationId": "post_api_ai_ask",
@@ -8302,6 +8365,7 @@
                 "ai_provider_connection",
                 "organization",
                 "ai_action",
+                "ai_session",
                 "import_run",
                 "review_session",
                 "review_share_link"
@@ -8362,6 +8426,7 @@
                 "ai.tool_failed",
                 "ai.tool_expired",
                 "ai.tool_denied",
+                "ai.tool_session_run",
                 "migration_import.applied",
                 "migration_import.rolled_back",
                 "review.session_created",

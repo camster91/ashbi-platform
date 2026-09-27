@@ -57,6 +57,7 @@ export const AUDIT_EVENT_CATALOG = Object.freeze({
   'ai.tool_failed': { entityType: 'ai_action', metadata: ['tool', 'toolClass', 'source', 'requesterUserId', 'correlationId', 'errorCode', 'outcome'] },
   'ai.tool_expired': { entityType: 'ai_action', metadata: ['tool', 'toolClass', 'source', 'requesterUserId', 'correlationId'] },
   'ai.tool_denied': { entityType: 'ai_action', metadata: ['tool', 'reason', 'source', 'correlationId'] },
+  'ai.tool_session_run': { entityType: 'ai_session', metadata: ['turns', 'toolCalls', 'readCount', 'pendingCount', 'deniedCount', 'stoppedReason', 'answered', 'correlationId'] },
   'migration_import.applied': { entityType: 'import_run', metadata: ['source', 'created', 'unchanged', 'alreadyPresent', 'channels'] },
   'migration_import.rolled_back': { entityType: 'import_run', metadata: ['source', 'deletedMessages', 'deletedRecords'] },
   'review.session_created': { entityType: 'review_session', metadata: ['projectId', 'attachmentId', 'version', 'previousSessionId', 'mediaKind'] },

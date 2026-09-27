@@ -672,6 +672,15 @@ export const aiToolRejectSchema = z.object({
   reason: z.enum(['not_needed', 'incorrect', 'unsafe', 'other']).default('other'),
 }).strict().optional();
 
+/** Longest assistant prompt accepted. Proposal (docs/ai-tool-registry.md). */
+export const AI_TOOL_SESSION_PROMPT_MAX = 4000;
+
+// The server generates the session id; a client-supplied one is rejected by
+// `.strict()` so a caller cannot steer the derived idempotency keys.
+export const aiToolSessionSchema = z.object({
+  prompt: z.string().trim().min(1).max(AI_TOOL_SESSION_PROMPT_MAX),
+}).strict();
+
 // ── Settings: assignment rules + templates + AI provider ───────────────────
 export const assignmentRuleCreateSchema = z.object({
   name: z.string().min(1).max(200),

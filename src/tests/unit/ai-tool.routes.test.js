@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
+import rateLimit from '@fastify/rate-limit';
 
 process.env.CREDENTIALS_KEY = process.env.CREDENTIALS_KEY || 'unit-test-credentials-key';
 
@@ -27,6 +28,7 @@ async function setup(t, { governance = { assertAllowed: async () => {} } } = {})
   const executor = createToolExecutor({ governance, logger: quiet, deps: { decryptSecret: () => 'token', postSlackMessage: async () => ({ channelId: 'CA1', slackTs: '1.1' }) } });
   const app = Fastify();
   await app.register(cookie);
+  await app.register(rateLimit, { global: false });
   app.decorate('authenticate', async (request, reply) => {
     const user = USERS[request.headers['x-test-user']];
     if (!user) return reply.status(401).send({ error: 'Unauthorized' });

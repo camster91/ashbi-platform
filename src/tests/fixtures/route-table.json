@@ -531,6 +531,7 @@
   "POST /api/ai-team/chat",
   "POST /api/ai-tools/approvals/:id/approve",
   "POST /api/ai-tools/approvals/:id/reject",
+  "POST /api/ai-tools/sessions",
   "POST /api/ai/ask",
   "POST /api/ai/chat",
   "POST /api/ai/client-health",
