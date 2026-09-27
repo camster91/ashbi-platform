@@ -7,6 +7,7 @@ import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-d
 import { validateBody, createInvoiceSchema, updateInvoiceSchema, markInvoicePaidSchema, sendInvoiceSchema, lineItemTemplateCreateSchema, invoiceBulkIdsSchema, invoiceBulkArchiveSchema, bulkMarkPaidSchema } from '../validators/schemas.js';
 import { sendInvoiceDeliveryEmail } from '../services/email.service.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
+import { defaultInvoiceCurrency, normalizeInvoiceCurrency } from '../utils/money.js';
 
 const HST_RATE = 13; // Ontario HST
 const VOID_UNDO_WINDOW_MS = 10_000;
@@ -206,19 +207,24 @@ export default async function invoiceRoutes(fastify) {
       discountAmount = 0,
       isRecurring = false,
       recurringInterval,
+      currency,
     } = request.body;
 
     if (!clientId) return reply.status(400).send({ error: 'clientId is required' });
     if (lineItems.length === 0) return reply.status(400).send({ error: 'At least one line item is required' });
 
-    const invoiceNumber = await generateInvoiceNumber();
+    const client = await fastify.prisma.client.findFirst({ where: { id: clientId }, select: { id: true, name: true } });
+    if (!client) return reply.status(404).send({ error: 'Client not found' });
+
+    const invoiceNumber = await generateInvoiceNumber(fastify.prisma);
     const processedItems = processLineItems(lineItems);
     const { subtotal, tax, total } = calcTotals(processedItems, taxRate, discountAmount);
 
     return fastify.prisma.invoice.create({
       data: {
         invoiceNumber,
-        title: title || null,
+        title: title || `Invoice for ${client.name}`,
+        currency: normalizeInvoiceCurrency(currency) || defaultInvoiceCurrency(),
         clientId,
         projectId: projectId || null,
         subtotal,
@@ -266,10 +272,12 @@ export default async function invoiceRoutes(fastify) {
       projectId,
       isRecurring,
       recurringInterval,
+      currency,
     } = request.body;
 
     const updateData = {};
-    if (title !== undefined) updateData.title = title;
+    if (title !== undefined && title !== '') updateData.title = title;
+    if (currency !== undefined) updateData.currency = normalizeInvoiceCurrency(currency);
     if (notes !== undefined) updateData.notes = notes;
     if (internalNotes !== undefined) updateData.internalNotes = internalNotes;
     if (dueDate !== undefined) updateData.dueDate = dueDate ? new Date(dueDate) : null;
@@ -571,7 +579,7 @@ export default async function invoiceRoutes(fastify) {
     });
     if (existing) return existing;
 
-    const invoiceNumber = await generateInvoiceNumber();
+    const invoiceNumber = await generateInvoiceNumber(fastify.prisma);
     const processedItems = proposal.lineItems.map((li, idx) => ({
       description: li.description,
       itemType: 'LABOR',

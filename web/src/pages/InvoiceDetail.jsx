@@ -15,6 +15,8 @@ import { Button, Card, LoadingState } from '../components/ui';
 import Modal, { ModalFooter } from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import QueryErrorState from '../components/QueryErrorState';
+import { buildInvoiceUpdatePayload, INVOICE_CURRENCY_OPTIONS } from '../lib/invoice-payloads';
+import { formatMoney, formatInvoiceDate, toDateInputValue } from '../lib/money';
 
 const HST_RATE = 13;
 const INITIAL_PAYMENT_FORM = { paymentMethod: 'BANK', paymentNotes: '', transactionId: '' };
@@ -45,13 +47,12 @@ const STATUS_CONFIG = {
   VOID:    { label: 'Void',    color: 'bg-muted text-muted-foreground' },
 };
 
-function fmt(n) {
-  return `$${(n || 0).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function fmt(n, currency) {
+  return formatMoney(n, currency);
 }
 
 function formatDate(date) {
-  if (!date) return '—';
-  return new Date(date).toLocaleDateString({ year: 'numeric', month: 'long', day: 'numeric' });
+  return formatInvoiceDate(date, { month: 'long' });
 }
 
 export default function InvoiceDetail() {
@@ -195,7 +196,8 @@ export default function InvoiceDetail() {
       title: invoice.title || '',
       notes: invoice.notes || '',
       internalNotes: invoice.internalNotes || '',
-      dueDate: invoice.dueDate ? invoice.dueDate.split('T')[0] : '',
+      dueDate: toDateInputValue(invoice.dueDate),
+      currency: invoice.currency || 'CAD',
       taxRate: invoice.taxRate || HST_RATE,
       taxType: invoice.taxType || 'HST',
       discountAmount: invoice.discountAmount || 0,
@@ -213,22 +215,8 @@ export default function InvoiceDetail() {
 
   const handleUpdate = (e) => {
     e.preventDefault();
-    updateMutation.mutate({
-      title: editForm.title || undefined,
-      notes: editForm.notes || undefined,
-      internalNotes: editForm.internalNotes || undefined,
-      dueDate: editForm.dueDate || undefined,
-      taxRate: parseFloat(editForm.taxRate),
-      taxType: editForm.taxType,
-      discountAmount: parseFloat(editForm.discountAmount) || 0,
-      lineItems: editForm.lineItems.map((li, idx) => ({
-        description: li.description,
-        itemType: li.itemType,
-        quantity: parseFloat(li.quantity) || 1,
-        unitPrice: parseFloat(li.unitPrice) || 0,
-        position: idx,
-      })),
-    });
+    // Shared with the API contract test so the UI payload always validates.
+    updateMutation.mutate(buildInvoiceUpdatePayload(editForm));
   };
 
   const handlePrint = () => {
@@ -452,10 +440,18 @@ export default function InvoiceDetail() {
                   className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Due Date</label>
-                <input type="date" value={editForm.dueDate}
+                <label htmlFor="invoice-edit-due-date" className="block text-sm font-medium mb-1">Due Date <span className="font-normal text-muted-foreground">(blank = upon receipt)</span></label>
+                <input id="invoice-edit-due-date" type="date" value={editForm.dueDate}
                   onChange={(e) => setEditForm(f => ({ ...f, dueDate: e.target.value }))}
                   className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" />
+              </div>
+              <div>
+                <label htmlFor="invoice-edit-currency" className="block text-sm font-medium mb-1">Currency</label>
+                <select id="invoice-edit-currency" value={editForm.currency || 'CAD'}
+                  onChange={(e) => setEditForm(f => ({ ...f, currency: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm">
+                  {INVOICE_CURRENCY_OPTIONS.map(code => <option key={code} value={code}>{code}</option>)}
+                </select>
               </div>
             </div>
 
@@ -510,7 +506,7 @@ export default function InvoiceDetail() {
                       })}
                       className="col-span-2 px-2 py-1.5 rounded border border-border bg-background text-sm text-right" />
                     <span className="col-span-2 text-sm text-right font-medium">
-                      {fmt((parseFloat(li.quantity) || 1) * (parseFloat(li.unitPrice) || 0))}
+                      {fmt((parseFloat(li.quantity) || 1) * (parseFloat(li.unitPrice) || 0), editForm.currency)}
                     </span>
                     <button type="button"
                       onClick={() => setEditForm(f => ({ ...f, lineItems: f.lineItems.filter((_, i) => i !== idx) }))}
@@ -580,7 +576,7 @@ export default function InvoiceDetail() {
                       <div>
                         <label className="block text-xs text-muted-foreground mb-0.5">Total</label>
                         <div className="px-2 py-1.5 text-sm font-medium">
-                          {fmt((parseFloat(li.quantity) || 1) * (parseFloat(li.unitPrice) || 0))}
+                          {fmt((parseFloat(li.quantity) || 1) * (parseFloat(li.unitPrice) || 0), editForm.currency)}
                         </div>
                       </div>
                     </div>
@@ -614,7 +610,7 @@ export default function InvoiceDetail() {
                   className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1">Discount ($)</label>
+                <label className="block text-sm font-medium mb-1">Discount ({editForm.currency || 'CAD'})</label>
                 <input type="number" value={editForm.discountAmount} min="0" step="0.01"
                   onChange={(e) => setEditForm(f => ({ ...f, discountAmount: e.target.value }))}
                   className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" />
@@ -639,10 +635,10 @@ export default function InvoiceDetail() {
 
             {/* Total preview */}
             <div className="rounded-lg bg-muted/50 p-3 text-sm space-y-1">
-              <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{fmt(editSubtotal)}</span></div>
-              {editDiscount > 0 && <div className="flex justify-between text-green-600"><span>Discount</span><span>-{fmt(editDiscount)}</span></div>}
-              <div className="flex justify-between text-muted-foreground"><span>{editForm.taxType} ({editForm.taxRate}%)</span><span>{fmt(editTax)}</span></div>
-              <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1"><span>Total</span><span>{fmt(editTotal)} CAD</span></div>
+              <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{fmt(editSubtotal, editForm.currency)}</span></div>
+              {editDiscount > 0 && <div className="flex justify-between text-green-600"><span>Discount</span><span>-{fmt(editDiscount, editForm.currency)}</span></div>}
+              <div className="flex justify-between text-muted-foreground"><span>{editForm.taxType} ({editForm.taxRate}%)</span><span>{fmt(editTax, editForm.currency)}</span></div>
+              <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1"><span>Total</span><span>{fmt(editTotal, editForm.currency)}</span></div>
             </div>
 
             <div className="flex gap-2">
@@ -700,8 +696,8 @@ export default function InvoiceDetail() {
                             <div className="text-xs text-muted-foreground mt-0.5">{li.itemType}</div>
                           </td>
                           <td className="px-3 py-3 text-center text-muted-foreground">{li.quantity}</td>
-                          <td className="px-3 py-3 text-right">{fmt(li.unitPrice)}</td>
-                          <td className="px-4 py-3 text-right font-medium">{fmt(li.total)}</td>
+                          <td className="px-3 py-3 text-right">{fmt(li.unitPrice, invoice.currency)}</td>
+                          <td className="px-4 py-3 text-right font-medium">{fmt(li.total, invoice.currency)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -717,11 +713,11 @@ export default function InvoiceDetail() {
                           <p className="font-medium truncate">{li.description}</p>
                           <p className="text-xs text-muted-foreground">{li.itemType}</p>
                         </div>
-                        <p className="font-semibold whitespace-nowrap">{fmt(li.total)}</p>
+                        <p className="font-semibold whitespace-nowrap">{fmt(li.total, invoice.currency)}</p>
                       </div>
                       <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
                         <span>Qty: {li.quantity}</span>
-                        <span>@ {fmt(li.unitPrice)}</span>
+                        <span>@ {fmt(li.unitPrice, invoice.currency)}</span>
                       </div>
                     </div>
                   ))}
@@ -731,18 +727,18 @@ export default function InvoiceDetail() {
                 <div className="mt-4 flex justify-end">
                   <div className="w-full sm:w-64 space-y-1.5 text-sm">
                     <div className="flex justify-between text-muted-foreground">
-                      <span>Subtotal</span><span>{fmt(invoice.subtotal)}</span>
+                      <span>Subtotal</span><span>{fmt(invoice.subtotal, invoice.currency)}</span>
                     </div>
                     {invoice.discountAmount > 0 && (
                       <div className="flex justify-between text-green-600">
-                        <span>Discount</span><span>-{fmt(invoice.discountAmount)}</span>
+                        <span>Discount</span><span>-{fmt(invoice.discountAmount, invoice.currency)}</span>
                       </div>
                     )}
                     <div className="flex justify-between text-muted-foreground">
-                      <span>{invoice.taxType} ({invoice.taxRate}%)</span><span>{fmt(invoice.tax)}</span>
+                      <span>{invoice.taxType} ({invoice.taxRate}%)</span><span>{fmt(invoice.tax, invoice.currency)}</span>
                     </div>
                     <div className="flex justify-between font-bold text-lg border-t border-border pt-2 mt-2">
-                      <span>Total</span><span>{fmt(invoice.total)} CAD</span>
+                      <span>Total</span><span>{fmt(invoice.total, invoice.currency)}</span>
                     </div>
                     {isPaid && (
                       <div className="flex justify-between text-green-600 text-sm">
@@ -806,7 +802,7 @@ export default function InvoiceDetail() {
                       {payments.map(p => (
                         <div key={p.id} className="flex items-center justify-between text-sm">
                           <div>
-                            <p className="font-medium">{fmt(p.amount)}</p>
+                            <p className="font-medium">{fmt(p.amount, invoice.currency)}</p>
                             <p className="text-xs text-muted-foreground">{paymentMethodLabel(p.method)} · {formatDate(p.paidAt)}</p>
                             {p.transactionId && <p className="text-xs text-muted-foreground font-mono">{p.transactionId}</p>}
                             {p.notes && <p className="text-xs text-muted-foreground">{p.notes}</p>}
@@ -861,7 +857,7 @@ export default function InvoiceDetail() {
         <form onSubmit={(event) => { event.preventDefault(); markPaidMutation.mutate(payForm); }} className="space-y-4">
           <div>
             <p className="text-sm text-muted-foreground">Invoice: <span className="font-medium text-foreground">{invoice.invoiceNumber}</span></p>
-            <p className="text-sm text-muted-foreground">Amount: <span className="font-semibold text-foreground">{fmt(invoice.total)}</span></p>
+            <p className="text-sm text-muted-foreground">Amount: <span className="font-semibold text-foreground">{fmt(invoice.total, invoice.currency)}</span></p>
           </div>
           <div>
             <label htmlFor="invoice-payment-method" className="block text-sm font-medium mb-1">Payment method</label>

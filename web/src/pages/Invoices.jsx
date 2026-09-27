@@ -14,6 +14,8 @@ import QueryErrorState from '../components/QueryErrorState';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { buildInvoiceCreatePayload, INVOICE_CURRENCY_OPTIONS } from '../lib/invoice-payloads';
+import { formatMoney, formatInvoiceDate } from '../lib/money';
 
 const HST_RATE = 13;
 
@@ -25,8 +27,8 @@ const STATUS_CONFIG = {
   VOID:    { label: 'Void',    color: 'bg-muted text-muted-foreground',              icon: Receipt },
 };
 
-function fmt(n) {
-  return `$${(n || 0).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function fmt(n, currency) {
+  return formatMoney(n, currency);
 }
 
 export default function Invoices() {
@@ -53,6 +55,7 @@ export default function Invoices() {
     title: '',
     notes: '',
     dueDate: '',
+    currency: 'CAD',
     taxRate: HST_RATE,
     taxType: 'HST',
     discountAmount: 0,
@@ -154,7 +157,7 @@ export default function Invoices() {
 
   // Form helpers
   const resetForm = () => setForm({
-    clientId: '', projectId: '', title: '', notes: '', dueDate: '',
+    clientId: '', projectId: '', title: '', notes: '', dueDate: '', currency: 'CAD',
     taxRate: HST_RATE, taxType: 'HST', discountAmount: 0,
     isRecurring: false, recurringInterval: 'MONTHLY',
     lineItems: [{ description: '', itemType: 'LABOR', quantity: 1, unitPrice: 0 }],
@@ -188,24 +191,8 @@ export default function Invoices() {
 
   const handleCreate = (e) => {
     e.preventDefault();
-    createMutation.mutate({
-      clientId: form.clientId,
-      projectId: form.projectId || undefined,
-      title: form.title || undefined,
-      notes: form.notes || undefined,
-      dueDate: form.dueDate || undefined,
-      taxRate: parseFloat(form.taxRate),
-      taxType: form.taxType,
-      discountAmount: parseFloat(form.discountAmount) || 0,
-      isRecurring: form.isRecurring,
-      recurringInterval: form.isRecurring ? form.recurringInterval : undefined,
-      lineItems: form.lineItems.map(li => ({
-        description: li.description,
-        itemType: li.itemType,
-        quantity: parseFloat(li.quantity) || 1,
-        unitPrice: parseFloat(li.unitPrice) || 0,
-      })),
-    });
+    // Shared with the API contract test so the UI payload always validates.
+    createMutation.mutate(buildInvoiceCreatePayload(form));
   };
 
   // Calculated totals for create form
@@ -399,7 +386,7 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
             </div>
             <p className="text-sm text-muted-foreground truncate">{invoice.client?.name}</p>
           </div>
-          <span className="text-lg font-semibold">{fmt(invoice.total)}</span>
+          <span className="text-lg font-semibold">{fmt(invoice.total, invoice.currency)}</span>
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
           {invoice.dueDate && (
@@ -447,7 +434,7 @@ function InvoiceRow({ invoice, isAdmin, onView, onSend, onMarkPaid, onDelete, se
             {invoice.title && <span className="text-xs text-muted-foreground truncate">— {invoice.title}</span>}
           </div>
           <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
-            <span className="font-semibold text-foreground text-sm">{fmt(invoice.total)}</span>
+            <span className="font-semibold text-foreground text-sm">{fmt(invoice.total, invoice.currency)}</span>
             {invoice.dueDate && (
               <span className={`flex items-center gap-1 ${invoice.isOverdue ? 'text-red-500' : ''}`}>
                 <Clock className="w-3 h-3" />
@@ -567,12 +554,20 @@ function InvoiceCreateForm({
         </div>
 
         {/* Dates */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Due Date</label>
-            <input type="date" value={form.dueDate}
+            <label htmlFor="invoice-due-date" className="block text-sm font-medium mb-1">Due Date <span className="font-normal text-muted-foreground">(blank = upon receipt)</span></label>
+            <input id="invoice-due-date" type="date" value={form.dueDate}
               onChange={(e) => onFormChange(f => ({ ...f, dueDate: e.target.value }))}
               className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" />
+          </div>
+          <div>
+            <label htmlFor="invoice-currency" className="block text-sm font-medium mb-1">Currency</label>
+            <select id="invoice-currency" value={form.currency || 'CAD'}
+              onChange={(e) => onFormChange(f => ({ ...f, currency: e.target.value }))}
+              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm">
+              {INVOICE_CURRENCY_OPTIONS.map(code => <option key={code} value={code}>{code}</option>)}
+            </select>
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Tax</label>
@@ -649,7 +644,7 @@ function InvoiceCreateForm({
                     onChange={(e) => onLineItemUpdate(idx, 'unitPrice', e.target.value)}
                     className="col-span-2 px-2 py-1.5 rounded border border-border bg-background text-sm text-right" />
                   <span className="col-span-2 text-sm text-right font-medium">
-                    {fmt((parseFloat(li.quantity) || 1) * (parseFloat(li.unitPrice) || 0))}
+                    {fmt((parseFloat(li.quantity) || 1) * (parseFloat(li.unitPrice) || 0), form.currency)}
                   </span>
                   <button type="button" onClick={() => onLineItemRemove(idx)}
                     aria-label={`Remove line item ${idx + 1}`}
@@ -699,7 +694,7 @@ function InvoiceCreateForm({
                     <div>
                       <label className="block text-xs text-muted-foreground mb-0.5">Total</label>
                       <div className="px-2 py-1.5 text-sm font-medium">
-                        {fmt((parseFloat(li.quantity) || 1) * (parseFloat(li.unitPrice) || 0))}
+                        {fmt((parseFloat(li.quantity) || 1) * (parseFloat(li.unitPrice) || 0), form.currency)}
                       </div>
                     </div>
                   </div>
@@ -718,7 +713,7 @@ function InvoiceCreateForm({
         {/* Discount */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Discount ($)</label>
+            <label className="block text-sm font-medium mb-1">Discount ({form.currency || 'CAD'})</label>
             <input type="number" value={form.discountAmount} min="0" step="0.01"
               onChange={(e) => onFormChange(f => ({ ...f, discountAmount: e.target.value }))}
               className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" />
@@ -755,21 +750,21 @@ function InvoiceCreateForm({
         <div className="rounded-lg bg-muted/50 p-4 space-y-1.5 text-sm">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Subtotal</span>
-            <span>{fmt(formSubtotal)}</span>
+            <span>{fmt(formSubtotal, form.currency)}</span>
           </div>
           {formDiscount > 0 && (
             <div className="flex justify-between text-green-600">
               <span>Discount</span>
-              <span>-{fmt(formDiscount)}</span>
+              <span>-{fmt(formDiscount, form.currency)}</span>
             </div>
           )}
           <div className="flex justify-between">
             <span className="text-muted-foreground">{form.taxType} ({form.taxRate}%)</span>
-            <span>{fmt(formTax)}</span>
+            <span>{fmt(formTax, form.currency)}</span>
           </div>
           <div className="flex justify-between font-semibold text-base border-t border-border pt-2 mt-2">
             <span>Total</span>
-            <span>{fmt(formTotal)} CAD</span>
+            <span>{fmt(formTotal, form.currency)}</span>
           </div>
         </div>
 
@@ -824,7 +819,7 @@ function CollectionsDashboard({ stats, invoices, onMarkPaid }) {
                       {getDaysOverdue(inv.dueDate)} days overdue · Due {formatDate(inv.dueDate)}
                     </div>
                   </div>
-                  <span className="text-lg font-semibold">{fmt(inv.total)}</span>
+                  <span className="text-lg font-semibold">{fmt(inv.total, inv.currency)}</span>
                   <Button size="sm" onClick={() => onMarkPaid(inv.id)}
                     leftIcon={<DollarSign className="w-3 h-3" />}>
                     Mark Paid
@@ -888,11 +883,11 @@ function getDaysOverdue(dueDate) {
 }
 
 function formatDate(date) {
-  return new Date(date).toLocaleDateString({ month: 'short', day: 'numeric', year: 'numeric' });
+  return formatInvoiceDate(date);
 }
 
 function exportToCSV(invoices) {
-  const headers = ['Invoice #', 'Client', 'Title', 'Status', 'Issue Date', 'Due Date', 'Subtotal', 'Tax', 'Total', 'Paid At'];
+  const headers = ['Invoice #', 'Client', 'Title', 'Status', 'Issue Date', 'Due Date', 'Currency', 'Subtotal', 'Tax', 'Total', 'Paid At'];
   const rows = invoices.map(inv => [
     inv.invoiceNumber,
     inv.client?.name || '',
@@ -900,6 +895,7 @@ function exportToCSV(invoices) {
     inv.isOverdue ? 'OVERDUE' : inv.status,
     inv.issueDate ? formatDate(inv.issueDate) : '',
     inv.dueDate ? formatDate(inv.dueDate) : '',
+    inv.currency || 'CAD',
     inv.subtotal?.toFixed(2),
     inv.tax?.toFixed(2),
     inv.total?.toFixed(2),
