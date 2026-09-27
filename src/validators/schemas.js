@@ -1872,3 +1872,9 @@ export const botTaskUpdateSchema = z.object({
   dueDate: z.string().datetime().nullable().optional(),
   blockedBy: z.string().max(2000).nullable().optional(),
 }).strict();
+
+// POST /api/estimates/view/:viewToken/approve (public capability link)
+export const estimatePublicResponseSchema = z.object({
+  action: z.enum(['approve', 'decline']),
+  reason: z.string().trim().max(2000).optional(),
+}).strict();

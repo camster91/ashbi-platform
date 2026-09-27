@@ -1902,7 +1902,12 @@ model Estimate {
   tax         Float     @default(0)
   total       Float     @default(0)
   validUntil  DateTime?
+  // Public link capability: rotated to a 256-bit token on send and valid only
+  // until publicAccessExpiresAt (null = never issued) unless revoked. The
+  // cuid default is a placeholder that no public route accepts.
   viewToken   String    @unique @default(cuid())
+  publicAccessExpiresAt DateTime?
+  publicAccessRevokedAt DateTime?
   sentAt      DateTime?
   // Email delivery tracking, updated by the signed Mailgun events webhook
   deliveryMessageId String?

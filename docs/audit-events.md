@@ -118,6 +118,9 @@ notes, signer names, email addresses, API key material or password hashes.
 | `review.decision_recorded` | `review_session` | USER or CLIENT | `POST /api/reviews/:id/decisions` (`via: staff`) and `POST /api/portal/review/:token/decisions` (a client through a share link created with `allowDecision`, `via: share_link`, `actorUserId` null). The guest's name, email and note stay on the append-only `ReviewDecision` row, never in the event | `decisionId`, `decision` (`approved` or `changes_requested`), `fromStatus`, `toStatus`, `via`, `shareLinkId` |
 | `review.share_link_created` | `review_share_link` | USER | `POST /api/reviews/:id/share-links` (step-up re-authentication); never the token or its hash | `sessionId`, `expiresAt`, `expiresInDays`, `allowDecision` |
 | `review.share_link_revoked` | `review_share_link` | USER | `POST /api/reviews/:id/share-links/:linkId/revoke` (only the first revocation of a link) | `sessionId`, `wasExpired` |
+| `estimate.approved` | `estimate` | CLIENT | `POST /api/estimates/view/:viewToken/approve` with `action: approve` (public capability link, `via: public_link`, `actorUserId` null) | `fromStatus`, `toStatus`, `via`, `total` |
+| `estimate.declined` | `estimate` | CLIENT | `POST /api/estimates/view/:viewToken/approve` with `action: decline` (`via: public_link`, `actorUserId` null); the decline reason is never recorded | `fromStatus`, `toStatus`, `via`, `total` |
+| `estimate.link_revoked` | `estimate` | USER | `POST /api/estimates/:id/revoke-link` | `alreadyRevoked` |
 
 `auth.login_failed` details:
 
