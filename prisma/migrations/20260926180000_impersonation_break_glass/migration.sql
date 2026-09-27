@@ -62,7 +62,7 @@ ALTER TABLE "break_glass_grants" ADD CONSTRAINT "break_glass_grants_organization
 -- the application enforces the same rules (src/auth/impersonation.js,
 -- src/auth/break-glass.js) and these keep a buggy or hand-written write out.
 ALTER TABLE "impersonation_sessions" ADD CONSTRAINT "impersonation_sessions_subjectRole_check"
-  CHECK ("subjectRole" IN ('TEAM', 'CLIENT'));
+  CHECK ("subjectRole" IN ('TEAM', 'STAFF', 'CLIENT'));
 ALTER TABLE "impersonation_sessions" ADD CONSTRAINT "impersonation_sessions_reason_check"
   CHECK (length("reason") BETWEEN 10 AND 500);
 ALTER TABLE "impersonation_sessions" ADD CONSTRAINT "impersonation_sessions_not_self_check"

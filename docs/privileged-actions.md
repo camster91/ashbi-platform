@@ -183,7 +183,7 @@ person's password. Code: `src/auth/impersonation.js`,
 | Only after step-up | `requireRecentAuth` (the same 10-minute window as the other privileged actions) |
 | With a reason | 10 to 500 characters (*Proposal*), required by the API, stored on the `impersonation_sessions` row, shown to the viewed person and in the Team page's **Support views** list. It is free text, so it is never copied into audit metadata |
 | Same organization only | The target is looked up through `createScopedPrisma(adminOrganizationId)`; another tenant's user id answers the same `404 IMPERSONATION_TARGET_NOT_FOUND` as an unknown id |
-| `TEAM` or `CLIENT` targets only | Never another `ADMIN` or a `BOT` (`403 IMPERSONATION_TARGET_FORBIDDEN`), never a platform operator (`PLATFORM_OPERATOR_USER_IDS`), never yourself (`400 IMPERSONATION_SELF`), never a deactivated account (`409`). A client user needs a portal contact (`409 IMPERSONATION_TARGET_NO_PORTAL`). The database repeats the role, self and length rules as CHECK constraints |
+| Non-admin staff (`TEAM`, `STAFF`) or `CLIENT` targets only | Never another `ADMIN` or a `BOT` (`403 IMPERSONATION_TARGET_FORBIDDEN`), never a platform operator (`PLATFORM_OPERATOR_USER_IDS`), never yourself (`400 IMPERSONATION_SELF`), never a deactivated account (`409`). A client user needs a portal contact (`409 IMPERSONATION_TARGET_NO_PORTAL`). The database repeats the role, self and length rules as CHECK constraints |
 | One view at a time | Starting a new view ends the admin's previous one (`superseded`) |
 
 ### How the view works

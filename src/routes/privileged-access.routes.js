@@ -48,7 +48,7 @@ export default async function privilegedAccessRoutes(fastify, options = {}) {
     return { active: Boolean(session), session, ...(request.impersonationEnded ? { ended: request.impersonationEnded } : {}) };
   });
 
-  // Start viewing as a TEAM or CLIENT member of the admin's own organization.
+  // Start viewing as a non-admin staff or CLIENT member of the admin's own organization.
   fastify.post('/impersonation', {
     onRequest: [fastify.adminOnly],
     preHandler: [requireRecentAuth, validateBody(impersonationStartSchema)],

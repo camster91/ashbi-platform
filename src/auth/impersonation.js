@@ -2,7 +2,7 @@
 // Policy: docs/privileged-actions.md#support-impersonation.
 //
 // An ADMIN who re-authenticated in the last few minutes may view the app as a
-// TEAM or CLIENT member of their own organization, for a fixed window and
+// non-admin staff (TEAM/STAFF) or CLIENT member of their own organization, for a fixed window and
 // with a written reason. The admin's own session cookie (`token`) is never
 // replaced: a second httpOnly cookie (`imp`) names an `impersonation_sessions`
 // row, and on every /api request the global hook in src/index.js swaps
@@ -12,7 +12,7 @@
 //   - the admin's session is still current (sessionVersion + session binding
 //     identical to the ones recorded when the view started),
 //   - the row is open, unexpired and belongs to the admin's organization,
-//   - the subject is still an active TEAM/CLIENT member of that organization.
+//   - the subject is still an active TEAM/STAFF/CLIENT member of that organization.
 //
 // While the view is active every mutating request is refused with
 // 403 IMPERSONATION_READ_ONLY, and the sensitive areas in BLOCKED_PREFIXES are
@@ -33,7 +33,9 @@ export const IMPERSONATION_COOKIE = 'imp';
 export const IMPERSONATION_TTL_SECONDS = 30 * 60;
 export const IMPERSONATION_REASON_MIN = 10;
 export const IMPERSONATION_REASON_MAX = 500;
-export const IMPERSONATABLE_ROLES = Object.freeze(['TEAM', 'CLIENT']);
+// Non-admin staff (TEAM from registration, STAFF from the Team page invite)
+// and client users.
+export const IMPERSONATABLE_ROLES = Object.freeze(['TEAM', 'STAFF', 'CLIENT']);
 
 export const IMPERSONATION_READ_ONLY_CODE = 'IMPERSONATION_READ_ONLY';
 export const IMPERSONATION_BLOCKED_CODE = 'IMPERSONATION_BLOCKED';

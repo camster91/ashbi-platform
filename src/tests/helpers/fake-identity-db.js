@@ -192,6 +192,7 @@ export function seedIdentityOrganizations(db, { passwordHash = '$2b$04$invalidin
     user('admin-a', 'org-a', 'ADMIN', { name: 'Avery Admin' }),
     user('admin-a2', 'org-a', 'ADMIN', { name: 'Ari Admin' }),
     user('team-a', 'org-a', 'TEAM', { name: 'Terry Team' }),
+    user('staff-a', 'org-a', 'STAFF', { name: 'Sam Staff' }),
     user('team-a-inactive', 'org-a', 'TEAM', { name: 'Ina Inactive', isActive: false }),
     user('client-user-a', 'org-a', 'CLIENT', { name: 'Cleo Client', clientId: 'client-a' }),
     user('client-user-a-nocontact', 'org-a', 'CLIENT', { name: 'Nora Nocontact', clientId: 'client-a' }),

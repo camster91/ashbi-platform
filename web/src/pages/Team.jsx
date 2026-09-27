@@ -30,7 +30,7 @@ const roleColors = {
 };
 
 // Roles an admin may view the app as (#416): never another administrator.
-const VIEWABLE_ROLES = new Set(['TEAM', 'CLIENT']);
+const VIEWABLE_ROLES = new Set(['TEAM', 'STAFF', 'CLIENT']);
 
 const statusColor = (status) => {
   if (status === 'overloaded') return 'text-red-600 bg-red-50 dark:bg-red-900/20';

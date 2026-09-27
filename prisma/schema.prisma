@@ -1851,7 +1851,7 @@ model ApiKey {
 }
 
 // Audited support impersonation (#416, docs/privileged-actions.md): an ADMIN
-// views the app as a TEAM or CLIENT member of the same organization, read-only
+// views the app as a non-admin staff (TEAM/STAFF) or CLIENT member of the same organization, read-only
 // and for a fixed, non-renewable window. Actor and subject carry no FK so the
 // record outlives either account; the audit trail is in audit_events.
 model ImpersonationSession {
@@ -1860,7 +1860,7 @@ model ImpersonationSession {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   actorUserId    String
   subjectUserId  String
-  subjectRole    String // TEAM or CLIENT (CHECK constraint)
+  subjectRole    String // TEAM, STAFF or CLIENT (CHECK constraint)
   reason         String // 10 to 500 characters (CHECK constraint)
   readOnly       Boolean      @default(true)
   startedAt      DateTime     @default(now())

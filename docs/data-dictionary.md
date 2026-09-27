@@ -1062,7 +1062,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
 | `actorUserId` | String | required |  |  |  |
 | `subjectUserId` | String | required |  |  |  |
-| `subjectRole` | String | required |  |  | TEAM or CLIENT (CHECK constraint) |
+| `subjectRole` | String | required |  |  | TEAM, STAFF or CLIENT (CHECK constraint) |
 | `reason` | String | required |  |  | 10 to 500 characters (CHECK constraint) |
 | `readOnly` | Boolean | required | `true` |  |  |
 | `startedAt` | DateTime | required | `now()` |  |  |

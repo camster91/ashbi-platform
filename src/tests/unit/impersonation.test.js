@@ -246,6 +246,12 @@ describe('starting a support view', () => {
     assert.match(note.message, /ticket 4412/);
   });
 
+  it('allows every non-admin staff role (TEAM from registration, STAFF from the Team page)', async (t) => {
+    const { startOk, db } = await buildApp(t);
+    await startOk('admin-a', 'staff-a');
+    assert.equal(db.tables.impersonationSession[0].subjectRole, 'STAFF');
+  });
+
   it('ends the previous view when an admin starts another', async (t) => {
     const { startOk, db } = await buildApp(t);
     await startOk('admin-a', 'team-a');

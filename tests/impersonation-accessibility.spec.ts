@@ -58,6 +58,8 @@ test.describe('Support impersonation', () => {
     await expect(page).toHaveURL(/\/team$/);
     await expect(page.getByRole('region', { name: 'Support view' })).toHaveCount(0);
     expect(state.impersonationStops).toBe(1);
+    // Let the reloaded Team page settle so no request outlives the fixture.
+    await page.waitForLoadState('networkidle');
   });
 
   test('the banner is axe-clean and stays visible on every page', async ({ page, browserName }) => {
@@ -77,5 +79,6 @@ test.describe('Support impersonation', () => {
 
     await page.goto('/projects');
     await expect(page.getByRole('region', { name: 'Support view' })).toBeVisible();
+    await page.waitForLoadState('networkidle');
   });
 });
