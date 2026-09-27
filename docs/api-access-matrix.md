@@ -50,7 +50,8 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | public | 50 |
 | recent-auth + staff | 4 |
 | staff | 355 |
-| **total** | 522 |
+| staff (inline) | 1 |
+| **total** | 523 |
 
 ## Routes by prefix
 
@@ -469,7 +470,8 @@ queries; the test keeps a reviewed list of those routes with the reason.
 
 | Method | Path | Access | Tenancy | Notes |
 | --- | --- | --- | --- | --- |
-| GET | `/api/health` | public | exempt | health: Readiness probe for the deploy controller and uptime checks. |
+| GET | `/api/health` | public | exempt | health: Readiness probe for uptime checks; dependency states and revision only (details at /api/health/details). |
+| GET | `/api/health/details` | staff (inline) | exempt | Staff or container-loopback infrastructure probe: runs SELECT 1 and reads Redis queue counters; reads no tenant data. |
 
 ### /api/inbox
 

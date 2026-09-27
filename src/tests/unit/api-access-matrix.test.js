@@ -34,7 +34,7 @@ const DOC_URL = new URL('../../../docs/api-access-matrix.md', import.meta.url);
 const INTENTIONALLY_PUBLIC_ROUTES = {
   'OPTIONS *': { category: 'infrastructure', reason: 'CORS preflight handled by @fastify/cors.' },
   'GET /api/live': { category: 'health', reason: 'Liveness probe; returns only status and revision.' },
-  'GET /api/health': { category: 'health', reason: 'Readiness probe for the deploy controller and uptime checks.' },
+  'GET /api/health': { category: 'health', reason: 'Readiness probe for uptime checks; dependency states and revision only (details at /api/health/details).' },
 
   'POST /api/auth/login': { category: 'credential exchange', reason: 'Staff password login.' },
   'POST /api/auth/login/mfa': { category: 'credential exchange', reason: 'Second login step; requires the short-lived MFA challenge token.' },
@@ -100,6 +100,7 @@ const INTENTIONALLY_PUBLIC_ROUTES = {
  * @type {Record<string, string>}
  */
 const REVIEWED_UNSCOPED_ROUTES = {
+  'GET /api/health/details': 'Staff or container-loopback infrastructure probe: runs SELECT 1 and reads Redis queue counters; reads no tenant data.',
   'GET /api/auth/me': 'Reads and returns only the caller\'s own user record.',
   'PUT /api/auth/me': 'Updates only the caller\'s own user record.',
   'POST /api/auth/change-password': 'Changes only the caller\'s own password.',
