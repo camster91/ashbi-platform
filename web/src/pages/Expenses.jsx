@@ -11,6 +11,7 @@ import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 import { useToast } from '../hooks/useToast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import QueryErrorState from '../components/QueryErrorState';
+import { formatDate, formatMoney } from '../lib/format';
 
 const CATEGORIES = [
   { value: 'OFFICE', label: 'Office' },
@@ -38,8 +39,8 @@ const CATEGORY_COLORS = {
   OTHER: 'bg-muted text-muted-foreground',
 };
 
-function fmt(n) {
-  return `$${(n || 0).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+function fmt(n, currency) {
+  return formatMoney(n || 0, currency);
 }
 
 const emptyForm = {
@@ -590,7 +591,7 @@ export default function Expenses() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2 text-sm text-foreground">
                         <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
-                        {new Date(expense.date).toLocaleDateString()}
+                        {formatDate(expense.date)}
                       </div>
                     </td>
                     <td className="px-4 py-3">
@@ -631,7 +632,7 @@ export default function Expenses() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <span className="text-sm font-semibold text-foreground">{fmt(expense.amount)}</span>
+                      <span className="text-sm font-semibold text-foreground">{fmt(expense.amount, expense.currency)}</span>
                       <span className="text-xs text-muted-foreground ml-1">{expense.currency}</span>
                     </td>
                     <td className="px-4 py-3 text-right">

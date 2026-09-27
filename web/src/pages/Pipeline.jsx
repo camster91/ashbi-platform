@@ -11,13 +11,14 @@ import { Card, LoadingState } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
 import Modal, { ModalFooter } from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { formatMoney } from '../lib/format';
 
 const PRIMARY = '#2e2958';
 const ACCENT = '#e6f354';
 
 function fmt(n) {
   if (n == null) return '--';
-  return `$${(n || 0).toLocaleString('en-CA', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  return formatMoney(n, undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
 const STAGE_CONFIG = {
