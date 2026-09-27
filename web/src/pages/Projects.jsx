@@ -1,56 +1,70 @@
 import { useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
-import { FolderOpen, ChevronRight, Plus, Clock, User, Tag } from 'lucide-react';
+import { Plus, Clock, User, Tag, CalendarDays } from 'lucide-react';
 import { api } from '../lib/api';
 import { EmptyState, KanbanPageSkeleton } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
 import { getHealthColor, getProjectStatusColor, getProjectStatusLabel, cn } from '../lib/utils';
 import CreateProjectModal from '../components/CreateProjectModal';
+import { formatDate } from '../lib/format';
 
-// Kanban column definitions
+// Kanban column definitions. Project status vocabularies still differ between
+// the DB model and the API (#405), so every value either maps to a column here
+// or lands in the visible "Other" column — no project is dropped.
 const KANBAN_COLUMNS = [
   {
     key: 'LEAD',
     label: 'Lead',
+    emptyText: 'No leads right now.',
     headerColor: 'border-gray-400 text-gray-700 dark:text-gray-300',
-    bgColor: 'bg-gray-50/50',
-    statuses: ['STARTING_UP', 'ON_HOLD'],
+    bgColor: 'bg-muted/40',
+    statuses: ['STARTING_UP', 'ON_HOLD', 'DRAFT'],
   },
   {
     key: 'ACTIVE',
     label: 'Active',
+    emptyText: 'No active projects.',
     headerColor: 'border-blue-400 text-blue-700 dark:text-blue-300',
-    bgColor: 'bg-blue-50/30',
+    bgColor: 'bg-muted/40',
     statuses: ['ACTIVE', 'DESIGN_DEV', 'ADDING_CONTENT'],
   },
   {
     key: 'REVIEW',
     label: 'Review',
-    headerColor: 'border-yellow-400 text-yellow-700 dark:text-yellow-300',
-    bgColor: 'bg-yellow-50/30',
+    emptyText: 'Nothing is waiting for review.',
+    headerColor: 'border-yellow-400 text-yellow-800 dark:text-yellow-300',
+    bgColor: 'bg-muted/40',
     statuses: ['FINALIZING'],
   },
   {
     key: 'DONE',
     label: 'Done',
+    emptyText: 'No finished projects yet.',
     headerColor: 'border-green-400 text-green-800 dark:text-green-300',
-    bgColor: 'bg-green-50/30',
-    statuses: ['LAUNCHED', 'CANCELLED'],
+    bgColor: 'bg-muted/40',
+    statuses: ['LAUNCHED', 'COMPLETED', 'CANCELLED'],
   },
 ];
 
-function getColumnForStatus(status) {
-  for (const col of KANBAN_COLUMNS) {
-    if (col.statuses.includes(status)) return col.key;
-  }
-  return 'LEAD'; // default
-}
+const OTHER_COLUMN = {
+  key: 'OTHER',
+  label: 'Other',
+  emptyText: '',
+  headerColor: 'border-border text-muted-foreground',
+  bgColor: 'bg-muted/40',
+  statuses: [],
+};
 
-function formatDate(dateStr) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' });
+export function groupProjectsByColumn(projects) {
+  const known = new Set(KANBAN_COLUMNS.flatMap((col) => col.statuses));
+  const columns = KANBAN_COLUMNS.map((col) => ({
+    ...col,
+    projects: projects.filter((p) => col.statuses.includes(p.status)),
+  }));
+  const other = projects.filter((p) => !known.has(p.status));
+  if (other.length > 0) columns.push({ ...OTHER_COLUMN, projects: other });
+  return columns;
 }
 
 function ProjectCard({ project }) {
@@ -110,10 +124,17 @@ function ProjectCard({ project }) {
         <span className={cn('px-1.5 py-0.5 text-[10px] font-medium rounded-full', getProjectStatusColor(project.status))}>
           {getProjectStatusLabel(project.status)}
         </span>
-        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-          <Clock className="w-2.5 h-2.5" />
-          {formatDate(project.updatedAt)}
-        </div>
+        {project.endDate ? (
+          <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <CalendarDays className="w-3 h-3" aria-hidden="true" />
+            <span>Due {formatDate(project.endDate)}</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <Clock className="w-3 h-3" aria-hidden="true" />
+            <span>Updated {formatDate(project.updatedAt)}</span>
+          </div>
+        )}
       </div>
 
       {/* Progress bar */}
@@ -146,7 +167,7 @@ function KanbanColumn({ column, projects, count }) {
           <EmptyState
             icon="projects"
             title="No projects"
-            description={`No projects are currently in ${column.label.toLowerCase()}.`}
+            description={column.emptyText}
             className="py-8"
           />
         ) : (
@@ -187,11 +208,8 @@ export default function Projects() {
   // when the response looked empty, which hid real projects.)
   const displayProjects = Array.isArray(projects) ? projects : [];
 
-  // Group projects by kanban column
-  const columns = KANBAN_COLUMNS.map((col) => {
-    const colProjects = displayProjects.filter((p) => col.statuses.includes(p.status));
-    return { ...col, projects: colProjects };
-  });
+  // Group projects by kanban column (unknown statuses go to "Other")
+  const columns = groupProjectsByColumn(displayProjects);
 
   if (isLoading) {
     return <KanbanPageSkeleton label="Loading projects" />;
@@ -236,7 +254,7 @@ export default function Projects() {
 
       {/* Kanban Board */}
       <div
-        className="flex gap-4 overflow-x-auto pb-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+        className="flex gap-4 overflow-x-auto pb-4 min-w-0 [contain:inline-size] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
         role="region"
         aria-label="Project status board"
         tabIndex={0}
