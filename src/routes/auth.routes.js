@@ -384,14 +384,17 @@ export default async function authRoutes(fastify) {
   fastify.post('/client/signup', {
     preHandler: [validateBody(clientSignupSchema)],
   }, async (request, reply) => {
-    const { token, email, password } = request.body;
+    const { token, password } = request.body;
+    const email = request.body.email.trim().toLowerCase();
 
-    // Find and validate invitation
+    // Find and validate invitation. The organization always comes from the
+    // invited client (server-side), never from the request body.
     const invitation = await request.prisma.clientInvitation.findUnique({
-      where: { token }
+      where: { token },
+      include: { client: { select: { id: true, name: true, organizationId: true } } },
     });
 
-    if (!invitation) {
+    if (!invitation || !invitation.client?.organizationId) {
       return reply.status(404).send({ error: 'Invalid invitation token' });
     }
 
@@ -404,7 +407,7 @@ export default async function authRoutes(fastify) {
       return reply.status(400).send({ error: 'Invitation expired' });
     }
 
-    if (invitation.email !== email) {
+    if (invitation.email.trim().toLowerCase() !== email) {
       return reply.status(400).send({ error: 'Email does not match invitation' });
     }
 
@@ -425,8 +428,19 @@ export default async function authRoutes(fastify) {
         name: email.split('@')[0], // Use email prefix as default name
         role: 'CLIENT',
         clientId: invitation.clientId,
+        organizationId: invitation.client.organizationId,
         isActive: true
       }
+    });
+
+    // The client portal authorizes a (user, contact) pair, so make sure the
+    // invited address is a contact of the invited client.
+    const contact = await request.prisma.contact.findFirst({
+      where: { clientId: invitation.clientId, email: { equals: email, mode: 'insensitive' } },
+      select: { id: true },
+    }) ?? await request.prisma.contact.create({
+      data: { email, name: user.name, clientId: invitation.clientId },
+      select: { id: true },
     });
 
     // Mark invitation as used
@@ -435,7 +449,7 @@ export default async function authRoutes(fastify) {
       data: { usedAt: new Date() }
     });
 
-    const jwtToken = signUserSession(fastify.jwt, user);
+    const jwtToken = signUserSession(fastify.jwt, user, { contactId: contact.id });
 
     reply
       .setCookie('token', jwtToken, sessionCookieOptions({ includeMaxAge: true }))

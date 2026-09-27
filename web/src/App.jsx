@@ -26,6 +26,7 @@ const PortalIntakeForm = lazy(() => import('./pages/PortalIntakeForm'));
 const PortalEstimate = lazy(() => import('./pages/PortalEstimate'));
 const PortalReview = lazy(() => import('./pages/PortalReview'));
 const ClientPortal = lazy(() => import('./pages/ClientPortal'));
+const ClientInvite = lazy(() => import('./pages/ClientInvite'));
 const Layout = lazy(() => import('./components/Layout'));
 const QueryProvider = lazy(() => import('./components/QueryProvider'));
 
@@ -197,6 +198,7 @@ function AppRoutes() {
           <Route path="/portal/review/:token" element={<QueryRoute><PortalReview /></QueryRoute>} />
           <Route path="/client-portal" element={<ClientPortal />} />
           <Route path="/client-portal/verify" element={<ClientPortal />} />
+          <Route path="/client/invite" element={<ClientInvite />} />
           <Route path="/client/login" element={<ClientPortal />} />
           <Route path="/client/dashboard" element={<ClientPortal />} />
           <Route path="/" element={<RootRedirect />} />
