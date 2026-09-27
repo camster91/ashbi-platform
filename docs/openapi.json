@@ -4220,10 +4220,10 @@
                 },
                 "priority": {
                   "enum": [
-                    "LOW",
-                    "NORMAL",
+                    "CRITICAL",
                     "HIGH",
-                    "CRITICAL"
+                    "NORMAL",
+                    "LOW"
                   ],
                   "type": "string"
                 },
@@ -4278,10 +4278,10 @@
           "priority": {
             "default": "NORMAL",
             "enum": [
-              "LOW",
-              "NORMAL",
+              "CRITICAL",
               "HIGH",
-              "CRITICAL"
+              "NORMAL",
+              "LOW"
             ],
             "type": "string"
           },
@@ -4312,10 +4312,10 @@
           "priority": {
             "default": "NORMAL",
             "enum": [
-              "LOW",
-              "NORMAL",
+              "CRITICAL",
               "HIGH",
-              "CRITICAL"
+              "NORMAL",
+              "LOW"
             ],
             "type": "string"
           },

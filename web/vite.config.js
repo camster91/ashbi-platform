@@ -63,10 +63,15 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // Dependency-free modules shared with the API (e.g. task priorities).
+      '@shared': path.resolve(__dirname, '../src/shared'),
     },
   },
   server: {
     port: 5173,
+    fs: {
+      allow: [path.resolve(__dirname), path.resolve(__dirname, '../src/shared')],
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:3000',

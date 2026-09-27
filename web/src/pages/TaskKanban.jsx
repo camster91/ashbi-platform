@@ -5,6 +5,7 @@ import { Plus, ArrowLeft } from 'lucide-react';
 import { api } from '../lib/api';
 import LoadingState from '../components/ui/LoadingState';
 import QueryErrorState from '../components/QueryErrorState';
+import { DEFAULT_TASK_PRIORITY, TASK_PRIORITY_LABELS } from '@shared/task-priority.js';
 
 const STATUS_COLUMNS = [
   { key: 'PENDING', label: 'To Do', headerColor: 'text-muted-foreground border-muted-foreground/30' },
@@ -13,11 +14,12 @@ const STATUS_COLUMNS = [
   { key: 'COMPLETED', label: 'Done', headerColor: 'text-green-600 border-green-400' },
 ];
 
+// Keyed by the shared API priority list (src/shared/task-priority.js).
 const PRIORITY_COLORS = {
   LOW: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-  MEDIUM: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+  NORMAL: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
   HIGH: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
-  URGENT: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  CRITICAL: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
 };
 
 export default function TaskKanban() {
@@ -49,7 +51,7 @@ export default function TaskKanban() {
   });
 
   const createMutation = useMutation({
-    mutationFn: ({ title, status }) => api.createQuickTask(projectId, { title, status, priority: 'MEDIUM' }),
+    mutationFn: ({ title, status }) => api.createQuickTask(projectId, { title, status, priority: DEFAULT_TASK_PRIORITY }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['kanban', projectId] });
       setNewTaskTitle('');
@@ -129,8 +131,8 @@ export default function TaskKanban() {
                       <p className="text-sm font-medium text-foreground leading-snug">{task.title}</p>
                     </Link>
                     <div className="mt-2 flex items-center justify-between flex-wrap gap-1">
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${PRIORITY_COLORS[task.priority] || PRIORITY_COLORS.MEDIUM}`}>
-                        {task.priority}
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${PRIORITY_COLORS[task.priority] || PRIORITY_COLORS[DEFAULT_TASK_PRIORITY]}`}>
+                        {TASK_PRIORITY_LABELS[task.priority] || task.priority}
                       </span>
                       {task.assignee && (
                         <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
