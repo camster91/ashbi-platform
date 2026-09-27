@@ -144,6 +144,9 @@ A `forwardRef` `<input>` with token styling. It has no variants or sizes.
 | `type` | string | `'text'` | |
 | `className`, `ref`, `...props` | | | Passed through to `<input>` |
 
+The file also exports `inputStyles(className)`, the same class list, for
+`<select>` and `<textarea>` fields that should match Input.
+
 Accessibility:
 
 - Input does not render a label. Pair it with a `<label htmlFor>` or pass
@@ -179,14 +182,17 @@ A `forwardRef` `<div>` surface.
 | `variant` | see Variants | `'default'` | `glass` uses the `glass-card` utility |
 | `padding` | see Padding | `'md'` (`p-5`) | |
 | `isInteractive` | boolean | `false` | Adds `cursor-pointer hover-lift` only |
-| `className`, `ref`, `...props` | | | Passed through to `<div>` |
+| `as` | element type | `'div'` | Renders another element, such as `'article'`, `'section'` or `'button'`, so the surface keeps native semantics |
+| `className`, `ref`, `...props` | | | Passed through to the root element |
 
 Accessibility:
 
-- Card is a plain `<div>`. `isInteractive` is visual only: it adds no role,
-  `tabIndex` or key handling.
-- For a clickable card, put a real `<button>` or `<a>` inside it, or pass
-  `role`, `tabIndex={0}` and an `onKeyDown` yourself.
+- Card is a plain `<div>` unless `as` says otherwise. `isInteractive` is
+  visual only: it adds no role, `tabIndex` or key handling.
+- For a clickable card, render it as a real control
+  (`<Card as="button" type="button" isInteractive>`), put a real `<button>`
+  or `<a>` inside it, or pass `role`, `tabIndex={0}` and an `onKeyDown`
+  yourself.
 
 Tokens: `card`, `card-foreground`, `border`, `foreground`.
 
