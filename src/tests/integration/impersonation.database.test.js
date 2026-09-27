@@ -163,14 +163,17 @@ test('impersonation sessions and break-glass grants stay in their tenant, expire
     const environment = { BREAK_GLASS_ENABLED: 'true', PLATFORM_OPERATOR_USER_IDS: adminB.id };
     const { grant, token: recovery } = await issueBreakGlassGrant(raw, {
       organizationId: orgA, targetUserId: adminA.id, operatorId: adminB.id, reason: 'Integration: admin lost both factors',
+      osUser: 'deploy', host: 'api-1.internal',
     }, { environment });
+    assert.equal(grant.issuedByOsUser, 'deploy');
+    assert.equal(grant.issuedFromHost, 'api-1.internal');
     assert.equal(await scopedB.breakGlassGrant.findFirst({ where: { id: grant.id } }), null);
     assert.equal((await scopedA.breakGlassGrant.findMany({})).length, 1);
     await assert.rejects(raw.breakGlassGrant.create({ data: {
-      organizationId: orgA, targetUserId: adminA.id, operatorId: adminB.id, reason: 'x', tokenHash: `h-${suffix}`, expiresAt: new Date(Date.now() + 60_000),
+      organizationId: orgA, targetUserId: adminA.id, operatorId: adminB.id, reason: 'x', tokenHash: `h-${suffix}`, issuedByOsUser: 'ops', issuedFromHost: 'host', expiresAt: new Date(Date.now() + 60_000),
     } }), undefined, 'short reason');
     await assert.rejects(raw.breakGlassGrant.create({ data: {
-      organizationId: orgA, targetUserId: adminA.id, operatorId: adminB.id, reason: REASON, tokenHash: `h2-${suffix}`, expiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000),
+      organizationId: orgA, targetUserId: adminA.id, operatorId: adminB.id, reason: REASON, tokenHash: `h2-${suffix}`, issuedByOsUser: 'ops', issuedFromHost: 'host', expiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000),
     } }), undefined, 'longer than 60 minutes');
 
     const redeemed = await redeemBreakGlassGrant(raw, { token: recovery, newPassword: 'Integration-Pass-1' }, { environment });
@@ -178,6 +181,8 @@ test('impersonation sessions and break-glass grants stay in their tenant, expire
     await assert.rejects(redeemBreakGlassGrant(raw, { token: recovery, newPassword: 'Integration-Pass-1' }, { environment }), { code: 'BREAK_GLASS_INVALID' });
     const glassEvents = await raw.auditEvent.findMany({ where: { organizationId: orgA, action: { startsWith: 'break_glass.' } }, orderBy: { createdAt: 'asc' } });
     assert.deepEqual(glassEvents.map((event) => event.action), ['break_glass.granted', 'break_glass.redeemed']);
+    assert.equal(glassEvents[0].metadata.osUser, 'deploy');
+    assert.equal(glassEvents[0].metadata.host, 'api-1.internal');
     assert.equal(await raw.auditEvent.count({ where: { organizationId: orgB, action: { startsWith: 'break_glass.' } } }), 0);
     const restored = await raw.user.findUniqueOrThrow({ where: { id: adminA.id } });
     assert.equal(restored.sessionVersion, adminA.sessionVersion + 1);

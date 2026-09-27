@@ -67,9 +67,9 @@ export const AUDIT_EVENT_CATALOG = Object.freeze({
   // Support impersonation and break-glass recovery (#416, docs/privileged-actions.md).
   'impersonation.started': { entityType: 'impersonation_session', metadata: ['subjectUserId', 'subjectRole', 'expiresAt', 'ttlSeconds', 'readOnly'] },
   'impersonation.ended': { entityType: 'impersonation_session', metadata: ['reason', 'subjectUserId', 'durationSeconds'] },
-  'break_glass.granted': { entityType: 'break_glass_grant', metadata: ['targetUserId', 'operatorId', 'expiresAt', 'promoteToAdmin'] },
+  'break_glass.granted': { entityType: 'break_glass_grant', metadata: ['targetUserId', 'operatorId', 'expiresAt', 'promoteToAdmin', 'osUser', 'host'] },
   'break_glass.redeemed': { entityType: 'break_glass_grant', metadata: ['targetUserId', 'operatorId', 'promoted', 'reactivated', 'mfaReset', 'apiKeysRevoked'] },
-  'break_glass.revoked': { entityType: 'break_glass_grant', metadata: ['targetUserId', 'operatorId'] },
+  'break_glass.revoked': { entityType: 'break_glass_grant', metadata: ['targetUserId', 'operatorId', 'osUser', 'host'] },
 });
 
 /**

@@ -37,6 +37,7 @@ const { default: authRoutes } = await import('../../routes/auth.routes.js');
 const { default: teamRoutes } = await import('../../routes/team.routes.js');
 const { default: privilegedAccessRoutes } = await import('../../routes/privileged-access.routes.js');
 const { default: clientPortalRoutes } = await import('../../routes/client-portal.routes.js');
+const { default: googleCalendarRoutes } = await import('../../routes/google-calendar.routes.js');
 
 const SESSION_IAT = Math.floor(Date.now() / 1000) - 60;
 const REASON = 'Customer ticket 4412: task list looks empty';
@@ -89,6 +90,11 @@ async function buildApp(t, { db = seedIdentityOrganizations(createFakeIdentityDb
   await app.register(privilegedAccessRoutes, { prefix: '/api/auth', prisma: db });
   await app.register(teamRoutes, { prefix: '/api/team' });
   await app.register(clientPortalRoutes, { prefix: '/api/client-portal' });
+  await app.register(googleCalendarRoutes, {
+    prefix: '/api/google-calendar',
+    googleClientId: 'client-id', googleClientSecret: 'client-secret', googleRedirectUri: 'https://hub.test/api/google-calendar/oauth/callback',
+    createOAuthClient: () => ({ generateAuthUrl: ({ state }) => `https://accounts.google.test/auth?state=${state}` }),
+  });
   const handled = [];
   await app.register(async (probe) => {
     for (const method of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']) {
@@ -113,6 +119,7 @@ async function buildApp(t, { db = seedIdentityOrganizations(createFakeIdentityDb
     }
     probe.post('/api/ai-tools/approvals/:id/approve', { onRequest: [app.authenticate] }, async () => { handled.push('approve'); return {}; });
     probe.post('/api/portal/invoice/:token/pay', async () => { handled.push('pay'); return {}; });
+    probe.get('/api/probe/side-effect', { onRequest: [app.authenticate], config: { sideEffectingGet: true } }, async () => { handled.push('side-effect'); return {}; });
   });
   t.after(() => app.close());
 
@@ -332,6 +339,48 @@ describe('while viewing as someone', () => {
     assert.equal(sessions.statusCode, 403);
   });
 
+  it('cannot bypass the blocked areas with encoded paths, doubled slashes or HEAD', async (t) => {
+    const { startOk, app, handled } = await buildApp(t);
+    const { cookies } = await startOk();
+    for (const [method, url] of [
+      ['GET', '/api/api-%6beys'],
+      ['GET', '/api/audit%2Devents'],
+      ['GET', '/api/auth/m%66a'],
+      ['GET', '//api/api-keys'],
+      ['GET', '/api/api-keys/'],
+      ['HEAD', '/api/api-keys'],
+      ['HEAD', '/api/audit-events'],
+      ['POST', '/api/auth/%69mpersonation'],
+    ]) {
+      const response = await app.inject({ method, url, cookies, payload: method === 'POST' ? {} : undefined });
+      assert.equal(response.statusCode, 403, `${method} ${url}`);
+      if (method !== 'HEAD') assert.equal(response.json().code, 'IMPERSONATION_BLOCKED', `${method} ${url}`);
+    }
+    // An encoded path never makes a write look like the allow-listed stop.
+    const encodedStop = await app.inject({ method: 'POST', url: '/api/probe?x=/api/auth/impersonation/stop', cookies, payload: {} });
+    assert.equal(encodedStop.json().code, 'IMPERSONATION_READ_ONLY');
+    assert.deepEqual(handled, []);
+  });
+
+  it('refuses GET routes with side effects, including the Google Calendar OAuth start', async (t) => {
+    const { startOk, app, handled, cookiesFor, db } = await buildApp(t);
+    const marked = await startOk();
+    const sideEffect = await app.inject({ method: 'GET', url: '/api/probe/side-effect', cookies: marked.cookies });
+    assert.equal(sideEffect.statusCode, 403);
+    assert.equal(sideEffect.json().code, 'IMPERSONATION_READ_ONLY');
+    const oauth = await app.inject({ method: 'GET', url: '/api/google-calendar/oauth/start', cookies: marked.cookies });
+    assert.equal(oauth.statusCode, 403, oauth.body);
+    assert.equal(oauth.json().code, 'IMPERSONATION_BLOCKED');
+    const encodedOauth = await app.inject({ method: 'GET', url: '/api/google-calendar/oauth/st%61rt', cookies: marked.cookies });
+    assert.equal(encodedOauth.statusCode, 403);
+    assert.deepEqual(handled, []);
+    // Outside a view the same routes work.
+    const own = await app.inject({ method: 'GET', url: '/api/google-calendar/oauth/start', cookies: cookiesFor('admin-a') });
+    assert.equal(own.statusCode, 302);
+    assert.match(own.headers.location, /accounts\.google\.test/);
+    assert.equal(db.tables.impersonationSession.length, 1);
+  });
+
   it('records the real admin as actor and the viewed person on every audit event and log line', async (t) => {
     const { startOk, app, db, lines } = await buildApp(t);
     const { cookies } = await startOk();
@@ -498,6 +547,9 @@ describe('impersonationDenial policy', () => {
     }
     assert.equal(impersonationDenial('GET', '/api/api-keys?all=1').code, 'IMPERSONATION_BLOCKED');
     assert.equal(impersonationDenial('GET', '/api/api-keysx'), null, 'prefixes match whole segments');
+    assert.equal(impersonationDenial('GET', '/api/x', { routeUrl: '/api/api-keys/:id' }).code, 'IMPERSONATION_BLOCKED', 'the matched route pattern counts');
+    assert.equal(impersonationDenial('GET', '/api/x', { sideEffectingGet: true }).code, 'IMPERSONATION_READ_ONLY');
+    assert.equal(impersonationDenial('POST', '/api/auth/impersonation/stop', { routeUrl: '/api/probe' }).code, 'IMPERSONATION_READ_ONLY', 'both paths must be the allowed route');
   });
 
   it('never accepts a token signed with another key or of another type', () => {

@@ -20,7 +20,7 @@ import {
   impersonationStartProblem,
   signImpersonationToken,
 } from '../auth/impersonation.js';
-import { BreakGlassError, redeemBreakGlassGrant } from '../auth/break-glass.js';
+import { BreakGlassError, isBreakGlassEnabled, redeemBreakGlassGrant } from '../auth/break-glass.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { validateBody, impersonationStartSchema, breakGlassRedeemSchema } from '../validators/schemas.js';
 
@@ -211,6 +211,11 @@ export default async function privilegedAccessRoutes(fastify, options = {}) {
   // scripts/break-glass.mjs. 404 unless BREAK_GLASS_ENABLED=true.
   fastify.post('/break-glass/redeem', {
     config: { rateLimit: { max: 10, timeWindow: '15 minutes', keyGenerator: (req) => req.ip } },
+    // Disabled: 404 whatever the body, before validation can reveal the route.
+    onRequest: [async (_request, reply) => {
+      if (!isBreakGlassEnabled()) return reply.status(404).send({ error: 'Not found' });
+      return undefined;
+    }],
     preHandler: [validateBody(breakGlassRedeemSchema)],
   }, async (request, reply) => {
     reply.header('Cache-Control', 'no-store');

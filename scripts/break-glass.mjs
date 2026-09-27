@@ -15,13 +15,18 @@
  *   node scripts/break-glass.mjs revoke --grant <grantId> --operator <platformOperatorUserId>
  *
  * List an organization's recent grants (no tokens are ever shown again):
- *   node scripts/break-glass.mjs list --organization-id <orgId>
+ *   node scripts/break-glass.mjs list --organization-id <orgId> --operator <platformOperatorUserId>
+ *
+ * The --operator id is claimed, not authenticated: the grant and its audit
+ * events also record the OS user and host this script runs as.
  */
+import os from 'node:os';
 import prismaPkg from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import {
   BreakGlassError,
   issueBreakGlassGrant,
+  listBreakGlassGrants,
   revokeBreakGlassGrant,
 } from '../src/auth/break-glass.js';
 
@@ -39,13 +44,20 @@ function usage(message) {
     'Usage:',
     '  node scripts/break-glass.mjs issue --organization-id <id> (--email <email> | --user-id <id>) --operator <userId> --reason "<text>" [--promote] --confirm',
     '  node scripts/break-glass.mjs revoke --grant <grantId> --operator <userId>',
-    '  node scripts/break-glass.mjs list --organization-id <id>',
+    '  node scripts/break-glass.mjs list --organization-id <id> --operator <userId>',
   ].join('\n'));
   process.exit(2);
 }
 
 if (!['issue', 'revoke', 'list'].includes(command)) usage();
 if (!process.env.DATABASE_URL) usage('DATABASE_URL is required.');
+
+// Where the CLI runs: recorded with every grant and revocation.
+function provenance() {
+  let osUser = process.env.SUDO_USER || process.env.USER || 'unknown';
+  try { osUser = process.env.SUDO_USER || os.userInfo().username; } catch { /* no passwd entry */ }
+  return { osUser, host: os.hostname() };
+}
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
 
@@ -65,6 +77,7 @@ async function main() {
       operatorId,
       reason,
       promoteToAdmin: flag('--promote'),
+      ...provenance(),
     });
     const base = (process.env.APP_URL || process.env.HUB_URL || 'http://localhost:5173').replace(/\/$/, '');
     console.log(JSON.stringify({
@@ -84,21 +97,14 @@ async function main() {
     const grantId = option('--grant');
     const operatorId = option('--operator');
     if (!grantId || !operatorId) usage('Missing a required option.');
-    console.log(JSON.stringify(await revokeBreakGlassGrant(prisma, { grantId, operatorId })));
+    console.log(JSON.stringify(await revokeBreakGlassGrant(prisma, { grantId, operatorId, ...provenance() })));
     return;
   }
 
   const organizationId = option('--organization-id');
-  if (!organizationId) usage('Missing --organization-id.');
-  const grants = await prisma.breakGlassGrant.findMany({
-    where: { organizationId },
-    orderBy: { createdAt: 'desc' },
-    take: 20,
-    select: {
-      id: true, targetUserId: true, operatorId: true, reason: true, promoteToAdmin: true,
-      createdAt: true, expiresAt: true, redeemedAt: true, revokedAt: true,
-    },
-  });
+  const operatorId = option('--operator');
+  if (!organizationId || !operatorId) usage('Missing --organization-id or --operator.');
+  const grants = await listBreakGlassGrants(prisma, { organizationId, operatorId });
   console.log(JSON.stringify(grants, null, 2));
 }
 

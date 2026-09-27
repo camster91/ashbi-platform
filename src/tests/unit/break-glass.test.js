@@ -16,6 +16,8 @@ const {
   hashBreakGlassToken,
   issueBreakGlassGrant,
   redeemBreakGlassGrant,
+  listBreakGlassGrants,
+  provenanceValue,
   revokeBreakGlassGrant,
 } = await import('../../auth/break-glass.js');
 const { default: privilegedAccessRoutes } = await import('../../routes/privileged-access.routes.js');
@@ -33,7 +35,8 @@ function setup() {
 }
 
 const issue = (db, overrides = {}, environment = ENABLED) => issueBreakGlassGrant(db, {
-  organizationId: 'org-a', targetEmail: 'ADMIN-A@org-a.test', operatorId: 'admin-b', reason: REASON, ...overrides,
+  organizationId: 'org-a', targetEmail: 'ADMIN-A@org-a.test', operatorId: 'admin-b', reason: REASON,
+  osUser: 'deploy', host: 'api-1.internal', ...overrides,
 }, { environment });
 
 const audits = (db, action) => db.tables.auditEvent.filter((event) => event.action === action);
@@ -83,11 +86,28 @@ describe('issuing a break-glass grant', () => {
     assert.equal(event.organizationId, 'org-a');
     assert.equal(event.actorUserId, 'admin-b');
     assert.equal(event.entityId, grant.id);
-    assert.deepEqual(Object.keys(event.metadata).sort(), ['expiresAt', 'operatorId', 'promoteToAdmin', 'targetUserId']);
+    assert.deepEqual(Object.keys(event.metadata).sort(), ['expiresAt', 'host', 'operatorId', 'osUser', 'promoteToAdmin', 'targetUserId']);
+    // The operator id is only claimed; where the CLI ran is recorded too.
+    assert.equal(event.metadata.osUser, 'deploy');
+    assert.equal(event.metadata.host, 'api-1.internal');
+    assert.equal(row.issuedByOsUser, 'deploy');
+    assert.equal(row.issuedFromHost, 'api-1.internal');
+    assert.equal(provenanceValue('Jane Doe (root)'), 'Jane_Doe__root_');
+    assert.equal(provenanceValue(''), 'unknown');
 
     const notified = db.tables.notification.filter((n) => n.type === 'security.break_glass_granted').map((n) => n.userId).sort();
     assert.deepEqual(notified, ['admin-a', 'admin-a2'], 'the org\'s active admins and the target');
     assert.ok(db.tables.notification.every((n) => !n.message.includes(token)));
+  });
+
+  it('listing grants also requires the operator check and never returns token hashes', async () => {
+    const db = setup();
+    await issue(db);
+    await assert.rejects(listBreakGlassGrants(db, { organizationId: 'org-a', operatorId: 'admin-a2' }, { environment: ENABLED }), { code: 'BREAK_GLASS_NOT_OPERATOR' });
+    const grants = await listBreakGlassGrants(db, { organizationId: 'org-a', operatorId: 'admin-b' }, { environment: ENABLED });
+    assert.equal(grants.length, 1);
+    assert.equal(grants[0].tokenHash, undefined);
+    assert.equal(grants[0].issuedFromHost, 'api-1.internal');
   });
 
   it('a new grant for the same person revokes the outstanding one', async () => {
@@ -160,6 +180,17 @@ describe('redeeming a break-glass grant', () => {
     assert.deepEqual(audits(db, 'user.role_changed')[0].metadata, { fromRole: 'TEAM', toRole: 'ADMIN' });
   });
 
+  it('re-checks at redemption that a promotion is still needed', async () => {
+    const db = setup();
+    const admins = db.tables.user.filter((u) => u.organizationId === 'org-a' && u.role === 'ADMIN');
+    admins.forEach((u) => { u.isActive = false; });
+    const { token } = await issue(db, { targetEmail: 'staff-a@org-a.test', promoteToAdmin: true });
+    // An administrator was restored in the meantime.
+    admins[1].isActive = true;
+    await assert.rejects(redeemBreakGlassGrant(db, { token, newPassword: 'Fresh-Start-2026' }, { environment: ENABLED }), { code: 'BREAK_GLASS_INVALID' });
+    assert.equal(db.tables.user.find((u) => u.id === 'staff-a').role, 'STAFF');
+  });
+
   it('the redeem route answers 404 when disabled and a generic 400 for a bad token', async (t) => {
     const db = setup();
     const app = Fastify();
@@ -179,6 +210,11 @@ describe('redeeming a break-glass grant', () => {
     delete process.env.BREAK_GLASS_ENABLED;
     const disabled = await app.inject({ method: 'POST', url: '/api/auth/break-glass/redeem', payload: { token: 'x'.repeat(43), newPassword: 'Fresh-Start-2026' } });
     assert.equal(disabled.statusCode, 404);
+    // Before validation: an invalid body gets the same 404.
+    for (const payload of [{}, { token: 'short' }, 'not json']) {
+      const response = await app.inject({ method: 'POST', url: '/api/auth/break-glass/redeem', payload });
+      assert.equal(response.statusCode, 404, JSON.stringify(payload));
+    }
 
     Object.assign(process.env, ENABLED);
     const bad = await app.inject({ method: 'POST', url: '/api/auth/break-glass/redeem', payload: { token: 'x'.repeat(43), newPassword: 'Fresh-Start-2026' } });

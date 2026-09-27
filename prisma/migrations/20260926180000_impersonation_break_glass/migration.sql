@@ -1,5 +1,11 @@
 -- Audited support impersonation and break-glass administrator recovery (#416).
 -- Policy and runbook: docs/privileged-actions.md.
+--
+-- Actor, subject, target and operator user ids deliberately carry no foreign
+-- key (like audit_events.actorUserId and review_share_links.createdById):
+-- these rows are evidence and must outlive the accounts they name, so a user
+-- deletion can neither cascade them away nor be blocked by them. The
+-- organization FK cascades because the whole tenant's records go with it.
 
 -- CreateTable
 CREATE TABLE "impersonation_sessions" (
@@ -28,6 +34,8 @@ CREATE TABLE "break_glass_grants" (
     "reason" TEXT NOT NULL,
     "promoteToAdmin" BOOLEAN NOT NULL DEFAULT false,
     "tokenHash" TEXT NOT NULL,
+    "issuedByOsUser" TEXT NOT NULL,
+    "issuedFromHost" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "expiresAt" TIMESTAMP(3) NOT NULL,
     "redeemedAt" TIMESTAMP(3),

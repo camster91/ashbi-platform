@@ -161,6 +161,8 @@ export const IMPERSONATION_BLOCKED_PREFIXES = Object.freeze([
   '/api/settings/ai-kill-switch',
   '/api/audit-events', // an admin reads the log as themselves
   '/api/push', // device (push subscription) management
+  '/api/google-calendar/oauth', // binds an external account to the viewed person
+  '/api/slack/oauth', // installs an integration
 ]);
 
 function pathOf(url) {
@@ -169,27 +171,58 @@ function pathOf(url) {
   return query === -1 ? raw : raw.slice(0, query);
 }
 
+/**
+ * The path as the router sees it: percent-decoded (so `/api/api-%6beys` is
+ * `/api/api-keys`), with repeated and trailing slashes collapsed. A path that
+ * cannot be decoded is returned raw; the router rejects it anyway.
+ * @param {string} url
+ */
+export function normalizedPath(url) {
+  let path = pathOf(url);
+  try {
+    path = decodeURIComponent(path);
+  } catch {
+    // malformed escape: keep raw
+  }
+  path = path.replace(/\/{2,}/g, '/');
+  return path.length > 1 ? path.replace(/\/+$/, '') : path;
+}
+
 function matchesPrefix(path, prefix) {
   return path === prefix || path.startsWith(`${prefix}/`);
 }
 
 /**
+ * Route option that marks a GET/HEAD route with side effects (it writes, or
+ * binds an external account to the caller). Such routes are refused during a
+ * view like any write: `config: { [SIDE_EFFECTING_GET]: true }`.
+ */
+export const SIDE_EFFECTING_GET = 'sideEffectingGet';
+
+/**
  * Why an impersonated request must be refused, or null when it may proceed.
+ * Every path check runs on both the decoded request path and, when the router
+ * matched one, the route pattern (`request.routeOptions.url`), so encoded or
+ * doubled slashes cannot slip past the prefix list.
  * @param {string} method
  * @param {string} url
+ * @param {{ routeUrl?: string | null, sideEffectingGet?: boolean }} [route]
  * @returns {null | { status: 403, code: string, error: string }}
  */
-export function impersonationDenial(method, url) {
+export function impersonationDenial(method, url, { routeUrl = null, sideEffectingGet = false } = {}) {
   const verb = String(method || 'GET').toUpperCase();
-  const path = pathOf(url);
-  if (verb === 'POST' && path === '/api/auth/impersonation') {
+  const paths = [normalizedPath(url), routeUrl ? normalizedPath(routeUrl) : null].filter(Boolean);
+  if (verb === 'POST' && paths.includes('/api/auth/impersonation')) {
     return { status: 403, code: IMPERSONATION_BLOCKED_CODE, error: 'Stop viewing as this person before starting another view.' };
   }
-  if (IMPERSONATION_BLOCKED_PREFIXES.some((prefix) => matchesPrefix(path, prefix))) {
+  if (paths.some((path) => IMPERSONATION_BLOCKED_PREFIXES.some((prefix) => matchesPrefix(path, prefix)))) {
     return { status: 403, code: IMPERSONATION_BLOCKED_CODE, error: 'This area is not available while viewing as another person.' };
   }
-  if (SAFE_METHODS.has(verb) || ALLOWED_MUTATIONS.has(`${verb} ${path}`)) return null;
-  return { status: 403, code: IMPERSONATION_READ_ONLY_CODE, error: 'Read only: changes are not allowed while viewing as another person.' };
+  const readOnly = { status: 403, code: IMPERSONATION_READ_ONLY_CODE, error: 'Read only: changes are not allowed while viewing as another person.' };
+  if (SAFE_METHODS.has(verb)) return sideEffectingGet ? readOnly : null;
+  // Only an exact, matched allow-listed route may write.
+  if (paths.every((path) => ALLOWED_MUTATIONS.has(`${verb} ${path}`))) return null;
+  return readOnly;
 }
 
 // ---------------------------------------------------------------------------
@@ -422,7 +455,8 @@ export function revokeImpersonationsForUser(prisma, request, userId, reason) {
  */
 export function createImpersonationHook({ prisma, isCurrentUserSession, logger = defaultLogger }) {
   return async function impersonationHook(request, reply) {
-    if (!request.url.startsWith('/api/')) return undefined;
+    // Normalised, so `//api/...` or an encoded prefix cannot skip the hook.
+    if (!normalizedPath(request.url).startsWith('/api/')) return undefined;
     if (!request.cookies?.[IMPERSONATION_COOKIE]) return undefined;
 
     let adminOk = false;
@@ -475,7 +509,10 @@ export function createImpersonationHook({ prisma, isCurrentUserSession, logger =
     }
     request.log.info({ ...logFields, method: request.method, url: pathOf(request.url) }, 'impersonated request');
 
-    const denial = impersonationDenial(request.method, request.url);
+    const denial = impersonationDenial(request.method, request.url, {
+      routeUrl: request.routeOptions?.url ?? null,
+      sideEffectingGet: request.routeOptions?.config?.[SIDE_EFFECTING_GET] === true,
+    });
     if (denial) {
       return reply.status(denial.status).send({ error: denial.error, code: denial.code });
     }

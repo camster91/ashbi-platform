@@ -1888,6 +1888,8 @@ model BreakGlassGrant {
   reason         String // 10 to 500 characters (CHECK constraint)
   promoteToAdmin Boolean      @default(false)
   tokenHash      String       @unique
+  issuedByOsUser String // OS user the operator CLI ran as (the operator id is only claimed)
+  issuedFromHost String // Host name the operator CLI ran on
   createdAt      DateTime     @default(now())
   expiresAt      DateTime // at most 60 minutes after createdAt (CHECK constraint)
   redeemedAt     DateTime?

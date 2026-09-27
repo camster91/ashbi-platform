@@ -9,13 +9,17 @@
 // new password. Redeeming turns off their two-factor authentication (they
 // re-enroll after signing in), reactivates the account, signs out every other
 // session, revokes their API keys, and (only when the grant says so) makes a
-// TEAM member an ADMIN.
+// non-admin staff member (TEAM or STAFF) an ADMIN.
 //
 // Guard rails:
 //   - Off unless BREAK_GLASS_ENABLED=true, both for issuing (CLI) and redeeming
 //     (POST /api/auth/break-glass/redeem answers 404 otherwise).
-//   - Only a platform operator (PLATFORM_OPERATOR_USER_IDS, re-checked as an
-//     active ADMIN in the database) can issue or revoke.
+//   - The operator is *named*, not authenticated: the CLI takes an --operator
+//     user id that must be in PLATFORM_OPERATOR_USER_IDS and still an active
+//     ADMIN in the database. Whoever can run the CLI with production database
+//     access can claim any listed id, so the grant and its audit event also
+//     record the OS user and host the CLI ran as (see "Known limitations" in
+//     docs/privileged-actions.md). Access control is the host itself.
 //   - A written reason (10 to 500 characters) is stored with the grant.
 //   - 30 minutes, single use (*Proposal*); the database caps it at 60.
 //   - Audited in the target organization (break_glass.granted / .redeemed /
@@ -34,6 +38,18 @@ export const BREAK_GLASS_TTL_SECONDS = 30 * 60;
 export const BREAK_GLASS_REASON_MIN = 10;
 export const BREAK_GLASS_REASON_MAX = 500;
 const BCRYPT_ROUNDS = 12;
+
+const PROVENANCE_MAX = 128;
+
+/**
+ * Reduce an OS user name or host name to the audit metadata alphabet
+ * (`[A-Za-z0-9_.:/@+-]`, at most 128 characters) so it is never dropped.
+ * @param {unknown} value
+ */
+export function provenanceValue(value) {
+  const text = String(value ?? '').trim().replace(/[^A-Za-z0-9_.:/@+-]/g, '_').slice(0, PROVENANCE_MAX);
+  return text || 'unknown';
+}
 
 export class BreakGlassError extends Error {
   /** @param {string} code @param {string} message @param {number} [status] */
@@ -112,7 +128,8 @@ async function notifyUsers(prisma, userIds, { type, title, message, data }, logg
  *
  * @param {any} prisma Raw Prisma client (operator CLI; there is no tenant session).
  * @param {{ organizationId: string, targetEmail?: string, targetUserId?: string,
- *   operatorId: string, reason: string, promoteToAdmin?: boolean }} input
+ *   operatorId: string, reason: string, promoteToAdmin?: boolean,
+ *   osUser?: string, host?: string }} input `osUser` / `host`: where the CLI ran.
  */
 export async function issueBreakGlassGrant(prisma, input, {
   environment = process.env, nowMs = Date.now(), logger = defaultLogger,
@@ -144,7 +161,7 @@ export async function issueBreakGlassGrant(prisma, input, {
     throw new BreakGlassError('BREAK_GLASS_TARGET_FORBIDDEN', 'Break-glass access restores staff administrators only.', 403);
   }
   if (target.role !== 'ADMIN' && !promoteToAdmin) {
-    throw new BreakGlassError('BREAK_GLASS_TARGET_NOT_ADMIN', 'The target is not an administrator. Pass --promote only when the organization has no administrator left.', 409);
+    throw new BreakGlassError('BREAK_GLASS_TARGET_NOT_ADMIN', 'The target is not an administrator. Pass --promote (for a TEAM or STAFF member) only when the organization has no administrator left.', 409);
   }
   if (target.role !== 'ADMIN' && promoteToAdmin && (await activeAdminIds(prisma, organization.id)).length > 0) {
     throw new BreakGlassError('BREAK_GLASS_ADMIN_EXISTS', 'The organization still has an active administrator; restore that account instead of promoting another.', 409);
@@ -153,6 +170,7 @@ export async function issueBreakGlassGrant(prisma, input, {
   const now = new Date(nowMs);
   const expiresAt = new Date(nowMs + BREAK_GLASS_TTL_SECONDS * 1000);
   const token = crypto.randomBytes(32).toString('base64url');
+  const provenance = { osUser: provenanceValue(input.osUser), host: provenanceValue(input.host) };
 
   // One outstanding grant per target: a new one replaces the old.
   const superseded = await prisma.breakGlassGrant.findMany({
@@ -160,7 +178,7 @@ export async function issueBreakGlassGrant(prisma, input, {
     select: { id: true },
   });
   for (const old of superseded) {
-    await revokeGrantRow(prisma, old.id, organization.id, operator.id, target.id, now, logger);
+    await revokeGrantRow(prisma, old.id, organization.id, operator.id, target.id, now, logger, provenance);
   }
 
   const grant = await prisma.breakGlassGrant.create({
@@ -171,6 +189,8 @@ export async function issueBreakGlassGrant(prisma, input, {
       reason,
       promoteToAdmin,
       tokenHash: hashBreakGlassToken(token),
+      issuedByOsUser: provenance.osUser,
+      issuedFromHost: provenance.host,
       createdAt: now,
       expiresAt,
     },
@@ -182,7 +202,7 @@ export async function issueBreakGlassGrant(prisma, input, {
     actorUserId: operator.id,
     action: 'break_glass.granted',
     entityId: grant.id,
-    metadata: { targetUserId: target.id, operatorId: operator.id, expiresAt, promoteToAdmin },
+    metadata: { targetUserId: target.id, operatorId: operator.id, expiresAt, promoteToAdmin, ...provenance },
   }, { logger });
 
   const admins = await activeAdminIds(prisma, organization.id);
@@ -196,7 +216,7 @@ export async function issueBreakGlassGrant(prisma, input, {
   return { grant, token, target, organization };
 }
 
-async function revokeGrantRow(prisma, grantId, organizationId, operatorId, targetUserId, now, logger) {
+async function revokeGrantRow(prisma, grantId, organizationId, operatorId, targetUserId, now, logger, provenance = {}) {
   const result = await prisma.breakGlassGrant.updateMany({
     where: { id: grantId, organizationId, redeemedAt: null, revokedAt: null },
     data: { revokedAt: now },
@@ -208,20 +228,21 @@ async function revokeGrantRow(prisma, grantId, organizationId, operatorId, targe
     actorUserId: operatorId,
     action: 'break_glass.revoked',
     entityId: grantId,
-    metadata: { targetUserId, operatorId },
+    metadata: { targetUserId, operatorId, ...provenance },
   }, { logger });
   return true;
 }
 
 /** Revoke an outstanding grant (operator CLI). */
-export async function revokeBreakGlassGrant(prisma, { grantId, operatorId }, {
+export async function revokeBreakGlassGrant(prisma, { grantId, operatorId, osUser, host }, {
   environment = process.env, nowMs = Date.now(), logger = defaultLogger,
 } = {}) {
   // Revoking only removes access, so it works even with the flag off.
   const operator = await assertOperator(prisma, operatorId, environment);
   const grant = await prisma.breakGlassGrant.findUnique({ where: { id: grantId } });
   if (!grant) throw new BreakGlassError('BREAK_GLASS_GRANT_NOT_FOUND', 'Grant not found.', 404);
-  const revoked = await revokeGrantRow(prisma, grant.id, grant.organizationId, operator.id, grant.targetUserId, new Date(nowMs), logger);
+  const provenance = { osUser: provenanceValue(osUser), host: provenanceValue(host) };
+  const revoked = await revokeGrantRow(prisma, grant.id, grant.organizationId, operator.id, grant.targetUserId, new Date(nowMs), logger, provenance);
   if (!revoked) throw new BreakGlassError('BREAK_GLASS_GRANT_CLOSED', 'The grant was already redeemed or revoked.', 409);
   return { revoked: true, grantId: grant.id };
 }
@@ -249,6 +270,9 @@ export async function redeemBreakGlassGrant(prisma, { token, newPassword, reques
   });
   if (!target || target.role === 'CLIENT' || target.role === 'BOT') throw invalid;
   if (target.role !== 'ADMIN' && !grant.promoteToAdmin) throw invalid;
+  // A promotion is only for an organization with no administrator left; one
+  // may have been restored since the grant was issued.
+  if (target.role !== 'ADMIN' && (await activeAdminIds(prisma, grant.organizationId)).length > 0) throw invalid;
 
   const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
   const promoted = target.role !== 'ADMIN' && grant.promoteToAdmin;
@@ -329,4 +353,22 @@ export async function redeemBreakGlassGrant(prisma, { token, newPassword, reques
   }, logger);
 
   return { redeemed: true, promoted, reactivated, mfaReset: target.mfaEnabled === true };
+}
+
+/**
+ * Recent grants of an organization for the operator CLI (never tokens or
+ * hashes). Same operator check as issuing.
+ */
+export async function listBreakGlassGrants(prisma, { organizationId, operatorId }, { environment = process.env } = {}) {
+  await assertOperator(prisma, operatorId, environment);
+  return prisma.breakGlassGrant.findMany({
+    where: { organizationId },
+    orderBy: { createdAt: 'desc' },
+    take: 20,
+    select: {
+      id: true, targetUserId: true, operatorId: true, reason: true, promoteToAdmin: true,
+      issuedByOsUser: true, issuedFromHost: true,
+      createdAt: true, expiresAt: true, redeemedAt: true, revokedAt: true,
+    },
+  });
 }

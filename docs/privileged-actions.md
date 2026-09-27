@@ -226,6 +226,18 @@ person's password. Code: `src/auth/impersonation.js`,
 | Any route behind `requireRecentAuth` | `403 IMPERSONATION_BLOCKED` (the view cannot re-authenticate, so it is never prompted) |
 | Admin-only routes | `403 Admin access required`: the request carries the viewed person's role |
 | Billing and payment actions, account deletion, session management | Covered by the read-only rule (all are writes) |
+| `GET` routes with side effects, marked `config: { sideEffectingGet: true }`: `GET /api/google-calendar/oauth/start` (would bind a Google account the admin controls to the viewed person) and `GET /api/slack/oauth/start`. `/api/google-calendar/oauth` and `/api/slack/oauth` are also on the blocked list | `403 IMPERSONATION_READ_ONLY` / `IMPERSONATION_BLOCKED` |
+
+Paths are matched after percent-decoding and slash normalisation **and**
+against the matched route pattern (`request.routeOptions.url`), so
+`/api/api-%6beys` or `//api/audit-events` cannot slip past the list.
+
+Accepted (*Proposal*): two reads create an organization-level default the
+first time they run, whoever calls them — `GET /api/brand` (default brand
+settings row) and `GET /api/projects/:id/health-history` (seeds the history
+with the current health). Neither is tied to the caller's identity or
+changes anything a normal read by that person would not, so they are not
+marked.
 
 The web app shows these refusals as a "Read-only support view" message.
 
@@ -276,10 +288,10 @@ named staff member of that organization, who redeems it themselves.
 
 | Guard rail | Rule |
 | --- | --- |
-| Off by default | Both the CLI and `POST /api/auth/break-glass/redeem` refuse unless `BREAK_GLASS_ENABLED=true` (the route answers `404`). Set it only for the emergency and unset it afterwards |
-| Operator only | `--operator` must be in `PLATFORM_OPERATOR_USER_IDS` **and** still an active `ADMIN` in the database (the same rule as the AI kill switch) |
+| Off by default | Both the CLI and `POST /api/auth/break-glass/redeem` refuse unless `BREAK_GLASS_ENABLED=true` (the route answers `404` before looking at the body). Set it only for the emergency and unset it afterwards |
+| Operator only | `--operator` must be in `PLATFORM_OPERATOR_USER_IDS` **and** still an active `ADMIN` in the database (the same rule as the AI kill switch), for `issue`, `revoke` and `list`. The id is claimed, not authenticated, so each grant and its `break_glass.granted` / `break_glass.revoked` events also record the **OS user and host** the CLI ran as (`issuedByOsUser`, `issuedFromHost`; metadata `osUser`, `host`) |
 | Reason | `--reason`, 10 to 500 characters, stored on the grant and shown in the notifications |
-| Target | An `ADMIN` of the organization (a deactivated one is reactivated). A `TEAM` member only with `--promote`, and only when the organization has **no** active admin. Never a client user or bot |
+| Target | An `ADMIN` of the organization (a deactivated one is reactivated). A non-admin staff member (`TEAM` or `STAFF`) only with `--promote`, and only when the organization has **no** active admin, checked both when issuing and again when redeeming. Never a client user or bot |
 | Time-boxed, single use | 30 minutes (*Proposal*, `BREAK_GLASS_TTL_SECONDS`; the database caps it at 60). Redeeming claims the grant atomically; a second use, an expired or a revoked grant answer the same generic `400`. A new grant for the same person revokes the outstanding one |
 | Secret handling | The 256-bit token is printed once as a link with the token in the URL **fragment** (`/break-glass#token=…`), so it never reaches server or proxy logs; only its SHA-256 is stored. The page removes it from the address bar |
 | Effect | New password; two-factor turned off (re-enroll after signing in); account reactivated; every session signed out; the person's API keys revoked; open impersonation views by or of them ended; `role = ADMIN` only for a `--promote` grant |
@@ -303,8 +315,8 @@ named staff member of that organization, who redeems it themselves.
      --confirm
    ```
 
-   Add `--promote --email <staff member>` only when the organization has no
-   active administrator left.
+   Add `--promote --email <staff member>` (a `TEAM` or `STAFF` account) only
+   when the organization has no active administrator left.
 3. Send the printed link to the verified person over a **different channel**
    from the request (for example by phone or SMS to the number on file). It
    works once and expires in 30 minutes.
@@ -318,7 +330,7 @@ named staff member of that organization, who redeems it themselves.
 
 To cancel an unused grant: `node scripts/break-glass.mjs revoke --grant <id>
 --operator <id>` (works with the flag off). `node scripts/break-glass.mjs list
---organization-id <id>` shows recent grants (never tokens).
+--organization-id <id> --operator <id>` shows recent grants (never tokens).
 
 ## Related revocations
 
@@ -347,6 +359,8 @@ To cancel an unused grant: `node scripts/break-glass.mjs revoke --grant <id>
 - Break-glass has no web console for operators and relies on the CLI running
   with production database access; the operator identity is the
   `--operator` id checked against `PLATFORM_OPERATOR_USER_IDS`, not a
-  separately authenticated session.
+  separately authenticated session. Anyone who can run the CLI with the
+  production database can claim a listed id; the recorded OS user and host
+  make that traceable, and host access is the real control.
 - Deferred to later #416 work: enterprise SSO, SCIM provisioning, domain
   verification and managed-device controls.
