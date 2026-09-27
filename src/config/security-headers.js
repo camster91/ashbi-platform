@@ -3,7 +3,9 @@ function originFromDsn(dsn) {
   try { return new URL(dsn).origin; } catch { return null; }
 }
 
-export function buildHelmetOptions({ isProduction, corsOrigins = [], sentryDsn } = {}) {
+// `isDeployed` (staging or production, from env.js) enables HSTS and
+// upgrade-insecure-requests; `isProduction` is accepted for older callers.
+export function buildHelmetOptions({ isProduction, isDeployed = isProduction, corsOrigins = [], sentryDsn } = {}) {
   const connectSrc = ["'self'", 'wss:', 'https://fonts.googleapis.com', ...corsOrigins];
   const sentryOrigin = originFromDsn(sentryDsn);
   if (sentryOrigin) connectSrc.push(sentryOrigin);
@@ -13,7 +15,7 @@ export function buildHelmetOptions({ isProduction, corsOrigins = [], sentryDsn }
       directives: {
         defaultSrc: ["'self'"],
         baseUri: ["'self'"],
-        blockAllMixedContent: isProduction ? [] : null,
+        blockAllMixedContent: isDeployed ? [] : null,
         connectSrc: [...new Set(connectSrc)],
         fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
         formAction: ["'self'"],
@@ -26,7 +28,7 @@ export function buildHelmetOptions({ isProduction, corsOrigins = [], sentryDsn }
         scriptSrc: ["'self'"],
         scriptSrcAttr: ["'none'"],
         styleSrc: ["'self'", 'https://fonts.googleapis.com', "'unsafe-inline'"],
-        upgradeInsecureRequests: isProduction ? [] : null,
+        upgradeInsecureRequests: isDeployed ? [] : null,
         workerSrc: ["'self'", 'blob:']
       }
     },
@@ -34,7 +36,7 @@ export function buildHelmetOptions({ isProduction, corsOrigins = [], sentryDsn }
     crossOriginOpenerPolicy: { policy: 'same-origin' },
     crossOriginResourcePolicy: { policy: 'same-origin' },
     frameguard: { action: 'deny' },
-    hsts: isProduction ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
+    hsts: isDeployed ? { maxAge: 31536000, includeSubDomains: true, preload: true } : false,
     noSniff: true,
     originAgentCluster: true,
     referrerPolicy: { policy: 'no-referrer' },

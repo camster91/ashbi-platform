@@ -30,8 +30,12 @@ const env = {
   isTest,
   isStaging: nodeEnv === 'staging',
   isProduction: nodeEnv === 'production',
-  // True only for the local environments (development, test). Deployed
-  // environments, including staging, get production behaviour.
+  // staging or production. Security behaviour (secret validation, secure
+  // cookies, HSTS, generic 5xx bodies, fail-closed webhooks and admin
+  // bootstrap, fixed rate limit) keys off this, so staging matches
+  // production. isProduction is only for production-specific concerns.
+  isDeployed: nodeEnv === 'staging' || nodeEnv === 'production',
+  // True only for the local environments (development, test).
   isDev: isDevelopment || isTest,
   // Whether deployment secrets are validated at startup.
   requiresDeploymentSecrets: !(isDevelopment || isTest),

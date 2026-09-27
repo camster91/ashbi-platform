@@ -13,7 +13,7 @@ export function sessionCookieMaxAge(value = env.jwtExpiresIn) {
  * Accepts a boolean `isProduction` (legacy form) or `{ isProduction, includeMaxAge }`.
  */
 export function sessionCookieOptions(options = {}) {
-  const { isProduction = env.isProduction, includeMaxAge = false } =
+  const { isProduction = env.isDeployed, includeMaxAge = false } =
     typeof options === 'boolean' ? { isProduction: options } : options;
   const cookie = {
     path: '/',

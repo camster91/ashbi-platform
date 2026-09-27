@@ -250,7 +250,7 @@ export default async function authRoutes(fastify) {
       // ADMIN_INVITE_TOKEN is unset OR doesn't match. In dev, allow
       // it (the seed needs to work without ceremony).
       if (!env.adminInviteToken) {
-        if (env.isProduction) {
+        if (env.isDeployed) {
           return reply.status(503).send({
             error: 'Server misconfigured: ADMIN_INVITE_TOKEN is required for first-user registration in production. Set it in your environment before deploying.'
           });
@@ -551,13 +551,13 @@ export default async function authRoutes(fastify) {
         } catch (mailErr) {
           logger.error({ err: mailErr }, '[auth] Failed to send reset email');
           // In production, surface the error so the user knows email delivery failed
-          if (env.isProduction) {
+          if (env.isDeployed) {
             return reply.status(503).send({ error: 'Failed to send reset email. Please try again or contact support.' });
           }
         }
       } else {
         logger.warn('[auth] Mailgun not configured — password reset email not sent');
-        if (env.isProduction) {
+        if (env.isDeployed) {
           return reply.status(503).send({ error: 'Email service not configured. Please contact support to reset your password.' });
         } else {
           // Authentication action links are credentials. Never write them to logs;
