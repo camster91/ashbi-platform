@@ -83,7 +83,7 @@ notes, signer names, email addresses, API key material or password hashes.
 | `user.deactivated` | `user` | USER (admin) | `PUT /api/team/:id` when `isActive` goes true → false | `fromActive`, `toActive` |
 | `user.reactivated` | `user` | USER (admin) | `PUT /api/team/:id` when `isActive` goes false → true | `fromActive`, `toActive` |
 | `auth.login_failed` | `user` | USER or CLIENT | `POST /api/auth/login` (any failure) and `POST /api/auth/client/login` (wrong password) for an **existing** account; unknown emails have no tenant and are not logged | `portal` (`staff` or `client`), `accountActive` |
-| `auth.password_changed` | `user` | USER | `POST /api/auth/change-password`, `POST /api/auth/reset-password`, `POST /api/team/:id/reset-password` | `method` (`self_service`, `reset_link`, `admin_reset`), `sessionsRevoked`, `apiKeysRevoked` (admin reset) |
+| `auth.password_changed` | `user` | USER | `POST /api/auth/change-password`, `POST /api/auth/reset-password`, `POST /api/team/:id/reset-password`, `POST /api/auth/break-glass/redeem` | `method` (`self_service`, `reset_link`, `admin_reset`, `break_glass`), `sessionsRevoked`, `apiKeysRevoked` (admin reset, break-glass) |
 | `auth.mfa_enabled` | `user` | USER | `POST /api/auth/mfa/confirm` | `recoveryCodesIssued` |
 | `auth.mfa_disabled` | `user` | USER | `POST /api/auth/mfa/disable` | `method` (`totp` or `recovery_code`) |
 | `auth.mfa_reset` | `user` | USER (the acting admin) | `POST /api/auth/mfa/admin/users/:userId/reset` | `wasEnabled` |
@@ -117,6 +117,20 @@ notes, signer names, email addresses, API key material or password hashes.
 | `review.decision_recorded` | `review_session` | USER or CLIENT | `POST /api/reviews/:id/decisions` (`via: staff`) and `POST /api/portal/review/:token/decisions` (a client through a share link created with `allowDecision`, `via: share_link`, `actorUserId` null). The guest's name, email and note stay on the append-only `ReviewDecision` row, never in the event | `decisionId`, `decision` (`approved` or `changes_requested`), `fromStatus`, `toStatus`, `via`, `shareLinkId` |
 | `review.share_link_created` | `review_share_link` | USER | `POST /api/reviews/:id/share-links` (step-up re-authentication); never the token or its hash | `sessionId`, `expiresAt`, `expiresInDays`, `allowDecision` |
 | `review.share_link_revoked` | `review_share_link` | USER | `POST /api/reviews/:id/share-links/:linkId/revoke` (only the first revocation of a link) | `sessionId`, `wasExpired` |
+| `impersonation.started` | `impersonation_session` | USER (the admin) | `POST /api/auth/impersonation` (step-up; see [privileged-actions.md](privileged-actions.md#support-impersonation)); `entityId` is the `ImpersonationSession` id. The free-text reason stays on that row, never in the event | `subjectUserId`, `subjectRole` (`TEAM` or `CLIENT`), `expiresAt`, `ttlSeconds`, `readOnly` |
+| `impersonation.ended` | `impersonation_session` | USER (who ended it), or SYSTEM on expiry | `POST /api/auth/impersonation/stop` (`stopped`), a new view (`superseded`), sign-out (`signed_out`), the first request after the window (`expired`), and the revocations in [privileged-actions.md](privileged-actions.md#ending-and-revocation) (`revoked_password_reset`, `revoked_password_change`, `revoked_role_change`, `revoked_deactivated`). Once per view | `reason`, `subjectUserId`, `durationSeconds` |
+| `break_glass.granted` | `break_glass_grant` | USER (the platform operator; may belong to another organization) | `scripts/break-glass.mjs issue` with `BREAK_GLASS_ENABLED=true`; filed in the **target** organization. Never the token or its hash; the reason stays on the grant row | `targetUserId`, `operatorId`, `expiresAt`, `promoteToAdmin` |
+| `break_glass.redeemed` | `break_glass_grant` | USER (the recovered account) | `POST /api/auth/break-glass/redeem`; followed by `auth.password_changed` (`method: break_glass`), and `auth.mfa_reset`, `user.role_changed`, `user.reactivated` when those happened | `targetUserId`, `operatorId`, `promoted`, `reactivated`, `mfaReset`, `apiKeysRevoked` |
+| `break_glass.revoked` | `break_glass_grant` | USER (the platform operator) | `scripts/break-glass.mjs revoke`, or a newer grant for the same person | `targetUserId`, `operatorId` |
+
+Events written **while an admin views as another person** (#416), whatever
+their action, record the admin as `actorUserId` (actor type `USER`) and carry
+two extra metadata fields that every action allows:
+`impersonatedUserId` (the viewed person) and `impersonationSessionId`.
+`AUDIT_UNIVERSAL_METADATA` in `src/services/audit-event.service.js` lists
+them; `recordAuditEvent` adds them from the request context, so a route does
+not have to. The view is read-only, so in practice these are reads that audit
+themselves and the view's own start/end events.
 
 `auth.login_failed` details:
 

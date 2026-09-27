@@ -14,7 +14,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   which reads hide soft-deleted rows is in [soft-delete-policy.md](soft-delete-policy.md).
 - **Notes** combine `///` doc comments and trailing `//` comments from the schema.
 
-99 models, 0 enums, 45 tenant-scoped, 13 soft-deletable.
+101 models, 0 enums, 47 tenant-scoped, 13 soft-deletable.
 
 ## Model index
 
@@ -35,6 +35,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Attachment](#model-attachment) | `attachments` | yes | no | 15 |
 | [AuditEvent](#model-auditevent) | `audit_events` | yes | no | 12 |
 | [BrandSettings](#model-brandsettings) | `brand_settings` | yes | no | 15 |
+| [BreakGlassGrant](#model-breakglassgrant) | `break_glass_grants` | yes | no | 12 |
 | [CalendarEvent](#model-calendarevent) | `calendar_events` | no | no | 22 |
 | [ChatMessage](#model-chatmessage) | `chat_messages` | no | no | 20 |
 | [ChatReaction](#model-chatreaction) | `chat_reactions` | no | no | 7 |
@@ -54,6 +55,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Expense](#model-expense) | `expenses` | no | yes | 19 |
 | [FormDraft](#model-formdraft) | `form_drafts` | yes | no | 13 |
 | [GoogleCalendarConnection](#model-googlecalendarconnection) | `google_calendar_connections` | yes | no | 14 |
+| [ImpersonationSession](#model-impersonationsession) | `impersonation_sessions` | yes | no | 13 |
 | [ImportRun](#model-importrun) | `import_runs` | yes | no | 12 |
 | [IntakeForm](#model-intakeform) | `intake_forms` | no | no | 11 |
 | [IntakeFormResponse](#model-intakeformresponse) | `intake_form_responses` | no | no | 8 |
@@ -70,7 +72,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Notification](#model-notification) | `notifications` | no | no | 10 |
 | [NotionImportRecord](#model-notionimportrecord) | `notion_import_records` | yes | no | 14 |
 | [OnboardingProgress](#model-onboardingprogress) | `onboarding_progress` | yes | no | 12 |
-| [Organization](#model-organization) | `organizations` | no | no | 53 |
+| [Organization](#model-organization) | `organizations` | no | no | 55 |
 | [OutreachSequence](#model-outreachsequence) | `outreach_sequences` | yes | no | 10 |
 | [PipelineDeal](#model-pipelinedeal) | `pipeline_deals` | no | no | 15 |
 | [PipelineStage](#model-pipelinestage) | `pipeline_stages` | yes | no | 10 |
@@ -487,6 +489,29 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `invoiceFooter` | String | optional |  |  | Custom footer text for invoices |
 | `proposalFooter` | String | optional |  |  |  |
 | `contractHeader` | String | optional |  |  |  |
+
+### Model BreakGlassGrant
+
+- Table: `break_glass_grants`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@index([organizationId, createdAt])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
+| `targetUserId` | String | required |  |  | No FK: history must outlive the account |
+| `operatorId` | String | required |  |  | Platform operator user id (PLATFORM_OPERATOR_USER_IDS); may belong to another organization |
+| `reason` | String | required |  |  | 10 to 500 characters (CHECK constraint) |
+| `promoteToAdmin` | Boolean | required | `false` |  |  |
+| `tokenHash` | String | unique, required |  |  |  |
+| `createdAt` | DateTime | required | `now()` |  |  |
+| `expiresAt` | DateTime | required |  |  | at most 60 minutes after createdAt (CHECK constraint) |
+| `redeemedAt` | DateTime | optional |  |  |  |
+| `revokedAt` | DateTime | optional |  |  |  |
 
 ### Model CalendarEvent
 
@@ -1020,6 +1045,32 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
 | `user` | User | required |  | → User, via (userId) → (id), onDelete Cascade |  |
 
+### Model ImpersonationSession
+
+- Table: `impersonation_sessions`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@index([organizationId, startedAt])`
+  - `@@index([actorUserId, endedAt])`
+  - `@@index([subjectUserId, endedAt])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
+| `actorUserId` | String | required |  |  |  |
+| `subjectUserId` | String | required |  |  |  |
+| `subjectRole` | String | required |  |  | TEAM or CLIENT (CHECK constraint) |
+| `reason` | String | required |  |  | 10 to 500 characters (CHECK constraint) |
+| `readOnly` | Boolean | required | `true` |  |  |
+| `startedAt` | DateTime | required | `now()` |  |  |
+| `expiresAt` | DateTime | required |  |  | at most 60 minutes after startedAt (CHECK constraint) |
+| `endedAt` | DateTime | optional |  |  |  |
+| `endReason` | String | optional |  |  | stopped, expired, superseded, signed_out, revoked_* (CHECK constraint) |
+| `endedById` | String | optional |  |  | No FK: history must outlive the actor account |
+
 ### Model ImportRun
 
 - Table: `import_runs`
@@ -1474,6 +1525,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `aiProviderConnection` | AiProviderConnection | optional |  | → AiProviderConnection |  |
 | `aiUsageRecords` | AiUsageRecord[] | list, required |  | → AiUsageRecord |  |
 | `reviewSessions` | ReviewSession[] | list, required |  | → ReviewSession |  |
+| `impersonationSessions` | ImpersonationSession[] | list, required |  | → ImpersonationSession |  |
+| `breakGlassGrants` | BreakGlassGrant[] | list, required |  | → BreakGlassGrant |  |
 
 ### Model OutreachSequence
 
