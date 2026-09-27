@@ -458,7 +458,7 @@ export async function checkOverdueInvoices() {
 // ==================== WORKFLOW ENGINE ====================
 
 export async function executeWorkflow(workflow, triggerData = {}) {
-  const { id: workflowId, name, actions, triggerType, triggerConfig } = workflow;
+  const { id: workflowId, name, actions } = workflow;
   const runId = crypto.randomUUID();
   let status = 'SUCCESS';
   let error = null;
@@ -467,7 +467,7 @@ export async function executeWorkflow(workflow, triggerData = {}) {
   console.log(`[Workflow] Starting execution: ${name} (${workflowId})`);
 
   // Create run record
-  const run = await prisma.workflowRun.create({
+  await prisma.workflowRun.create({
     data: {
       id: runId,
       workflowId,

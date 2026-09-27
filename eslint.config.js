@@ -22,14 +22,38 @@ export default defineConfig([
     ],
     languageOptions: {
       sourceType: 'module',
-      globals: globals.browser,
+      // The backend (`src/`) runs on Node.js, not in a browser. Declaring the
+      // Node globals lets `no-undef` catch identifiers that were never
+      // imported or passed in (e.g. a missing `PDFDocument` import or
+      // `request` handler parameter), which otherwise only surface as a
+      // ReferenceError at request time.
+      globals: { ...globals.node },
     },
     rules: {
-      'no-undef': 'off',
+      'no-undef': 'error',
+      // Ratchet: unused variables are warnings so the existing backlog stays
+      // visible without blocking CI. Prefix intentionally unused names with
+      // `_` to silence them. Do not raise the warning count.
       'no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-vars': ['warn', {
+        args: 'none',
+        caughtErrors: 'none',
+        varsIgnorePattern: '^_',
+        ignoreRestSiblings: true,
+      }],
       'no-empty': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-unused-vars': 'off',
+    },
+  },
+  {
+    // TEMPORARY, tracked separately: proposal.routes.js reads an undeclared
+    // `computedLineItems` in the version snapshot of PUT /api/proposals/:id.
+    // That fix lands on its own branch; this override only silences that
+    // single identifier in that single file so `no-undef` stays an error
+    // everywhere else. Delete this block once the fix is merged.
+    files: ['src/routes/proposal.routes.js'],
+    languageOptions: {
+      globals: { computedLineItems: 'readonly' },
     },
   },
 ])
