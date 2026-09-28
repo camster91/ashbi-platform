@@ -46,7 +46,7 @@ test('the real application enforces a read-only support view end to end', {
     };
     const started = await app.inject({ method: 'POST', url: '/api/auth/impersonation', cookies: adminCookies, payload: { userId: staff.id, reason: 'End-to-end support view check' } });
     app.io.in = realIn;
-    assert.deepEqual(droppedRooms, [`user:${admin.id}`]);
+    assert.deepEqual(droppedRooms, [[`user:${admin.id}`, `pending-user:${admin.id}`]]);
     assert.equal(started.statusCode, 201, started.body);
     const view = { token: session, [IMPERSONATION_COOKIE]: started.cookies.find((c) => c.name === IMPERSONATION_COOKIE).value };
 
@@ -98,18 +98,37 @@ test('the real application enforces a read-only support view end to end', {
     // Also without the view cookie (a sibling tab reconnecting before the
     // browser stored it): the admin has an open view.
     assert.match((await handshake({ token: session }))?.message || '', /support view/);
-    // A socket whose handshake passed just before the view opened is dropped
-    // by the re-check after it joins the admin's room.
+    // A socket whose handshake passed just before the view opened waits in
+    // the pending room, its events held, and is dropped by the re-check
+    // without ever joining the admin's room or running a handler.
     const onConnection = app.io.of('/').listeners('connection')[0];
-    let droppedLate = false;
-    await new Promise((resolve) => {
-      onConnection({
-        userId: admin.id, organizationId: org, userRole: 'ADMIN',
-        join() {}, on() {}, disconnect() { droppedLate = true; resolve(); },
-      });
-      setTimeout(resolve, 2_000);
-    });
-    assert.equal(droppedLate, true, 'a late socket is dropped while the view is open');
+    const fakeSocket = (userId) => {
+      const socket = {
+        userId, organizationId: org, userRole: 'ADMIN', rooms: new Set(), middleware: [], handled: [], dropped: false,
+        join(room) { socket.rooms.add(room); }, leave(room) { socket.rooms.delete(room); },
+        use(fn) { socket.middleware.push(fn); },
+        on(event) { socket.handled.push(event); },
+        disconnect() { socket.dropped = true; },
+      };
+      return socket;
+    };
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 500));
+    const late = fakeSocket(admin.id);
+    onConnection(late);
+    assert.deepEqual([...late.rooms], [`pending-user:${admin.id}`], 'waits in the pending room');
+    const lateEvent = new Promise((resolve) => late.middleware[0](['join-project', 'p'], resolve));
+    await settle();
+    assert.equal(late.dropped, true, 'a late socket is dropped while the view is open');
+    assert.equal(late.rooms.has(`user:${admin.id}`), false, 'never joins the admin room');
+    assert.match((await lateEvent)?.message || '', /support view/, 'its events are refused');
+    // Someone without a view is cleared into their own room.
+    const other = fakeSocket(staff.id);
+    onConnection(other);
+    const otherEvent = new Promise((resolve) => other.middleware[0](['join', staff.id], resolve));
+    await settle();
+    assert.equal(other.dropped, false);
+    assert.deepEqual([...other.rooms], [`user:${staff.id}`]);
+    assert.equal(await otherEvent, undefined, 'its events pass');
 
     // Stopping restores the admin.
     const stop = await app.inject({ method: 'POST', url: '/api/auth/impersonation/stop', cookies: view });
