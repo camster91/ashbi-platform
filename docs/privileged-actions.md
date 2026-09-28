@@ -147,6 +147,32 @@ signed-in user (staff and portal clients) signs in once more after the
 release. Magic links emailed before the release no longer work; clients
 request a new one.
 
+## Credential throttles
+
+Sign-in and account-recovery endpoints carry a per-IP route limit plus
+failure-only per-account budgets (`src/auth/credential-throttle.js`):
+
+| Endpoint | Per IP (route) | Failures per account + IP | Failures per account (backstop) |
+| --- | --- | --- | --- |
+| `POST /api/auth/login` | 20 / 15 min | 10 / 15 min | 100 / 15 min |
+| `POST /api/auth/client/login` | 20 / 15 min | 10 / 15 min | 100 / 15 min |
+| `POST /api/auth/client/signup` | 20 / 15 min | 5 / hour | 50 / hour |
+| `POST /api/auth/reset-password` | 20 / 15 min | - | - |
+| `POST /api/client-portal/request-access` | 10 / 15 min | 5 / 15 min (every request) | 20 / 15 min (every request) |
+| `POST /api/client-portal/verify-token` | 20 / 15 min | - | - |
+
+A failure is a 400/401/403/404 answer; successful sign-ins never consume the
+budget, so an attacker hammering an account from their own address does not
+lock out its owner signing in from elsewhere. Unknown emails still cost one
+bcrypt comparison, so timing does not reveal registered emails. The limits use
+the app's rate-limit store, which is per API instance (in memory).
+
+**Residual risk:** an attacker controlling many addresses can exhaust an
+account's backstop and lock it for the rest of that window. The backstop is
+set high enough that this takes a large, noisy attack; per-instance counters
+mean a multi-instance deployment multiplies every budget by its instance
+count.
+
 ## API keys (service credentials)
 
 API keys authenticate the AI bridge (`/api/ai-bridge/*`, see

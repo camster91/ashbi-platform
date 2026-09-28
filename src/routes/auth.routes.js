@@ -27,10 +27,12 @@ import {
 
 // Per-account budgets for the credential endpoints (on top of the per-IP
 // route limits): see src/auth/credential-throttle.js.
+// Failures only; the per-account (email-only) number is a backstop against
+// distributed sprays and is deliberately much higher than the account+IP one.
 const ACCOUNT_LIMITS = {
-  login: { max: 10, timeWindow: '15 minutes' },
-  clientLogin: { max: 10, timeWindow: '15 minutes' },
-  clientSignup: { max: 5, timeWindow: '1 hour' },
+  login: { perAccountAndIp: { max: 10, timeWindow: '15 minutes' }, perAccount: { max: 100, timeWindow: '15 minutes' } },
+  clientLogin: { perAccountAndIp: { max: 10, timeWindow: '15 minutes' }, perAccount: { max: 100, timeWindow: '15 minutes' } },
+  clientSignup: { perAccountAndIp: { max: 5, timeWindow: '1 hour' }, perAccount: { max: 50, timeWindow: '1 hour' } },
 };
 
 // At most one auth.login_failed event per account per window, so a password
@@ -148,7 +150,8 @@ export default async function authRoutes(fastify) {
   // Login
   fastify.post('/login', {
     ...authRateLimit,
-    preHandler: [validateBody(loginSchema), loginAccountThrottle],
+    preHandler: [validateBody(loginSchema), loginAccountThrottle.guard],
+    onSend: loginAccountThrottle.onSend,
   }, async (request, reply) => {
     const { email, password } = request.body;
 
@@ -391,7 +394,8 @@ export default async function authRoutes(fastify) {
   // Client signup via invitation token
   fastify.post('/client/signup', {
     ...authRateLimit,
-    preHandler: [validateBody(clientSignupSchema), clientSignupAccountThrottle],
+    preHandler: [validateBody(clientSignupSchema), clientSignupAccountThrottle.guard],
+    onSend: clientSignupAccountThrottle.onSend,
   }, async (request, reply) => {
     const { token, email, password } = request.body;
 
@@ -471,7 +475,8 @@ export default async function authRoutes(fastify) {
   // Client login
   fastify.post('/client/login', {
     ...authRateLimit,
-    preHandler: [validateBody(clientLoginSchema), clientLoginAccountThrottle],
+    preHandler: [validateBody(clientLoginSchema), clientLoginAccountThrottle.guard],
+    onSend: clientLoginAccountThrottle.onSend,
   }, async (request, reply) => {
     const { email, password } = request.body;
 

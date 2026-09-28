@@ -84,34 +84,51 @@ test('credential endpoints carry per-route IP limits', async (t) => {
   }
 });
 
-test('staff login is throttled per account across IP addresses', async (t) => {
-  const app = await buildApp(t, fakeDb([await staffUser()]));
-  const statuses = [];
-  for (let attempt = 0; attempt < 12; attempt += 1) {
-    const response = await app.inject({
-      method: 'POST', url: '/api/auth/login', remoteAddress: `10.0.${attempt}.1`,
-      payload: { email: attempt % 2 ? 'STAFF@Example.test' : 'staff@example.test', password: 'wrong-password' },
-    });
-    statuses.push(response.statusCode);
-  }
-  assert.deepEqual(statuses.slice(0, 10), Array(10).fill(401));
-  assert.deepEqual(statuses.slice(10), [429, 429]);
-  const other = await app.inject({ method: 'POST', url: '/api/auth/login', remoteAddress: '10.9.9.9', payload: { email: 'other@example.test', password: 'x' } });
-  assert.equal(other.statusCode, 401, 'another account is not affected');
+const login = (app, ip, password) => app.inject({
+  method: 'POST', url: '/api/auth/login', remoteAddress: ip, payload: { email: 'staff@example.test', password },
 });
 
-test('client login and magic-link requests are throttled per account', async (t) => {
+test('failed staff logins are throttled per account and IP; the victim can still sign in', async (t) => {
+  const app = await buildApp(t, fakeDb([await staffUser()]));
+  const attacker = [];
+  for (let attempt = 0; attempt < 12; attempt += 1) attacker.push((await login(app, '203.0.113.7', 'wrong-password')).statusCode);
+  assert.deepEqual(attacker.slice(0, 10), Array(10).fill(401));
+  assert.deepEqual(attacker.slice(10), [429, 429]);
+  // Same account, the real user's own address: not locked out.
+  assert.equal((await login(app, '198.51.100.20', PASSWORD)).statusCode, 200);
+});
+
+test('successful sign-ins never consume the failure budget', async (t) => {
+  const app = await buildApp(t, fakeDb([await staffUser()]));
+  for (let attempt = 0; attempt < 15; attempt += 1) {
+    assert.equal((await login(app, '198.51.100.21', PASSWORD)).statusCode, 200, `sign-in ${attempt + 1}`);
+  }
+  assert.equal((await login(app, '198.51.100.21', 'wrong-password')).statusCode, 401);
+});
+
+test('a distributed spray is bounded by the per-account backstop', async (t) => {
+  const app = await buildApp(t, fakeDb([await staffUser()]));
+  let lastStatus;
+  for (let attempt = 0; attempt < 101; attempt += 1) {
+    lastStatus = (await login(app, `10.${Math.floor(attempt / 200)}.${attempt % 200}.1`, 'wrong-password')).statusCode;
+  }
+  assert.equal(lastStatus, 429, 'the 101st failure from yet another address is refused');
+});
+
+test('client login failures and magic-link requests are throttled per account and IP', async (t) => {
   const app = await buildApp(t, fakeDb([]));
   const client = [];
   for (let attempt = 0; attempt < 11; attempt += 1) {
-    client.push((await app.inject({ method: 'POST', url: '/api/auth/client/login', remoteAddress: `10.1.${attempt}.1`, payload: { email: 'c@example.test', password: 'wrong-password' } })).statusCode);
+    client.push((await app.inject({ method: 'POST', url: '/api/auth/client/login', remoteAddress: '203.0.113.8', payload: { email: 'c@example.test', password: 'wrong-password' } })).statusCode);
   }
   assert.equal(client.at(-1), 429);
   const links = [];
   for (let attempt = 0; attempt < 6; attempt += 1) {
-    links.push((await app.inject({ method: 'POST', url: '/api/client-portal/request-access', remoteAddress: `10.2.${attempt}.1`, payload: { email: 'c@example.test' } })).statusCode);
+    links.push((await app.inject({ method: 'POST', url: '/api/client-portal/request-access', remoteAddress: '203.0.113.9', payload: { email: 'c@example.test' } })).statusCode);
   }
   assert.deepEqual(links, [200, 200, 200, 200, 200, 429]);
+  const elsewhere = await app.inject({ method: 'POST', url: '/api/client-portal/request-access', remoteAddress: '198.51.100.30', payload: { email: 'c@example.test' } });
+  assert.equal(elsewhere.statusCode, 200);
 });
 
 test('an unknown email still costs one bcrypt comparison (staff and client)', async (t) => {

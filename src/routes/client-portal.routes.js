@@ -169,13 +169,19 @@ export default async function clientPortalRoutes(fastify) {
 
   // Per-email budget for magic-link requests, on top of the per-IP route
   // limit, so one inbox cannot be flooded from many addresses.
-  const requestAccessAccountThrottle = accountThrottle(fastify, { name: 'portal-link', max: 5, timeWindow: '15 minutes' });
+  const requestAccessAccountThrottle = accountThrottle(fastify, {
+    name: 'portal-link',
+    countAll: true,
+    perAccountAndIp: { max: 5, timeWindow: '15 minutes' },
+    perAccount: { max: 20, timeWindow: '15 minutes' },
+  });
 
   // POST /api/client-portal/request-access
   // Sends a magic link email — link points to /verify-token which sets a secure cookie
   fastify.post('/request-access', {
     config: { rateLimit: { max: 10, timeWindow: '15 minutes' } },
-    preHandler: [validateBody(requestAccessSchema), requestAccessAccountThrottle],
+    preHandler: [validateBody(requestAccessSchema), requestAccessAccountThrottle.guard],
+    onSend: requestAccessAccountThrottle.onSend,
   }, async (request, reply) => {
     const { email } = request.body;
 
