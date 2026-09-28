@@ -9,6 +9,9 @@ import defaultLogger from '../utils/logger.js';
 
 let stripe = null;
 
+// Only open invoices may be settled by a Checkout completion.
+export const SETTLEABLE_INVOICE_STATUSES = Object.freeze(['SENT', 'OVERDUE']);
+
 function getStripe() {
   if (!stripe && env.stripeSecretKey) {
     stripe = new Stripe(env.stripeSecretKey);
@@ -158,11 +161,13 @@ export async function handleWebhook(payload, signature) {
 
 /**
  * A verified checkout that must not settle the invoice: the session does not
- * match it (`CHECKOUT_MISMATCH`), or it was already settled by another
- * payment (`INVOICE_ALREADY_PAID`). Retrying the delivery cannot help.
+ * match it (`CHECKOUT_MISMATCH`), it was already settled by another payment
+ * (`INVOICE_ALREADY_PAID`), or the invoice was voided before the customer
+ * paid (`INVOICE_VOID` — never flipped back to PAID). Retrying the delivery
+ * cannot help.
  */
 export class StripeCheckoutRejectedError extends Error {
-  /** @param {string} message @param {'CHECKOUT_MISMATCH' | 'INVOICE_ALREADY_PAID'} code */
+  /** @param {string} message @param {'CHECKOUT_MISMATCH' | 'INVOICE_ALREADY_PAID' | 'INVOICE_VOID'} code */
   constructor(message, code = 'CHECKOUT_MISMATCH') {
     super(message);
     this.name = 'StripeCheckoutRejectedError';
@@ -196,8 +201,10 @@ export async function recordCompletedCheckout(prisma, event, { correlationId = n
       if (session.currency?.toLowerCase() !== expectedCurrency) throw new StripeCheckoutRejectedError('Stripe currency does not match invoice');
       if (session.metadata?.invoiceNumber !== invoice.invoiceNumber) throw new StripeCheckoutRejectedError('Stripe invoice number does not match');
 
+      // Only an open invoice can be settled: a VOID (or DRAFT) invoice is
+      // never flipped to PAID by a stale Checkout session.
       const transitioned = await tx.invoice.updateMany({
-        where: { id: invoiceId, status: { not: 'PAID' } },
+        where: { id: invoiceId, status: { in: SETTLEABLE_INVOICE_STATUSES } },
         data: {
           status: 'PAID',
           paidAt: new Date(event.created * 1000),
@@ -210,6 +217,9 @@ export async function recordCompletedCheckout(prisma, event, { correlationId = n
       if (transitioned.count === 0) {
         const prior = await tx.invoicePayment.findUnique({ where: { transactionId, method: 'STRIPE' } });
         if (prior?.invoiceId === invoiceId) return { duplicate: true, invoiceId };
+        const current = await tx.invoice.findUnique({ where: { id: invoiceId }, select: { status: true } });
+        if (current?.status === 'VOID') throw new StripeCheckoutRejectedError('Invoice was voided before the payment completed', 'INVOICE_VOID');
+        if (current?.status !== 'PAID') throw new StripeCheckoutRejectedError('Invoice is not awaiting payment');
         throw new StripeCheckoutRejectedError('Invoice was already paid by another transaction', 'INVOICE_ALREADY_PAID');
       }
 
@@ -255,6 +265,9 @@ export async function recordCompletedCheckout(prisma, event, { correlationId = n
  *   retries every non-2xx answer).
  * - INVOICE_ALREADY_PAID (200, not recorded, alerted once): the customer paid
  *   an invoice another payment already settled; a refund decision is needed.
+ * - INVOICE_VOID (200, not recorded, alerted once): the customer paid an
+ *   invoice voided after its Checkout session was created; the invoice stays
+ *   VOID and staff decide on a refund or re-issue.
  * - DOMAIN_EVENT_INVALID (500, alerted): the outbox event was rejected, so the
  *   payment transaction rolled back. Producers normalize data, so this is a
  *   code defect; Stripe keeps retrying the delivery until it is fixed.
@@ -273,6 +286,11 @@ export function handleCheckoutFailure(err, { event, route, log = defaultLogger, 
   if (err instanceof StripeCheckoutRejectedError && err.code === 'INVOICE_ALREADY_PAID') {
     result = { statusCode: 200, acknowledged: true, code: err.code, error: 'Invoice was already paid by another transaction' };
     alertEvent = 'stripe_checkout_invoice_already_paid';
+  } else if (err instanceof StripeCheckoutRejectedError && err.code === 'INVOICE_VOID') {
+    // The customer paid a voided invoice (unapplied money): acknowledged so
+    // Stripe stops retrying, alerted so staff refund or re-issue.
+    result = { statusCode: 200, acknowledged: true, code: err.code, error: 'Invoice was voided before the payment completed' };
+    alertEvent = 'stripe_checkout_invoice_void';
   } else if (err instanceof StripeCheckoutRejectedError) {
     result = { statusCode: 200, acknowledged: true, code: 'CHECKOUT_MISMATCH', error: 'Stripe payment did not match an invoice' };
   } else if (err?.code === 'DOMAIN_EVENT_INVALID' || err?.code === 'DOMAIN_EVENT_IDEMPOTENCY_CONFLICT') {
@@ -349,6 +367,26 @@ export const CLEARED_CHECKOUT_FIELDS = Object.freeze({
   stripeCheckoutCurrency: null,
   stripeCheckoutExpiresAt: null,
 });
+
+/**
+ * Expire a stored Checkout session so it can no longer be paid (used when an
+ * invoice is voided or its currency is rewritten). Best-effort: returns false
+ * and logs when Stripe is unavailable; never throws.
+ * @param {string | null | undefined} sessionId
+ * @param {{ stripeClient?: any, log?: { warn: Function } }} [options]
+ */
+export async function expireCheckoutSession(sessionId, { stripeClient = getStripe(), log = defaultLogger } = {}) {
+  if (!sessionId || !stripeClient) return false;
+  try {
+    await stripeClient.checkout.sessions.expire(sessionId);
+    return true;
+  } catch (err) {
+    // Already expired/completed sessions are rejected by Stripe; completion
+    // is still refused for a VOID invoice by recordCompletedCheckout.
+    log.warn({ errorName: err?.name, errorCode: err?.code }, 'Stripe Checkout session could not be expired');
+    return false;
+  }
+}
 
 export async function clearExpiredCheckout(prisma, session) {
   const invoiceId = session.metadata?.invoiceId;

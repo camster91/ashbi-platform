@@ -127,6 +127,7 @@ Stripe with a distinct code (`handleCheckoutFailure` in
 | --- | --- | --- | --- |
 | `CHECKOUT_MISMATCH` | 200 (`recorded: false`) | The session does not match the invoice (amount, currency, number, unpaid) | Logged as a warning; acknowledged because Stripe retries every non-2xx answer and a retry cannot help |
 | `INVOICE_ALREADY_PAID` | 200 (`recorded: false`) | Another payment settled the invoice first (e.g. a manual mark-paid won the race) | Logged and alerted (`stripe_checkout_invoice_already_paid`): the customer may need a refund |
+| `INVOICE_VOID` | 200 (`recorded: false`) | The invoice was voided after its Checkout session was created (voiding expires the session, best-effort) | The invoice stays VOID; logged and alerted (`stripe_checkout_invoice_void`): refund or re-issue |
 | `DOMAIN_EVENT_INVALID` | 500 | The outbox event was rejected, so the payment transaction rolled back | Logged and alerted (`domain_event_invalid`): a code defect; Stripe keeps retrying until fixed |
 | `CHECKOUT_RECORDING_FAILED` | 500 | Anything else, e.g. the database was unavailable | Logged; nothing was committed and Stripe retries the delivery |
 

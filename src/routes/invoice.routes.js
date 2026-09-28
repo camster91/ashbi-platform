@@ -1,5 +1,5 @@
 // Invoice routes — full CRUD + send + PDF + payments + templates
-import { CLEARED_CHECKOUT_FIELDS, checkoutPersistenceData, createPaymentLink, ensureCheckoutSession, handleCheckoutFailure, handleWebhook, recordCheckoutAuditEvents, recordCompletedCheckout } from '../services/stripe.service.js';
+import { CLEARED_CHECKOUT_FIELDS, checkoutPersistenceData, createPaymentLink, ensureCheckoutSession, expireCheckoutSession, handleCheckoutFailure, handleWebhook, recordCheckoutAuditEvents, recordCompletedCheckout } from '../services/stripe.service.js';
 import { generateInvoicePdf } from '../utils/generate-invoice-pdf.js';
 import { deliveryFieldsFromSend, withDeliveryState } from '../services/mailgun-delivery.service.js';
 import { createNumberedInvoice } from '../utils/invoice.js';
@@ -25,12 +25,22 @@ export const INVOICE_BULK_SEND_MAX = 25;
 
 /**
  * @param {any} fastify
- * @param {{ createPaymentLink?: Function, sendInvoiceDeliveryEmail?: Function }} [options]
+ * @param {{ createPaymentLink?: Function, sendInvoiceDeliveryEmail?: Function, expireCheckoutSession?: Function }} [options]
  *   Test seams for the Stripe and email providers; production uses the defaults.
  */
 export default async function invoiceRoutes(fastify, options = {}) {
   const createCheckout = options.createPaymentLink || createPaymentLink;
   const deliverInvoiceEmail = options.sendInvoiceDeliveryEmail || sendInvoiceDeliveryEmail;
+  const expireSession = options.expireCheckoutSession || expireCheckoutSession;
+
+  // A voided invoice must not stay payable through a stored Checkout session:
+  // forget it on the invoice and ask Stripe to expire it (best-effort; a
+  // completion that still arrives is refused as INVOICE_VOID).
+  async function retireCheckoutSession(invoice) {
+    if (!invoice.stripeCheckoutSessionId) return;
+    const expired = await expireSession(invoice.stripeCheckoutSessionId, { log: fastify.log });
+    if (!expired) fastify.log.warn({ invoiceId: invoice.id }, 'Voided invoice Checkout session was not expired at Stripe');
+  }
 
   function calcTotals(lineItems, taxRate, discountAmount = 0) {
     const subtotal = lineItems.reduce((sum, li) => sum + li.total, 0);
@@ -393,8 +403,9 @@ export default async function invoiceRoutes(fastify, options = {}) {
     const voidedAt = new Date();
     const updated = await request.prisma.invoice.update({
       where: { id: request.params.id },
-      data: { status: 'VOID', voidedAt, voidedFromStatus: invoice.status }
+      data: { status: 'VOID', voidedAt, voidedFromStatus: invoice.status, ...CLEARED_CHECKOUT_FIELDS }
     });
+    await retireCheckoutSession(invoice);
     return {
       ...updated,
       undoExpiresAt: new Date(voidedAt.getTime() + VOID_UNDO_WINDOW_MS),
@@ -885,8 +896,9 @@ export default async function invoiceRoutes(fastify, options = {}) {
 
       await fastify.prisma.invoice.update({
         where: { id },
-        data: { status: 'VOID' }
+        data: { status: 'VOID', voidedAt: new Date(), voidedFromStatus: invoice.status, ...CLEARED_CHECKOUT_FIELDS }
       });
+      await retireCheckoutSession(invoice);
       archived++;
     }
 
