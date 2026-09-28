@@ -479,7 +479,7 @@ export default function Dashboard() {
                     <div className="text-right ml-3">
                       <span className={cn(
                         'text-lg font-bold',
-                        project.healthScore >= 80 ? 'text-green-600' : project.healthScore >= 60 ? 'text-amber-600' : 'text-red-600'
+                        project.healthScore >= 80 ? 'text-green-800 dark:text-green-400' : project.healthScore >= 60 ? 'text-amber-800 dark:text-amber-400' : 'text-red-700 dark:text-red-400'
                       )}>{project.healthScore}</span>
                       <p className="text-[10px] text-muted-foreground">health</p>
                     </div>

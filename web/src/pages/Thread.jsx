@@ -169,7 +169,7 @@ export default function Thread() {
     <div className="max-w-5xl mx-auto space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex items-start gap-4">
-        <Link to="/inbox" className="p-2 hover:bg-secondary rounded-lg transition-colors mt-1">
+        <Link to="/inbox" aria-label="Back to inbox" className="p-2 hover:bg-secondary rounded-lg transition-colors mt-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div className="flex-1 min-w-0">
@@ -454,9 +454,10 @@ export default function Thread() {
               <div className="px-5 py-3 border-b border-border flex justify-between items-center">
                 <h2 className="font-heading font-semibold">Compose Response</h2>
                 <button
+                  type="button"
                   onClick={() => draftMutation.mutate()}
                   disabled={draftMutation.isPending}
-                  className="text-sm text-accent hover:text-accent/80 flex items-center gap-1.5 font-medium transition-colors"
+                  className="text-sm text-primary dark:text-accent hover:opacity-80 flex items-center gap-1.5 font-medium transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <Sparkles className={cn('w-4 h-4', draftMutation.isPending && 'animate-pulse')} />
                   {draftMutation.isPending ? 'Generating...' : 'AI Draft'}
@@ -467,7 +468,8 @@ export default function Thread() {
                   value={responseText}
                   onChange={(e) => setResponseText(e.target.value)}
                   rows={6}
-                  className="w-full p-3 border border-border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm leading-relaxed"
+                  aria-label="Response"
+                  className="w-full p-3 border border-border bg-background text-foreground placeholder:text-muted-foreground rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm leading-relaxed"
                   placeholder="Write your response..."
                 />
                 <div className="flex items-center justify-between mt-3">
@@ -498,7 +500,8 @@ export default function Thread() {
                 value={noteText}
                 onChange={(e) => setNoteText(e.target.value)}
                 rows={2}
-                className="w-full p-3 border border-border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm"
+                aria-label="Internal note"
+                className="w-full p-3 border border-border bg-background text-foreground placeholder:text-muted-foreground rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm"
                 placeholder="Add a note for the team..."
               />
               <div className="flex justify-end mt-2">
