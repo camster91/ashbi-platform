@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, ArrowLeft } from 'lucide-react';
@@ -93,6 +93,19 @@ export default function TaskKanban() {
   });
 
   const [announcement, setAnnouncement] = useState('');
+  // A keyboard move re-renders the card in another column (a new element), so
+  // remember which card to give focus back to once the board has refetched.
+  const refocusTaskIdRef = useRef(null);
+  const refocusStatusRef = useRef(null);
+  useEffect(() => {
+    const taskId = refocusTaskIdRef.current;
+    if (!taskId) return;
+    const card = document.querySelector(`[data-task-id="${CSS.escape(taskId)}"]`);
+    if (card && card.dataset.status === refocusStatusRef.current) {
+      refocusTaskIdRef.current = null;
+      card.focus();
+    }
+  }, [board]);
 
   const moveTaskTo = (task, fromStatus, toStatus) => {
     if (!toStatus || fromStatus === toStatus) return;
@@ -101,17 +114,29 @@ export default function TaskKanban() {
     moveMutation.mutate(
       { taskId: task.id, status: toStatus },
       {
-        onSuccess: () => setAnnouncement(`Moved "${task.title}" to ${label}.`),
+        onSuccess: () => {
+          refocusTaskIdRef.current = task.id;
+          refocusStatusRef.current = toStatus;
+          setAnnouncement(`Moved "${task.title}" to ${label}.`);
+        },
         onError: () => setAnnouncement(`Could not move "${task.title}".`),
       },
     );
   };
 
+  // Left/Right move to the neighbouring column. Below the lg breakpoint the
+  // columns are stacked, so Up/Down move to the previous/next column too.
   const handleCardKeyDown = (event, task, columnIndex) => {
     if (event.target !== event.currentTarget) return;
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    const stacked = typeof window.matchMedia === 'function' && !window.matchMedia('(min-width: 1024px)').matches;
+    const step = {
+      ArrowLeft: -1,
+      ArrowRight: 1,
+      ...(stacked ? { ArrowUp: -1, ArrowDown: 1 } : {}),
+    }[event.key];
+    if (!step) return;
     event.preventDefault();
-    const target = columns[columnIndex + (event.key === 'ArrowRight' ? 1 : -1)];
+    const target = columns[columnIndex + step];
     if (target) moveTaskTo(task, columns[columnIndex].key, target.key);
   };
 
@@ -156,7 +181,7 @@ export default function TaskKanban() {
 
       <p className="sr-only" aria-live="polite" role="status">{announcement}</p>
       <p id="kanban-keyboard-help" className="sr-only">
-        Focus a task card and press the left or right arrow key to move it to the neighbouring column, or use its Move to menu.
+        To move a focused task card, press the left or right arrow key for the previous or next column. On narrow screens, where columns are stacked, the up and down arrow keys also move it to the previous or next column. You can also use the card's Move to menu.
       </p>
 
       <div className="flex flex-col gap-4 lg:flex-row lg:overflow-x-auto lg:pb-2 min-w-0 [contain:inline-size]" role="region" aria-label="Task board">
@@ -184,12 +209,14 @@ export default function TaskKanban() {
                     key={task.id}
                     draggable
                     tabIndex={0}
-                    aria-label={`${task.title}, ${label}`}
-                    aria-describedby="kanban-keyboard-help"
+                    data-task-id={task.id}
+                    data-status={key}
+                    aria-describedby={`kanban-task-${task.id}-status kanban-keyboard-help`}
                     onKeyDown={(e) => handleCardKeyDown(e, task, columnIndex)}
                     onDragStart={() => setDraggedTask({ ...task, fromStatus: key })}
                     className="bg-card border border-border rounded-lg p-3 cursor-grab active:cursor-grabbing hover:shadow-md hover:border-primary/40 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
+                    <span id={`kanban-task-${task.id}-status`} className="sr-only">In column {label}.</span>
                     <Link to={`/task/${task.id}`} className="block rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                       <p className="text-sm font-medium text-foreground leading-snug break-words">{task.title}</p>
                     </Link>

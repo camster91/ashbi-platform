@@ -184,19 +184,29 @@ test.describe('UI quality', () => {
     await expect(page.getByRole('heading', { name: 'Website Redesign', level: 1 })).toBeInViewport();
   });
 
-  test('task cards can be moved with the keyboard', async ({ page }) => {
-    let moved: unknown = null;
+  test('task cards can be moved with the keyboard and keep focus', async ({ page, isMobile }) => {
+    const moves: unknown[] = [];
+    let current = kanbanTasks;
+    await page.route('**/api/tasks/kanban/project-a', route => json(route, current));
     await page.route('**/api/tasks/task-b/move', route => {
-      moved = route.request().postDataJSON();
-      return json(route, { id: 'task-b', status: 'IN_PROGRESS' });
+      const body = route.request().postDataJSON() as { status: 'IN_PROGRESS' };
+      moves.push(body);
+      const card = { ...kanbanTasks.PENDING[0], status: body.status };
+      current = { ...kanbanTasks, PENDING: [], [body.status]: [...kanbanTasks[body.status], card] };
+      return json(route, card);
     });
     await page.goto('/project/project-a/kanban');
-    const card = page.getByRole('listitem', { name: /Collect brand assets/ });
+    const card = page.locator('li[data-task-id="task-b"]');
     await card.focus();
     await expect(card).toBeFocused();
-    await page.keyboard.press('ArrowRight');
-    await expect.poll(() => moved).toEqual({ status: 'IN_PROGRESS' });
-    await expect(page.getByRole('status').filter({ hasText: 'Moved "Collect brand assets"' })).toBeAttached();
+    await expect(card).toHaveAccessibleDescription(/In column To Do\./);
+    // Stacked (mobile) columns move with Down; side-by-side columns with Right.
+    await page.keyboard.press(isMobile ? 'ArrowDown' : 'ArrowRight');
+    await expect.poll(() => moves).toEqual([{ status: 'IN_PROGRESS' }]);
+    await expect(page.getByRole('status').filter({ hasText: 'Moved "Collect brand assets" to In Progress.' })).toBeAttached();
+    const moved = page.locator('li[data-task-id="task-b"][data-status="IN_PROGRESS"]');
+    await expect(moved).toBeVisible();
+    await expect(moved).toBeFocused();
   });
 
   test('task board shows every task status and has no empty fixed-height columns on mobile', async ({ page, isMobile }) => {
