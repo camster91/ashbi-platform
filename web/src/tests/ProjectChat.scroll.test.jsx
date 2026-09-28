@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -40,16 +40,18 @@ describe('ProjectChat', () => {
     expect(scrollTo.mock.contexts.at(-1)).toHaveClass('overflow-y-auto');
   });
 
-  it('offers a labelled attach control instead of a bare native file input', async () => {
+  it('offers a labelled, focusable Attach button that opens the file picker', async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(
+    const { container } = render(
       <QueryClientProvider client={queryClient}>
         <ProjectChat projectId="p1" />
       </QueryClientProvider>,
     );
-    const input = await screen.findByLabelText('Attach a file to this message');
-    expect(input).toHaveAttribute('type', 'file');
-    expect(input).toHaveClass('sr-only');
-    expect(input.closest('label')).toHaveTextContent('Attach');
+    const button = await screen.findByRole('button', { name: 'Attach a file to this message' });
+    const input = container.querySelector('input[type="file"]');
+    expect(input).toHaveClass('hidden');
+    const click = vi.spyOn(input, 'click');
+    fireEvent.click(button);
+    expect(click).toHaveBeenCalled();
   });
 });

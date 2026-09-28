@@ -30,6 +30,7 @@ export default function ProjectChat({ projectId }) {
   const [attachment, setAttachment] = useState(null);
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   // Fetch messages
   const {
@@ -302,11 +303,16 @@ export default function ProjectChat({ projectId }) {
       {/* Input */}
       <form onSubmit={handleSend} className="border-t border-border p-3">
         <div className="flex gap-2">
-          <label className="inline-flex min-h-10 shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-within:ring-2 focus-within:ring-ring">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            aria-label="Attach a file to this message"
+            className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
             <Paperclip className="h-4 w-4" aria-hidden="true" />
-            <span className="hidden sm:inline">Attach</span>
-            <input type="file" onChange={(event) => setAttachment(event.target.files?.[0] || null)} aria-label="Attach a file to this message" className="sr-only" />
-          </label>
+            <span className="hidden sm:inline" aria-hidden="true">Attach</span>
+          </button>
+          <input ref={fileInputRef} type="file" onChange={(event) => setAttachment(event.target.files?.[0] || null)} tabIndex={-1} aria-hidden="true" className="hidden" />
           <input
             type="text"
             value={message}
