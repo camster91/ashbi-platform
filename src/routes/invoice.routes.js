@@ -14,6 +14,19 @@ const HST_RATE = 13; // Ontario HST
 const VOID_UNDO_WINDOW_MS = 10_000;
 const VOIDABLE_STATUSES = new Set(['DRAFT', 'SENT', 'OVERDUE']);
 
+// Prisma reports the violated unique constraint as meta.target (field list
+// or index name) or, through the pg driver adapter, as
+// meta.driverAdapterError.cause.constraint.
+export function isUniqueViolationOn(error, { index, fields = [] }) {
+  if (error?.code !== 'P2002') return false;
+  const target = error.meta?.target;
+  const targets = Array.isArray(target) ? target : (target ? [target] : []);
+  const constraint = error.meta?.driverAdapterError?.cause?.constraint;
+  if (constraint?.index) targets.push(constraint.index);
+  if (Array.isArray(constraint?.fields)) targets.push(...constraint.fields);
+  return targets.some((value) => value === index || fields.includes(String(value).replace(/"/g, '')));
+}
+
 function roundMoney(value) {
   return Math.round((Number(value) || 0) * 100) / 100;
 }
@@ -695,7 +708,9 @@ export default async function invoiceRoutes(fastify, options = {}) {
         include: invoiceInclude
       });
     } catch (error) {
-      if (error?.code !== 'P2002') throw error;
+      // Only the one-invoice-per-proposal constraint means "already created";
+      // any other unique violation is a real error.
+      if (!isUniqueViolationOn(error, { index: 'invoices_proposalId_key', fields: ['proposalId'] })) throw error;
       return fastify.prisma.invoice.findUnique({
         where: { proposalId: proposal.id },
         include: invoiceInclude

@@ -11,8 +11,12 @@
 -- version during a rolling deploy) still get it set. The new unique index is
 -- built before the global one is dropped, so uniqueness never lapses; the
 -- global index is strictly stronger, so existing data cannot violate it.
--- Invoices and the counter table are small; each statement holds its lock
--- only briefly. The previous app version keeps working after this migration:
+-- Prisma sends this file as one script, which PostgreSQL runs as a single
+-- implicit transaction: every lock taken here (the backfill UPDATE's row
+-- locks, the unique-index build's SHARE lock that blocks invoice writes, the
+-- trigger/constraint changes) is held until the whole migration commits.
+-- invoices is small, so the window is short; run it in a quiet period. The
+-- previous app version keeps working after this migration:
 -- its max()+1 numbering is still per organization, and the new allocator
 -- skips any number such a writer already used.
 
