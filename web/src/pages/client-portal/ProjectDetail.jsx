@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { preferredScrollBehavior } from '../../lib/motion';
 import ConfirmDialog from '../../components/ConfirmDialog';
-import SlowNotice, { SlowLoadingStatus, SLOW_WRITE_INLINE as slowWrite } from '../../components/ui/SlowNotice';
-import { portalFetch, downloadPortalDocument, deletePortalDocument, BRAND, fmtDate, fmtRelative, projectStatusLabel, projectStatusColor, priorityLabel, priorityColor, Icons, useProjectChat, PortalChatComposer } from './shared';
+import { Alert, Button, Card, LoadingState } from '../../components/ui';
+import SlowNotice, { SLOW_WRITE_INLINE as slowWrite } from '../../components/ui/SlowNotice';
+import { cn } from '../../lib/utils';
+import { portalFetch, downloadPortalDocument, deletePortalDocument, fmtDate, fmtRelative, projectStatusLabel, projectStatusColor, priorityLabel, priorityColor, Icons, useProjectChat, PortalChatComposer, PortalProgress, PortalDocumentList, PortalUploadZone, StatusBadge, portalFieldStyles, pageTitleClass, sectionTitleClass, labelClass } from './shared';
 
 // ── Project Detail (Kanban + Chat + Documents) ────────────────────────────────
 export default function ProjectDetail({ projectId, token, onBack }) {
@@ -175,22 +177,22 @@ export default function ProjectDetail({ projectId, token, onBack }) {
   }
 
   if (loading) {
-    return <SlowLoadingStatus label="Loading project..." className="cp-loading" />;
+    return <LoadingState label="Loading project..." />;
   }
   if (error || !project) {
     return (
-      <div className="cp-error-box">
-        <p className="cp-error">{error || 'Project not found'}</p>
-        <button type="button" aria-label="Back to projects" onClick={onBack} className="cp-link">Go back</button>
+      <div className="mx-auto my-8 max-w-[400px] text-center">
+        <p className="text-destructive">{error || 'Project not found'}</p>
+        <Button type="button" aria-label="Back to projects" variant="link" onClick={onBack}>Go back</Button>
       </div>
     );
   }
 
   const kanbanColumns = [
-    { key: 'TODO', label: 'To Do', tasks: tasks.TODO, color: '#b45309' },
-    { key: 'IN_PROGRESS', label: 'In Progress', tasks: tasks.IN_PROGRESS, color: '#4d7c0f' },
-    { key: 'DONE', label: 'Done', tasks: tasks.DONE, color: '#15803d' },
-    { key: 'BLOCKED', label: 'Blocked', tasks: tasks.BLOCKED || [], color: '#b91c1c' },
+    { key: 'TODO', label: 'To Do', tasks: tasks.TODO, dot: 'bg-warning' },
+    { key: 'IN_PROGRESS', label: 'In Progress', tasks: tasks.IN_PROGRESS, dot: 'bg-accent' },
+    { key: 'DONE', label: 'Done', tasks: tasks.DONE, dot: 'bg-success' },
+    { key: 'BLOCKED', label: 'Blocked', tasks: tasks.BLOCKED || [], dot: 'bg-destructive' },
   ];
 
   const detailTabs = [
@@ -200,95 +202,89 @@ export default function ProjectDetail({ projectId, token, onBack }) {
   ];
 
   return (
-    <div className="cp-space-y-4">
+    <div className="space-y-4">
       {/* Back button + header */}
       <div>
-        <button type="button" aria-label="Back to projects" onClick={onBack} className="cp-link" style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', marginBottom: '0.75rem', fontSize: '0.85rem' }}>
-          {Icons.back} Back to Projects
-        </button>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
-          <h2 className="cp-page-title" style={{ marginBottom: 0 }}>{project.name}</h2>
-          <span className={`cp-badge ${projectStatusColor(project.status)}`}>{projectStatusLabel(project.status)}</span>
+        <Button type="button" aria-label="Back to projects" variant="link" leftIcon={Icons.back} onClick={onBack} className="mb-3 gap-1">
+          Back to Projects
+        </Button>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className={cn(pageTitleClass, 'mb-0')}>{project.name}</h2>
+          <StatusBadge color={projectStatusColor(project.status)}>{projectStatusLabel(project.status)}</StatusBadge>
         </div>
-        {project.aiSummary && <p className="cp-text-muted" style={{ marginTop: '0.5rem', fontSize: '0.85rem' }}>{project.aiSummary}</p>}
+        {project.aiSummary && <p className="mt-2 text-sm text-muted-foreground">{project.aiSummary}</p>}
       </div>
 
       {/* Progress */}
-      <div className="cp-card" style={{ padding: '1rem 1.25rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.375rem' }}>
-          <span className="cp-text-muted">Progress</span>
-          <span className="cp-text" style={{ fontWeight: 600 }}>{project.progressPct}%</span>
+      <Card padding="none" className="px-5 py-4">
+        <div className="mb-1.5 flex justify-between text-sm">
+          <span className="text-muted-foreground">Progress</span>
+          <span className="font-semibold text-foreground">{project.progressPct}%</span>
         </div>
-        <div style={{ width: '100%', height: 10, background: BRAND.border, borderRadius: 5, overflow: 'hidden' }}>
-          <div style={{
-            height: '100%', borderRadius: 5, transition: 'width 0.3s',
-            width: `${project.progressPct}%`,
-            background: project.progressPct >= 80 ? '#15803d' : BRAND.primary
-          }} />
-        </div>
-      </div>
+        <PortalProgress value={project.progressPct} tone={project.progressPct >= 80 ? 'bg-success' : 'bg-primary'} className="h-2.5" />
+      </Card>
 
       {project.milestones?.length > 0 && (
-        <section className="cp-card" style={{ padding: '1rem 1.25rem' }} aria-labelledby="portal-milestones-title">
-          <h3 id="portal-milestones-title" className="cp-section-title">Milestones</h3>
-          <div className="cp-space-y-2">
+        <Card as="section" padding="none" className="px-5 py-4" aria-labelledby="portal-milestones-title">
+          <h3 id="portal-milestones-title" className={sectionTitleClass}>Milestones</h3>
+          <div className="space-y-2">
             {project.milestones.map(milestone => (
-              <div key={milestone.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div key={milestone.id} className="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                  <p className="cp-text" style={{ fontWeight: 600 }}>{milestone.name}</p>
-                  {milestone.description && <p className="cp-text-muted" style={{ fontSize: '0.8rem' }}>{milestone.description}</p>}
+                  <p className="font-semibold text-foreground">{milestone.name}</p>
+                  {milestone.description && <p className="text-sm text-muted-foreground">{milestone.description}</p>}
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <span className={`cp-badge ${milestone.status === 'COMPLETED' ? 'cp-badge--green' : 'cp-badge--blue'}`}>{milestone.status.replaceAll('_', ' ')}</span>
-                  <p className="cp-text-muted" style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>Due {fmtDate(milestone.dueDate)}</p>
+                <div className="text-right">
+                  <StatusBadge color={milestone.status === 'COMPLETED' ? 'success' : 'info'}>{milestone.status.replaceAll('_', ' ')}</StatusBadge>
+                  <p className="mt-1 text-xs text-muted-foreground">Due {fmtDate(milestone.dueDate)}</p>
                 </div>
               </div>
             ))}
           </div>
-        </section>
+        </Card>
       )}
 
       {project.revisionRounds?.length > 0 && (
-        <section className="cp-card" style={{ padding: '1rem 1.25rem' }} aria-labelledby="portal-revisions-title">
-          <h3 id="portal-revisions-title" className="cp-section-title">Revision approvals</h3>
-          <div className="cp-space-y-3">
+        <Card as="section" padding="none" className="px-5 py-4" aria-labelledby="portal-revisions-title">
+          <h3 id="portal-revisions-title" className={sectionTitleClass}>Revision approvals</h3>
+          <div className="space-y-3">
             {project.revisionRounds.map(revision => (
-              <div key={revision.id} style={{ borderTop: `1px solid ${BRAND.border}`, paddingTop: '0.75rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-                  <p className="cp-text" style={{ fontWeight: 600 }}>Round {revision.roundNumber}</p>
-                  <span className={`cp-badge ${revision.status === 'APPROVED' ? 'cp-badge--green' : 'cp-badge--orange'}`}>{revision.status.replaceAll('_', ' ')}</span>
+              <div key={revision.id} className="border-t border-border pt-3">
+                <div className="flex flex-wrap justify-between gap-4">
+                  <p className="font-semibold text-foreground">Round {revision.roundNumber}</p>
+                  <StatusBadge color={revision.status === 'APPROVED' ? 'success' : 'warning'}>{revision.status.replaceAll('_', ' ')}</StatusBadge>
                 </div>
-                {revision.notes && <p className="cp-text-muted" style={{ fontSize: '0.8rem', marginTop: '0.5rem' }}>{revision.notes}</p>}
+                {revision.notes && <p className="mt-2 text-sm text-muted-foreground">{revision.notes}</p>}
                 {revision.status !== 'APPROVED' && (
-                  <div style={{ marginTop: '0.75rem' }}>
-                    <label htmlFor={`revision-feedback-${revision.id}`} className="cp-label">Feedback for round {revision.roundNumber}</label>
-                    <textarea id={`revision-feedback-${revision.id}`} className="cp-input" rows={3} value={revisionFeedback[revision.id] || ''} onChange={event => setRevisionFeedback(current => ({ ...current, [revision.id]: event.target.value }))} placeholder="Describe requested changes, or approve when everything looks right." />
-                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
-                      <button type="button" className="cp-btn-primary" disabled={submittingWorkflow} aria-busy={submittingWorkflow || undefined} onClick={() => handleRevisionResponse(revision, 'APPROVE')}>Approve round</button>
-                      <button type="button" className="cp-btn-secondary" disabled={submittingWorkflow} aria-busy={submittingWorkflow || undefined} onClick={() => handleRevisionResponse(revision, 'REQUEST_CHANGES')}>Request changes</button>
+                  <div className="mt-3">
+                    <label htmlFor={`revision-feedback-${revision.id}`} className={labelClass}>Feedback for round {revision.roundNumber}</label>
+                    <textarea id={`revision-feedback-${revision.id}`} className={portalFieldStyles()} rows={3} value={revisionFeedback[revision.id] || ''} onChange={event => setRevisionFeedback(current => ({ ...current, [revision.id]: event.target.value }))} placeholder="Describe requested changes, or approve when everything looks right." />
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Button type="button" disabled={submittingWorkflow} aria-busy={submittingWorkflow || undefined} onClick={() => handleRevisionResponse(revision, 'APPROVE')}>Approve round</Button>
+                      <Button type="button" variant="outline" disabled={submittingWorkflow} aria-busy={submittingWorkflow || undefined} onClick={() => handleRevisionResponse(revision, 'REQUEST_CHANGES')}>Request changes</Button>
                     </div>
                   </div>
                 )}
               </div>
             ))}
           </div>
-        </section>
+        </Card>
       )}
 
-      <section className="cp-card" style={{ padding: '1rem 1.25rem' }} aria-labelledby="portal-feedback-title">
-        <h3 id="portal-feedback-title" className="cp-section-title">Project feedback</h3>
+      <Card as="section" padding="none" className="px-5 py-4" aria-labelledby="portal-feedback-title">
+        <h3 id="portal-feedback-title" className={sectionTitleClass}>Project feedback</h3>
         <form onSubmit={handleGeneralFeedback}>
-          <label htmlFor="portal-project-feedback" className="cp-label">Message to the project team</label>
-          <textarea id="portal-project-feedback" className="cp-input" rows={3} value={generalFeedback} onChange={event => setGeneralFeedback(event.target.value)} required />
-          <button type="submit" className="cp-btn-primary" style={{ marginTop: '0.5rem' }} disabled={submittingWorkflow || !generalFeedback.trim()} aria-busy={submittingWorkflow || undefined}>Send feedback</button>
+          <label htmlFor="portal-project-feedback" className={labelClass}>Message to the project team</label>
+          <textarea id="portal-project-feedback" className={portalFieldStyles()} rows={3} value={generalFeedback} onChange={event => setGeneralFeedback(event.target.value)} required />
+          <Button type="submit" className="mt-2" disabled={submittingWorkflow || !generalFeedback.trim()} aria-busy={submittingWorkflow || undefined}>Send feedback</Button>
         </form>
-      </section>
+      </Card>
 
-      {workflowStatus && <p role="status" aria-live="polite" className="cp-alert" style={{ background: '#f0fdf4', color: '#166534' }}>{workflowStatus}</p>}
-      {workflowError && <p role="alert" className="cp-alert cp-alert--red cp-error">{workflowError}</p>}
+      {workflowStatus && <Alert variant="success">{workflowStatus}</Alert>}
+      {workflowError && <Alert variant="error">{workflowError}</Alert>}
 
       {/* Detail tabs */}
-      <div role="tablist" aria-label="Project detail sections" style={{ display: 'flex', gap: '0.25rem', borderBottom: `2px solid ${BRAND.border}` }}>
+      <div role="tablist" aria-label="Project detail sections" className="flex gap-1 border-b-2 border-border">
         {detailTabs.map(tab => (
           <button
             key={tab.id}
@@ -297,23 +293,6 @@ export default function ProjectDetail({ projectId, token, onBack }) {
             aria-selected={activeView === tab.id}
             className="cp-tab"
             onClick={() => setActiveView(tab.id)}
-            style={{
-              padding: '0.625rem 1rem',
-              fontSize: '0.85rem',
-              fontWeight: activeView === tab.id ? 600 : 400,
-              color: activeView === tab.id ? BRAND.primary : BRAND.textMuted,
-              borderBottom: activeView === tab.id ? `2px solid ${BRAND.accent}` : '2px solid transparent',
-              borderTop: 0,
-              borderRight: 0,
-              borderLeft: 0,
-              marginBottom: '-2px',
-              background: 'none',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.375rem',
-              transition: 'all 0.2s',
-            }}
           >
             {tab.icon} {tab.label}
           </button>
@@ -326,28 +305,28 @@ export default function ProjectDetail({ projectId, token, onBack }) {
           {kanbanColumns.map(col => (
             <div key={col.key} className="cp-kanban-col">
               <div className="cp-kanban-col-header">
-                <span style={{ width: 8, height: 8, borderRadius: '50%', background: col.color, display: 'inline-block' }} />
-                <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{col.label}</span>
-                <span className="cp-text-muted" style={{ fontSize: '0.75rem' }}>{col.tasks.length}</span>
+                <span className={cn('inline-block h-2 w-2 rounded-full', col.dot)} />
+                <span className="text-sm font-semibold">{col.label}</span>
+                <span className="text-xs text-muted-foreground">{col.tasks.length}</span>
               </div>
               <div className="cp-kanban-col-body">
                 {col.tasks.length === 0 ? (
-                  <p className="cp-text-muted" style={{ fontSize: '0.8rem', textAlign: 'center', padding: '1rem 0' }}>No tasks</p>
+                  <p className="py-4 text-center text-sm text-muted-foreground">No tasks</p>
                 ) : (
                   col.tasks.map(task => (
-                    <div key={task.id} className="cp-kanban-card">
-                      <h4 className="cp-text" style={{ fontSize: '0.85rem', fontWeight: 500 }}>{task.title}</h4>
-                      {task.description && <p className="cp-text-muted" style={{ fontSize: '0.75rem', marginTop: '0.25rem' }}>{task.description}</p>}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem', flexWrap: 'wrap', gap: '0.25rem' }}>
-                        <span className={`cp-badge ${priorityColor(task.priority)}`}>{priorityLabel(task.priority)}</span>
-                        {task.assignee && <span className="cp-text-muted" style={{ fontSize: '0.7rem' }}>{task.assignee.name}</span>}
+                    <Card key={task.id} padding="sm" className="rounded-xl">
+                      <h4 className="font-heading text-sm font-medium text-foreground">{task.title}</h4>
+                      {task.description && <p className="mt-1 text-xs text-muted-foreground">{task.description}</p>}
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-1">
+                        <StatusBadge color={priorityColor(task.priority)}>{priorityLabel(task.priority)}</StatusBadge>
+                        {task.assignee && <span className="text-xs text-muted-foreground">{task.assignee.name}</span>}
                         {task.dueDate && (
-                          <span className="cp-text-muted" style={{ fontSize: '0.7rem' }}>
+                          <span className="text-xs text-muted-foreground">
                             {fmtRelative(task.dueDate)}
                           </span>
                         )}
                       </div>
-                    </div>
+                    </Card>
                   ))
                 )}
               </div>
@@ -360,26 +339,26 @@ export default function ProjectDetail({ projectId, token, onBack }) {
       {activeView === 'chat' && (
         <div className="cp-chat-container">
           <div className="cp-chat-messages">
-            {messagesError && <div role="alert" className="cp-alert cp-alert--red"><p>Chat messages could not be loaded. Try again.</p><button type="button" className="cp-link" onClick={reloadMessages}>Try again</button></div>}
+            {messagesError && <Alert variant="error" className="mb-2" action={<Button type="button" variant="link" onClick={reloadMessages}>Try again</Button>}>Chat messages could not be loaded. Try again.</Alert>}
             {loadingMessages && messages.length === 0 ? (
-              <p role="status" className="cp-text-muted">Loading messages…</p>
+              <p role="status" className="text-muted-foreground">Loading messages…</p>
             ) : messages.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '2rem 0' }}>
-                <p className="cp-text-muted">No messages yet. Start the conversation!</p>
+              <div className="py-8 text-center">
+                <p className="text-muted-foreground">No messages yet. Start the conversation!</p>
               </div>
             ) : (
               messages.map(msg => (
-                <div key={msg.id} className="cp-chat-bubble">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.25rem' }}>
-                    <span style={{ fontWeight: 600, fontSize: '0.85rem', color: BRAND.text }}>
+                <Card key={msg.id} padding="none" className="mb-2 rounded-xl px-4 py-3">
+                  <div className="mb-1 flex items-baseline justify-between gap-2">
+                    <span className="text-sm font-semibold text-foreground">
                       {msg.author?.name || 'Team'}
                     </span>
-                    <span className="cp-text-muted" style={{ fontSize: '0.7rem' }}>
+                    <span className="text-xs text-muted-foreground">
                       {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
-                  <p className="cp-text" style={{ fontSize: '0.85rem', lineHeight: 1.5 }}>{msg.content}</p>
-                </div>
+                  <p className="text-sm leading-normal text-foreground">{msg.content}</p>
+                </Card>
               ))
             )}
             <div ref={chatEndRef} />
@@ -390,105 +369,30 @@ export default function ProjectDetail({ projectId, token, onBack }) {
 
       {/* Documents view */}
       {activeView === 'documents' && (
-        <div className="cp-space-y-4">
-          {/* Upload area */}
-          <input
-            type="file"
-            ref={fileInputRef}
-            multiple
-            className="cp-visually-hidden"
-            aria-label="Choose project documents to upload"
-            // The visible upload button opens this picker; keep the visually
-            // hidden input out of the tab order so keyboard focus never lands
-            // on an invisible control.
-            tabIndex={-1}
-            onChange={e => { if (e.target.files.length > 0) handleFileUpload(e.target.files); }}
-          />
-          <button
-            type="button"
-            className="cp-upload-zone"
-            aria-describedby="project-upload-help"
-            onClick={() => fileInputRef.current?.click()}
+        <div className="space-y-4">
+          <PortalUploadZone
+            inputRef={fileInputRef}
+            inputLabel="Choose project documents to upload"
+            helpId="project-upload-help"
+            uploading={uploading}
             disabled={uploading}
-            onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = BRAND.primary; }}
-            onDragLeave={e => { e.currentTarget.style.borderColor = BRAND.border; }}
-            onDrop={e => {
-              e.preventDefault();
-              e.currentTarget.style.borderColor = BRAND.border;
-              if (e.dataTransfer.files.length > 0) handleFileUpload(e.dataTransfer.files);
-            }}
-          >
-            {Icons.upload}
-            <p className="cp-text" style={{ fontWeight: 600, marginTop: '0.5rem' }}>
-              {uploading ? 'Uploading...' : 'Drop files here or click to upload'}
-            </p>
-            <p id="project-upload-help" className="cp-text-muted" style={{ fontSize: '0.8rem' }}>PDF, images, documents — up to 50MB</p>
-          </button>
+            onFiles={handleFileUpload}
+          />
           <SlowNotice active={uploading} {...slowWrite} />
 
           {/* Upload error — surfaced so the user sees what failed instead of a ghost-success */}
           {uploadError && (
-            <div
-              role="alert"
-              className="cp-card"
-              style={{
-                padding: '0.75rem 1rem',
-                borderLeft: `4px solid ${BRAND.danger}`,
-                background: '#fef2f2',
-                color: BRAND.danger,
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                gap: '1rem',
-              }}
-            >
-              <span style={{ fontSize: '0.875rem' }}>{uploadError}</span>
-              <button
-                type="button"
-                onClick={() => setUploadError(null)}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: BRAND.danger,
-                  cursor: 'pointer',
-                  fontSize: '1.25rem',
-                  lineHeight: 1,
-                  padding: '0 0.25rem',
-                }}
-                aria-label="Dismiss upload error"
-              >
-                ×
-              </button>
-            </div>
+            <Alert variant="error" onDismiss={() => setUploadError(null)} dismissLabel="Dismiss upload error">
+              {uploadError}
+            </Alert>
           )}
 
-          {/* Document list */}
-          {documents.length === 0 ? (
-            <div className="cp-card" style={{ padding: '2rem', textAlign: 'center' }}>
-              <p className="cp-text-muted">No documents yet. Upload one above.</p>
-            </div>
-          ) : (
-            <div className="cp-space-y-2">
-              {documents.map(doc => (
-                <div key={doc.id} className="cp-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.875rem 1.25rem' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p className="cp-text" style={{ fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.originalName}</p>
-                    <p className="cp-text-muted" style={{ fontSize: '0.75rem' }}>
-                      {(doc.size / 1024).toFixed(1)} KB &middot; {fmtDate(doc.createdAt)} &middot; {doc.uploadedBy?.name || 'Unknown'}
-                    </p>
-                  </div>
-                  <div style={{ display: 'flex', gap: '0.5rem', marginLeft: '0.75rem' }}>
-                    <button type="button" onClick={() => handleDownloadDoc(doc)} className="cp-btn-secondary" style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem' }}>
-                      {Icons.download} Download
-                    </button>
-                    <button type="button" onClick={() => { setDeleteError(''); setDocumentToDelete(doc); }} disabled={deletingDocument} className="cp-btn-danger" style={{ fontSize: '0.75rem', padding: '0.25rem 0.625rem', minWidth: 44, minHeight: 44 }} aria-label={`Delete ${doc.originalName}`}>
-                      {Icons.trash}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          <PortalDocumentList
+            documents={documents}
+            onDownload={handleDownloadDoc}
+            onDelete={doc => { setDeleteError(''); setDocumentToDelete(doc); }}
+            deleting={deletingDocument}
+          />
         </div>
       )}
       <ConfirmDialog

@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import test from 'node:test';
 
 import {
+  DOMAIN_EVENT_DISPATCH_INTERVAL_MS,
+  domainEventsQueue,
   escalationQueue,
   healthQueue,
   scheduledQueue,
@@ -18,7 +20,7 @@ test('scheduler bootstrap uses stable IDs and timezone-aware business schedules'
     removedSchedulers.push(id);
     return true;
   };
-  const queues = [healthQueue, escalationQueue, weeklyDigestQueue, scheduledQueue];
+  const queues = [healthQueue, escalationQueue, weeklyDigestQueue, scheduledQueue, domainEventsQueue];
   for (const queue of queues) {
     queue.upsertJobScheduler = async (id, repeat, template) => {
       calls.push({ queue: queue.name, id, repeat, template });
@@ -36,12 +38,12 @@ test('scheduler bootstrap uses stable IDs and timezone-aware business schedules'
   await setupRecurringJobs();
   await setupRecurringJobs();
 
-  assert.equal(calls.length, 12);
-  const firstPass = calls.slice(0, 6);
-  const secondPass = calls.slice(6);
+  assert.equal(calls.length, 14);
+  const firstPass = calls.slice(0, 7);
+  const secondPass = calls.slice(7);
   assert.deepEqual(secondPass, firstPass);
   assert.equal(lockedCleanupAttempts, 2);
-  assert.equal(new Set(firstPass.map(({ queue, id }) => `${queue}:${id}`)).size, 6);
+  assert.equal(new Set(firstPass.map(({ queue, id }) => `${queue}:${id}`)).size, 7);
   assert.ok(removedSchedulers.includes('fleet-digest-daily-toronto'), 'retired fleet digest schedule is removed');
 
   const names = firstPass.map(({ template }) => template.name);
@@ -52,11 +54,20 @@ test('scheduler bootstrap uses stable IDs and timezone-aware business schedules'
     'recurring-invoices',
     'overdue-invoices',
     'trash-purge',
+    'dispatch-domain-events',
   ]);
-  for (const call of firstPass) {
+  const businessSchedules = firstPass.filter(({ queue }) => queue !== domainEventsQueue.name);
+  for (const call of businessSchedules) {
     assert.equal(call.template.opts.attempts, 3);
     assert.equal(call.template.opts.removeOnFail, 500);
   }
+  // The outbox dispatcher keeps its own per-event retry state; a failed tick
+  // is not retried by BullMQ, the next tick picks the work up.
+  const dispatch = firstPass.find(({ queue }) => queue === domainEventsQueue.name);
+  assert.equal(dispatch.id, 'domain-events-dispatch');
+  assert.deepEqual(dispatch.repeat, { every: DOMAIN_EVENT_DISPATCH_INTERVAL_MS });
+  assert.equal(dispatch.template.opts.attempts, 1);
+  assert.equal(dispatch.template.opts.removeOnFail, 500);
   for (const name of ['generate-weekly-digest', 'trash-purge']) {
     assert.equal(firstPass.find((call) => call.template.name === name).repeat.tz, 'America/Toronto');
   }

@@ -5,6 +5,57 @@ import { Loader2 } from 'lucide-react';
 import useSlowState, { SLOW_THRESHOLD_MS } from '../../hooks/useSlowState';
 import { SlowMessage } from './SlowNotice';
 
+const variants = {
+  primary: 'bg-primary text-primary-foreground hover:bg-primary/90 focus:ring-primary/20',
+  secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80 focus:ring-secondary/20',
+  outline: 'border-2 border-border bg-transparent text-foreground hover:bg-muted focus:ring-border',
+  ghost: 'bg-transparent text-foreground hover:bg-muted focus:ring-muted',
+  danger: 'bg-destructive text-destructive-foreground hover:bg-destructive/90 focus:ring-destructive/20',
+  destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90 focus:ring-destructive/20',
+  // Lower-emphasis destructive trigger (for example a row's delete icon that
+  // opens a ConfirmDialog, whose confirm button is the solid `danger`).
+  'danger-outline': 'border-2 border-destructive bg-transparent text-destructive hover:bg-destructive/10 focus:ring-destructive/20',
+  success: 'bg-success text-success-foreground hover:bg-success/90 focus:ring-success/20',
+  warning: 'bg-warning text-warning-foreground hover:bg-warning/90 focus:ring-warning/20',
+  // Text-only action (the client portal's inline "View all …" links). Keeps
+  // the 44px target from the size but drops the horizontal padding.
+  link: 'bg-transparent px-0 font-medium text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring',
+};
+
+const sizes = {
+  xs: 'min-h-11 px-2.5 text-xs',
+  sm: 'min-h-11 px-3 text-sm',
+  md: 'min-h-11 px-4 text-sm',
+  lg: 'h-12 px-6 text-base',
+  xl: 'h-14 px-8 text-base',
+};
+
+const iconSizes = {
+  xs: 'w-3.5 h-3.5',
+  sm: 'w-4 h-4',
+  md: 'w-4 h-4',
+  lg: 'w-5 h-5',
+  xl: 'w-5 h-5',
+};
+
+/**
+ * Class list for a Button-styled element. Use it to give a real `<a href>`
+ * the same look as a Button (for example "Pay now" or "Review and sign"
+ * links) without nesting a button inside a link.
+ */
+export function buttonStyles({ variant = 'primary', size = 'md', className } = {}) {
+  return cn(
+    'inline-flex items-center justify-center gap-2 rounded-lg font-medium',
+    'transition-colors duration-200 ease-out motion-reduce:transition-none',
+    'focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-offset-0',
+    'disabled:opacity-50 disabled:cursor-not-allowed',
+    variants[variant] || variants.primary,
+    sizes[size] || sizes.md,
+    variant === 'link' && 'px-0',
+    className
+  );
+}
+
 const Button = forwardRef(({
   children,
   variant = 'primary',
@@ -54,33 +105,6 @@ const Button = forwardRef(({
       document.body
     );
   }
-  const variants = {
-    primary: 'bg-primary text-primary-foreground hover:bg-primary/90 focus:ring-primary/20',
-    secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80 focus:ring-secondary/20',
-    outline: 'border-2 border-border bg-transparent text-foreground hover:bg-muted focus:ring-border',
-    ghost: 'bg-transparent text-foreground hover:bg-muted focus:ring-muted',
-    danger: 'bg-destructive text-destructive-foreground hover:bg-destructive/90 focus:ring-destructive/20',
-    destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90 focus:ring-destructive/20',
-    success: 'bg-success text-success-foreground hover:bg-success/90 focus:ring-success/20',
-    warning: 'bg-warning text-warning-foreground hover:bg-warning/90 focus:ring-warning/20',
-  };
-
-  const sizes = {
-    xs: 'min-h-11 px-2.5 text-xs',
-    sm: 'min-h-11 px-3 text-sm',
-    md: 'min-h-11 px-4 text-sm',
-    lg: 'h-12 px-6 text-base',
-    xl: 'h-14 px-8 text-base',
-  };
-
-  const iconSizes = {
-    xs: 'w-3.5 h-3.5',
-    sm: 'w-4 h-4',
-    md: 'w-4 h-4',
-    lg: 'w-5 h-5',
-    xl: 'w-5 h-5',
-  };
-
   // Always return the same fragment shape so the <button> never remounts (and
   // never loses focus) when loading toggles.
   return (
@@ -89,15 +113,7 @@ const Button = forwardRef(({
       ref={ref}
       disabled={showDisabled || showLoading}
       aria-busy={showLoading || undefined}
-      className={cn(
-        'inline-flex items-center justify-center gap-2 rounded-lg font-medium',
-        'transition-colors duration-200 ease-out motion-reduce:transition-none',
-        'focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-offset-0',
-        'disabled:opacity-50 disabled:cursor-not-allowed',
-        variants[variant] || variants.primary,
-        sizes[size] || sizes.md,
-        className
-      )}
+      className={buttonStyles({ variant, size, className })}
       {...props}
       aria-describedby={describedBy}
     >
