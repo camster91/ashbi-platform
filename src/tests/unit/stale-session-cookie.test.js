@@ -92,3 +92,21 @@ describe('a stale session cookie never blocks public routes and is cleared', () 
     assert.equal(clearsSessionCookie(response), false);
   });
 });
+
+describe('the support-view hook never restores a stale session', () => {
+  it('leaves request.user empty when the admin session behind an imp cookie is not current', async () => {
+    const { createImpersonationHook, IMPERSONATION_COOKIE } = await import('../../auth/impersonation.js');
+    const hook = createImpersonationHook({ prisma: {}, isCurrentUserSession: async () => false });
+    const cleared = [];
+    const request = {
+      url: '/api/clients',
+      cookies: { [IMPERSONATION_COOKIE]: 'x', token: 'stale' },
+      user: null,
+      async jwtVerify() { this.user = { id: 'someone', organizationId: 'org-a', role: 'ADMIN' }; },
+    };
+    const reply = { clearCookie: (name) => { cleared.push(name); return reply; } };
+    await hook(request, reply);
+    assert.equal(request.user, null);
+    assert.deepEqual(cleared, [IMPERSONATION_COOKIE]);
+  });
+});

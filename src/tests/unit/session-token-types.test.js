@@ -21,6 +21,7 @@ import { createSocketAuthMiddleware } from '../../auth/socket-auth.js';
 import { signOAuthState, verifyOAuthState } from '../../auth/oauth-state.js';
 import { signReauthToken } from '../../auth/reauth.js';
 import { createMfaChallenge } from '../../auth/mfa.js';
+import { signImpersonationToken } from '../../auth/impersonation.js';
 import { magicLinkClaims } from '../../routes/client-portal.routes.js';
 import clientPortalRoutes from '../../routes/client-portal.routes.js';
 import { redactCapabilityUrl } from '../../utils/log-redaction.js';
@@ -66,6 +67,13 @@ async function nonSessionTokens(app) {
     legacyBotToken: app.jwt.sign({ id: 'bot', role: 'BOT', email: 'bot@system' }, { expiresIn: '30d' }),
     reauth: signReauthToken({ id: staff.id, sessionVersion: staff.sessionVersion, iat: 1 }),
     mfaChallenge: createMfaChallenge(staff),
+    // The support-view `imp` cookie token (typ 'impersonation', its own derived key).
+    impersonation: signImpersonationToken({
+      sessionId: 'view-1', actor: { id: staff.id, organizationId: 'org-a', sessionVersion: staff.sessionVersion, iat: 1 },
+      subjectUserId: portalUser.id, expiresAt: new Date(Date.now() + 600_000),
+    }),
+    // The same claims signed with the session key must still not pass as a session.
+    impersonationClaimsOnSessionKey: app.jwt.sign({ typ: 'impersonation', sid: 'view-1', sub: staff.id, org: 'org-a', subj: portalUser.id }, { expiresIn: '10m' }),
     untypedStaffSession: app.jwt.sign({ id: staff.id, role: 'ADMIN', organizationId: 'org-a', sessionVersion: staff.sessionVersion }, { expiresIn: '1h' }),
     clientTypedAsStaff: app.jwt.sign({ ...portalUser, typ: SESSION_TOKEN_TYPE }, { expiresIn: '1h' }),
     staffTypedAsClient: app.jwt.sign({ ...staff, typ: CLIENT_SESSION_TOKEN_TYPE }, { expiresIn: '1h' }),

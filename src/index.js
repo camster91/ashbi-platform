@@ -18,6 +18,8 @@ import prisma from './config/db.js';
 import { apiRateLimitMax, isNonApiRequest } from './config/rateLimit.js';
 import { trustHops } from './config/trust-proxy.js';
 import { clearStaleSessionCookie, resolveRequestSession } from './auth/request-session.js';
+import { isCurrentUserSession } from './auth/session.js';
+import { actorHasOpenView, applyImpersonation, createImpersonationHook, socketHandshakeDuringView } from './auth/impersonation.js';
 import { createJoinProjectHandler } from './auth/project-room-access.js';
 import { createSocketAuthMiddleware } from './auth/socket-auth.js';
 import { clientAcquisitionCorsOptions, loadClientAcquisitionConfig } from './services/client-acquisition.contract.js';
@@ -184,12 +186,21 @@ fastify.addHook('onRequest', async (request, reply) => {
   if (session === 'error') request.log.warn('Session validation unavailable; continuing without a session');
 });
 
-// Auth decorators
+// Support impersonation (#416, docs/privileged-actions.md): when the `imp`
+// cookie names a live, read-only view, swap request.user for the viewed
+// person and refuse writes and sensitive areas. Runs for /api/auth too.
+fastify.addHook('onRequest', createImpersonationHook({ prisma, isCurrentUserSession }));
+
+// Auth decorators. Re-verifying the session cookie resets request.user to the
+// signed-in admin, so an active impersonation is re-applied afterwards.
 fastify.decorate('authenticate', async (request, reply) => {
   const session = await resolveRequestSession(request, prisma);
-  if (session === 'current') return undefined;
-  if (session === 'stale') clearStaleSessionCookie(request, reply);
-  return reply.status(401).send({ error: 'Unauthorized' });
+  if (session !== 'current') {
+    if (session === 'stale') clearStaleSessionCookie(request, reply);
+    return reply.status(401).send({ error: 'Unauthorized' });
+  }
+  applyImpersonation(request);
+  return undefined;
 });
 
 fastify.decorate('adminOnly', async (request, reply) => {
@@ -198,6 +209,7 @@ fastify.decorate('adminOnly', async (request, reply) => {
     if (session === 'stale') clearStaleSessionCookie(request, reply);
     return reply.status(401).send({ error: 'Unauthorized' });
   }
+  applyImpersonation(request);
   if (request.user.role !== 'ADMIN') return reply.status(403).send({ error: 'Admin access required' });
   return undefined;
 });
@@ -267,10 +279,16 @@ const io = new SocketIO(fastify.server, { cors: { origin: env.isDev ? 'http://lo
 fastify.addHook('onClose', async () => {
   await new Promise((resolve) => io.close(resolve));
 });
+// Handshake: sessions only (src/auth/socket-auth.js). Realtime is paused
+// during a support view (#416): a handshake carrying the view cookie is
+// refused before verification, and an admin with an open view is refused
+// after the session is verified.
 io.use(createSocketAuthMiddleware({
   verifyToken: (token) => fastify.jwt.verify(token),
   parseCookie: (header) => fastify.parseCookie(header),
   prisma,
+  refuseBeforeVerify: (cookies) => (socketHandshakeDuringView(cookies) ? 'Realtime is paused during a support view' : null),
+  refuseAfterVerify: async (decoded) => ((await actorHasOpenView(prisma, decoded)) ? 'Realtime is paused during a support view' : null),
 }));
 
 // Socket.IO connection handling. Without this, the client-emitted `join` /

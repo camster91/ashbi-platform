@@ -35,7 +35,9 @@ export default async function googleCalendarRoutes(fastify, options = {}) {
   const revokeToken = options.revokeGoogleToken ?? revokeGoogleToken;
   const staleLockMs = options.staleLockMs ?? GOOGLE_SYNC_STALE_LOCK_MS;
   const now = options.now ?? (() => new Date());
-  fastify.get('/oauth/start', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  // Side-effecting GET: it binds a Google account to the caller, so a support
+  // view (#416) must never reach it (see src/auth/impersonation.js).
+  fastify.get('/oauth/start', { onRequest: [fastify.authenticate], config: { sideEffectingGet: true } }, async (request, reply) => {
     if (!googleClientId || !googleClientSecret || !googleRedirectUri) {
       return reply.status(503).send({ error: 'Google Calendar OAuth is not configured', code: 'GOOGLE_CALENDAR_OAUTH_UNAVAILABLE' });
     }

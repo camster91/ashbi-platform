@@ -123,7 +123,8 @@ export default async function clientPortalRoutes(fastify) {
     // Authorization header; a stale cookie is cleared with the 401 so the
     // browser is not locked out (and logout always clears it).
     const reject = (error) => {
-      clearStaleSessionCookie(request, reply);
+      // During a support view the cookie is the admin's own, valid session.
+      if (!request.impersonation) clearStaleSessionCookie(request, reply);
       return reply.status(401).send({ error });
     };
     try {
@@ -139,11 +140,16 @@ export default async function clientPortalRoutes(fastify) {
         return reply.status(401).send({ error: 'Missing token' });
       }
 
-      let payload;
-      try {
-        payload = fastify.jwt.verify(rawToken);
-      } catch {
-        return reject('Invalid or expired token');
+      // An admin viewing as this client user (#416): the global hook already
+      // verified the admin's session and the read-only view; the subject's
+      // claims carry the client_session type.
+      let payload = request.impersonation?.user;
+      if (!payload) {
+        try {
+          payload = fastify.jwt.verify(rawToken);
+        } catch {
+          return reject('Invalid or expired token');
+        }
       }
 
       // Only a client-portal session: a staff session, a magic link or any
