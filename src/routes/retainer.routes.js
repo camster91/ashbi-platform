@@ -226,7 +226,7 @@ export default async function retainerRoutes(fastify) {
     }
 
     const { clientId } = request.params;
-    const { currency = 'USD', daysUntilDue = 30, resetHours = false } = request.body || {};
+    const { currency = 'CAD', daysUntilDue = 30, resetHours = false } = request.body || {};
 
     const plan = await fastify.prisma.retainerPlan.findUnique({
       where: { clientId },
@@ -237,12 +237,12 @@ export default async function retainerRoutes(fastify) {
       return reply.status(404).send({ error: 'No retainer plan found for this client' });
     }
 
-    const amount = currency === 'CAD'
-      ? (plan.monthlyAmountCad || plan.monthlyAmountUsd || 0)
-      : (plan.monthlyAmountUsd || plan.monthlyAmountCad || 0);
+    // Bill only the amount set in the invoice's currency: a USD rate is never
+    // invoiced labelled CAD (or the reverse).
+    const amount = currency === 'CAD' ? plan.monthlyAmountCad : plan.monthlyAmountUsd;
 
-    if (!amount) {
-      return reply.status(400).send({ error: 'No monthly rate set on this retainer plan' });
+    if (!amount || amount <= 0) {
+      return reply.status(400).send({ error: `No monthly ${currency} rate set on this retainer plan`, code: 'RETAINER_RATE_MISSING' });
     }
 
     const now = new Date();

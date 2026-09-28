@@ -470,8 +470,10 @@ export const logRetainerHoursSchema = z.object({
   projectId: cuidId.optional(),
 });
 
+// Retainer plans carry a monthly CAD and/or USD amount; the invoice bills the
+// amount in the requested currency (default CAD, the invoice default).
 export const generateRetainerInvoiceSchema = z.object({
-  currency: z.enum(['USD', 'CAD']).optional().default('USD'),
+  currency: z.enum(['CAD', 'USD']).optional().default('CAD'),
   daysUntilDue: z.number().int().positive().optional().default(30),
   resetHours: z.boolean().optional().default(false),
 });
@@ -1841,7 +1843,8 @@ export const calendarEventUpdateSchema = calendarEventCreateSchema.partial();
 export const credentialUpsertSchema = credentialCreateSchema;
 
 export const retainerGenerateInvoiceSchema = z.object({
-  currency: z.enum(['USD', 'CAD', 'EUR', 'GBP']).default('USD'),
+  // Only CAD/USD: a plan has no EUR/GBP amount to bill (see above).
+  currency: z.enum(['CAD', 'USD']).default('CAD'),
   daysUntilDue: z.number().int().positive().max(180).default(30),
   resetHours: z.boolean().default(false),
 });
