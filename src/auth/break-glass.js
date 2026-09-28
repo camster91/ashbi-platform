@@ -287,8 +287,9 @@ export async function redeemBreakGlassGrant(prisma, { token, newPassword, reques
   const outcome = await prisma.$transaction(async (tx) => {
     // Serialize every redemption in the organization (restorations reactivate
     // an administrator too) and re-check a promotion under the lock, so two
-    // grants redeemed at once never both find no administrator.
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`break-glass-redeem:${grant.organizationId}`}, 0))`;
+    // grants redeemed at once never both find no administrator. The key keeps
+    // its original name so processes of either version serialize together.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`break-glass-promote:${grant.organizationId}`}, 0))`;
     if (promoted && (await activeAdminIds(tx, grant.organizationId)).length > 0) return null;
     const claimed = await tx.breakGlassGrant.updateMany({
       where: { id: grant.id, redeemedAt: null, revokedAt: null, expiresAt: { gt: now } },

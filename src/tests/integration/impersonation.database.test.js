@@ -227,7 +227,7 @@ test('impersonation sessions and break-glass grants stay in their tenant, expire
     let lockTaken;
     const taken = new Promise((resolve) => { lockTaken = resolve; });
     const holder = raw.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`break-glass-redeem:${orgC}`}, 0))`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`break-glass-promote:${orgC}`}, 0))`;
       lockTaken();
       await held;
     }, { timeout: 20_000 });

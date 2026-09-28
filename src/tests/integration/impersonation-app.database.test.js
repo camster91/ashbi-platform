@@ -98,6 +98,18 @@ test('the real application enforces a read-only support view end to end', {
     // Also without the view cookie (a sibling tab reconnecting before the
     // browser stored it): the admin has an open view.
     assert.match((await handshake({ token: session }))?.message || '', /support view/);
+    // A socket whose handshake passed just before the view opened is dropped
+    // by the re-check after it joins the admin's room.
+    const onConnection = app.io.of('/').listeners('connection')[0];
+    let droppedLate = false;
+    await new Promise((resolve) => {
+      onConnection({
+        userId: admin.id, organizationId: org, userRole: 'ADMIN',
+        join() {}, on() {}, disconnect() { droppedLate = true; resolve(); },
+      });
+      setTimeout(resolve, 2_000);
+    });
+    assert.equal(droppedLate, true, 'a late socket is dropped while the view is open');
 
     // Stopping restores the admin.
     const stop = await app.inject({ method: 'POST', url: '/api/auth/impersonation/stop', cookies: view });

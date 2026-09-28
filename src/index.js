@@ -299,6 +299,14 @@ io.use(async (socket, next) => {
 io.on('connection', (socket) => {
   // Auto-join the authenticated user's own room so notify() reaches them.
   if (socket.userId) socket.join(`user:${socket.userId}`);
+  // Re-check for a support view now that the socket is in the admin's room:
+  // a view that opened while the handshake was in flight is either visible
+  // here, or finds this socket in the room when it drops the admin's sockets.
+  if (socket.userId && socket.organizationId) {
+    actorHasOpenView(prisma, { id: socket.userId, organizationId: socket.organizationId })
+      .then((open) => { if (open) socket.disconnect(true); })
+      .catch(() => socket.disconnect(true));
+  }
 
   // Explicit join is only allowed for the caller's own user room.
   socket.on('join', (userId) => {
