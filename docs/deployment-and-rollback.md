@@ -79,7 +79,15 @@ records; the environment is included in every history outcome field.
   Traefik and the published host port reach the container from a Docker
   network address, so only a process inside the container qualifies.
 - `deploy-vps-direct.sh` gates on the strict detailed view (worker ok, exact
-  revision and image digest). `npm run smoke:production-health` gates on the
+  revision and image digest). If that read fails (for example an operator
+  rollback to an image built before `/api/health/details` existed, which
+  answers 404), it falls back to the public `/api/health`. Those older images
+  publish `imageDigest`, `worker` and `revision` there, so the same checks
+  apply; current images keep `imageDigest` out of the public body, so the
+  fallback cannot pass the gate for them. On a readiness failure the script
+  prints the non-strict detailed and public health bodies before restoring
+  the previous release (busybox `wget` prints nothing on a 503). The API
+  container gets `--stop-timeout 30`, above the API's 10 s shutdown drain. `npm run smoke:production-health` gates on the
   public `/api/health?strict=1` (worker ok, exact revision); the digest is
   verified on the host by the deploy script.
 - Uptime monitors should alert on `/api/health` 503 (API cannot reach its
@@ -189,7 +197,8 @@ Use the last known-good immutable image reference and image ID from
 `$ROOT_DIR/releases/history.tsv`; never roll back with a mutable `main` or
 `latest` tag. The release script automatically restores the retained previous
 container when startup or readiness fails. For an operator-requested rollback,
-rerun the script using the recorded previous artifact, revision, and image ID,
+rerun the script (the current version works with older artifacts; see
+"Health endpoints") using the recorded previous artifact, revision, and image ID,
 then verify both fields at `/api/health/details` (staff session, or
 `docker exec ashbi-platform wget -qO- 'http://127.0.0.1:3002/api/health/details'`) and run `docker exec ashbi-platform-worker npm run health:worker`. Record the operator, timestamp,
 source release, target image ID, reason, and verification result.
