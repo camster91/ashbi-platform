@@ -213,6 +213,33 @@ test('impersonation sessions and break-glass grants stay in their tenant, expire
     const results = await Promise.allSettled(promotions.map((recoveryToken) => redeemBreakGlassGrant(raw, { token: recoveryToken, newPassword: 'Integration-Pass-2' }, { environment })));
     assert.deepEqual(results.map((r) => r.status).sort(), ['fulfilled', 'rejected']);
     assert.equal(await raw.user.count({ where: { organizationId: orgC, role: 'ADMIN' } }), 1);
+
+    // Restoring a deactivated administrator takes the same organization lock,
+    // so it cannot interleave with a promotion's no-admin check.
+    const [promotedC] = await raw.user.findMany({ where: { organizationId: orgC, role: 'ADMIN' } });
+    await raw.user.update({ where: { id: promotedC.id }, data: { isActive: false } });
+    const { token: restoreToken } = await issueBreakGlassGrant(raw, {
+      organizationId: orgC, targetUserId: promotedC.id, operatorId: adminB.id,
+      reason: 'Integration: restore the deactivated administrator', osUser: 'deploy', host: 'api-1.internal',
+    }, { environment });
+    let releaseLock;
+    const held = new Promise((resolve) => { releaseLock = resolve; });
+    let lockTaken;
+    const taken = new Promise((resolve) => { lockTaken = resolve; });
+    const holder = raw.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`break-glass-redeem:${orgC}`}, 0))`;
+      lockTaken();
+      await held;
+    }, { timeout: 20_000 });
+    await taken;
+    let restoreSettled = false;
+    const restore = redeemBreakGlassGrant(raw, { token: restoreToken, newPassword: 'Integration-Pass-3' }, { environment })
+      .finally(() => { restoreSettled = true; });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    assert.equal(restoreSettled, false, 'restoration waits for the organization lock');
+    releaseLock();
+    await holder;
+    assert.equal((await restore).redeemed, true);
   } finally {
     await app?.close();
     await raw.notification.deleteMany({ where: { user: { organizationId: { in: [orgA, orgB, orgC] } } } });

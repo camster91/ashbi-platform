@@ -18,7 +18,7 @@ import prisma from './config/db.js';
 import { apiRateLimitMax, isNonApiRequest } from './config/rateLimit.js';
 import { trustHops } from './config/trust-proxy.js';
 import { isCurrentUserSession } from './auth/session.js';
-import { applyImpersonation, createImpersonationHook, socketHandshakeDuringView } from './auth/impersonation.js';
+import { actorHasOpenView, applyImpersonation, createImpersonationHook, socketHandshakeDuringView } from './auth/impersonation.js';
 import { createJoinProjectHandler } from './auth/project-room-access.js';
 import { clientAcquisitionCorsOptions, loadClientAcquisitionConfig } from './services/client-acquisition.contract.js';
 import { initHermesBridge } from './agents/hub-hermes.integration.js';
@@ -284,6 +284,7 @@ io.use(async (socket, next) => {
     if (!(await isCurrentUserSession(prisma, decoded))) {
       return next(new Error('Invalid token'));
     }
+    if (await actorHasOpenView(prisma, decoded)) return next(new Error('Realtime is paused during a support view'));
     socket.userId = decoded.id || decoded.contactId;
     socket.userRole = decoded.role;
     socket.organizationId = decoded.organizationId;

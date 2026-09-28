@@ -207,6 +207,23 @@ export function socketHandshakeDuringView(cookies) {
 }
 
 /**
+ * Whether `actor` (a decoded session) has an open support view. Realtime is
+ * refused for such an admin on every connection, not only ones carrying the
+ * view cookie: a sibling tab can reconnect in the moment before the browser
+ * stores the cookie, and would otherwise stay connected as the admin.
+ * @param {any} prisma Raw client (the socket handshake has no tenant scope).
+ * @param {{ id?: string, organizationId?: string } | null | undefined} actor
+ */
+export async function actorHasOpenView(prisma, actor, { nowMs = Date.now() } = {}) {
+  if (!actor?.id || !actor.organizationId) return false;
+  const open = await prisma.impersonationSession.findFirst({
+    where: { organizationId: actor.organizationId, actorUserId: actor.id, endedAt: null, expiresAt: { gt: new Date(nowMs) } },
+    select: { id: true },
+  });
+  return Boolean(open);
+}
+
+/**
  * Route option that marks a GET/HEAD route with side effects (it writes, or
  * binds an external account to the caller). Such routes are refused during a
  * view like any write: `config: { [SIDE_EFFECTING_GET]: true }`.

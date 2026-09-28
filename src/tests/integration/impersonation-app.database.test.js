@@ -95,7 +95,9 @@ test('the real application enforces a read-only support view end to end', {
       socketAuth({ handshake: { headers: { cookie }, auth: {} } }, (err) => resolve(err));
     });
     assert.match((await handshake(view))?.message || '', /support view/);
-    assert.equal(await handshake({ token: session }), undefined);
+    // Also without the view cookie (a sibling tab reconnecting before the
+    // browser stored it): the admin has an open view.
+    assert.match((await handshake({ token: session }))?.message || '', /support view/);
 
     // Stopping restores the admin.
     const stop = await app.inject({ method: 'POST', url: '/api/auth/impersonation/stop', cookies: view });
@@ -107,6 +109,7 @@ test('the real application enforces a read-only support view end to end', {
     assert.equal(stale.statusCode, 409, stale.body);
     assert.equal(stale.json().code, 'IMPERSONATION_ENDED');
     assert.equal((await prisma.client.findUnique({ where: { id: client.id } })).name, 'App Client');
+    assert.equal(await handshake({ token: session }), undefined, 'realtime resumes once the view ends');
     const after = await app.inject({ method: 'GET', url: '/api/auth/me', cookies: { token: session } });
     assert.equal(after.json().id, admin.id);
     assert.equal(after.json().impersonation, undefined);
