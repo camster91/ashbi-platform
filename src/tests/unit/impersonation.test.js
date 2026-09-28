@@ -27,6 +27,7 @@ const {
   createImpersonationHook,
   impersonationDenial,
   signImpersonationToken,
+  socketHandshakeDuringView,
   verifyImpersonationToken,
 } = await import('../../auth/impersonation.js');
 const { createScopedPrisma } = await import('../../utils/prisma-tenant-proxy.js');
@@ -595,5 +596,13 @@ describe('impersonationDenial policy', () => {
     assert.equal(verifyImpersonationToken(`${header}.${payload}.bad`), null);
     const session = signUserSession({ sign: (claims) => JSON.stringify(claims) }, { id: 'a' });
     assert.equal(verifyImpersonationToken(session), null);
+  });
+});
+
+describe('realtime during a support view', () => {
+  it('refuses a socket handshake carrying the view cookie, live or ended', () => {
+    assert.equal(socketHandshakeDuringView({ token: 't', [IMPERSONATION_COOKIE]: 'anything' }), true);
+    assert.equal(socketHandshakeDuringView({ token: 't' }), false);
+    assert.equal(socketHandshakeDuringView(null), false);
   });
 });

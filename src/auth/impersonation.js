@@ -194,6 +194,19 @@ function matchesPrefix(path, prefix) {
 }
 
 /**
+ * Realtime is off for the length of a support view. The socket handshake
+ * authenticates the admin's own session token, so a socket opened from the
+ * viewed person's screen would join the admin's rooms and receive the admin's
+ * notifications (and, for a client view, be authorized as staff). A handshake
+ * carrying the view cookie, live or ended, is refused; the web app reloads when
+ * the view stops, and the next handshake no longer carries it.
+ * @param {Record<string, string | undefined> | null | undefined} cookies
+ */
+export function socketHandshakeDuringView(cookies) {
+  return Boolean(cookies?.[IMPERSONATION_COOKIE]);
+}
+
+/**
  * Route option that marks a GET/HEAD route with side effects (it writes, or
  * binds an external account to the caller). Such routes are refused during a
  * view like any write: `config: { [SIDE_EFFECTING_GET]: true }`.

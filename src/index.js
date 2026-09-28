@@ -18,7 +18,7 @@ import prisma from './config/db.js';
 import { apiRateLimitMax, isNonApiRequest } from './config/rateLimit.js';
 import { trustHops } from './config/trust-proxy.js';
 import { isCurrentUserSession } from './auth/session.js';
-import { applyImpersonation, createImpersonationHook } from './auth/impersonation.js';
+import { applyImpersonation, createImpersonationHook, socketHandshakeDuringView } from './auth/impersonation.js';
 import { createJoinProjectHandler } from './auth/project-room-access.js';
 import { clientAcquisitionCorsOptions, loadClientAcquisitionConfig } from './services/client-acquisition.contract.js';
 import { initHermesBridge } from './agents/hub-hermes.integration.js';
@@ -275,7 +275,9 @@ io.use(async (socket, next) => {
     // Accept an explicit auth payload for native/non-browser clients or the
     // same httpOnly cookie used by browser sessions. Never accept query-string
     // tokens: WebSocket upgrade URLs are routinely logged by proxies.
-    const cookieToken = fastify.parseCookie(socket.handshake.headers.cookie || '').token;
+    const cookies = fastify.parseCookie(socket.handshake.headers.cookie || '');
+    if (socketHandshakeDuringView(cookies)) return next(new Error('Realtime is paused during a support view'));
+    const cookieToken = cookies.token;
     const token = socket.handshake.auth?.token || cookieToken;
     if (!token) return next(new Error('Authentication required'));
     const decoded = await fastify.jwt.verify(token);

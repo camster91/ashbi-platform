@@ -69,43 +69,48 @@ export default async function privilegedAccessRoutes(fastify, options = {}) {
     }
 
     const nowMs = Date.now();
-    // One view at a time per admin; a new one ends the previous one.
-    await endImpersonationSessions(db, {
-      organizationId,
-      where: { actorUserId: actor.id },
-      reason: 'superseded',
-      endedById: actor.id,
-      requestId: request.id,
-      ip: request.ip,
-      nowMs,
-    });
-
     const startedAt = new Date(nowMs);
     const expiresAt = new Date(nowMs + IMPERSONATION_TTL_SECONDS * 1000);
-    const row = await db.impersonationSession.create({
-      data: {
-        actorUserId: actor.id,
-        subjectUserId: subject.id,
-        subjectRole: subject.role,
-        reason,
-        readOnly: true,
-        startedAt,
-        expiresAt,
-      },
-    });
+    // One view at a time per admin; a new one ends the previous one. The
+    // per-admin lock serializes concurrent starts (two tabs or devices), so
+    // the second always supersedes the first instead of both staying open.
+    const row = await db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`impersonation-start:${actor.id}`}, 0))`;
+      await endImpersonationSessions(tx, {
+        organizationId,
+        where: { actorUserId: actor.id },
+        reason: 'superseded',
+        endedById: actor.id,
+        requestId: request.id,
+        ip: request.ip,
+        nowMs,
+      });
+      const created = await tx.impersonationSession.create({
+        data: {
+          actorUserId: actor.id,
+          subjectUserId: subject.id,
+          subjectRole: subject.role,
+          reason,
+          readOnly: true,
+          startedAt,
+          expiresAt,
+        },
+      });
 
-    await recordRequestAuditEvent(db, request, {
-      action: 'impersonation.started',
-      entityId: row.id,
-      metadata: {
-        subjectUserId: subject.id,
-        subjectRole: subject.role,
-        expiresAt,
-        ttlSeconds: IMPERSONATION_TTL_SECONDS,
-        readOnly: true,
-        impersonatedUserId: subject.id,
-        impersonationSessionId: row.id,
-      },
+      await recordRequestAuditEvent(tx, request, {
+        action: 'impersonation.started',
+        entityId: created.id,
+        metadata: {
+          subjectUserId: subject.id,
+          subjectRole: subject.role,
+          expiresAt,
+          ttlSeconds: IMPERSONATION_TTL_SECONDS,
+          readOnly: true,
+          impersonatedUserId: subject.id,
+          impersonationSessionId: created.id,
+        },
+      });
+      return created;
     });
 
     // The viewed person is told, in-app, who is looking and why.

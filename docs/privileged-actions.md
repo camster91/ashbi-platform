@@ -218,8 +218,10 @@ person's password. Code: `src/auth/impersonation.js`,
   which drives the banner. A client user is viewed through the client portal
   (`/client/dashboard`); the staff APIs refuse a client identity as always.
 - The web app reloads on start and stop so no cached data of the other
-  identity survives. Realtime (Socket.IO) stays connected as the admin: live
-  notifications of the viewed person are not shown during the view.
+  identity survives. Realtime (Socket.IO) is off during a view: a handshake
+  carrying the view cookie is refused, because the socket authenticates the
+  admin's own session and would otherwise join the admin's rooms. Live
+  updates resume after the view ends.
 
 ### Read-only and blocked areas
 
@@ -362,7 +364,7 @@ To cancel an unused grant: `node scripts/break-glass.mjs revoke --grant <id>
   session's issue time to the second; two sessions of the same user issued in
   the same second share a binding. The impersonation cookie uses the same binding.
 - Support views are read-only; there is no audited write-through mode.
-- The realtime socket stays the admin's during a view.
+- Realtime (Socket.IO) is off during a view; the viewed screen does not update live.
 - Break-glass has no web console for operators and relies on the CLI running
   with production database access; the operator identity is the
   `--operator` id checked against `PLATFORM_OPERATOR_USER_IDS`, not a

@@ -71,6 +71,23 @@ test('the real application enforces a read-only support view end to end', {
       assert.equal(response.json().code, 'IMPERSONATION_BLOCKED', url);
     }
 
+    // Opening the app during a view does not write to the viewed person's
+    // onboarding record (the tour requests it on every page load).
+    const onboarding = await app.inject({ method: 'GET', url: '/api/onboarding/progress', cookies: view });
+    assert.equal(onboarding.statusCode, 200, onboarding.body);
+    assert.equal(await prisma.onboardingProgress.count({ where: { userId: staff.id } }), 0);
+
+    // Realtime is refused while the view cookie is present: the socket would
+    // otherwise authenticate as the admin and join the admin's rooms.
+    const socketAuth = app.io.of('/')._fns?.[0];
+    assert.equal(typeof socketAuth, 'function', 'socket auth middleware is registered');
+    const handshake = (jar) => new Promise((resolve) => {
+      const cookie = Object.entries(jar).map(([name, value]) => `${name}=${value}`).join('; ');
+      socketAuth({ handshake: { headers: { cookie }, auth: {} } }, (err) => resolve(err));
+    });
+    assert.match((await handshake(view))?.message || '', /support view/);
+    assert.equal(await handshake({ token: session }), undefined);
+
     // Stopping restores the admin.
     const stop = await app.inject({ method: 'POST', url: '/api/auth/impersonation/stop', cookies: view });
     assert.equal(stop.statusCode, 200, stop.body);
@@ -86,9 +103,19 @@ test('the real application enforces a read-only support view end to end', {
     assert.equal(after.json().impersonation, undefined);
     const actions = (await prisma.auditEvent.findMany({ where: { organizationId: org }, orderBy: { createdAt: 'asc' } })).map((e) => e.action);
     assert.deepEqual(actions.filter((a) => a.startsWith('impersonation.')), ['impersonation.started', 'impersonation.ended']);
+
+    // Starts at the same moment (several tabs) leave exactly one open view.
+    const racing = await Promise.all([1, 2, 3, 4, 5, 6].map(() => app.inject({
+      method: 'POST', url: '/api/auth/impersonation', cookies: adminCookies, payload: { userId: staff.id, reason: 'Concurrent start check' },
+    })));
+    assert.ok(racing.every((r) => r.statusCode === 201), racing.map((r) => r.body).join('\n'));
+    assert.equal(await prisma.impersonationSession.count({ where: { organizationId: org, actorUserId: admin.id, endedAt: null } }), 1);
+    const superseded = await prisma.impersonationSession.findMany({ where: { organizationId: org, endReason: 'superseded' } });
+    assert.equal(superseded.length, racing.length - 1);
   } finally {
     await app.close();
     await prisma.notification.deleteMany({ where: { user: { organizationId: org } } });
+    await prisma.onboardingProgress.deleteMany({ where: { user: { organizationId: org } } });
     await prisma.impersonationSession.deleteMany({ where: { organizationId: org } });
     await prisma.client.deleteMany({ where: { organizationId: org } });
     await prisma.user.deleteMany({ where: { organizationId: org } });
