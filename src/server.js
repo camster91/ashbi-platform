@@ -19,6 +19,8 @@ const shutdown = createShutdown({
   flush: env.sentryDsn ? () => Sentry.flush(2_000) : undefined,
 });
 
+// unhandledRejection is logged, reported and counted but not fatal yet; see
+// installProcessHandlers for the plan to make it fatal.
 installProcessHandlers({
   shutdown,
   logger,

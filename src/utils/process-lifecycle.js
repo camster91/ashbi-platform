@@ -1,5 +1,5 @@
 /**
- * Process lifecycle for long-running entry points (API server).
+ * Process lifecycle for long-running entry points (API server and worker).
  *
  * A crashed or signalled process must actually exit so the container runtime
  * restarts it. Setting process.exitCode alone is not enough: open handles
@@ -9,8 +9,17 @@
 
 export const DEFAULT_SHUTDOWN_TIMEOUT_MS = 10_000;
 
+/** Process-wide counters surfaced by the detailed health view. */
+const counters = { unhandledRejections: 0 };
+
+export function processCounters() {
+  return { ...counters };
+}
+
 /**
- * Build an idempotent shutdown function.
+ * Build an idempotent shutdown function. Repeated calls (a second signal,
+ * a fatal error during the drain) return the same pending shutdown instead of
+ * exiting mid-drain.
  *
  * @param {object} options
  * @param {Array<[string, () => unknown]>} options.steps Named cleanup steps, run in order.
@@ -29,9 +38,11 @@ export function createShutdown({
   setTimer = setTimeout,
 }) {
   let pending;
+  let code = 0;
   return function shutdown(reason, exitCode = 0) {
+    // A fatal error while already draining still makes the exit non-zero.
+    code = Math.max(code, exitCode);
     if (pending) return pending;
-    let code = exitCode;
     let exited = false;
     const finish = (finalCode) => {
       if (exited) return;
@@ -69,16 +80,34 @@ export function createShutdown({
 }
 
 /**
- * Route signals and fatal errors to `shutdown`. Fatal errors are logged,
- * reported, and exit non-zero after a graceful drain.
+ * Route signals and fatal errors to `shutdown`.
+ *
+ * - SIGINT/SIGTERM: graceful shutdown, exit 0. Handlers stay installed, so a
+ *   second signal joins the running drain instead of killing the process
+ *   mid-drain (the drain deadline still bounds it).
+ * - uncaughtException: log, report, graceful shutdown with exit 1 (process
+ *   state is unknown after a synchronous throw).
+ * - unhandledRejection: log, report and count, but keep serving by default.
+ *   Existing fire-and-forget code paths may still reject unobserved; turning
+ *   each into an outage would be worse than the leak. Plan: once the
+ *   `unhandledRejections` counter in /api/health/details stays at zero in
+ *   production, pass `fatalUnhandledRejection: true` (see
+ *   docs/deployment-and-rollback.md "Process lifecycle").
  */
-export function installProcessHandlers({ proc = process, shutdown, logger, captureException }) {
-  proc.once('SIGINT', () => void shutdown('SIGINT', 0));
-  proc.once('SIGTERM', () => void shutdown('SIGTERM', 0));
+export function installProcessHandlers({
+  proc = process,
+  shutdown,
+  logger,
+  captureException,
+  fatalUnhandledRejection = false,
+}) {
+  proc.on('SIGINT', () => void shutdown('SIGINT', 0));
+  proc.on('SIGTERM', () => void shutdown('SIGTERM', 0));
   proc.on('unhandledRejection', (reason) => {
-    logger.fatal({ err: reason }, 'Unhandled promise rejection');
+    counters.unhandledRejections += 1;
+    logger.error({ err: reason, unhandledRejections: counters.unhandledRejections }, 'Unhandled promise rejection');
     captureException?.(reason);
-    void shutdown('unhandledRejection', 1);
+    if (fatalUnhandledRejection) void shutdown('unhandledRejection', 1);
   });
   proc.on('uncaughtException', (error) => {
     logger.fatal({ err: error }, 'Uncaught exception');

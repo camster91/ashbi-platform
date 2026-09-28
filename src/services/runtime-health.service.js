@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { rawPrisma } from '../config/db.js';
 import env from '../config/env.js';
 import { QUEUES } from '../jobs/queue-names.js';
+import { processCounters } from '../utils/process-lifecycle.js';
 
 const WORKER_HEARTBEAT_KEY = 'ashbi:workers:heartbeat';
 const REQUIRED_WORKER_FRESHNESS_MS = 45_000;
@@ -160,6 +161,8 @@ export async function checkRuntimeHealth({
     alerting,
     revision,
     imageDigest: process.env.APP_IMAGE_DIGEST || 'unknown',
+    // Unhandled rejections are logged and counted, not fatal (yet).
+    process: processCounters(),
     timestamp: new Date(now).toISOString(),
   };
 }

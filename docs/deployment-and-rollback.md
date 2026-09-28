@@ -127,6 +127,26 @@ its own 90s deadline), and it must stay long enough for 50 MB uploads on slow
 links. Job enqueues fail within 5s with 503 `QUEUE_UNAVAILABLE` while Redis is
 down instead of hanging the request.
 
+## Process lifecycle
+
+API (`src/server.js`) and worker (`src/jobs/worker.js`) share
+`src/utils/process-lifecycle.js`:
+
+- SIGTERM/SIGINT run one idempotent drain (API: HTTP, health Redis, queues,
+  Prisma; worker: heartbeat, BullMQ workers, queues, Prisma), flush Sentry,
+  then exit 0. A second signal joins the running drain. The drain is forced
+  to exit after 10 s (API; container `--stop-timeout 30`) or 110 s (worker;
+  `--stop-timeout 120`).
+- `uncaughtException` is logged, reported to Sentry and exits 1 after the
+  drain, so the container restarts instead of idling half-dead.
+- `unhandledRejection` is logged, reported and counted
+  (`process.unhandledRejections` in `/api/health/details`) but is **not fatal
+  yet**: some fire-and-forget paths may still reject unobserved, and each would
+  otherwise become an outage. Plan: fix what the counter and Sentry surface;
+  once it stays at zero in production for two weeks, set
+  `fatalUnhandledRejection: true` in `installProcessHandlers` so a rejection
+  exits like an uncaught exception.
+
 ## API rate limits
 
 The global `/api` limiter keys signed-in traffic (a verified staff or portal

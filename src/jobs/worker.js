@@ -29,6 +29,7 @@ import { checkAllEscalations, checkThreadEscalation, runForEachOrganization } fr
 import { dispatchDomainEvents } from '../services/domain-event-dispatcher.service.js';
 import { initSentry, Sentry } from '../observability/sentry.js';
 import { sendOperationalAlert } from '../observability/alerts.js';
+import { createShutdown, installProcessHandlers } from '../utils/process-lifecycle.js';
 
 initSentry('worker');
 
@@ -334,34 +335,26 @@ heartbeatInterval.unref();
 
 console.log(`Workers started (${activeWorkers.length}/8 active)`);
 
-let shuttingDown = false;
-async function shutdown(signal) {
-  if (shuttingDown) return;
-  shuttingDown = true;
-  clearInterval(heartbeatInterval);
-  logger.info({ signal }, 'Worker: draining active jobs');
-  await Promise.all(activeWorkers.map((worker) => worker.close()));
-  await closeQueueInfrastructure();
-  await prisma.$disconnect();
-  logger.info('Worker: shutdown complete');
-}
-
-process.on('SIGINT', () => shutdown('SIGINT').then(() => process.exit(0)).catch((err) => {
-  logger.fatal({ err }, 'Worker: graceful shutdown failed');
-  process.exit(1);
-}));
-process.on('SIGTERM', () => shutdown('SIGTERM').then(() => process.exit(0)).catch((err) => {
-  logger.fatal({ err }, 'Worker: graceful shutdown failed');
-  process.exit(1);
-}));
-
-process.on('unhandledRejection', (reason) => {
-  logger.error({ err: reason }, 'Worker: unhandled promise rejection');
-  if (env.sentryDsn) Sentry.captureException(reason);
+// Same lifecycle as the API (src/utils/process-lifecycle.js): one idempotent
+// drain, so a second signal joins it instead of exiting mid-drain. The
+// deadline sits under the container's 120s stop timeout.
+const shutdown = createShutdown({
+  logger,
+  timeoutMs: 110_000,
+  steps: [
+    ['heartbeat', () => clearInterval(heartbeatInterval)],
+    ['workers', async () => {
+      logger.info('Worker: draining active jobs');
+      await Promise.all(activeWorkers.map((worker) => worker.close()));
+    }],
+    ['queues', () => closeQueueInfrastructure()],
+    ['database', () => prisma.$disconnect()],
+  ],
+  flush: env.sentryDsn ? () => Sentry.flush(2_000) : undefined,
 });
 
-process.on('uncaughtException', (err) => {
-  logger.fatal({ err }, 'Worker: uncaught exception');
-  if (env.sentryDsn) Sentry.captureException(err);
-  shutdown('uncaughtException').finally(() => process.exit(1));
+installProcessHandlers({
+  shutdown,
+  logger,
+  captureException: env.sentryDsn ? (error) => Sentry.captureException(error) : undefined,
 });
