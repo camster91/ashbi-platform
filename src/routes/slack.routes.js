@@ -1,5 +1,5 @@
 import { decrypt, encrypt } from '../utils/crypto.js';
-import { signOAuthState, verifyOAuthState } from '../auth/oauth-state.js';
+import { consumeOAuthState, issueOAuthState } from '../auth/oauth-state.js';
 import { validateBody, slackInstallationSchema, slackChannelMappingSchema } from '../validators/schemas.js';
 import env from '../config/env.js';
 import { revokeSlackToken } from '../services/slack-outbound.service.js';
@@ -36,8 +36,9 @@ export default async function slackAdminRoutes(fastify, options = {}) {
     if (!slackClientId || !slackClientSecret || !slackRedirectUri) {
       return reply.status(503).send({ error: 'Slack OAuth is not configured', code: 'SLACK_OAUTH_UNAVAILABLE' });
     }
-    // Signed with a purpose-derived key, never the session key (src/auth/oauth-state.js).
-    const state = signOAuthState('slack_oauth', { organizationId: request.user.organizationId, userId: request.user.id });
+    // Signed with a purpose-derived key, never the session key, and bound to
+    // this browser by a cookie (src/auth/oauth-state.js).
+    const state = issueOAuthState(reply, 'slack_oauth', { organizationId: request.user.organizationId, userId: request.user.id });
     const authorizeUrl = new URL('https://slack.com/oauth/v2/authorize');
     authorizeUrl.searchParams.set('client_id', slackClientId);
     authorizeUrl.searchParams.set('redirect_uri', slackRedirectUri);
@@ -54,7 +55,7 @@ export default async function slackAdminRoutes(fastify, options = {}) {
     if (typeof code !== 'string' || typeof state !== 'string') {
       return reply.status(400).send({ error: 'Missing Slack OAuth callback data', code: 'SLACK_OAUTH_INVALID' });
     }
-    const oauthState = verifyOAuthState('slack_oauth', state);
+    const oauthState = consumeOAuthState(request, reply, 'slack_oauth', state);
     if (!oauthState) {
       return reply.status(401).send({ error: 'Invalid Slack OAuth state', code: 'SLACK_OAUTH_STATE_INVALID' });
     }

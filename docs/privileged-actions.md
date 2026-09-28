@@ -136,8 +136,10 @@ them are sessions (`src/auth/session.js`):
 
 A session must also carry a user `id` and an integer `sessionVersion`, and the
 `typ` must match the role (`client_session` exactly for `CLIENT`). OAuth
-`state` (Google Calendar, Slack), re-authentication cookies and MFA challenge
-tokens are signed with keys *derived* from `JWT_SECRET` per purpose
+`state` (Google Calendar, Slack; also bound to the initiating browser by an
+httpOnly `oauth_state_<purpose>` cookie that the callback requires and
+clears, so a captured state cannot be replayed), re-authentication cookies
+and MFA challenge tokens are signed with keys *derived* from `JWT_SECRET` per purpose
 (`src/auth/oauth-state.js`, `src/auth/reauth.js`, `src/auth/mfa.js`), so they
 never verify as a session at all. Request logs and browser telemetry redact
 OAuth `state` and `code` query parameters.

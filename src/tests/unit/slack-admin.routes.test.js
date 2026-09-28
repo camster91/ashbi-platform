@@ -3,13 +3,15 @@ import assert from 'node:assert/strict';
 import Fastify from 'fastify';
 import jwt from '@fastify/jwt';
 import slackAdminRoutes from '../../routes/slack.routes.js';
-import { signOAuthState, verifyOAuthState } from '../../auth/oauth-state.js';
+import cookie from '@fastify/cookie';
+import { oauthStateCookieName, signOAuthState, verifyOAuthState } from '../../auth/oauth-state.js';
 
 // OAuth state is signed with a key derived from JWT_SECRET (src/auth/oauth-state.js).
 process.env.JWT_SECRET ||= 'oauth-state-unit-test-secret';
 
 async function buildApp(prisma, options = {}) {
   const app = Fastify();
+  await app.register(cookie);
   await app.register(jwt, { secret: 'test-jwt-secret' });
   app.decorate('prisma', prisma);
   app.decorate('authenticate', async (request) => { request.user = { id: 'admin-1', role: 'ADMIN', organizationId: 'org-1' }; });
@@ -73,6 +75,7 @@ test('starts OAuth with signed short-lived tenant state and least-privilege bot 
   t.after(() => app.close());
 
   const response = await app.inject({ method: 'GET', url: '/oauth/start' });
+  assert.match(String(response.headers['set-cookie']), new RegExp(`^${oauthStateCookieName('slack_oauth')}=[^;]+;.*HttpOnly`, 'i'));
   const url = new URL(response.headers.location);
 
   assert.equal(response.statusCode, 302);
@@ -99,7 +102,14 @@ test('exchanges a valid OAuth callback code, stores an encrypted bot token, and 
   t.after(() => app.close());
   const state = signOAuthState('slack_oauth', { organizationId: 'org-1', userId: 'admin-1' });
 
-  const response = await app.inject({ method: 'GET', url: `/oauth/callback?code=code-1&state=${encodeURIComponent(state)}` });
+  const callbackUrl = `/oauth/callback?code=code-1&state=${encodeURIComponent(state)}`;
+  const nonce = verifyOAuthState('slack_oauth', state).nonce;
+  // Without the initiating browser's binding cookie the state is refused.
+  const unbound = await app.inject({ method: 'GET', url: callbackUrl });
+  assert.equal(unbound.statusCode, 401);
+  const response = await app.inject({ method: 'GET', url: callbackUrl, headers: { cookie: `${oauthStateCookieName('slack_oauth')}=${nonce}` } });
+  // The binding cookie is cleared on use, so the flow cannot be replayed from this browser.
+  assert.match(String(response.headers['set-cookie']), new RegExp(`${oauthStateCookieName('slack_oauth')}=;`));
 
   assert.equal(response.statusCode, 302);
   assert.equal(response.headers.location, '/settings?slack=connected');

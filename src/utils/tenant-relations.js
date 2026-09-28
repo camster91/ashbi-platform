@@ -5,7 +5,7 @@
 // (Prisma.dmmf). Prisma 7's runtime model omits `relationFromFields`, so a
 // relation's foreign-key scalar is resolved by the schema's convention: the
 // relation field `foo` is owned through the scalar `fooId`. The unit test
-// src/tests/unit/tenant-relations.test.js parses prisma/schema.prisma and fails
+// src/tests/unit/tenant-proxy-bypasses.test.js parses prisma/schema.prisma and fails
 // if any `@relation(fields: [...])` in the schema disagrees with this map, so a
 // relation that breaks the convention cannot slip through unchecked.
 

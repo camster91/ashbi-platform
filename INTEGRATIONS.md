@@ -110,6 +110,8 @@ WEBHOOK_SECRET=your-webhook-secret
 Every delivery must carry two headers (contract changed by the security audit
 at 8687cf9; senders using the old body-only signature are refused with 401):
 
+- `Content-Type: application/json`: the signature is checked over the raw
+  JSON body the server receives; other content types are not accepted.
 - `X-Webhook-Timestamp`: Unix time in seconds when the request was signed.
 - `X-Webhook-Signature`: lower-case hex `HMAC-SHA256(WEBHOOK_SECRET, "<timestamp>.<raw request body>")`,
   over the exact body bytes sent (not a re-serialised JSON object).

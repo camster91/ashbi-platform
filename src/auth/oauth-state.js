@@ -70,3 +70,42 @@ export function verifyOAuthState(purpose, token, { nowMs = Date.now() } = {}) {
   if (!Number.isInteger(claims.exp) || claims.exp <= Math.floor(nowMs / 1000)) return null;
   return claims;
 }
+
+// Browser binding. /oauth/start also sets an httpOnly cookie holding the
+// state's nonce, and the callback accepts the state only together with that
+// cookie, then clears it. A state captured from a URL or log is useless
+// without the initiating browser's cookie, and a completed flow cannot be
+// replayed from that browser either. (A thief holding both the URL and the
+// browser's cookie within the 10-minute window is not stopped; the provider's
+// one-time authorization code bounds that case.)
+export function oauthStateCookieName(purpose) {
+  assertPurpose(purpose);
+  return `oauth_state_${purpose}`;
+}
+
+function oauthStateCookieOptions({ isProduction = env.isProduction } = {}) {
+  // lax: the provider's redirect back is a top-level cross-site GET navigation.
+  return { path: '/api', httpOnly: true, secure: isProduction, sameSite: 'lax' };
+}
+
+/** Sign a state and bind it to this browser. Returns the state to put in the authorize URL. */
+export function issueOAuthState(reply, purpose, claims) {
+  const state = signOAuthState(purpose, claims);
+  const { nonce } = JSON.parse(Buffer.from(state.split('.')[1], 'base64url').toString('utf8'));
+  reply.setCookie(oauthStateCookieName(purpose), nonce, { ...oauthStateCookieOptions(), maxAge: OAUTH_STATE_TTL_SECONDS });
+  return state;
+}
+
+/**
+ * Verify a callback's state against its signature, purpose, expiry and the
+ * browser's binding cookie; the cookie is cleared either way. Returns the
+ * claims or null.
+ */
+export function consumeOAuthState(request, reply, purpose, state) {
+  const cookieName = oauthStateCookieName(purpose);
+  const bound = request.cookies?.[cookieName];
+  reply.clearCookie(cookieName, oauthStateCookieOptions());
+  const claims = verifyOAuthState(purpose, state);
+  if (!claims || typeof bound !== 'string' || !safeEqual(bound, claims.nonce)) return null;
+  return claims;
+}
