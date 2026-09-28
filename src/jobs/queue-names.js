@@ -6,4 +6,6 @@ export const QUEUES = Object.freeze({
   WEEKLY_DIGEST: 'weekly-digest',
   EMBEDDING: 'embedding',
   SCHEDULED: 'scheduled-maintenance',
+  // Transactional outbox dispatcher (#412, docs/event-outbox.md).
+  DOMAIN_EVENTS: 'domain-events',
 });

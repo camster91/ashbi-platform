@@ -1,5 +1,5 @@
 // Invoice routes — full CRUD + send + PDF + payments + templates
-import { CLEARED_CHECKOUT_FIELDS, checkoutPersistenceData, createPaymentLink, ensureCheckoutSession, handleWebhook, recordCheckoutAuditEvents, recordCompletedCheckout } from '../services/stripe.service.js';
+import { CLEARED_CHECKOUT_FIELDS, checkoutPersistenceData, createPaymentLink, ensureCheckoutSession, handleCheckoutFailure, handleWebhook, recordCheckoutAuditEvents, recordCompletedCheckout } from '../services/stripe.service.js';
 import { generateInvoicePdf } from '../utils/generate-invoice-pdf.js';
 import { deliveryFieldsFromSend, withDeliveryState } from '../services/mailgun-delivery.service.js';
 import { createNumberedInvoice } from '../utils/invoice.js';
@@ -8,6 +8,7 @@ import { validateBody, createInvoiceSchema, updateInvoiceSchema, markInvoicePaid
 import { sendInvoiceDeliveryEmail } from '../services/email.service.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { defaultInvoiceCurrency, normalizeInvoiceCurrency } from '../utils/money.js';
+import { settleInvoiceManually } from '../services/invoice-payment.service.js';
 
 const HST_RATE = 13; // Ontario HST
 const VOID_UNDO_WINDOW_MS = 10_000;
@@ -550,23 +551,19 @@ export default async function invoiceRoutes(fastify) {
 
     const paidDate = paidAt ? new Date(paidAt) : new Date();
 
-    const updated = await fastify.prisma.$transaction(async (tx) => {
-      const paidInvoice = await tx.invoice.update({
-        where: { id: request.params.id },
-        data: { status: 'PAID', paidAt: paidDate, paymentMethod, paymentNotes: paymentNotes || null, transactionId: transactionId || null }
-      });
-      const payment = await tx.invoicePayment.create({
-        data: {
-          invoiceId: request.params.id,
-          amount: amount ?? invoice.total,
-          method: paymentMethod,
-          notes: paymentNotes || null,
-          transactionId: transactionId || null,
-          paidAt: paidDate,
-        }
-      });
-      return { paidInvoice, payment };
+    // Compare-and-set: the transition, payment and outbox event
+    // (docs/event-outbox.md) commit together, and only if the invoice is still
+    // payable, so a concurrent mark-paid or Stripe settlement cannot double-pay.
+    const updated = await settleInvoiceManually(fastify.prisma, {
+      invoice,
+      method: paymentMethod,
+      amount: amount ?? invoice.total,
+      paidAt: paidDate,
+      invoiceFields: { paymentNotes: paymentNotes || null, transactionId: transactionId || null },
+      paymentFields: { notes: paymentNotes || null, transactionId: transactionId || null },
+      correlationId: request.id,
     });
+    if (!updated) return reply.status(409).send({ error: 'Invoice is no longer payable', code: 'INVOICE_NOT_PAYABLE' });
 
     await recordPaymentAudit(request, {
       invoice, paymentId: updated.payment?.id, amount: amount ?? invoice.total, method: paymentMethod, bulk: false,
@@ -761,19 +758,27 @@ export default async function invoiceRoutes(fastify) {
     const signature = request.headers['stripe-signature'];
     if (!signature) return reply.status(400).send({ error: 'Missing stripe-signature header' });
 
+    let event;
     try {
-      const event = await handleWebhook(request.rawBody || request.body, signature);
-
-      if (event.type === 'checkout.session.completed') {
-        const result = await recordCompletedCheckout(fastify.prisma, event);
-        await recordCheckoutAuditEvents(fastify.prisma, request, event, result);
-      }
-
-      return { received: true };
+      event = await handleWebhook(request.rawBody || request.body, signature);
     } catch (err) {
-      fastify.log.error({ err }, 'Stripe webhook error');
+      fastify.log.error({ errorName: err?.name }, 'Stripe webhook verification failed');
       return reply.status(400).send({ error: 'Webhook verification failed' });
     }
+
+    if (event.type === 'checkout.session.completed') {
+      try {
+        const result = await recordCompletedCheckout(fastify.prisma, event, { correlationId: request.id });
+        await recordCheckoutAuditEvents(fastify.prisma, request, event, result);
+      } catch (err) {
+        const failure = handleCheckoutFailure(err, { event, route: '/api/invoices/stripe-webhook', log: fastify.log });
+        // Permanent rejections are acknowledged so Stripe stops retrying them.
+        if (failure.acknowledged) return reply.status(200).send({ received: true, recorded: false, code: failure.code });
+        return reply.status(failure.statusCode).send({ error: failure.error, code: failure.code });
+      }
+    }
+
+    return { received: true };
   });
 
   // ─── POST /bulk/mark-paid — mark multiple invoices as paid ──────────────────
@@ -789,25 +794,26 @@ export default async function invoiceRoutes(fastify) {
     const paidDate = new Date();
     const method = paymentMethod || 'OTHER';
     let updated = 0;
+    // Additive to the original `{ updated }` response: why each other id was
+    // left alone (not_found, already_paid, void, or changed when another
+    // payment settled it between the read and the compare-and-set).
+    const skipped = [];
 
     for (const id of ids) {
       const invoice = await fastify.prisma.invoice.findUnique({ where: { id } });
-      if (!invoice || invoice.status === 'PAID' || invoice.status === 'VOID') continue;
+      if (!invoice) { skipped.push({ id, reason: 'not_found' }); continue; }
+      if (invoice.status === 'PAID') { skipped.push({ id, reason: 'already_paid' }); continue; }
+      if (invoice.status === 'VOID') { skipped.push({ id, reason: 'void' }); continue; }
 
-      const [, payment] = await fastify.prisma.$transaction([
-        fastify.prisma.invoice.update({
-          where: { id },
-          data: { status: 'PAID', paidAt: paidDate, paymentMethod: method }
-        }),
-        fastify.prisma.invoicePayment.create({
-          data: { invoiceId: id, amount: invoice.total, method, paidAt: paidDate }
-        })
-      ]);
-      await recordPaymentAudit(request, { invoice, paymentId: payment?.id, amount: invoice.total, method, bulk: true });
+      const settled = await settleInvoiceManually(fastify.prisma, {
+        invoice, method, amount: invoice.total, paidAt: paidDate, correlationId: request.id,
+      });
+      if (!settled) { skipped.push({ id, reason: 'changed' }); continue; }
+      await recordPaymentAudit(request, { invoice, paymentId: settled.payment?.id, amount: invoice.total, method, bulk: true });
       updated++;
     }
 
-    return { updated };
+    return { updated, skipped };
   });
 
   // ─── POST /bulk/send — send multiple invoices ───────────────────────────────

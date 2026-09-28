@@ -6,6 +6,7 @@ const Card = forwardRef(({
   variant = 'default',
   padding = 'md',
   isInteractive = false,
+  as: Component = 'div',
   className,
   ...props
 }, ref) => {
@@ -27,7 +28,7 @@ const Card = forwardRef(({
   };
 
   return (
-    <div
+    <Component
       ref={ref}
       className={cn(
         'rounded-2xl transition-all duration-300',
@@ -39,7 +40,7 @@ const Card = forwardRef(({
       {...props}
     >
       {children}
-    </div>
+    </Component>
   );
 });
 

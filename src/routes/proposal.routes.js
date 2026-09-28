@@ -14,6 +14,7 @@ import {
 } from '../validators/schemas.js';
 import { clampTake } from '../utils/query-limits.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
+import { recordProposalApproved } from '../services/domain-event-producers.js';
 import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
 import { deliveryFieldsFromSend, mailgunTrackingFields, withDeliveryState } from '../services/mailgun-delivery.service.js';
 
@@ -574,14 +575,21 @@ export default async function proposalRoutes(fastify) {
 
     // Compare-and-set so a concurrent second approval cannot also succeed
     // (and cannot write a second audit event).
+    // The approval and its outbox event (docs/event-outbox.md) commit together.
     const approvedAt = new Date();
-    const transitioned = await request.prisma.proposal.updateMany({
-      where: { id: proposal.id, status: { in: ['SENT', 'VIEWED'] }, publicAccessRevokedAt: null },
-      data: {
-        status: 'APPROVED',
-        approvedAt,
-        publicAccessRevokedAt: approvedAt,
+    const transitioned = await request.prisma.$transaction(async (tx) => {
+      const result = await tx.proposal.updateMany({
+        where: { id: proposal.id, status: { in: ['SENT', 'VIEWED'] }, publicAccessRevokedAt: null },
+        data: {
+          status: 'APPROVED',
+          approvedAt,
+          publicAccessRevokedAt: approvedAt,
+        }
+      });
+      if (result.count === 1) {
+        await recordProposalApproved(tx, { proposal, via: 'public_link', approvedAt, correlationId: request.id });
       }
+      return result;
     });
     if (transitioned.count !== 1) {
       return reply.status(409).send({ error: 'Proposal is not awaiting approval' });

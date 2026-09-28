@@ -8,6 +8,21 @@ import {
 } from '../components/ui/PageSkeleton';
 
 describe('Alert', () => {
+  it('renders a static banner with no role or live region when live is false', () => {
+    const { container } = render(<Alert variant="error" live={false} title="2 overdue invoices" />);
+    const root = container.firstChild;
+    expect(root).not.toHaveAttribute('role');
+    expect(root).not.toHaveAttribute('aria-live');
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('names the dismiss button from dismissLabel', () => {
+    const onDismiss = vi.fn();
+    render(<Alert variant="error" onDismiss={onDismiss} dismissLabel="Dismiss upload error">Upload failed</Alert>);
+    screen.getByRole('button', { name: 'Dismiss upload error' }).click();
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
   it('uses alert role for errors and status for info', () => {
     const { rerender } = render(
       <Alert variant="error" title="Something went wrong">

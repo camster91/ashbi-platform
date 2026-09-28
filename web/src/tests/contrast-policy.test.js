@@ -57,11 +57,43 @@ describe('WCAG contrast policy', () => {
     expect(ratio(rgb(foreground), rgb(background))).toBeGreaterThanOrEqual(4.5);
   });
 
+  it('portal primitive colour pairs on the light tokens meet 4.5:1 (#316)', () => {
+    const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');
+    const light = css.slice(css.indexOf(':root {'), css.indexOf('.dark {'));
+    const token = (name) => {
+      const [, h, s, l] = light.match(new RegExp(`--${name}:\\s*(\\d+)\\s+(\\d+)%\\s+(\\d+)%`)).map(Number);
+      return hsl(h, s, l);
+    };
+    const over = (color, alpha, base = white) => color.map((c, i) => Math.round(c * alpha + base[i] * (1 - alpha)));
+    const pairs = [
+      ['muted text on card', token('muted-foreground'), token('card')],
+      ['muted text on background', token('muted-foreground'), token('background')],
+      ['muted badge', token('muted-foreground'), token('muted')],
+      ['success badge', token('success'), over(token('success'), 0.1)],
+      ['warning badge', token('warning'), over(token('warning'), 0.1)],
+      ['danger badge', token('destructive'), over(token('destructive'), 0.1)],
+      ['info badge', token('info'), over(token('info'), 0.1)],
+      ['primary badge', token('primary'), over(token('primary'), 0.1)],
+      ['accent badge', token('accent-foreground'), over(token('accent'), 0.4)],
+      ['warning stat on tinted card', token('warning'), over(token('warning'), 0.05)],
+      ['success stat on tinted card', token('success'), over(token('success'), 0.05)],
+    ];
+    for (const [label, foreground, background] of pairs) {
+      expect(ratio(foreground, background), label).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it('portal and shell control boundaries meet 3:1', () => {
-    expect(ratio(rgb('918c9f'), white)).toBeGreaterThanOrEqual(3);
-    expect(ratio(rgb('918c9f'), cream)).toBeGreaterThanOrEqual(3);
-    expect(ratio(hsl(250, 12, 60), white)).toBeGreaterThanOrEqual(3);
-    expect(ratio(hsl(250, 12, 60), cream)).toBeGreaterThanOrEqual(3);
+    // The portal and shell draw control and interactive-card boundaries with
+    // the full `--border` token (#316/#317), read from the light theme.
+    const css = readFileSync(resolve(process.cwd(), 'src/index.css'), 'utf8');
+    const light = css.slice(css.indexOf(':root {'), css.indexOf('.dark {'));
+    const [, h, s, l] = light.match(/--border:\s*(\d+)\s+(\d+)%\s+(\d+)%/).map(Number);
+    const border = hsl(h, s, l);
+    const [, bh, bs, bl] = light.match(/--background:\s*(\d+)\s+(\d+)%\s+(\d+)%/).map(Number);
+    expect(ratio(border, white)).toBeGreaterThanOrEqual(3);
+    expect(ratio(border, cream)).toBeGreaterThanOrEqual(3);
+    expect(ratio(border, hsl(bh, bs, bl))).toBeGreaterThanOrEqual(3);
     expect(ratio(hsl(250, 15, 45), hsl(250, 39, 10))).toBeGreaterThanOrEqual(3);
   });
 

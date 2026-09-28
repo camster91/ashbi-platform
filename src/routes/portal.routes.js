@@ -7,6 +7,7 @@ import crypto from 'crypto';
 import { validateBody, bookingSchema, contractSignSchema, formSubmitSchema, proposalDeclineSchema } from '../validators/schemas.js';
 import { invoicePublicAccessFailure, INVOICE_OPEN_STATUSES, publicAccessFailure } from '../utils/public-document-access.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
+import { recordContractSigned, recordProposalApproved } from '../services/domain-event-producers.js';
 import env from '../config/env.js';
 
 export default async function portalRoutes(fastify) {
@@ -170,14 +171,21 @@ export default async function portalRoutes(fastify) {
     // Compare-and-set on the status read above: two concurrent approvals
     // (double click, replayed link) must not both run the automation or
     // both write an audit event.
+    // The approval and its outbox event (docs/event-outbox.md) commit together.
     const approvedAt = new Date();
-    const transitioned = await request.prisma.proposal.updateMany({
-      where: { id: proposal.id, status: proposal.status, publicAccessRevokedAt: null },
-      data: {
-        status: 'APPROVED',
-        approvedAt,
-        publicAccessRevokedAt: approvedAt,
+    const transitioned = await request.prisma.$transaction(async (tx) => {
+      const result = await tx.proposal.updateMany({
+        where: { id: proposal.id, status: proposal.status, publicAccessRevokedAt: null },
+        data: {
+          status: 'APPROVED',
+          approvedAt,
+          publicAccessRevokedAt: approvedAt,
+        }
+      });
+      if (result.count === 1) {
+        await recordProposalApproved(tx, { proposal, via: 'portal_link', approvedAt, correlationId: request.id });
       }
+      return result;
     });
     if (transitioned.count !== 1) {
       return reply.status(409).send({ error: 'Proposal is no longer awaiting approval' });
@@ -307,21 +315,30 @@ export default async function portalRoutes(fastify) {
       .update(`${contract.id}:${signedContentHash}:${signerName}:${signatureType}:${signatureDataHash}:${now.toISOString()}`)
       .digest('hex');
 
-    const updated = await request.prisma.contract.updateMany({
-      where: { id: contract.id, status: 'SENT', publicAccessRevokedAt: null },
-      data: {
-        status: 'SIGNED',
-        clientSigHash: sigHash,
-        clientSigName: signerName,
-        clientSigDate: now,
-        signedAt: now,
-        signedContentHash,
-        signatureType,
-        signatureDataHash,
-        signerIp: request.ip,
-        signerUserAgent: String(request.headers['user-agent'] || '').slice(0, 500),
-        publicAccessRevokedAt: now,
+    // The signature and its outbox event (docs/event-outbox.md) commit together.
+    const updated = await request.prisma.$transaction(async (tx) => {
+      const result = await tx.contract.updateMany({
+        where: { id: contract.id, status: 'SENT', publicAccessRevokedAt: null },
+        data: {
+          status: 'SIGNED',
+          clientSigHash: sigHash,
+          clientSigName: signerName,
+          clientSigDate: now,
+          signedAt: now,
+          signedContentHash,
+          signatureType,
+          signatureDataHash,
+          signerIp: request.ip,
+          signerUserAgent: String(request.headers['user-agent'] || '').slice(0, 500),
+          publicAccessRevokedAt: now,
+        }
+      });
+      if (result.count === 1) {
+        await recordContractSigned(tx, {
+          contract, signingMethod: signatureType, documentHash: signedContentHash, via: 'portal_link', signedAt: now, correlationId: request.id,
+        });
       }
+      return result;
     });
     if (updated.count !== 1) return reply.status(409).send({ error: 'Contract is no longer awaiting signature' });
 
