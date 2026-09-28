@@ -135,7 +135,37 @@ test('public link routes carry per-route rate limits', () => {
 });
 
 test('the migration rotates every existing estimate token', () => {
-  const migration = readFileSync(new URL('../../../prisma/migrations/20260927050000_estimate_public_access/migration.sql', import.meta.url), 'utf8');
+  const migration = readFileSync(new URL('../../../prisma/migrations/20260927050500_estimate_public_access/migration.sql', import.meta.url), 'utf8');
   assert.match(migration, /UPDATE "estimates"\s+SET "viewToken" = /);
   assert.doesNotMatch(migration, /DROP /);
+});
+
+test('staff can reissue a link for a SENT estimate, audited; not for other states', async (t) => {
+  const audits = [];
+  const row = estimateRow({ publicAccessExpiresAt: null, publicAccessRevokedAt: new Date() });
+  const app = Fastify();
+  app.decorate('authenticate', async (request) => { request.user = { id: 'user-a', organizationId: 'org-a', role: 'ADMIN' }; });
+  const prisma = {
+    estimate: {
+      findUnique: async ({ where }) => (where.id === row.id ? row : null),
+      update: async ({ data }) => { Object.assign(row, data); return { id: row.id, viewToken: row.viewToken, publicAccessExpiresAt: row.publicAccessExpiresAt }; },
+    },
+    auditEvent: { create: async ({ data }) => { audits.push(data); return data; } },
+  };
+  app.addHook('onRequest', async (request) => { request.prisma = prisma; });
+  await app.register(estimateRoutes);
+  t.after(() => app.close());
+
+  const response = await app.inject({ method: 'POST', url: '/estimate-a/reissue-link' });
+  assert.equal(response.statusCode, 200, response.body);
+  assert.match(response.json().viewToken, /^[A-Za-z0-9_-]{43}$/);
+  assert.notEqual(response.json().viewToken, 'strong-token');
+  assert.ok(new Date(response.json().publicAccessExpiresAt) > new Date());
+  assert.equal(row.publicAccessRevokedAt, null);
+  assert.equal(audits.at(-1).action, 'estimate.link_reissued');
+  assert.ok(!JSON.stringify(audits).includes(response.json().viewToken), 'the audit event never holds the token');
+
+  row.status = 'APPROVED';
+  const refused = await app.inject({ method: 'POST', url: '/estimate-a/reissue-link' });
+  assert.equal(refused.statusCode, 400);
 });

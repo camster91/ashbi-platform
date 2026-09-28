@@ -295,7 +295,33 @@ export default async function estimateRoutes(fastify) {
     return publicEstimateView({ ...estimate, status: newStatus });
   });
 
-  // Revoke the public link (staff). A re-send issues a new one.
+  // Issue a fresh public link for a SENT estimate (after a revocation, an
+  // expired window, or the token rotation at release). Staff share the new
+  // link themselves; the old one stops working.
+  fastify.post('/:id/reissue-link', {
+    onRequest: [fastify.authenticate],
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const existing = await request.prisma.estimate.findUnique({ where: { id }, select: { id: true, status: true, validUntil: true } });
+    if (!existing) return reply.status(404).send({ error: 'Estimate not found' });
+    if (existing.status !== 'SENT') {
+      return reply.status(400).send({ error: 'Only a sent estimate awaiting an answer can get a new link' });
+    }
+    const access = createPublicAccessWindow(existing.validUntil);
+    const updated = await request.prisma.estimate.update({
+      where: { id },
+      data: { viewToken: access.token, publicAccessExpiresAt: access.expiresAt, publicAccessRevokedAt: null },
+      select: { id: true, viewToken: true, publicAccessExpiresAt: true },
+    });
+    await recordRequestAuditEvent(request.prisma, request, {
+      action: 'estimate.link_reissued',
+      entityId: id,
+      metadata: { expiresAt: access.expiresAt },
+    });
+    return updated;
+  });
+
+  // Revoke the public link (staff). Reissue or re-send issues a new one.
   fastify.post('/:id/revoke-link', {
     onRequest: [fastify.authenticate],
   }, async (request, reply) => {

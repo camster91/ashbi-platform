@@ -122,6 +122,7 @@ notes, signer names, email addresses, API key material or password hashes.
 | `estimate.approved` | `estimate` | CLIENT | `POST /api/estimates/view/:viewToken/approve` with `action: approve` (public capability link, `via: public_link`, `actorUserId` null) | `fromStatus`, `toStatus`, `via`, `total` |
 | `estimate.declined` | `estimate` | CLIENT | `POST /api/estimates/view/:viewToken/approve` with `action: decline` (`via: public_link`, `actorUserId` null); the decline reason is never recorded | `fromStatus`, `toStatus`, `via`, `total` |
 | `estimate.link_revoked` | `estimate` | USER | `POST /api/estimates/:id/revoke-link` | `alreadyRevoked` |
+| `estimate.link_reissued` | `estimate` | USER | `POST /api/estimates/:id/reissue-link` (SENT estimates only; never the token) | `expiresAt` |
 
 `auth.login_failed` details:
 
