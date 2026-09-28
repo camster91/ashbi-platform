@@ -372,6 +372,13 @@ To cancel an unused grant: `node scripts/break-glass.mjs revoke --grant <id>
   the same second share a binding. The impersonation cookie uses the same binding.
 - Support views are read-only; there is no audited write-through mode.
 - Realtime (Socket.IO) is off for the admin, on every device, while a view of theirs is open; screens do not update live.
+- Cross-instance socket revocation is published over Redis and awaited, but
+  not acknowledged per instance. If one API instance's Redis subscriber is
+  down while its sockets stay connected, that instance drops the admin's
+  sockets on its next 10-second sweep instead of at once. Those sockets
+  belong to the admin's own browser and carry only the admin's own access.
+  A shared Socket.IO adapter (tracked in #290) would make revocation, and
+  every room broadcast, cluster-wide.
 - Break-glass has no web console for operators and relies on the CLI running
   with production database access; the operator identity is the
   `--operator` id checked against `PLATFORM_OPERATOR_USER_IDS`, not a
