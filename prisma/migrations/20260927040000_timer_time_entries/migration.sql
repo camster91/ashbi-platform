@@ -17,6 +17,11 @@
 -- neither reads the column nor creates a second running timer on purpose
 -- (if it races, the insert now fails instead of corrupting timers).
 
+-- Block concurrent timer writes (reads continue) for the rest of this
+-- migration's transaction, so no new duplicate running timer can appear
+-- between closing the duplicates and creating the unique index.
+LOCK TABLE "time_sessions" IN SHARE ROW EXCLUSIVE MODE;
+
 -- AlterTable
 ALTER TABLE "time_entries" ADD COLUMN "timeSessionId" TEXT;
 

@@ -1348,17 +1348,20 @@ export const taskTemplateSchema = z.object({
 });
 
 // ── Time tracking ────────────────────────────────────────────────────────
+// TimeEntry.duration is in minutes; one entry covers at most one day.
+export const MAX_TIME_ENTRY_MINUTES = 1440;
+
 export const timeEntryCreateSchema = z.object({
   projectId: cuidId,
   taskId: cuidId.optional(),
-  duration: z.number().positive().max(86_400), // max 24h
+  duration: z.number().positive().max(MAX_TIME_ENTRY_MINUTES), // minutes, max 24h
   description: z.string().max(2_000).optional(),
   date: z.string().datetime().optional(),
   billable: z.boolean().default(true),
 });
 
 export const timeEntryUpdateSchema = z.object({
-  duration: z.number().positive().max(86_400).optional(),
+  duration: z.number().positive().max(MAX_TIME_ENTRY_MINUTES).optional(), // minutes
   description: z.string().max(2_000).optional(),
   date: z.string().datetime().optional(),
   billable: z.boolean().optional(),

@@ -69,7 +69,9 @@ export default async function taskRoutes(fastify) {
     // thousands of open tasks. Caller can use pagination params if they need
     // more — previously this returned every assigned task with no `take`.
     const { limit = '200', offset = '0' } = request.query ?? {};
-    const tasks = await request.prisma.task.findMany({
+    // Priority order is applied in the database so offset pagination follows
+    // the global CRITICAL > HIGH > NORMAL > LOW order, not per page.
+    const tasks = await findTasksInPriorityOrder(request.prisma.task, {
       where: {
         assigneeId: request.user.id,
         status: { not: 'COMPLETED' }
@@ -88,7 +90,7 @@ export default async function taskRoutes(fastify) {
       ],
       take: Math.min(parseInt(limit, 10) || 200, 500),
       skip: parseInt(offset, 10) || 0,
-    }).then(sortByTaskPriority);
+    });
 
     // Group by category
     const grouped = {

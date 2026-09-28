@@ -149,6 +149,9 @@ export default function ProjectChat({ projectId }) {
     onSuccess: (created) => {
       setMessage('');
       setSendError('');
+      // Back to the safe default after each client-visible message, so the
+      // next message is internal unless staff choose otherwise again.
+      setVisibility('INTERNAL');
       if (attachment) uploadMutation.mutate({ attachment, messageId: created.id });
       else setAttachment(null);
     },

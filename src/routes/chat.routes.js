@@ -3,8 +3,10 @@
 // Visibility (C3): INTERNAL messages are staff-only team chat and are only
 // broadcast to the internal `project:{id}` room. CLIENT messages are part of
 // the client-portal conversation ("Visible to client"); they are broadcast to
-// staff and, in the client shape, to `project:{id}:client`. A reply always
-// takes its parent's visibility.
+// staff and, in the client shape, to `project:{id}:client`. A reply under an
+// INTERNAL message is always INTERNAL; a reply under a CLIENT message keeps
+// the visibility its author chose (INTERNAL by default), so a staff aside in
+// a client thread is never silently shown to the client.
 
 import {
   validateBody,
@@ -95,9 +97,9 @@ export default async function chatRoutes(fastify) {
         select: { id: true, visibility: true },
       });
       if (!parent) return reply.status(409).send({ error: 'Reply parent must belong to the same project' });
-      // A reply to internal chat can never leak to the client (and a reply to
-      // the client conversation stays in it).
-      visibility = parent.visibility ?? 'INTERNAL';
+      // A reply to internal chat can never leak to the client. A reply in the
+      // client conversation keeps the requested visibility (never promoted).
+      if ((parent.visibility ?? 'INTERNAL') !== 'CLIENT') visibility = 'INTERNAL';
     }
 
     // Extract mentions from content (@username)
@@ -219,17 +221,21 @@ export default async function chatRoutes(fastify) {
       return reply.status(403).send({ error: 'Cannot delete this message' });
     }
 
-    const replyCount = await request.prisma.chatMessage.count({ where: { parentId: messageId, projectId } });
-    const tombstoned = replyCount > 0;
-    if (tombstoned) {
-      await request.prisma.chatMessage.update({
-        where: { id: messageId },
-        data: { content: '', metadata: null, removedAt: new Date() },
-      });
-      await request.prisma.chatReaction.deleteMany({ where: { messageId } });
-    } else {
-      await request.prisma.chatMessage.delete({ where: { id: messageId } });
-    }
+    // One transaction: the reply count, the tombstone and its reaction cleanup
+    // (or the hard delete) commit together.
+    const tombstoned = await request.prisma.$transaction(async (tx) => {
+      const replyCount = await tx.chatMessage.count({ where: { parentId: messageId, projectId } });
+      if (replyCount > 0) {
+        await tx.chatMessage.update({
+          where: { id: messageId },
+          data: { content: '', metadata: null, removedAt: new Date() },
+        });
+        await tx.chatReaction.deleteMany({ where: { messageId } });
+        return true;
+      }
+      await tx.chatMessage.delete({ where: { id: messageId } });
+      return false;
+    });
 
     const payload = { messageId, tombstoned };
     emitChatEvent(fastify.io, existing, 'chat:deleted', payload, payload);

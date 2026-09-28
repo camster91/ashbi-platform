@@ -7,11 +7,14 @@
 //   a concurrent start that loses the race answers 409 TIMER_ALREADY_RUNNING.
 // - Stopping a timer creates the TimeEntry (source TIMER, linked through
 //   timeSessionId) in the same transaction, so timed work reaches reports,
-//   timesheets and budgets. A timer stopped under one minute records no entry.
+//   timesheets and budgets. A timer stopped under one minute records no entry;
+//   a timer left running longer than a day records a 24h (1440-minute) entry,
+//   the same cap manual entries have, while the session keeps its real span.
 // - Only the timer's owner can stop, update or delete it; any other id is
 //   404 (never 500, and never a hint that the timer exists).
 
 import prisma from '../config/db.js';
+import { MAX_TIME_ENTRY_MINUTES } from '../validators/schemas.js';
 
 export class TimerError extends Error {
   /**
@@ -68,7 +71,7 @@ async function closeSession(tx, session, endTime = new Date()) {
         projectId: session.projectId,
         taskId: session.taskId ?? null,
         description: session.description ?? null,
-        duration,
+        duration: Math.min(duration, MAX_TIME_ENTRY_MINUTES),
         date: session.startTime,
         billable: session.billable ?? true,
         source: 'TIMER',
@@ -140,22 +143,23 @@ export async function stopAllRunningTimers(userId) {
 }
 
 /**
- * Create a manual (already finished) time session.
+ * Record manually logged time as a TimeEntry (source MANUAL), the record that
+ * reports, timesheets and budgets read. (It used to create a finished
+ * TimeSession that nothing billed.) Duration is in minutes, max 1440.
  */
 export async function createManualEntry(userId, projectId, data) {
   const { taskId, duration, description, billable, date } = data;
 
-  return prisma.timeSession.create({
+  return prisma.timeEntry.create({
     data: {
       userId,
       projectId,
-      taskId,
-      duration,
-      description,
+      taskId: taskId ?? null,
+      duration: Math.round(duration),
+      description: description ?? null,
       billable: billable ?? true,
-      isRunning: false,
-      startTime: date ? new Date(date) : new Date(),
-      endTime: date ? new Date(new Date(date).getTime() + duration * 60000) : null
+      date: date ? new Date(date) : new Date(),
+      source: 'MANUAL',
     },
     include: SESSION_INCLUDE,
   });

@@ -64,6 +64,8 @@ describe('client portal chat only exposes client-visible messages', () => {
   const rows = [
     { id: 'internal-1', projectId: PROJECT, content: 'Client is slow to pay, chase them', visibility: 'INTERNAL', authorId: 'staff', createdAt: new Date(base + 1000) },
     { id: 'slack-1', projectId: PROJECT, content: 'Imported from Slack #internal', visibility: 'INTERNAL', externalSource: 'SLACK', authorId: null, createdAt: new Date(base + 2000) },
+    // A staff aside replying inside the client conversation stays internal.
+    { id: 'aside-1', projectId: PROJECT, parentId: 'client-0', content: 'Internal aside: chase them', visibility: 'INTERNAL', authorId: 'staff', createdAt: new Date(base + 3000) },
     ...Array.from({ length: 60 }, (_, i) => ({
       id: `client-${i}`, projectId: PROJECT, content: `Client-visible ${i}`, visibility: 'CLIENT', authorId: 'portal-user', createdAt: new Date(base + 10_000 + i * 1000),
     })),
@@ -220,7 +222,31 @@ describe('staff chat visibility and realtime rooms', () => {
     }
   });
 
-  it('a reply inherits its parent\'s visibility', async () => {
+  it('a reply under a CLIENT parent keeps the requested visibility and is never promoted', async () => {
+    const parentId = 'c123456789012345678901298';
+    const { app, io, rows } = staffApp({
+      rows: [{ id: parentId, projectId: PROJECT, content: 'client root', visibility: 'CLIENT', createdAt: new Date() }],
+    });
+    await app.register(chatRoutes, { prefix: '/api' });
+    try {
+      const aside = await app.inject({
+        method: 'POST', url: `/api/projects/${PROJECT}/messages`, payload: { content: 'staff aside', parentId },
+      });
+      assert.equal(aside.statusCode, 201, aside.body);
+      assert.equal(rows.at(-1).visibility, 'INTERNAL', 'default INTERNAL is kept under a CLIENT parent');
+      assert.deepEqual(io.emitted.map((entry) => entry.room), [`project:${PROJECT}`], 'the aside never reaches the client room');
+
+      const answer = await app.inject({
+        method: 'POST', url: `/api/projects/${PROJECT}/messages`, payload: { content: 'answer', parentId, visibility: 'CLIENT' },
+      });
+      assert.equal(answer.statusCode, 201, answer.body);
+      assert.equal(rows.at(-1).visibility, 'CLIENT');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('a reply under an INTERNAL parent is always INTERNAL', async () => {
     const parentId = 'c123456789012345678901299';
     const { app, rows } = staffApp({
       rows: [{ id: parentId, projectId: PROJECT, content: 'internal root', visibility: 'INTERNAL', createdAt: new Date() }],

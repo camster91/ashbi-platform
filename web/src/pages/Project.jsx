@@ -400,7 +400,8 @@ export default function Project() {
           <p className="mt-1 text-sm text-muted-foreground">Keep client and team decisions with the project, alongside its work and files.</p>
         </div>
         <div className="p-4">
-          <ProjectChat projectId={id} />
+          {/* Keyed so composer state (e.g. visibility) never carries across projects. */}
+          <ProjectChat key={id} projectId={id} />
         </div>
       </section>
 

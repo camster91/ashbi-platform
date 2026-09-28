@@ -69,6 +69,25 @@ test('paginated lists are ordered by priority in the database, across pages', as
   assert.deepEqual(page3.map((row) => row.id), ['low-b', 'low-c']);
 });
 
+test('GET /api/tasks/my pages through the global priority order', async () => {
+  const rows = [
+    { id: 'n1', priority: 'NORMAL', category: 'UPCOMING' }, { id: 'l1', priority: 'LOW', category: 'UPCOMING' },
+    { id: 'c1', priority: 'CRITICAL', category: 'UPCOMING' }, { id: 'h1', priority: 'HIGH', category: 'UPCOMING' },
+  ];
+  const app = Fastify();
+  app.decorate('authenticate', async (request) => { request.user = { id: 'u1', role: 'TEAM' }; });
+  app.addHook('onRequest', async (request) => { request.prisma = { task: fakeTaskDelegate(rows) }; });
+  await app.register(taskRoutes, { prefix: '/api/tasks' });
+  try {
+    const first = await app.inject({ method: 'GET', url: '/api/tasks/my?limit=2&offset=0' });
+    const second = await app.inject({ method: 'GET', url: '/api/tasks/my?limit=2&offset=2' });
+    assert.deepEqual(first.json().UPCOMING.map((task) => task.id), ['c1', 'h1']);
+    assert.deepEqual(second.json().UPCOMING.map((task) => task.id), ['n1', 'l1']);
+  } finally {
+    await app.close();
+  }
+});
+
 test('GET /api/tasks returns the most urgent tasks first', async () => {
   const rows = [
     { id: 't-low', priority: 'LOW' }, { id: 't-normal', priority: 'NORMAL' },

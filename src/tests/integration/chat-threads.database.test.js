@@ -61,6 +61,17 @@ test('chat delete keeps threads intact and lists top-level messages with nested 
     currentUser = ids.author;
     const lonely = await post({ content: 'No replies here' });
 
+    // A reply under a client-visible message keeps its own (default INTERNAL)
+    // visibility and is not part of the client's conversation.
+    const clientRoot = await post({ content: 'Hi Dana', visibility: 'CLIENT' });
+    const aside = await post({ content: 'Internal aside', parentId: clientRoot.id });
+    assert.equal(aside.visibility, 'INTERNAL');
+    const portalRows = await raw.chatMessage.findMany({ where: { projectId: ids.project, visibility: 'CLIENT', removedAt: null } });
+    assert.deepEqual(portalRows.map((row) => row.id), [clientRoot.id]);
+    await raw.chatMessage.delete({ where: { id: aside.id } });
+    await raw.chatMessage.delete({ where: { id: clientRoot.id } });
+    emitted.length = 0;
+
     const listed = await app.inject({ method: 'GET', url: `/api/projects/${ids.project}/messages` });
     assert.equal(listed.statusCode, 200, listed.body);
     assert.deepEqual(listed.json().map((message) => message.id), [root.id, lonely.id], 'replies are not listed top-level');

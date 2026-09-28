@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import Fastify from 'fastify';
 import { requestStorage } from '../../utils/request-context.js';
-import { startTimer, stopTimer, deleteTimeEntry, TimerError } from '../../services/timeTracking.service.js';
+import { startTimer, stopTimer, deleteTimeEntry, createManualEntry, TimerError } from '../../services/timeTracking.service.js';
+import { MAX_TIME_ENTRY_MINUTES, timeEntryCreateSchema, timeEntryUpdateSchema } from '../../validators/schemas.js';
 import timeRoutes, { timeEntryLock } from '../../routes/time.routes.js';
 
 // C2/H7/H6 without a database (the race itself is proven against PostgreSQL
@@ -54,6 +55,29 @@ test('stopping a timer creates a TIMER time entry linked to the session', async 
   assert.equal(db.entries[0].source, 'TIMER');
   assert.equal(db.entries[0].timeSessionId, 's1');
   assert.equal(db.entries[0].duration, 30);
+});
+
+test('a timer left running for days records at most a 1440-minute entry', async () => {
+  const db = fakeDb({ sessions: [{ id: 's1', userId: 'u1', projectId: 'p1', isRunning: true, startTime: new Date(Date.now() - 3 * 24 * 60 * 60_000) }] });
+  const stopped = await run(db, () => stopTimer('s1', 'u1'));
+  assert.equal(db.entries[0].duration, MAX_TIME_ENTRY_MINUTES);
+  assert.ok(stopped.duration >= 3 * 24 * 60 - 1, 'the session keeps its real span');
+});
+
+test('time entry durations are minutes, capped at one day', () => {
+  assert.equal(MAX_TIME_ENTRY_MINUTES, 1440);
+  assert.equal(timeEntryCreateSchema.safeParse({ projectId: 'p1', duration: 1440 }).success, true);
+  assert.equal(timeEntryCreateSchema.safeParse({ projectId: 'p1', duration: 1441 }).success, false);
+  assert.equal(timeEntryUpdateSchema.safeParse({ duration: 86_400 }).success, false);
+});
+
+test('a manual entry is recorded as a MANUAL TimeEntry', async () => {
+  const created = [];
+  const db = { timeEntry: { create: async ({ data }) => { created.push(data); return { id: 'e1', ...data }; } } };
+  const entry = await run(db, () => createManualEntry('u1', 'p1', { duration: 90, description: 'Call' }));
+  assert.equal(entry.source, 'MANUAL');
+  assert.equal(created[0].duration, 90);
+  assert.equal(created[0].userId, 'u1');
 });
 
 test('only the owner can stop or delete a timer; others get 404', async () => {
