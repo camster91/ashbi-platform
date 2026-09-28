@@ -10,6 +10,7 @@ import bcrypt from 'bcrypt';
 import { CLIENT_SESSION_TOKEN_TYPE, isCurrentUserSession, revokeUserSessions, sessionCookieMaxAge, signUserSession } from '../auth/session.js';
 import { MAGIC_LINK_TOKEN_TYPE, redeemMagicLink } from '../auth/magic-link.js';
 import { accountThrottle } from '../auth/credential-throttle.js';
+import { clearStaleSessionCookie } from '../auth/request-session.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { contentDisposition } from '../utils/send-file.js';
 import { ATTACHMENT_UNDER_REVIEW, isAttachmentUnderReview, isForeignKeyViolation } from '../services/media-review.service.js';
@@ -118,6 +119,13 @@ export default async function clientPortalRoutes(fastify) {
 
   // ── CLIENT JWT middleware ────────────────────────────────────────────────────
   async function clientAuth(request, reply) {
+    // A token that fails here came from the cookie when there is no
+    // Authorization header; a stale cookie is cleared with the 401 so the
+    // browser is not locked out (and logout always clears it).
+    const reject = (error) => {
+      clearStaleSessionCookie(request, reply);
+      return reply.status(401).send({ error });
+    };
     try {
       // Accept token from Authorization header or cookie only — never from URL query string
       // (query string tokens get leaked in browser history, proxy logs, and Referer headers)
@@ -131,15 +139,20 @@ export default async function clientPortalRoutes(fastify) {
         return reply.status(401).send({ error: 'Missing token' });
       }
 
-      const payload = fastify.jwt.verify(rawToken);
+      let payload;
+      try {
+        payload = fastify.jwt.verify(rawToken);
+      } catch {
+        return reject('Invalid or expired token');
+      }
 
       // Only a client-portal session: a staff session, a magic link or any
       // other token signed with this key is refused.
       if (!(await isCurrentUserSession(request.prisma, payload, { types: [CLIENT_SESSION_TOKEN_TYPE] }))) {
-        return reply.status(401).send({ error: 'Session expired or revoked' });
+        return reject('Session expired or revoked');
       }
       const principal = await resolvePortalPrincipal(request.prisma, payload);
-      if (!principal) return reply.status(401).send({ error: 'Session expired or revoked' });
+      if (!principal) return reject('Session expired or revoked');
 
       request.clientUser = {
         ...payload,
@@ -222,38 +235,41 @@ export default async function clientPortalRoutes(fastify) {
       return reply.status(400).send({ error: 'Token required' });
     }
 
+    let payload;
     try {
-      const payload = fastify.jwt.verify(token);
-      if (payload?.typ !== MAGIC_LINK_TOKEN_TYPE || typeof payload.jti !== 'string') {
-        return reply.status(401).send({ error: 'Invalid, expired, or revoked token' });
-      }
-
-      const principal = await resolvePortalPrincipal(request.prisma, payload);
-      if (!principal) return reply.status(401).send({ error: 'Invalid, expired, or revoked token' });
-      if (!(await redeemMagicLink(request.prisma, payload))) {
-        return reply.status(401).send({ error: 'This sign-in link has already been used. Request a new one.', code: 'MAGIC_LINK_USED' });
-      }
-
-      const sessionToken = signUserSession(fastify.jwt, principal.user, { contactId: principal.contact.id });
-
-      reply
-        .setCookie('token', sessionToken, {
-          path: '/',
-          httpOnly: true,
-          secure: env.isProduction,
-          sameSite: env.isProduction ? 'strict' : 'lax',
-          maxAge: sessionCookieMaxAge()
-        })
-        .send({
-          user: {
-            contactId: principal.contact.id,
-            clientId: principal.client.id,
-            role: 'CLIENT'
-          }
-        });
-    } catch (err) {
+      payload = fastify.jwt.verify(token);
+    } catch {
       return reply.status(401).send({ error: 'Invalid or expired token' });
     }
+    if (payload?.typ !== MAGIC_LINK_TOKEN_TYPE || typeof payload.jti !== 'string') {
+      return reply.status(401).send({ error: 'Invalid, expired, or revoked token' });
+    }
+
+    const principal = await resolvePortalPrincipal(request.prisma, payload);
+    if (!principal) return reply.status(401).send({ error: 'Invalid, expired, or revoked token' });
+    if (!(await redeemMagicLink(request.prisma, payload))) {
+      return reply.status(401).send({ error: 'This sign-in link has already been used. Request a new one.', code: 'MAGIC_LINK_USED' });
+    }
+
+    const sessionToken = signUserSession(fastify.jwt, principal.user, { contactId: principal.contact.id });
+
+    reply
+      .setCookie('token', sessionToken, {
+        path: '/',
+        httpOnly: true,
+        secure: env.isProduction,
+        sameSite: env.isProduction ? 'strict' : 'lax',
+        maxAge: sessionCookieMaxAge()
+      })
+      .send({
+        user: {
+          contactId: principal.contact.id,
+          clientId: principal.client.id,
+          role: 'CLIENT'
+        }
+      });
+    // Database failures propagate to the sanitised error handler (a 500, not
+    // a misleading "invalid link").
   });
 
   fastify.post('/logout', { preHandler: clientAuth }, async (request, reply) => {

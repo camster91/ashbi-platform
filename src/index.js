@@ -17,7 +17,7 @@ import env from './config/env.js';
 import prisma from './config/db.js';
 import { apiRateLimitMax, isNonApiRequest } from './config/rateLimit.js';
 import { trustHops } from './config/trust-proxy.js';
-import { isCurrentUserSession } from './auth/session.js';
+import { clearStaleSessionCookie, resolveRequestSession } from './auth/request-session.js';
 import { createJoinProjectHandler } from './auth/project-room-access.js';
 import { createSocketAuthMiddleware } from './auth/socket-auth.js';
 import { clientAcquisitionCorsOptions, loadClientAcquisitionConfig } from './services/client-acquisition.contract.js';
@@ -173,40 +173,33 @@ fastify.addHook('onRequest', async (request, reply) => {
     request.url === '/api/health' ||
     request.url === '/api/live'
   ) return;
-  let jwtVerified = false;
-  try {
-    await request.jwtVerify();
-    jwtVerified = true;
-  } catch {
-    // No valid token — let route-specific auth handle 401
-  }
-  if (jwtVerified) {
-    // A verified signature is not enough: only a current staff or client
-    // session (typed, with a user id and sessionVersion) may set request.user.
-    try {
-      if (!(await isCurrentUserSession(prisma, request.user))) {
-        return reply.status(401).send({ error: 'Session expired or revoked' });
-      }
-    } catch {
-      return reply.status(401).send({ error: 'Unable to validate session' });
-    }
-  }
+  // A token that is not a current session (stale, revoked, untyped, or not a
+  // session at all) makes the request anonymous and its cookie is cleared:
+  // each route's own guard decides, so public routes never 401 because of a
+  // stale cookie (src/auth/request-session.js).
+  // If the session store is unreachable the request is also anonymous here
+  // (the cookie is kept); guarded routes then answer 401 themselves.
+  const session = await resolveRequestSession(request, prisma);
+  if (session === 'stale') clearStaleSessionCookie(request, reply);
+  if (session === 'error') request.log.warn('Session validation unavailable; continuing without a session');
 });
 
 // Auth decorators
 fastify.decorate('authenticate', async (request, reply) => {
-  try {
-    await request.jwtVerify();
-    if (!(await isCurrentUserSession(prisma, request.user))) throw new Error('Revoked session');
-  } catch (err) { return reply.status(401).send({ error: 'Unauthorized' }); }
+  const session = await resolveRequestSession(request, prisma);
+  if (session === 'current') return undefined;
+  if (session === 'stale') clearStaleSessionCookie(request, reply);
+  return reply.status(401).send({ error: 'Unauthorized' });
 });
 
 fastify.decorate('adminOnly', async (request, reply) => {
-  try {
-    await request.jwtVerify();
-    if (!(await isCurrentUserSession(prisma, request.user))) throw new Error('Revoked session');
-    if (request.user.role !== 'ADMIN') return reply.status(403).send({ error: 'Admin access required' });
-  } catch (err) { return reply.status(401).send({ error: 'Unauthorized' }); }
+  const session = await resolveRequestSession(request, prisma);
+  if (session !== 'current') {
+    if (session === 'stale') clearStaleSessionCookie(request, reply);
+    return reply.status(401).send({ error: 'Unauthorized' });
+  }
+  if (request.user.role !== 'ADMIN') return reply.status(403).send({ error: 'Admin access required' });
+  return undefined;
 });
 
 // Infrastructure
