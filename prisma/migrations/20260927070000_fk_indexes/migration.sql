@@ -1,13 +1,17 @@
 -- Indexes for relation foreign-key columns that had none (joins, cascades and
--- "children of X" queries were sequential scans), plus messages(threadId,
--- receivedAt) for thread timelines, which supersedes messages(threadId).
+-- "children of X" queries were sequential scans).
 -- src/tests/unit/schema-fk-indexes.test.js keeps new relations indexed.
 --
--- Plain CREATE INDEX (not CONCURRENTLY): Prisma runs each migration in a
--- transaction, where CONCURRENTLY is not allowed. At current table sizes each
--- build takes milliseconds; the brief SHARE lock blocks writes to that table
--- only while its index builds. Revisit (split into a non-transactional
--- CONCURRENTLY step) before a table grows to millions of rows.
+-- Locking: Prisma applies this file as one transaction, so each table's SHARE
+-- lock (blocks writes to that table, not reads) is held from its CREATE INDEX
+-- until COMMIT, while the previous release keeps serving traffic. At current
+-- table sizes the whole file builds in well under a second. lock_timeout makes
+-- the migration fail fast (and roll back cleanly) instead of queueing behind a
+-- long transaction and stalling writers queued behind it; rerun the deploy
+-- when the database is quieter. CONCURRENTLY is not allowed inside a
+-- transaction; the messages index swap, on the busiest table, is done
+-- concurrently in the two single-statement migrations that follow.
+SET lock_timeout = '5s';
 
 -- CreateIndex
 CREATE INDEX "ai_team_messages_clientId_idx" ON "ai_team_messages"("clientId");
@@ -67,9 +71,6 @@ CREATE INDEX "invoice_line_items_invoiceId_idx" ON "invoice_line_items"("invoice
 CREATE INDEX "invoice_payments_invoiceId_idx" ON "invoice_payments"("invoiceId");
 
 -- CreateIndex
-CREATE INDEX "messages_threadId_receivedAt_idx" ON "messages"("threadId", "receivedAt");
-
--- CreateIndex
 CREATE INDEX "milestones_projectId_idx" ON "milestones"("projectId");
 
 -- CreateIndex
@@ -123,5 +124,4 @@ CREATE INDEX "wp_alerts_siteId_idx" ON "wp_alerts"("siteId");
 -- CreateIndex
 CREATE INDEX "wp_sites_clientId_idx" ON "wp_sites"("clientId");
 
--- The composite index above now serves every threadId lookup.
-DROP INDEX "messages_threadId_idx";
+RESET lock_timeout;

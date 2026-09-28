@@ -102,3 +102,20 @@ test('every relation foreign key leads an index', () => {
     .filter((key) => !missingForeignKeyIndexes(SCHEMA).includes(key));
   assert.deepEqual(stale, [], 'remove allowlist entries that are now indexed');
 });
+
+test('the FK index migration fails fast on locks; the messages swap runs concurrently, one statement per file', () => {
+  const dir = new URL('../../../prisma/migrations/', import.meta.url);
+  const read = (name) => fs.readFileSync(new URL(`${name}/migration.sql`, dir), 'utf8');
+  const statements = (sql) => sql.replace(/--.*$/gm, '').split(';').map((part) => part.trim()).filter(Boolean);
+
+  const fk = read('20260927070000_fk_indexes');
+  assert.match(statements(fk)[0], /^SET lock_timeout = '5s'$/);
+  assert.equal(statements(fk).at(-1), 'RESET lock_timeout');
+  assert.doesNotMatch(fk.replace(/--.*$/gm, ''), /"messages"|DROP INDEX|CONCURRENTLY/);
+
+  const create = statements(read('20260927070100_messages_thread_received_index'));
+  assert.equal(create.length, 1);
+  assert.match(create[0], /^CREATE INDEX CONCURRENTLY "messages_threadId_receivedAt_idx" ON "messages"\("threadId", "receivedAt"\)$/);
+  const drop = statements(read('20260927070200_drop_messages_thread_index'));
+  assert.deepEqual(drop, ['DROP INDEX CONCURRENTLY IF EXISTS "messages_threadId_idx"']);
+});
