@@ -1062,7 +1062,10 @@ model Invoice {
   isRecurring             Boolean   @default(false)
   recurringInterval       String? // MONTHLY | QUARTERLY | ANNUALLY
   recurringNextDate       DateTime?
+  // Overdue job: last reminder claimed/sent, and when the single 7-day
+  // escalation went out (escalated invoices leave the job's working set).
   reminderSentAt          DateTime?
+  overdueEscalatedAt      DateTime?
   viewToken               String?   @unique @default(cuid())
   publicAccessExpiresAt   DateTime?
   publicAccessRevokedAt   DateTime?
@@ -1088,6 +1091,7 @@ model Invoice {
 
   @@unique([organizationId, invoiceNumber])
   @@index([status, dueDate])
+  @@index([status, overdueEscalatedAt, dueDate])
   @@index([clientId, status])
   @@map("invoices")
 }
