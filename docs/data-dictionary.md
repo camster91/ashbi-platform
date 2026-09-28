@@ -61,7 +61,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [IntakeFormResponse](#model-intakeformresponse) | `intake_form_responses` | no | no | 8 |
 | [Integration](#model-integration) | `integrations` | yes | no | 11 |
 | [InternalNote](#model-internalnote) | `internal_notes` | no | no | 7 |
-| [Invoice](#model-invoice) | `invoices` | yes | yes | 60 |
+| [Invoice](#model-invoice) | `invoices` | yes | yes | 61 |
 | [InvoiceLineItem](#model-invoicelineitem) | `invoice_line_items` | no | no | 9 |
 | [InvoicePayment](#model-invoicepayment) | `invoice_payments` | no | no | 9 |
 | [LineItemTemplate](#model-lineitemtemplate) | `line_item_templates` | yes | no | 11 |
@@ -1183,6 +1183,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Constraints and indexes:
   - `@@unique([organizationId, invoiceNumber])`
   - `@@index([status, dueDate])`
+  - `@@index([status, overdueEscalatedAt, dueDate])`
   - `@@index([clientId, status])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
@@ -1229,6 +1230,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `recurringInterval` | String | optional |  |  | MONTHLY \| QUARTERLY \| ANNUALLY |
 | `recurringNextDate` | DateTime | optional |  |  |  |
 | `reminderSentAt` | DateTime | optional |  |  |  |
+| `overdueEscalatedAt` | DateTime | optional |  |  |  |
 | `viewToken` | String | unique, optional | `cuid()` |  |  |
 | `publicAccessExpiresAt` | DateTime | optional |  |  |  |
 | `publicAccessRevokedAt` | DateTime | optional |  |  |  |

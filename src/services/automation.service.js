@@ -328,6 +328,9 @@ export async function onContractSigned(contractId) {
 // ==================== TRIGGER: CHECK OVERDUE INVOICES ====================
 
 const OVERDUE_ESCALATION_DAYS = 7;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const OVERDUE_PAGE_SIZE = 200;
+const OPEN_INVOICE_STATUSES = ['SENT', 'OVERDUE'];
 
 function hubUrl() {
   return process.env.APP_URL || process.env.HUB_URL || 'https://hub.ashbi.ca';
@@ -345,31 +348,52 @@ async function bestEffort(label, invoiceId, fn) {
 }
 
 /**
- * Which reminder, if any, an overdue invoice is due for. A first reminder is
- * sent once; a single escalation follows once the invoice is at least
- * OVERDUE_ESCALATION_DAYS late (the recorded reminderSentAt tells which one
- * already went out), so repeated runs are idempotent.
+ * Which message, if any, an overdue invoice is due for: one reminder while it
+ * is less than OVERDUE_ESCALATION_DAYS late, then a single escalation
+ * (recorded in overdueEscalatedAt, after which the invoice leaves the job).
  */
 export function overdueReminderStage(invoice, now = new Date()) {
-  const dueAt = new Date(invoice.dueDate).getTime();
-  const daysOverdue = Math.floor((now.getTime() - dueAt) / (24 * 60 * 60 * 1000));
-  const escalationStart = dueAt + OVERDUE_ESCALATION_DAYS * 24 * 60 * 60 * 1000;
-  const lastReminder = invoice.reminderSentAt ? new Date(invoice.reminderSentAt).getTime() : null;
+  const daysOverdue = Math.floor((now.getTime() - new Date(invoice.dueDate).getTime()) / DAY_MS);
   if (daysOverdue >= OVERDUE_ESCALATION_DAYS) {
-    if (lastReminder && lastReminder >= escalationStart) return { stage: null, daysOverdue };
-    return { stage: 'ESCALATION', daysOverdue };
+    return { stage: invoice.overdueEscalatedAt ? null : 'ESCALATION', daysOverdue };
   }
-  if (!lastReminder) return { stage: 'REMINDER', daysOverdue };
-  return { stage: null, daysOverdue };
+  return { stage: invoice.reminderSentAt ? null : 'REMINDER', daysOverdue };
+}
+
+/**
+ * Claim the stage before sending anything: a compare-and-set on the values
+ * this run read, and only while the invoice is still open. A payment or void
+ * that lands mid-job, or an overlapping run that claimed first, makes the
+ * claim fail and nothing is sent. Returns an undo for a failed delivery.
+ */
+async function claimOverdueStage(db, invoice, stage, now) {
+  const where = { id: invoice.id, status: { in: OPEN_INVOICE_STATUSES }, reminderSentAt: invoice.reminderSentAt ?? null };
+  const data = { reminderSentAt: now };
+  if (stage === 'ESCALATION') {
+    where.overdueEscalatedAt = null;
+    data.overdueEscalatedAt = now;
+  }
+  const claimed = await db.invoice.updateMany({ where, data });
+  if (claimed.count !== 1) return null;
+  return async () => {
+    // Undo only our own claim, so the next run retries this stage.
+    const release = { reminderSentAt: invoice.reminderSentAt ?? null };
+    if (stage === 'ESCALATION') release.overdueEscalatedAt = null;
+    await db.invoice.updateMany({ where: { id: invoice.id, reminderSentAt: now }, data: release });
+  };
 }
 
 async function processOverdueInvoice(db, invoice, { now, sendOverdueEmail }) {
   // Compare-and-set: never overwrite a payment or void that just landed.
   if (invoice.status === 'SENT') {
-    await db.invoice.updateMany({ where: { id: invoice.id, status: 'SENT' }, data: { status: 'OVERDUE' } });
+    const moved = await db.invoice.updateMany({ where: { id: invoice.id, status: 'SENT' }, data: { status: 'OVERDUE' } });
+    if (moved.count !== 1) return { reminded: false, skipped: 'changed' };
   }
   const { stage, daysOverdue } = overdueReminderStage(invoice, now);
   if (!stage) return { reminded: false };
+
+  const release = await claimOverdueStage(db, invoice, stage, now);
+  if (!release) return { reminded: false, skipped: 'claimed_or_changed' };
 
   const contact = await getClientEmail(invoice.clientId);
   // The pay link is the public invoice page, which creates or refreshes a
@@ -377,24 +401,30 @@ async function processOverdueInvoice(db, invoice, { now, sendOverdueEmail }) {
   const linkUsable = invoice.viewToken && !invoicePublicAccessFailure({ ...invoice, status: 'OVERDUE' }, now);
   let delivered = false;
   if (contact?.email && linkUsable) {
-    const delivery = await sendOverdueEmail({
-      to: contact.email,
-      clientName: contact.name || invoice.client?.name,
-      invoiceNumber: invoice.invoiceNumber,
-      total: invoice.total,
-      currency: invoice.currency,
-      daysOverdue,
-      viewUrl: `${hubUrl()}/portal/invoice/${invoice.viewToken}`,
-      invoiceId: invoice.id,
-    });
+    let delivery;
+    try {
+      delivery = await sendOverdueEmail({
+        to: contact.email,
+        clientName: contact.name || invoice.client?.name,
+        invoiceNumber: invoice.invoiceNumber,
+        total: invoice.total,
+        currency: invoice.currency,
+        daysOverdue,
+        viewUrl: `${hubUrl()}/portal/invoice/${invoice.viewToken}`,
+        invoiceId: invoice.id,
+      });
+    } catch (err) {
+      delivery = { ok: false, error: err?.message };
+    }
     delivered = Boolean(delivery?.ok);
     if (!delivered) {
-      // Not recorded, so the next run retries the reminder.
-      console.warn(`[Automation] Overdue reminder for invoice ${invoice.id} was not accepted by the email provider`);
+      await release();
+      console.warn(`[Automation] Overdue ${stage.toLowerCase()} for invoice ${invoice.id} was not accepted by the email provider; will retry`);
       return { reminded: false };
     }
   }
-  await db.invoice.update({ where: { id: invoice.id }, data: { reminderSentAt: now } });
+  // Without a contact or a usable link the stage stays claimed (staff are
+  // notified below) rather than being retried on every run.
 
   const amount = formatMoney(invoice.total, invoice.currency);
   const organizationId = invoice.organizationId || null;
@@ -429,31 +459,40 @@ async function processOverdueInvoice(db, invoice, { now, sendOverdueEmail }) {
 /**
  * Mark past-due invoices OVERDUE and send templated reminders. Runs inside a
  * tenant job (db defaults to the request-context client, which runTenantJob
- * scopes to one organization). Each invoice is isolated: a failure is logged
- * and reported, and the remaining invoices are still processed.
+ * scopes to one organization). Every open, past-due, not-yet-escalated
+ * invoice is examined, page by page (keyset on id), so escalated or already
+ * reminded invoices can never starve new ones. Each invoice is isolated: a
+ * failure is logged and reported, and the rest are still processed.
  */
-export async function checkOverdueInvoices(db = prisma, { now = new Date(), sendOverdueEmail = sendInvoiceOverdueEmail } = {}) {
-  const overdueInvoices = await db.invoice.findMany({
-    where: {
-      status: { in: ['SENT', 'OVERDUE'] },
-      dueDate: { lt: now },
-    },
-    include: {
-      client: { select: { id: true, name: true } },
-    },
-    take: 1000,
-  });
-
+export async function checkOverdueInvoices(db = prisma, { now = new Date(), sendOverdueEmail = sendInvoiceOverdueEmail, pageSize = OVERDUE_PAGE_SIZE } = {}) {
   const result = { processed: 0, reminded: 0, failed: [] };
-  for (const invoice of overdueInvoices) {
-    try {
-      const outcome = await processOverdueInvoice(db, invoice, { now, sendOverdueEmail });
-      result.processed += 1;
-      if (outcome.reminded) result.reminded += 1;
-    } catch (err) {
-      console.error(`[Automation] Overdue processing failed for invoice ${invoice.id}:`, err?.message);
-      result.failed.push({ invoiceId: invoice.id, error: err?.message });
+  let cursor = null;
+  for (;;) {
+    const page = await db.invoice.findMany({
+      where: {
+        status: { in: OPEN_INVOICE_STATUSES },
+        dueDate: { lt: now },
+        overdueEscalatedAt: null,
+        ...(cursor ? { id: { gt: cursor } } : {}),
+      },
+      include: {
+        client: { select: { id: true, name: true } },
+      },
+      orderBy: { id: 'asc' },
+      take: pageSize,
+    });
+    for (const invoice of page) {
+      try {
+        const outcome = await processOverdueInvoice(db, invoice, { now, sendOverdueEmail });
+        result.processed += 1;
+        if (outcome.reminded) result.reminded += 1;
+      } catch (err) {
+        console.error(`[Automation] Overdue processing failed for invoice ${invoice.id}:`, err?.message);
+        result.failed.push({ invoiceId: invoice.id, error: err?.message });
+      }
     }
+    if (page.length < pageSize) break;
+    cursor = page[page.length - 1].id;
   }
   return result;
 }
@@ -768,7 +807,7 @@ function getNestedValue(obj, path) {
  * run; the call throws at the end if anything failed so the queue retries
  * (every step is idempotent).
  */
-export async function checkOverdueInvoicesForOrganizations(organizationIds, { db = null, sendOverdueEmail, now } = {}) {
+export async function checkOverdueInvoicesForOrganizations(organizationIds, { db = null, sendOverdueEmail, now, pageSize } = {}) {
   const failed = [];
   let processed = 0;
   for (const organizationId of organizationIds) {
@@ -776,7 +815,7 @@ export async function checkOverdueInvoicesForOrganizations(organizationIds, { db
       const result = await runTenantJob(
         db || prisma,
         organizationId,
-        (tenantPrisma) => checkOverdueInvoices(tenantPrisma, { sendOverdueEmail, now }),
+        (tenantPrisma) => checkOverdueInvoices(tenantPrisma, { sendOverdueEmail, now, pageSize }),
         db || backgroundPrisma,
       );
       processed += result.processed;
