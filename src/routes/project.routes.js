@@ -228,9 +228,9 @@ export default async function projectRoutes(fastify) {
       };
     } catch (error) {
       if (isAiControlError(error)) return sendAiError(reply, error);
+      request.log.error({ errorName: error?.name }, 'Project plan refresh failed');
       return reply.status(500).send({
         error: 'Failed to refresh project plan',
-        message: error.message
       });
     }
   });
@@ -576,7 +576,6 @@ Brief: ${brief}`;
       fastify.log.error(error, 'AI plan generation failed');
       return reply.status(500).send({
         error: 'Failed to generate AI plan',
-        message: error.message
       });
     }
   });

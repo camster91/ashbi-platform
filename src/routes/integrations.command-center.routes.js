@@ -83,7 +83,8 @@ async function fetchGithubSummary() {
       health: failingCI > 0 ? 'yellow' : 'green'
     };
   } catch (err) {
-    return { error: err.message, health: 'yellow' };
+    console.error('[command-center] Integration summary failed:', err?.name || 'Error');
+    return { error: 'Integration summary unavailable', health: 'yellow' };
   }
 }
 
@@ -121,7 +122,8 @@ async function fetchVpsSummary() {
       }))
     };
   } catch (err) {
-    return { error: err.message, health: 'yellow' };
+    console.error('[command-center] Integration summary failed:', err?.name || 'Error');
+    return { error: 'Integration summary unavailable', health: 'yellow' };
   }
 }
 
@@ -166,7 +168,8 @@ async function fetchHubTasks(request) {
       health: overdueTasks > 5 ? 'red' : overdueTasks > 0 ? 'yellow' : 'green'
     };
   } catch (err) {
-    return { error: err.message, health: 'yellow' };
+    console.error('[command-center] Integration summary failed:', err?.name || 'Error');
+    return { error: 'Integration summary unavailable', health: 'yellow' };
   }
 }
 

@@ -532,7 +532,7 @@ export default async function invoiceRoutes(fastify) {
       return { paymentLinkUrl: result.paymentLink, reused: result.reused };
     } catch (err) {
       fastify.log.error({ err }, 'Failed to create Stripe payment link');
-      return reply.status(500).send({ error: 'Failed to create payment link', detail: err.message });
+      return reply.status(500).send({ error: 'Failed to create payment link' });
     }
   });
 
