@@ -14,7 +14,6 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import invoiceRoutes from '../../routes/invoice.routes.js';
 import { createScopedPrisma } from '../../utils/prisma-tenant-proxy.js';
 import { enterRequestContext, getRequestPrisma } from '../../utils/request-context.js';
-import { toClientErrorBody, statusCodeForError } from '../../utils/http-errors.js';
 
 const databaseUrl = process.env.TENANT_INTEGRATION_DATABASE_URL;
 const CONCURRENT_CREATES = 12;
@@ -38,9 +37,6 @@ async function buildApp(raw) {
     const scoped = createScopedPrisma(raw, request.user.organizationId);
     request.prisma = scoped;
     enterRequestContext({ prisma: scoped, organizationId: request.user.organizationId });
-  });
-  app.setErrorHandler((error, _request, reply) => {
-    reply.status(statusCodeForError(error)).send(toClientErrorBody(error));
   });
   await app.register(invoiceRoutes);
   return app;
@@ -123,16 +119,13 @@ test('invoice numbers are per organization, atomic under concurrency and ordered
     assert.equal(skipped.statusCode, 200, skipped.body);
     assert.equal(skipped.json().invoiceNumber, `INV-${year}-10003`);
 
-    // The database still forbids a duplicate within one organization, and a
-    // raw unique violation maps to a generic 409 without Prisma internals.
+    // The database still forbids a duplicate within one organization. (How a
+    // unique violation reaches the client is proven through the real app in
+    // invoice-conflict-response.database.test.js.)
     const duplicate = await raw.invoice.create({ data: {
       invoiceNumber: `INV-${year}-0001`, clientId: `client-a-${suffix}`, organizationId: orgA, createdById: `user-a-${suffix}`,
     } }).catch((error) => error);
     assert.equal(duplicate?.code, 'P2002');
-    assert.equal(statusCodeForError(duplicate), 409);
-    const body = toClientErrorBody(duplicate);
-    assert.equal(body.statusCode, 409);
-    assert.doesNotMatch(JSON.stringify(body), /prisma|invoiceNumber|Unique constraint|invocation/i);
 
     // The organization is derived from the client even when a writer omits
     // it (database trigger), so per-organization uniqueness cannot be dodged.

@@ -13,7 +13,6 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import invoiceRoutes from '../../routes/invoice.routes.js';
 import { createScopedPrisma } from '../../utils/prisma-tenant-proxy.js';
 import { enterRequestContext, getRequestPrisma } from '../../utils/request-context.js';
-import { statusCodeForError, toClientErrorBody } from '../../utils/http-errors.js';
 import { purgeFixtureAuditEvents } from '../helpers/audit-cleanup.js';
 
 const databaseUrl = process.env.TENANT_INTEGRATION_DATABASE_URL;
@@ -53,7 +52,6 @@ test('manual payment references may repeat across invoices; Stripe ids stay uniq
       request.prisma = scoped;
       enterRequestContext({ prisma: scoped, organizationId: org });
     });
-    app.setErrorHandler((error, _request, reply) => reply.status(statusCodeForError(error)).send(toClientErrorBody(error)));
     await app.register(invoiceRoutes);
 
     const markPaid = (id) => app.inject({
@@ -71,7 +69,6 @@ test('manual payment references may repeat across invoices; Stripe ids stay uniq
     const duplicate = await raw.invoicePayment.create({ data: { invoiceId: third.id, amount: 1, method: 'STRIPE', transactionId: stripeId } })
       .catch((error) => error);
     assert.equal(duplicate?.code, 'P2002');
-    assert.equal(statusCodeForError(duplicate), 409);
     // A manual reference that happens to equal a Stripe id is not a conflict.
     await raw.invoicePayment.create({ data: { invoiceId: third.id, amount: 1, method: 'BANK', transactionId: stripeId } });
   } finally {
