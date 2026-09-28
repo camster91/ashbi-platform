@@ -45,4 +45,12 @@ describe('Card Component', () => {
     // Title should be an h3
     expect(screen.getByText('Title').tagName).toBe('H3');
   });
+
+  it('renders as another element through `as`, keeping native semantics', () => {
+    render(<Card as="button" type="button" isInteractive aria-label="Open project Alpha">Alpha</Card>);
+    const button = screen.getByRole('button', { name: 'Open project Alpha' });
+    expect(button.tagName).toBe('BUTTON');
+    expect(button.className).toContain('bg-card');
+    expect(button.className).toContain('hover-lift');
+  });
 });

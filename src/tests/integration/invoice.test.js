@@ -377,6 +377,10 @@ describe('Invoice CRUD', { skip }, () => {
     assert.equal(body.status, 'PAID');
     assert.ok(body.paidAt, 'paidAt should be set');
     assert.equal(body.paymentMethod, 'BANK');
+    // The outbox event committed with the payment (docs/event-outbox.md).
+    const events = await rawPrisma.domainEvent.findMany({ where: { aggregateType: 'invoice', aggregateId: createdInvoiceId } });
+    assert.deepEqual(events.map((event) => [event.type, event.sequence, event.payload.source, event.payload.method]), [['invoice.paid', 1, 'manual', 'BANK']]);
+    assert.doesNotMatch(JSON.stringify(events[0].payload), /e-Transfer|ETRANSFER/);
     console.log(`  ✓ Marked as paid: ${body.status}, paidAt=${body.paidAt}`);
   });
 

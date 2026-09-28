@@ -70,6 +70,7 @@ model Organization {
   aiProviderConnection AiProviderConnection?
   aiUsageRecords  AiUsageRecord[]
   reviewSessions  ReviewSession[]
+  domainEvents    DomainEvent[]
 
   @@map("organizations")
 }
@@ -1224,6 +1225,44 @@ model AuditEvent {
   @@index([organizationId, action, createdAt])
   @@index([organizationId, actorUserId, createdAt])
   @@map("audit_events")
+}
+
+// Transactional outbox of domain events (#412, docs/event-outbox.md). Rows are
+// written only by recordDomainEvent inside the business transaction that
+// produced them. The envelope (type through occurredAt) is immutable in the
+// database; only the dispatch bookkeeping columns below it ever change.
+model DomainEvent {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade, onUpdate: Restrict)
+  type           String // dotted, e.g. invoice.paid (src/services/domain-event-catalog.js)
+  schemaVersion  Int // payload schema version for `type`
+  aggregateType  String // e.g. invoice; fixed per type by the catalog
+  aggregateId    String // No FK: the event outlives its aggregate
+  sequence       Int // Per-aggregate order, contiguous from 1
+  payload        Json // Ids and non-sensitive fields only (catalog-validated)
+  correlationId  String // Request id of the originating request, or a new id
+  causationId    String? // Id of the message that caused this event, if any
+  idempotencyKey String // Unique per organization; a repeat returns the first event
+  occurredAt     DateTime     @default(now())
+  // Dispatch bookkeeping (the only mutable columns)
+  status         String       @default("pending") // pending, dispatching, published, dead, discarded
+  attempts       Int          @default(0)
+  nextAttemptAt  DateTime     @default(now())
+  lastAttemptAt  DateTime?
+  lockedUntil    DateTime? // Claim lease; an expired lease is reclaimed
+  claimToken     String?
+  publishedAt    DateTime?
+  discardedAt    DateTime? // Set when an admin discards a dead event
+  lastError      String? // Error name and truncated message only
+  replayCount    Int          @default(0)
+
+  @@unique([organizationId, idempotencyKey])
+  @@unique([organizationId, aggregateType, aggregateId, sequence])
+  @@index([status, nextAttemptAt])
+  @@index([organizationId, status, occurredAt])
+  @@index([organizationId, type, occurredAt])
+  @@map("domain_events")
 }
 
 // Organization-scoped bring-your-own-key AI provider connection (#413,
