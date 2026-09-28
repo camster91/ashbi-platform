@@ -214,7 +214,7 @@ export default function TaskKanban() {
                     aria-describedby={`kanban-task-${task.id}-status kanban-keyboard-help`}
                     onKeyDown={(e) => handleCardKeyDown(e, task, columnIndex)}
                     onDragStart={() => setDraggedTask({ ...task, fromStatus: key })}
-                    className="bg-card border border-border rounded-lg p-3 cursor-grab active:cursor-grabbing hover:shadow-md hover:border-primary/40 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="relative bg-card border border-border rounded-lg p-3 cursor-grab active:cursor-grabbing hover:shadow-md hover:border-primary/40 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <span id={`kanban-task-${task.id}-status`} className="sr-only">In column {label}.</span>
                     <Link to={`/task/${task.id}`} className="block rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
