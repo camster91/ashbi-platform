@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig, searchForWorkspaceRoot } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
@@ -70,7 +70,8 @@ export default defineConfig({
   server: {
     port: 5173,
     fs: {
-      allow: [path.resolve(__dirname), path.resolve(__dirname, '../src/shared')],
+      // Keep Vite's default (workspace root) and add the shared API modules.
+      allow: [searchForWorkspaceRoot(process.cwd()), path.resolve(__dirname, '../src/shared')],
     },
     proxy: {
       '/api': {
