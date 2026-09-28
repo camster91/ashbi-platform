@@ -94,6 +94,8 @@ function proposalTotals(lineItems, discount = 0) {
   return { subtotal, total };
 }
 
+export const PROPOSAL_BULK_SEND_MAX = 25;
+
 export default async function proposalRoutes(fastify) {
   // List all proposals
   fastify.get('/', {
@@ -316,14 +318,16 @@ export default async function proposalRoutes(fastify) {
     }
 
     if (existing.status !== 'DRAFT') {
-      return { statusCode: 400, body: { error: 'Only draft proposals can be sent' } };
+      return { statusCode: 400, body: { error: 'Only draft proposals can be sent', code: 'ALREADY_SENT' } };
     }
     if (existing.validUntil && new Date(existing.validUntil) <= new Date()) {
       return { statusCode: 409, body: { error: 'Proposal validity date must be extended before sending' } };
     }
     const access = createPublicAccessWindow(existing.validUntil);
-    const proposal = await request.prisma.proposal.update({
-      where: { id },
+    // Claim DRAFT -> SENT with the new token before emailing, so concurrent
+    // sends (single or bulk) email the client once, with the stored link.
+    const claimed = await request.prisma.proposal.updateMany({
+      where: { id, status: 'DRAFT' },
       data: {
         status: 'SENT',
         sentAt: new Date(),
@@ -331,6 +335,12 @@ export default async function proposalRoutes(fastify) {
         publicAccessExpiresAt: access.expiresAt,
         publicAccessRevokedAt: access.revokedAt,
       },
+    });
+    if (claimed.count !== 1) {
+      return { statusCode: 409, body: { error: 'Proposal is already being sent or was sent', code: 'ALREADY_SENT' } };
+    }
+    const proposal = await request.prisma.proposal.findUnique({
+      where: { id },
       include: {
         client: {
           select: {
@@ -688,6 +698,10 @@ export default async function proposalRoutes(fastify) {
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return reply.status(400).send({ error: 'ids array is required' });
     }
+    // Sequential emails per proposal: capped to stay inside request timeouts.
+    if (ids.length > PROPOSAL_BULK_SEND_MAX) {
+      return reply.status(400).send({ error: `Send at most ${PROPOSAL_BULK_SEND_MAX} proposals per request` });
+    }
 
     // Same path as a single send for each proposal; one failure never stops
     // the rest.
@@ -697,7 +711,7 @@ export default async function proposalRoutes(fastify) {
         const { statusCode, body } = await sendDraftProposal(request, id);
         results.push(statusCode === 200
           ? { id, ok: true, statusCode, emailSent: body.emailSent }
-          : { id, ok: false, statusCode, error: body.error });
+          : { id, ok: false, statusCode, error: body.error, ...(body.code === 'ALREADY_SENT' ? { reason: 'already_sent' } : {}) });
       } catch (err) {
         logger.error({ err, proposalId: id }, 'Bulk proposal send failed for one proposal');
         results.push({ id, ok: false, statusCode: 500, error: 'Proposal could not be sent' });

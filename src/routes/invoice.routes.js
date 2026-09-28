@@ -18,7 +18,19 @@ function roundMoney(value) {
   return Math.round((Number(value) || 0) * 100) / 100;
 }
 
-export default async function invoiceRoutes(fastify) {
+// Bulk send works through each draft sequentially (Checkout + email per
+// invoice), so the batch is capped to keep one request well inside proxy and
+// client timeouts; larger batches are sent in several requests.
+export const INVOICE_BULK_SEND_MAX = 25;
+
+/**
+ * @param {any} fastify
+ * @param {{ createPaymentLink?: Function, sendInvoiceDeliveryEmail?: Function }} [options]
+ *   Test seams for the Stripe and email providers; production uses the defaults.
+ */
+export default async function invoiceRoutes(fastify, options = {}) {
+  const createCheckout = options.createPaymentLink || createPaymentLink;
+  const deliverInvoiceEmail = options.sendInvoiceDeliveryEmail || sendInvoiceDeliveryEmail;
 
   function calcTotals(lineItems, taxRate, discountAmount = 0) {
     const subtotal = lineItems.reduce((sum, li) => sum + li.total, 0);
@@ -414,7 +426,7 @@ export default async function invoiceRoutes(fastify) {
   // Single path for sending a draft (used by POST /:id/send and bulk send):
   // issue the public link, try a Checkout session, email the client, audit.
   // Returns { statusCode, body } so bulk send can report per item.
-  async function sendDraftInvoice(request, invoiceId) {
+  async function sendDraftInvoice(request, invoiceId, { bulk = false } = {}) {
     const invoice = await fastify.prisma.invoice.findUnique({
       where: { id: invoiceId },
       include: {
@@ -425,25 +437,34 @@ export default async function invoiceRoutes(fastify) {
       }
     });
     if (!invoice) return { statusCode: 404, body: { error: 'Invoice not found' } };
-    if (invoice.status !== 'DRAFT') return { statusCode: 400, body: { error: 'Only draft invoices can be sent' } };
+    if (invoice.status !== 'DRAFT') return { statusCode: 400, body: { error: 'Only draft invoices can be sent', code: 'ALREADY_SENT' } };
 
     // The link is not tied to the due date: it stays valid while the invoice
     // is open (see invoicePublicAccessFailure), so overdue reminders work.
     const access = createPublicAccessWindow();
-    const updateData = {
-      status: 'SENT',
-      sentAt: new Date(),
-      viewToken: access.token,
-      publicAccessExpiresAt: access.expiresAt,
-      publicAccessRevokedAt: access.revokedAt,
-    };
+    // Claim DRAFT -> SENT with the new token before any side effect, so two
+    // concurrent sends (single or bulk) cannot both create a Checkout session
+    // and email the client, and the emailed link is the stored one.
+    const claimed = await fastify.prisma.invoice.updateMany({
+      where: { id: invoice.id, status: 'DRAFT' },
+      data: {
+        status: 'SENT',
+        sentAt: new Date(),
+        viewToken: access.token,
+        publicAccessExpiresAt: access.expiresAt,
+        publicAccessRevokedAt: access.revokedAt,
+      },
+    });
+    if (claimed.count !== 1) {
+      return { statusCode: 409, body: { error: 'Invoice is already being sent or was sent', code: 'ALREADY_SENT' } };
+    }
+    const updateData = {};
 
     // Attempt Stripe payment link
     try {
-      // The Checkout return URLs must point at the token issued by this send,
-      // not the pre-send token that is about to be replaced.
-      const checkoutInvoice = { ...invoice, viewToken: access.token };
-      const result = await createPaymentLink(checkoutInvoice);
+      // The Checkout return URLs must point at the token issued by this send.
+      const checkoutInvoice = { ...invoice, status: 'SENT', viewToken: access.token };
+      const result = await createCheckout(checkoutInvoice);
       if (result) Object.assign(updateData, checkoutPersistenceData(checkoutInvoice, result));
     } catch (err) {
       fastify.log.warn({ err }, 'Stripe payment link failed — sending without it');
@@ -455,7 +476,7 @@ export default async function invoiceRoutes(fastify) {
     if (primaryContact?.email) {
       try {
         const viewUrl = `${process.env.APP_URL || 'https://hub.ashbi.ca'}/portal/invoice/${access.token}`;
-        const delivery = await sendInvoiceDeliveryEmail({
+        const delivery = await deliverInvoiceEmail({
           to: primaryContact.email,
           clientName: primaryContact.name || invoice.client.name,
           invoiceNumber: invoice.invoiceNumber,
@@ -493,6 +514,7 @@ export default async function invoiceRoutes(fastify) {
         paymentLinkAttached: Boolean(updateData.stripePaymentLink),
         total: invoice.total,
         currency: invoice.currency,
+        ...(bulk ? { bulk: true } : {}),
       },
     });
 
@@ -825,16 +847,19 @@ export default async function invoiceRoutes(fastify) {
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return reply.status(400).send({ error: 'ids array is required' });
     }
+    if (ids.length > INVOICE_BULK_SEND_MAX) {
+      return reply.status(400).send({ error: `Send at most ${INVOICE_BULK_SEND_MAX} invoices per request` });
+    }
 
-    // Each invoice goes through the same path as a single send (public link,
-    // Checkout, email, audit); one failure never stops the rest.
+    // Each invoice goes through the same path as a single send (claim, public
+    // link, Checkout, email, audit); one failure never stops the rest.
     const results = [];
     for (const id of ids) {
       try {
-        const { statusCode, body } = await sendDraftInvoice(request, id);
+        const { statusCode, body } = await sendDraftInvoice(request, id, { bulk: true });
         results.push(statusCode === 200
           ? { id, ok: true, statusCode, invoiceNumber: body.invoiceNumber, emailSent: body.emailSent }
-          : { id, ok: false, statusCode, error: body.error });
+          : { id, ok: false, statusCode, error: body.error, ...(body.code === 'ALREADY_SENT' ? { reason: 'already_sent' } : {}) });
       } catch (err) {
         fastify.log.error({ err, invoiceId: id }, 'Bulk invoice send failed for one invoice');
         results.push({ id, ok: false, statusCode: 500, error: 'Invoice could not be sent' });

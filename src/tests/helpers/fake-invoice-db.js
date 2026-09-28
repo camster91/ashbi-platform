@@ -134,14 +134,14 @@ export function createFakeInvoiceDb({ clients = [], invoices = [], organizationI
 }
 
 /** Fastify app wired like production: `fastify.prisma` and `request.prisma` are the same scoped client. */
-export async function buildInvoiceApp(t, routes, db, { user = { id: 'user-a', organizationId: 'org-a', role: 'ADMIN' }, prefix } = {}) {
+export async function buildInvoiceApp(t, routes, db, { user = { id: 'user-a', organizationId: 'org-a', role: 'ADMIN' }, prefix, routeOptions = {} } = {}) {
   const { default: Fastify } = await import('fastify');
   const app = Fastify();
   app.decorate('prisma', db);
   app.decorate('authenticate', async (request) => { request.user = user; });
   app.decorate('adminOnly', async (request) => { request.user = user; });
   app.addHook('onRequest', async (request) => { request.prisma = db; });
-  await app.register(routes, prefix ? { prefix } : {});
+  await app.register(routes, { ...routeOptions, ...(prefix ? { prefix } : {}) });
   t.after(() => app.close());
   return app;
 }

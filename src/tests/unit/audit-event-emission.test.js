@@ -82,6 +82,8 @@ test('sending an invoice emits invoice.sent with the correlation id', async (t) 
     invoice: {
       findUnique: async () => draftInvoice(),
       update: async ({ data }) => ({ ...draftInvoice(), ...data, client: { id: 'client-1', name: 'Acme' } }),
+      // Send claims DRAFT -> SENT before any side effect.
+      updateMany: async () => ({ count: 1 }),
     },
   });
   const response = await app.inject({ method: 'POST', url: '/inv-1/send', payload: {} });
@@ -103,7 +105,9 @@ test('a failing audit store does not fail the invoice send', async (t) => {
     auditEvent: auditStore({ failing: true }),
     invoice: {
       findUnique: async () => draftInvoice(),
-      update: async ({ data }) => ({ ...draftInvoice(), ...data }),
+      // The send already claimed DRAFT -> SENT, so the stored row is SENT.
+      update: async ({ data }) => ({ ...draftInvoice(), status: 'SENT', ...data }),
+      updateMany: async () => ({ count: 1 }),
     },
   });
   const response = await app.inject({ method: 'POST', url: '/inv-1/send', payload: {} });
@@ -178,7 +182,12 @@ test('bulk actions emit one event per changed invoice', async (t) => {
     invoice: {
       findUnique: async ({ where }) => invoices[where.id] ?? null,
       update: async ({ where, data }) => ({ ...invoices[where.id], ...data }),
-      updateMany: async ({ where }) => ({ count: where.status.notIn.includes(invoices[where.id]?.status) ? 0 : 1 }),
+      updateMany: async ({ where }) => {
+        const status = invoices[where.id]?.status;
+        // Send claims `status: 'DRAFT'`; settlement guards `status: { notIn }`.
+        const matches = typeof where.status === 'string' ? status === where.status : !where.status.notIn.includes(status);
+        return { count: matches ? 1 : 0 };
+      },
     },
     invoicePayment: { create: async ({ data }) => ({ id: `pay-${data.invoiceId}`, ...data }) },
     client: { findUnique: async () => ({ organizationId: 'org-1' }) },
@@ -204,7 +213,7 @@ test('bulk actions emit one event per changed invoice', async (t) => {
   // Bulk send goes through the single-send path and reports each item.
   assert.equal(sent.json().sent, 1);
   assert.deepEqual(sent.json().results.map((result) => [result.id, result.ok]), [['inv-a', true], ['inv-b', false]]);
-  assert.deepEqual(audit.events.map((event) => [event.action, event.entityId]), [['invoice.sent', 'inv-a']]);
+  assert.deepEqual(audit.events.map((event) => [event.action, event.entityId, event.metadata.bulk]), [['invoice.sent', 'inv-a', true]]);
 });
 
 test('a settled Stripe checkout is audited as a webhook actor; a replay is not', async () => {
