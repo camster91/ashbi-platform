@@ -17,6 +17,7 @@ const ALLOWED = {
   'ai-tool.routes.js': [1, 'only ToolError instances reach the reply (anything else is rethrown)'],
   'ai-connection.routes.js': [1, 'AI connection validation errors with fixed messages (400)'],
   'auth.routes.js': [1, 'AccountWithoutOrganizationError has a fixed message (403)'],
+  'privileged-access.routes.js': [1, 'BreakGlassError has fixed, caller-safe messages (4xx)'],
   'review.routes.js': [1, 'ReviewSessionClosedError has a fixed message (409)'],
   'trash.routes.js': [2, 'only the trash service\'s own 4xx messages are forwarded'],
 };
