@@ -3796,12 +3796,10 @@
       "RetainerGenerateInvoice": {
         "properties": {
           "currency": {
-            "default": "USD",
+            "default": "CAD",
             "enum": [
-              "USD",
               "CAD",
-              "EUR",
-              "GBP"
+              "USD"
             ],
             "type": "string"
           },

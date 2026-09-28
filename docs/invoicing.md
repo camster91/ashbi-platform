@@ -76,18 +76,43 @@ How invoices behave from creation to payment. Code-present; provider
 - OVERDUE is accepted wherever SENT is: resend, payment link, rotate, pay.
   VOID invoices are viewable but never payable.
 - The client portal lists only SENT, OVERDUE and PAID invoices.
+- Sending claims DRAFT→SENT with the new token (compare-and-set) before any
+  Checkout session or email, so concurrent sends email once and the emailed
+  link is the stored one; a losing send gets 409 `ALREADY_SENT`.
 - Bulk send runs each draft through the single-send path (link, Checkout
-  attempt, email, audit) and returns per-item results.
+  attempt, email, audit) and returns per-item results (`reason:
+  'already_sent'` for a draft another send claimed). At most 25 ids per
+  request, because each item is sent sequentially.
+- Voiding (single or bulk archive) clears the stored Checkout session and
+  expires it at Stripe (best-effort). A Checkout completion only settles a
+  SENT or OVERDUE invoice; a payment for a VOID invoice is acknowledged as
+  `INVOICE_VOID`, alerted for a refund/re-issue decision, and never turns the
+  invoice PAID (see [event-outbox.md](event-outbox.md)).
+- The public invoice page shows the stored subtotal, discount, tax and total
+  and hides Pay when the total is zero.
 
 ## Overdue reminders
 
 The `overdue-invoices` job marks SENT invoices past their due date OVERDUE
 (compare-and-set) and sends the templated overdue email (with currency and
 the public link): one reminder, then one escalation from 7 days overdue
-(which also flags the client AT_RISK). A reminder is recorded
-(`reminderSentAt`) only when the provider accepts it, so failed sends are
-retried on the next run. Each invoice and each organization is processed in
-isolation; activity logging and notifications are best-effort.
+(which also flags the client AT_RISK and sets `overdueEscalatedAt`).
+
+- Each message is **claimed before it is sent**: a compare-and-set on
+  `reminderSentAt` / `overdueEscalatedAt` while the invoice is still SENT or
+  OVERDUE. A payment or void landing mid-run, or an overlapping run, makes
+  the claim fail and nothing is sent. A failed delivery releases the claim,
+  so the next run retries it.
+- Escalated invoices leave the working set; the rest are paged by id, so
+  new overdue invoices are always reached.
+- Each invoice and each organization is processed in isolation; activity
+  logging and notifications are best-effort.
+
+## Retainer invoices
+
+Retainer plans hold a monthly CAD and/or USD amount. A retainer invoice
+defaults to CAD and bills only the amount in its currency; it is refused
+(`RETAINER_RATE_MISSING`) when that amount is not set.
 
 ## Payments
 
