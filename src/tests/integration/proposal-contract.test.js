@@ -213,6 +213,8 @@ describe('Proposal CRUD', { skip }, () => {
       if (!createdContractId) await new Promise(resolve => setTimeout(resolve, 25));
     }
     assert.ok(createdContractId, 'Approval automation should create a draft contract');
+    const events = await rawPrisma.domainEvent.findMany({ where: { aggregateType: 'proposal', aggregateId: createdProposalId } });
+    assert.deepEqual(events.map((event) => [event.type, event.organizationId, event.payload.via]), [['proposal.approved', testOrganizationId, 'portal_link']]);
     console.log(`  ✓ Approved proposal`);
   });
 
@@ -302,6 +304,9 @@ describe('Contract CRUD', { skip }, () => {
       if (!createdProject) await new Promise(resolve => setTimeout(resolve, 25));
     }
     assert.equal(createdProject?.organizationId, testOrganizationId);
+    const events = await rawPrisma.domainEvent.findMany({ where: { aggregateType: 'contract', aggregateId: createdContractId } });
+    assert.deepEqual(events.map((event) => [event.type, event.organizationId, event.payload.documentHash]), [['contract.signed', testOrganizationId, body.signedContentHash]]);
+    assert.doesNotMatch(JSON.stringify(events[0].payload), /Jane Prop/);
     console.log(`  ✓ Signed contract`);
   });
 

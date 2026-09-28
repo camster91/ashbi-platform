@@ -12,6 +12,9 @@ actions; mutable presentation records are not sufficient evidence").
 - Reader: `GET /api/audit-events` (admin only), shown in the web app under
   **Settings → Activity log**.
 
+Domain events for integration (transactional, delivered to subscribers) live
+in a separate outbox: [event-outbox.md](event-outbox.md).
+
 Related #412 references, all generated and checked for drift:
 
 - [data-dictionary.md](data-dictionary.md): every model, its table, tenant
@@ -123,6 +126,8 @@ notes, signer names, email addresses, API key material or password hashes.
 | `estimate.declined` | `estimate` | CLIENT | `POST /api/estimates/view/:viewToken/approve` with `action: decline` (`via: public_link`, `actorUserId` null); the decline reason is never recorded | `fromStatus`, `toStatus`, `via`, `total` |
 | `estimate.link_revoked` | `estimate` | USER | `POST /api/estimates/:id/revoke-link` | `alreadyRevoked` |
 | `estimate.link_reissued` | `estimate` | USER | `POST /api/estimates/:id/reissue-link` (SENT estimates only; never the token) | `expiresAt` |
+| `domain_event.replayed` | `domain_event` | USER | `POST /api/domain-events/replay` (admin, step-up); one event per requeued outbox row ([event-outbox.md](event-outbox.md)) | `type`, `aggregateType`, `aggregateId`, `sequence`, `fromStatus`, `toStatus`, `replayCount`, `previousAttempts` |
+| `domain_event.discarded` | `domain_event` | USER | `POST /api/domain-events/discard` (admin, step-up); one event per discarded dead outbox row ([event-outbox.md](event-outbox.md)) | `type`, `aggregateType`, `aggregateId`, `sequence`, `fromStatus`, `toStatus`, `reason`, `replayCount`, `previousAttempts` |
 
 `auth.login_failed` details:
 

@@ -13,9 +13,13 @@ const app = readFileSync(resolve(process.cwd(), 'src/App.jsx'), 'utf8');
 describe('critical portal and shell control semantics', () => {
   it('uses native upload buttons and named file inputs instead of clickable divs', () => {
     expect(portal).not.toMatch(/<div\s+className="cp-upload-zone"/);
-    expect(portal.match(/<button\s+type="button"\s+className="cp-upload-zone"/g)).toHaveLength(2);
-    expect(portal).toContain('aria-label="Choose project documents to upload"');
-    expect(portal).toContain('aria-label="Choose documents to upload"');
+    // One shared PortalUploadZone renders the native button; count the render
+    // sites so neither the Documents tab nor the project view can drop it.
+    expect(portal.match(/<button\s+type="button"\s+className="cp-upload-zone"/g)).toHaveLength(1);
+    expect(portal.match(/<PortalUploadZone\b/g)).toHaveLength(2);
+    expect(portal).toContain('aria-label={inputLabel}');
+    expect(portal).toContain('inputLabel="Choose project documents to upload"');
+    expect(portal).toContain('inputLabel="Choose documents to upload"');
   });
 
   it('exchanges URL magic tokens for an httpOnly-cookie session and supports real logout', () => {
@@ -36,7 +40,8 @@ describe('critical portal and shell control semantics', () => {
     expect(portal.match(/<PortalChatComposer\b/g)).toHaveLength(2);
     expect(portal.match(/aria-label="Message to project team"/g)).toHaveLength(1);
     expect(portal.match(/aria-label="Send message"/g)).toHaveLength(1);
-    expect(portal.match(/aria-label={`Delete \${doc\.originalName}`}/g)).toHaveLength(2);
+    expect(portal.match(/aria-label={`Delete \${doc\.originalName}`}/g)).toHaveLength(1);
+    expect(portal.match(/<PortalDocumentList\b/g)).toHaveLength(2);
     expect(portal.match(/role="status" aria-live="polite"/g).length).toBeGreaterThanOrEqual(2);
     expect(portal).toContain('aria-label="Project for chat"');
     expect(portal).toContain('aria-label="Project for documents"');

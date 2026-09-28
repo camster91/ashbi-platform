@@ -41,6 +41,14 @@ const Badge = forwardRef(({
       subtle: 'bg-destructive/10 text-destructive',
       solid: 'bg-destructive text-destructive-foreground',
     },
+    // Brand lime. The lime fill is too light for coloured text, so every
+    // treatment pairs it with the dark accent foreground.
+    accent: {
+      default: 'bg-accent text-accent-foreground',
+      outline: 'border-accent text-accent-foreground',
+      subtle: 'bg-accent/40 text-accent-foreground',
+      solid: 'bg-accent text-accent-foreground',
+    },
     info: {
       default: 'bg-info text-info-foreground',
       outline: 'border-info text-info',
@@ -62,6 +70,7 @@ const Badge = forwardRef(({
     success: 'bg-success',
     warning: 'bg-warning',
     danger: 'bg-destructive',
+    accent: 'bg-accent-foreground',
     info: 'bg-info',
   };
 

@@ -38,8 +38,8 @@ queries; the test keeps a reviewed list of those routes with the reason.
 
 | Access | Routes |
 | --- | --- |
-| admin | 32 |
-| admin + recent-auth | 10 |
+| admin | 33 |
+| admin + recent-auth | 12 |
 | admin + recent-auth (access change) | 1 |
 | admin + staff | 6 |
 | api-key | 1 |
@@ -49,8 +49,8 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | client-portal | 19 |
 | public | 50 |
 | recent-auth + staff | 4 |
-| staff | 356 |
-| **total** | 523 |
+| staff | 357 |
+| **total** | 527 |
 
 ## Routes by prefix
 
@@ -401,6 +401,14 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | --- | --- | --- | --- | --- |
 | GET | `/api/dashboard/stats` | staff | scoped |  |
 
+### /api/domain-events
+
+| Method | Path | Access | Tenancy | Notes |
+| --- | --- | --- | --- | --- |
+| GET | `/api/domain-events` | admin | scoped |  |
+| POST | `/api/domain-events/discard` | admin + recent-auth | scoped |  |
+| POST | `/api/domain-events/replay` | admin + recent-auth | scoped |  |
+
 ### /api/draft
 
 | Method | Path | Access | Tenancy | Notes |
@@ -430,6 +438,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | GET | `/api/estimates/:id` | staff | scoped |  |
 | PUT | `/api/estimates/:id` | staff | scoped |  |
 | POST | `/api/estimates/:id/convert` | staff | scoped |  |
+| POST | `/api/estimates/:id/reissue-link` | staff | scoped |  |
 | POST | `/api/estimates/:id/revoke-link` | staff | scoped |  |
 | POST | `/api/estimates/:id/send` | staff | scoped |  |
 | GET | `/api/estimates/view/:viewToken` | public | exempt | capability token: Estimate view link. |

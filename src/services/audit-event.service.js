@@ -69,6 +69,8 @@ export const AUDIT_EVENT_CATALOG = Object.freeze({
   'estimate.declined': { entityType: 'estimate', metadata: ['fromStatus', 'toStatus', 'via', 'total'] },
   'estimate.link_revoked': { entityType: 'estimate', metadata: ['alreadyRevoked'] },
   'estimate.link_reissued': { entityType: 'estimate', metadata: ['expiresAt'] },
+  'domain_event.replayed': { entityType: 'domain_event', metadata: ['type', 'aggregateType', 'aggregateId', 'sequence', 'fromStatus', 'toStatus', 'replayCount', 'previousAttempts'] },
+  'domain_event.discarded': { entityType: 'domain_event', metadata: ['type', 'aggregateType', 'aggregateId', 'sequence', 'fromStatus', 'toStatus', 'reason', 'replayCount', 'previousAttempts'] },
 });
 
 /** action -> entityType, derived from the catalog. */

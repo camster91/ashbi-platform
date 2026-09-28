@@ -38,7 +38,7 @@ const DIRECT_SCOPED_MODELS = new Set([
   'pipelinestage', 'promptversion', 'credential', 'credentialaccessaudit',
   'onboardingprogress', 'slackinstallation', 'slackchannelmapping', 'slackeventreceipt', 'googlecalendarconnection', 'notionimportrecord', 'importrun', 'slackimportrecord', 'aibridgeaction',
   'publicinquiry', 'auditevent', 'aiproviderconnection', 'aiusagerecord',
-  'reviewsession'
+  'reviewsession', 'domainevent'
 ]);
 
 // Evidence tables that may only ever be appended to. Request-scoped code gets
@@ -48,6 +48,19 @@ const APPEND_ONLY_MODELS = new Set(['auditevent', 'reviewdecision']);
 const APPEND_ONLY_BLOCKED_METHODS = new Set([
   'update', 'updateMany', 'updateManyAndReturn', 'upsert', 'delete', 'deleteMany',
 ]);
+
+// Models whose rows request-scoped code may create and read, but only update
+// through the listed columns, and never upsert or delete. The domain event
+// outbox (#412): its envelope is immutable (also enforced by a database
+// trigger); only dispatch bookkeeping changes, e.g. an admin replay.
+const BOOKKEEPING_ONLY_MODELS = {
+  domainevent: new Set([
+    'status', 'attempts', 'nextAttemptAt', 'lastAttemptAt', 'lockedUntil',
+    'claimToken', 'publishedAt', 'discardedAt', 'lastError', 'replayCount',
+  ]),
+};
+const BOOKKEEPING_BLOCKED_METHODS = new Set(['upsert', 'delete', 'deleteMany', 'updateManyAndReturn']);
+const BOOKKEEPING_UPDATE_METHODS = new Set(['update', 'updateMany']);
 
 // Models that are intentionally shared across organizations. Every Prisma
 // model must be present here, DIRECT_SCOPED_MODELS, or TENANT_PATHS; an
@@ -498,9 +511,21 @@ export function createScopedPrisma(prisma, organizationId) {
               throw new TenancyError(`${String(modelName)} is append-only; ${String(methodName)} is not permitted`);
             };
           }
+          const bookkeepingFields = BOOKKEEPING_ONLY_MODELS[modelKey];
+          if (bookkeepingFields && BOOKKEEPING_BLOCKED_METHODS.has(methodName)) {
+            return async () => {
+              throw new Error(`Tenancy Error: ${String(modelName)} rows cannot be removed or upserted; ${String(methodName)} is not permitted`);
+            };
+          }
 
           return async (...args) => {
             const queryArgs = args[0] || {};
+            if (bookkeepingFields && BOOKKEEPING_UPDATE_METHODS.has(methodName)) {
+              const changed = Object.keys(queryArgs.data || {}).filter((field) => !bookkeepingFields.has(field));
+              if (changed.length > 0) {
+                throw new Error(`Tenancy Error: ${String(modelName)} fields ${changed.join(', ')} are immutable`);
+              }
+            }
             // Each distinct referenced record is verified once per call, so a
             // batched createMany costs one check per owner instead of per row.
             const verified = new Set();

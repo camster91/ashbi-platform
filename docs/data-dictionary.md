@@ -14,7 +14,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   which reads hide soft-deleted rows is in [soft-delete-policy.md](soft-delete-policy.md).
 - **Notes** combine `///` doc comments and trailing `//` comments from the schema.
 
-101 models, 0 enums, 45 tenant-scoped, 13 soft-deletable.
+102 models, 0 enums, 46 tenant-scoped, 13 soft-deletable.
 
 ## Model index
 
@@ -48,6 +48,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [CreativeBrief](#model-creativebrief) | `creative_briefs` | no | no | 16 |
 | [Credential](#model-credential) | `credentials` | yes | no | 16 |
 | [CredentialAccessAudit](#model-credentialaccessaudit) | `credential_access_audits` | yes | no | 11 |
+| [DomainEvent](#model-domainevent) | `domain_events` | yes | no | 23 |
 | [EmailTriageDraft](#model-emailtriagedraft) | `email_triage_drafts` | no | no | 10 |
 | [EmailTriageItem](#model-emailtriageitem) | `email_triage_items` | yes | no | 14 |
 | [EmailWebhookReceipt](#model-emailwebhookreceipt) | `email_webhook_receipts` | no | no | 3 |
@@ -72,7 +73,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Notification](#model-notification) | `notifications` | no | no | 10 |
 | [NotionImportRecord](#model-notionimportrecord) | `notion_import_records` | yes | no | 14 |
 | [OnboardingProgress](#model-onboardingprogress) | `onboarding_progress` | yes | no | 12 |
-| [Organization](#model-organization) | `organizations` | no | no | 53 |
+| [Organization](#model-organization) | `organizations` | no | no | 54 |
 | [OutreachSequence](#model-outreachsequence) | `outreach_sequences` | yes | no | 10 |
 | [PipelineDeal](#model-pipelinedeal) | `pipeline_deals` | no | no | 15 |
 | [PipelineStage](#model-pipelinestage) | `pipeline_stages` | yes | no | 10 |
@@ -857,6 +858,44 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `keyVersion` | String | optional |  |  |  |
 | `createdAt` | DateTime | required | `now()` |  |  |
 
+### Model DomainEvent
+
+- Table: `domain_events`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@unique([organizationId, idempotencyKey])`
+  - `@@unique([organizationId, aggregateType, aggregateId, sequence])`
+  - `@@index([status, nextAttemptAt])`
+  - `@@index([organizationId, status, occurredAt])`
+  - `@@index([organizationId, type, occurredAt])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `organizationId` | String | required |  |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
+| `type` | String | required |  |  | dotted, e.g. invoice.paid (src/services/domain-event-catalog.js) |
+| `schemaVersion` | Int | required |  |  | payload schema version for `type` |
+| `aggregateType` | String | required |  |  | e.g. invoice; fixed per type by the catalog |
+| `aggregateId` | String | required |  |  | No FK: the event outlives its aggregate |
+| `sequence` | Int | required |  |  | Per-aggregate order, contiguous from 1 |
+| `payload` | Json | required |  |  | Ids and non-sensitive fields only (catalog-validated) |
+| `correlationId` | String | required |  |  | Request id of the originating request, or a new id |
+| `causationId` | String | optional |  |  | Id of the message that caused this event, if any |
+| `idempotencyKey` | String | required |  |  | Unique per organization; a repeat returns the first event |
+| `occurredAt` | DateTime | required | `now()` |  |  |
+| `status` | String | required | `"pending"` |  | pending, dispatching, published, dead, discarded |
+| `attempts` | Int | required | `0` |  |  |
+| `nextAttemptAt` | DateTime | required | `now()` |  |  |
+| `lastAttemptAt` | DateTime | optional |  |  |  |
+| `lockedUntil` | DateTime | optional |  |  | Claim lease; an expired lease is reclaimed |
+| `claimToken` | String | optional |  |  |  |
+| `publishedAt` | DateTime | optional |  |  |  |
+| `discardedAt` | DateTime | optional |  |  | Set when an admin discards a dead event |
+| `lastError` | String | optional |  |  | Error name and truncated message only |
+| `replayCount` | Int | required | `0` |  |  |
+
 ### Model EmailTriageDraft
 
 - Table: `email_triage_drafts`
@@ -1507,6 +1546,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `aiProviderConnection` | AiProviderConnection | optional |  | → AiProviderConnection |  |
 | `aiUsageRecords` | AiUsageRecord[] | list, required |  | → AiUsageRecord |  |
 | `reviewSessions` | ReviewSession[] | list, required |  | → ReviewSession |  |
+| `domainEvents` | DomainEvent[] | list, required |  | → DomainEvent |  |
 
 ### Model OutreachSequence
 
