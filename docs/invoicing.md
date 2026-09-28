@@ -52,7 +52,10 @@ How invoices behave from creation to payment. Code-present; provider
   said CAD. **Existing rows were not rewritten (owner decision).** Run
   `node scripts/backfill-invoice-currency.mjs` for a read-only report of
   suspect rows; `--apply --currency CAD --ids a,b` rewrites only the listed,
-  unpaid invoices.
+  unpaid invoices (compare-and-set on the audited value). Each rewrite also
+  clears the invoice's stored Checkout session, which was created in the old
+  currency, and expires it at Stripe (best-effort), so the client's next
+  payment opens a fresh session in the new currency.
 - Invoice stats group money by currency (`byCurrency`, `currencies`,
   `mixedCurrency`). The top-level amounts are filled only when all invoices
   share one currency; with several currencies they are `null` (counts stay

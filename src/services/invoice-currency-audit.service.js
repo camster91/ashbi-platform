@@ -7,6 +7,7 @@
 // decide per invoice.
 
 import { normalizeInvoiceCurrency } from '../utils/money.js';
+import { CLEARED_CHECKOUT_FIELDS, expireCheckoutSession } from './stripe.service.js';
 
 const CANADIAN_TAX_TYPES = new Set(['HST', 'GST', 'PST']);
 
@@ -42,7 +43,33 @@ function pick(invoice) {
     invoiceNumber: invoice.invoiceNumber,
     status: invoice.status,
     currency: invoice.currency ?? null,
+    checkoutSessionId: invoice.stripeCheckoutSessionId ?? null,
   };
+}
+
+/**
+ * Apply planned currency rewrites. A stored Checkout session was created in
+ * the old currency, so the same compare-and-set update forgets it (the next
+ * payment request creates a session in the new currency) and the session is
+ * then expired at Stripe so the old-currency link cannot be paid
+ * (best-effort; a completion in the wrong currency is still rejected as
+ * CHECKOUT_MISMATCH).
+ * @returns {Promise<{ applied: any[], changed: any[] }>} changed = rows that
+ *   no longer held the audited value and were left alone
+ */
+export async function applyCurrencyBackfill(prisma, updates, { expire = expireCheckoutSession } = {}) {
+  const applied = [];
+  const changed = [];
+  for (const update of updates) {
+    const result = await prisma.invoice.updateMany({
+      where: { id: update.id, currency: update.from, status: { not: 'PAID' } },
+      data: { currency: update.to, ...CLEARED_CHECKOUT_FIELDS },
+    });
+    if (result.count !== 1) { changed.push(update); continue; }
+    const sessionExpired = update.checkoutSessionId ? await expire(update.checkoutSessionId) : null;
+    applied.push({ ...update, sessionExpired });
+  }
+  return { applied, changed };
 }
 
 /**
@@ -61,7 +88,7 @@ export function planCurrencyBackfill(findings, { ids = [], currency }) {
       skipped.push({ ...finding, skipReason: 'PAID invoices keep their settled currency' });
       continue;
     }
-    updates.push({ id: finding.id, from: finding.currency, to: target });
+    updates.push({ id: finding.id, from: finding.currency, to: target, checkoutSessionId: finding.checkoutSessionId ?? null });
   }
   return { updates, skipped };
 }

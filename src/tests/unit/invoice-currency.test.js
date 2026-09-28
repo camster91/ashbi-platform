@@ -6,7 +6,7 @@ import invoiceRoutes from '../../routes/invoice.routes.js';
 import { buildInvoiceDeliveryEmail, buildInvoiceOverdueEmail } from '../../services/email.service.js';
 import { generateInvoicePdf } from '../../utils/generate-invoice-pdf.js';
 import { DEFAULT_INVOICE_CURRENCY, formatMoney } from '../../utils/money.js';
-import { findInvoiceCurrencyMismatches } from '../../services/invoice-currency-audit.service.js';
+import { applyCurrencyBackfill, findInvoiceCurrencyMismatches, planCurrencyBackfill } from '../../services/invoice-currency-audit.service.js';
 import { createFakeInvoiceDb, buildInvoiceApp } from '../helpers/fake-invoice-db.js';
 
 const PAYLOAD = {
@@ -90,4 +90,32 @@ test('the currency audit reports suspected mismatches without deciding for the o
     ['a', 'CANADIAN_TAX_ON_USD_INVOICE'],
     ['b', 'CHECKOUT_CURRENCY_DIFFERS'],
   ]);
+});
+
+test('an applied currency rewrite clears and expires the old-currency Checkout session', async () => {
+  const rows = [
+    { id: 'a', invoiceNumber: 'INV-1', currency: 'USD', taxType: 'HST', bonsaiInvoiceId: null, status: 'SENT', stripeCheckoutSessionId: 'cs_usd', stripePaymentLink: 'https://checkout.stripe.test/usd' },
+    { id: 'b', invoiceNumber: 'INV-2', currency: 'USD', taxType: 'HST', bonsaiInvoiceId: null, status: 'SENT', stripeCheckoutSessionId: null },
+  ];
+  const plan = planCurrencyBackfill(findInvoiceCurrencyMismatches(rows), { ids: ['a', 'b'], currency: 'CAD' });
+  // Row b changed after the audit, so its compare-and-set must not apply.
+  rows[1].currency = 'EUR';
+  const prisma = {
+    invoice: {
+      updateMany: async ({ where, data }) => {
+        const row = rows.find((candidate) => candidate.id === where.id && candidate.currency === where.currency && candidate.status !== 'PAID');
+        if (!row) return { count: 0 };
+        Object.assign(row, data);
+        return { count: 1 };
+      },
+    },
+  };
+  const expired = [];
+  const { applied, changed } = await applyCurrencyBackfill(prisma, plan.updates, { expire: async (id) => { expired.push(id); return true; } });
+  assert.deepEqual(applied.map((update) => [update.id, update.to, update.sessionExpired]), [['a', 'CAD', true]]);
+  assert.deepEqual(changed.map((update) => update.id), ['b']);
+  assert.equal(rows[0].currency, 'CAD');
+  assert.equal(rows[0].stripeCheckoutSessionId, null);
+  assert.equal(rows[0].stripePaymentLink, null);
+  assert.deepEqual(expired, ['cs_usd']);
 });

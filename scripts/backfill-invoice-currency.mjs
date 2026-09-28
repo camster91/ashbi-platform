@@ -12,12 +12,15 @@
 //
 // Apply — only for invoices the owner lists, never for PAID invoices:
 //   node scripts/backfill-invoice-currency.mjs --apply --currency CAD --ids inv_1,inv_2
+// Each rewrite also clears the invoice's stored Checkout session (created in
+// the old currency) and expires it at Stripe when STRIPE_SECRET_KEY is set,
+// so the client's next payment uses a fresh session in the new currency.
 //
 // Requires DATABASE_URL. Scans every organization (maintenance script, not a
 // request), so run it only with operator credentials.
 
 import { rawPrisma } from '../src/config/db.js';
-import { findInvoiceCurrencyMismatches, planCurrencyBackfill } from '../src/services/invoice-currency-audit.service.js';
+import { applyCurrencyBackfill, findInvoiceCurrencyMismatches, planCurrencyBackfill } from '../src/services/invoice-currency-audit.service.js';
 
 function argValue(name) {
   const index = process.argv.indexOf(name);
@@ -32,7 +35,7 @@ const invoices = await rawPrisma.invoice.findMany({
   where: { deletedAt: null },
   select: {
     id: true, invoiceNumber: true, clientId: true, status: true, currency: true,
-    taxType: true, bonsaiInvoiceId: true, stripeCheckoutCurrency: true,
+    taxType: true, bonsaiInvoiceId: true, stripeCheckoutCurrency: true, stripeCheckoutSessionId: true,
   },
   orderBy: { createdAt: 'asc' },
 });
@@ -46,14 +49,11 @@ if (apply) {
     process.exit(64);
   }
   const plan = planCurrencyBackfill(findings, { ids, currency });
-  for (const update of plan.updates) {
-    // Compare-and-set: only rewrite a row that still holds the audited value.
-    await rawPrisma.invoice.updateMany({
-      where: { id: update.id, currency: update.from, status: { not: 'PAID' } },
-      data: { currency: update.to },
-    });
-  }
-  report.applied = plan.updates;
+  // Compare-and-set per row; the stored Checkout session (old currency) is
+  // cleared in the same update and expired at Stripe (best-effort).
+  const { applied, changed } = await applyCurrencyBackfill(rawPrisma, plan.updates);
+  report.applied = applied;
+  report.changedSinceAudit = changed;
   report.skipped = plan.skipped;
   report.notSuspect = ids.filter((id) => !findings.some((finding) => finding.id === id));
 }
