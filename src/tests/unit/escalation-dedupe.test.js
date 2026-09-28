@@ -169,3 +169,16 @@ test('schema, migration and response route carry the escalation marker', () => {
   const worker = fs.readFileSync(new URL('../../jobs/worker.js', import.meta.url), 'utf8');
   assert.match(worker, /runForEachOrganization\(/);
 });
+
+test('a claim from a stale snapshot loses when the marker moved since it was read', async () => {
+  const prisma = fakePrisma([{ id: 't1', subject: 'Late', lastActivityAt: at(0), lastEscalationLevel: 1, lastEscalatedAt: at(5) }]);
+  const stale = await prisma.thread.findUnique({ where: { id: 't1' } });
+  // After this snapshot the client wrote again (new cycle) and another check
+  // already sent that cycle's warning; the stale ESCALATION must not fire.
+  prisma.rows[0].lastActivityAt = at(6);
+  prisma.rows[0].lastEscalationLevel = 1;
+  prisma.rows[0].lastEscalatedAt = at(8.5);
+  await checkThreadEscalation('t1', { prisma, slaDefaults: SLA, existingThread: stale, now: at(9) });
+  assert.deepEqual(prisma.notifications, []);
+  assert.equal(prisma.rows[0].lastEscalatedAt.getTime(), at(8.5).getTime());
+});

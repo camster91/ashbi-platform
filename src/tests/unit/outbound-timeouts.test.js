@@ -4,7 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { OUTBOUND_TIMEOUT_MS, outboundSignal } from '../../utils/outbound-timeouts.js';
+import { OUTBOUND_TIMEOUT_MS, ollamaChatTimeoutMs, outboundSignal } from '../../utils/outbound-timeouts.js';
 
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -61,6 +61,11 @@ test('timeout budgets are bounded and signals abort', async () => {
     assert.ok(outboundSignal(kind) instanceof AbortSignal);
   }
   assert.throws(() => outboundSignal('nope'), /Unknown outbound timeout/);
+  assert.equal(ollamaChatTimeoutMs(undefined), OUTBOUND_TIMEOUT_MS.aiChat);
+  assert.equal(ollamaChatTimeoutMs('300000'), 300_000);
+  assert.equal(ollamaChatTimeoutMs('5'), 10_000);
+  assert.equal(ollamaChatTimeoutMs('99999999'), 600_000);
+  assert.ok(OUTBOUND_TIMEOUT_MS.upload >= 60_000, 'PDF uploads get a longer budget');
 });
 
 test('a hung provider is aborted instead of hanging the caller', async () => {

@@ -52,17 +52,21 @@ function sessionToken(request) {
  * grants nothing.
  */
 export async function rateLimitPrincipal(request) {
-  const fromHook = request.user?.id ?? request.user?.contactId;
-  if (fromHook) return String(fromHook);
-  const token = sessionToken(request);
-  if (!token || typeof request.server?.jwt?.verify !== 'function') return null;
-  try {
-    const payload = await request.server.jwt.verify(token);
-    const id = payload?.id ?? payload?.contactId;
-    return id ? String(id) : null;
-  } catch {
-    return null;
+  let payload = request.user;
+  if (!(payload?.id ?? payload?.contactId)) {
+    const token = sessionToken(request);
+    if (!token || typeof request.server?.jwt?.verify !== 'function') return null;
+    try {
+      payload = await request.server.jwt.verify(token);
+    } catch {
+      return null;
+    }
   }
+  // Bot credentials are shared automation, not a person: they keep the
+  // per-IP bucket and limit instead of one shared high-limit user bucket.
+  if (payload?.role === 'BOT') return null;
+  const id = payload?.id ?? payload?.contactId;
+  return id ? String(id) : null;
 }
 
 /** Global limiter key: `user:<id>` for verified sessions, `ip:<addr>` otherwise. */

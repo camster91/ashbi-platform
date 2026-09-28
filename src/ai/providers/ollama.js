@@ -4,7 +4,7 @@
 // Auth: Authorization: Bearer $OLLAMA_API_KEY
 
 import env from '../../config/env.js';
-import { outboundSignal } from '../../utils/outbound-timeouts.js';
+import { ollamaChatTimeoutMs, outboundSignal } from '../../utils/outbound-timeouts.js';
 
 // Models available under this Ollama account
 // Only gemma4:31b is available in the Gemma4 family — all tasks use it
@@ -33,7 +33,7 @@ class OllamaProvider {
     messages.push({ role: 'user', content: prompt });
 
     const res = await fetch(`${this.baseUrl}/api/chat`, {
-      signal: outboundSignal('aiChat'),
+      signal: AbortSignal.timeout(ollamaChatTimeoutMs()),
       method: 'POST',
       headers: this._headers(),
       body: JSON.stringify({

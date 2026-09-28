@@ -29,16 +29,14 @@ export function currentEscalationLevel(thread) {
 async function claimEscalationLevel(prisma, thread, level, now) {
   const alreadyClaimed = currentEscalationLevel(thread);
   if (alreadyClaimed >= level) return false;
-  const where = { id: thread.id };
-  if (alreadyClaimed > 0) {
-    where.lastEscalationLevel = { lt: level };
-  } else if (thread.lastEscalatedAt) {
-    // Level from a previous activity cycle: claim only if nobody re-claimed
-    // since this thread was read.
-    where.lastEscalatedAt = new Date(thread.lastEscalatedAt);
-  } else {
-    where.lastEscalatedAt = null;
-  }
+  // Optimistic concurrency: every claim requires the escalation marker to be
+  // unchanged since this thread was read, so two checks racing on the same
+  // thread (sweep vs delayed check, two workers) cannot both notify.
+  const where = {
+    id: thread.id,
+    lastEscalatedAt: thread.lastEscalatedAt ? new Date(thread.lastEscalatedAt) : null,
+  };
+  if (alreadyClaimed > 0) where.lastEscalationLevel = { lt: level };
   const result = await prisma.thread.updateMany({
     where,
     data: { lastEscalationLevel: level, lastEscalatedAt: now },

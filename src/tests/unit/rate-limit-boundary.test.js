@@ -72,6 +72,10 @@ test('signed-in traffic is keyed by the verified user; anonymous traffic by IP',
   assert.equal(await apiRateLimitKey({ ...base, headers: { authorization: 'Bearer good-portal' } }), 'user:contact-9');
   assert.equal(await apiRateLimitKey({ ...base, cookies: { token: 'forged' } }), 'ip:198.51.100.7');
   assert.equal(await apiRateLimitKey(base), 'ip:198.51.100.7');
+  // Bot tokens keep the per-IP bucket (and the 100/min anonymous limit).
+  assert.equal(await apiRateLimitKey({ ...base, user: { id: 'bot', role: 'BOT' } }), 'ip:198.51.100.7');
+  server.jwt.verify = async () => ({ id: 'bot', role: 'BOT' });
+  assert.equal(await apiRateLimitKey({ ...base, cookies: { token: 'bot-token' } }), 'ip:198.51.100.7');
 });
 
 test('per-user limit defaults to 600/min, is env-configurable and never below the IP limit', () => {
