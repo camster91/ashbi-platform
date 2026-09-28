@@ -64,6 +64,9 @@ export default function Credentials() {
   const [visiblePasswords, setVisiblePasswords] = useState({});
   const [copiedId, setCopiedId] = useState(null);
   const [credentialToDelete, setCredentialToDelete] = useState(null);
+  // Inline result of a click that reads a secret (edit, copy, reveal). The
+  // request is sent with userInitiated so the global toast reports it too.
+  const [secretError, setSecretError] = useState('');
 
   const { data: credentials = [], isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ['credentials', filterCategory, filterClient],
@@ -115,6 +118,7 @@ export default function Credentials() {
   }
 
   function startEdit(cred) {
+    setSecretError('');
     // Fetch decrypted password
     api.getCredentialPassword(cred.id, 'edit credential').then(({ password }) => {
       setForm({
@@ -129,6 +133,8 @@ export default function Credentials() {
       });
       setEditingId(cred.id);
       setShowForm(true);
+    }).catch(() => {
+      setSecretError(`“${cred.label}” could not be opened for editing. Try again.`);
     });
   }
 
@@ -147,13 +153,14 @@ export default function Credentials() {
   }
 
   async function copyPassword(id) {
+    setSecretError('');
     try {
       const { password } = await api.getCredentialPassword(id, 'copy credential password');
       await navigator.clipboard.writeText(password);
       setCopiedId(id);
       setTimeout(() => setCopiedId(null), 2000);
-    } catch (e) {
-      console.error('Failed to copy password', e);
+    } catch {
+      setSecretError('The password could not be copied. Try again.');
     }
   }
 
@@ -165,11 +172,12 @@ export default function Credentials() {
         return next;
       });
     } else {
+      setSecretError('');
       try {
         const { password } = await api.getCredentialPassword(id, 'display credential password');
         setVisiblePasswords((prev) => ({ ...prev, [id]: password }));
-      } catch (e) {
-        console.error('Failed to fetch password', e);
+      } catch {
+        setSecretError('The password could not be shown. Try again.');
       }
     }
   }
@@ -203,6 +211,13 @@ export default function Credentials() {
           <Plus className="w-4 h-4" /> Add Credential
         </button>
       </div>
+
+      {secretError && (
+        <div role="alert" className="flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+          <span>{secretError}</span>
+          <button type="button" onClick={() => setSecretError('')} className="min-h-11 px-2 underline rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Dismiss</button>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3">
@@ -391,15 +406,19 @@ export default function Credentials() {
                             {visiblePasswords[cred.id] || '********'}
                           </span>
                           <button
+                            type="button"
                             onClick={() => togglePassword(cred.id)}
-                            className="p-1 text-muted-foreground hover:text-foreground rounded"
+                            aria-label={`${visiblePasswords[cred.id] ? 'Hide' : 'Show'} password for ${cred.label}`}
+                            className="min-h-8 min-w-8 inline-flex items-center justify-center p-1 text-muted-foreground hover:text-foreground rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             title={visiblePasswords[cred.id] ? 'Hide' : 'Show'}
                           >
                             {visiblePasswords[cred.id] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                           </button>
                           <button
+                            type="button"
                             onClick={() => copyPassword(cred.id)}
-                            className="p-1 text-muted-foreground hover:text-foreground rounded"
+                            aria-label={`Copy password for ${cred.label}`}
+                            className="min-h-8 min-w-8 inline-flex items-center justify-center p-1 text-muted-foreground hover:text-foreground rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                             title="Copy password"
                           >
                             {copiedId === cred.id ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}

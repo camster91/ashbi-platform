@@ -121,7 +121,7 @@ function GithubPanel({ data, loading, onRefresh }) {
         </button>
       }
     >
-      {data?.error && <p className="text-red-700 dark:text-red-400 text-sm">{data.error}</p>}
+      {data?.error && <p role="alert" className="text-red-700 dark:text-red-400 text-sm">{data.error}</p>}
       <div className="flex gap-4 mb-3 text-sm">
         <span className="text-muted-foreground">Open PRs: <strong className={data?.openPRCount > 0 ? 'text-yellow-800 dark:text-yellow-400' : 'text-foreground'}>{data?.openPRCount ?? '—'}</strong></span>
         <span className="text-muted-foreground">Failing CI: <strong className={data?.failingCI > 0 ? 'text-red-700 dark:text-red-400' : 'text-foreground'}>{data?.failingCI ?? 0}</strong></span>
@@ -167,7 +167,7 @@ function VpsPanel({ data, loading, onRefresh, onRestart }) {
         </button>
       }
     >
-      {data?.error && <p className="text-red-700 dark:text-red-400 text-sm">{data.error}</p>}
+      {data?.error && <p role="alert" className="text-red-700 dark:text-red-400 text-sm">{data.error}</p>}
       {data && !data.error && (
         <>
           <div className="flex gap-3 mb-3 text-sm flex-wrap">
@@ -230,7 +230,7 @@ function SitesPanel({ data, loading, onRefresh }) {
         </button>
       }
     >
-      {data?.error && <p className="text-red-700 dark:text-red-400 text-sm">{data.error}</p>}
+      {data?.error && <p role="alert" className="text-red-700 dark:text-red-400 text-sm">{data.error}</p>}
       {data?.summary && (
         <div className="flex gap-3 mb-3 flex-wrap">
           <CommandBadge variant="green">✓ {data.summary.healthy} up</CommandBadge>
@@ -296,6 +296,7 @@ function AgentsPanel({ data, loading, onRefresh, onRunAgent }) {
         </button>
       }
     >
+      {data?.error && <p role="alert" className="mb-2 text-red-700 dark:text-red-400 text-sm">{data.error}</p>}
       <div className="flex items-center gap-2 mb-3">
         {data?.openclawRunning ? (
           <><Wifi className="w-3.5 h-3.5 text-green-800 dark:text-green-400" /><span className="text-sm text-green-800 dark:text-green-400">OpenClaw online</span></>
@@ -433,7 +434,9 @@ export default function CommandCenter() {
       const result = await fetchFn();
       setter(result);
     } catch (err) {
-      console.error(`Panel ${panel} refresh failed:`, err);
+      // The refresh button is a click-triggered read: keep the last data and
+      // show why the refresh failed inside the panel.
+      setter((previous) => ({ ...(previous || {}), error: `Refresh failed: ${err?.message || 'the service did not respond'}. Try again.` }));
     } finally {
       setPanelLoading(p => ({ ...p, [panel]: false }));
     }
