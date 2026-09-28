@@ -154,6 +154,18 @@ test('the real application enforces a read-only support view end to end', {
     const actions = (await prisma.auditEvent.findMany({ where: { organizationId: org }, orderBy: { createdAt: 'asc' } })).map((e) => e.action);
     assert.deepEqual(actions.filter((a) => a.startsWith('impersonation.')), ['impersonation.started', 'impersonation.ended']);
 
+    // If the other API instances cannot be told to drop the admin's sockets,
+    // the view does not start: no cookie, and the row is ended.
+    const realRevoke = app.revokeSupportViewSockets;
+    app.revokeSupportViewSockets = async () => { throw new Error('redis down'); };
+    const unsafe = await app.inject({ method: 'POST', url: '/api/auth/impersonation', cookies: adminCookies, payload: { userId: staff.id, reason: 'Revocation failure check' } });
+    app.revokeSupportViewSockets = realRevoke;
+    assert.equal(unsafe.statusCode, 503, unsafe.body);
+    assert.equal(unsafe.json().code, 'IMPERSONATION_START_FAILED');
+    assert.equal(unsafe.cookies.find((c) => c.name === IMPERSONATION_COOKIE), undefined);
+    assert.equal(await prisma.impersonationSession.count({ where: { organizationId: org, actorUserId: admin.id, endedAt: null } }), 0);
+    assert.equal(await prisma.impersonationSession.count({ where: { organizationId: org, endReason: 'start_failed' } }), 1);
+
     // Starts at the same moment (several tabs) leave exactly one open view.
     const racing = await Promise.all([1, 2, 3, 4, 5, 6].map(() => app.inject({
       method: 'POST', url: '/api/auth/impersonation', cookies: adminCookies, payload: { userId: staff.id, reason: 'Concurrent start check' },

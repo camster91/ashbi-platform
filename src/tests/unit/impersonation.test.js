@@ -659,3 +659,18 @@ describe('support-view socket revocation across instances', () => {
     assert.deepEqual(ioB.dropped, []);
   });
 });
+
+describe('a view start waits for the cross-instance revocation', () => {
+  const io = { in() { return { disconnectSockets() {} }; } };
+  const redisWith = (publish) => ({ duplicate: () => ({ on() {}, async subscribe() {}, publish, async quit() {} }) });
+  it('resolves once published', async () => {
+    const revoker = createViewSocketRevoker({ io, redis: redisWith(async () => 1) });
+    await revoker.revoke('a');
+  });
+  it('rejects when publishing fails or stalls', async () => {
+    const failing = createViewSocketRevoker({ io, redis: redisWith(async () => { throw new Error('down'); }), logger: { warn() {} } });
+    await assert.rejects(failing.revoke('a'), /down/);
+    const stalled = createViewSocketRevoker({ io, redis: redisWith(() => new Promise(() => {})), logger: { warn() {} } });
+    await assert.rejects(stalled.revoke('a', { timeoutMs: 20 }), /timed out/);
+  });
+});

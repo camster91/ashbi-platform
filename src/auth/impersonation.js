@@ -44,6 +44,7 @@ export const IMPERSONATION_ENDED_CODE = 'IMPERSONATION_ENDED';
 export const IMPERSONATION_END_REASONS = Object.freeze([
   'stopped', 'expired', 'superseded', 'signed_out',
   'revoked_password_reset', 'revoked_role_change', 'revoked_deactivated', 'revoked_password_change',
+  'start_failed',
 ]);
 
 const TOKEN_TYPE = 'impersonation';
@@ -223,6 +224,9 @@ export async function actorHasOpenView(prisma, actor, { nowMs = Date.now() } = {
   return Boolean(open);
 }
 
+/** Longest a view start waits for the cross-instance revocation to publish. */
+export const VIEW_REVOKE_PUBLISH_TIMEOUT_MS = 2_000;
+
 /** Pub/sub channel that carries "drop this admin's sockets" to every API instance. */
 export const VIEW_REVOKE_CHANNEL = 'ashbi:support-view:revoke-sockets';
 
@@ -261,11 +265,22 @@ export function createViewSocketRevoker({ io, redis = null, logger = defaultLogg
     Promise.resolve(subscriber.subscribe(VIEW_REVOKE_CHANNEL)).catch(warn('Support-view revocation subscribe failed'));
   }
   return {
-    revoke(userId) {
+    /**
+     * Resolves once the revocation is published to the other instances, or
+     * rejects if that fails or takes longer than `timeoutMs`; the caller must
+     * not report the view as started unless it resolved.
+     */
+    async revoke(userId, { timeoutMs = VIEW_REVOKE_PUBLISH_TIMEOUT_MS } = {}) {
       dropLocal(userId);
-      if (publisher) {
-        Promise.resolve(publisher.publish(VIEW_REVOKE_CHANNEL, JSON.stringify({ userId })))
-          .catch(warn('Support-view revocation publish failed'));
+      if (!publisher) return;
+      let timer;
+      try {
+        await Promise.race([
+          Promise.resolve(publisher.publish(VIEW_REVOKE_CHANNEL, JSON.stringify({ userId }))),
+          new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Revocation publish timed out')), timeoutMs); }),
+        ]);
+      } finally {
+        clearTimeout(timer);
       }
     },
     async close() {

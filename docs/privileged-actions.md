@@ -285,6 +285,7 @@ The web app shows these refusals as a "Read-only support view" message.
 | The admin signed out | `signed_out` |
 | An admin reset the password of either person (`POST /api/team/:id/reset-password`), or either used a reset link | `revoked_password_reset` |
 | Either person changed their own password | `revoked_password_change` |
+| The start could not revoke the admin's sockets on every API instance (Redis publish failed or took over 2 s); the request answers `503 IMPERSONATION_START_FAILED` | `start_failed` |
 | Either person's role changed (`PUT /api/team/:id`) | `revoked_role_change` |
 | Either person was deactivated | `revoked_deactivated` |
 
