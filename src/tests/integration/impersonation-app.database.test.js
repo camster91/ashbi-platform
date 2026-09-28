@@ -75,7 +75,13 @@ test('the real application enforces a read-only support view end to end', {
     const stop = await app.inject({ method: 'POST', url: '/api/auth/impersonation/stop', cookies: view });
     assert.equal(stop.statusCode, 200, stop.body);
     assert.equal(stop.json().stopped, 1);
-    const after = await app.inject({ method: 'GET', url: '/api/auth/me', cookies: view });
+    // A request still carrying the ended view's cookie is refused, never run
+    // as the admin; without it the admin is themselves again.
+    const stale = await app.inject({ method: 'PUT', url: `/api/clients/${client.id}`, cookies: view, payload: { name: 'Renamed' } });
+    assert.equal(stale.statusCode, 409, stale.body);
+    assert.equal(stale.json().code, 'IMPERSONATION_ENDED');
+    assert.equal((await prisma.client.findUnique({ where: { id: client.id } })).name, 'App Client');
+    const after = await app.inject({ method: 'GET', url: '/api/auth/me', cookies: { token: session } });
     assert.equal(after.json().id, admin.id);
     assert.equal(after.json().impersonation, undefined);
     const actions = (await prisma.auditEvent.findMany({ where: { organizationId: org }, orderBy: { createdAt: 'asc' } })).map((e) => e.action);

@@ -146,8 +146,8 @@ test('impersonation sessions and break-glass grants stay in their tenant, expire
       row.id,
     );
     const afterExpiry = await app.inject({ method: 'GET', url: '/api/auth/me', cookies: viewing });
-    assert.equal(afterExpiry.json().id, adminA.id);
-    assert.equal(afterExpiry.json().impersonation, undefined);
+    assert.equal(afterExpiry.statusCode, 409, afterExpiry.body);
+    assert.equal(afterExpiry.json().code, 'IMPERSONATION_ENDED');
     const ended = await raw.impersonationSession.findUniqueOrThrow({ where: { id: row.id } });
     assert.equal(ended.endReason, 'expired');
     assert.equal(ended.endedAt.getTime(), ended.expiresAt.getTime());

@@ -46,6 +46,7 @@ export function setApiErrorCallback(callback) {
  * request is then retried exactly once.
  */
 export const REAUTH_REQUIRED = 'REAUTH_REQUIRED';
+export const IMPERSONATION_ENDED = 'IMPERSONATION_ENDED';
 let onReauthRequired = null;
 let pendingReauth = null;
 
@@ -147,6 +148,12 @@ async function request(endpoint, options = {}) {
         response.status,
         data
       );
+      // A support view ended while this screen still showed the viewed
+      // person (#416): reload so nothing continues under the wrong identity.
+      if (response.status === 409 && data.code === IMPERSONATION_ENDED && typeof window !== 'undefined') {
+        window.location.reload();
+        throw error;
+      }
       if (response.status === 403 && data.code === REAUTH_REQUIRED && onReauthRequired && !options.reauthRetried) {
         if (await requestReauth(endpoint)) {
           return request(endpoint, { ...options, reauthRetried: true });

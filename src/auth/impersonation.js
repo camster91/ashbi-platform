@@ -39,6 +39,7 @@ export const IMPERSONATABLE_ROLES = Object.freeze(['TEAM', 'STAFF', 'CLIENT']);
 
 export const IMPERSONATION_READ_ONLY_CODE = 'IMPERSONATION_READ_ONLY';
 export const IMPERSONATION_BLOCKED_CODE = 'IMPERSONATION_BLOCKED';
+export const IMPERSONATION_ENDED_CODE = 'IMPERSONATION_ENDED';
 
 export const IMPERSONATION_END_REASONS = Object.freeze([
   'stopped', 'expired', 'superseded', 'signed_out',
@@ -198,6 +199,21 @@ function matchesPrefix(path, prefix) {
  * view like any write: `config: { [SIDE_EFFECTING_GET]: true }`.
  */
 export const SIDE_EFFECTING_GET = 'sideEffectingGet';
+
+/**
+ * After a view ended (expired, stopped elsewhere or revoked), which request
+ * carrying the dead cookie may still run: the view-status read (so the banner
+ * learns the view is over), stop and sign-out. Everything else is refused.
+ * @param {string} method
+ * @param {string} url
+ * @param {string | null} [routeUrl]
+ */
+export function mayProceedAfterViewEnded(method, url, routeUrl = null) {
+  const verb = String(method || 'GET').toUpperCase();
+  const paths = [normalizedPath(url), routeUrl ? normalizedPath(routeUrl) : null].filter(Boolean);
+  if ((verb === 'GET' || verb === 'HEAD') && paths.every((path) => path === '/api/auth/impersonation')) return true;
+  return paths.every((path) => ALLOWED_MUTATIONS.has(`${verb} ${path}`));
+}
 
 /**
  * Why an impersonated request must be refused, or null when it may proceed.
@@ -491,7 +507,17 @@ export function createImpersonationHook({ prisma, isCurrentUserSession, logger =
     if (result.status !== 'active') {
       reply.clearCookie(IMPERSONATION_COOKIE, clearImpersonationCookieOptions());
       request.impersonationEnded = result.status === 'expired' ? 'expired' : 'invalid';
-      return undefined; // continue as the admin
+      // The request was sent from the viewed person's screen (a form, a
+      // background save): never run it as the admin. Only the view-status
+      // read, stop and sign-out go through; the client reloads on 409 and its
+      // next request, now without the cookie, is the admin's own.
+      if (!mayProceedAfterViewEnded(request.method, request.url, request.routeOptions?.url ?? null)) {
+        return reply.status(409).send({
+          error: 'The support view has ended. Reload to continue as yourself.',
+          code: IMPERSONATION_ENDED_CODE,
+        });
+      }
+      return undefined;
     }
 
     const { context } = result;

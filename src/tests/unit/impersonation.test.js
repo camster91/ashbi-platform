@@ -420,13 +420,17 @@ describe('while viewing as someone', () => {
     const { startOk, app, cookiesFor } = await buildApp(t);
     const { cookie } = await startOk();
     // Another admin in the same org presenting admin-a's cookie.
+    // It never becomes a view; the request is refused and the cookie cleared,
+    // so the next request is simply the presenting admin's own.
     const stolen = await app.inject({ method: 'GET', url: '/api/auth/me', cookies: cookiesFor('admin-a2', { [IMPERSONATION_COOKIE]: cookie.value }) });
-    assert.equal(stolen.json().id, 'admin-a2');
-    assert.equal(stolen.json().impersonation, undefined);
+    assert.deepEqual([stolen.statusCode, stolen.json().code], [409, 'IMPERSONATION_ENDED']);
     assert.ok(cleared(stolen));
+    const own = await app.inject({ method: 'GET', url: '/api/auth/me', cookies: cookiesFor('admin-a2') });
+    assert.equal(own.json().id, 'admin-a2');
+    assert.equal(own.json().impersonation, undefined);
     const forged = `${cookie.value.slice(0, -4)}AAAA`;
     const forgedResponse = await app.inject({ method: 'GET', url: '/api/auth/me', cookies: cookiesFor('admin-a', { [IMPERSONATION_COOKIE]: forged }) });
-    assert.equal(forgedResponse.json().id, 'admin-a');
+    assert.deepEqual([forgedResponse.statusCode, forgedResponse.json().code], [409, 'IMPERSONATION_ENDED']);
     // Without a valid admin session the cookie is worthless.
     const anonymous = await app.inject({ method: 'GET', url: '/api/probe', cookies: { [IMPERSONATION_COOKIE]: cookie.value } });
     assert.equal(anonymous.statusCode, 401);
@@ -449,12 +453,38 @@ describe('ending a support view', () => {
     assert.equal(ended.metadata.reason, 'stopped');
     assert.equal(ended.metadata.subjectUserId, 'team-a');
     assert.equal(typeof ended.metadata.durationSeconds, 'number');
-    // The old cookie no longer works; the admin is themselves again.
-    const me = await app.inject({ method: 'GET', url: '/api/auth/me', cookies });
+    // A request still carrying the dead cookie (a tab that missed the stop)
+    // is refused, never run as the admin; without it the admin is themselves.
+    const staleRead = await app.inject({ method: 'GET', url: '/api/auth/me', cookies });
+    assert.deepEqual([staleRead.statusCode, staleRead.json().code], [409, 'IMPERSONATION_ENDED']);
+    assert.ok(cleared(staleRead));
+    const staleWrite = await app.inject({ method: 'POST', url: '/api/probe', cookies, payload: {} });
+    assert.deepEqual([staleWrite.statusCode, staleWrite.json().code], [409, 'IMPERSONATION_ENDED']);
+    const own = { ...cookies };
+    delete own[IMPERSONATION_COOKIE];
+    const me = await app.inject({ method: 'GET', url: '/api/auth/me', cookies: own });
     assert.equal(me.json().id, 'admin-a');
     assert.equal(me.json().impersonation, undefined);
-    const write = await app.inject({ method: 'POST', url: '/api/probe', cookies, payload: {} });
+    const write = await app.inject({ method: 'POST', url: '/api/probe', cookies: own, payload: {} });
     assert.equal(write.statusCode, 200);
+  });
+
+  it('never runs a write sent from the viewed screen as the admin after the view expires', async (t) => {
+    const { startOk, app, db } = await buildApp(t);
+    const { cookies } = await startOk();
+    const [row] = db.tables.impersonationSession;
+    row.startedAt = new Date(Date.now() - 31 * 60 * 1000);
+    row.expiresAt = new Date(Date.now() - 60 * 1000);
+    for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+      const response = await app.inject({ method, url: '/api/probe', cookies, payload: {} });
+      assert.deepEqual([response.statusCode, response.json().code], [409, 'IMPERSONATION_ENDED'], method);
+      assert.ok(cleared(response), method);
+    }
+    // The banner's status check and stop/logout still go through.
+    const status = await app.inject({ method: 'GET', url: '/api/auth/impersonation', cookies });
+    assert.equal(status.statusCode, 200, status.body);
+    const stop = await app.inject({ method: 'POST', url: '/api/auth/impersonation/stop', cookies });
+    assert.equal(stop.statusCode, 200, stop.body);
   });
 
   it('expires after the window without extension, recording the end once', async (t) => {
@@ -465,7 +495,7 @@ describe('ending a support view', () => {
     row.startedAt = new Date(Date.now() - 31 * 60 * 1000);
     row.expiresAt = new Date(Date.now() - 60 * 1000);
     const me = await app.inject({ method: 'GET', url: '/api/auth/me', cookies });
-    assert.equal(me.json().id, 'admin-a');
+    assert.deepEqual([me.statusCode, me.json().code], [409, 'IMPERSONATION_ENDED']);
     assert.ok(cleared(me));
     assert.equal(row.endReason, 'expired');
     assert.equal(row.endedAt.getTime(), row.expiresAt.getTime());
@@ -499,7 +529,8 @@ describe('ending a support view', () => {
       assert.equal(response.statusCode, 200, `${url}: ${response.body}`);
       assert.equal(row.endReason, reason, url);
       const after = await app.inject({ method: 'GET', url: '/api/auth/me', cookies });
-      assert.equal(after.json().id, 'admin-a', `${url}: back to the admin`);
+      assert.deepEqual([after.statusCode, after.json().code], [409, 'IMPERSONATION_ENDED'], `${url}: dead cookie refused`);
+      assert.ok(cleared(after), url);
     }
   });
 
@@ -518,8 +549,11 @@ describe('ending a support view', () => {
     db.tables.user.find((u) => u.id === 'admin-a').sessionVersion += 1;
     const fresh = app.jwt.sign({ id: 'admin-a', role: 'ADMIN', organizationId: 'org-a', sessionVersion: 1, iat: SESSION_IAT });
     const me = await app.inject({ method: 'GET', url: '/api/auth/me', cookies: { token: fresh, [IMPERSONATION_COOKIE]: cookie.value } });
-    assert.equal(me.json().id, 'admin-a');
-    assert.equal(me.json().impersonation, undefined);
+    assert.deepEqual([me.statusCode, me.json().code], [409, 'IMPERSONATION_ENDED']);
+    assert.ok(cleared(me));
+    const own = await app.inject({ method: 'GET', url: '/api/auth/me', cookies: { token: fresh } });
+    assert.equal(own.json().id, 'admin-a');
+    assert.equal(own.json().impersonation, undefined);
   });
 
   it('lists recent views with reasons for admins', async (t) => {

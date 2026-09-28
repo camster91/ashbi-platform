@@ -206,8 +206,13 @@ person's password. Code: `src/auth/impersonation.js`,
   organization, the admin is still an active `ADMIN` with the same session,
   and the viewed person is still active with the role the view started with.
   Only then is `request.user` replaced by the viewed person (with an
-  `impersonation` block). Anything else clears the cookie and the request
-  continues as the admin.
+  `impersonation` block). Anything else (the view expired, was stopped or
+  revoked elsewhere, or the cookie is forged or another admin's) clears the
+  cookie and **refuses that request** with `409 IMPERSONATION_ENDED`: it was
+  sent from a screen showing the viewed person and must never run as the
+  admin. Only the view-status read (`GET /api/auth/impersonation`), stop and
+  sign-out go through. The web app reloads on that code; its next request,
+  now without the cookie, is the admin's own.
 - `GET /api/auth/me` returns the viewed person plus
   `impersonation: { sessionId, actor, subject, startedAt, expiresAt, readOnly }`,
   which drives the banner. A client user is viewed through the client portal
