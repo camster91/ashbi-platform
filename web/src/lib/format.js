@@ -1,15 +1,18 @@
 // Shared display formatters (dates and money) so every screen renders the same
-// shape: "Sep 27, 2026", "Sep 27, 2026, 3:04 PM" and "$10,170.00".
+// shape: "Sep 27, 2026", "Sep 27, 2026, 3:04 p.m." and "$10,170.00".
 //
 // There is no per-organization locale setting yet, so the workspace locale is
-// a single module-level value (en-US by default, matching the USD default currency of the data model). Call
-// setFormatLocale() once an organization locale exists; every helper reads it.
+// a single module-level value: Canadian English, matching the CAD invoice
+// default (CAD renders as "$", other currencies get their prefix, e.g.
+// "US$"). Call setFormatLocale() once an organization locale exists.
 //
-// Invoice, client-portal, PDF and email currency rendering still use their own
-// formatting and should adopt formatMoney() in a follow-up.
+// Invoice, client-portal, PDF and email currency rendering live on the payments
+// branch (its own money helper) and will be unified with formatMoney() later.
 
-export const DEFAULT_LOCALE = 'en-US';
-export const DEFAULT_CURRENCY = 'USD';
+export const DEFAULT_LOCALE = 'en-CA';
+// Matches the app's invoice default. The payments branch keeps its own
+// money helper for invoice/portal/PDF/email; the two will be unified later.
+export const DEFAULT_CURRENCY = 'CAD';
 
 let activeLocale = DEFAULT_LOCALE;
 
@@ -27,14 +30,20 @@ function toDate(value) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-/** "Sep 27, 2026" — empty string for missing/invalid input. */
-export function formatDate(value, options = {}) {
+/**
+ * "Sep 27, 2026" — empty string for missing/invalid input.
+ * `dateOnly: true` is for calendar dates stored as midnight UTC (a project's
+ * start/end date): it formats in UTC so viewers west of UTC do not see the
+ * previous day.
+ */
+export function formatDate(value, { dateOnly = false, ...options } = {}) {
   const date = toDate(value);
   if (!date) return '';
   return new Intl.DateTimeFormat(activeLocale, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
+    ...(dateOnly ? { timeZone: 'UTC' } : {}),
     ...options,
   }).format(date);
 }
@@ -54,9 +63,10 @@ export function formatDateTime(value, options = {}) {
 }
 
 /**
- * "$10,170.00" (or "CA$10,170.00" when the currency differs from the locale's
- * own). `compact: true` gives "$12.2K" for KPI tiles. Non-numeric input renders
- * as a zero amount so a missing total never shows "NaN".
+ * "$10,170.00" for CAD in the default en-CA locale ("US$10,170.00" for USD).
+ * Pass the record's currency when known; the default is CAD. `compact: true`
+ * gives "$12.2K" for KPI tiles. Non-numeric input renders as a zero amount so
+ * a missing total never shows "NaN".
  */
 export function formatMoney(amount, currency = DEFAULT_CURRENCY, { compact = false, ...options } = {}) {
   const numeric = Number(amount);

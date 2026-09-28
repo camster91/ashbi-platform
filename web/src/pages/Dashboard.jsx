@@ -473,7 +473,7 @@ export default function Dashboard() {
                         )}
                       </div>
                       {project.endDate && (
-                        <p className="text-xs text-muted-foreground mt-1">Due {formatDate(project.endDate)}</p>
+                        <p className="text-xs text-muted-foreground mt-1">Due {formatDate(project.endDate, { dateOnly: true })}</p>
                       )}
                     </div>
                     <div className="text-right ml-3">

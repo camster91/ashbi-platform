@@ -127,7 +127,7 @@ function ProjectCard({ project }) {
         {project.endDate ? (
           <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
             <CalendarDays className="w-3 h-3" aria-hidden="true" />
-            <span>Due {formatDate(project.endDate)}</span>
+            <span>Due {formatDate(project.endDate, { dateOnly: true })}</span>
           </div>
         ) : (
           <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
