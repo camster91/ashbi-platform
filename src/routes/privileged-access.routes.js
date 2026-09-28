@@ -19,6 +19,7 @@ import {
   impersonationCookieOptions,
   impersonationStartProblem,
   signImpersonationToken,
+  viewSocketRooms,
 } from '../auth/impersonation.js';
 import { BreakGlassError, isBreakGlassEnabled, redeemBreakGlassGrant } from '../auth/break-glass.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
@@ -118,7 +119,9 @@ export default async function privilegedAccessRoutes(fastify, options = {}) {
     // pending room while their connection is re-checked. Drop them; the view
     // row is committed, so the handshake refuses the admin's reconnects until
     // the view ends, whether or not the cookie has arrived yet.
-    fastify.io?.in([`user:${actor.id}`, `pending-user:${actor.id}`]).disconnectSockets(true);
+    // On every API instance: locally now, the others through pub/sub.
+    if (fastify.revokeSupportViewSockets) fastify.revokeSupportViewSockets(actor.id);
+    else fastify.io?.in(viewSocketRooms(actor.id)).disconnectSockets(true);
 
     // The viewed person is told, in-app, who is looking and why.
     const notification = {

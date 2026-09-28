@@ -223,14 +223,65 @@ export async function actorHasOpenView(prisma, actor, { nowMs = Date.now() } = {
   return Boolean(open);
 }
 
+/** Pub/sub channel that carries "drop this admin's sockets" to every API instance. */
+export const VIEW_REVOKE_CHANNEL = 'ashbi:support-view:revoke-sockets';
+
+/** Rooms holding a user's sockets: cleared ones and ones awaiting the view re-check. */
+export function viewSocketRooms(userId) {
+  return [`user:${userId}`, `pending-user:${userId}`];
+}
+
+/**
+ * Drops an admin's sockets on every API instance when a view starts: locally
+ * at once, and through Redis pub/sub on the others (there is no shared
+ * Socket.IO adapter). Without Redis (tests) only the local drop runs; the
+ * periodic sweep remains the fallback if a message is lost.
+ * @param {{ io: any, redis?: any, logger?: { warn: Function } }} options
+ *   `redis` is an ioredis client to duplicate for publishing and subscribing.
+ */
+export function createViewSocketRevoker({ io, redis = null, logger = defaultLogger }) {
+  const dropLocal = (userId) => io.in(viewSocketRooms(userId)).disconnectSockets(true);
+  const warn = (message) => (err) => logger.warn({ err: { message: err?.message } }, message);
+  let publisher = null;
+  let subscriber = null;
+  if (redis && typeof redis.duplicate === 'function') {
+    publisher = redis.duplicate();
+    subscriber = redis.duplicate();
+    publisher.on?.('error', warn('Support-view revocation publisher error'));
+    subscriber.on?.('error', warn('Support-view revocation subscriber error'));
+    subscriber.on('message', (channel, message) => {
+      if (channel !== VIEW_REVOKE_CHANNEL) return;
+      try {
+        const { userId } = JSON.parse(message);
+        if (typeof userId === 'string' && userId) dropLocal(userId);
+      } catch (err) {
+        warn('Ignoring a malformed support-view revocation')(err);
+      }
+    });
+    Promise.resolve(subscriber.subscribe(VIEW_REVOKE_CHANNEL)).catch(warn('Support-view revocation subscribe failed'));
+  }
+  return {
+    revoke(userId) {
+      dropLocal(userId);
+      if (publisher) {
+        Promise.resolve(publisher.publish(VIEW_REVOKE_CHANNEL, JSON.stringify({ userId })))
+          .catch(warn('Support-view revocation publish failed'));
+      }
+    },
+    async close() {
+      await Promise.allSettled([subscriber?.quit?.(), publisher?.quit?.()]);
+    },
+  };
+}
+
 /** How often each instance sweeps its sockets for admins with an open view. */
 export const VIEW_SOCKET_SWEEP_MS = 10_000;
 
 /**
  * Disconnect this instance's sockets whose user has an open support view.
- * Starting a view drops the admin's sockets on the instance that served the
- * request; with several API instances and no shared Socket.IO adapter, the
- * sweep reaches sockets held by the others within one interval.
+ * The fallback behind the pub/sub revocation: if a revocation message is
+ * lost (Redis briefly unavailable), the sweep still reaches the sockets
+ * within one interval.
  * @param {Iterable<any>} sockets This instance's connected sockets.
  * @param {any} prisma Raw client.
  * @returns {Promise<number>} Sockets disconnected.
