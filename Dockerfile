@@ -50,6 +50,10 @@ USER node
 # Default environment
 ENV NODE_ENV=production
 ENV PORT=3002
+# Lets the deploy controller read /api/health/details via `docker exec` on
+# container loopback (src/services/runtime-health.service.js isLoopbackPeer).
+# Never set it where a proxy on the same host forwards to 127.0.0.1.
+ENV HEALTH_DETAILS_LOOPBACK=true
 ARG APP_REVISION=unknown
 ENV APP_REVISION=$APP_REVISION
 

@@ -75,9 +75,12 @@ records; the environment is included in every history outcome field.
   state or the image digest. The detailed view is for operators: sign in as
   staff, or on the host run
   `docker exec ashbi-platform wget -qO- 'http://127.0.0.1:3002/api/health/details?strict=1'`.
-  Loopback is judged from the raw socket address, never `X-Forwarded-For`;
-  Traefik and the published host port reach the container from a Docker
-  network address, so only a process inside the container qualifies.
+  Loopback access needs `HEALTH_DETAILS_LOOPBACK=true` (set only by the
+  Dockerfile; development and host-level proxies never enable it), a loopback
+  TCP peer judged from the raw socket (never `X-Forwarded-For`), and no
+  forwarding headers (`X-Forwarded-For`, `Forwarded`, `X-Real-IP`, ...) on the
+  request. Traefik and the published host port reach the container from a
+  Docker network address, so only a process inside the container qualifies.
 - `deploy-vps-direct.sh` gates on the strict detailed view (worker ok, exact
   revision and image digest). If that read fails (for example an operator
   rollback to an image built before `/api/health/details` existed, which

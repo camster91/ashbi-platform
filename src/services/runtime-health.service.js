@@ -196,17 +196,33 @@ export function publicHealthView(report) {
 }
 
 const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+const FORWARDING_HEADERS = ['x-forwarded-for', 'forwarded', 'x-real-ip', 'x-forwarded-host', 'x-forwarded-proto'];
+
+/** HEALTH_DETAILS_LOOPBACK=true enables loopback access (set in the Dockerfile only). */
+export function loopbackHealthDetailsEnabled(value = process.env.HEALTH_DETAILS_LOOPBACK) {
+  return value === 'true';
+}
 
 /**
- * True when the TCP peer is this host's loopback interface. Uses the raw
- * socket address, never X-Forwarded-For, so a proxied request cannot claim it.
- * Inside the container only a local process (the deploy controller's
- * `docker exec`) can connect from loopback: Traefik and the published host
- * port both arrive from a Docker network address.
+ * True when the detailed health view may be served without a session because
+ * the caller is a local process inside the API container (the deploy
+ * controller's `docker exec`):
+ *
+ * - HEALTH_DETAILS_LOOPBACK=true, which only the production image sets. A
+ *   developer machine or a host-level reverse proxy that forwards to
+ *   127.0.0.1 therefore never gets the unauthenticated detail view.
+ * - The TCP peer is loopback, from the raw socket, never X-Forwarded-For.
+ *   Inside the container, Traefik and the published host port arrive from a
+ *   Docker network address.
+ * - No forwarding headers at all: anything relayed by a proxy (even one
+ *   running on loopback) is treated as remote.
  */
-export function isLoopbackPeer(request) {
+export function isLoopbackPeer(request, { enabled = loopbackHealthDetailsEnabled() } = {}) {
+  if (!enabled) return false;
   const address = request?.raw?.socket?.remoteAddress ?? request?.socket?.remoteAddress;
-  return LOOPBACK_ADDRESSES.has(address);
+  if (!LOOPBACK_ADDRESSES.has(address)) return false;
+  const headers = request?.headers ?? request?.raw?.headers ?? {};
+  return FORWARDING_HEADERS.every((name) => headers[name] === undefined);
 }
 
 export const HEALTH_DETAIL_ROLES = Object.freeze(['ADMIN', 'TEAM']);

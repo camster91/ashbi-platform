@@ -6,6 +6,7 @@ import {
   closeRuntimeHealth,
   healthStatusCode,
   isLoopbackPeer,
+  loopbackHealthDetailsEnabled,
   isStrictHealthQuery,
   publicHealthView,
   REQUIRED_BACKUP_FRESHNESS_MS,
@@ -179,13 +180,21 @@ test('strict query parsing and loopback detection use the raw socket only', () =
   assert.equal(isStrictHealthQuery({ strict: 'true' }), true);
   assert.equal(isStrictHealthQuery({ strict: '0' }), false);
   assert.equal(isStrictHealthQuery(undefined), false);
-  assert.equal(isLoopbackPeer({ raw: { socket: { remoteAddress: '127.0.0.1' } } }), true);
-  assert.equal(isLoopbackPeer({ raw: { socket: { remoteAddress: '::ffff:127.0.0.1' } } }), true);
+  const on = { enabled: true };
+  assert.equal(isLoopbackPeer({ headers: {}, raw: { socket: { remoteAddress: '127.0.0.1' } } }, on), true);
+  assert.equal(isLoopbackPeer({ headers: {}, raw: { socket: { remoteAddress: '::ffff:127.0.0.1' } } }, on), true);
   assert.equal(isLoopbackPeer({
     ip: '127.0.0.1',
     headers: { 'x-forwarded-for': '127.0.0.1' },
     raw: { socket: { remoteAddress: '172.18.0.4' } },
-  }), false);
+  }, on), false, 'forwarded-for cannot claim loopback');
+  for (const header of ['x-forwarded-for', 'forwarded', 'x-real-ip']) {
+    assert.equal(isLoopbackPeer({ headers: { [header]: '203.0.113.9' }, raw: { socket: { remoteAddress: '127.0.0.1' } } }, on), false, `${header} from a local proxy is remote`);
+  }
+  assert.equal(isLoopbackPeer({ headers: {}, raw: { socket: { remoteAddress: '127.0.0.1' } } }, { enabled: false }), false, 'off unless the image enables it');
+  assert.equal(loopbackHealthDetailsEnabled(undefined), false);
+  assert.equal(loopbackHealthDetailsEnabled('true'), true);
+  assert.equal(loopbackHealthDetailsEnabled('1'), false);
 });
 
 test('health routes: public probe is minimal, details need staff or container loopback', async () => {
@@ -213,12 +222,27 @@ test('health routes: public probe is minimal, details need staff or container lo
     });
     assert.equal(spoofed.statusCode, 401);
 
+    const previous = process.env.HEALTH_DETAILS_LOOPBACK;
+    delete process.env.HEALTH_DETAILS_LOOPBACK;
+    const localDisabled = await app.inject({ method: 'GET', url: '/api/health/details', remoteAddress: '127.0.0.1' });
+    assert.equal(localDisabled.statusCode, 401, 'loopback trust is off outside the container image');
+    process.env.HEALTH_DETAILS_LOOPBACK = 'true';
+    const proxied = await app.inject({
+      method: 'GET',
+      url: '/api/health/details',
+      remoteAddress: '127.0.0.1',
+      headers: { 'x-forwarded-for': '203.0.113.9' },
+    });
+    assert.equal(proxied.statusCode, 401, 'a proxy on loopback is not trusted');
     const local = await app.inject({ method: 'GET', url: '/api/health/details?strict=1', remoteAddress: '127.0.0.1' });
+    if (previous === undefined) delete process.env.HEALTH_DETAILS_LOOPBACK;
+    else process.env.HEALTH_DETAILS_LOOPBACK = previous;
     assert.ok([200, 503].includes(local.statusCode));
     const detail = local.json();
     assert.ok('imageDigest' in detail);
     assert.ok('failedJobs' in detail);
     assert.equal(typeof detail.strictReady, 'boolean');
+    assert.equal(typeof detail.process.unhandledRejections, 'number');
   } finally {
     await app.close();
     await closeRuntimeHealth();
