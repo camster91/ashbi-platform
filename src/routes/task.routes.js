@@ -3,6 +3,7 @@
 import { validateBody, createTaskSchema, updateTaskSchema, taskUpdateSchema, taskBulkUpdateSchema, taskPageContentUpdateSchema, taskSubpageCreateSchema, taskDependencyCreateSchema, taskCreateQuickSchema, TASK_STATUS_VALUES } from '../validators/schemas.js';
 import { z } from 'zod';
 import bus, { EVENTS } from '../utils/events.js';
+import { parseTaskContent } from '../utils/taskContent.js';
 
 export default async function taskRoutes(fastify) {
   // List all tasks with filters
@@ -303,13 +304,9 @@ export default async function taskRoutes(fastify) {
       return reply.status(404).send({ error: 'Task not found' });
     }
 
-    // Parse content if it's stored as JSON string
-    let parsedContent = [];
-    try {
-      parsedContent = JSON.parse(task.content || '[]');
-    } catch (e) {
-      parsedContent = [{ type: 'paragraph', content: task.content || '' }];
-    }
+    // Stored as a JSON block array; legacy/malformed values become a
+    // paragraph holding the original value instead of disappearing.
+    const parsedContent = parseTaskContent(task.content);
 
     // Parse properties
     let parsedProperties = {};
