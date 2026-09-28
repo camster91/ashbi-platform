@@ -43,6 +43,7 @@ test('impersonation sessions and break-glass grants stay in their tenant, expire
   const suffix = randomUUID();
   const orgA = `imp-org-a-${suffix}`;
   const orgB = `imp-org-b-${suffix}`;
+  const orgC = `imp-org-c-${suffix}`;
   let app;
 
   try {
@@ -189,14 +190,37 @@ test('impersonation sessions and break-glass grants stay in their tenant, expire
     // The old admin session no longer works.
     const stale = await app.inject({ method: 'GET', url: '/api/auth/me', cookies: { token: token(adminA) } });
     assert.equal(stale.statusCode, 401);
+
+    // Concurrent issues for one person leave exactly one redeemable grant.
+    await Promise.all([1, 2, 3, 4].map((n) => issueBreakGlassGrant(raw, {
+      organizationId: orgA, targetUserId: adminA.id, operatorId: adminB.id, reason: `Integration: concurrent issue number ${n}`,
+      osUser: 'deploy', host: 'api-1.internal',
+    }, { environment })));
+    assert.equal(await raw.breakGlassGrant.count({ where: { organizationId: orgA, targetUserId: adminA.id, redeemedAt: null, revokedAt: null } }), 1);
+
+    // Two promotion grants redeemed at once in an organization with no
+    // administrator promote exactly one person.
+    await raw.organization.create({ data: { id: orgC, name: 'Impersonation Tenant C', slug: `imp-c-${suffix}` } });
+    const teamC1 = await make(orgC, 'team-c1', 'TEAM');
+    const teamC2 = await make(orgC, 'team-c2', 'TEAM');
+    const promotions = [];
+    for (const target of [teamC1, teamC2]) {
+      promotions.push((await issueBreakGlassGrant(raw, {
+        organizationId: orgC, targetUserId: target.id, operatorId: adminB.id, promoteToAdmin: true,
+        reason: 'Integration: every administrator left the organization', osUser: 'deploy', host: 'api-1.internal',
+      }, { environment })).token);
+    }
+    const results = await Promise.allSettled(promotions.map((recoveryToken) => redeemBreakGlassGrant(raw, { token: recoveryToken, newPassword: 'Integration-Pass-2' }, { environment })));
+    assert.deepEqual(results.map((r) => r.status).sort(), ['fulfilled', 'rejected']);
+    assert.equal(await raw.user.count({ where: { organizationId: orgC, role: 'ADMIN' } }), 1);
   } finally {
     await app?.close();
-    await raw.notification.deleteMany({ where: { user: { organizationId: { in: [orgA, orgB] } } } });
-    await raw.impersonationSession.deleteMany({ where: { organizationId: { in: [orgA, orgB] } } });
-    await raw.breakGlassGrant.deleteMany({ where: { organizationId: { in: [orgA, orgB] } } });
-    await raw.user.deleteMany({ where: { organizationId: { in: [orgA, orgB] } } });
-    if (await purgeFixtureAuditEvents(raw, { ids: [orgA, orgB] })) {
-      await raw.organization.deleteMany({ where: { id: { in: [orgA, orgB] } } });
+    await raw.notification.deleteMany({ where: { user: { organizationId: { in: [orgA, orgB, orgC] } } } });
+    await raw.impersonationSession.deleteMany({ where: { organizationId: { in: [orgA, orgB, orgC] } } });
+    await raw.breakGlassGrant.deleteMany({ where: { organizationId: { in: [orgA, orgB, orgC] } } });
+    await raw.user.deleteMany({ where: { organizationId: { in: [orgA, orgB, orgC] } } });
+    if (await purgeFixtureAuditEvents(raw, { ids: [orgA, orgB, orgC] })) {
+      await raw.organization.deleteMany({ where: { id: { in: [orgA, orgB, orgC] } } });
     }
     await raw.$disconnect();
   }

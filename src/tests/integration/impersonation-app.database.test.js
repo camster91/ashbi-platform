@@ -37,7 +37,16 @@ test('the real application enforces a read-only support view end to end', {
     const session = app.jwt.sign({ id: admin.id, email: admin.email, name: admin.name, role: 'ADMIN', organizationId: org, sessionVersion: 0, iat }, { expiresIn: '1h' });
     const adminCookies = { token: session, ...reauthCookies({ id: admin.id, sessionVersion: 0, iat }) };
 
+    // Sockets the admin already had are dropped when the view starts.
+    const droppedRooms = [];
+    const realIn = app.io.in.bind(app.io);
+    app.io.in = (room) => {
+      const operator = realIn(room);
+      return { disconnectSockets: (close) => { droppedRooms.push(room); return operator.disconnectSockets(close); } };
+    };
     const started = await app.inject({ method: 'POST', url: '/api/auth/impersonation', cookies: adminCookies, payload: { userId: staff.id, reason: 'End-to-end support view check' } });
+    app.io.in = realIn;
+    assert.deepEqual(droppedRooms, [`user:${admin.id}`]);
     assert.equal(started.statusCode, 201, started.body);
     const view = { token: session, [IMPERSONATION_COOKIE]: started.cookies.find((c) => c.name === IMPERSONATION_COOKIE).value };
 

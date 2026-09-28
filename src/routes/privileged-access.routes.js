@@ -113,6 +113,12 @@ export default async function privilegedAccessRoutes(fastify, options = {}) {
       return created;
     });
 
+    // Sockets the admin already has (other tabs share the view cookie) were
+    // authenticated as the admin and sit in the admin's rooms. Drop them; the
+    // web app reconnects, which the handshake refuses while the view cookie
+    // is present and allows on the admin's other devices.
+    fastify.io?.in(`user:${actor.id}`).disconnectSockets(true);
+
     // The viewed person is told, in-app, who is looking and why.
     const notification = {
       userId: subject.id,

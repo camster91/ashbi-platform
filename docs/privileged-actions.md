@@ -220,8 +220,11 @@ person's password. Code: `src/auth/impersonation.js`,
 - The web app reloads on start and stop so no cached data of the other
   identity survives. Realtime (Socket.IO) is off during a view: a handshake
   carrying the view cookie is refused, because the socket authenticates the
-  admin's own session and would otherwise join the admin's rooms. Live
-  updates resume after the view ends.
+  admin's own session and would otherwise join the admin's rooms. Starting a
+  view also drops the admin's existing sockets (other tabs share the cookie);
+  the web app reconnects, which the handshake refuses in the viewing browser
+  and allows on the admin's other devices. Live updates resume after the view
+  ends.
 
 ### Read-only and blocked areas
 
@@ -300,7 +303,7 @@ named staff member of that organization, who redeems it themselves.
 | Off by default | Both the CLI and `POST /api/auth/break-glass/redeem` refuse unless `BREAK_GLASS_ENABLED=true` (the route answers `404` before looking at the body). Set it only for the emergency and unset it afterwards |
 | Operator only | `--operator` must be in `PLATFORM_OPERATOR_USER_IDS` **and** still an active `ADMIN` in the database (the same rule as the AI kill switch), for `issue`, `revoke` and `list`. The id is claimed, not authenticated, so each grant and its `break_glass.granted` / `break_glass.revoked` events also record the **OS user and host** the CLI ran as (`issuedByOsUser`, `issuedFromHost`; metadata `osUser`, `host`) |
 | Reason | `--reason`, 10 to 500 characters, stored on the grant and shown in the notifications |
-| Target | An `ADMIN` of the organization (a deactivated one is reactivated). A non-admin staff member (`TEAM` or `STAFF`) only with `--promote`, and only when the organization has **no** active admin, checked both when issuing and again when redeeming. Never a client user or bot |
+| Target | An `ADMIN` of the organization (a deactivated one is reactivated). A non-admin staff member (`TEAM` or `STAFF`) only with `--promote`, and only when the organization has **no** active admin, checked both when issuing and again when redeeming (under a per-organization lock, so two promotion grants redeemed at once promote only one person). Never a client user or bot |
 | Time-boxed, single use | 30 minutes (*Proposal*, `BREAK_GLASS_TTL_SECONDS`; the database caps it at 60). Redeeming claims the grant atomically; a second use, an expired or a revoked grant answer the same generic `400`. A new grant for the same person revokes the outstanding one |
 | Secret handling | The 256-bit token is printed once as a link with the token in the URL **fragment** (`/break-glass#token=…`), so it never reaches server or proxy logs; only its SHA-256 is stored. The page removes it from the address bar |
 | Effect | New password; two-factor turned off (re-enroll after signing in); account reactivated; every session signed out; the person's API keys revoked; open impersonation views by or of them ended; `role = ADMIN` only for a `--promote` grant |

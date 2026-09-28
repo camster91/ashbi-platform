@@ -172,38 +172,44 @@ export async function issueBreakGlassGrant(prisma, input, {
   const token = crypto.randomBytes(32).toString('base64url');
   const provenance = { osUser: provenanceValue(input.osUser), host: provenanceValue(input.host) };
 
-  // One outstanding grant per target: a new one replaces the old.
-  const superseded = await prisma.breakGlassGrant.findMany({
-    where: { organizationId: organization.id, targetUserId: target.id, redeemedAt: null, revokedAt: null, expiresAt: { gt: now } },
-    select: { id: true },
-  });
-  for (const old of superseded) {
-    await revokeGrantRow(prisma, old.id, organization.id, operator.id, target.id, now, logger, provenance);
-  }
+  // One outstanding grant per target: a new one replaces the old. The
+  // per-target lock serializes concurrent issues, so each one revokes the
+  // previous grant instead of both staying redeemable.
+  const grant = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`break-glass-target:${target.id}`}, 0))`;
+    const superseded = await tx.breakGlassGrant.findMany({
+      where: { organizationId: organization.id, targetUserId: target.id, redeemedAt: null, revokedAt: null, expiresAt: { gt: now } },
+      select: { id: true },
+    });
+    for (const old of superseded) {
+      await revokeGrantRow(tx, old.id, organization.id, operator.id, target.id, now, logger, provenance);
+    }
 
-  const grant = await prisma.breakGlassGrant.create({
-    data: {
+    const created = await tx.breakGlassGrant.create({
+      data: {
+        organizationId: organization.id,
+        targetUserId: target.id,
+        operatorId: operator.id,
+        reason,
+        promoteToAdmin,
+        tokenHash: hashBreakGlassToken(token),
+        issuedByOsUser: provenance.osUser,
+        issuedFromHost: provenance.host,
+        createdAt: now,
+        expiresAt,
+      },
+    });
+
+    await recordAuditEvent(tx, {
       organizationId: organization.id,
-      targetUserId: target.id,
-      operatorId: operator.id,
-      reason,
-      promoteToAdmin,
-      tokenHash: hashBreakGlassToken(token),
-      issuedByOsUser: provenance.osUser,
-      issuedFromHost: provenance.host,
-      createdAt: now,
-      expiresAt,
-    },
+      actorType: 'USER',
+      actorUserId: operator.id,
+      action: 'break_glass.granted',
+      entityId: created.id,
+      metadata: { targetUserId: target.id, operatorId: operator.id, expiresAt, promoteToAdmin, ...provenance },
+    }, { logger });
+    return created;
   });
-
-  await recordAuditEvent(prisma, {
-    organizationId: organization.id,
-    actorType: 'USER',
-    actorUserId: operator.id,
-    action: 'break_glass.granted',
-    entityId: grant.id,
-    metadata: { targetUserId: target.id, operatorId: operator.id, expiresAt, promoteToAdmin, ...provenance },
-  }, { logger });
 
   const admins = await activeAdminIds(prisma, organization.id);
   await notifyUsers(prisma, [...admins, target.id], {
@@ -279,6 +285,12 @@ export async function redeemBreakGlassGrant(prisma, { token, newPassword, reques
   const reactivated = target.isActive !== true;
 
   const outcome = await prisma.$transaction(async (tx) => {
+    if (promoted) {
+      // Serialize promotions per organization and re-check under the lock:
+      // two grants redeemed at once must not both find no administrator.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`break-glass-promote:${grant.organizationId}`}, 0))`;
+      if ((await activeAdminIds(tx, grant.organizationId)).length > 0) return null;
+    }
     const claimed = await tx.breakGlassGrant.updateMany({
       where: { id: grant.id, redeemedAt: null, revokedAt: null, expiresAt: { gt: now } },
       data: { redeemedAt: now },
