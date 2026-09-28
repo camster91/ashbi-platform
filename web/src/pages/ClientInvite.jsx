@@ -128,10 +128,12 @@ export default function ClientInvite() {
 function inviteErrorMessage(status, serverMessage) {
   if (status === 404) return 'This invitation link is not valid. Ask your project contact to send a new one.';
   if (status === 429) return 'Too many attempts. Wait a moment and try again.';
+  if (status === 409) return 'This invitation has already been used. Sign in to the client portal instead.';
   if (status === 400 && typeof serverMessage === 'string') {
     if (/expired/i.test(serverMessage)) return 'This invitation has expired. Ask your project contact to send a new one.';
     if (/already used/i.test(serverMessage)) return 'This invitation has already been used. Sign in to the client portal instead.';
     if (/does not match/i.test(serverMessage)) return 'That email address does not match the invitation. Use the address the invitation was sent to.';
+    if (/no longer valid/i.test(serverMessage)) return 'This invitation is no longer valid. Ask your project contact for a new one.';
     if (/already exists/i.test(serverMessage)) return 'An account already exists for this email. Sign in to the client portal instead.';
   }
   return 'We could not accept this invitation. Try again in a moment.';

@@ -141,6 +141,13 @@ async function uniqueOrganizationSlug(tx, name) {
   return `${base}-${crypto.randomBytes(6).toString('hex')}`;
 }
 
+class InvitationAlreadyUsedError extends Error {
+  constructor() {
+    super('Invitation already used');
+    this.name = 'InvitationAlreadyUsedError';
+  }
+}
+
 export default async function authRoutes(fastify) {
   const authRateLimit = {
     config: {
@@ -391,7 +398,7 @@ export default async function authRoutes(fastify) {
     // invited client (server-side), never from the request body.
     const invitation = await request.prisma.clientInvitation.findUnique({
       where: { token },
-      include: { client: { select: { id: true, name: true, organizationId: true } } },
+      include: { client: { select: { id: true, name: true, organizationId: true, status: true, deletedAt: true } } },
     });
 
     if (!invitation || !invitation.client?.organizationId) {
@@ -399,12 +406,16 @@ export default async function authRoutes(fastify) {
     }
 
     if (invitation.usedAt) {
-      return reply.status(400).send({ error: 'Invitation already used' });
+      return reply.status(409).send({ error: 'Invitation already used' });
     }
 
     const now = new Date();
     if (new Date(invitation.expiresAt) < now) {
       return reply.status(400).send({ error: 'Invitation expired' });
+    }
+
+    if (invitation.client.deletedAt || invitation.client.status !== 'ACTIVE') {
+      return reply.status(400).send({ error: 'Invitation is no longer valid for this client' });
     }
 
     if (invitation.email.trim().toLowerCase() !== email) {
@@ -420,34 +431,54 @@ export default async function authRoutes(fastify) {
       return reply.status(400).send({ error: 'Account already exists' });
     }
 
-    // Create user
-    const user = await request.prisma.user.create({
-      data: {
-        email,
-        password: await hashPassword(password),
-        name: email.split('@')[0], // Use email prefix as default name
-        role: 'CLIENT',
-        clientId: invitation.clientId,
-        organizationId: invitation.client.organizationId,
-        isActive: true
+    const passwordHash = await hashPassword(password);
+
+    // Claim the invitation, create the user and make sure the invited address
+    // is a contact of the invited client (the client portal authorizes a
+    // user + contact pair) in one transaction. The claim comes first and is
+    // conditional, so of two concurrent submissions exactly one proceeds; any
+    // failure rolls everything back and leaves the invitation usable.
+    let user;
+    let contact;
+    try {
+      ({ user, contact } = await request.prisma.$transaction(async (tx) => {
+        const claim = await tx.clientInvitation.updateMany({
+          where: { id: invitation.id, usedAt: null },
+          data: { usedAt: new Date() },
+        });
+        if (claim.count !== 1) throw new InvitationAlreadyUsedError();
+
+        const createdUser = await tx.user.create({
+          data: {
+            email,
+            password: passwordHash,
+            name: email.split('@')[0], // Use email prefix as default name
+            role: 'CLIENT',
+            clientId: invitation.clientId,
+            organizationId: invitation.client.organizationId,
+            isActive: true
+          }
+        });
+
+        const invitedContact = await tx.contact.findFirst({
+          where: { clientId: invitation.clientId, email: { equals: email, mode: 'insensitive' } },
+          select: { id: true },
+        }) ?? await tx.contact.create({
+          data: { email, name: createdUser.name, clientId: invitation.clientId },
+          select: { id: true },
+        });
+
+        return { user: createdUser, contact: invitedContact };
+      }));
+    } catch (error) {
+      if (error instanceof InvitationAlreadyUsedError) {
+        return reply.status(409).send({ error: 'Invitation already used' });
       }
-    });
-
-    // The client portal authorizes a (user, contact) pair, so make sure the
-    // invited address is a contact of the invited client.
-    const contact = await request.prisma.contact.findFirst({
-      where: { clientId: invitation.clientId, email: { equals: email, mode: 'insensitive' } },
-      select: { id: true },
-    }) ?? await request.prisma.contact.create({
-      data: { email, name: user.name, clientId: invitation.clientId },
-      select: { id: true },
-    });
-
-    // Mark invitation as used
-    await request.prisma.clientInvitation.update({
-      where: { id: invitation.id },
-      data: { usedAt: new Date() }
-    });
+      if (error?.code === 'P2002') {
+        return reply.status(400).send({ error: 'Account already exists' });
+      }
+      throw error;
+    }
 
     const jwtToken = signUserSession(fastify.jwt, user, { contactId: contact.id });
 
@@ -467,7 +498,10 @@ export default async function authRoutes(fastify) {
   fastify.post('/client/login', {
     preHandler: [validateBody(clientLoginSchema)],
   }, async (request, reply) => {
-    const { email, password } = request.body;
+    const { password } = request.body;
+    // Stored addresses are lower-cased at signup; match how forgot-password
+    // and signup normalise the address.
+    const email = request.body.email.trim().toLowerCase();
 
     const user = await request.prisma.user.findFirst({
       where: {

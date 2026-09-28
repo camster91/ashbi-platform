@@ -53,6 +53,13 @@ describe('client invitation page', () => {
     expect(assign).not.toHaveBeenCalled();
   });
 
+  it('explains a used invitation (409) and points to portal sign-in', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 409, json: async () => ({ error: 'Invitation already used' }) })));
+    renderAt('/client/invite?token=abc123');
+    fillForm();
+    expect(await screen.findByRole('alert')).toHaveTextContent('already been used');
+  });
+
   it('shows guidance when the link has no token', () => {
     renderAt('/client/invite');
     expect(screen.getByRole('alert')).toHaveTextContent('This invitation link is incomplete.');
