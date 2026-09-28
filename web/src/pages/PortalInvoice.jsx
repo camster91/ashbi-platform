@@ -28,6 +28,18 @@ function formatDate(date) {
   return formatInvoiceDate(date, { month: 'long' });
 }
 
+// The invoice's stored amounts are authoritative (the server applied the
+// discount and tax); the page never recomputes or substitutes them.
+export function invoiceAmounts(invoice) {
+  const amount = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
+  return {
+    subtotal: amount(invoice.subtotal),
+    discount: amount(invoice.discountAmount),
+    tax: amount(invoice.tax),
+    total: amount(invoice.total),
+  };
+}
+
 export default function PortalInvoice() {
   const { token } = useParams();
 
@@ -64,15 +76,14 @@ export default function PortalInvoice() {
 
   const status = statusConfig[invoice.status] || statusConfig.DRAFT;
   const StatusIcon = status.icon;
-  const showPayButton = invoice.status === 'SENT' || invoice.status === 'OVERDUE';
   const isPaid = invoice.status === 'PAID';
-
-  const subtotal = invoice.lineItems?.reduce((sum, item) => {
-    return sum + Number(item.amount || item.total || (item.quantity * (item.rate || item.unitPrice || 0)));
-  }, 0) || 0;
-  const tax = Number(invoice.tax || 0);
-  const total = Number(invoice.total || invoice.amount || (subtotal + tax));
+  const { subtotal, discount, tax, total } = invoiceAmounts(invoice);
+  // Nothing to collect on a zero (or negative) total.
+  const showPayButton = (invoice.status === 'SENT' || invoice.status === 'OVERDUE') && total > 0;
   const currency = invoice.currency;
+  const taxLabel = invoice.taxType && invoice.taxType !== 'NONE'
+    ? `${invoice.taxType}${invoice.taxRate != null ? ` (${invoice.taxRate}%)` : ''}`
+    : 'Tax';
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -182,9 +193,15 @@ export default function PortalInvoice() {
               <span className="text-slate-500">Subtotal</span>
               <span className="text-slate-700">{formatMoney(subtotal, currency)}</span>
             </div>
+            {discount > 0 && (
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-500">Discount</span>
+                <span className="text-green-700">-{formatMoney(discount, currency)}</span>
+              </div>
+            )}
             {tax > 0 && (
               <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-500">Tax</span>
+                <span className="text-slate-500">{taxLabel}</span>
                 <span className="text-slate-700">{formatMoney(tax, currency)}</span>
               </div>
             )}
