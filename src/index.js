@@ -297,16 +297,26 @@ io.use(async (socket, next) => {
 // `join-project` events were never handled, so room-scoped notifications
 // (io.to(`user:...`)) were never delivered. Rooms are authorized server-side.
 io.on('connection', (socket) => {
-  // Auto-join the authenticated user's own room so notify() reaches them.
-  if (socket.userId) socket.join(`user:${socket.userId}`);
-  // Re-check for a support view now that the socket is in the admin's room:
-  // a view that opened while the handshake was in flight is either visible
-  // here, or finds this socket in the room when it drops the admin's sockets.
-  if (socket.userId && socket.organizationId) {
-    actorHasOpenView(prisma, { id: socket.userId, organizationId: socket.organizationId })
-      .then((open) => { if (open) socket.disconnect(true); })
-      .catch(() => socket.disconnect(true));
-  }
+  // A support view that opened while the handshake was in flight must not
+  // leave this socket with the admin's realtime access. The socket waits in
+  // a pending room (which starting a view also drops) and every event it
+  // sends waits on a re-check; only then does it join the user's own room,
+  // so notify() reaches it.
+  const pendingRoom = `pending-user:${socket.userId}`;
+  if (socket.userId) socket.join(pendingRoom);
+  const cleared = socket.userId && socket.organizationId
+    ? actorHasOpenView(prisma, { id: socket.userId, organizationId: socket.organizationId }).then((open) => !open, () => false)
+    : Promise.resolve(true);
+  socket.use((_packet, next) => {
+    cleared.then((ok) => (ok ? next() : next(new Error('Realtime is paused during a support view'))));
+  });
+  cleared.then((ok) => {
+    if (!ok) { socket.disconnect(true); return; }
+    if (socket.userId) {
+      socket.join(`user:${socket.userId}`);
+      socket.leave(pendingRoom);
+    }
+  });
 
   // Explicit join is only allowed for the caller's own user room.
   socket.on('join', (userId) => {
