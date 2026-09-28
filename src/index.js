@@ -18,7 +18,9 @@ import prisma from './config/db.js';
 import { apiRateLimitMax, isNonApiRequest } from './config/rateLimit.js';
 import { trustHops } from './config/trust-proxy.js';
 import { isCurrentUserSession } from './auth/session.js';
-import { actorHasOpenView, applyImpersonation, createImpersonationHook, socketHandshakeDuringView } from './auth/impersonation.js';
+import {
+  actorHasOpenView, applyImpersonation, createImpersonationHook, socketHandshakeDuringView, startViewSocketSweep,
+} from './auth/impersonation.js';
 import { createJoinProjectHandler } from './auth/project-room-access.js';
 import { clientAcquisitionCorsOptions, loadClientAcquisitionConfig } from './services/client-acquisition.contract.js';
 import { initHermesBridge } from './agents/hub-hermes.integration.js';
@@ -267,7 +269,12 @@ fastify.setErrorHandler((error, request, reply) => {
 
 // Socket.IO
 const io = new SocketIO(fastify.server, { cors: { origin: env.isDev ? 'http://localhost:*' : env.corsOrigins, credentials: true } });
+// Starting a support view drops the admin's sockets on the instance that
+// served it; this sweep reaches sockets on every other API instance (there is
+// no shared Socket.IO adapter) within one interval.
+const stopViewSocketSweep = startViewSocketSweep(io, prisma, fastify.log);
 fastify.addHook('onClose', async () => {
+  stopViewSocketSweep();
   await new Promise((resolve) => io.close(resolve));
 });
 io.use(async (socket, next) => {

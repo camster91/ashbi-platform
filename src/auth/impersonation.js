@@ -223,6 +223,58 @@ export async function actorHasOpenView(prisma, actor, { nowMs = Date.now() } = {
   return Boolean(open);
 }
 
+/** How often each instance sweeps its sockets for admins with an open view. */
+export const VIEW_SOCKET_SWEEP_MS = 10_000;
+
+/**
+ * Disconnect this instance's sockets whose user has an open support view.
+ * Starting a view drops the admin's sockets on the instance that served the
+ * request; with several API instances and no shared Socket.IO adapter, the
+ * sweep reaches sockets held by the others within one interval.
+ * @param {Iterable<any>} sockets This instance's connected sockets.
+ * @param {any} prisma Raw client.
+ * @returns {Promise<number>} Sockets disconnected.
+ */
+export async function sweepSocketsDuringViews(sockets, prisma, { nowMs = Date.now() } = {}) {
+  const candidates = [...sockets].filter((socket) => socket?.userId && socket.organizationId);
+  if (candidates.length === 0) return 0;
+  const open = await prisma.impersonationSession.findMany({
+    where: {
+      actorUserId: { in: [...new Set(candidates.map((socket) => socket.userId))] },
+      endedAt: null,
+      expiresAt: { gt: new Date(nowMs) },
+    },
+    select: { actorUserId: true, organizationId: true },
+  });
+  const viewing = new Set(open.map((row) => `${row.organizationId}:${row.actorUserId}`));
+  let dropped = 0;
+  for (const socket of candidates) {
+    if (viewing.has(`${socket.organizationId}:${socket.userId}`)) {
+      socket.disconnect(true);
+      dropped += 1;
+    }
+  }
+  return dropped;
+}
+
+/**
+ * Run the sweep on this API instance. It is connection hygiene, not a
+ * business schedule: each instance can only see and drop its own sockets,
+ * so it cannot be a worker job. Returns a stop function.
+ * @param {any} io Socket.IO server.
+ * @param {any} prisma Raw client.
+ * @param {{ warn: Function }} logger
+ */
+export function startViewSocketSweep(io, prisma, logger, { intervalMs = VIEW_SOCKET_SWEEP_MS } = {}) {
+  const timer = setInterval(() => {
+    sweepSocketsDuringViews(io.of('/').sockets.values(), prisma).catch((err) => {
+      logger.warn({ err: { message: err?.message } }, 'Support-view socket sweep failed');
+    });
+  }, intervalMs);
+  timer.unref?.();
+  return () => clearInterval(timer);
+}
+
 /**
  * Route option that marks a GET/HEAD route with side effects (it writes, or
  * binds an external account to the caller). Such routes are refused during a

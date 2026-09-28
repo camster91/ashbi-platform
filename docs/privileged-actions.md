@@ -222,7 +222,10 @@ person's password. Code: `src/auth/impersonation.js`,
   view of theirs is open: the socket authenticates the admin's own session
   and would otherwise join the admin's rooms. A handshake carrying the view
   cookie, or from an admin with an open view, is refused, and starting a
-  view drops the admin's existing sockets (other tabs share the cookie).
+  view drops the admin's existing sockets (other tabs share the cookie). With
+  several API instances and no shared Socket.IO adapter, each instance also
+  sweeps its sockets every 10 seconds and drops those of admins with an open
+  view, so a socket held by another instance is reached within one interval.
   Live updates resume after the view ends and the page reloads.
 
 ### Read-only and blocked areas

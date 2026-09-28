@@ -130,6 +130,13 @@ test('the real application enforces a read-only support view end to end', {
     assert.deepEqual([...other.rooms], [`user:${staff.id}`]);
     assert.equal(await otherEvent, undefined, 'its events pass');
 
+    // Sockets held by another API instance (no shared adapter) are reached
+    // by the periodic sweep: the admin's is dropped, others are left alone.
+    const { sweepSocketsDuringViews } = await import('../../auth/impersonation.js');
+    const elsewhere = [fakeSocket(admin.id), fakeSocket(staff.id), { ...fakeSocket(admin.id), organizationId: 'another-org' }];
+    assert.equal(await sweepSocketsDuringViews(elsewhere, prisma), 1);
+    assert.deepEqual(elsewhere.map((socket) => socket.dropped), [true, false, false]);
+
     // Stopping restores the admin.
     const stop = await app.inject({ method: 'POST', url: '/api/auth/impersonation/stop', cookies: view });
     assert.equal(stop.statusCode, 200, stop.body);
