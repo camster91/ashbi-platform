@@ -86,6 +86,20 @@ test('a bucket larger than one capped findMany is read to the end before lower p
   assert.deepEqual(second.map((row) => row.id), Array.from({ length: 10 }, (_, i) => `critical-${120 + i}`));
 });
 
+test('bucket reads end their order with the unique id, so ties cannot shift between chunks', async () => {
+  const seen = [];
+  const delegate = {
+    count: async () => 1,
+    findMany: async (args) => { seen.push(args.orderBy); return []; },
+  };
+  await findTasksInPriorityOrder(delegate, { where: {}, orderBy: [{ dueDate: 'asc' }], take: 5 });
+  assert.ok(seen.length > 0);
+  for (const order of seen) assert.deepEqual(order, [{ dueDate: 'asc' }, { id: 'asc' }]);
+  seen.length = 0;
+  await findTasksInPriorityOrder(delegate, { where: {}, orderBy: [{ id: 'desc' }], take: 5 });
+  for (const order of seen) assert.deepEqual(order, [{ id: 'desc' }]);
+});
+
 test('GET /api/tasks/my pages through the global priority order', async () => {
   const rows = [
     { id: 'n1', priority: 'NORMAL', category: 'UPCOMING' }, { id: 'l1', priority: 'LOW', category: 'UPCOMING' },

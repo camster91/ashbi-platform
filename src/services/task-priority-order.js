@@ -19,6 +19,11 @@ export async function findTasksInPriorityOrder(delegate, { where = {}, include, 
     { priority: { notIn: [...TASK_PRIORITIES] } },
   ];
   const counts = await Promise.all(buckets.map((bucket) => delegate.count({ where: { AND: [where, bucket] } })));
+  // A bucket may be read in several OFFSET queries, so the order must be
+  // total: end with the unique id, or ties (say, many null due dates) could
+  // come back in a different order and be repeated or skipped.
+  const order = [...(Array.isArray(orderBy) ? orderBy : [orderBy])];
+  if (!order.some((clause) => clause && Object.hasOwn(clause, 'id'))) order.push({ id: 'asc' });
   const rows = [];
   let offset = skip;
   let remaining = take;
@@ -34,7 +39,7 @@ export async function findTasksInPriorityOrder(delegate, { where = {}, include, 
         where: { AND: [where, buckets[i]] },
         ...(include ? { include } : {}),
         ...(select ? { select } : {}),
-        orderBy,
+        orderBy: order,
         skip: offset,
         take: remaining,
       });
