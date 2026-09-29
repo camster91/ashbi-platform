@@ -1433,8 +1433,11 @@ export const taskTemplateSchema = z.object({
 // TimeEntry.duration is stored and reported in MINUTES (timer sessions and the
 // /summary hours maths use minutes too); one entry covers at most one day.
 export const MAX_TIME_ENTRY_MINUTES = 1440;
+// Stored as whole minutes (rounded): a value that rounds to 0 would be a
+// zero-minute entry in timesheets, reports and budgets, so it is refused.
 const timeEntryDurationMinutes = z.number().positive().max(MAX_TIME_ENTRY_MINUTES)
-  .describe('Duration in minutes (not seconds), at most 1440 (24h).');
+  .refine((minutes) => Math.round(minutes) >= 1, { message: 'Duration must be at least 1 minute' })
+  .describe('Duration in minutes (not seconds), at least 1 and at most 1440 (24h).');
 
 export const timeEntryCreateSchema = z.object({
   projectId: cuidId,

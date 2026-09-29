@@ -5175,7 +5175,7 @@
             "type": "string"
           },
           "duration": {
-            "description": "Duration in minutes (not seconds), at most 1440 (24h).",
+            "description": "Duration in minutes (not seconds), at least 1 and at most 1440 (24h).",
             "exclusiveMinimum": 0,
             "maximum": 1440,
             "type": "number"
@@ -5211,7 +5211,7 @@
             "type": "string"
           },
           "duration": {
-            "description": "Duration in minutes (not seconds), at most 1440 (24h).",
+            "description": "Duration in minutes (not seconds), at least 1 and at most 1440 (24h).",
             "exclusiveMinimum": 0,
             "maximum": 1440,
             "type": "number"

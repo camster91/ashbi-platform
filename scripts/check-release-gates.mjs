@@ -127,6 +127,8 @@ export function validateReleaseGates(root = process.cwd()) {
     [/health:worker/, 'does not require worker readiness'],
     [/ROLLBACK_WORKER_CONTAINER/, 'does not retain a worker rollback'],
     [/record deployed/, 'does not append a successful release record'],
+    [/restore_previous\(\) \{[\s\S]{0,200}image_meets_floor "\$PREVIOUS_IMAGE"/, 'does not refuse to roll back below the rollback floor'],
+    [/image_meets_floor "\$IMAGE"[\s\S]*npx prisma migrate deploy\n\s*raise_rollback_floor "\$IMAGE"/, 'does not check and raise the rollback floor around migrations'],
   ];
   for (const [pattern, message] of directRequirements) {
     if (!pattern.test(directDeploy)) failures.push(`deploy-vps-direct.sh ${message}`);
