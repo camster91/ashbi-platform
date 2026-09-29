@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
+import { applyChatDelete, applyChatEdit } from '../lib/chat-thread-cache';
 import { useSocket } from '../hooks/useSocket';
 import { useAuth } from '../hooks/useAuth';
 import { preferredScrollBehavior } from '../lib/motion';
@@ -83,9 +84,8 @@ export default function ProjectChat({ projectId }) {
 
       // Listen for edits
       socket.on('chat:edited', (editedMessage) => {
-        queryClient.setQueryData(['chat', projectId], (old = []) =>
-          old.map(m => m.id === editedMessage.id ? editedMessage : m)
-        );
+        // Replies are nested in their thread: update either level.
+        queryClient.setQueryData(['chat', projectId], (old = []) => applyChatEdit(old, editedMessage));
       });
 
       // Listen for deletions
@@ -94,9 +94,7 @@ export default function ProjectChat({ projectId }) {
           queryClient.invalidateQueries({ queryKey: ['chat', projectId] });
           return;
         }
-        queryClient.setQueryData(['chat', projectId], (old = []) =>
-          old.filter(m => m.id !== messageId)
-        );
+        queryClient.setQueryData(['chat', projectId], (old = []) => applyChatDelete(old, messageId));
       });
 
       // Listen for reactions
