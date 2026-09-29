@@ -7,7 +7,9 @@
 // cannot re-send the same SLA_WARNING / ESCALATION. Any thread activity after
 // the last escalation (a response, a new message) starts a new cycle, the same
 // clock `hoursSinceActivity` is measured on; sending a response also resets the
-// level explicitly (src/routes/response.routes.js).
+// level explicitly (src/routes/response.routes.js). A claim and its
+// notifications commit in one transaction, so a failed fan-out never leaves a
+// level claimed without its alert.
 
 export const ESCALATION_LEVELS = Object.freeze({ NONE: 0, SLA_WARNING: 1, ESCALATION: 2 });
 
@@ -65,60 +67,67 @@ export async function checkThreadEscalation(threadId, {
 
   const hoursSinceActivity = (now - new Date(thread.lastActivityAt)) / HOUR_MS;
   const slaHours = slaDefaults[thread.priority] || 24;
-  const notifications = [];
-  let admins;
-  const getAdmins = async () => {
-    admins ??= await activeAdmins(prisma);
-    return admins;
-  };
-
-  if (hoursSinceActivity >= 4 && hoursSinceActivity < 8 && thread.assignedToId
-    && await claimEscalationLevel(prisma, thread, ESCALATION_LEVELS.SLA_WARNING, now)) {
-    notifications.push({
-      userId: thread.assignedToId,
-      type: 'SLA_WARNING',
-      title: 'Response needed soon',
-      message: `Thread "${thread.subject}" needs attention (${Math.round(hoursSinceActivity)}h without response)`,
-      data: { threadId: thread.id },
-    });
+  const wantsWarning = hoursSinceActivity >= 4 && hoursSinceActivity < 8 && Boolean(thread.assignedToId)
+    && currentEscalationLevel(thread) < ESCALATION_LEVELS.SLA_WARNING;
+  const wantsEscalation = hoursSinceActivity >= 8
+    && currentEscalationLevel(thread) < ESCALATION_LEVELS.ESCALATION;
+  const wantsBreach = hoursSinceActivity >= slaHours && !thread.slaBreached;
+  if (!wantsWarning && !wantsEscalation && !wantsBreach) {
+    return { escalated: false, notifications: 0, hoursSinceActivity: Math.round(hoursSinceActivity) };
   }
+  // Read outside the transaction; only the claims and the fan-out must be atomic.
+  const admins = wantsEscalation || wantsBreach ? await activeAdmins(prisma) : [];
 
-  if (hoursSinceActivity >= 8
-    && await claimEscalationLevel(prisma, thread, ESCALATION_LEVELS.ESCALATION, now)) {
-    for (const admin of await getAdmins()) {
-      notifications.push({
-        userId: admin.id,
-        type: 'ESCALATION',
-        title: 'Thread escalation',
-        message: `Thread "${thread.subject}" has had no response for ${Math.round(hoursSinceActivity)} hours`,
-        data: { threadId: thread.id, assigneeId: thread.assignedToId },
+  // Claims and notifications commit together: if the fan-out fails (or the
+  // worker dies) the claims roll back, so the next attempt sends the alert
+  // instead of finding the level already claimed.
+  const notifications = await prisma.$transaction(async (tx) => {
+    const pending = [];
+    if (wantsWarning && await claimEscalationLevel(tx, thread, ESCALATION_LEVELS.SLA_WARNING, now)) {
+      pending.push({
+        userId: thread.assignedToId,
+        type: 'SLA_WARNING',
+        title: 'Response needed soon',
+        message: `Thread "${thread.subject}" needs attention (${Math.round(hoursSinceActivity)}h without response)`,
+        data: { threadId: thread.id },
       });
     }
-  }
 
-  if (hoursSinceActivity >= slaHours && !thread.slaBreached) {
-    // slaBreached is the once-only marker for the breach notification.
-    const claimed = await prisma.thread.updateMany({
-      where: { id: thread.id, slaBreached: false },
-      data: { slaBreached: true },
-    });
-    if (claimed.count === 1) {
-      for (const admin of await getAdmins()) {
-        notifications.push({
+    if (wantsEscalation && await claimEscalationLevel(tx, thread, ESCALATION_LEVELS.ESCALATION, now)) {
+      for (const admin of admins) {
+        pending.push({
           userId: admin.id,
-          type: 'SLA_BREACH',
-          title: 'SLA BREACH',
-          message: `Thread "${thread.subject}" has breached SLA (${Math.round(hoursSinceActivity)}h without response)`,
-          data: { threadId: thread.id, priority: thread.priority },
+          type: 'ESCALATION',
+          title: 'Thread escalation',
+          message: `Thread "${thread.subject}" has had no response for ${Math.round(hoursSinceActivity)} hours`,
+          data: { threadId: thread.id, assigneeId: thread.assignedToId },
         });
       }
     }
-  }
 
-  // One round-trip for the whole fan-out; notifications are independent.
-  if (notifications.length > 0) {
-    await prisma.notification.createMany({ data: notifications });
-  }
+    if (wantsBreach) {
+      // slaBreached is the once-only marker for the breach notification.
+      const claimed = await tx.thread.updateMany({
+        where: { id: thread.id, slaBreached: false },
+        data: { slaBreached: true },
+      });
+      if (claimed.count === 1) {
+        for (const admin of admins) {
+          pending.push({
+            userId: admin.id,
+            type: 'SLA_BREACH',
+            title: 'SLA BREACH',
+            message: `Thread "${thread.subject}" has breached SLA (${Math.round(hoursSinceActivity)}h without response)`,
+            data: { threadId: thread.id, priority: thread.priority },
+          });
+        }
+      }
+    }
+
+    // One round-trip for the whole fan-out.
+    if (pending.length > 0) await tx.notification.createMany({ data: pending });
+    return pending;
+  });
 
   return {
     escalated: notifications.length > 0,
