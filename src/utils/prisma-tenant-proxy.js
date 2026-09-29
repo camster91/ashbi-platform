@@ -1,6 +1,7 @@
 // @ts-check
 import logger from './logger.js';
 import { withSoftDelete } from '../services/soft-delete.service.js';
+import { relationsFor } from './tenant-relations.js';
 
 /**
  * Enterprise Scoped Prisma Proxy with Soft Delete + Tenant Isolation
@@ -71,7 +72,11 @@ const BOOKKEEPING_UPDATE_METHODS = new Set(['update', 'updateMany']);
 // protection and is written from the unauthenticated, signed webhook route.
 // platformsetting is the single deployment-wide settings row (AI kill switch);
 // only platform operators write it (settings.routes.js).
-const GLOBAL_MODELS = new Set(['organization', 'mailgunwebhookreceipt', 'platformsetting']);
+// clientportallinkredemption only stores the random jti of redeemed portal
+// magic links (single-use guard), written from the unauthenticated redeem route.
+// emailwebhookreceipt only stores accepted signatures of the signed inbound
+// email webhook (replay guard).
+const GLOBAL_MODELS = new Set(['organization', 'mailgunwebhookreceipt', 'platformsetting', 'clientportallinkredemption', 'emailwebhookreceipt']);
 
 // Direct-owned records can also reference another tenant-owned root. The
 // redundant organizationId is not enough: the referenced parent must belong
@@ -256,25 +261,208 @@ function buildTenantWhere(path, organizationId) {
   return result;
 }
 
+// Delegate methods a request-scoped client may call. Anything else (a method a
+// future Prisma adds, or one this proxy has no scoping rule for) is refused
+// instead of passing through unscoped.
+const READ_METHODS = new Set([
+  'findMany', 'findFirst', 'findFirstOrThrow', 'findUnique', 'findUniqueOrThrow',
+  'count', 'aggregate', 'groupBy',
+]);
+const CREATE_METHODS = new Set(['create', 'createMany', 'createManyAndReturn']);
+const BULK_UPDATE_METHODS = new Set(['updateMany', 'updateManyAndReturn']);
+const WRITE_METHODS = new Set([
+  ...CREATE_METHODS, 'update', ...BULK_UPDATE_METHODS, 'upsert', 'delete', 'deleteMany',
+]);
+export const SCOPED_DELEGATE_METHODS = Object.freeze([...READ_METHODS, ...WRITE_METHODS]);
+
+// Nested relation operations. Writes that create or upsert a *parent* record
+// through a to-one relation, and connectOrCreate anywhere, cannot be verified
+// before Prisma runs them, so they are refused in request scope.
+const NESTED_TO_ONE_REFUSED = new Set(['create', 'connectOrCreate', 'upsert']);
+const NESTED_TO_MANY_REFUSED = new Set(['connectOrCreate']);
+
+/**
+ * A tenant-isolation refusal. `statusCode` is what the API answers
+ * (src/utils/http-errors.js): 404 for a record outside the organization, 400
+ * for a missing owner, 500 for a policy/programming error. The message (with
+ * ids) is for logs only and never reaches a client.
+ */
+export class TenancyError extends Error {
+  constructor(message, statusCode = 500) {
+    super(`Tenancy Error: ${message}`);
+    this.name = 'TenancyError';
+    this.code = 'TENANCY_VIOLATION';
+    this.statusCode = statusCode;
+  }
+}
+
+function isPlainObject(value) {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) && !(value instanceof Date);
+}
+
+function asList(value) {
+  if (value === undefined || value === null) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+/** A foreign-key scalar write: `'id'`, `{ set: 'id' }`, or null (no owner). */
+function scalarKeyValue(value) {
+  if (typeof value === 'string') return value;
+  if (isPlainObject(value) && typeof value.set === 'string') return value.set;
+  return null;
+}
+
+function describeWhere(where) {
+  if (isPlainObject(where) && typeof where.id === 'string' && Object.keys(where).length === 1) return where.id;
+  return JSON.stringify(where);
+}
+
 export function createScopedPrisma(prisma, organizationId) {
   if (!organizationId) {
-    throw new Error('Tenancy Error: organizationId is required for scoped queries');
+    throw new TenancyError('organizationId is required for scoped queries');
   }
 
   // Apply soft-delete wrapper first, then tenant scoping
   const softPrisma = withSoftDelete(prisma);
 
-  async function verifyTenantOwner({ relation, model, delegate }, ownerId) {
-    const ownerPath = TENANT_PATHS[model];
-    const ownerWhere = DIRECT_SCOPED_MODELS.has(model)
-      ? { id: ownerId, organizationId }
-      : { AND: [{ id: ownerId }, buildTenantWhere(ownerPath, organizationId)] };
-    const owner = await softPrisma[delegate].findFirst({
-      where: ownerWhere,
-      select: { id: true },
-    });
+  /** The where that proves a record of `modelKey` belongs to this organization. */
+  function ownedWhere(modelKey, where) {
+    if (DIRECT_SCOPED_MODELS.has(modelKey)) return { ...where, organizationId };
+    return { AND: [where, buildTenantWhere(TENANT_PATHS[modelKey], organizationId)] };
+  }
+
+  /**
+   * Prove that the record of `modelKey` matching `where` (a unique input)
+   * belongs to this organization. Each distinct record is checked once per
+   * call (`verified`).
+   */
+  async function verifyOwned(label, modelKey, where, verified) {
+    if (!isPlainObject(where) || Object.keys(where).length === 0) {
+      throw new TenancyError(`${label} reference is not a unique record`, 400);
+    }
+    const cacheKey = `${modelKey}:${JSON.stringify(where)}`;
+    if (verified.has(cacheKey)) return;
+    if (modelKey === 'organization') {
+      if (where.id !== organizationId || Object.keys(where).length !== 1) {
+        throw new TenancyError(`${label} ${describeWhere(where)} does not belong to organization ${organizationId}`, 404);
+      }
+      verified.add(cacheKey);
+      return;
+    }
+    if (GLOBAL_MODELS.has(modelKey)) {
+      throw new TenancyError(`${label} links a shared ${modelKey} record, which scoped writes may not do`);
+    }
+    if (!DIRECT_SCOPED_MODELS.has(modelKey) && !TENANT_PATHS[modelKey]) {
+      throw new TenancyError(`${label} references ${modelKey}, which is not classified for tenant access`);
+    }
+    const meta = relationsFor(modelKey);
+    const delegate = softPrisma[meta?.delegate ?? modelKey];
+    if (!delegate || typeof delegate.findFirst !== 'function') {
+      throw new TenancyError(`${label} references ${modelKey}, which cannot be verified`);
+    }
+    const owner = await delegate.findFirst({ where: ownedWhere(modelKey, where), select: { id: true } });
     if (!owner) {
-      throw new Error(`Tenancy Error: ${relation} ${ownerId} does not belong to organization ${organizationId}`);
+      throw new TenancyError(`${label} ${describeWhere(where)} does not belong to organization ${organizationId}`, 404);
+    }
+    verified.add(cacheKey);
+  }
+
+  /**
+   * Validate one row of write data for `modelKey`: every foreign-key scalar
+   * and every nested relation write that points at a tenant-owned record must
+   * stay inside this organization. Nested creates of direct-scoped models get
+   * this organization injected, like top-level creates.
+   */
+  async function validateWriteData(modelKey, data, verified, { creating, nested = false }) {
+    if (!isPlainObject(data)) return;
+    const meta = relationsFor(modelKey);
+    if (!meta) throw new TenancyError(`no relation metadata for ${modelKey}; the write cannot be validated`);
+    if (nested && creating && DIRECT_SCOPED_MODELS.has(modelKey) && data.organization === undefined) {
+      data.organizationId = organizationId;
+    }
+
+    for (const [key, value] of Object.entries(data)) {
+      const relationName = meta.foreignKeys[key];
+      if (relationName) {
+        const ownerId = scalarKeyValue(value);
+        if (ownerId === null) continue;
+        await verifyOwned(relationName, meta.relations[relationName].target, { id: ownerId }, verified);
+        continue;
+      }
+      const relation = meta.relations[key];
+      if (!relation || value === undefined || value === null) continue;
+      if (!isPlainObject(value)) {
+        throw new TenancyError(`${modelKey}.${key} has an unsupported nested write`);
+      }
+      const toOne = relation.fk !== null;
+      for (const [operation, operand] of Object.entries(value)) {
+        if ((toOne ? NESTED_TO_ONE_REFUSED : NESTED_TO_MANY_REFUSED).has(operation)) {
+          throw new TenancyError(`nested ${key}.${operation} is not allowed in scoped writes`);
+        }
+        switch (operation) {
+          case 'connect':
+          case 'set':
+            for (const where of asList(operand)) await verifyOwned(key, relation.target, where, verified);
+            break;
+          case 'create':
+            for (const row of asList(operand)) {
+              await validateWriteData(relation.target, row, verified, { creating: true, nested: true });
+            }
+            break;
+          case 'createMany':
+            for (const row of asList(operand?.data)) {
+              await validateWriteData(relation.target, row, verified, { creating: true, nested: true });
+            }
+            break;
+          case 'update':
+          case 'updateMany':
+            for (const entry of asList(operand)) {
+              // To-many (and filtered to-one) updates are { where, data };
+              // a plain to-one update is the data itself.
+              const rowData = isPlainObject(entry) && isPlainObject(entry.data) && (!toOne || entry.where !== undefined)
+                ? entry.data
+                : entry;
+              await validateWriteData(relation.target, rowData, verified, { creating: false, nested: true });
+            }
+            break;
+          case 'upsert':
+            for (const entry of asList(operand)) {
+              await validateWriteData(relation.target, entry?.create, verified, { creating: true, nested: true });
+              await validateWriteData(relation.target, entry?.update, verified, { creating: false, nested: true });
+            }
+            break;
+          case 'disconnect':
+          case 'delete':
+          case 'deleteMany':
+            break;
+          default:
+            throw new TenancyError(`nested ${key}.${operation} is not supported in scoped writes`);
+        }
+      }
+    }
+  }
+
+  /** Validate the data rows of a top-level write call. */
+  async function validateWriteArgs(modelKey, methodName, queryArgs, verified) {
+    if (methodName === 'upsert') {
+      await validateWriteData(modelKey, queryArgs.create, verified, { creating: true });
+      await validateWriteData(modelKey, queryArgs.update, verified, { creating: false });
+      return;
+    }
+    if (CREATE_METHODS.has(methodName) || methodName === 'update' || BULK_UPDATE_METHODS.has(methodName)) {
+      const creating = CREATE_METHODS.has(methodName);
+      const rows = asList(queryArgs.data);
+      if (creating) {
+        // A batch may link rows it creates itself (a reply's parentId naming a
+        // root in the same createMany). Those rows are created in this
+        // organization, and each is validated below, so they count as owned.
+        // Not with skipDuplicates: a skipped row could name an existing
+        // record of another organization.
+        for (const row of queryArgs.skipDuplicates ? [] : rows) {
+          if (typeof row?.id === 'string') verified.add(`${modelKey}:${JSON.stringify({ id: row.id })}`);
+        }
+      }
+      for (const row of rows) await validateWriteData(modelKey, row, verified, { creating });
     }
   }
 
@@ -303,14 +491,14 @@ export function createScopedPrisma(prisma, organizationId) {
 
       if (GLOBAL_MODELS.has(modelKey)) return model;
       if (RESTRICTED_MODELS.has(modelKey)) {
-        throw new Error(`Tenancy Error: model ${String(modelName)} has no tenant owner and is unavailable in request scope`);
+        throw new TenancyError(`model ${String(modelName)} has no tenant owner and is unavailable in request scope`);
       }
 
       // Application model delegates must be classified explicitly. This
       // makes future schema additions fail closed until their ownership
       // policy is reviewed.
       if (!isDirect && !tenantPath) {
-        throw new Error(`Tenancy Error: model ${String(modelName)} is not classified for tenant access`);
+        throw new TenancyError(`model ${String(modelName)} is not classified for tenant access`);
       }
 
       return new Proxy(model, {
@@ -320,9 +508,14 @@ export function createScopedPrisma(prisma, organizationId) {
           if (typeof methodName !== 'string') return modelTarget[methodName];
           const method = modelTarget[methodName];
           if (typeof method !== 'function') return method;
+          if (!READ_METHODS.has(methodName) && !WRITE_METHODS.has(methodName)) {
+            return async () => {
+              throw new TenancyError(`${String(modelName)}.${String(methodName)} is not permitted in request scope`);
+            };
+          }
           if (APPEND_ONLY_MODELS.has(modelKey) && APPEND_ONLY_BLOCKED_METHODS.has(methodName)) {
             return async () => {
-              throw new Error(`Tenancy Error: ${String(modelName)} is append-only; ${String(methodName)} is not permitted`);
+              throw new TenancyError(`${String(modelName)} is append-only; ${String(methodName)} is not permitted`);
             };
           }
           const bookkeepingFields = BOOKKEEPING_ONLY_MODELS[modelKey];
@@ -340,12 +533,15 @@ export function createScopedPrisma(prisma, organizationId) {
                 throw new Error(`Tenancy Error: ${String(modelName)} fields ${changed.join(', ')} are immutable`);
               }
             }
+            // Each distinct referenced record is verified once per call, so a
+            // batched createMany costs one check per owner instead of per row.
+            const verified = new Set();
 
             // Path A: direct-scoped model (client/project/user)
             if (isDirect) {
-              if (['findMany', 'findUnique', 'findUniqueOrThrow', 'findFirst', 'findFirstOrThrow', 'count', 'aggregate', 'groupBy'].includes(methodName)) {
+              if (READ_METHODS.has(methodName)) {
                 queryArgs.where = { ...queryArgs.where, organizationId };
-              } else if (['create', 'createMany'].includes(methodName)) {
+              } else if (CREATE_METHODS.has(methodName)) {
                 if (Array.isArray(queryArgs.data)) {
                   queryArgs.data = queryArgs.data.map(d => ({ ...d, organizationId }));
                 } else {
@@ -355,7 +551,7 @@ export function createScopedPrisma(prisma, organizationId) {
                 queryArgs.where = { ...queryArgs.where, organizationId };
                 queryArgs.create = { ...queryArgs.create, organizationId };
                 queryArgs.update = { ...queryArgs.update, organizationId };
-              } else if (['update', 'updateMany', 'delete', 'deleteMany'].includes(methodName)) {
+              } else if (methodName === 'update' || methodName === 'delete' || methodName === 'deleteMany' || BULK_UPDATE_METHODS.has(methodName)) {
                 queryArgs.where = { ...queryArgs.where, organizationId };
                 if (queryArgs.data) {
                   queryArgs.data = { ...queryArgs.data, organizationId };
@@ -363,152 +559,114 @@ export function createScopedPrisma(prisma, organizationId) {
               }
 
               const parentRelations = DIRECT_PARENT_RELATIONS[modelKey] || [];
-              const isCreate = methodName === 'create' || methodName === 'createMany';
+              const isCreate = CREATE_METHODS.has(methodName);
               const ownershipWrites = methodName === 'upsert'
                 ? [{ row: queryArgs.create, creating: true }, { row: queryArgs.update, creating: false }]
-                : (isCreate || methodName === 'update' || methodName === 'updateMany')
-                  ? (Array.isArray(queryArgs.data) ? queryArgs.data : [queryArgs.data])
-                    .map((row) => ({ row, creating: isCreate }))
+                : (isCreate || methodName === 'update' || BULK_UPDATE_METHODS.has(methodName))
+                  ? asList(queryArgs.data).map((row) => ({ row, creating: isCreate }))
                   : [];
-              // Each distinct owner is verified once per call, so a batched
-              // createMany costs one check per owner instead of one per row.
-              const verifiedOwners = new Set();
               for (const { row, creating } of ownershipWrites) {
                 for (const parent of parentRelations) {
                   if (row?.[parent.relation]?.create || row?.[parent.relation]?.connectOrCreate) {
-                    throw new Error(`Tenancy Error: nested ${parent.relation} creation is not allowed in scoped writes`);
+                    throw new TenancyError(`nested ${parent.relation} creation is not allowed in scoped writes`);
                   }
                   const ownerId = row?.[parent.field] ?? row?.[parent.relation]?.connect?.id;
-                  if (!ownerId) {
-                    if (creating && parent.required) {
-                      throw new Error(`Tenancy Error: ${String(modelName)}.${parent.field} is required`);
-                    }
-                    continue;
+                  if (!ownerId && creating && parent.required) {
+                    throw new TenancyError(`${String(modelName)}.${parent.field} is required`, 400);
                   }
-                  const ownerKey = `${parent.relation}:${ownerId}`;
-                  if (verifiedOwners.has(ownerKey)) continue;
-                  await verifyTenantOwner(parent, ownerId);
-                  verifiedOwners.add(ownerKey);
                 }
               }
+              await validateWriteArgs(modelKey, methodName, queryArgs, verified);
               logger.debug({ modelName, methodName, organizationId }, 'Scoped Query Execution');
               return method.apply(modelTarget, [queryArgs, ...args.slice(1)]);
             }
 
             // Path B: tenant-path-scoped model (Thread, Task, Invoice, etc.)
             // Auto-inject a relation filter that walks to organizationId.
-            if (tenantPath) {
-              const tenantWhere = buildTenantWhere(tenantPath, organizationId);
+            const tenantWhere = buildTenantWhere(tenantPath, organizationId);
+            const ownerRelation = tenantPath[0];
+            const ownerIdField = `${ownerRelation}Id`;
 
-              // findUnique on Prisma requires the where to be a unique input —
-              // a relation filter AND id filter breaks that. Convert to
-              // findFirst (which accepts arbitrary where) and preserve
-              // include/select from the original args.
-              if (methodName === 'findUnique' || methodName === 'findUniqueOrThrow') {
-                const findFirstArgs = {
-                  where: { AND: [queryArgs.where ?? {}, tenantWhere] },
-                };
-                if (queryArgs.include) findFirstArgs.include = queryArgs.include;
-                if (queryArgs.select)  findFirstArgs.select  = queryArgs.select;
-                if (queryArgs.orderBy) findFirstArgs.orderBy = queryArgs.orderBy;
-                if (queryArgs.cursor)  findFirstArgs.cursor  = queryArgs.cursor;
-                if (queryArgs.distinct) findFirstArgs.distinct = queryArgs.distinct;
-                const scopedMethod = methodName === 'findUniqueOrThrow' ? 'findFirstOrThrow' : 'findFirst';
-                logger.debug({ modelName, methodName: `${scopedMethod}(from-unique)`, organizationId, tenantPath }, 'Tenant-path Query Execution');
-                return modelTarget[scopedMethod](findFirstArgs);
-              }
-
-              if (['findFirst', 'findMany', 'count', 'aggregate', 'groupBy'].includes(methodName)) {
-                queryArgs.where = { AND: [queryArgs.where ?? {}, tenantWhere] };
-              } else if (['updateMany', 'deleteMany'].includes(methodName)) {
-                queryArgs.where = { AND: [queryArgs.where ?? {}, tenantWhere] };
-              }
-
-              // Prisma update/delete require a WhereUniqueInput. Adding a
-              // relation filter via AND makes that input invalid. Prove the
-              // target belongs to this tenant first, then execute the original
-              // unique mutation. Relationship-owner changes are independently
-              // checked so a record cannot be moved across tenants.
-              if (methodName === 'update' || methodName === 'delete') {
-                const scopedTarget = await modelTarget.findFirst({
-                  where: { AND: [queryArgs.where ?? {}, tenantWhere] },
-                  select: { id: true },
-                });
-                if (!scopedTarget) {
-                  throw new Error(`Tenancy Error: ${String(modelName)} record is unavailable in this organization`);
-                }
-                if (methodName === 'update') {
-                  const ownerRelation = tenantPath[0];
-                  const ownerIdField = `${ownerRelation}Id`;
-                  const ownerPolicy = RELATION_OWNER_MODELS[ownerRelation];
-                  const changedOwnerId = queryArgs.data?.[ownerIdField];
-                  if (changedOwnerId && ownerPolicy) {
-                    await verifyTenantOwner({ relation: ownerRelation, ...ownerPolicy }, changedOwnerId);
-                  }
-                }
-                logger.debug({ modelName, methodName, organizationId, tenantPath }, 'Tenant-path Unique Mutation');
-                return method.apply(modelTarget, [queryArgs, ...args.slice(1)]);
-              }
-              if (methodName === 'upsert') {
-                const ownerRelation = tenantPath[0];
-                const ownerIdField = `${ownerRelation}Id`;
-                const ownerPolicy = RELATION_OWNER_MODELS[ownerRelation];
-                if (!ownerPolicy) {
-                  throw new Error(`Tenancy Error: no owner policy for relation ${ownerRelation}`);
-                }
-
-                const scopedTarget = await modelTarget.findFirst({
-                  where: { AND: [queryArgs.where ?? {}, tenantWhere] },
-                  select: { id: true },
-                });
-                const branch = scopedTarget ? queryArgs.update : queryArgs.create;
-                const ownerId = branch?.[ownerIdField];
-                if (!scopedTarget && !ownerId) {
-                  throw new Error(`Tenancy Error: ${String(modelName)}.${ownerIdField} is required`);
-                }
-                if (ownerId) {
-                  await verifyTenantOwner({ relation: ownerRelation, ...ownerPolicy }, ownerId);
-                }
-
-                const branchArgs = scopedTarget
-                  ? { where: queryArgs.where, data: queryArgs.update }
-                  : { data: queryArgs.create };
-                if (queryArgs.include) branchArgs.include = queryArgs.include;
-                if (queryArgs.select) branchArgs.select = queryArgs.select;
-                const branchMethod = scopedTarget ? 'update' : 'create';
-                logger.debug({ modelName, methodName: `${branchMethod}(from-upsert)`, organizationId, tenantPath }, 'Tenant-path Upsert');
-                return modelTarget[branchMethod](branchArgs);
-              }
-              if (methodName === 'create' || methodName === 'createMany') {
-                const ownerRelation = tenantPath[0];
-                const ownerIdField = `${ownerRelation}Id`;
-                const ownerPolicy = RELATION_OWNER_MODELS[ownerRelation];
-                if (!ownerPolicy) {
-                  throw new Error(`Tenancy Error: no owner policy for relation ${ownerRelation}`);
-                }
-                const ownershipWrites = (Array.isArray(queryArgs.data) ? queryArgs.data : [queryArgs.data])
-                  .map((row) => ({ row, required: true }));
-                const verifiedOwners = new Set();
-                for (const { row, required } of ownershipWrites) {
-                  const ownerId = row?.[ownerIdField];
-                  if (!ownerId) {
-                    if (required) {
-                      throw new Error(`Tenancy Error: ${String(modelName)}.${ownerIdField} is required`);
-                    }
-                    continue;
-                  }
-
-                  if (verifiedOwners.has(ownerId)) continue;
-                  await verifyTenantOwner({ relation: ownerRelation, ...ownerPolicy }, ownerId);
-                  verifiedOwners.add(ownerId);
-                }
-              }
-
-              logger.debug({ modelName, methodName, organizationId, tenantPath }, 'Tenant-path Query Execution');
-              return method.apply(modelTarget, [queryArgs, ...args.slice(1)]);
+            // findUnique on Prisma requires the where to be a unique input —
+            // a relation filter AND id filter breaks that. Convert to
+            // findFirst (which accepts arbitrary where) and preserve
+            // include/select from the original args.
+            if (methodName === 'findUnique' || methodName === 'findUniqueOrThrow') {
+              const findFirstArgs = {
+                where: { AND: [queryArgs.where ?? {}, tenantWhere] },
+              };
+              if (queryArgs.include) findFirstArgs.include = queryArgs.include;
+              if (queryArgs.select)  findFirstArgs.select  = queryArgs.select;
+              if (queryArgs.orderBy) findFirstArgs.orderBy = queryArgs.orderBy;
+              if (queryArgs.cursor)  findFirstArgs.cursor  = queryArgs.cursor;
+              if (queryArgs.distinct) findFirstArgs.distinct = queryArgs.distinct;
+              const scopedMethod = methodName === 'findUniqueOrThrow' ? 'findFirstOrThrow' : 'findFirst';
+              logger.debug({ modelName, methodName: `${scopedMethod}(from-unique)`, organizationId, tenantPath }, 'Tenant-path Query Execution');
+              return modelTarget[scopedMethod](findFirstArgs);
             }
 
-            return method.apply(modelTarget, args);
+            if (READ_METHODS.has(methodName) || methodName === 'deleteMany' || BULK_UPDATE_METHODS.has(methodName)) {
+              queryArgs.where = { AND: [queryArgs.where ?? {}, tenantWhere] };
+            }
+
+            // Prisma update/delete require a WhereUniqueInput. Adding a
+            // relation filter via AND makes that input invalid. Prove the
+            // target belongs to this tenant first, then execute the original
+            // unique mutation. Every foreign key and nested relation write is
+            // independently checked so a record cannot be moved or linked
+            // across tenants.
+            if (methodName === 'update' || methodName === 'delete') {
+              const scopedTarget = await modelTarget.findFirst({
+                where: { AND: [queryArgs.where ?? {}, tenantWhere] },
+                select: { id: true },
+              });
+              if (!scopedTarget) {
+                throw new TenancyError(`${String(modelName)} record is unavailable in this organization`, 404);
+              }
+              if (methodName === 'update') await validateWriteArgs(modelKey, methodName, queryArgs, verified);
+              logger.debug({ modelName, methodName, organizationId, tenantPath }, 'Tenant-path Unique Mutation');
+              return method.apply(modelTarget, [queryArgs, ...args.slice(1)]);
+            }
+            if (methodName === 'upsert') {
+              if (!RELATION_OWNER_MODELS[ownerRelation]) {
+                throw new TenancyError(`no owner policy for relation ${ownerRelation}`);
+              }
+
+              const scopedTarget = await modelTarget.findFirst({
+                where: { AND: [queryArgs.where ?? {}, tenantWhere] },
+                select: { id: true },
+              });
+              const branch = scopedTarget ? queryArgs.update : queryArgs.create;
+              if (!scopedTarget && !branch?.[ownerIdField]) {
+                throw new TenancyError(`${String(modelName)}.${ownerIdField} is required`, 400);
+              }
+              await validateWriteData(modelKey, branch, verified, { creating: !scopedTarget });
+
+              const branchArgs = scopedTarget
+                ? { where: queryArgs.where, data: queryArgs.update }
+                : { data: queryArgs.create };
+              if (queryArgs.include) branchArgs.include = queryArgs.include;
+              if (queryArgs.select) branchArgs.select = queryArgs.select;
+              const branchMethod = scopedTarget ? 'update' : 'create';
+              logger.debug({ modelName, methodName: `${branchMethod}(from-upsert)`, organizationId, tenantPath }, 'Tenant-path Upsert');
+              return modelTarget[branchMethod](branchArgs);
+            }
+            if (CREATE_METHODS.has(methodName)) {
+              if (!RELATION_OWNER_MODELS[ownerRelation]) {
+                throw new TenancyError(`no owner policy for relation ${ownerRelation}`);
+              }
+              for (const row of asList(queryArgs.data)) {
+                if (!row?.[ownerIdField]) {
+                  throw new TenancyError(`${String(modelName)}.${ownerIdField} is required`, 400);
+                }
+              }
+            }
+            if (CREATE_METHODS.has(methodName) || BULK_UPDATE_METHODS.has(methodName)) {
+              await validateWriteArgs(modelKey, methodName, queryArgs, verified);
+            }
+
+            logger.debug({ modelName, methodName, organizationId, tenantPath }, 'Tenant-path Query Execution');
+            return method.apply(modelTarget, [queryArgs, ...args.slice(1)]);
           };
         }
       });

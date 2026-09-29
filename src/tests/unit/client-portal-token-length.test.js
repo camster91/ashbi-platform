@@ -35,7 +35,8 @@ test('magic-link claims carry identifiers only, so any contact fits the redempti
   const user = { id: 'cmugckzq9000ysx7dgh43uxwh', email: `${'a'.repeat(243)}@example.com`, name: 'N'.repeat(200), sessionVersion: 2147483647 };
   const contact = { id: 'cmugckure000osx7d2posnb8e', clientId: 'cmugckur5000nsx7dl8eqbr9t', email: user.email, name: user.name, client: { organizationId: 'cmugc76on0000oi7dp2v85ini' } };
   const claims = magicLinkClaims(user, contact);
-  assert.deepEqual(Object.keys(claims).sort(), ['clientId', 'contactId', 'id', 'organizationId', 'role', 'sessionVersion']);
+  assert.deepEqual(Object.keys(claims).sort(), ['clientId', 'contactId', 'id', 'jti', 'organizationId', 'role', 'sessionVersion', 'typ']);
+  assert.equal(claims.typ, 'client_magic_link');
   assert.equal(claims.role, 'CLIENT');
 
   const app = Fastify();

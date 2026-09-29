@@ -25,6 +25,7 @@ import env from '../config/env.js';
 import defaultLogger from '../utils/logger.js';
 import { safeEqual } from '../utils/crypto.js';
 import { sessionBinding } from './reauth.js';
+import { sessionTokenTypeFor } from './session.js';
 import { recordAuditEvent } from '../services/audit-event.service.js';
 
 export const IMPERSONATION_COOKIE = 'imp';
@@ -436,6 +437,10 @@ export async function findPortalContact(prisma, subject) {
 
 function subjectClaims(subject, row, contactId) {
   return {
+    // The subject's session type, so session checks that require it (the
+    // client portal accepts only client_session) treat the view like the
+    // subject's own session.
+    typ: sessionTokenTypeFor(subject.role),
     id: subject.id,
     email: subject.email,
     name: subject.name,
@@ -631,6 +636,9 @@ export function createImpersonationHook({ prisma, isCurrentUserSession, logger =
       adminOk = false;
     }
     if (!adminOk) {
+      // jwtVerify above re-set request.user from the (non-current) token;
+      // never leave it behind for tenancy or routes to trust.
+      request.user = null;
       reply.clearCookie(IMPERSONATION_COOKIE, clearImpersonationCookieOptions());
       return undefined; // the route's own guard answers 401
     }

@@ -1,10 +1,53 @@
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import env from '../config/env.js';
-import { validateBody, createEstimateSchema, updateEstimateSchema } from '../validators/schemas.js';
+import { validateBody, createEstimateSchema, updateEstimateSchema, estimatePublicResponseSchema } from '../validators/schemas.js';
 import { clampTake } from '../utils/query-limits.js';
 import { softDelete } from '../services/trash.service.js';
 import { deliveryFieldsFromSend, mailgunTrackingFields, withDeliveryState } from '../services/mailgun-delivery.service.js';
+import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
+import { recordAuditEvent, recordRequestAuditEvent } from '../services/audit-event.service.js';
+
+// Estimates a client may see through the public link. A DRAFT is never public,
+// whatever token it holds.
+const PUBLIC_ESTIMATE_STATUSES = ['SENT', 'APPROVED', 'DECLINED', 'CONVERTED'];
+// Per-IP limits for the unauthenticated link routes (on top of the global
+// /api limit): enough for a client opening and answering their estimate.
+const PUBLIC_VIEW_RATE_LIMIT = { rateLimit: { max: 30, timeWindow: '1 minute' } };
+const PUBLIC_RESPOND_RATE_LIMIT = { rateLimit: { max: 10, timeWindow: '15 minutes' } };
+
+/** The explicit public shape: no internal ids, drafts, delivery data or tokens. */
+export function publicEstimateView(estimate) {
+  const lineItems = Array.isArray(estimate.lineItems) ? estimate.lineItems : [];
+  return {
+    title: estimate.title,
+    description: estimate.description ?? null,
+    status: estimate.status,
+    lineItems: lineItems.map((item) => ({
+      description: typeof item?.description === 'string' ? item.description : '',
+      quantity: Number(item?.quantity) || 0,
+      rate: Number(item?.rate) || 0,
+      amount: Number(item?.amount ?? (Number(item?.quantity) || 0) * (Number(item?.rate) || 0)) || 0,
+    })),
+    subtotal: estimate.subtotal,
+    tax: estimate.tax,
+    total: estimate.total,
+    validUntil: estimate.validUntil ?? null,
+    sentAt: estimate.sentAt ?? null,
+    createdAt: estimate.createdAt,
+    clientName: estimate.client?.name ?? null,
+  };
+}
+
+/** Why a public link cannot be used, or null. Unknown and draft look the same. */
+function publicEstimateFailure(estimate, now = new Date()) {
+  if (!estimate || !PUBLIC_ESTIMATE_STATUSES.includes(estimate.status)) {
+    return { statusCode: 404, error: 'Estimate not found' };
+  }
+  const access = publicAccessFailure(estimate, now);
+  if (access) return access.statusCode === 404 ? { statusCode: 404, error: 'Estimate not found' } : access;
+  return null;
+}
 
 export default async function estimateRoutes(fastify) {
   // List estimates
@@ -132,14 +175,23 @@ export default async function estimateRoutes(fastify) {
     if (!estimate) return reply.status(404).send({ error: 'Estimate not found' });
     if (estimate.status !== 'DRAFT') return reply.status(400).send({ error: 'Only draft estimates can be sent' });
 
+    // Issue a fresh 256-bit link that expires with the estimate (or in 30
+    // days); the placeholder token created with the draft is never public.
+    const access = createPublicAccessWindow(estimate.validUntil);
     const updated = await request.prisma.estimate.update({
       where: { id },
-      data: { status: 'SENT', sentAt: new Date() },
+      data: {
+        status: 'SENT',
+        sentAt: new Date(),
+        viewToken: access.token,
+        publicAccessExpiresAt: access.expiresAt,
+        publicAccessRevokedAt: null,
+      },
       include: { client: { select: { id: true, name: true } } }
     });
 
     // Send estimate email with magic link to client
-    const portalUrl = `${env.hubUrl}/portal/estimate/${estimate.viewToken}`;
+    const portalUrl = `${env.hubUrl}/portal/estimate/${access.token}`;
     let deliveryFields = null;
 
     if (env.mailgunApiKey && env.mailgunDomain && estimate.client?.email) {
@@ -190,37 +242,100 @@ export default async function estimateRoutes(fastify) {
     return withDeliveryState({ ...updated, ...deliveryFields });
   });
 
-  // Public view by token
-  fastify.get('/view/:viewToken', { config: { public: true } }, async (request, reply) => {
+  // Public view by token (capability link: expiring, revocable, never a draft)
+  fastify.get('/view/:viewToken', { config: { public: true, ...PUBLIC_VIEW_RATE_LIMIT } }, async (request, reply) => {
     const estimate = await request.prisma.estimate.findUnique({
       where: { viewToken: request.params.viewToken },
-      include: { client: { select: { id: true, name: true, email: true } } }
+      include: { client: { select: { name: true } } },
     });
-    if (!estimate) return reply.status(404).send({ error: 'Estimate not found' });
-    // Provider message ids and bounce diagnostics are staff-only.
-    const { deliveryMessageId, deliveryError, ...publicEstimate } = estimate;
-    return publicEstimate;
+    const failure = publicEstimateFailure(estimate);
+    if (failure) return reply.status(failure.statusCode).send({ error: failure.error });
+    return publicEstimateView(estimate);
   });
 
   // Client approve/decline estimate
-  fastify.post('/view/:viewToken/approve', { config: { public: true } }, async (request, reply) => {
+  fastify.post('/view/:viewToken/approve', {
+    config: { public: true, ...PUBLIC_RESPOND_RATE_LIMIT },
+    preHandler: validateBody(estimatePublicResponseSchema),
+  }, async (request, reply) => {
     const { viewToken } = request.params;
-    const { action } = request.body; // 'approve' or 'decline'
-    if (!['approve', 'decline'].includes(action)) {
-      return reply.status(400).send({ error: 'Action must be approve or decline' });
+    const { action } = request.body;
+
+    const estimate = await request.prisma.estimate.findUnique({
+      where: { viewToken },
+      include: { client: { select: { name: true, organizationId: true } } },
+    });
+    const failure = publicEstimateFailure(estimate);
+    if (failure) return reply.status(failure.statusCode).send({ error: failure.error });
+    if (estimate.status !== 'SENT') return reply.status(400).send({ error: 'Estimate is not in a state that can be responded to' });
+    const now = new Date();
+    if (action === 'approve' && estimate.validUntil && new Date(estimate.validUntil) < now) {
+      return reply.status(410).send({ error: 'This estimate has expired. Contact us for an updated estimate.', code: 'ESTIMATE_EXPIRED' });
     }
 
-    const estimate = await request.prisma.estimate.findUnique({ where: { viewToken } });
-    if (!estimate) return reply.status(404).send({ error: 'Estimate not found' });
-    if (estimate.status !== 'SENT') return reply.status(400).send({ error: 'Estimate is not in a state that can be responded to' });
-
     const newStatus = action === 'approve' ? 'APPROVED' : 'DECLINED';
-    const updated = await request.prisma.estimate.update({
-      where: { viewToken },
-      data: { status: newStatus }
+    // Compare-and-set: two concurrent answers cannot both win.
+    const claimed = await request.prisma.estimate.updateMany({
+      where: { id: estimate.id, status: 'SENT' },
+      data: { status: newStatus },
+    });
+    if (claimed.count !== 1) return reply.status(409).send({ error: 'This estimate was already answered' });
+
+    await recordAuditEvent(request.prisma, {
+      organizationId: estimate.client?.organizationId,
+      actorType: 'CLIENT',
+      actorUserId: null,
+      action: action === 'approve' ? 'estimate.approved' : 'estimate.declined',
+      entityId: estimate.id,
+      requestId: request.id,
+      ip: request.ip,
+      metadata: { fromStatus: 'SENT', toStatus: newStatus, via: 'public_link', total: estimate.total },
     });
 
+    return publicEstimateView({ ...estimate, status: newStatus });
+  });
+
+  // Issue a fresh public link for a SENT estimate (after a revocation, an
+  // expired window, or the token rotation at release). Staff share the new
+  // link themselves; the old one stops working.
+  fastify.post('/:id/reissue-link', {
+    onRequest: [fastify.authenticate],
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const existing = await request.prisma.estimate.findUnique({ where: { id }, select: { id: true, status: true, validUntil: true } });
+    if (!existing) return reply.status(404).send({ error: 'Estimate not found' });
+    if (existing.status !== 'SENT') {
+      return reply.status(400).send({ error: 'Only a sent estimate awaiting an answer can get a new link' });
+    }
+    const access = createPublicAccessWindow(existing.validUntil);
+    const updated = await request.prisma.estimate.update({
+      where: { id },
+      data: { viewToken: access.token, publicAccessExpiresAt: access.expiresAt, publicAccessRevokedAt: null },
+      select: { id: true, viewToken: true, publicAccessExpiresAt: true },
+    });
+    await recordRequestAuditEvent(request.prisma, request, {
+      action: 'estimate.link_reissued',
+      entityId: id,
+      metadata: { expiresAt: access.expiresAt },
+    });
     return updated;
+  });
+
+  // Revoke the public link (staff). Reissue or re-send issues a new one.
+  fastify.post('/:id/revoke-link', {
+    onRequest: [fastify.authenticate],
+  }, async (request, reply) => {
+    const { id } = request.params;
+    const existing = await request.prisma.estimate.findUnique({ where: { id }, select: { id: true, publicAccessRevokedAt: true } });
+    if (!existing) return reply.status(404).send({ error: 'Estimate not found' });
+    const revokedAt = existing.publicAccessRevokedAt ?? new Date();
+    await request.prisma.estimate.update({ where: { id }, data: { publicAccessRevokedAt: revokedAt } });
+    await recordRequestAuditEvent(request.prisma, request, {
+      action: 'estimate.link_revoked',
+      entityId: id,
+      metadata: { alreadyRevoked: Boolean(existing.publicAccessRevokedAt) },
+    });
+    return { id, publicAccessRevokedAt: revokedAt };
   });
 
   // Convert estimate to proposal

@@ -17,6 +17,15 @@ that idempotent wrapper.
 - Tenant scoping composes with the deletion filter; neither policy replaces the
   other's criteria. Both remain active inside callback transactions.
 
+### Soft-deleted parents in scoped writes
+
+Request-scoped writes verify every foreign key and nested `connect` against
+the caller's organization through the soft-delete-filtered client
+(`src/utils/prisma-tenant-proxy.js`). A soft-deleted parent therefore counts
+as absent: linking a record to a trashed project, task, user or client is
+refused with a `TenancyError` that the API answers as a generic
+`404 Not Found`. Restore the parent from the trash first.
+
 ## Privileged lifecycle paths
 
 Restore and purge code must opt in visibly with an explicit, defined

@@ -3,9 +3,15 @@ import assert from 'node:assert/strict';
 import Fastify from 'fastify';
 import jwt from '@fastify/jwt';
 import googleCalendarRoutes from '../../routes/google-calendar.routes.js';
+import cookie from '@fastify/cookie';
+import { oauthStateCookieName, signOAuthState, verifyOAuthState } from '../../auth/oauth-state.js';
+
+// OAuth state is signed with a key derived from JWT_SECRET (src/auth/oauth-state.js).
+process.env.JWT_SECRET ||= 'oauth-state-unit-test-secret';
 
 async function buildApp(prisma, options = {}) {
   const app = Fastify();
+  await app.register(cookie);
   await app.register(jwt, { secret: 'test-jwt-secret' });
   app.decorate('prisma', prisma);
   app.decorate('authenticate', async (request) => {
@@ -32,12 +38,14 @@ test('starts user-scoped Google OAuth with calendar-events scope and signed stat
   t.after(() => app.close());
 
   const response = await app.inject({ method: 'GET', url: '/oauth/start' });
+  assert.match(String(response.headers['set-cookie']), new RegExp(`^${oauthStateCookieName('google_calendar_oauth')}=[^;]+;.*HttpOnly`, 'i'));
   const url = new URL(response.headers.location);
   assert.equal(response.statusCode, 302);
   assert.equal(url.searchParams.get('scope'), 'https://www.googleapis.com/auth/calendar.events');
   assert.equal(url.searchParams.get('access_type'), 'offline');
   assert.equal(url.searchParams.get('prompt'), 'consent');
-  const state = app.jwt.verify(url.searchParams.get('state'));
+  assert.throws(() => app.jwt.verify(url.searchParams.get('state')), 'OAuth state must not verify with the session key');
+  const state = verifyOAuthState('google_calendar_oauth', url.searchParams.get('state'));
   assert.equal(state.type, 'google_calendar_oauth');
   assert.equal(state.userId, 'user-1');
   assert.equal(state.organizationId, 'org-1');
@@ -57,9 +65,16 @@ test('exchanges OAuth code, stores an encrypted refresh token, and returns to Se
     createOAuthClient: () => ({ getToken: async () => ({ tokens: { refresh_token: 'sensitive-refresh-token', scope: 'https://www.googleapis.com/auth/calendar.events' } }) }),
   });
   t.after(() => app.close());
-  const state = app.jwt.sign({ type: 'google_calendar_oauth', organizationId: 'org-1', userId: 'user-1' }, { expiresIn: '10m' });
+  const state = signOAuthState('google_calendar_oauth', { organizationId: 'org-1', userId: 'user-1' });
 
-  const response = await app.inject({ method: 'GET', url: `/oauth/callback?code=code-1&state=${encodeURIComponent(state)}` });
+  const callbackUrl = `/oauth/callback?code=code-1&state=${encodeURIComponent(state)}`;
+  const nonce = verifyOAuthState('google_calendar_oauth', state).nonce;
+  // Without the initiating browser's binding cookie the state is refused.
+  const unbound = await app.inject({ method: 'GET', url: callbackUrl });
+  assert.equal(unbound.statusCode, 401);
+  const response = await app.inject({ method: 'GET', url: callbackUrl, headers: { cookie: `${oauthStateCookieName('google_calendar_oauth')}=${nonce}` } });
+  // The binding cookie is cleared on use, so the flow cannot be replayed from this browser.
+  assert.match(String(response.headers['set-cookie']), new RegExp(`${oauthStateCookieName('google_calendar_oauth')}=;`));
   assert.equal(response.statusCode, 302);
   assert.equal(response.headers.location, '/settings?googleCalendar=connected');
   assert.equal(stored.organizationId, 'org-1');

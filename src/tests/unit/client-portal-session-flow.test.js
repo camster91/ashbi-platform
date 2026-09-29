@@ -3,12 +3,13 @@ import { after, before, describe, it } from 'node:test';
 import cookie from '@fastify/cookie';
 import jwt from '@fastify/jwt';
 import Fastify from 'fastify';
-import clientPortalRoutes from '../../routes/client-portal.routes.js';
+import clientPortalRoutes, { magicLinkClaims } from '../../routes/client-portal.routes.js';
 
 describe('client portal cookie session flow', () => {
   let app;
   let sessionVersion = 2;
   const activityRows = [];
+  const redeemedLinks = new Set();
   let revisionStatus = 'IN_REVIEW';
   const user = {
     id: 'portal-user', email: 'client@example.com', name: 'Client User', role: 'CLIENT',
@@ -80,6 +81,14 @@ describe('client portal cookie session flow', () => {
         }],
       },
     };
+    prisma.clientPortalLinkRedemption = {
+      create: async ({ data }) => {
+        if (redeemedLinks.has(data.jti)) throw Object.assign(new Error('Unique constraint failed'), { code: 'P2002' });
+        redeemedLinks.add(data.jti);
+        return { id: `redemption-${redeemedLinks.size}`, ...data };
+      },
+      deleteMany: async () => ({ count: 0 }),
+    };
     prisma.$transaction = async callback => callback(prisma);
     app.decorate('prisma', prisma);
     app.decorate('io', { to: () => ({ emit: () => {} }) });
@@ -98,7 +107,7 @@ describe('client portal cookie session flow', () => {
   });
 
   it('returns 404 only when a client document is absent from storage', async () => {
-    const bearer = app.jwt.sign({ ...user, contactId: contact.id, sessionVersion }, { expiresIn: '1h' });
+    const bearer = app.jwt.sign({ ...user, contactId: contact.id, sessionVersion, typ: 'client_session' }, { expiresIn: '1h' });
     const response = await app.inject({
       method: 'GET',
       url: '/api/client-portal/documents/missing-document/download',
@@ -110,7 +119,7 @@ describe('client portal cookie session flow', () => {
   });
 
   it('returns 500 instead of masking a document storage failure as absent', async () => {
-    const bearer = app.jwt.sign({ ...user, contactId: contact.id, sessionVersion }, { expiresIn: '1h' });
+    const bearer = app.jwt.sign({ ...user, contactId: contact.id, sessionVersion, typ: 'client_session' }, { expiresIn: '1h' });
     const response = await app.inject({
       method: 'GET',
       url: '/api/client-portal/documents/unreadable-document/download',
@@ -122,11 +131,10 @@ describe('client portal cookie session flow', () => {
   });
 
   it('exchanges a bounded magic token for an httpOnly session and revokes it on logout', async () => {
-    const magicToken = app.jwt.sign({
-      ...user,
-      contactId: contact.id,
-      sessionVersion,
-    }, { expiresIn: '1h' });
+    const magicToken = app.jwt.sign(
+      magicLinkClaims({ ...user, sessionVersion }, { ...contact, client: { organizationId: client.organizationId } }),
+      { expiresIn: '1h' },
+    );
     const verified = await app.inject({
       method: 'POST',
       url: '/api/client-portal/verify-token',
@@ -150,8 +158,28 @@ describe('client portal cookie session flow', () => {
     assert.equal(revoked.statusCode, 401);
   });
 
+  it('redeems a magic link once and never accepts it as a portal bearer', async () => {
+    const magicToken = app.jwt.sign(
+      magicLinkClaims({ ...user, sessionVersion }, { ...contact, client: { organizationId: client.organizationId } }),
+      { expiresIn: '1h' },
+    );
+    const asBearer = await app.inject({ method: 'GET', url: '/api/client-portal/me', headers: { authorization: `Bearer ${magicToken}` } });
+    assert.equal(asBearer.statusCode, 401);
+
+    const first = await app.inject({ method: 'POST', url: '/api/client-portal/verify-token', payload: { token: magicToken } });
+    assert.equal(first.statusCode, 200, first.body);
+    const replay = await app.inject({ method: 'POST', url: '/api/client-portal/verify-token', payload: { token: magicToken } });
+    assert.equal(replay.statusCode, 401);
+    assert.equal(replay.json().code, 'MAGIC_LINK_USED');
+
+    // An untyped token with valid portal claims (the pre-fix link shape) is no link at all.
+    const untyped = app.jwt.sign({ ...user, contactId: contact.id, sessionVersion }, { expiresIn: '1h' });
+    const legacy = await app.inject({ method: 'POST', url: '/api/client-portal/verify-token', payload: { token: untyped } });
+    assert.equal(legacy.statusCode, 401);
+  });
+
   it('scopes contracts and records client revision approval and feedback as durable activities', async () => {
-    const bearer = app.jwt.sign({ ...user, contactId: contact.id, sessionVersion }, { expiresIn: '1h' });
+    const bearer = app.jwt.sign({ ...user, contactId: contact.id, sessionVersion, typ: 'client_session' }, { expiresIn: '1h' });
     const headers = { authorization: `Bearer ${bearer}` };
     const contracts = await app.inject({ method: 'GET', url: '/api/client-portal/contracts', headers });
     assert.equal(contracts.statusCode, 200);
