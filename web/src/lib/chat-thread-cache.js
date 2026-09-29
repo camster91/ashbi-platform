@@ -24,3 +24,9 @@ export function applyChatDelete(threads = [], messageId) {
       }
       : thread));
 }
+
+/** Whether a message is in the cached list, at either level. */
+export function hasChatMessage(threads = [], messageId) {
+  return threads.some((thread) => thread.id === messageId
+    || (Array.isArray(thread.replies) && thread.replies.some((reply) => reply.id === messageId)));
+}

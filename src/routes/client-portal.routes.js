@@ -536,23 +536,32 @@ export default async function clientPortalRoutes(fastify) {
   fastify.get('/projects/:id/messages', { preHandler: [clientAuth, validateQuery(chatMessageListQuerySchema)] }, async (request, reply) => {
     const { clientId } = request.clientUser;
     const { id } = request.params;
-    const { limit, before, after } = request.query;
+    const { limit, before, after, beforeId, afterId } = request.query;
 
     const project = await request.prisma.project.findFirst({ where: { id, clientId } });
     if (!project) {
       return reply.status(404).send({ error: 'Project not found' });
     }
 
+    // The cursor is (createdAt, id): with an id, messages sharing the boundary
+    // timestamp are split by id instead of being skipped.
     const where = { projectId: id, visibility: 'CLIENT', removedAt: null };
-    if (before) where.createdAt = { lt: new Date(before) };
-    else if (after) where.createdAt = { gt: new Date(after) };
+    if (before) {
+      const at = new Date(before);
+      if (beforeId) where.OR = [{ createdAt: { lt: at } }, { createdAt: at, id: { lt: beforeId } }];
+      else where.createdAt = { lt: at };
+    } else if (after) {
+      const at = new Date(after);
+      if (afterId) where.OR = [{ createdAt: { gt: at } }, { createdAt: at, id: { gt: afterId } }];
+      else where.createdAt = { gt: at };
+    }
 
     const messages = await request.prisma.chatMessage.findMany({
       where,
       include: {
         author: { select: { id: true, name: true } }
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit
     });
 
