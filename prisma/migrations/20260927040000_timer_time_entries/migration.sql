@@ -47,7 +47,12 @@ WITH ranked AS (
 UPDATE "time_sessions" AS s
 SET "isRunning" = false,
     "endTime" = ranked."nextStart",
-    "duration" = GREATEST(0, ROUND(EXTRACT(EPOCH FROM (ranked."nextStart" - ranked."startTime")) / 60))::INTEGER,
+    -- Under a full minute records nothing (0), as for timers stopped by the app.
+    "duration" = CASE
+      WHEN ranked."nextStart" - ranked."startTime" >= INTERVAL '1 minute'
+        THEN GREATEST(1, ROUND(EXTRACT(EPOCH FROM (ranked."nextStart" - ranked."startTime")) / 60))::INTEGER
+      ELSE 0
+    END,
     "updatedAt" = CURRENT_TIMESTAMP
 FROM ranked
 WHERE s."id" = ranked."id" AND ranked."nextStart" IS NOT NULL;
