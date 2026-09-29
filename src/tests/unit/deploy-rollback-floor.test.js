@@ -62,7 +62,7 @@ test('the release refuses the older image before migrating, and automatic rollba
 
 test('a live image below the floor stops as soon as the migration is applied', () => {
   const afterMigrate = script.slice(script.indexOf('npx prisma migrate deploy'), script.indexOf('npx prisma migrate status'));
-  assert.match(afterMigrate, /raise_rollback_floor "\$IMAGE"[\s\S]*image_meets_floor "\$LIVE_IMAGE"[\s\S]*docker stop "\$CONTAINER"[\s\S]*docker stop --time 120 "\$WORKER_CONTAINER"/);
+  assert.match(afterMigrate, /raise_rollback_floor "\$IMAGE"[\s\S]*image_meets_floor "\$LIVE_IMAGE"[\s\S]*stop_below_floor "\$CONTAINER" 30 && stop_below_floor "\$WORKER_CONTAINER" 120 \|\| \{[\s\S]*die /);
 });
 
 test('a refused rollback also removes the rejected candidate', () => {
@@ -70,4 +70,22 @@ test('a refused rollback also removes the rejected candidate', () => {
   assert.match(restore, /docker rm -f "\$CONTAINER"[\s\S]*docker rm -f "\$WORKER_CONTAINER"[\s\S]*rollback_floor_blocked/);
   const emergency = script.slice(script.indexOf('emergency_rollback() {'), script.indexOf('elif', script.indexOf('emergency_rollback() {')));
   assert.match(emergency, /docker rm -f "\$CONTAINER"[\s\S]*docker rm -f "\$WORKER_CONTAINER"[\s\S]*rollback_floor_blocked/);
+});
+
+function stopProbe(dockerBody) {
+  const program = `set -euo pipefail\nRELEASE_DIR=/nonexistent\n${dockerBody}\n${floorBlock}\nif stop_below_floor api 30; then echo stopped; else echo still-running; fi\ncat "$LOG"`;
+  return execFileSync('bash', ['-c', program], { encoding: 'utf8', env: { ...process.env, LOG: path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'stop-')), 'log') } });
+}
+
+test('stop_below_floor force-removes a container whose stop did not take, and fails if it still runs', () => {
+  // docker stop "fails" and the container keeps running until rm -f.
+  const stubborn = `: > "$LOG"; RUNNING=true
+docker() { echo "$1" >> "$LOG"; case $1 in stop) return 1 ;; rm) RUNNING=false ;; inspect) echo "$RUNNING" ;; esac; }`;
+  const out = stopProbe(stubborn);
+  assert.match(out, /^stopped\n/);
+  assert.match(out, /stop\ninspect\nrm\ninspect/);
+  // Neither stop nor rm takes effect: the caller must abort the release.
+  const unkillable = `: > "$LOG"
+docker() { echo "$1" >> "$LOG"; case $1 in stop|rm) return 1 ;; inspect) echo true ;; esac; }`;
+  assert.match(stopProbe(unkillable), /^still-running\n/);
 });
