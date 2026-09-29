@@ -76,8 +76,11 @@ export default function Modal({
     document.addEventListener('keydown', handleKeyDown);
     document.body.style.overflow = 'hidden';
 
+    // Move focus into the dialog, unless its content already placed focus
+    // inside it (e.g. a field focused once async data arrived): never pull
+    // focus back to the first control.
     const animationFrame = requestAnimationFrame(() => {
-      if (modalRef.current) {
+      if (modalRef.current && !modalRef.current.contains(document.activeElement)) {
         const focusableElements = getFocusableElements(modalRef.current);
         (focusableElements[0] || modalRef.current).focus();
       }

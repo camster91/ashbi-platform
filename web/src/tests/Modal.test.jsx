@@ -25,6 +25,28 @@ describe('Modal', () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it('keeps focus that its content placed before the open frame runs', () => {
+    // Deterministic reproduction of the ReauthDialog race: content focuses its
+    // field (data arrived) before the modal's open animation frame fires.
+    const frames = [];
+    const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => { frames.push(cb); return frames.length; });
+    const caf = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+    try {
+      render(
+        <Modal isOpen onClose={vi.fn()} title="Confirm">
+          <input aria-label="Password" />
+        </Modal>
+      );
+      const field = screen.getByLabelText('Password');
+      field.focus();
+      frames.forEach((cb) => cb(0));
+      expect(field).toHaveFocus();
+    } finally {
+      raf.mockRestore();
+      caf.mockRestore();
+    }
+  });
+
   it('contains keyboard focus and restores it to the trigger', async () => {
     const user = userEvent.setup();
 
