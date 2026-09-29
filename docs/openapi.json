@@ -4253,11 +4253,11 @@
         "properties": {
           "clientCanDecide": {
             "type": "boolean"
+          },
+          "sharedWithClient": {
+            "type": "boolean"
           }
         },
-        "required": [
-          "clientCanDecide"
-        ],
         "type": "object"
       },
       "ReviewDecisionCreate": {

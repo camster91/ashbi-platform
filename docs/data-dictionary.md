@@ -98,7 +98,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [RevenueSnapshot](#model-revenuesnapshot) | `revenue_snapshots` | no | no | 20 |
 | [ReviewAnnotation](#model-reviewannotation) | `review_annotations` | no | no | 26 |
 | [ReviewDecision](#model-reviewdecision) | `review_decisions` | no | no | 11 |
-| [ReviewSession](#model-reviewsession) | `review_sessions` | yes | no | 22 |
+| [ReviewSession](#model-reviewsession) | `review_sessions` | yes | no | 23 |
 | [ReviewShareLink](#model-reviewsharelink) | `review_share_links` | no | no | 13 |
 | [RevisionRound](#model-revisionround) | `revision_rounds` | no | no | 10 |
 | [SlackChannelMapping](#model-slackchannelmapping) | `slack_channel_mappings` | yes | no | 13 |
@@ -2274,7 +2274,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `version` | Int | required | `1` |  |  |
 | `sourceUrl` | String | optional |  |  | web page review: the captured http(s) URL (CHECK constraint) |
 | `captureViewport` | String | optional |  |  | web page review: desktop or mobile, set with sourceUrl (CHECK constraint) |
-| `clientCanDecide` | Boolean | required | `false` |  | signed-in client portal users may approve or request changes |
+| `sharedWithClient` | Boolean | required | `false` |  | visible in the project's client portal (opt-in; share links are separate) |
+| `clientCanDecide` | Boolean | required | `false` |  | signed-in client portal users may approve or request changes; only while shared (CHECK constraint) |
 | `previousSessionId` | String | unique, optional |  |  | the session this version replaces |
 | `previousSession` | ReviewSession | optional |  | → ReviewSession, via (previousSessionId) → (id), onDelete SetNull, "ReviewSessionVersions" |  |
 | `nextSession` | ReviewSession | optional |  | → ReviewSession, "ReviewSessionVersions" |  |
