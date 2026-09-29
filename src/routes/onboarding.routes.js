@@ -188,6 +188,15 @@ async function updateProgress(request, data) {
 
 export default async function onboardingRoutes(fastify) {
   fastify.get('/progress', { onRequest: [fastify.authenticate] }, async request => {
+    // A support view is read-only: show the viewed person's progress as
+    // stored, without creating, resetting or completing their record.
+    if (request.impersonation) {
+      const stored = await request.prisma.onboardingProgress.findFirst({ where: { userId: request.user.id } });
+      const progress = stored?.roleSnapshot === request.user.role
+        ? stored
+        : { skippedTaskIds: [], startedAt: null, dismissedAt: null, completedAt: null };
+      return presentProgress(request, progress, { persistCompletion: false });
+    }
     const progress = await getOrCreateProgress(request);
     return presentProgress(request, progress);
   });

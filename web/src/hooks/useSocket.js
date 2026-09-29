@@ -69,10 +69,11 @@ export function useSocket() {
 
     if (!sharedSocket || sharedUserId !== user.id) {
       sharedSocket?.disconnect();
-      sharedSocket = io(SOCKET_URL, {
+      const socket = io(SOCKET_URL, {
         withCredentials: true,
         transports: ['websocket', 'polling'],
       });
+      sharedSocket = socket;
       sharedUserId = user.id;
 
       sharedSocket.on('connect', () => {
@@ -80,8 +81,12 @@ export function useSocket() {
         sharedSocket.emit('join', user.id);
       });
 
-      sharedSocket.on('disconnect', () => {
+      sharedSocket.on('disconnect', (reason) => {
         setIsConnected(false);
+        // The server drops a user's sockets when their identity changes (a
+        // support view starts). Socket.IO does not retry a server-side
+        // disconnect, so reconnect; the handshake decides who may.
+        if (reason === 'io server disconnect' && sharedSocket === socket) socket.connect();
       });
 
       attachSocketHandlers(sharedSocket, queryClient, setNotifications);

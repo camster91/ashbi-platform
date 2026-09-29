@@ -86,7 +86,7 @@ notes, signer names, email addresses, API key material or password hashes.
 | `user.deactivated` | `user` | USER (admin) | `PUT /api/team/:id` when `isActive` goes true → false | `fromActive`, `toActive` |
 | `user.reactivated` | `user` | USER (admin) | `PUT /api/team/:id` when `isActive` goes false → true | `fromActive`, `toActive` |
 | `auth.login_failed` | `user` | USER or CLIENT | `POST /api/auth/login` (any failure) and `POST /api/auth/client/login` (wrong password) for an **existing** account; unknown emails have no tenant and are not logged | `portal` (`staff` or `client`), `accountActive` |
-| `auth.password_changed` | `user` | USER | `POST /api/auth/change-password`, `POST /api/auth/reset-password`, `POST /api/team/:id/reset-password` | `method` (`self_service`, `reset_link`, `admin_reset`), `sessionsRevoked`, `apiKeysRevoked` (admin reset) |
+| `auth.password_changed` | `user` | USER | `POST /api/auth/change-password`, `POST /api/auth/reset-password`, `POST /api/team/:id/reset-password`, `POST /api/auth/break-glass/redeem` | `method` (`self_service`, `reset_link`, `admin_reset`, `break_glass`), `sessionsRevoked`, `apiKeysRevoked` (admin reset, break-glass) |
 | `auth.mfa_enabled` | `user` | USER | `POST /api/auth/mfa/confirm` | `recoveryCodesIssued` |
 | `auth.mfa_disabled` | `user` | USER | `POST /api/auth/mfa/disable` | `method` (`totp` or `recovery_code`) |
 | `auth.mfa_reset` | `user` | USER (the acting admin) | `POST /api/auth/mfa/admin/users/:userId/reset` | `wasEnabled` |
@@ -123,6 +123,20 @@ notes, signer names, email addresses, API key material or password hashes.
 | `review.share_link_revoked` | `review_share_link` | USER | `POST /api/reviews/:id/share-links/:linkId/revoke` (only the first revocation of a link) | `sessionId`, `wasExpired` |
 | `domain_event.replayed` | `domain_event` | USER | `POST /api/domain-events/replay` (admin, step-up); one event per requeued outbox row ([event-outbox.md](event-outbox.md)) | `type`, `aggregateType`, `aggregateId`, `sequence`, `fromStatus`, `toStatus`, `replayCount`, `previousAttempts` |
 | `domain_event.discarded` | `domain_event` | USER | `POST /api/domain-events/discard` (admin, step-up); one event per discarded dead outbox row ([event-outbox.md](event-outbox.md)) | `type`, `aggregateType`, `aggregateId`, `sequence`, `fromStatus`, `toStatus`, `reason`, `replayCount`, `previousAttempts` |
+| `impersonation.started` | `impersonation_session` | USER (the admin) | `POST /api/auth/impersonation` (step-up; see [privileged-actions.md](privileged-actions.md#support-impersonation)); `entityId` is the `ImpersonationSession` id. The free-text reason stays on that row, never in the event | `subjectUserId`, `subjectRole` (`TEAM`, `STAFF` or `CLIENT`), `expiresAt`, `ttlSeconds`, `readOnly` |
+| `impersonation.ended` | `impersonation_session` | USER (who ended it), or SYSTEM on expiry | `POST /api/auth/impersonation/stop` (`stopped`), a new view (`superseded`), sign-out (`signed_out`), the first request after the window (`expired`), and the revocations in [privileged-actions.md](privileged-actions.md#ending-and-revocation) (`revoked_password_reset`, `revoked_password_change`, `revoked_role_change`, `revoked_deactivated`), or a start that could not revoke the admin's sockets on every API instance (`start_failed`). Once per view | `reason`, `subjectUserId`, `durationSeconds` |
+| `break_glass.granted` | `break_glass_grant` | USER (the platform operator; may belong to another organization) | `scripts/break-glass.mjs issue` with `BREAK_GLASS_ENABLED=true`; filed in the **target** organization. Never the token or its hash; the reason stays on the grant row | `targetUserId`, `operatorId`, `expiresAt`, `promoteToAdmin`, `osUser`, `host` (the OS user and host the CLI ran as; the operator id is only claimed) |
+| `break_glass.redeemed` | `break_glass_grant` | USER (the recovered account) | `POST /api/auth/break-glass/redeem`; followed by `auth.password_changed` (`method: break_glass`), and `auth.mfa_reset`, `user.role_changed`, `user.reactivated` when those happened | `targetUserId`, `operatorId`, `promoted`, `reactivated`, `mfaReset`, `apiKeysRevoked` |
+| `break_glass.revoked` | `break_glass_grant` | USER (the platform operator) | `scripts/break-glass.mjs revoke`, or a newer grant for the same person | `targetUserId`, `operatorId`, `osUser`, `host` |
+
+Events written **while an admin views as another person** (#416), whatever
+their action, record the admin as `actorUserId` (actor type `USER`) and carry
+two extra metadata fields that every action allows:
+`impersonatedUserId` (the viewed person) and `impersonationSessionId`.
+`AUDIT_UNIVERSAL_METADATA` in `src/services/audit-event.service.js` lists
+them; `recordAuditEvent` adds them from the request context, so a route does
+not have to. The view is read-only, so in practice these are reads that audit
+themselves and the view's own start/end events.
 
 `auth.login_failed` details:
 

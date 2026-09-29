@@ -15,9 +15,14 @@ import { fileURLToPath } from 'url';
 
 import env from './config/env.js';
 import prisma from './config/db.js';
+import { connection as redisConnection } from './jobs/queue.js';
 import { apiRateLimitMax, isNonApiRequest } from './config/rateLimit.js';
 import { trustHops } from './config/trust-proxy.js';
 import { isCurrentUserSession } from './auth/session.js';
+import {
+  actorHasOpenView, applyImpersonation, createImpersonationHook, createViewSocketRevoker, socketHandshakeDuringView,
+  startViewSocketSweep,
+} from './auth/impersonation.js';
 import { createJoinProjectHandler } from './auth/project-room-access.js';
 import { clientAcquisitionCorsOptions, loadClientAcquisitionConfig } from './services/client-acquisition.contract.js';
 import { initHermesBridge } from './agents/hub-hermes.integration.js';
@@ -160,11 +165,18 @@ fastify.addHook('onRequest', async (request, reply) => {
   }
 });
 
-// Auth decorators
+// Support impersonation (#416, docs/privileged-actions.md): when the `imp`
+// cookie names a live, read-only view, swap request.user for the viewed
+// person and refuse writes and sensitive areas. Runs for /api/auth too.
+fastify.addHook('onRequest', createImpersonationHook({ prisma, isCurrentUserSession }));
+
+// Auth decorators. Re-verifying the session cookie resets request.user to the
+// signed-in admin, so an active impersonation is re-applied afterwards.
 fastify.decorate('authenticate', async (request, reply) => {
   try {
     await request.jwtVerify();
     if (!(await isCurrentUserSession(prisma, request.user))) throw new Error('Revoked session');
+    applyImpersonation(request);
   } catch (err) { return reply.status(401).send({ error: 'Unauthorized' }); }
 });
 
@@ -172,6 +184,7 @@ fastify.decorate('adminOnly', async (request, reply) => {
   try {
     await request.jwtVerify();
     if (!(await isCurrentUserSession(prisma, request.user))) throw new Error('Revoked session');
+    applyImpersonation(request);
     if (request.user.role !== 'ADMIN') return reply.status(403).send({ error: 'Admin access required' });
   } catch (err) { return reply.status(401).send({ error: 'Unauthorized' }); }
 });
@@ -258,7 +271,15 @@ fastify.setErrorHandler((error, request, reply) => {
 
 // Socket.IO
 const io = new SocketIO(fastify.server, { cors: { origin: env.isDev ? 'http://localhost:*' : env.corsOrigins, credentials: true } });
+// Starting a support view drops the admin's sockets on every API instance
+// (Redis pub/sub; there is no shared Socket.IO adapter). The sweep is the
+// fallback if a revocation message is lost.
+const viewSocketRevoker = createViewSocketRevoker({ io, redis: redisConnection, logger: fastify.log });
+fastify.decorate('revokeSupportViewSockets', (userId) => viewSocketRevoker.revoke(userId));
+const stopViewSocketSweep = startViewSocketSweep(io, prisma, fastify.log);
 fastify.addHook('onClose', async () => {
+  stopViewSocketSweep();
+  await viewSocketRevoker.close();
   await new Promise((resolve) => io.close(resolve));
 });
 io.use(async (socket, next) => {
@@ -266,13 +287,16 @@ io.use(async (socket, next) => {
     // Accept an explicit auth payload for native/non-browser clients or the
     // same httpOnly cookie used by browser sessions. Never accept query-string
     // tokens: WebSocket upgrade URLs are routinely logged by proxies.
-    const cookieToken = fastify.parseCookie(socket.handshake.headers.cookie || '').token;
+    const cookies = fastify.parseCookie(socket.handshake.headers.cookie || '');
+    if (socketHandshakeDuringView(cookies)) return next(new Error('Realtime is paused during a support view'));
+    const cookieToken = cookies.token;
     const token = socket.handshake.auth?.token || cookieToken;
     if (!token) return next(new Error('Authentication required'));
     const decoded = await fastify.jwt.verify(token);
     if (!(await isCurrentUserSession(prisma, decoded))) {
       return next(new Error('Invalid token'));
     }
+    if (await actorHasOpenView(prisma, decoded)) return next(new Error('Realtime is paused during a support view'));
     socket.userId = decoded.id || decoded.contactId;
     socket.userRole = decoded.role;
     socket.organizationId = decoded.organizationId;
@@ -285,8 +309,26 @@ io.use(async (socket, next) => {
 // `join-project` events were never handled, so room-scoped notifications
 // (io.to(`user:...`)) were never delivered. Rooms are authorized server-side.
 io.on('connection', (socket) => {
-  // Auto-join the authenticated user's own room so notify() reaches them.
-  if (socket.userId) socket.join(`user:${socket.userId}`);
+  // A support view that opened while the handshake was in flight must not
+  // leave this socket with the admin's realtime access. The socket waits in
+  // a pending room (which starting a view also drops) and every event it
+  // sends waits on a re-check; only then does it join the user's own room,
+  // so notify() reaches it.
+  const pendingRoom = `pending-user:${socket.userId}`;
+  if (socket.userId) socket.join(pendingRoom);
+  const cleared = socket.userId && socket.organizationId
+    ? actorHasOpenView(prisma, { id: socket.userId, organizationId: socket.organizationId }).then((open) => !open, () => false)
+    : Promise.resolve(true);
+  socket.use((_packet, next) => {
+    cleared.then((ok) => (ok ? next() : next(new Error('Realtime is paused during a support view'))));
+  });
+  cleared.then((ok) => {
+    if (!ok) { socket.disconnect(true); return; }
+    if (socket.userId) {
+      socket.join(`user:${socket.userId}`);
+      socket.leave(pendingRoom);
+    }
+  });
 
   // Explicit join is only allowed for the caller's own user room.
   socket.on('join', (userId) => {
