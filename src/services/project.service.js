@@ -194,7 +194,7 @@ async function syncTasksFromPlan(prisma, projectId, plan) {
 export const HEALTH_HISTORY_LIMIT = 90;
 export const HEALTH_HISTORY_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;
 // Finished projects keep their last score; scoring them hourly is wasted work.
-export const HEALTH_INACTIVE_STATUSES = Object.freeze(['LAUNCHED', 'CANCELLED']);
+export const HEALTH_INACTIVE_STATUSES = Object.freeze(['LAUNCHED', 'COMPLETED', 'CANCELLED']);
 const HEALTH_UPDATE_CONCURRENCY = 10;
 
 /**

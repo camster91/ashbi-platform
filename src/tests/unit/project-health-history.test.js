@@ -67,10 +67,11 @@ test('only active projects are scored, and unchanged projects are not written', 
     { id: 'steady', status: 'DESIGN_DEV', health: 'ON_TRACK', healthScore: 100, healthHistory: recent, threads: [] },
     { id: 'launched', status: 'LAUNCHED', health: 'ON_TRACK', healthScore: 10, healthHistory: null, threads: [] },
     { id: 'cancelled', status: 'CANCELLED', health: 'ON_TRACK', healthScore: 10, healthHistory: null, threads: [] },
+    { id: 'completed', status: 'COMPLETED', health: 'ON_TRACK', healthScore: 10, healthHistory: null, threads: [] },
   ]);
   const updated = await updateAllProjectHealth(prisma, { now: NOW });
   assert.equal(updated, 0);
-  assert.deepEqual(prisma.findArgs.where, { status: { notIn: ['LAUNCHED', 'CANCELLED'] } });
+  assert.deepEqual(prisma.findArgs.where, { status: { notIn: ['LAUNCHED', 'COMPLETED', 'CANCELLED'] } });
 });
 
 test('history appends on change or after a day, never on an unchanged hour', () => {
