@@ -1790,6 +1790,17 @@ export const teamResetPasswordSchema = z.object({
   newPassword: password,
 });
 
+// Support impersonation and break-glass recovery (#416, docs/privileged-actions.md).
+export const impersonationStartSchema = z.object({
+  userId: z.string().trim().min(1).max(191),
+  reason: z.string().trim().min(10, 'Give a reason of at least 10 characters').max(500),
+}).strict();
+
+export const breakGlassRedeemSchema = z.object({
+  token: z.string().min(20).max(200),
+  newPassword: password,
+}).strict();
+
 export const taskTemplateCreateSchema = z.object({
   name: z.string().min(1).max(200),
   phase: z.string().min(1).max(100).optional(),

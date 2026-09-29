@@ -44,6 +44,7 @@ const INTENTIONALLY_PUBLIC_ROUTES = {
   'POST /api/auth/reset-password': { category: 'credential exchange', reason: 'Requires the emailed single-use reset token.' },
   'POST /api/auth/client/signup': { category: 'credential exchange', reason: 'Requires a client invitation token.' },
   'POST /api/auth/client/login': { category: 'credential exchange', reason: 'Client portal password login.' },
+  'POST /api/auth/break-glass/redeem': { category: 'credential exchange', reason: 'Redeems a single-use, 30-minute break-glass grant issued by a platform operator with scripts/break-glass.mjs (SHA-256-hashed 256-bit token). 404 unless BREAK_GLASS_ENABLED=true; rate limited per IP; audited in the target organization. See docs/privileged-actions.md.' },
   'POST /api/bot/auth': { category: 'credential exchange', reason: 'Checks the bot bearer secret in the handler before issuing a JWT.' },
 
   'POST /api/client-portal/request-access': { category: 'magic link', reason: 'Emails a client portal magic link.' },
@@ -110,6 +111,10 @@ const REVIEWED_UNSCOPED_ROUTES = {
   'POST /api/auth/reauth': 'Verifies only the caller\'s own password or second factor and writes only the caller\'s own MFA attempt state.',
   'POST /api/auth/mfa/admin/users/:userId/reset': 'Admin only; the target user is looked up with the admin\'s organizationId.',
   'POST /api/auth/admin/clients/:clientId/invite': 'Admin only; the client is looked up with the admin\'s organizationId.',
+  'GET /api/auth/impersonation': 'Returns only the caller\'s own support-view state, from the context the impersonation hook verified.',
+  'POST /api/auth/impersonation': 'Admin only; queries use createScopedPrisma(request.user.organizationId), so a subject in another organization is not found (404).',
+  'POST /api/auth/impersonation/stop': 'Ends only the caller\'s own support view(s), through a client scoped to the caller\'s organization.',
+  'GET /api/auth/impersonation/sessions': 'Admin only; reads through createScopedPrisma(request.user.organizationId).',
   'POST /api/mailgun/send': 'Admin only; sends one email and reads no tenant data.',
   'POST /api/webhooks/email/test': 'Admin only; runs the email pipeline inside the admin\'s organization via runTenantJob.',
 };

@@ -175,9 +175,32 @@ const notifications = [
   { id: 'notification-b', type: 'INVOICE_VIEWED', title: 'Invoice viewed', message: 'Northwind Studio viewed INV-2026-001.', read: true, createdAt: LAST_WEEK, data: { invoiceId: invoice.id } },
 ];
 
+// Support impersonation (#416): the Team page lists these members, and an
+// admin may start a read-only view as the team member.
+export const teamMember = { id: 'user-team', name: 'Terry Team', email: 'terry@example.com', role: 'TEAM', skills: ['design'], capacity: 100, isActive: true, mfaEnabled: false, mfaLocked: false, activeThreads: 1, activeTasks: 2 };
+const teamList = [
+  { ...adminUser, isActive: true, mfaEnabled: true, mfaLocked: false, activeThreads: 1, activeTasks: 1 },
+  teamMember,
+];
+const IMPERSONATION_EXPIRES = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+
+function impersonationView() {
+  return {
+    sessionId: 'impersonation-a',
+    actor: { id: adminUser.id, name: adminUser.name },
+    subject: { id: teamMember.id, name: teamMember.name, role: 'TEAM' },
+    startedAt: new Date().toISOString(),
+    expiresAt: IMPERSONATION_EXPIRES,
+    readOnly: true,
+  };
+}
+
 export type ApiState = {
   notes: Array<Record<string, unknown>>;
   createdNotes: Array<Record<string, unknown>>;
+  impersonationStarts: Array<Record<string, unknown>>;
+  impersonationStops: number;
+  impersonating: boolean;
   unmocked: string[];
 };
 
@@ -207,13 +230,16 @@ function json(route: Route, body: unknown, status = 200) {
  * `{ signedIn: false }` to start signed out; `/api/auth/login` then signs the
  * session in, so a keyboard-only login can be exercised end to end.
  */
-export async function mockAuthenticatedApi(page: Page, { user = adminUser, signedIn = true } = {}) {
+export async function mockAuthenticatedApi(page: Page, { user = adminUser, signedIn = true, impersonating = false } = {}) {
   let session = signedIn;
   const state: ApiState = {
     notes: [
       { id: 'note-a', title: 'Kickoff notes', content: 'Client wants a lighter palette.', type: 'MEETING_NOTES', tags: ['kickoff'], isPinned: true, updatedAt: LAST_WEEK, author: { id: adminUser.id, name: adminUser.name } },
     ],
     createdNotes: [],
+    impersonationStarts: [],
+    impersonationStops: 0,
+    impersonating,
     unmocked: trackUnmocked(page),
   };
 
@@ -227,8 +253,30 @@ export async function mockAuthenticatedApi(page: Page, { user = adminUser, signe
       session = true;
       return json(route, { user });
     }
-    if (path === '/auth/me') return session ? json(route, user) : json(route, { error: 'Unauthorized' }, 401);
+    if (path === '/auth/me') {
+      if (!session) return json(route, { error: 'Unauthorized' }, 401);
+      // While an admin views as the team member, /auth/me answers as them.
+      return json(route, state.impersonating ? { ...teamMember, impersonation: impersonationView() } : user);
+    }
     if (!session) return json(route, { error: 'Unauthorized' }, 401);
+
+    // Support impersonation (#416).
+    if (path === '/auth/impersonation' && method === 'POST') {
+      state.impersonationStarts.push(request.postDataJSON());
+      state.impersonating = true;
+      return json(route, { active: true, session: impersonationView() }, 201);
+    }
+    if (path === '/auth/impersonation/stop' && method === 'POST') {
+      state.impersonationStops += 1;
+      state.impersonating = false;
+      return json(route, { active: false, stopped: 1 });
+    }
+    if (path === '/auth/impersonation/sessions') {
+      return json(route, { sessions: [{ id: 'impersonation-old', actor: { id: adminUser.id, name: adminUser.name }, subject: { id: teamMember.id, name: teamMember.name, role: 'TEAM' }, reason: 'Ticket 1182: missing tasks on dashboard', startedAt: LAST_WEEK, expiresAt: LAST_WEEK, endedAt: LAST_WEEK, endReason: 'stopped', active: false }] });
+    }
+    if (path === '/team' && method === 'GET') return json(route, teamList);
+    if (path === '/team/workload') return json(route, teamList.map(member => ({ id: member.id, name: member.name, role: member.role, skills: member.skills, activeThreads: member.activeThreads, activeTasks: member.activeTasks, workloadScore: 20, capacity: member.capacity, utilizationPercent: 20, status: 'available' })));
+    if (path === '/team/allocations') return json(route, { allocations: [] });
 
     // Shell-wide requests (Layout, notifications, timer, onboarding).
     if (path === '/onboarding/progress') return json(route, { supported: true, role: user.role, state: 'completed', completedCount: 3, totalCount: 3, tasks: [] });

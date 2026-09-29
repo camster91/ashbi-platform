@@ -128,7 +128,9 @@ export default async function clientPortalRoutes(fastify) {
         return reply.status(401).send({ error: 'Missing token' });
       }
 
-      const payload = fastify.jwt.verify(rawToken);
+      // An admin viewing as this client user (#416): the global hook already
+      // verified the admin's session and the read-only view.
+      const payload = request.impersonation?.user ?? fastify.jwt.verify(rawToken);
 
       if (!(await isCurrentUserSession(request.prisma, payload))) return reply.status(401).send({ error: 'Session expired or revoked' });
       const principal = await resolvePortalPrincipal(request.prisma, payload);
@@ -221,8 +223,8 @@ export default async function clientPortalRoutes(fastify) {
         .setCookie('token', sessionToken, {
           path: '/',
           httpOnly: true,
-          secure: env.isProduction,
-          sameSite: env.isProduction ? 'strict' : 'lax',
+          secure: env.isDeployed,
+          sameSite: env.isDeployed ? 'strict' : 'lax',
           maxAge: sessionCookieMaxAge()
         })
         .send({
@@ -243,8 +245,8 @@ export default async function clientPortalRoutes(fastify) {
       .clearCookie('token', {
         path: '/',
         httpOnly: true,
-        secure: env.isProduction,
-        sameSite: env.isProduction ? 'strict' : 'lax',
+        secure: env.isDeployed,
+        sameSite: env.isDeployed ? 'strict' : 'lax',
       })
       .send({ success: true });
   });

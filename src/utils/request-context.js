@@ -1,3 +1,4 @@
+// @ts-check
 // Per-request async context for tenant scoping.
 //
 // Why this exists:
@@ -45,7 +46,7 @@ export const requestStorage = new AsyncLocalStorage();
  * marks "from this point in the async chain, the store is X" and Node's
  * async_hooks propagate that to subsequent awaits.
  *
- * @param {{ prisma: any, organizationId: string | null, requestId?: string, feature?: string | null }} ctx
+ * @param {{ prisma: any, organizationId: string | null, requestId?: string, feature?: string | null, impersonation?: { organizationId: string, actorUserId: string, subjectUserId: string, sessionId: string } | null }} ctx
  */
 export function enterRequestContext(ctx) {
   requestStorage.enterWith(ctx);
@@ -71,4 +72,14 @@ export function getRequestId() {
 /** A label for what is running: the route pattern, or a job's label. */
 export function getRequestFeature() {
   return requestStorage.getStore()?.feature ?? null;
+}
+
+/**
+ * The active support-impersonation context of the current request (#416), or
+ * null. Audit events written during the request record the real actor and
+ * the viewed person from it.
+ * @returns {{ organizationId: string, actorUserId: string, subjectUserId: string, sessionId: string } | null}
+ */
+export function getRequestImpersonation() {
+  return requestStorage.getStore()?.impersonation ?? null;
 }

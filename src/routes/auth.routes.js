@@ -10,6 +10,13 @@ import { isCurrentUserSession, revokeUserSessions, sessionCookieOptions, signUse
 import { recordAuditEvent, recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { clearReauthCookieOptions, REAUTH_COOKIE } from '../auth/reauth.js';
 import {
+  IMPERSONATION_COOKIE,
+  clearImpersonationCookieOptions,
+  describeImpersonation,
+  endImpersonationSessions,
+  revokeImpersonationsForUser,
+} from '../auth/impersonation.js';
+import {
   validateBody,
   schemas,
   loginSchema,
@@ -189,6 +196,15 @@ export default async function authRoutes(fastify) {
           where: { userId: request.user.id }
         });
         await revokeUserSessions(request.prisma, request.user.id);
+        // Signing out also ends any support view the admin had open (#416).
+        await endImpersonationSessions(request.prisma, {
+          organizationId: request.user.organizationId,
+          where: { actorUserId: request.user.id },
+          reason: 'signed_out',
+          endedById: request.user.id,
+          requestId: request.id,
+          ip: request.ip,
+        });
       }
     } catch {
       // Logout is idempotent: always clear the browser cookie.
@@ -199,6 +215,7 @@ export default async function authRoutes(fastify) {
       // session cookie and the user appears to remain signed in.
       .clearCookie('token', sessionCookieOptions())
       .clearCookie(REAUTH_COOKIE, clearReauthCookieOptions())
+      .clearCookie(IMPERSONATION_COOKIE, clearImpersonationCookieOptions())
       .send({ success: true });
   });
 
@@ -222,9 +239,12 @@ export default async function authRoutes(fastify) {
       return reply.status(404).send({ error: 'User not found' });
     }
 
+    const impersonation = describeImpersonation(request.impersonation);
     return {
       ...user,
-      skills: typeof user.skills === 'string' ? JSON.parse(user.skills || '[]') : (user.skills || [])
+      skills: typeof user.skills === 'string' ? JSON.parse(user.skills || '[]') : (user.skills || []),
+      // Present only while an admin views as this person (#416).
+      ...(impersonation ? { impersonation } : {}),
     };
   });
 
@@ -250,7 +270,7 @@ export default async function authRoutes(fastify) {
       // ADMIN_INVITE_TOKEN is unset OR doesn't match. In dev, allow
       // it (the seed needs to work without ceremony).
       if (!env.adminInviteToken) {
-        if (env.isProduction) {
+        if (env.isDeployed) {
           return reply.status(503).send({
             error: 'Server misconfigured: ADMIN_INVITE_TOKEN is required for first-user registration in production. Set it in your environment before deploying.'
           });
@@ -374,6 +394,7 @@ export default async function authRoutes(fastify) {
       entityId: request.user.id,
       metadata: { method: 'self_service', sessionsRevoked: true },
     });
+    await revokeImpersonationsForUser(request.prisma, request, request.user.id, 'revoked_password_change');
 
     return { success: true };
   });
@@ -551,13 +572,13 @@ export default async function authRoutes(fastify) {
         } catch (mailErr) {
           logger.error({ err: mailErr }, '[auth] Failed to send reset email');
           // In production, surface the error so the user knows email delivery failed
-          if (env.isProduction) {
+          if (env.isDeployed) {
             return reply.status(503).send({ error: 'Failed to send reset email. Please try again or contact support.' });
           }
         }
       } else {
         logger.warn('[auth] Mailgun not configured — password reset email not sent');
-        if (env.isProduction) {
+        if (env.isDeployed) {
           return reply.status(503).send({ error: 'Email service not configured. Please contact support to reset your password.' });
         } else {
           // Authentication action links are credentials. Never write them to logs;
@@ -612,6 +633,14 @@ export default async function authRoutes(fastify) {
         requestId: request.id,
         ip: request.ip,
         metadata: { method: 'reset_link', sessionsRevoked: true },
+      });
+      await endImpersonationSessions(request.prisma, {
+        organizationId: user.organizationId,
+        where: { OR: [{ actorUserId: user.id }, { subjectUserId: user.id }] },
+        reason: 'revoked_password_reset',
+        endedById: user.id,
+        requestId: request.id,
+        ip: request.ip,
       });
 
       return { success: true };

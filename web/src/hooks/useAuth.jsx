@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, createContext, useContext, useRef } f
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { purgePrivateCaches } from '../lib/private-cache';
+import { reloadTo } from '../lib/navigation';
 import { clearBrowserPushSubscription } from './usePushNotifications';
 
 const AuthContext = createContext(null);
@@ -191,8 +192,31 @@ export function AuthProvider({ children }) {
     navigate('/login', { replace: true, state: { reason, message, returnTo } });
   }, [location.hash, location.pathname, location.search, navigate]);
 
+  // Support impersonation (#416): the server keeps the admin's own session
+  // and adds a read-only view cookie; /auth/me then answers as the viewed
+  // person with an `impersonation` block. Both transitions reload the app so
+  // no cached data or socket of the previous identity survives.
+  const startImpersonation = useCallback(async (member, reason) => {
+    authCheckSequenceRef.current += 1;
+    const result = await api.startImpersonation(member.id, reason);
+    await purgePrivateCaches();
+    reloadTo(result?.session?.subject?.role === 'CLIENT' ? '/client/dashboard' : '/dashboard');
+    return result;
+  }, []);
+
+  const stopImpersonation = useCallback(async ({ to = '/team' } = {}) => {
+    authCheckSequenceRef.current += 1;
+    try {
+      await api.stopImpersonation();
+    } catch {
+      // The view may already have ended (expired or revoked); continue.
+    }
+    await purgePrivateCaches();
+    reloadTo(to);
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, authState, login, completeMfaLogin, logout, expireSession, checkAuth }}>
+    <AuthContext.Provider value={{ user, isLoading, authState, login, completeMfaLogin, logout, expireSession, checkAuth, startImpersonation, stopImpersonation }}>
       {children}
     </AuthContext.Provider>
   );

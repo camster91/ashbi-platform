@@ -33,7 +33,7 @@ export default async function settingsRoutes(fastify) {
   // List all assignment rules
   fastify.get('/assignment-rules', {
     onRequest: [fastify.authenticate]
-  }, async () => {
+  }, async (request) => {
     const rules = await request.prisma.assignmentRule.findMany({
       orderBy: [
         { priority: 'desc' },
