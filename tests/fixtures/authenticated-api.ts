@@ -152,6 +152,11 @@ const reviewSession = {
   title: 'Homepage draft',
   status: 'changes_requested',
   version: 1,
+  // An uploaded file, not a captured web page (staffSession in review.routes.js).
+  sourceUrl: null,
+  captureViewport: null,
+  sharedWithClient: false,
+  clientCanDecide: false,
   previousSessionId: null,
   nextSessionId: null,
   createdById: 'user-admin',
@@ -339,6 +344,9 @@ export async function mockAuthenticatedApi(page: Page, { user = adminUser, signe
     if (path === `/attachments/uploads/${reviewAttachment.filename}`) return route.fulfill({ status: 200, contentType: 'image/png', body: reviewImagePng });
 
     // Media review (#417).
+    // GET /api/reviews/capabilities: web page capture is configured, so the
+    // "Review a web page" controls render and are covered by axe.
+    if (path === '/reviews/capabilities') return json(route, { webCapture: { enabled: true, viewports: ['desktop', 'mobile'] } });
     if (path === '/reviews' && method === 'GET') return json(route, { sessions: [{ ...reviewSession, openAnnotationCount: 1 }] });
     if (path === `/reviews/${reviewSession.id}`) {
       return json(route, {
