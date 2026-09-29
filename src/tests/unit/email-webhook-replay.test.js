@@ -11,19 +11,35 @@ process.env.WEBHOOK_SECRET = 'email-webhook-test-secret';
 process.env.BOT_ORGANIZATION_ID = 'org-bot';
 
 const { default: webhookRoutes } = await import('../../routes/webhook.routes.js');
-const { signEmailWebhook, verifyEmailWebhook, claimEmailWebhookSignature } = await import('../../webhooks/email-webhook-signature.js');
+const {
+  EMAIL_WEBHOOK_CLAIM_LEASE_MS, signEmailWebhook, verifyEmailWebhook, claimEmailWebhookSignature, markEmailWebhookProcessed,
+} = await import('../../webhooks/email-webhook-signature.js');
 
 function receiptStore() {
-  const seen = new Set();
+  const rows = new Map();
+  const matches = (row, where) => Object.entries(where).every(([key, condition]) => {
+    if (condition && typeof condition === 'object' && !(condition instanceof Date) && 'lt' in condition) return row[key] < condition.lt;
+    return row[key] === condition;
+  });
   return {
-    seen,
+    get seen() { return new Set(rows.keys()); },
+    rows,
     emailWebhookReceipt: {
       create: async ({ data }) => {
-        if (seen.has(data.signature)) throw Object.assign(new Error('Unique constraint failed'), { code: 'P2002' });
-        seen.add(data.signature);
+        if (rows.has(data.signature)) throw Object.assign(new Error('Unique constraint failed'), { code: 'P2002' });
+        rows.set(data.signature, { processedAt: null, ...data });
         return data;
       },
-      deleteMany: async ({ where }) => { if (where.signature) seen.delete(where.signature); return { count: 0 }; },
+      updateMany: async ({ where, data }) => {
+        let count = 0;
+        for (const row of rows.values()) if (matches(row, where)) { Object.assign(row, data); count += 1; }
+        return { count };
+      },
+      deleteMany: async ({ where }) => {
+        let count = 0;
+        for (const [key, row] of rows) if (matches(row, where)) { rows.delete(key); count += 1; }
+        return { count };
+      },
     },
   };
 }
@@ -48,6 +64,22 @@ test('a signature is accepted once', async () => {
   const store = receiptStore();
   assert.equal(await claimEmailWebhookSignature(store, 'abc'), true);
   assert.equal(await claimEmailWebhookSignature(store, 'abc'), false);
+});
+
+test('an interrupted claim is retryable after its lease; a processed delivery never is', async () => {
+  const store = receiptStore();
+  const t0 = new Date('2026-09-29T00:00:00Z');
+  const later = (ms) => new Date(t0.getTime() + ms);
+
+  // The process died after claiming: nothing marked it processed.
+  assert.equal(await claimEmailWebhookSignature(store, 'lost', { now: t0 }), true);
+  assert.equal(await claimEmailWebhookSignature(store, 'lost', { now: later(30_000) }), false, 'in flight: still leased');
+  assert.equal(await claimEmailWebhookSignature(store, 'lost', { now: later(EMAIL_WEBHOOK_CLAIM_LEASE_MS + 1) }), true, 'a retry takes the stale claim over');
+
+  // A processed delivery stays a replay, however late it comes back.
+  assert.equal(await claimEmailWebhookSignature(store, 'done', { now: t0 }), true);
+  await markEmailWebhookProcessed(store, 'done', { now: later(1_000) });
+  assert.equal(await claimEmailWebhookSignature(store, 'done', { now: later(EMAIL_WEBHOOK_CLAIM_LEASE_MS + 1) }), false);
 });
 
 test('the route refuses unsigned, legacy-signed, stale and replayed deliveries', async (t) => {

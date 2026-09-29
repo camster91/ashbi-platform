@@ -7,7 +7,9 @@ import env from '../config/env.js';
 import {validateBody, webhookEmailTestSchema} from '../validators/schemas.js';
 import { runTenantJob } from '../jobs/tenant-iteration.js';
 import { prisma as backgroundPrisma } from '../config/db.js';
-import { claimEmailWebhookSignature, releaseEmailWebhookSignature, verifyEmailWebhook } from '../webhooks/email-webhook-signature.js';
+import {
+  claimEmailWebhookSignature, markEmailWebhookProcessed, releaseEmailWebhookSignature, verifyEmailWebhook,
+} from '../webhooks/email-webhook-signature.js';
 
 export default async function webhookRoutes(fastify) {
   // Email webhook endpoint
@@ -53,6 +55,11 @@ export default async function webhookRoutes(fastify) {
         () => processEmailPipeline(emailData),
         backgroundPrisma,
       );
+      // Finished: a later delivery with this signature is a replay. Until
+      // this runs, an interrupted claim is retryable after its lease.
+      await markEmailWebhookProcessed(receipts, verification.signature).catch((err) => {
+        fastify.log.warn({ errorName: err?.name }, 'Could not mark the email webhook processed');
+      });
 
       return {
         success: true,
