@@ -111,7 +111,7 @@ export default function Milestones({ projectId }) {
     <div>
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-gray-900">Milestones</h3>
+        <h3 className="text-lg font-semibold text-foreground">Milestones</h3>
         <button
           onClick={() => setShowCreateModal(true)}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
@@ -129,14 +129,14 @@ export default function Milestones({ projectId }) {
           isRetrying={isFetching}
         />
       ) : milestones.length === 0 ? (
-        <div className="text-center py-12 text-gray-500">
+        <div className="text-center py-12 text-muted-foreground">
           <p className="text-lg">No milestones yet</p>
           <p className="text-sm mt-1">Add milestones to track project progress</p>
         </div>
       ) : (
         <div className="relative">
           {/* Timeline line */}
-          <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-gray-200"></div>
+          <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-muted"></div>
 
           <div className="space-y-6">
             {milestones.map((milestone, index) => {
@@ -158,7 +158,7 @@ export default function Milestones({ projectId }) {
                         ? 'bg-red-500 border-red-500'
                         : isUpcoming
                         ? 'bg-yellow-500 border-yellow-500'
-                        : 'bg-white border-gray-300'
+                        : 'bg-card border-border'
                     }`}
                     style={{ top: '1rem' }}
                   ></div>
@@ -169,24 +169,24 @@ export default function Milestones({ projectId }) {
                     onClick={() => setSelectedMilestone(milestone)}
                     aria-label={`Open milestone ${milestone.name}`}
                     aria-pressed={selectedMilestone?.id === milestone.id}
-                    className={`w-full min-h-11 bg-white rounded-lg border p-4 text-left cursor-pointer hover:shadow-md active:bg-gray-50 transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 ${
+                    className={`w-full min-h-11 bg-card rounded-lg border p-4 text-left cursor-pointer hover:shadow-md active:bg-muted transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 ${
                       milestone.status === 'COMPLETED' ? 'opacity-75' : ''
                     }`}
                     style={{ borderLeftColor: milestone.color, borderLeftWidth: '4px' }}
                   >
                     <div className="flex items-start justify-between">
                       <div>
-                        <h4 className="font-medium text-gray-900">{milestone.name}</h4>
+                        <h4 className="font-medium text-foreground">{milestone.name}</h4>
                         {milestone.description && (
-                          <p className="text-sm text-gray-500 mt-1">{milestone.description}</p>
+                          <p className="text-sm text-muted-foreground mt-1">{milestone.description}</p>
                         )}
                       </div>
                       <div className="text-right">
                         <span className={`text-sm font-medium ${
-                          milestone.status === 'COMPLETED' ? 'text-green-600' :
-                          isOverdue ? 'text-red-600' :
-                          isUpcoming ? 'text-yellow-600' :
-                          'text-gray-600'
+                          milestone.status === 'COMPLETED' ? 'text-green-700 dark:text-green-400' :
+                          isOverdue ? 'text-red-700 dark:text-red-400' :
+                          isUpcoming ? 'text-yellow-700 dark:text-yellow-400' :
+                          'text-muted-foreground'
                         }`}>
                           {milestone.status === 'COMPLETED'
                             ? 'Completed'
@@ -196,7 +196,7 @@ export default function Milestones({ projectId }) {
                             ? 'Due today'
                             : `${daysUntil} days left`}
                         </span>
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-muted-foreground mt-1">
                           {formatDate(milestone.dueDate)}
                         </p>
                       </div>
@@ -204,11 +204,11 @@ export default function Milestones({ projectId }) {
 
                     {/* Progress Bar */}
                     <div className="mt-3">
-                      <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                      <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
                         <span>{milestone.completedTasks} of {milestone.totalTasks} tasks</span>
                         <span>{milestone.progress}%</span>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="w-full bg-muted rounded-full h-2">
                         <div
                           className="h-2 rounded-full transition-all"
                           style={{
@@ -284,7 +284,7 @@ function MilestoneModal({ milestone, onSave, onDelete, onClose, isLoading, isDel
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+          <label className="block text-sm font-medium text-foreground mb-1">Name</label>
           <input
             type="text"
             value={formData.name}
@@ -295,7 +295,7 @@ function MilestoneModal({ milestone, onSave, onDelete, onClose, isLoading, isDel
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+          <label className="block text-sm font-medium text-foreground mb-1">Description</label>
           <textarea
             value={formData.description}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -306,7 +306,7 @@ function MilestoneModal({ milestone, onSave, onDelete, onClose, isLoading, isDel
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Due Date</label>
             <input
               type="date"
               value={formData.dueDate}
@@ -316,7 +316,7 @@ function MilestoneModal({ milestone, onSave, onDelete, onClose, isLoading, isDel
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Color</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Color</label>
             <input
               type="color"
               value={formData.color}
@@ -328,7 +328,7 @@ function MilestoneModal({ milestone, onSave, onDelete, onClose, isLoading, isDel
 
         {milestone && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Status</label>
             <select
               value={formData.status}
               onChange={(e) => setFormData({ ...formData, status: e.target.value })}
@@ -343,7 +343,7 @@ function MilestoneModal({ milestone, onSave, onDelete, onClose, isLoading, isDel
 
         {milestone?.tasks?.length > 0 && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-foreground mb-2">
               Tasks ({milestone.tasks.length})
             </label>
             <div className="max-h-40 overflow-y-auto border rounded-lg">
@@ -352,13 +352,13 @@ function MilestoneModal({ milestone, onSave, onDelete, onClose, isLoading, isDel
                   key={task.id}
                   className="flex items-center justify-between px-3 py-2 border-b last:border-b-0"
                 >
-                  <span className={`text-sm ${task.status === 'COMPLETED' ? 'line-through text-gray-500' : 'text-gray-700'}`}>
+                  <span className={`text-sm ${task.status === 'COMPLETED' ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
                     {task.title}
                   </span>
                   <span className={`text-xs px-2 py-0.5 rounded ${
-                    task.status === 'COMPLETED' ? 'bg-green-100 text-green-700' :
-                    task.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700' :
-                    'bg-gray-100 text-gray-700'
+                    task.status === 'COMPLETED' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' :
+                    task.status === 'IN_PROGRESS' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' :
+                    'bg-muted text-foreground'
                   }`}>
                     {task.status}
                   </span>
@@ -375,7 +375,7 @@ function MilestoneModal({ milestone, onSave, onDelete, onClose, isLoading, isDel
                 type="button"
                 onClick={onDelete}
                 disabled={isDeleting}
-                className="text-red-600 hover:text-red-700"
+                className="text-red-700 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
               >
                 {isDeleting ? 'Deleting…' : 'Delete'}
               </button>
@@ -385,7 +385,7 @@ function MilestoneModal({ milestone, onSave, onDelete, onClose, isLoading, isDel
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+              className="px-4 py-2 text-foreground hover:bg-muted rounded-lg"
             >
               Cancel
             </button>
