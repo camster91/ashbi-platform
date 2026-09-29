@@ -67,4 +67,21 @@ describe('project chat visibility', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/components/ProjectChat.jsx'), 'utf8');
     expect(source).toContain("useState('INTERNAL')");
   });
+  it('badges every reply with its own visibility and notes replies outside the window', async () => {
+    api.getChatMessages.mockResolvedValue([{
+      id: 'root', authorId: 'u2', author: { name: 'Pat' }, content: 'Root message', visibility: 'CLIENT',
+      createdAt: '2026-09-29T10:00:00.000Z', replyCount: 3,
+      replies: [
+        { id: 'r1', author: { name: 'Sam' }, content: 'Team note', visibility: 'INTERNAL' },
+        { id: 'r2', author: { name: 'Sam' }, content: 'For the client', visibility: 'CLIENT' },
+      ],
+    }]);
+    renderChat();
+    const replies = await screen.findByRole('list', { name: 'Replies' });
+    const items = replies.querySelectorAll('li');
+    expect(items[0]).toHaveTextContent('Internal');
+    expect(items[0]).toHaveTextContent('Team note');
+    expect(items[1]).toHaveTextContent('Visible to client');
+    expect(screen.getByText('Showing the latest 2 of 3 replies.')).toBeInTheDocument();
+  });
 });
