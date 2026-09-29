@@ -15,6 +15,21 @@ import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { contentDisposition } from '../utils/send-file.js';
 import { ATTACHMENT_UNDER_REVIEW, isAttachmentUnderReview, isForeignKeyViolation } from '../services/media-review.service.js';
 import { emitChatEvent, toClientChatPayload } from '../auth/project-room-access.js';
+import {
+  CHAT_PENDING_ENTITY,
+  MAX_PENDING_CHAT_UPLOADS_PER_UPLOADER,
+  claimPendingChatAttachments,
+  findClientReadableChatAttachment,
+  loadChatAttachments,
+  normaliseAttachmentIds,
+  sendChatAttachmentError,
+  storeValidatedUpload,
+  toClientAttachmentPayload,
+  toStaffAttachmentPayload,
+  unlinkStoredUpload,
+  withAttachments,
+} from '../services/chat-attachment.service.js';
+import { sendStoredFile } from '../utils/send-file.js';
 import { validateBody, validateParams, validateQuery, chatMessageListQuerySchema, clientPortalMessageSchema, requestAccessSchema, fileUpload, clientPortalTokenRedeemSchema, clientPortalRevisionResponseSchema, clientPortalFeedbackSchema } from '../validators/schemas.js';
 import { invoicePublicAccessFailure, INVOICE_OPEN_STATUSES } from '../utils/public-document-access.js';
 import { outboundSignal } from '../utils/outbound-timeouts.js';
@@ -118,6 +133,27 @@ export function magicLinkClaims(user, contact) {
     role: 'CLIENT',
     sessionVersion: user.sessionVersion,
   };
+}
+
+/**
+ * The user row a portal contact writes as (chat author, uploader). Created on
+ * first use for contacts that predate client-portal user accounts.
+ */
+async function resolveContactAuthor(prisma, { contactId, clientId }) {
+  const contact = await prisma.contact.findUnique({ where: { id: contactId } });
+  let authorUser = await prisma.user.findFirst({ where: { email: contact.email } });
+  if (!authorUser) {
+    authorUser = await prisma.user.create({
+      data: {
+        email: contact.email,
+        name: contact.name,
+        password: await bcrypt.hash(randomUUID(), 12), // magic-link account; keep stored credential non-reusable
+        role: 'CLIENT',
+        clientId
+      }
+    });
+  }
+  return authorUser;
 }
 
 // ── Routes ───────────────────────────────────────────────────────────────────
@@ -556,14 +592,106 @@ export default async function clientPortalRoutes(fastify) {
       take: limit
     });
 
-    return messages.reverse().map(toClientChatPayload);
+    // Only CLIENT messages are loaded above, so only their files are; each is
+    // reduced to the client shape by toClientChatPayload (docs/chat-media.md).
+    const byMessage = await loadChatAttachments(request.prisma, messages.map((message) => message.id));
+    return withAttachments(messages.reverse(), byMessage).map(toClientChatPayload);
+  });
+
+  // POST /api/client-portal/projects/:id/chat-uploads — a file for a portal
+  // chat message that is still being written. Stored as a pending chat upload
+  // owned by the contact's user; the message send claims it.
+  fastify.post('/projects/:id/chat-uploads', { preHandler: clientAuth }, async (request, reply) => {
+    const { clientId, contactId } = request.clientUser;
+    const { id } = request.params;
+
+    const project = await request.prisma.project.findFirst({ where: { id, clientId }, select: { id: true, organizationId: true } });
+    if (!project) return reply.status(404).send({ error: 'Project not found' });
+
+    const authorUser = await resolveContactAuthor(request.prisma, { contactId, clientId });
+    const pending = await request.prisma.attachment.count({
+      where: { entityType: CHAT_PENDING_ENTITY, entityId: id, uploadedById: authorUser.id },
+    });
+    if (pending >= MAX_PENDING_CHAT_UPLOADS_PER_UPLOADER) {
+      return reply.status(409).send({ error: 'Too many unsent attachments. Send or remove some first.', code: 'TOO_MANY_PENDING_UPLOADS' });
+    }
+
+    const data = await request.file();
+    if (!data) return reply.status(400).send({ error: 'No file uploaded' });
+    const { stored, error } = await storeValidatedUpload(data);
+    if (error) return reply.status(400).send({ error });
+
+    const attachment = await request.prisma.attachment.create({
+      data: {
+        ...stored,
+        entityType: CHAT_PENDING_ENTITY,
+        entityId: id,
+        uploadedById: authorUser.id,
+        organizationId: project.organizationId,
+      },
+    });
+    // The client shape, without the download URL: a pending file is readable
+    // only once it is sent on a client-visible message.
+    const { url: _url, ...clientShape } = toClientAttachmentPayload(attachment) ?? { id: attachment.id };
+    return reply.status(201).send(clientShape);
+  });
+
+  // DELETE /api/client-portal/projects/:id/chat-uploads/:attachmentId — remove
+  // one of the contact's own unsent uploads.
+  fastify.delete('/projects/:id/chat-uploads/:attachmentId', { preHandler: clientAuth }, async (request, reply) => {
+    const { clientId, contactId } = request.clientUser;
+    const { id, attachmentId } = request.params;
+    const project = await request.prisma.project.findFirst({ where: { id, clientId }, select: { id: true } });
+    if (!project) return reply.status(404).send({ error: 'Project not found' });
+    const authorUser = await resolveContactAuthor(request.prisma, { contactId, clientId });
+    const existing = await request.prisma.attachment.findFirst({
+      where: { id: attachmentId, entityType: CHAT_PENDING_ENTITY, entityId: id, uploadedById: authorUser.id },
+      select: { id: true, path: true },
+    });
+    if (!existing) return reply.status(404).send({ error: 'Pending upload not found' });
+    const deleted = await request.prisma.attachment.deleteMany({ where: { id: existing.id, entityType: CHAT_PENDING_ENTITY } });
+    if (deleted.count === 1) await unlinkStoredUpload(existing.path);
+    return { success: true };
+  });
+
+  // GET /api/client-portal/chat-attachments/:attachmentId — a file attached to
+  // a CLIENT-visible message of one of this client's projects. Anything else
+  // (INTERNAL message, another client's project, deleted message, unsent or
+  // quarantined file) is a 404 (docs/chat-media.md).
+  fastify.get('/chat-attachments/:attachmentId', { preHandler: clientAuth }, async (request, reply) => {
+    const { clientId, organizationId } = request.clientUser;
+    const attachment = await findClientReadableChatAttachment(request.prisma, {
+      attachmentId: request.params.attachmentId,
+      clientId,
+      organizationId,
+    });
+    if (!attachment) return reply.status(404).send({ error: 'File not found' });
+    const mime = String(attachment.mimeType || '');
+    const media = mime.startsWith('video/') || mime.startsWith('audio/');
+    const inline = media || mime.startsWith('image/');
+    const sent = await sendStoredFile(request, reply, {
+      filepath: path.join(UPLOAD_DIR, path.basename(attachment.filename)),
+      mimeType: attachment.mimeType,
+      fileName: attachment.originalName,
+      disposition: inline ? 'inline' : 'attachment',
+      allowRanges: media,
+      headers: { 'Cache-Control': 'private, no-store' },
+    });
+    if (sent === null) return reply.status(404).send({ error: 'File not found' });
+    return sent;
   });
 
   // POST /api/client-portal/projects/:id/messages
   fastify.post('/projects/:id/messages', { preHandler: [clientAuth, validateBody(clientPortalMessageSchema)] }, async (request, reply) => {
     const { clientId, contactId } = request.clientUser;
     const { id } = request.params;
-    const { content, type } = request.body;
+    const { content = '', type } = request.body;
+    let attachmentIds;
+    try {
+      attachmentIds = normaliseAttachmentIds(request.body.attachmentIds);
+    } catch (err) {
+      return sendChatAttachmentError(reply, err);
+    }
 
     const project = await request.prisma.project.findFirst({ where: { id, clientId } });
     if (!project) {
@@ -571,40 +699,37 @@ export default async function clientPortalRoutes(fastify) {
     }
 
     // Find or create a user for the contact to use as author
-    const contact = await request.prisma.contact.findUnique({ where: { id: contactId } });
-    let authorUser = await request.prisma.user.findFirst({
-      where: { email: contact.email }
-    });
+    const authorUser = await resolveContactAuthor(request.prisma, { contactId, clientId });
 
-    // If no user exists for this contact, create a minimal one
-    if (!authorUser) {
-      authorUser = await request.prisma.user.create({
-        data: {
-          email: contact.email,
-          name: contact.name,
-          password: await bcrypt.hash(randomUUID(), 12), // magic-link account; keep stored credential non-reusable
-          role: 'CLIENT',
-          clientId
-        }
+    // A portal message is always CLIENT-visible; it and the claim of its
+    // pending uploads commit together (docs/chat-media.md).
+    let created;
+    try {
+      created = await request.prisma.$transaction(async (tx) => {
+        const row = await tx.chatMessage.create({
+          data: {
+            content,
+            type,
+            visibility: 'CLIENT',
+            projectId: id,
+            authorId: authorUser.id
+          },
+          include: {
+            author: { select: { id: true, name: true, email: true } }
+          }
+        });
+        await claimPendingChatAttachments(tx, { attachmentIds, projectId: id, uploadedById: authorUser.id, messageId: row.id });
+        return row;
       });
+    } catch (err) {
+      return sendChatAttachmentError(reply, err);
     }
-
-    const message = await request.prisma.chatMessage.create({
-      data: {
-        content,
-        type,
-        visibility: 'CLIENT',
-        projectId: id,
-        authorId: authorUser.id
-      },
-      include: {
-        author: { select: { id: true, name: true, email: true } }
-      }
-    });
+    const [message] = withAttachments([created], await loadChatAttachments(request.prisma, [created.id]));
 
     // Staff see it in the internal room; the client room gets the portal shape.
     const clientMessage = toClientChatPayload(message);
-    emitChatEvent(fastify.io, message, 'chat:message', { ...message, metadata: null }, clientMessage);
+    const staffMessage = { ...message, metadata: null, attachments: message.attachments.map(toStaffAttachmentPayload) };
+    emitChatEvent(fastify.io, message, 'chat:message', staffMessage, clientMessage);
 
     return reply.status(201).send(clientMessage);
   });

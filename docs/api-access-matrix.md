@@ -46,12 +46,12 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | api-key + scope ai_bridge:actions | 2 |
 | api-key + scope ai_bridge:read | 1 |
 | bot-secret | 40 |
-| client-portal | 19 |
+| client-portal | 22 |
 | public | 51 |
 | recent-auth + staff | 4 |
-| staff | 359 |
+| staff | 361 |
 | staff (inline) | 1 |
-| **total** | 532 |
+| **total** | 537 |
 
 ## Routes by prefix
 
@@ -293,6 +293,8 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | PUT | `/api/chat/projects/:projectId/messages/:messageId` | staff | scoped |  |
 | POST | `/api/chat/projects/:projectId/messages/:messageId/reactions` | staff | scoped |  |
 | DELETE | `/api/chat/projects/:projectId/messages/:messageId/reactions/:emoji` | staff | scoped |  |
+| POST | `/api/chat/projects/:projectId/uploads` | staff | scoped |  |
+| DELETE | `/api/chat/projects/:projectId/uploads/:attachmentId` | staff | scoped |  |
 
 ### /api/client-acquisition
 
@@ -307,6 +309,7 @@ queries; the test keeps a reviewed list of those routes with the reason.
 
 | Method | Path | Access | Tenancy | Notes |
 | --- | --- | --- | --- | --- |
+| GET | `/api/client-portal/chat-attachments/:attachmentId` | client-portal | exempt |  |
 | GET | `/api/client-portal/contracts` | client-portal | exempt |  |
 | GET | `/api/client-portal/contracts/:id/pdf` | client-portal | exempt |  |
 | DELETE | `/api/client-portal/documents/:docId` | client-portal | exempt |  |
@@ -317,6 +320,8 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | GET | `/api/client-portal/me` | client-portal | exempt |  |
 | GET | `/api/client-portal/projects` | client-portal | exempt |  |
 | GET | `/api/client-portal/projects/:id` | client-portal | exempt |  |
+| POST | `/api/client-portal/projects/:id/chat-uploads` | client-portal | exempt |  |
+| DELETE | `/api/client-portal/projects/:id/chat-uploads/:attachmentId` | client-portal | exempt |  |
 | GET | `/api/client-portal/projects/:id/documents` | client-portal | exempt |  |
 | POST | `/api/client-portal/projects/:id/feedback` | client-portal | exempt |  |
 | GET | `/api/client-portal/projects/:id/messages` | client-portal | exempt |  |

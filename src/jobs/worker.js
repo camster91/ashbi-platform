@@ -22,6 +22,7 @@ import { resolveTenantOrganizationIds, runTenantJob } from './tenant-iteration.j
 import { runWeeklyDigest } from './weekly-digest.js';
 import { processRecurringInvoicesForAllOrganizations } from './recurring-invoices.js';
 import { purgeExpiredTrashForAllOrganizations } from './trash-purge.js';
+import { purgePendingChatUploads } from './chat-upload-cleanup.js';
 import {
   checkOverdueInvoicesForAllOrganizations,
 } from '../services/automation.service.js';
@@ -288,6 +289,8 @@ const scheduledWorker = createWorker(
         return checkOverdueInvoicesForAllOrganizations();
       case 'trash-purge':
         return purgeExpiredTrashForAllOrganizations();
+      case 'chat-upload-cleanup':
+        return purgePendingChatUploads();
       case 'fleet-digest':
         return { skipped: true, reason: 'retired WordPress fleet digest' };
       case 'scheduled-workflows':

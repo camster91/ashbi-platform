@@ -734,7 +734,11 @@ model Attachment {
   size           Int // Size in bytes
   path           String // Storage path or URL
   thumbnailPath  String? // For images
-  entityType     String // PROJECT, TASK, CHAT, NOTE
+  // PROJECT, TASK, NOTE, CHAT (entityId = chat message), or CHAT_PENDING
+  // (entityId = project): a chat upload not yet sent with a message. Sending
+  // the message claims it (CHAT); unclaimed ones are purged after 24 hours
+  // (docs/chat-media.md).
+  entityType     String
   entityId       String
   uploadedById   String
   createdAt      DateTime @default(now())
@@ -745,6 +749,9 @@ model Attachment {
   reviewSessions ReviewSession[]
 
   @@index([organizationId])
+  // Chat: one query loads the files of every visible message, and the
+  // pending-upload purge finds stale CHAT_PENDING rows.
+  @@index([entityType, entityId])
   @@map("attachments")
 }
 

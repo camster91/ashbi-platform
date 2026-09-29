@@ -18,6 +18,20 @@ import {
 } from '../validators/schemas.js';
 import { safeParse } from '../utils/safeParse.js';
 import { emitChatEvent, mayNotifyMention, projectRoom, toClientChatPayload } from '../auth/project-room-access.js';
+import {
+  CHAT_ATTACHMENT_ENTITY,
+  CHAT_PENDING_ENTITY,
+  MAX_PENDING_CHAT_UPLOADS_PER_UPLOADER,
+  claimPendingChatAttachments,
+  loadChatAttachments,
+  messageIdsOf,
+  normaliseAttachmentIds,
+  sendChatAttachmentError,
+  storeValidatedUpload,
+  toStaffAttachmentPayload,
+  unlinkStoredUpload,
+  withAttachments,
+} from '../services/chat-attachment.service.js';
 
 /**
  * A tombstoned message (deleted while it still had replies) keeps its place
@@ -27,14 +41,26 @@ import { emitChatEvent, mayNotifyMention, projectRoom, toClientChatPayload } fro
  */
 function presentMessage(message) {
   const presented = { ...message, metadata: safeParse(message.metadata) };
+  if (Array.isArray(message.attachments)) presented.attachments = message.attachments.map(toStaffAttachmentPayload);
   if (message.removedAt) {
     presented.content = '';
     presented.metadata = null;
     presented.reactions = [];
+    presented.attachments = [];
   }
   if (Array.isArray(message.replies)) presented.replies = message.replies.map(presentMessage);
   return presented;
 }
+
+/**
+ * A message row with its (and its replies') attachments, loaded in one query.
+ * @param {any} prisma
+ * @param {any[]} messages
+ */
+async function attachFiles(prisma, messages) {
+  return withAttachments(messages, await loadChatAttachments(prisma, messageIdsOf(messages)));
+}
+
 
 export default async function chatRoutes(fastify) {
   // Top-level messages for a project (newest page, returned oldest-first),
@@ -74,7 +100,58 @@ export default async function chatRoutes(fastify) {
       take: limit
     });
 
-    return messages.reverse().map(presentMessage);
+    // Files of every message on the page (and their replies) in one query.
+    return (await attachFiles(request.prisma, messages.reverse())).map(presentMessage);
+  });
+
+  // Upload one file for a message that is still being written (docs/chat-media.md).
+  // The file is stored as a pending chat upload of this project owned by the
+  // uploader; POST /messages claims it with `attachmentIds`. Unsent uploads
+  // are purged after 24 hours.
+  fastify.post('/projects/:projectId/uploads', {
+    onRequest: [fastify.authenticate],
+  }, async (request, reply) => {
+    const { projectId } = request.params;
+    const project = await request.prisma.project.findFirst({ where: { id: projectId }, select: { id: true, organizationId: true } });
+    if (!project) return reply.status(404).send({ error: 'Project not found' });
+
+    const pending = await request.prisma.attachment.count({
+      where: { entityType: CHAT_PENDING_ENTITY, entityId: projectId, uploadedById: request.user.id },
+    });
+    if (pending >= MAX_PENDING_CHAT_UPLOADS_PER_UPLOADER) {
+      return reply.status(409).send({ error: 'Too many unsent attachments. Send or remove some first.', code: 'TOO_MANY_PENDING_UPLOADS' });
+    }
+
+    const data = await request.file();
+    if (!data) return reply.status(400).send({ error: 'No file uploaded' });
+    const { stored, error } = await storeValidatedUpload(data);
+    if (error) return reply.status(400).send({ error });
+
+    const attachment = await request.prisma.attachment.create({
+      data: {
+        ...stored,
+        entityType: CHAT_PENDING_ENTITY,
+        entityId: projectId,
+        uploadedById: request.user.id,
+        organizationId: project.organizationId,
+      },
+    });
+    return reply.status(201).send(toStaffAttachmentPayload(attachment));
+  });
+
+  // Remove one of your own unsent uploads (the composer's "remove" button).
+  fastify.delete('/projects/:projectId/uploads/:attachmentId', {
+    onRequest: [fastify.authenticate],
+  }, async (request, reply) => {
+    const { projectId, attachmentId } = request.params;
+    const existing = await request.prisma.attachment.findFirst({
+      where: { id: attachmentId, entityType: CHAT_PENDING_ENTITY, entityId: projectId, uploadedById: request.user.id },
+      select: { id: true, path: true },
+    });
+    if (!existing) return reply.status(404).send({ error: 'Pending upload not found' });
+    const deleted = await request.prisma.attachment.deleteMany({ where: { id: existing.id, entityType: CHAT_PENDING_ENTITY } });
+    if (deleted.count === 1) await unlinkStoredUpload(existing.path);
+    return { success: true };
   });
 
   // Send a chat message
@@ -83,10 +160,16 @@ export default async function chatRoutes(fastify) {
     preHandler: validateBody(chatMessageCreateSchema),
   }, async (request, reply) => {
     const { projectId } = request.params;
-    const { content, type = 'TEXT', metadata, parentId } = request.body;
+    const { content = '', type = 'TEXT', metadata, parentId } = request.body;
     let visibility = request.body.visibility ?? 'INTERNAL';
+    let attachmentIds;
+    try {
+      attachmentIds = normaliseAttachmentIds(request.body.attachmentIds);
+    } catch (err) {
+      return sendChatAttachmentError(reply, err);
+    }
 
-    if (!content?.trim()) {
+    if (!content.trim() && attachmentIds.length === 0) {
       return reply.status(400).send({ error: 'Message content is required' });
     }
     const project = await request.prisma.project.findFirst({ where: { id: projectId }, select: { id: true, clientId: true } });
@@ -110,22 +193,35 @@ export default async function chatRoutes(fastify) {
       mentions.push(match[1]);
     }
 
-    const message = await request.prisma.chatMessage.create({
-      data: {
-        content,
-        type,
-        visibility,
-        metadata: metadata ? JSON.stringify(metadata) : null,
-        parentId,
-        projectId,
-        authorId: request.user.id
-      },
-      include: {
-        author: { select: { id: true, name: true, email: true } },
-        reactions: true,
-        replies: true
-      }
-    });
+    // One transaction: the message and the claim of its pending uploads
+    // commit together, or neither does (a file that is no longer pending
+    // rolls the message back; docs/chat-media.md).
+    let created;
+    try {
+      created = await request.prisma.$transaction(async (tx) => {
+        const row = await tx.chatMessage.create({
+          data: {
+            content,
+            type,
+            visibility,
+            metadata: metadata ? JSON.stringify(metadata) : null,
+            parentId,
+            projectId,
+            authorId: request.user.id
+          },
+          include: {
+            author: { select: { id: true, name: true, email: true } },
+            reactions: true,
+            replies: true
+          }
+        });
+        await claimPendingChatAttachments(tx, { attachmentIds, projectId, uploadedById: request.user.id, messageId: row.id });
+        return row;
+      });
+    } catch (err) {
+      return sendChatAttachmentError(reply, err);
+    }
+    const [message] = await attachFiles(request.prisma, [created]);
 
     // Log activity
     await request.prisma.activity.create({
@@ -134,7 +230,7 @@ export default async function chatRoutes(fastify) {
         action: 'created',
         entityType: 'CHAT',
         entityId: message.id,
-        entityName: content.substring(0, 50),
+        entityName: (content.trim() || `${attachmentIds.length} attachment${attachmentIds.length === 1 ? '' : 's'}`).substring(0, 50),
         projectId,
         userId: request.user.id
       }
@@ -182,7 +278,7 @@ export default async function chatRoutes(fastify) {
       return reply.status(403).send({ error: 'Can only edit your own messages' });
     }
 
-    const message = await request.prisma.chatMessage.update({
+    const updated = await request.prisma.chatMessage.update({
       where: { id: messageId },
       data: {
         content,
@@ -194,6 +290,8 @@ export default async function chatRoutes(fastify) {
         reactions: true
       }
     });
+    // The edit event replaces the message in open chats: keep its files.
+    const [message] = await attachFiles(request.prisma, [updated]);
 
     const presented = presentMessage(message);
     emitChatEvent(fastify.io, message, 'chat:edited', presented, toClientChatPayload(message));
@@ -223,7 +321,13 @@ export default async function chatRoutes(fastify) {
 
     // One transaction: the reply count, the tombstone and its reaction cleanup
     // (or the hard delete) commit together.
-    const tombstoned = await request.prisma.$transaction(async (tx) => {
+    // The message's files go with it (rows here, bytes after commit).
+    const { tombstoned, files } = await request.prisma.$transaction(async (tx) => {
+      const attached = await tx.attachment.findMany({
+        where: { entityType: CHAT_ATTACHMENT_ENTITY, entityId: messageId },
+        select: { id: true, path: true },
+      });
+      if (attached.length) await tx.attachment.deleteMany({ where: { id: { in: attached.map((file) => file.id) } } });
       const replyCount = await tx.chatMessage.count({ where: { parentId: messageId, projectId } });
       if (replyCount > 0) {
         await tx.chatMessage.update({
@@ -231,11 +335,14 @@ export default async function chatRoutes(fastify) {
           data: { content: '', metadata: null, removedAt: new Date() },
         });
         await tx.chatReaction.deleteMany({ where: { messageId } });
-        return true;
+        return { tombstoned: true, files: attached };
       }
       await tx.chatMessage.delete({ where: { id: messageId } });
-      return false;
+      return { tombstoned: false, files: attached };
     });
+    for (const file of files) {
+      await unlinkStoredUpload(file.path).catch((err) => request.log.warn({ err, attachmentId: file.id }, 'chat: attachment file not removed'));
+    }
 
     const payload = { messageId, tombstoned };
     emitChatEvent(fastify.io, existing, 'chat:deleted', payload, payload);

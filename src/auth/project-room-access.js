@@ -16,6 +16,8 @@
  * for the internal room.
  */
 
+import { toClientAttachmentPayload } from '../services/chat-attachment.service.js';
+
 /** @param {string} projectId */
 export function projectRoom(projectId) {
   return `project:${projectId}`;
@@ -133,7 +135,10 @@ export const CLIENT_CHAT_FIELDS = Object.freeze([
 /**
  * The client-portal shape of a CLIENT chat message: no metadata (mentions,
  * integration details), reactions, external identifiers or staff emails.
- * Returns null for anything that is not client-visible.
+ * Returns null for anything that is not client-visible, so the files of an
+ * INTERNAL message never reach a client. Attachments, when the message
+ * carries them, are reduced to the client shape (id, name, MIME type, size,
+ * client-portal download URL; docs/chat-media.md).
  *
  * @param {Record<string, any>} message
  * @returns {Record<string, any> | null}
@@ -142,6 +147,9 @@ export function toClientChatPayload(message) {
   if (!message || message.visibility !== 'CLIENT' || message.removedAt) return null;
   const payload = pick(message, CLIENT_CHAT_FIELDS);
   if (message.author) payload.author = { id: message.author.id, name: message.author.name };
+  payload.attachments = Array.isArray(message.attachments)
+    ? message.attachments.map(toClientAttachmentPayload).filter(Boolean)
+    : [];
   return payload;
 }
 

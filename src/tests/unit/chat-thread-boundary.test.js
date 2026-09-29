@@ -70,6 +70,7 @@ test('chat message reads tolerate malformed legacy metadata', async () => {
     chatMessage: {
       findMany: async () => [{ id: 'c123456789012345678901236', content: 'Legacy message', metadata: '{not-json}' }],
     },
+    attachment: { findMany: async () => [] },
   });
   app.addHook('onRequest', async (request) => { request.prisma = app.prisma; });
   await app.register(chatRoutes, { prefix: '/api' });
