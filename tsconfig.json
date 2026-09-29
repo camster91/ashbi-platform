@@ -16,6 +16,7 @@
     "sourceMap": true,
     "paths": {
       "@/*": ["./src/*"],
+      "@shared/*": ["./src/shared/*"],
       "@web/*": ["./web/src/*"]
     }
   },

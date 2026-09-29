@@ -586,8 +586,14 @@ model ChatMessage {
   externalAuthorName String?
   externalMessageId  String? // Provider-native message identifier for durable reconciliation
   externalThreadId   String? // Provider-native root-thread identifier
+  // INTERNAL: staff-only team chat (default, includes Slack imports).
+  // CLIENT: part of the client-portal conversation, readable by the client.
+  visibility String   @default("INTERNAL")
   isEdited  Boolean   @default(false)
   editedAt  DateTime?
+  // Tombstone for a deleted message that still has replies: the content is
+  // cleared and the thread stays intact. Messages without replies are removed.
+  removedAt DateTime?
   parentId  String? // For thread replies
   projectId String
   authorId  String?
@@ -603,6 +609,7 @@ model ChatMessage {
 
   @@index([projectId])
   @@index([projectId, createdAt])
+  @@index([projectId, visibility, createdAt])
   @@index([projectId, externalSource, externalMessageId])
   @@index([projectId, externalSource, externalThreadId])
   @@index([parentId])
@@ -683,7 +690,9 @@ model TimeEntry {
   date        DateTime  @default(now())
   billable    Boolean   @default(true)
   hourlyRate  Float? // Override rate for this entry
-  source      String    @default("MANUAL")
+  source      String    @default("MANUAL") // MANUAL, TIMER
+  // The timer this entry was recorded from (source TIMER); one entry per timer.
+  timeSessionId String?   @unique
   invoiced    Boolean   @default(false) // Has this been included in an invoice?
   invoiceId   String? // Link to invoice if billed
   reviewStatus   String    @default("PENDING") // PENDING, APPROVED, REJECTED
@@ -703,6 +712,7 @@ model TimeEntry {
   project Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
   user    User     @relation(fields: [userId], references: [id])
   invoice Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  timeSession TimeSession? @relation(fields: [timeSessionId], references: [id], onDelete: SetNull)
 
   @@index([projectId])
   @@index([userId])
@@ -1852,13 +1862,17 @@ model TimeSession {
   duration    Int       @default(0) // Duration in minutes (calculated on stop)
   description String?
   billable    Boolean   @default(true)
-  isRunning   Boolean   @default(false) // True if timer is currently running
+  // True if timer is currently running. At most one per user: enforced by the
+  // partial unique index time_sessions_one_running_per_user (migration
+  // 20260927040000_timer_time_entries), which Prisma cannot express.
+  isRunning   Boolean   @default(false)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  user    User    @relation(fields: [userId], references: [id])
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  task    Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  user      User       @relation(fields: [userId], references: [id])
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task      Task?      @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  timeEntry TimeEntry?
 
   @@index([userId])
   @@index([projectId])

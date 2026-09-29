@@ -1,6 +1,7 @@
 // Shared Zod validation schemas for Fastify route input validation
 // Usage: import { schemas } from '../validators/schemas.js';
 
+import { DEFAULT_TASK_PRIORITY, TASK_PRIORITIES } from '../shared/task-priority.js';
 import { z } from 'zod';
 import {
   ALLOWED_UPLOAD_EXTENSIONS,
@@ -144,7 +145,7 @@ export const updateProjectSchema = z.object({
 export const createTaskSchema = z.object({
   title: z.string().min(1).max(500),
   description: z.string().max(10000).optional(),
-  priority: z.enum(['CRITICAL', 'HIGH', 'NORMAL', 'LOW']).optional().default('NORMAL'),
+  priority: z.enum(TASK_PRIORITIES).optional().default(DEFAULT_TASK_PRIORITY),
   status: z.enum(['PENDING', 'UPCOMING', 'IMMEDIATE', 'IN_PROGRESS', 'BLOCKED', 'WAITING_US', 'WAITING_CLIENT', 'COMPLETED']).optional().default('PENDING'),
   category: z.string().max(50).optional(),
   projectId: cuidId,
@@ -158,7 +159,7 @@ export const createTaskSchema = z.object({
 export const updateTaskSchema = z.object({
   title: z.string().min(1).max(500).optional(),
   description: z.string().max(10000).optional(),
-  priority: z.enum(['CRITICAL', 'HIGH', 'NORMAL', 'LOW']).optional(),
+  priority: z.enum(TASK_PRIORITIES).optional(),
   status: z.enum(['PENDING', 'UPCOMING', 'IMMEDIATE', 'IN_PROGRESS', 'BLOCKED', 'WAITING_US', 'WAITING_CLIENT', 'COMPLETED']).optional(),
   category: z.string().max(50).optional(),
   assigneeId: cuidId.nullable().optional(),
@@ -632,7 +633,7 @@ const aiBridgeTaskActionInputSchema = z.object({
   projectId: cuidId,
   title: z.string().trim().min(1).max(500),
   description: z.string().max(10_000).optional(),
-  priority: z.enum(['CRITICAL', 'HIGH', 'NORMAL', 'LOW']).optional(),
+  priority: z.enum(TASK_PRIORITIES).optional(),
   dueDate: z.string().max(64).optional(),
 }).strict();
 
@@ -921,7 +922,7 @@ export const taskCreateSchema = z.object({
   projectId: cuidId,
   status: z.enum(TASK_STATUS_VALUES).optional(),
   description: z.string().max(50_000).optional(),
-  priority: z.enum(['LOW', 'NORMAL', 'HIGH', 'CRITICAL']).default('NORMAL'),
+  priority: z.enum(TASK_PRIORITIES).default(DEFAULT_TASK_PRIORITY),
   dueDate: z.string().datetime().nullable().optional(),
   assigneeId: cuidId.optional(),
 });
@@ -930,7 +931,7 @@ export const taskUpdateSchema = z.object({
   title: z.string().min(1).max(500).optional(),
   description: z.string().max(50_000).optional(),
   status: z.enum(['TODO', 'IN_PROGRESS', 'BLOCKED', 'REVIEW', 'COMPLETED']).optional(),
-  priority: z.enum(['LOW', 'NORMAL', 'HIGH', 'CRITICAL']).optional(),
+  priority: z.enum(TASK_PRIORITIES).optional(),
   assigneeId: cuidId.nullable().optional(),
   dueDate: z.string().datetime().nullable().optional(),
 });
@@ -939,7 +940,7 @@ export const taskBulkUpdateSchema = z.object({
   updates: z.array(z.object({
     id: cuidId,
     status: z.enum(['TODO', 'IN_PROGRESS', 'BLOCKED', 'REVIEW', 'COMPLETED']).optional(),
-    priority: z.enum(['LOW', 'NORMAL', 'HIGH', 'CRITICAL']).optional(),
+    priority: z.enum(TASK_PRIORITIES).optional(),
     assigneeId: cuidId.nullable().optional(),
   })).min(1).max(100),
 });
@@ -984,7 +985,7 @@ export const taskDependencyCreateSchema = z.object({
 export const taskCreateQuickSchema = z.object({
   title: z.string().min(1).max(500),
   assigneeId: cuidId.optional(),
-  priority: z.enum(['LOW', 'NORMAL', 'HIGH', 'CRITICAL']).default('NORMAL'),
+  priority: z.enum(TASK_PRIORITIES).default(DEFAULT_TASK_PRIORITY),
   status: z.enum(TASK_STATUS_VALUES).default('PENDING'),
 });
 
@@ -1379,12 +1380,12 @@ export const taskTemplateSchema = z.object({
 });
 
 // ── Time tracking ────────────────────────────────────────────────────────
-// `duration` is stored and reported in MINUTES (TimeEntry.duration, timer
-// sessions and the /summary hours maths all use minutes). NOTE: the 86_400
-// ceiling is a seconds-based leftover — 24h is 1_440 minutes; tightening it is
-// a server validation change left to the time-tracking owners.
-const timeEntryDurationMinutes = z.number().positive().max(86_400)
-  .describe('Duration in minutes (not seconds).');
+// TimeEntry.duration is stored and reported in MINUTES (timer sessions and the
+// /summary hours maths use minutes too); one entry covers at most one day.
+export const MAX_TIME_ENTRY_MINUTES = 1440;
+const timeEntryDurationMinutes = z.number().positive().max(MAX_TIME_ENTRY_MINUTES)
+  .describe('Duration in minutes (not seconds), at most 1440 (24h).');
+
 export const timeEntryCreateSchema = z.object({
   projectId: cuidId,
   taskId: cuidId.optional(),
@@ -1395,7 +1396,7 @@ export const timeEntryCreateSchema = z.object({
 });
 
 export const timeEntryUpdateSchema = z.object({
-  duration: timeEntryDurationMinutes.optional(),
+  duration: timeEntryDurationMinutes.optional(), // minutes
   description: z.string().max(2_000).optional(),
   date: z.string().datetime().optional(),
   billable: z.boolean().optional(),
@@ -1442,11 +1443,26 @@ export const calendarRsvpSchema = z.object({
 });
 
 // ── Chat (Ash chat + simple chat) ─────────────────────────────────────────
+// INTERNAL messages are staff-only team chat; CLIENT messages are part of the
+// client-portal conversation. Staff messages default to INTERNAL; a reply
+// always takes its parent's visibility.
+export const CHAT_VISIBILITIES = /** @type {const} */ (['INTERNAL', 'CLIENT']);
+
 export const chatMessageCreateSchema = z.object({
   content: z.string().min(1).max(50_000),
   type: z.enum(['TEXT', 'IMAGE', 'FILE', 'SYSTEM']).default('TEXT'),
   metadata: z.record(z.string(), z.unknown()).optional(),
   parentId: cuidId.optional(),
+  visibility: z.enum(CHAT_VISIBILITIES).default('INTERNAL'),
+});
+
+// Chat history pages: non-numeric or non-positive limits are rejected, large
+// ones are capped so one request cannot pull a project's whole history.
+export const CHAT_PAGE_MAX = 100;
+export const chatMessageListQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).default(50).transform((limit) => Math.min(limit, CHAT_PAGE_MAX)),
+  before: z.string().datetime({ offset: true }).optional(),
+  after: z.string().datetime({ offset: true }).optional(),
 });
 
 export const chatMessageUpdateSchema = z.object({

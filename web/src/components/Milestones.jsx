@@ -5,6 +5,7 @@ import Modal from './Modal';
 import { useToast } from '../hooks/useToast';
 import ConfirmDialog from './ConfirmDialog';
 import Skeleton from './ui/Skeleton';
+import QueryErrorState from './QueryErrorState';
 
 export default function Milestones({ projectId }) {
   const queryClient = useQueryClient();
@@ -14,7 +15,14 @@ export default function Milestones({ projectId }) {
   const [milestoneToDelete, setMilestoneToDelete] = useState(null);
 
   // Fetch milestones
-  const { data: milestones = [], isLoading } = useQuery({
+  const {
+    data: milestones = [],
+    isLoading,
+    isError,
+    error: milestonesError,
+    refetch,
+    isFetching,
+  } = useQuery({
     queryKey: ['milestones', projectId],
     queryFn: () => api.getMilestones(projectId)
   });
@@ -73,7 +81,7 @@ export default function Milestones({ projectId }) {
 
   // Format date
   const formatDate = (date) => {
-    return new Date(date).toLocaleDateString({
+    return new Date(date).toLocaleDateString(undefined, {
       month: 'short',
       day: 'numeric',
       year: 'numeric'
@@ -113,7 +121,14 @@ export default function Milestones({ projectId }) {
       </div>
 
       {/* Timeline View */}
-      {milestones.length === 0 ? (
+      {isError ? (
+        <QueryErrorState
+          error={milestonesError}
+          message="Milestones could not be loaded"
+          onRetry={refetch}
+          isRetrying={isFetching}
+        />
+      ) : milestones.length === 0 ? (
         <div className="text-center py-12 text-gray-500">
           <p className="text-lg">No milestones yet</p>
           <p className="text-sm mt-1">Add milestones to track project progress</p>

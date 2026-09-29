@@ -9,7 +9,7 @@ export default async function calendarRoutes(fastify, options = {}) {
     createCalendarClient: createGoogleCalendarClient, decryptSecret: decrypt, ...input,
   }));
   // Get calendar events
-  fastify.get('/calendar', {
+  fastify.get('/', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
     const { startDate, endDate, projectId, type } = request.query;
@@ -58,7 +58,7 @@ export default async function calendarRoutes(fastify, options = {}) {
   });
 
   // Get my calendar events
-  fastify.get('/calendar/my', {
+  fastify.get('/my', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
     const { startDate, endDate } = request.query;
@@ -91,7 +91,7 @@ export default async function calendarRoutes(fastify, options = {}) {
   });
 
   // Get single event
-  fastify.get('/calendar/:id', {
+  fastify.get('/:id', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const { id } = request.params;
@@ -120,7 +120,7 @@ export default async function calendarRoutes(fastify, options = {}) {
   });
 
   // Create event / meeting
-  fastify.post('/calendar', {
+  fastify.post('/', {
     onRequest: [fastify.authenticate],
     preHandler: validateBody(calendarEventCreateSchema),
   }, async (request, reply) => {
@@ -190,17 +190,12 @@ export default async function calendarRoutes(fastify, options = {}) {
     // Notify attendees
     for (const attendeeId of attendeeIds) {
       if (attendeeId !== request.user.id) {
-        await request.prisma.notification.create({
-          data: {
-            type: 'EVENT_INVITE',
-            title: 'Meeting Invitation',
-            message: `${request.user.name} invited you to "${title}"`,
-            data: JSON.stringify({ eventId: event.id, projectId }),
-            userId: attendeeId
-          }
+        await fastify.notify(attendeeId, {
+          type: 'EVENT_INVITE',
+          title: 'Meeting Invitation',
+          message: `${request.user.name} invited you to "${title}"`,
+          data: { eventId: event.id, projectId },
         });
-
-        fastify.notify(attendeeId, 'EVENT_INVITE', { eventId: event.id });
       }
     }
 
@@ -208,7 +203,7 @@ export default async function calendarRoutes(fastify, options = {}) {
   });
 
   // Update event
-  fastify.put('/calendar/:id', {
+  fastify.put('/:id', {
     onRequest: [fastify.authenticate],
     preHandler: validateBody(calendarEventUpdateSchema),
   }, async (request, reply) => {
@@ -266,14 +261,11 @@ export default async function calendarRoutes(fastify, options = {}) {
 
         for (const attendeeId of newAttendeeIds) {
           if (attendeeId !== request.user.id) {
-            await request.prisma.notification.create({
-              data: {
-                type: 'EVENT_INVITE',
-                title: 'Meeting Invitation',
-                message: `${request.user.name} invited you to "${title || existing.title}"`,
-                data: JSON.stringify({ eventId: id }),
-                userId: attendeeId
-              }
+            await fastify.notify(attendeeId, {
+              type: 'EVENT_INVITE',
+              title: 'Meeting Invitation',
+              message: `${request.user.name} invited you to "${title || existing.title}"`,
+              data: { eventId: id },
             });
           }
         }
@@ -298,7 +290,7 @@ export default async function calendarRoutes(fastify, options = {}) {
   });
 
   // Delete event
-  fastify.delete('/calendar/:id', {
+  fastify.delete('/:id', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const { id } = request.params;
@@ -328,7 +320,7 @@ export default async function calendarRoutes(fastify, options = {}) {
   });
 
   // RSVP to event
-  fastify.post('/calendar/:id/rsvp', {
+  fastify.post('/:id/rsvp', {
     onRequest: [fastify.authenticate],
     preHandler: validateBody(calendarRsvpSchema),
   }, async (request, reply) => {
@@ -364,14 +356,11 @@ export default async function calendarRoutes(fastify, options = {}) {
     });
 
     if (event && event.createdById !== request.user.id) {
-      await request.prisma.notification.create({
-        data: {
-          type: 'EVENT_RSVP',
-          title: 'Meeting RSVP',
-          message: `${request.user.name} ${status.toLowerCase()} your meeting "${event.title}"`,
-          data: JSON.stringify({ eventId: id, status }),
-          userId: event.createdById
-        }
+      await fastify.notify(event.createdById, {
+        type: 'EVENT_RSVP',
+        title: 'Meeting RSVP',
+        message: `${request.user.name} ${status.toLowerCase()} your meeting "${event.title}"`,
+        data: { eventId: id, status },
       });
     }
 
@@ -379,7 +368,7 @@ export default async function calendarRoutes(fastify, options = {}) {
   });
 
   // Get upcoming events (widget/dashboard)
-  fastify.get('/calendar/upcoming', {
+  fastify.get('/upcoming', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
     const { limit: limitParam = '5' } = request.query;

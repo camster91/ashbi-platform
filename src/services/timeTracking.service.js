@@ -1,103 +1,167 @@
-// Time Tracking service
-// Migrated from ashbi-hub to Prisma
+// Time Tracking service (timers = TimeSession, billable records = TimeEntry)
+//
+// Behaviour (docs/product-status.md, "Time tracking"):
+// - A user has at most one running timer. The database enforces it with a
+//   partial unique index on time_sessions("userId") WHERE "isRunning"; start
+//   stops the previous timer and creates the new one in one transaction, and
+//   a concurrent start that loses the race answers 409 TIMER_ALREADY_RUNNING.
+// - Stopping a timer creates the TimeEntry (source TIMER, linked through
+//   timeSessionId) in the same transaction, so timed work reaches reports,
+//   timesheets and budgets. A timer stopped under one minute records no entry;
+//   a timer left running longer than a day records a 24h (1440-minute) entry,
+//   the same cap manual entries have, while the session keeps its real span.
+// - Only the timer's owner can stop, update or delete it; any other id is
+//   404 (never 500, and never a hint that the timer exists).
 
 import prisma from '../config/db.js';
+import { MAX_TIME_ENTRY_MINUTES } from '../validators/schemas.js';
+
+export class TimerError extends Error {
+  /**
+   * @param {number} statusCode
+   * @param {string} code
+   * @param {string} message
+   */
+  constructor(statusCode, code, message) {
+    super(message);
+    this.name = 'TimerError';
+    this.statusCode = statusCode;
+    this.code = code;
+    this.expose = true;
+  }
+}
+
+const SESSION_INCLUDE = {
+  project: { select: { id: true, name: true } },
+  task: { select: { id: true, title: true } },
+};
+
+function isUniqueViolation(err) {
+  return err?.code === 'P2002' || /Unique constraint failed/i.test(String(err?.message));
+}
 
 /**
- * Start a new time tracking session
+ * Reply helper for routes: TimerError → its status and code, others rethrow.
+ * @param {any} reply
+ * @param {unknown} err
+ */
+export function sendTimerError(reply, err) {
+  if (err instanceof TimerError) {
+    return reply.status(err.statusCode).send({ error: err.message, code: err.code });
+  }
+  throw err;
+}
+
+/**
+ * Close one running session inside `tx` and record its TimeEntry.
+ * Returns null when the session was no longer running (someone else stopped
+ * it first).
+ */
+async function closeSession(tx, session, endTime = new Date()) {
+  const duration = Math.max(0, Math.round((endTime.getTime() - new Date(session.startTime).getTime()) / 60000));
+  const claimed = await tx.timeSession.updateMany({
+    where: { id: session.id, userId: session.userId, isRunning: true },
+    data: { endTime, duration, isRunning: false },
+  });
+  if (claimed.count !== 1) return null;
+  const timeEntry = duration > 0
+    ? await tx.timeEntry.create({
+      data: {
+        userId: session.userId,
+        projectId: session.projectId,
+        taskId: session.taskId ?? null,
+        description: session.description ?? null,
+        duration: Math.min(duration, MAX_TIME_ENTRY_MINUTES),
+        date: session.startTime,
+        billable: session.billable ?? true,
+        source: 'TIMER',
+        timeSessionId: session.id,
+      },
+    })
+    : null;
+  return { duration, timeEntry };
+}
+
+/**
+ * Start a new timer, stopping (and recording) any running one first.
  */
 export async function startTimer(userId, projectId, taskId = null, description = null) {
-  // Stop any running timers for this user first
-  await stopAllRunningTimers(userId);
-
-  return prisma.timeSession.create({
-    data: {
-      userId,
-      projectId,
-      taskId,
-      description,
-      startTime: new Date(),
-      isRunning: true,
-      billable: true
-    },
-    include: {
-      project: { select: { id: true, name: true } },
-      task: { select: { id: true, title: true } }
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const running = await tx.timeSession.findMany({ where: { userId, isRunning: true } });
+      const endTime = new Date();
+      for (const session of running) await closeSession(tx, session, endTime);
+      return tx.timeSession.create({
+        data: {
+          userId,
+          projectId,
+          taskId,
+          description,
+          startTime: new Date(),
+          isRunning: true,
+          billable: true,
+        },
+        include: SESSION_INCLUDE,
+      });
+    });
+  } catch (err) {
+    if (isUniqueViolation(err)) {
+      throw new TimerError(409, 'TIMER_ALREADY_RUNNING', 'Another timer was started at the same moment. Refresh to see the running timer.');
     }
-  });
-}
-
-/**
- * Stop a running timer
- */
-export async function stopTimer(sessionId) {
-  const session = await prisma.timeSession.findUnique({ where: { id: sessionId } });
-
-  if (!session || !session.isRunning) {
-    throw new Error('No running timer found');
+    throw err;
   }
+}
 
-  const endTime = new Date();
-  const durationMs = endTime - session.startTime;
-  const durationMinutes = Math.round(durationMs / (1000 * 60));
-
-  return prisma.timeSession.update({
-    where: { id: sessionId },
-    data: {
-      endTime,
-      duration: durationMinutes,
-      isRunning: false
-    },
-    include: {
-      project: { select: { id: true, name: true } },
-      task: { select: { id: true, title: true } }
-    }
+/**
+ * Stop the caller's running timer and create its TimeEntry atomically.
+ */
+export async function stopTimer(sessionId, userId) {
+  return prisma.$transaction(async (tx) => {
+    const session = await tx.timeSession.findFirst({ where: { id: sessionId, userId } });
+    if (!session) throw new TimerError(404, 'TIMER_NOT_FOUND', 'Timer not found');
+    if (!session.isRunning) throw new TimerError(409, 'TIMER_NOT_RUNNING', 'This timer is already stopped');
+    const closed = await closeSession(tx, session);
+    if (!closed) throw new TimerError(409, 'TIMER_NOT_RUNNING', 'This timer is already stopped');
+    const stopped = await tx.timeSession.findFirst({ where: { id: sessionId, userId }, include: SESSION_INCLUDE });
+    return { ...stopped, timeEntry: closed.timeEntry };
   });
 }
 
 /**
- * Stop all running timers for a user
+ * Stop all running timers for a user, recording a TimeEntry for each.
  */
 export async function stopAllRunningTimers(userId) {
-  const runningTimers = await prisma.timeSession.findMany({
-    where: { userId, isRunning: true }
+  return prisma.$transaction(async (tx) => {
+    const running = await tx.timeSession.findMany({ where: { userId, isRunning: true } });
+    const endTime = new Date();
+    let stopped = 0;
+    for (const session of running) {
+      if (await closeSession(tx, session, endTime)) stopped += 1;
+    }
+    return stopped;
   });
-
-  const endTime = new Date();
-
-  for (const timer of runningTimers) {
-    const durationMinutes = Math.round((endTime - timer.startTime) / (1000 * 60));
-    await prisma.timeSession.update({
-      where: { id: timer.id },
-      data: { endTime, duration: durationMinutes, isRunning: false }
-    });
-  }
-
-  return runningTimers.length;
 }
 
 /**
- * Create a manual time entry
+ * Record manually logged time as a TimeEntry (source MANUAL), the record that
+ * reports, timesheets and budgets read. (It used to create a finished
+ * TimeSession that nothing billed.) Duration is in minutes, max 1440.
  */
 export async function createManualEntry(userId, projectId, data) {
   const { taskId, duration, description, billable, date } = data;
 
-  return prisma.timeSession.create({
+  return prisma.timeEntry.create({
     data: {
       userId,
       projectId,
-      taskId,
-      duration,
-      description,
+      taskId: taskId ?? null,
+      duration: Math.round(duration),
+      description: description ?? null,
       billable: billable ?? true,
-      isRunning: false,
-      startTime: date ? new Date(date) : new Date(),
-      endTime: date ? new Date(new Date(date).getTime() + duration * 60000) : null
+      date: date ? new Date(date) : new Date(),
+      source: 'MANUAL',
     },
-    include: {
-      project: { select: { id: true, name: true } },
-      task: { select: { id: true, title: true } }
-    }
+    include: SESSION_INCLUDE,
   });
 }
 
@@ -117,10 +181,7 @@ export async function getTimeSummary(userId, filters = {}) {
 
   const sessions = await prisma.timeSession.findMany({
     where,
-    include: {
-      project: { select: { id: true, name: true } },
-      task: { select: { id: true, title: true } }
-    },
+    include: SESSION_INCLUDE,
     orderBy: { startTime: 'desc' }
   });
 
@@ -151,15 +212,18 @@ export async function getTimeSummary(userId, filters = {}) {
 }
 
 /**
- * Delete a time entry
+ * Delete one of the caller's (stopped) timer sessions. The TimeEntry it
+ * produced is kept; its timeSessionId link is cleared by the foreign key.
  */
 export async function deleteTimeEntry(sessionId, userId) {
-  const session = await prisma.timeSession.findUnique({ where: { id: sessionId } });
+  const session = await prisma.timeSession.findFirst({ where: { id: sessionId, userId } });
 
-  if (!session) throw new Error('Time entry not found');
-  if (session.isRunning) throw new Error('Cannot delete a running timer — stop it first');
+  if (!session) throw new TimerError(404, 'TIMER_NOT_FOUND', 'Timer not found');
+  if (session.isRunning) throw new TimerError(409, 'TIMER_RUNNING', 'Cannot delete a running timer — stop it first');
 
-  return prisma.timeSession.delete({ where: { id: sessionId } });
+  const deleted = await prisma.timeSession.deleteMany({ where: { id: sessionId, userId, isRunning: false } });
+  if (deleted.count !== 1) throw new TimerError(404, 'TIMER_NOT_FOUND', 'Timer not found');
+  return { success: true };
 }
 
 /**
@@ -168,9 +232,6 @@ export async function deleteTimeEntry(sessionId, userId) {
 export async function getRunningTimer(userId) {
   return prisma.timeSession.findFirst({
     where: { userId, isRunning: true },
-    include: {
-      project: { select: { id: true, name: true } },
-      task: { select: { id: true, title: true } }
-    }
+    include: SESSION_INCLUDE,
   });
 }

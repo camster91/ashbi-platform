@@ -319,6 +319,8 @@ export async function mockAuthenticatedApi(page: Page, { user = adminUser, signe
     if (path === '/projects' && method === 'GET') return json(route, { projects: [project], total: 1 });
     if (path === `/projects/${project.id}`) return json(route, project);
     if (path === `/projects/${project.id}/revisions`) return json(route, [{ id: 'revision-a', roundNumber: 1, status: 'OPEN', notes: 'Homepage copy tweaks', requestedAt: YESTERDAY, createdAt: YESTERDAY }]);
+    // Milestones: GET /api/projects/:projectId/milestones (milestone.routes.js).
+    if (path === `/projects/${project.id}/milestones`) return json(route, [{ id: 'milestone-a', name: 'Design review', description: 'Review the homepage design.', dueDate: NEXT_WEEK, status: 'IN_PROGRESS', color: '#2563eb', progress: 50, totalTasks: 2, completedTasks: 1, isOverdue: false, tasks: [tasks[0], tasks[2]], _count: { tasks: 2 } }]);
     if (path === `/projects/${project.id}/communications`) return json(route, { communications: [{ id: 'comm-a', subject: 'Homepage feedback', summary: 'Client approved the layout direction.', direction: 'INBOUND', from: 'dana@northwind.example', to: 'hello@ashbi.ca', receivedAt: YESTERDAY, sentiment: 'POSITIVE' }], total: 1 });
     if (path === `/projects/${project.id}/context`) return json(route, { aiSummary: 'Weekly cadence, email-first client.', humanNotes: 'Prefers async updates.', lastCompactedAt: YESTERDAY });
     if (path === `/projects/${project.id}/budget`) return json(route, { budget: 12000, budgetUsed: 4800, totalCost: 4800, percentUsed: 40, burnRate: 1200, time: { totalHours: 34, billableHours: 32 }, expenses: { total: 600, count: 2 }, costByUser: [{ user: { id: adminUser.id, name: adminUser.name }, hours: 32, cost: 4200 }] });
@@ -332,7 +334,7 @@ export async function mockAuthenticatedApi(page: Page, { user = adminUser, signe
       }
       return json(route, state.notes);
     }
-    if (path === `/chat/projects/${project.id}/messages`) return json(route, [{ id: 'message-a', content: 'Homepage draft is ready for review.', createdAt: YESTERDAY, authorId: adminUser.id, author: { id: adminUser.id, name: adminUser.name }, isEdited: false, reactions: [] }]);
+    if (path === `/chat/projects/${project.id}/messages`) return json(route, [{ id: 'message-a', content: 'Homepage draft is ready for review.', createdAt: YESTERDAY, authorId: adminUser.id, author: { id: adminUser.id, name: adminUser.name }, isEdited: false, visibility: 'INTERNAL', replies: [], reactions: [] }]);
     if (path === '/attachments') return json(route, [reviewAttachment]);
     if (path === `/attachments/uploads/${reviewAttachment.filename}`) return route.fulfill({ status: 200, contentType: 'image/png', body: reviewImagePng });
 

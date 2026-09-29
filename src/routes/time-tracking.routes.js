@@ -9,7 +9,8 @@ import {
   createManualEntry,
   getTimeSummary,
   deleteTimeEntry,
-  getRunningTimer
+  getRunningTimer,
+  sendTimerError
 } from '../services/timeTracking.service.js';
 
 export default async function timeTrackingRoutes(fastify) {
@@ -21,16 +22,24 @@ export default async function timeTrackingRoutes(fastify) {
     const { projectId, taskId, description } = request.body;
     const userId = request.user.id;
 
-    const session = await startTimer(userId, projectId, taskId, description);
-    return reply.status(201).send(session);
+    try {
+      const session = await startTimer(userId, projectId, taskId, description);
+      return reply.status(201).send(session);
+    } catch (err) {
+      return sendTimerError(reply, err);
+    }
   });
 
-  // Stop a timer
+  // Stop the caller's timer; creates its TimeEntry in the same transaction.
   fastify.post('/:id/stop', {
     onRequest: [fastify.authenticate]
-  }, async (request) => {
+  }, async (request, reply) => {
     const { id } = request.params;
-    return stopTimer(id);
+    try {
+      return await stopTimer(id, request.user.id);
+    } catch (err) {
+      return sendTimerError(reply, err);
+    }
   });
 
   // Stop all running timers for the current user
@@ -70,12 +79,16 @@ export default async function timeTrackingRoutes(fastify) {
     return getTimeSummary(userId, { projectId, startDate, endDate });
   });
 
-  // Delete a time entry
+  // Delete one of the caller's stopped timer sessions (not a TimeEntry;
+  // entries are deleted with DELETE /api/time-entries/:id).
   fastify.delete('/:id', {
     onRequest: [fastify.authenticate]
-  }, async (request) => {
+  }, async (request, reply) => {
     const { id } = request.params;
-    const userId = request.user.id;
-    return deleteTimeEntry(id, userId);
+    try {
+      return await deleteTimeEntry(id, request.user.id);
+    } catch (err) {
+      return sendTimerError(reply, err);
+    }
   });
 }

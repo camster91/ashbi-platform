@@ -13,17 +13,21 @@ import reviewPortalRoutes from '../../routes/review-portal.routes.js';
  *
  * The sequence intentionally matches the pre-extraction application factory
  * so route precedence and Fastify plugin initialization remain unchanged.
+ * Modules whose routes span several roots (revisions, comments, time entries,
+ * milestones: e.g. /projects/:projectId/milestones and /milestones/:id) mount
+ * at /api; a module prefix plus its own root segment produced unreachable
+ * double-prefixed URLs such as /api/milestones/milestones/:id.
  *
  * @param {import('fastify').FastifyInstance} fastify
  */
 export async function registerCollaborationRoutes(fastify) {
   await fastify.register(messageRoutes, { prefix: '/api/messages' });
-  await fastify.register(revisionRoutes, { prefix: '/api/revisions' });
+  await fastify.register(revisionRoutes, { prefix: '/api' });
   await fastify.register(calendarRoutes, { prefix: '/api/calendar' });
-  await fastify.register(commentRoutes, { prefix: '/api/comments' });
+  await fastify.register(commentRoutes, { prefix: '/api' });
   await fastify.register(attachmentRoutes, { prefix: '/api/attachments' });
-  await fastify.register(timeRoutes, { prefix: '/api/time' });
-  await fastify.register(milestoneRoutes, { prefix: '/api/milestones' });
+  await fastify.register(timeRoutes, { prefix: '/api' });
+  await fastify.register(milestoneRoutes, { prefix: '/api' });
   // Media review (#417): the staff API, and the public share-link API under
   // the tenancy-exempt /api/portal prefix (docs/media-review.md).
   await fastify.register(reviewRoutes, { prefix: '/api/reviews' });

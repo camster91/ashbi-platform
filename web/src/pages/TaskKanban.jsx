@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import LoadingState from '../components/ui/LoadingState';
 import QueryErrorState from '../components/QueryErrorState';
 import { formatDate } from '../lib/format';
+import { DEFAULT_TASK_PRIORITY, TASK_PRIORITY_LABELS } from '@shared/task-priority.js';
 
 // Core columns are always shown. Other stored task statuses (the task status
 // vocabulary is not yet unified, #405) get their own column when any task has
@@ -44,11 +45,12 @@ export function buildKanbanColumns(board = {}) {
   }));
 }
 
+// Keyed by the shared API priority list (src/shared/task-priority.js).
 const PRIORITY_COLORS = {
   LOW: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-  MEDIUM: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+  NORMAL: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
   HIGH: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
-  URGENT: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  CRITICAL: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
 };
 
 export default function TaskKanban() {
@@ -82,7 +84,7 @@ export default function TaskKanban() {
   });
 
   const createMutation = useMutation({
-    mutationFn: ({ title, status }) => api.createQuickTask(projectId, { title, status, priority: 'MEDIUM' }),
+    mutationFn: ({ title, status }) => api.createQuickTask(projectId, { title, status, priority: DEFAULT_TASK_PRIORITY }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['kanban', projectId] });
       setNewTaskTitle('');
@@ -221,8 +223,8 @@ export default function TaskKanban() {
                       <p className="text-sm font-medium text-foreground leading-snug break-words">{task.title}</p>
                     </Link>
                     <div className="mt-2 flex items-center justify-between flex-wrap gap-1">
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${PRIORITY_COLORS[task.priority] || PRIORITY_COLORS.MEDIUM}`}>
-                        {task.priority}
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${PRIORITY_COLORS[task.priority] || PRIORITY_COLORS[DEFAULT_TASK_PRIORITY]}`}>
+                        {TASK_PRIORITY_LABELS[task.priority] || task.priority}
                       </span>
                       {task.assignee && (
                         <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">

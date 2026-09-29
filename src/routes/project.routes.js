@@ -2,6 +2,7 @@
 
 import { refreshProjectPlan, getProjectBudgetMetrics, normalizeHealthHistory } from '../services/project.service.js';
 import { safeParse } from '../utils/safeParse.js';
+import { sortByTaskPriority } from '../shared/task-priority.js';
 import { queueEmbedding } from '../jobs/queue.js';
 import aiClient from '../ai/client.js';
 import {
@@ -123,7 +124,6 @@ export default async function projectRoutes(fastify) {
         },
         tasks: {
           orderBy: [
-            { priority: 'asc' },
             { createdAt: 'desc' }
           ],
           include: {
@@ -137,9 +137,10 @@ export default async function projectRoutes(fastify) {
       return reply.status(404).send({ error: 'Project not found' });
     }
 
-    // Parse JSON fields
+    // Parse JSON fields; tasks most urgent first (CRITICAL > HIGH > NORMAL > LOW).
     return {
       ...project,
+      tasks: sortByTaskPriority(project.tasks ?? []),
       aiPlan: safeParse(project.aiPlan),
       risks: safeParse(project.risks, [])
     };
@@ -257,12 +258,11 @@ export default async function projectRoutes(fastify) {
         assignee: { select: { id: true, name: true } }
       },
       orderBy: [
-        { priority: 'asc' },
         { dueDate: 'asc' }
       ]
     });
 
-    return tasks;
+    return sortByTaskPriority(tasks);
   });
 
   // Create task in project

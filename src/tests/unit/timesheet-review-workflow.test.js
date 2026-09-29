@@ -22,7 +22,7 @@ async function createApp(role = 'ADMIN') {
       },
     };
   });
-  await app.register(timeRoutes, { prefix: '/api/time' });
+  await app.register(timeRoutes, { prefix: '/api' });
   return { app, updates };
 }
 
@@ -30,7 +30,7 @@ test('admin approval records durable approval state and reviewer', async (t) => 
   const { app, updates } = await createApp();
   t.after(() => app.close());
 
-  const response = await app.inject({ method: 'PATCH', url: '/api/time/timesheets/entry-1/approve' });
+  const response = await app.inject({ method: 'PATCH', url: '/api/timesheets/entry-1/approve' });
 
   assert.equal(response.statusCode, 200);
   assert.equal(updates[0].data.reviewStatus, 'APPROVED');
@@ -45,7 +45,7 @@ test('admin rejection records a reason without calling approval', async (t) => {
 
   const response = await app.inject({
     method: 'PATCH',
-    url: '/api/time/timesheets/entry-1/reject',
+    url: '/api/timesheets/entry-1/reject',
     payload: { reason: 'Description does not match the work performed.' },
   });
 

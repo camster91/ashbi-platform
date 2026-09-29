@@ -15,7 +15,7 @@ import {
 
 export default async function assetLibraryRoutes(fastify) {
   // Get assets for a client
-  fastify.get('/assets/client/:clientId', {
+  fastify.get('/client/:clientId', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
     const { type, category } = request.query;
@@ -23,7 +23,7 @@ export default async function assetLibraryRoutes(fastify) {
   });
 
   // Get a single asset
-  fastify.get('/assets/:id', {
+  fastify.get('/:id', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const asset = await getAsset(request.params.id);
@@ -32,7 +32,7 @@ export default async function assetLibraryRoutes(fastify) {
   });
 
   // Create an asset
-  fastify.post('/assets', {
+  fastify.post('/', {
     onRequest: [fastify.authenticate],
     preHandler: validateBody(assetCreateSchema),
   }, async (request, reply) => {
@@ -41,7 +41,7 @@ export default async function assetLibraryRoutes(fastify) {
   });
 
   // Update an asset
-  fastify.patch('/assets/:id', {
+  fastify.patch('/:id', {
     onRequest: [fastify.authenticate],
     preHandler: validateBody(assetUpdateSchema),
   }, async (request) => {
@@ -49,7 +49,7 @@ export default async function assetLibraryRoutes(fastify) {
   });
 
   // Delete an asset
-  fastify.delete('/assets/:id', {
+  fastify.delete('/:id', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
     await deleteAsset(request.params.id);
@@ -57,7 +57,7 @@ export default async function assetLibraryRoutes(fastify) {
   });
 
   // Search assets
-  fastify.get('/assets/search', {
+  fastify.get('/search', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const { q, limit } = request.query;

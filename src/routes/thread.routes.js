@@ -203,17 +203,12 @@ export default async function threadRoutes(fastify) {
 
     // Notify assigned user
     if (assigneeId) {
-      await request.prisma.notification.create({
-        data: {
-          type: 'THREAD_ASSIGNED',
-          title: 'New thread assigned',
-          message: `You have been assigned: ${thread.subject}`,
-          data: JSON.stringify({ threadId: id }),
-          userId: assigneeId
-        }
+      await fastify.notify(assigneeId, {
+        type: 'THREAD_ASSIGNED',
+        title: 'New thread assigned',
+        message: `You have been assigned: ${thread.subject}`,
+        data: { threadId: id },
       });
-
-      fastify.notify(assigneeId, 'THREAD_ASSIGNED', { threadId: id });
     }
 
     return thread;

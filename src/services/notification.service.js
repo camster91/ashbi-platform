@@ -47,6 +47,46 @@ export async function createNotification({ userId, type, title, message, data, s
 }
 
 /**
+ * The application's single notification path (H4). Routes call
+ * `fastify.notify(userId, { type, title, message, data })`, which persists
+ * exactly one human-readable row and emits it in realtime; they must not
+ * also create notification rows. `data` carries the ids the web app turns
+ * into a deep link (taskId, projectId, threadId, eventId, clientId...).
+ * `emit` delivers a row that was already persisted inside a transaction.
+ *
+ * @param {{ to: (room: string) => { emit: Function } }} io
+ * @param {{ error: Function }} [log]
+ */
+export function createNotifier(io, log = console) {
+  const emit = (userId, notification) => {
+    io.to(`user:${userId}`).emit('notification:new', {
+      id: notification.id,
+      type: notification.type,
+      title: notification.title,
+      message: notification.message,
+      data: notification.data,
+      createdAt: notification.createdAt,
+    });
+    // Legacy event used for cache invalidation (no title, so the web app
+    // never shows a second toast for it).
+    io.to(`user:${userId}`).emit('notification', { id: notification.id, type: notification.type, data: notification.data });
+  };
+  const notify = async (userId, { type, title, message, data } = /** @type {any} */ ({})) => {
+    try {
+      const notification = await prisma.notification.create({
+        data: { userId, type, title: title || type, message: message || '', data: data ?? undefined },
+      });
+      emit(userId, notification);
+      return notification;
+    } catch (err) {
+      log.error({ err, type }, '[notify] Failed to persist notification');
+      return null;
+    }
+  };
+  return { notify, emit };
+}
+
+/**
  * List notifications for a user with pagination and optional filtering.
  */
 export async function getNotifications(userId, { limit = 50, offset = 0, unreadOnly = false } = {}) {

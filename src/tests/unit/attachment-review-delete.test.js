@@ -41,9 +41,9 @@ async function staffApp(t, db) {
   const app = Fastify({ logger: false });
   app.decorate('authenticate', async (request) => { request.user = withSession({ id: 'admin-1', role: 'ADMIN', organizationId: 'org-a' }); });
   app.addHook('onRequest', async (request) => { request.prisma = db; });
-  await app.register(attachmentRoutes);
+  await app.register(attachmentRoutes, { prefix: '/api/attachments' });
   t.after(() => app.close());
-  return (id = DOC.id) => app.inject({ method: 'DELETE', url: `/attachments/${id}` });
+  return (id = DOC.id) => app.inject({ method: 'DELETE', url: `/api/attachments/${id}` });
 }
 
 async function portalApp(t, db) {

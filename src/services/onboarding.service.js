@@ -48,8 +48,9 @@ export async function onboardClient(fastify, { name, email, contactName, retaine
       },
     });
     const admins = await transaction.user.findMany({ where: { role: 'ADMIN', isActive: true } });
+    const notifications = [];
     for (const admin of admins) {
-      await transaction.notification.create({
+      notifications.push(await transaction.notification.create({
         data: {
           type: 'CLIENT_ONBOARDED',
           title: `New client onboarded: ${name}`,
@@ -57,13 +58,15 @@ export async function onboardClient(fastify, { name, email, contactName, retaine
           data: { clientId: client.id, projectId: project.id },
           userId: admin.id,
         },
-      });
+      }));
     }
-    return { client, contact, project, thread, admins };
+    return { client, contact, project, thread, notifications };
   });
 
-  for (const admin of result.admins) {
-    fastify.notify(admin.id, 'CLIENT_ONBOARDED', { clientId: result.client.id, clientName: name });
+  // The rows were persisted inside the transaction; after commit only the
+  // realtime event is sent (one row per admin, never a second one).
+  for (const notification of result.notifications) {
+    fastify.emitNotification(notification.userId, notification);
   }
   return {
     client: { ...result.client, contact: result.contact },

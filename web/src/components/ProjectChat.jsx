@@ -7,7 +7,24 @@ import { preferredScrollBehavior } from '../lib/motion';
 import ConfirmDialog from './ConfirmDialog';
 import LoadingState from './ui/LoadingState';
 import QueryErrorState from './QueryErrorState';
-import { Edit2, Trash2, Paperclip } from 'lucide-react';
+import { Edit2, Trash2, Lock, Eye, Paperclip } from 'lucide-react';
+
+// Chat visibility (docs/product-status.md): INTERNAL messages are staff-only;
+// CLIENT messages are also shown to the client in their portal.
+export function VisibilityBadge({ visibility }) {
+  if (visibility === 'CLIENT') {
+    return (
+      <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-200" title="The client can read this message in their portal">
+        <Eye className="h-3 w-3" aria-hidden="true" /> Visible to client
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-foreground" title="Only your team can read this message">
+      <Lock className="h-3 w-3" aria-hidden="true" /> Internal
+    </span>
+  );
+}
 
 function ChatAttachments({ messageId }) {
   const { data: attachments = [] } = useQuery({ queryKey: ['chat-attachments', messageId], queryFn: () => api.getAttachments('CHAT', messageId), staleTime: 30000 });
@@ -28,6 +45,7 @@ export default function ProjectChat({ projectId }) {
   const [editingContent, setEditingContent] = useState('');
   const [messageToDelete, setMessageToDelete] = useState(null);
   const [attachment, setAttachment] = useState(null);
+  const [visibility, setVisibility] = useState('INTERNAL');
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -53,7 +71,14 @@ export default function ProjectChat({ projectId }) {
 
       // Listen for new messages
       socket.on('chat:message', (newMessage) => {
-        queryClient.setQueryData(['chat', projectId], (old = []) => [...old, newMessage]);
+        // Replies are nested under their parent: refetch the thread instead.
+        if (newMessage.parentId) {
+          queryClient.invalidateQueries({ queryKey: ['chat', projectId] });
+          return;
+        }
+        queryClient.setQueryData(['chat', projectId], (old = []) =>
+          old.some((m) => m.id === newMessage.id) ? old : [...old, newMessage]
+        );
       });
 
       // Listen for edits
@@ -64,7 +89,11 @@ export default function ProjectChat({ projectId }) {
       });
 
       // Listen for deletions
-      socket.on('chat:deleted', ({ messageId }) => {
+      socket.on('chat:deleted', ({ messageId, tombstoned }) => {
+        if (tombstoned) {
+          queryClient.invalidateQueries({ queryKey: ['chat', projectId] });
+          return;
+        }
         queryClient.setQueryData(['chat', projectId], (old = []) =>
           old.filter(m => m.id !== messageId)
         );
@@ -119,10 +148,13 @@ export default function ProjectChat({ projectId }) {
 
   // Send message mutation
   const sendMutation = useMutation({
-    mutationFn: (content) => api.sendChatMessage(projectId, { content }),
+    mutationFn: (content) => api.sendChatMessage(projectId, { content, visibility }),
     onSuccess: (created) => {
       setMessage('');
       setSendError('');
+      // Back to the safe default after each client-visible message, so the
+      // next message is internal unless staff choose otherwise again.
+      setVisibility('INTERNAL');
       if (attachment) uploadMutation.mutate({ attachment, messageId: created.id });
       else setAttachment(null);
     },
@@ -229,9 +261,12 @@ export default function ProjectChat({ projectId }) {
                 className={`flex mb-3 group ${msg.authorId === user?.id ? 'justify-end' : 'justify-start'}`}
               >
                 <div className={`max-w-[70%] ${msg.authorId === user?.id ? 'order-2' : ''}`}>
-                  {msg.authorId !== user?.id && (
-                    <span className="text-xs text-muted-foreground ml-1">{msg.author?.name || msg.externalAuthorName || 'Unknown sender'}</span>
-                  )}
+                  <div className={`flex items-center gap-2 mb-0.5 ${msg.authorId === user?.id ? 'justify-end' : ''}`}>
+                    {msg.authorId !== user?.id && (
+                      <span className="text-xs text-muted-foreground ml-1">{msg.author?.name || msg.externalAuthorName || 'Unknown sender'}</span>
+                    )}
+                    <VisibilityBadge visibility={msg.visibility} />
+                  </div>
                   <div
                     className={`rounded-lg px-4 py-2 ${
                       msg.authorId === user?.id
@@ -239,7 +274,7 @@ export default function ProjectChat({ projectId }) {
                         : 'bg-muted text-foreground'
                     }`}
                   >
-                    {editingId === msg.id ? <form onSubmit={(event) => { event.preventDefault(); if (editingContent.trim()) editMutation.mutate({ id: msg.id, content: editingContent.trim() }); }}><input autoFocus value={editingContent} onChange={(event) => setEditingContent(event.target.value)} className="w-full rounded px-2 py-1 bg-background text-foreground" /><div className="mt-2 flex gap-2"><button type="submit" className="text-xs underline">Save</button><button type="button" onClick={() => setEditingId(null)} className="text-xs underline">Cancel</button></div></form> : <p className="whitespace-pre-wrap">{msg.content}</p>}
+                    {msg.removedAt ? <p className="italic opacity-80">Message deleted</p> : editingId === msg.id ? <form onSubmit={(event) => { event.preventDefault(); if (editingContent.trim()) editMutation.mutate({ id: msg.id, content: editingContent.trim() }); }}><input autoFocus value={editingContent} onChange={(event) => setEditingContent(event.target.value)} className="w-full rounded px-2 py-1 bg-background text-foreground" /><div className="mt-2 flex gap-2"><button type="submit" className="text-xs underline">Save</button><button type="button" onClick={() => setEditingId(null)} className="text-xs underline">Cancel</button></div></form> : <p className="whitespace-pre-wrap">{msg.content}</p>}
                     <div className="flex items-center justify-between mt-1">
                       <span className={`text-xs ${msg.authorId === user?.id ? 'text-blue-50' : 'text-muted-foreground'}`}>
                         {formatTime(msg.createdAt)}
@@ -247,8 +282,18 @@ export default function ProjectChat({ projectId }) {
                       </span>
                     </div>
                   </div>
-                  <ChatAttachments messageId={msg.id} />
-                  {msg.authorId === user?.id && editingId !== msg.id && <div className="mt-1 flex justify-end gap-1"><button type="button" onClick={() => { setEditingId(msg.id); setEditingContent(msg.content); }} aria-label="Edit your message" className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-primary"><Edit2 className="w-3.5 h-3.5" /></button><button type="button" onClick={() => requestMessageDeletion(msg)} disabled={deleteMutation.isPending} aria-label="Delete your message" className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"><Trash2 className="w-3.5 h-3.5" /></button></div>}
+                  {!msg.removedAt && <ChatAttachments messageId={msg.id} />}
+                  {msg.replies?.length > 0 && (
+                    <ul className="mt-2 space-y-1 border-l-2 border-border pl-3" aria-label="Replies">
+                      {msg.replies.map((replyMessage) => (
+                        <li key={replyMessage.id} className="text-sm text-foreground">
+                          <span className="text-xs text-muted-foreground">{replyMessage.author?.name || replyMessage.externalAuthorName || 'Unknown sender'}: </span>
+                          {replyMessage.removedAt ? <em>Message deleted</em> : replyMessage.content}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {msg.authorId === user?.id && !msg.removedAt && editingId !== msg.id && <div className="mt-1 flex justify-end gap-1"><button type="button" onClick={() => { setEditingId(msg.id); setEditingContent(msg.content); }} aria-label="Edit your message" className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-primary"><Edit2 className="w-3.5 h-3.5" /></button><button type="button" onClick={() => requestMessageDeletion(msg)} disabled={deleteMutation.isPending} aria-label="Delete your message" className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"><Trash2 className="w-3.5 h-3.5" /></button></div>}
                   {/* Reactions */}
                   {msg.reactions?.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-1">
@@ -301,7 +346,19 @@ export default function ProjectChat({ projectId }) {
       )}
 
       {/* Input */}
-      <form onSubmit={handleSend} className="border-t border-border p-3">
+      <form onSubmit={handleSend} className={`border-t border-border p-3 ${visibility === 'CLIENT' ? 'bg-amber-50 dark:bg-amber-950/30' : ''}`}>
+        <fieldset className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+          <legend className="sr-only">Who can read this message</legend>
+          <label className={`inline-flex min-h-11 cursor-pointer items-center gap-1 rounded border px-2 ${visibility === 'INTERNAL' ? 'border-foreground/60 bg-muted font-semibold' : 'border-border'}`}>
+            <input type="radio" name={`chat-visibility-${projectId}`} value="INTERNAL" checked={visibility === 'INTERNAL'} onChange={() => setVisibility('INTERNAL')} />
+            <Lock className="h-3 w-3" aria-hidden="true" /> Internal (team only)
+          </label>
+          <label className={`inline-flex min-h-11 cursor-pointer items-center gap-1 rounded border px-2 ${visibility === 'CLIENT' ? 'border-amber-700 bg-amber-100 font-semibold text-amber-900 dark:bg-amber-900/40 dark:text-amber-200' : 'border-border'}`}>
+            <input type="radio" name={`chat-visibility-${projectId}`} value="CLIENT" checked={visibility === 'CLIENT'} onChange={() => setVisibility('CLIENT')} />
+            <Eye className="h-3 w-3" aria-hidden="true" /> Visible to client
+          </label>
+          {visibility === 'CLIENT' && <span role="status" className="text-amber-900 dark:text-amber-200">The client will see this message in their portal.</span>}
+        </fieldset>
         <div className="flex gap-2">
           <button
             type="button"
@@ -320,7 +377,8 @@ export default function ProjectChat({ projectId }) {
               setMessage(e.target.value);
               handleTyping();
             }}
-            placeholder="Type a message... (use @name to mention)"
+            placeholder={visibility === 'CLIENT' ? 'Message the client...' : 'Message your team... (use @name to mention)'}
+            aria-label={visibility === 'CLIENT' ? 'Message visible to the client' : 'Internal message to your team'}
             className="min-w-0 flex-1 border border-border bg-background text-foreground placeholder:text-muted-foreground rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-ring"
           />
           <button

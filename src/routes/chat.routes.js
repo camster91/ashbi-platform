@@ -1,18 +1,52 @@
 // Project Chat routes - Real-time team messaging
+//
+// Visibility (C3): INTERNAL messages are staff-only team chat and are only
+// broadcast to the internal `project:{id}` room. CLIENT messages are part of
+// the client-portal conversation ("Visible to client"); they are broadcast to
+// staff and, in the client shape, to `project:{id}:client`. A reply under an
+// INTERNAL message is always INTERNAL; a reply under a CLIENT message keeps
+// the visibility its author chose (INTERNAL by default), so a staff aside in
+// a client thread is never silently shown to the client.
 
-import { validateBody, chatMessageCreateSchema, chatMessageUpdateSchema, chatReactionCreateSchema } from '../validators/schemas.js';
+import {
+  validateBody,
+  validateQuery,
+  chatMessageCreateSchema,
+  chatMessageListQuerySchema,
+  chatMessageUpdateSchema,
+  chatReactionCreateSchema,
+} from '../validators/schemas.js';
 import { safeParse } from '../utils/safeParse.js';
+import { emitChatEvent, projectRoom, toClientChatPayload } from '../auth/project-room-access.js';
+
+/**
+ * A tombstoned message (deleted while it still had replies) keeps its place
+ * in the thread but none of its content.
+ *
+ * @param {Record<string, any>} message
+ */
+function presentMessage(message) {
+  const presented = { ...message, metadata: safeParse(message.metadata) };
+  if (message.removedAt) {
+    presented.content = '';
+    presented.metadata = null;
+    presented.reactions = [];
+  }
+  if (Array.isArray(message.replies)) presented.replies = message.replies.map(presentMessage);
+  return presented;
+}
 
 export default async function chatRoutes(fastify) {
-  // Get chat messages for a project (paginated)
+  // Top-level messages for a project (newest page, returned oldest-first),
+  // each with its replies nested.
   fastify.get('/projects/:projectId/messages', {
-    onRequest: [fastify.authenticate]
+    onRequest: [fastify.authenticate],
+    preHandler: validateQuery(chatMessageListQuerySchema),
   }, async (request) => {
     const { projectId } = request.params;
-    const { limit: limitParam = '50', before, after } = request.query;
-    const limit = parseInt(limitParam);
+    const { limit, before, after } = request.query;
 
-    const where = { projectId };
+    const where = { projectId, parentId: null };
 
     // Cursor-based pagination
     if (before) {
@@ -40,11 +74,7 @@ export default async function chatRoutes(fastify) {
       take: limit
     });
 
-    // Parse metadata JSON
-    return messages.reverse().map(m => ({
-      ...m,
-      metadata: safeParse(m.metadata)
-    }));
+    return messages.reverse().map(presentMessage);
   });
 
   // Send a chat message
@@ -54,6 +84,7 @@ export default async function chatRoutes(fastify) {
   }, async (request, reply) => {
     const { projectId } = request.params;
     const { content, type = 'TEXT', metadata, parentId } = request.body;
+    let visibility = request.body.visibility ?? 'INTERNAL';
 
     if (!content?.trim()) {
       return reply.status(400).send({ error: 'Message content is required' });
@@ -63,9 +94,12 @@ export default async function chatRoutes(fastify) {
     if (parentId) {
       const parent = await request.prisma.chatMessage.findFirst({
         where: { id: parentId, projectId },
-        select: { id: true },
+        select: { id: true, visibility: true },
       });
       if (!parent) return reply.status(409).send({ error: 'Reply parent must belong to the same project' });
+      // A reply to internal chat can never leak to the client. A reply in the
+      // client conversation keeps the requested visibility (never promoted).
+      if ((parent.visibility ?? 'INTERNAL') !== 'CLIENT') visibility = 'INTERNAL';
     }
 
     // Extract mentions from content (@username)
@@ -80,6 +114,7 @@ export default async function chatRoutes(fastify) {
       data: {
         content,
         type,
+        visibility,
         metadata: metadata ? JSON.stringify(metadata) : null,
         parentId,
         projectId,
@@ -113,30 +148,20 @@ export default async function chatRoutes(fastify) {
 
       for (const user of mentionedUsers) {
         if (user.id !== request.user.id) {
-          await request.prisma.notification.create({
-            data: {
-              type: 'MENTION',
-              title: 'You were mentioned',
-              message: `${request.user.name} mentioned you in a chat message`,
-              data: JSON.stringify({ projectId, messageId: message.id }),
-              userId: user.id
-            }
+          await fastify.notify(user.id, {
+            type: 'MENTION',
+            title: 'You were mentioned',
+            message: `${request.user.name} mentioned you in a chat message`,
+            data: { projectId, messageId: message.id },
           });
-          fastify.notify(user.id, 'MENTION', { projectId, messageId: message.id });
         }
       }
     }
 
-    // Broadcast to project room
-    fastify.io.to(`project:${projectId}`).emit('chat:message', {
-      ...message,
-      metadata: safeParse(message.metadata)
-    });
+    const presented = presentMessage(message);
+    emitChatEvent(fastify.io, message, 'chat:message', presented, toClientChatPayload(message));
 
-    return reply.status(201).send({
-      ...message,
-      metadata: safeParse(message.metadata)
-    });
+    return reply.status(201).send(presented);
   });
 
   // Edit a message
@@ -149,7 +174,7 @@ export default async function chatRoutes(fastify) {
 
     const existing = await request.prisma.chatMessage.findFirst({ where: { id: messageId, projectId } });
 
-    if (!existing) {
+    if (!existing || existing.removedAt) {
       return reply.status(404).send({ error: 'Message not found' });
     }
 
@@ -170,13 +195,16 @@ export default async function chatRoutes(fastify) {
       }
     });
 
-    // Broadcast edit
-    fastify.io.to(`project:${projectId}`).emit('chat:edited', message);
+    const presented = presentMessage(message);
+    emitChatEvent(fastify.io, message, 'chat:edited', presented, toClientChatPayload(message));
 
-    return message;
+    return presented;
   });
 
-  // Delete a message
+  // Delete a message. A message that has replies becomes a tombstone (its
+  // content is cleared, the thread stays); others are removed outright. The
+  // reply foreign key is ON DELETE NO ACTION, so deleting a parent with
+  // replies used to fail with a 500.
   fastify.delete('/projects/:projectId/messages/:messageId', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
@@ -184,7 +212,7 @@ export default async function chatRoutes(fastify) {
 
     const existing = await request.prisma.chatMessage.findFirst({ where: { id: messageId, projectId } });
 
-    if (!existing) {
+    if (!existing || existing.removedAt) {
       return reply.status(404).send({ error: 'Message not found' });
     }
 
@@ -193,12 +221,26 @@ export default async function chatRoutes(fastify) {
       return reply.status(403).send({ error: 'Cannot delete this message' });
     }
 
-    await request.prisma.chatMessage.delete({ where: { id: messageId } });
+    // One transaction: the reply count, the tombstone and its reaction cleanup
+    // (or the hard delete) commit together.
+    const tombstoned = await request.prisma.$transaction(async (tx) => {
+      const replyCount = await tx.chatMessage.count({ where: { parentId: messageId, projectId } });
+      if (replyCount > 0) {
+        await tx.chatMessage.update({
+          where: { id: messageId },
+          data: { content: '', metadata: null, removedAt: new Date() },
+        });
+        await tx.chatReaction.deleteMany({ where: { messageId } });
+        return true;
+      }
+      await tx.chatMessage.delete({ where: { id: messageId } });
+      return false;
+    });
 
-    // Broadcast deletion
-    fastify.io.to(`project:${projectId}`).emit('chat:deleted', { messageId });
+    const payload = { messageId, tombstoned };
+    emitChatEvent(fastify.io, existing, 'chat:deleted', payload, payload);
 
-    return { success: true };
+    return { success: true, tombstoned };
   });
 
   // Add reaction to message
@@ -242,8 +284,8 @@ export default async function chatRoutes(fastify) {
       }
     });
 
-    // Broadcast reaction
-    fastify.io.to(`project:${projectId}`).emit('chat:reaction', {
+    // Reactions are a staff-side affordance: internal room only.
+    fastify.io.to(projectRoom(projectId)).emit('chat:reaction', {
       action: 'added',
       messageId,
       reaction
@@ -268,8 +310,7 @@ export default async function chatRoutes(fastify) {
       }
     });
 
-    // Broadcast removal
-    fastify.io.to(`project:${projectId}`).emit('chat:reaction', {
+    fastify.io.to(projectRoom(projectId)).emit('chat:reaction', {
       action: 'removed',
       messageId,
       emoji: decodeURIComponent(emoji),

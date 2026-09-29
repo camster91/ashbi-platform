@@ -61,7 +61,7 @@ rules, text lengths, the region bounds, the token-hash format and the
 
 A file under review cannot be deleted: `review_sessions.attachmentId` is
 `ON DELETE RESTRICT`, and both delete routes (`DELETE
-/api/attachments/attachments/:id` and the client portal's `DELETE
+/api/attachments/:id` and the client portal's `DELETE
 /api/client-portal/documents/:docId`) answer `409 ATTACHMENT_UNDER_REVIEW`
 while any review session references it. A client therefore cannot approve
 through a share link and then delete the file, and the approval with it.

@@ -6,7 +6,7 @@ import { isAiControlError, sendAiError } from '../ai/errors.js';
 
 export default async function messageRoutes(fastify) {
   // Paste content from any platform and extract structured data
-  fastify.post('/messages/paste', {
+  fastify.post('/paste', {
     onRequest: [fastify.authenticate],
     preHandler: validateBody(messagePasteSchema),
   }, async (request, reply) => {

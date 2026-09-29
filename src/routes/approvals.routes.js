@@ -6,7 +6,7 @@ const cuidId = { type: 'string', minLength: 1, maxLength: 50 };
 
 export default async function approvalRoutes(fastify) {
   // GET /api/approvals
-  fastify.get('/approvals', { onRequest: [fastify.authenticate] }, async (request) => {
+  fastify.get('/', { onRequest: [fastify.authenticate] }, async (request) => {
     const { status, type, limit = 50, offset = 0 } = request.query;
     const where = {};
     if (status) where.status = status.toUpperCase();
@@ -24,13 +24,13 @@ export default async function approvalRoutes(fastify) {
   });
 
   // GET /api/approvals/pending-count
-  fastify.get('/approvals/pending-count', { onRequest: [fastify.authenticate] }, async () => {
+  fastify.get('/pending-count', { onRequest: [fastify.authenticate] }, async () => {
     const count = await fastify.prisma.approval.count({ where: { status: 'PENDING' } });
     return { count };
   });
 
   // GET /api/approvals/:id
-  fastify.get('/approvals/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
+  fastify.get('/:id', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     const { id } = request.params;
 
     const approval = await fastify.prisma.approval.findUnique({
@@ -41,7 +41,7 @@ export default async function approvalRoutes(fastify) {
   });
 
   // PATCH /api/approvals/:id — admin approves/rejects
-  fastify.patch('/approvals/:id', {
+  fastify.patch('/:id', {
     onRequest: [fastify.authenticate, fastify.adminOnly],
     preHandler: [validateBody(patchApprovalSchema)],
   }, async (request, reply) => {
