@@ -159,12 +159,18 @@ test('chat media: atomic send, client isolation and pending purge', {
     assert.equal(await raw.chatMessage.count({ where: { projectId: ids.projectA } }), messagesBefore, 'refused sends leave no message behind');
     assert.equal((await raw.attachment.findUnique({ where: { id: othersUpload.id } })).entityType, 'CHAT_PENDING');
 
-    // Staff list: every message carries its files (one batched query).
+    // A reply can carry files too.
+    const replyFile = await staffUpload(ids.projectA, 'reply.png', 'image/png', PNG);
+    const replyResponse = await staffSend({ content: 'See the reply file', parentId: internalMessage.id, attachmentIds: [replyFile.id] });
+    assert.equal(replyResponse.statusCode, 201, replyResponse.body);
+
+    // Staff list: threads and their replies carry their files (one batched query).
     const staffList = await app.inject({ method: 'GET', url: `/api/chat/projects/${ids.projectA}/messages` });
     assert.equal(staffList.statusCode, 200, staffList.body);
     const listed = new Map(staffList.json().map((message) => [message.id, message]));
     assert.equal(listed.get(internalMessage.id).attachments.length, 1);
     assert.equal(listed.get(clientMessage.id).attachments.length, 2);
+    assert.deepEqual(listed.get(internalMessage.id).replies.map((reply) => reply.attachments.map((file) => file.id)), [[replyFile.id]]);
 
     // ── Client A: only CLIENT messages and their files ─────────────────────
     const portalList = await app.inject({ method: 'GET', url: `/api/client-portal/projects/${ids.projectA}/messages`, headers: asClientA });

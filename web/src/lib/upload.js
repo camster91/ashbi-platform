@@ -56,13 +56,13 @@ export function prepareUploadFile(file, { fallbackBase = 'attachment' } = {}) {
  * POST one file as multipart/form-data with upload progress.
  * @param {string} url
  * @param {File} file
- * @param {{ headers?: Record<string, string>, onProgress?: (fraction: number) => void, signal?: AbortSignal, fieldName?: string }} [options]
+ * @param {{ method?: string, headers?: Record<string, string>, onProgress?: (fraction: number) => void, signal?: AbortSignal, fieldName?: string }} [options]
  * @returns {Promise<any>} the parsed JSON response
  */
-export function uploadFileWithProgress(url, file, { headers = {}, onProgress, signal, fieldName = 'file' } = {}) {
+export function uploadFileWithProgress(url, file, { method = 'POST', headers = {}, onProgress, signal, fieldName = 'file' } = {}) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', url);
+    xhr.open(method, url);
     xhr.withCredentials = true;
     for (const [name, value] of Object.entries(headers)) if (value) xhr.setRequestHeader(name, value);
     xhr.upload.onprogress = (event) => {

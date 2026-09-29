@@ -639,8 +639,10 @@ export const api = {
     request(`/attachments/${id}`, { method: 'DELETE' }),
   // Chat media (docs/chat-media.md): upload first as a pending chat upload,
   // then send the message with its `attachmentIds`.
-  uploadChatFile: (projectId, file, options = {}) =>
-    uploadFileWithProgress(`${API_BASE}/chat/projects/${projectId}/uploads`, file, options),
+  uploadChatFile: (projectId, file, options = {}) => {
+    const url = `${API_BASE}/chat/projects/${projectId}/uploads`;
+    return uploadFileWithProgress(url, file, { ...options, method: 'POST' });
+  },
   discardChatUpload: (projectId, attachmentId) =>
     request(`/chat/projects/${projectId}/uploads/${attachmentId}`, { method: 'DELETE', silent: true }),
   attachmentFileUrl: (filename) => `${API_BASE}/attachments/uploads/${encodeURIComponent(filename)}`,
