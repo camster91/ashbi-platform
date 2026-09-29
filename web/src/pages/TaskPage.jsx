@@ -96,8 +96,14 @@ function PageHeader({ task, onUpdate, isEditing }) {
   };
 
   const handleTitleBlur = () => {
-    if (title !== task?.title) {
-      onUpdate({ title });
+    const trimmed = title.trim();
+    // A task always has a title: clearing it restores the saved one.
+    if (!trimmed) {
+      setTitle(task?.title || '');
+      return;
+    }
+    if (trimmed !== task?.title) {
+      onUpdate({ title: trimmed });
     }
   };
 
