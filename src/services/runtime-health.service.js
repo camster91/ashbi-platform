@@ -4,11 +4,14 @@ import { readFile } from 'node:fs/promises';
 import { rawPrisma } from '../config/db.js';
 import env from '../config/env.js';
 import { QUEUES } from '../jobs/queue-names.js';
+import { processCounters } from '../utils/process-lifecycle.js';
 
 const WORKER_HEARTBEAT_KEY = 'ashbi:workers:heartbeat';
 const REQUIRED_WORKER_FRESHNESS_MS = 45_000;
 const CHECK_TIMEOUT_MS = 2_500;
 const REQUIRED_BACKUP_FRESHNESS_MS = 30 * 60 * 60 * 1_000;
+const READY_DEPENDENCIES = ['database', 'redis'];
+const PUBLIC_CHECKS = ['database', 'redis', 'worker'];
 const BACKUP_STATUS_PATH = process.env.BACKUP_STATUS_PATH || '/app/config/backup-status.json';
 
 // Health responses are consumed by operators and uptime probes, so a failing
@@ -128,7 +131,12 @@ export async function checkRuntimeHealth({
     checks.backup = checkResult(false, describeFailure(error));
   }
 
-  const ready = ['database', 'redis', 'worker'].every((name) => checks[name].status === 'ok');
+  // Readiness means "this API process can serve requests": database and Redis.
+  // A missing or stale worker heartbeat degrades the report (background jobs
+  // are delayed) but must not take the whole API out of rotation. The deploy
+  // controller still requires the worker through the strict view.
+  const ready = READY_DEPENDENCIES.every((name) => checks[name].status === 'ok');
+  const strictReady = ready && checks.worker.status === 'ok';
   const failedJobTotal = Object.values(failedJobs).reduce(
     (sum, count) => sum + (Number.isInteger(count) ? count : 0),
     0,
@@ -137,19 +145,87 @@ export async function checkRuntimeHealth({
     destinationConfigured: alertDestinationConfigured,
     ownerConfigured: alertOwnerConfigured,
   };
+  const degraded = checks.worker.status !== 'ok'
+    || failedJobTotal > 0
+    || checks.backup.status !== 'ok'
+    || !alerting.destinationConfigured
+    || !alerting.ownerConfigured;
   return {
     ready,
-    status: ready ? 'ok' : 'unavailable',
-    degraded: failedJobTotal > 0 || checks.backup.status !== 'ok' || !alerting.destinationConfigured || !alerting.ownerConfigured,
+    strictReady,
+    status: !ready ? 'unavailable' : checks.worker.status === 'ok' ? 'ok' : 'degraded',
+    degraded,
     checks,
     failedJobs,
     failedJobTotal,
     alerting,
     revision,
     imageDigest: process.env.APP_IMAGE_DIGEST || 'unknown',
+    // Unhandled rejections are logged and counted, not fatal (yet).
+    process: processCounters(),
     timestamp: new Date(now).toISOString(),
   };
 }
+
+/** `?strict=1` also requires a fresh, same-revision worker heartbeat. */
+export function isStrictHealthQuery(query) {
+  const value = query?.strict;
+  return value === '1' || value === 'true';
+}
+
+export function healthStatusCode(report, { strict = false } = {}) {
+  return (strict ? report.strictReady : report.ready) ? 200 : 503;
+}
+
+/**
+ * The unauthenticated probe: dependency states and the running revision (the
+ * same revision /api/live already publishes). Failure details, failed-job
+ * counts, backup and alerting state, and the image digest are detail-only.
+ */
+export function publicHealthView(report) {
+  return {
+    ready: report.ready,
+    status: report.status,
+    degraded: report.degraded,
+    checks: Object.fromEntries(
+      PUBLIC_CHECKS.map((name) => [name, { status: report.checks?.[name]?.status ?? 'unavailable' }]),
+    ),
+    revision: report.revision,
+    timestamp: report.timestamp,
+  };
+}
+
+const LOOPBACK_ADDRESSES = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+const FORWARDING_HEADERS = ['x-forwarded-for', 'forwarded', 'x-real-ip', 'x-forwarded-host', 'x-forwarded-proto'];
+
+/** HEALTH_DETAILS_LOOPBACK=true enables loopback access (set in the Dockerfile only). */
+export function loopbackHealthDetailsEnabled(value = process.env.HEALTH_DETAILS_LOOPBACK) {
+  return value === 'true';
+}
+
+/**
+ * True when the detailed health view may be served without a session because
+ * the caller is a local process inside the API container (the deploy
+ * controller's `docker exec`):
+ *
+ * - HEALTH_DETAILS_LOOPBACK=true, which only the production image sets. A
+ *   developer machine or a host-level reverse proxy that forwards to
+ *   127.0.0.1 therefore never gets the unauthenticated detail view.
+ * - The TCP peer is loopback, from the raw socket, never X-Forwarded-For.
+ *   Inside the container, Traefik and the published host port arrive from a
+ *   Docker network address.
+ * - No forwarding headers at all: anything relayed by a proxy (even one
+ *   running on loopback) is treated as remote.
+ */
+export function isLoopbackPeer(request, { enabled = loopbackHealthDetailsEnabled() } = {}) {
+  if (!enabled) return false;
+  const address = request?.raw?.socket?.remoteAddress ?? request?.socket?.remoteAddress;
+  if (!LOOPBACK_ADDRESSES.has(address)) return false;
+  const headers = request?.headers ?? request?.raw?.headers ?? {};
+  return FORWARDING_HEADERS.every((name) => headers[name] === undefined);
+}
+
+export const HEALTH_DETAIL_ROLES = Object.freeze(['ADMIN', 'TEAM', 'STAFF']);
 
 export async function closeRuntimeHealth() {
   if (!healthRedis) return;

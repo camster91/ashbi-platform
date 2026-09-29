@@ -12,6 +12,7 @@ import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { contentDisposition } from '../utils/send-file.js';
 import { ATTACHMENT_UNDER_REVIEW, isAttachmentUnderReview, isForeignKeyViolation } from '../services/media-review.service.js';
 import { validateBody, validateParams, clientPortalMessageSchema, requestAccessSchema, fileUpload, clientPortalTokenRedeemSchema, clientPortalRevisionResponseSchema, clientPortalFeedbackSchema } from '../validators/schemas.js';
+import { outboundSignal } from '../utils/outbound-timeouts.js';
 
 const PORTAL_BASE = env.hubUrl;
 const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
@@ -46,6 +47,7 @@ async function sendMagicLinkEmail(toEmail, toName, magicLink) {
 
   const auth = Buffer.from(`api:${MAILGUN_API_KEY}`).toString('base64');
   const res = await fetch(`https://api.mailgun.net/v3/${MAILGUN_DOMAIN}/messages`, {
+    signal: outboundSignal('api'),
     method: 'POST',
     headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/x-www-form-urlencoded' },
     body: body.toString()
