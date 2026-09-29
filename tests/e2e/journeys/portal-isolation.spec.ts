@@ -146,14 +146,19 @@ test('a portal client sees only its own documents and cannot fetch another clien
 
     const ownMessage = `for client A ${a.suffix}`;
     const otherMessage = `for client B only ${b.suffix}`;
-    await json(await admin.post(`/api/chat/projects/${projectB.id}/messages`, { data: { content: otherMessage } }), 201);
-    await json(await admin.post(`/api/chat/projects/${projectA.id}/messages`, { data: { content: ownMessage } }), 201);
+    const internalMessage = `staff only on A ${a.suffix}`;
+    // Staff chat is internal unless marked visible to the client.
+    await json(await admin.post(`/api/chat/projects/${projectB.id}/messages`, { data: { content: otherMessage, visibility: 'CLIENT' } }), 201);
+    await json(await admin.post(`/api/chat/projects/${projectA.id}/messages`, { data: { content: internalMessage } }), 201);
+    await json(await admin.post(`/api/chat/projects/${projectA.id}/messages`, { data: { content: ownMessage, visibility: 'CLIENT' } }), 201);
 
     const events = () => page.evaluate(() => ((window as any).__portalSocketEvents as string[]).join('\n'));
     // Positive control: the socket is live and in its own project room.
     await expect.poll(events, { timeout: 10_000 }).toContain(ownMessage);
     expect(await events()).not.toContain(otherMessage);
     expect(await events()).not.toContain(projectB.id);
+    // Internal chat on the client's own project never reaches its socket.
+    expect(await events()).not.toContain(internalMessage);
   });
 
   await test.step('client A cannot open client B\'s contract or invoice in the browser', async () => {

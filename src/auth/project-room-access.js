@@ -173,3 +173,11 @@ export function toClientTaskPayload(task) {
   if (!task || task.parentId) return null;
   return pick(task, CLIENT_TASK_FIELDS);
 }
+
+// A mention notification carries the author and message ids, so it follows
+// the message's visibility: client users are notified only of client-visible
+// messages on their own client's project.
+export function mayNotifyMention(user, visibility, project) {
+  if (user.role !== 'CLIENT') return true;
+  return visibility === 'CLIENT' && Boolean(user.clientId) && user.clientId === project.clientId;
+}

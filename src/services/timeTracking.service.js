@@ -58,13 +58,15 @@ export function sendTimerError(reply, err) {
  * it first).
  */
 async function closeSession(tx, session, endTime = new Date()) {
-  const duration = Math.max(0, Math.round((endTime.getTime() - new Date(session.startTime).getTime()) / 60000));
+  const elapsedMs = endTime.getTime() - new Date(session.startTime).getTime();
+  const duration = Math.max(0, Math.round(elapsedMs / 60000));
   const claimed = await tx.timeSession.updateMany({
     where: { id: session.id, userId: session.userId, isRunning: true },
     data: { endTime, duration, isRunning: false },
   });
   if (claimed.count !== 1) return null;
-  const timeEntry = duration > 0
+  // Under a full minute records nothing (the rounded duration would be 1).
+  const timeEntry = elapsedMs >= 60000
     ? await tx.timeEntry.create({
       data: {
         userId: session.userId,

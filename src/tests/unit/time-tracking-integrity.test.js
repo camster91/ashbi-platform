@@ -123,3 +123,15 @@ test('approved and invoiced time entries are locked against edit and delete', as
     await app.close();
   }
 });
+
+test('a timer stopped before a full minute records no entry, even when it rounds to 1', async () => {
+  for (const seconds of [10, 30, 45, 59]) {
+    const db = fakeDb({ sessions: [{ id: 's1', userId: 'u1', projectId: 'p1', isRunning: true, startTime: new Date(Date.now() - seconds * 1000) }] });
+    await run(db, () => stopTimer('s1', 'u1'));
+    assert.equal(db.entries.length, 0, `${seconds}s`);
+  }
+  const db = fakeDb({ sessions: [{ id: 's1', userId: 'u1', projectId: 'p1', isRunning: true, startTime: new Date(Date.now() - 61 * 1000) }] });
+  await run(db, () => stopTimer('s1', 'u1'));
+  assert.equal(db.entries.length, 1);
+  assert.equal(db.entries[0].duration, 1);
+});

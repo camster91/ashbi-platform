@@ -17,7 +17,7 @@ import {
   chatReactionCreateSchema,
 } from '../validators/schemas.js';
 import { safeParse } from '../utils/safeParse.js';
-import { emitChatEvent, projectRoom, toClientChatPayload } from '../auth/project-room-access.js';
+import { emitChatEvent, mayNotifyMention, projectRoom, toClientChatPayload } from '../auth/project-room-access.js';
 
 /**
  * A tombstoned message (deleted while it still had replies) keeps its place
@@ -89,7 +89,7 @@ export default async function chatRoutes(fastify) {
     if (!content?.trim()) {
       return reply.status(400).send({ error: 'Message content is required' });
     }
-    const project = await request.prisma.project.findFirst({ where: { id: projectId }, select: { id: true } });
+    const project = await request.prisma.project.findFirst({ where: { id: projectId }, select: { id: true, clientId: true } });
     if (!project) return reply.status(404).send({ error: 'Project not found' });
     if (parentId) {
       const parent = await request.prisma.chatMessage.findFirst({
@@ -147,7 +147,7 @@ export default async function chatRoutes(fastify) {
       });
 
       for (const user of mentionedUsers) {
-        if (user.id !== request.user.id) {
+        if (user.id !== request.user.id && mayNotifyMention(user, visibility, project)) {
           await fastify.notify(user.id, {
             type: 'MENTION',
             title: 'You were mentioned',
