@@ -54,8 +54,20 @@ test('deploying an older image does not raise the floor', () => {
 test('the release refuses the older image before migrating, and automatic rollback fails closed', () => {
   const guardBeforeMigrate = script.indexOf('image_meets_floor "$IMAGE"');
   assert.ok(guardBeforeMigrate > 0 && guardBeforeMigrate < script.indexOf('npx prisma migrate deploy'));
-  const restore = script.slice(script.indexOf('restore_previous() {'), script.indexOf('docker rm -f "$CONTAINER"', script.indexOf('restore_previous() {')));
+  const restore = script.slice(script.indexOf('restore_previous() {'), script.indexOf('docker rename "$ROLLBACK_CONTAINER"', script.indexOf('restore_previous() {')));
   assert.match(restore, /image_meets_floor "\$PREVIOUS_IMAGE"[\s\S]*return 1/);
   const emergency = script.slice(script.indexOf('emergency_rollback() {'), script.indexOf('start_worker_container() {'));
   assert.match(emergency, /image_meets_floor "\$PREVIOUS_IMAGE"[\s\S]*rollback_floor_blocked[\s\S]*elif/);
+});
+
+test('a live image below the floor stops as soon as the migration is applied', () => {
+  const afterMigrate = script.slice(script.indexOf('npx prisma migrate deploy'), script.indexOf('npx prisma migrate status'));
+  assert.match(afterMigrate, /raise_rollback_floor "\$IMAGE"[\s\S]*image_meets_floor "\$LIVE_IMAGE"[\s\S]*docker stop "\$CONTAINER"[\s\S]*docker stop --time 120 "\$WORKER_CONTAINER"/);
+});
+
+test('a refused rollback also removes the rejected candidate', () => {
+  const restore = script.slice(script.indexOf('restore_previous() {'), script.indexOf('return 1', script.indexOf('restore_previous() {')));
+  assert.match(restore, /docker rm -f "\$CONTAINER"[\s\S]*docker rm -f "\$WORKER_CONTAINER"[\s\S]*rollback_floor_blocked/);
+  const emergency = script.slice(script.indexOf('emergency_rollback() {'), script.indexOf('elif', script.indexOf('emergency_rollback() {')));
+  assert.match(emergency, /docker rm -f "\$CONTAINER"[\s\S]*docker rm -f "\$WORKER_CONTAINER"[\s\S]*rollback_floor_blocked/);
 });

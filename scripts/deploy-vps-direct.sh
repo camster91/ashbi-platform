@@ -124,6 +124,15 @@ fi
 
 docker run --rm --network "$NETWORK" --env-file "$ENV_FILE" "$IMAGE" npx prisma migrate deploy
 raise_rollback_floor "$IMAGE"
+# A live image below the floor must stop serving the moment the migration is
+# applied, not at cutover: until then it would serve what the new schema keeps
+# private. If the release then fails, it stays down (fail closed).
+LIVE_IMAGE=$(docker inspect --format '{{.Config.Image}}' "$CONTAINER" 2>/dev/null || true)
+if [[ -n $LIVE_IMAGE ]] && ! image_meets_floor "$LIVE_IMAGE" >/dev/null; then
+  docker stop "$CONTAINER" >/dev/null 2>&1 || true
+  docker stop --time 120 "$WORKER_CONTAINER" >/dev/null 2>&1 || true
+  record legacy_stopped_below_floor "image=$LIVE_IMAGE"
+fi
 docker run --rm --network "$NETWORK" --env-file "$ENV_FILE" "$IMAGE" npx prisma migrate status
 
 PREVIOUS_IMAGE=$(docker inspect --format '{{.Config.Image}}' "$CONTAINER" 2>/dev/null || true)
@@ -140,6 +149,9 @@ emergency_rollback() {
   trap - EXIT
   if ((status != 0)) && [[ $CUTOVER_STARTED == true ]] && docker inspect "$ROLLBACK_CONTAINER" >/dev/null 2>&1 \
     && ! image_meets_floor "$PREVIOUS_IMAGE" >/dev/null; then
+    # Fail closed: remove the rejected candidate and restore nothing.
+    docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+    docker rm -f "$WORKER_CONTAINER" >/dev/null 2>&1 || true
     record rollback_floor_blocked "previous=$PREVIOUS_IMAGE" || true
   elif ((status != 0)) && [[ $CUTOVER_STARTED == true ]] && docker inspect "$ROLLBACK_CONTAINER" >/dev/null 2>&1; then
     docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
@@ -188,7 +200,10 @@ start_container() {
 restore_previous() {
   local floor_missing
   if [[ -n $PREVIOUS_IMAGE ]] && ! floor_missing=$(image_meets_floor "$PREVIOUS_IMAGE"); then
-    # Fail closed: the previous image would serve data this schema keeps private.
+    # Fail closed: the previous image would serve data this schema keeps
+    # private, so remove the rejected candidate and restore nothing.
+    docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+    docker rm -f "$WORKER_CONTAINER" >/dev/null 2>&1 || true
     record rollback_floor_blocked "previous=$PREVIOUS_IMAGE;missing=$floor_missing"
     return 1
   fi
