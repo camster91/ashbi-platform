@@ -120,7 +120,10 @@ const emailWorker = createWorker(
 
     return result;
   },
-  { concurrency: 5 }
+  // The pipeline is not idempotent: a stalled job (its worker died or lost
+  // the lock) is failed and kept for a deliberate replay, never re-run
+  // automatically on another worker, which could duplicate its writes.
+  { concurrency: 5, maxStalledCount: 0 }
 );
 
 // Project Health Worker

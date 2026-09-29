@@ -187,5 +187,6 @@ test('the route never re-serialises the body and queues before recording the rec
     const worker = fs.readFileSync(new URL('../../jobs/worker.js', import.meta.url), 'utf8');
     const emailWorker = worker.slice(worker.indexOf('QUEUES.EMAIL_PROCESSING'), worker.indexOf('// Project Health Worker'));
     assert.match(emailWorker, /try \{\s*await scheduleEscalationCheck/, 'a scheduling failure never fails a processed email job');
+    assert.match(emailWorker, /maxStalledCount: 0/, 'a stalled email job is failed for replay, never re-run');
   });
 });
