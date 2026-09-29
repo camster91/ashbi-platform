@@ -7,7 +7,7 @@ const project = readFileSync(resolve(process.cwd(), 'src/pages/Project.jsx'), 'u
 describe('project chat discoverability', () => {
   it('mounts the realtime project conversation in the staff project workspace', () => {
     expect(project).toContain("import ProjectChat from '../components/ProjectChat'");
-    expect(project).toContain('<ProjectChat projectId={id} />');
+    expect(project).toContain('<ProjectChat key={id} projectId={id} />');
     expect(project).toContain('Project conversation');
   });
 });

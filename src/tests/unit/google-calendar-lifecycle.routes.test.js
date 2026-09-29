@@ -16,7 +16,7 @@ async function buildApp(routes, prisma, options = {}) {
     request.user = { id: 'user-1', organizationId: 'org-1', role: 'MEMBER' };
   });
   app.addHook('preHandler', async (request) => { request.prisma = prisma; });
-  await app.register(routes, options);
+  await app.register(routes, routes === calendarRoutes ? { prefix: '/api/calendar', ...options } : options);
   return { app, logs };
 }
 
@@ -138,7 +138,7 @@ test('deleting a synced Hub event propagates the delete to Google after the loca
   });
   t.after(() => app.close());
 
-  const response = await app.inject({ method: 'DELETE', url: '/calendar/event-1' });
+  const response = await app.inject({ method: 'DELETE', url: '/api/calendar/event-1' });
 
   assert.equal(response.statusCode, 200);
   assert.deepEqual(response.json(), { success: true, googleDeleted: true });
@@ -156,7 +156,7 @@ test('a Google failure never blocks deleting the Hub event', async (t) => {
   }, { propagateGoogleDeletion: async () => { throw new Error('unexpected'); } });
   t.after(() => app.close());
 
-  const response = await app.inject({ method: 'DELETE', url: '/calendar/event-1' });
+  const response = await app.inject({ method: 'DELETE', url: '/api/calendar/event-1' });
 
   assert.equal(response.statusCode, 200);
   assert.deepEqual(response.json(), { success: true, googleDeleted: false });
@@ -173,7 +173,7 @@ test('deleting an unsynced Hub event does not contact Google', async (t) => {
   }, { propagateGoogleDeletion: async () => { called = true; } });
   t.after(() => app.close());
 
-  const response = await app.inject({ method: 'DELETE', url: '/calendar/event-1' });
+  const response = await app.inject({ method: 'DELETE', url: '/api/calendar/event-1' });
 
   assert.deepEqual(response.json(), { success: true });
   assert.equal(called, false);

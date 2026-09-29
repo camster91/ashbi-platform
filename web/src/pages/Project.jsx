@@ -46,6 +46,7 @@ import ProjectContextCard from '../components/project/ProjectContext';
 import ProjectMedia from '../components/project/ProjectMedia';
 import ProjectReviews from '../components/project/ProjectReviews';
 import ProjectChat from '../components/ProjectChat';
+import Milestones from '../components/Milestones';
 import QueryErrorState from '../components/QueryErrorState';
 import PartialSectionNotice from '../components/PartialSectionNotice';
 import useManualRetry from '../hooks/useManualRetry';
@@ -399,8 +400,13 @@ export default function Project() {
           <p className="mt-1 text-sm text-muted-foreground">Keep client and team decisions with the project, alongside its work and files.</p>
         </div>
         <div className="p-4">
-          <ProjectChat projectId={id} />
+          {/* Keyed so composer state (e.g. visibility) never carries across projects. */}
+          <ProjectChat key={id} projectId={id} />
         </div>
+      </section>
+
+      <section className="bg-card rounded-xl border border-border p-4" aria-label="Project milestones">
+        <Milestones projectId={id} />
       </section>
 
       {/* Budget Tracking */}

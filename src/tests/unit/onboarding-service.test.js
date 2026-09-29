@@ -30,7 +30,8 @@ function fixture({ failMessage = false } = {}) {
         return result;
       },
     },
-    notify: (...args) => notifications.push(args),
+    notify: () => { throw new Error('onboarding persists in its transaction; it must not call notify'); },
+    emitNotification: (...args) => notifications.push(args),
   };
   return { fastify, writes, notifications };
 }
@@ -47,7 +48,13 @@ test('full client onboarding is one transaction and emits only after commit', as
   assert.equal(writes.at(-1)[0], 'transaction-commit');
   const notification = writes.find(([kind]) => kind === 'notification')[1];
   assert.deepEqual(notification.data, { clientId: 'client-a', projectId: 'project-a' });
-  assert.deepEqual(notifications, [['admin-a', 'CLIENT_ONBOARDED', { clientId: 'client-a', clientName: 'Acme' }]]);
+  // One persisted row per admin, and only a realtime emit of that same row
+  // after commit (H4: no second notification row).
+  assert.equal(writes.filter(([kind]) => kind === 'notification').length, 1);
+  assert.equal(notifications.length, 1);
+  assert.equal(notifications[0][0], 'admin-a');
+  assert.equal(notifications[0][1].type, 'CLIENT_ONBOARDED');
+  assert.equal(notifications[0][1].title, 'New client onboarded: Acme');
 });
 
 test('full client onboarding never emits success when a transactional write fails', async () => {

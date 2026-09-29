@@ -1,14 +1,15 @@
 // /admin/command-center — Unified Hub Dashboard
-// Aggregates: GitHub CI, VPS health, all sites, active agents, today's tasks
+// Aggregates: GitHub CI, VPS health and today's tasks from GET /api/command-center.
+// Hostinger site checks and agent runs have no backend in this workspace, so
+// the page shows them as not configured instead of calling missing routes.
 // Auto-refreshes every 60 seconds
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useToast } from '../hooks/useToast';
 import {
-  RefreshCw, Github, Server, Globe, Bot, CheckSquare,
+  RefreshCw, Github, Server, Globe, CheckSquare,
   AlertTriangle, CheckCircle, XCircle, Clock, ExternalLink,
-  Play, RotateCcw, ChevronDown, ChevronUp, Wifi, WifiOff,
+  ChevronDown, ChevronUp,
   Activity, Zap, Database, Code2
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card';
@@ -151,7 +152,7 @@ function GithubPanel({ data, loading, onRefresh }) {
 }
 
 // ─── VPS Panel ─────────────────────────────────────────────────────────────────
-function VpsPanel({ data, loading, onRefresh, onRestart }) {
+function VpsPanel({ data, loading, onRefresh }) {
   const health = data?.health || 'unknown';
 
   return (
@@ -189,149 +190,11 @@ function VpsPanel({ data, loading, onRefresh, onRestart }) {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-muted-foreground text-xs capitalize">{app.status || 'unknown'}</span>
-                  {onRestart && (
-                    <button
-                      type="button"
-                      aria-label={`Restart ${app.name}`}
-                      onClick={() => onRestart(app.uuid || app.name)}
-                      className="min-h-11 min-w-11 inline-flex items-center justify-center rounded hover:text-primary text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      title="Restart"
-                    >
-                      <RotateCcw className="w-3 h-3" />
-                    </button>
-                  )}
                 </div>
               </div>
             ))}
           </div>
         </>
-      )}
-    </SectionCard>
-  );
-}
-
-// ─── Sites Panel ───────────────────────────────────────────────────────────────
-function SitesPanel({ data, loading, onRefresh }) {
-  const health = !data ? 'unknown'
-    : data.summary?.critical > 0 ? 'red'
-    : data.summary?.warning > 0 ? 'yellow'
-    : 'green';
-
-  return (
-    <SectionCard
-      title="Hostinger Sites"
-      icon={Globe}
-      health={health}
-      loading={loading}
-      collapsible
-      actions={
-        <button type="button" onClick={onRefresh} className="min-h-11 min-w-11 inline-flex items-center justify-center rounded hover:text-foreground text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Refresh Hostinger Sites panel">
-          <RefreshCw className="w-3.5 h-3.5" />
-        </button>
-      }
-    >
-      {data?.error && <p className="text-red-400 text-sm">{data.error}</p>}
-      {data?.summary && (
-        <div className="flex gap-3 mb-3 flex-wrap">
-          <CommandBadge variant="green">✓ {data.summary.healthy} up</CommandBadge>
-          {data.summary.warning > 0 && <CommandBadge variant="yellow">⚠ {data.summary.warning} warn</CommandBadge>}
-          {data.summary.critical > 0 && <CommandBadge variant="red">✕ {data.summary.critical} down</CommandBadge>}
-        </div>
-      )}
-      <div className="space-y-1.5">
-        {data?.sites?.map(site => (
-          <div key={site.domain} className="flex items-center justify-between text-sm">
-            <div className="flex items-center gap-2">
-              <StatusDot health={site.health} size="xs" animate={site.health === 'red'} />
-              <a
-                href={`https://${site.domain}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-primary font-medium"
-              >
-                {site.domain}
-              </a>
-            </div>
-            <div className="flex items-center gap-2 text-muted-foreground text-xs">
-              {site.latencyMs && <span>{site.latencyMs}ms</span>}
-              {site.status && typeof site.status === 'number' && (
-                <CommandBadge variant={site.status >= 500 ? 'red' : site.status >= 400 ? 'yellow' : 'green'}>
-                  {site.status}
-                </CommandBadge>
-              )}
-            </div>
-          </div>
-        ))}
-        {(!data?.sites || data.sites.length === 0) && !loading && (
-          <p className="text-muted-foreground text-sm">No sites configured. Set <code className="text-xs">HOSTINGER_ASHBI_SITES</code> env var.</p>
-        )}
-      </div>
-    </SectionCard>
-  );
-}
-
-// ─── Agents Panel ──────────────────────────────────────────────────────────────
-function AgentsPanel({ data, loading, onRefresh, onRunAgent }) {
-  const [running, setRunning] = useState({});
-
-  const handleRun = async (name) => {
-    setRunning(r => ({ ...r, [name]: true }));
-    try {
-      await onRunAgent(name);
-    } finally {
-      setTimeout(() => setRunning(r => ({ ...r, [name]: false })), 2000);
-    }
-  };
-
-  return (
-    <SectionCard
-      title="AI Agents"
-      icon={Bot}
-      health={data?.openclawRunning ? 'green' : 'yellow'}
-      loading={loading}
-      collapsible
-      actions={
-        <button type="button" onClick={onRefresh} className="min-h-11 min-w-11 inline-flex items-center justify-center rounded hover:text-foreground text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" aria-label="Refresh AI Agents panel">
-          <RefreshCw className="w-3.5 h-3.5" />
-        </button>
-      }
-    >
-      <div className="flex items-center gap-2 mb-3">
-        {data?.openclawRunning ? (
-          <><Wifi className="w-3.5 h-3.5 text-green-500" /><span className="text-sm text-green-500">OpenClaw online</span></>
-        ) : (
-          <><WifiOff className="w-3.5 h-3.5 text-yellow-400" /><span className="text-sm text-yellow-400">OpenClaw status unknown</span></>
-        )}
-      </div>
-      <div className="space-y-2">
-        {data?.agents?.map(agent => (
-          <div key={agent.name} className="flex items-center justify-between text-sm">
-            <div>
-              <p className="font-medium">{agent.displayName}</p>
-              <p className="text-xs text-muted-foreground">{agent.description}</p>
-            </div>
-            <button
-              type="button"
-              aria-label={`Run ${agent.displayName}`}
-              onClick={() => handleRun(agent.name)}
-              disabled={running[agent.name]}
-              className="flex min-h-11 items-center gap-1 px-2 py-1 rounded text-xs bg-primary/10 hover:bg-primary/20 text-primary disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {running[agent.name] ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
-              {running[agent.name] ? 'Running...' : 'Run'}
-            </button>
-          </div>
-        ))}
-      </div>
-      {data?.recentLogs?.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-border">
-          <p className="text-xs text-muted-foreground mb-1.5">Recent logs:</p>
-          <div className="flex flex-wrap gap-1">
-            {data.recentLogs.map(log => (
-              <CommandBadge key={log.date} variant="default">{log.date}</CommandBadge>
-            ))}
-          </div>
-        </div>
       )}
     </SectionCard>
   );
@@ -386,14 +249,8 @@ function TasksPanel({ data, loading }) {
 
 // ─── Main Component ────────────────────────────────────────────────────────────
 export default function CommandCenter() {
-  const toast = useToast();
   const [data, setData] = useState(null);
-  const [githubDetailed, setGithubDetailed] = useState(null);
-  const [vpsDetailed, setVpsDetailed] = useState(null);
-  const [sitesData, setSitesData] = useState(null);
-  const [agentsData, setAgentsData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [panelLoading, setPanelLoading] = useState({});
   const [lastRefresh, setLastRefresh] = useState(null);
   const [error, setError] = useState(null);
   const timerRef = useRef(null);
@@ -402,16 +259,7 @@ export default function CommandCenter() {
     setLoading(true);
     setError(null);
     try {
-      // Main aggregate
-      const [center, sites, agents] = await Promise.allSettled([
-        api.getCommandCenter(),
-        api.getHostingerSites(),
-        api.getAgentsStatus(),
-      ]);
-
-      if (center.status === 'fulfilled') setData(center.value);
-      if (sites.status === 'fulfilled') setSitesData(sites.value);
-      if (agents.status === 'fulfilled') setAgentsData(agents.value);
+      setData(await api.getCommandCenter());
       setLastRefresh(new Date());
     } catch (err) {
       setError(err.message);
@@ -427,41 +275,11 @@ export default function CommandCenter() {
     return () => clearInterval(timerRef.current);
   }, [fetchAll]);
 
-  const refreshPanel = async (panel, fetchFn, setter) => {
-    setPanelLoading(p => ({ ...p, [panel]: true }));
-    try {
-      const result = await fetchFn();
-      setter(result);
-    } catch (err) {
-      console.error(`Panel ${panel} refresh failed:`, err);
-    } finally {
-      setPanelLoading(p => ({ ...p, [panel]: false }));
-    }
-  };
-
-  const handleRestartApp = async (uuid) => {
-    try {
-      await api.restartApp(uuid);
-      setTimeout(() => refreshPanel('vps', api.getVpsHealth, setVpsDetailed), 3000);
-    } catch (err) {
-      toast.error(`Restart failed: ${err.message}`);
-    }
-  };
-
-  const handleRunAgent = async (name) => {
-    try {
-      await api.runAgent(name);
-    } catch (err) {
-      toast.error(`Failed to run agent: ${err.message}`);
-    }
-  };
-
-  // Derive VPS data — prefer detailed if loaded, else fall back to command center
-  const vpsData = vpsDetailed || (data?.vps ? { ...data.vps, apps: data.vps.apps || [] } : null);
-  const githubData = githubDetailed || data?.github;
+  const vpsData = data?.vps ? { ...data.vps, apps: data.vps.apps || [] } : null;
+  const githubData = data?.github;
   const tasksData = data?.tasks;
 
-  const overallHealth = deriveOverallHealth({ github: githubData, vps: vpsData, sites: sitesData, tasks: tasksData });
+  const overallHealth = deriveOverallHealth({ github: githubData, vps: vpsData, tasks: tasksData });
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -506,7 +324,7 @@ export default function CommandCenter() {
       )}
 
       {/* Summary bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <SummaryTile
           label="GitHub"
           icon={Github}
@@ -522,13 +340,6 @@ export default function CommandCenter() {
           sub="running"
         />
         <SummaryTile
-          label="Sites"
-          icon={Globe}
-          health={sitesData ? (sitesData.summary?.critical > 0 ? 'red' : sitesData.summary?.warning > 0 ? 'yellow' : 'green') : 'unknown'}
-          value={sitesData ? `${sitesData.summary?.healthy ?? 0}/${sitesData.summary?.total ?? 0}` : '—'}
-          sub="up"
-        />
-        <SummaryTile
           label="Tasks"
           icon={CheckSquare}
           health={tasksData?.health || 'unknown'}
@@ -541,29 +352,21 @@ export default function CommandCenter() {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         <GithubPanel
           data={githubData}
-          loading={loading || panelLoading.github}
-          onRefresh={() => refreshPanel('github', api.getGithubRepos, setGithubDetailed)}
+          loading={loading}
+          onRefresh={fetchAll}
         />
 
         <VpsPanel
           data={vpsData}
-          loading={loading || panelLoading.vps}
-          onRefresh={() => refreshPanel('vps', api.getVpsHealth, setVpsDetailed)}
-          onRestart={handleRestartApp}
+          loading={loading}
+          onRefresh={fetchAll}
         />
 
-        <SitesPanel
-          data={sitesData}
-          loading={loading || panelLoading.sites}
-          onRefresh={() => refreshPanel('sites', api.getHostingerSites, setSitesData)}
-        />
-
-        <AgentsPanel
-          data={agentsData}
-          loading={loading || panelLoading.agents}
-          onRefresh={() => refreshPanel('agents', api.getAgentsStatus, setAgentsData)}
-          onRunAgent={handleRunAgent}
-        />
+        <SectionCard title="Sites and agents" icon={Globe} health="unknown">
+          <p className="text-muted-foreground text-sm">
+            Not configured. Hostinger site checks and agent runs are not connected to this workspace.
+          </p>
+        </SectionCard>
 
         <TasksPanel
           data={tasksData}
@@ -590,12 +393,6 @@ export default function CommandCenter() {
               label="Open Coolify"
               description="Manage deployments"
               onClick={() => window.open('https://coolify.ashbi.ca', '_blank')}
-            />
-            <ActionButton
-              icon={Bot}
-              label="Run Overnight Batch"
-              description="Email triage + Upwork checks"
-              onClick={() => handleRunAgent('overnight-batch')}
             />
           </div>
         </SectionCard>
@@ -657,9 +454,9 @@ function statusToHealth(status) {
   return 'yellow';
 }
 
-function deriveOverallHealth({ github, vps, sites, tasks }) {
-  if (vps?.errored > 0 || sites?.summary?.critical > 0 || tasks?.overdueCount > 5) return 'red';
-  if (vps?.stopped > 0 || sites?.summary?.warning > 0 || tasks?.overdueCount > 0 || github?.openPRCount > 5) return 'yellow';
-  if (vps && sites && github) return 'green';
+function deriveOverallHealth({ github, vps, tasks }) {
+  if (vps?.errored > 0 || tasks?.overdueCount > 5) return 'red';
+  if (vps?.stopped > 0 || tasks?.overdueCount > 0 || github?.openPRCount > 5) return 'yellow';
+  if (vps && github) return 'green';
   return 'unknown';
 }

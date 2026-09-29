@@ -22,11 +22,12 @@ import { clearStaleSessionCookie, resolveRequestSession } from './auth/request-s
 import { requestTimeoutMs } from './config/http.js';
 import { spaStaticOptions } from './config/static-cache.js';
 import { isCurrentUserSession } from './auth/session.js';
+import { createNotifier } from './services/notification.service.js';
 import {
   actorHasOpenView, applyImpersonation, createImpersonationHook, createViewSocketRevoker, socketHandshakeDuringView,
   startViewSocketSweep,
 } from './auth/impersonation.js';
-import { createJoinProjectHandler } from './auth/project-room-access.js';
+import { createJoinProjectHandler, createLeaveProjectHandler } from './auth/project-room-access.js';
 import { createSocketAuthMiddleware } from './auth/socket-auth.js';
 import { clientAcquisitionCorsOptions, loadClientAcquisitionConfig } from './services/client-acquisition.contract.js';
 import { initHermesBridge } from './agents/hub-hermes.integration.js';
@@ -388,9 +389,11 @@ io.on('connection', (socket) => {
     if (userId && userId === socket.userId) socket.join(`user:${userId}`);
   });
 
-  // Join a project room only if the caller is staff in the project's org or
-  // the project's own client (see canJoinProjectRoom). Acknowledges the result
-  // so a reconnecting call can wait for the room before re-signalling.
+  // Staff in the project's org join the internal `project:{id}` room; the
+  // project's own client joins only `project:{id}:client` (see
+  // project-room-access.js), which never carries internal chat or fields.
+  // Acknowledges the result so a reconnecting call can wait for the room
+  // before re-signalling.
   socket.on('join-project', createJoinProjectHandler(socket, {
     findProject: (projectId) => prisma.project.findUnique({
       where: { id: projectId },
@@ -399,21 +402,18 @@ io.on('connection', (socket) => {
     logger,
   }));
 
-  socket.on('leave-project', (projectId) => {
-    if (projectId) socket.leave(`project:${projectId}`);
-  });
+  socket.on('leave-project', createLeaveProjectHandler(socket));
 
   registerCallSignalling(io, socket);
 });
 
 fastify.decorate('io', io);
-fastify.decorate('notify', async (userId, type, data) => {
-  try {
-    const { createNotification } = await import('./services/notification.service.js');
-    await createNotification({ userId, type, title: type, message: JSON.stringify(data), data }, { io });
-  } catch (err) { logger.error({ err }, '[notify] Failed to persist notification'); }
-  io.to(`user:${userId}`).emit('notification', { type, data });
-});
+// The single notification path (H4, see notification.service.js): notify()
+// persists exactly one human-readable row and emits it; emitNotification()
+// only emits a row already persisted inside a transaction.
+const notifier = createNotifier(io, logger);
+fastify.decorate('notify', notifier.notify);
+fastify.decorate('emitNotification', notifier.emit);
 
 // Initialization
 if (initializeRuntime) initSubscribers({ fastify, io });

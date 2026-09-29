@@ -216,6 +216,18 @@ Before enabling production promotion, rehearse this in staging:
 
 ## Manual rollback
 
+**Rollback floor.** Some migrations close a confidentiality gap that older
+images do not know about. `20260927030000_chat_message_visibility` is one:
+images that predate it serve every project chat message, internal ones
+included, to client sessions. Once the release script applies such a
+migration it records it in `$ROOT_DIR/releases/rollback-floor`, and from then
+on it refuses to deploy an image that lacks it (`rollback_floor_blocked` in
+`history.tsv`). The automatic rollback is refused as well and the release fails
+closed, leaving the API down rather than serving the older image. Roll
+forward with a fixed image instead. The floor list lives in
+`ROLLBACK_FLOOR_MIGRATIONS` in `scripts/deploy-vps-direct.sh`.
+
+
 Use the last known-good immutable image reference and image ID from
 `$ROOT_DIR/releases/history.tsv`; never roll back with a mutable `main` or
 `latest` tag. The release script automatically restores the retained previous

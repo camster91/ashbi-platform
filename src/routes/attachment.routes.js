@@ -121,7 +121,7 @@ export default async function attachmentRoutes(fastify) {
   });
 
   // Delete attachment
-  fastify.delete('/attachments/:id', {
+  fastify.delete('/:id', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const { id } = request.params;

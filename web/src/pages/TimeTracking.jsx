@@ -323,6 +323,11 @@ export default function TimeTracking() {
                     </span>
                   </td>
                   <td className="px-2 py-3">
+                    {entry.reviewStatus === 'APPROVED' || entry.invoiced ? (
+                      <span className="text-xs text-muted-foreground" title={entry.invoiced ? 'Invoiced time cannot be changed' : 'Approved time is locked until an admin rejects it'}>
+                        Locked
+                      </span>
+                    ) : (
                     <button
                       onClick={() => { deleteMutation.reset(); setEntryToDelete(entry); }}
                       aria-label={`Delete time entry ${entry.description || entry.id}`}
@@ -330,6 +335,7 @@ export default function TimeTracking() {
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
+                    )}
                   </td>
                 </tr>
               ))}

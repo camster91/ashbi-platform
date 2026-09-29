@@ -1,0 +1,124 @@
+// Once a confidentiality migration is applied, no image lacking it may serve
+// again (Codex P1 on #480: rolling back to an image that does not filter chat
+// visibility would expose internal project chat to clients). These tests run
+// the rollback-floor functions from scripts/deploy-vps-direct.sh in bash with
+// `docker` stubbed by a table of which image carries which migration.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+
+const script = fs.readFileSync(new URL('../../../scripts/deploy-vps-direct.sh', import.meta.url), 'utf8');
+const floorBlock = script.slice(script.indexOf('# --- rollback floor ---'), script.indexOf('# --- end rollback floor ---'));
+const CHAT = '20260927030000_chat_message_visibility';
+
+function bash(releaseDir, images, body) {
+  // An image named broken:* makes the probe itself fail (docker exits 125).
+  const stub = `docker() { [[ $1 == run && $3 == --entrypoint && $4 == test ]] || return 2; [[ $5 == broken:* ]] && return 125; grep -qxF "$5 $7" "$IMAGES"; }`;
+  const program = `set -euo pipefail\nRELEASE_DIR=${JSON.stringify(releaseDir)}\nIMAGES=${JSON.stringify(images)}\n${stub}\n${floorBlock}\n${body}`;
+  return execFileSync('bash', ['-c', program], { encoding: 'utf8' });
+}
+
+function fixture() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rollback-floor-'));
+  const images = path.join(dir, 'images');
+  // new:1 carries the chat migration; old:1 predates it.
+  fs.writeFileSync(images, `new:1 /app/prisma/migrations/${CHAT}\n`);
+  return { dir, images };
+}
+
+test('the floor block is present in the release script', () => {
+  assert.ok(floorBlock.includes('image_meets_floor') && floorBlock.includes(CHAT));
+});
+
+test('before any floor is recorded every image may serve', () => {
+  const { dir, images } = fixture();
+  assert.equal(bash(dir, images, 'image_meets_floor old:1 && echo ok'), 'ok\n');
+});
+
+test('deploying an image that carries the migration raises the floor, which then blocks the older image', () => {
+  const { dir, images } = fixture();
+  bash(dir, images, 'raise_rollback_floor new:1; raise_rollback_floor new:1');
+  assert.equal(fs.readFileSync(path.join(dir, 'rollback-floor'), 'utf8'), `${CHAT}\n`, 'recorded once');
+  assert.equal(bash(dir, images, 'image_meets_floor new:1 && echo ok'), 'ok\n');
+  assert.equal(bash(dir, images, 'if missing=$(image_meets_floor old:1); then echo allowed; else echo "blocked $missing"; fi'), `blocked ${CHAT}\n`);
+});
+
+test('deploying an older image does not raise the floor', () => {
+  const { dir, images } = fixture();
+  bash(dir, images, 'raise_rollback_floor old:1');
+  assert.equal(fs.existsSync(path.join(dir, 'rollback-floor')), false);
+});
+
+test('the release refuses the older image before migrating, and automatic rollback fails closed', () => {
+  const guardBeforeMigrate = script.indexOf('image_meets_floor "$IMAGE"');
+  assert.ok(guardBeforeMigrate > 0 && guardBeforeMigrate < script.indexOf('npx prisma migrate deploy'));
+  const restore = script.slice(script.indexOf('restore_previous() {'), script.indexOf('docker rename "$ROLLBACK_CONTAINER"', script.indexOf('restore_previous() {')));
+  assert.match(restore, /image_meets_floor "\$PREVIOUS_IMAGE"[\s\S]*return 1/);
+  const emergency = script.slice(script.indexOf('emergency_rollback() {'), script.indexOf('start_worker_container() {'));
+  assert.match(emergency, /image_meets_floor "\$PREVIOUS_IMAGE"[\s\S]*rollback_floor_blocked[\s\S]*elif/);
+});
+
+test('a live image below the floor stops as soon as the migration is applied', () => {
+  const afterMigrate = script.slice(script.indexOf('npx prisma migrate deploy'), script.indexOf('npx prisma migrate status'));
+  assert.match(afterMigrate, /raise_rollback_floor "\$IMAGE"[\s\S]*LIVE_IMAGE=\$\(container_image "\$CONTAINER"\)[\s\S]*\$LIVE_IMAGE == unknown \]\] \|\| ! image_meets_floor "\$LIVE_IMAGE"[\s\S]*stop_below_floor "\$CONTAINER" 30 && stop_below_floor "\$WORKER_CONTAINER" 120 \|\| \{[\s\S]*die /);
+});
+
+test('a refused rollback also removes the rejected candidate', () => {
+  const restore = script.slice(script.indexOf('restore_previous() {'), script.indexOf('return 1', script.indexOf('restore_previous() {')));
+  assert.match(restore, /docker rm -f "\$CONTAINER"[\s\S]*docker rm -f "\$WORKER_CONTAINER"[\s\S]*rollback_floor_blocked/);
+  const emergency = script.slice(script.indexOf('emergency_rollback() {'), script.indexOf('elif', script.indexOf('emergency_rollback() {')));
+  assert.match(emergency, /docker rm -f "\$CONTAINER"[\s\S]*docker rm -f "\$WORKER_CONTAINER"[\s\S]*rollback_floor_blocked/);
+});
+
+function stopProbe(dockerBody) {
+  const program = `set -euo pipefail\nRELEASE_DIR=/nonexistent\n${dockerBody}\n${floorBlock}\nif stop_below_floor api 30; then echo stopped; else echo still-running; fi\ncat "$LOG"`;
+  return execFileSync('bash', ['-c', program], { encoding: 'utf8', env: { ...process.env, LOG: path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'stop-')), 'log') } });
+}
+
+test('stop_below_floor force-removes a container whose stop did not take, and fails if it still runs', () => {
+  // docker stop "fails" and the container keeps running until rm -f.
+  const stubborn = `: > "$LOG"; RUNNING=true
+docker() { echo "$1" >> "$LOG"; case $1 in stop) return 1 ;; rm) RUNNING=false ;; inspect) echo "$RUNNING" ;; esac; }`;
+  const out = stopProbe(stubborn);
+  assert.match(out, /^stopped\n/);
+  assert.match(out, /stop\ninspect\nrm\ninspect/);
+  // Neither stop nor rm takes effect: the caller must abort the release.
+  const unkillable = `: > "$LOG"
+docker() { echo "$1" >> "$LOG"; case $1 in stop|rm) return 1 ;; inspect) echo true ;; esac; }`;
+  assert.match(stopProbe(unkillable), /^still-running\n/);
+});
+
+test('stop_below_floor fails closed when the container state cannot be read', () => {
+  // Daemon unavailable: stop, rm and inspect all fail with a non-"No such" error.
+  const daemonDown = `: > "$LOG"
+docker() { echo "$1" >> "$LOG"; echo "Cannot connect to the Docker daemon" >&2; return 1; }`;
+  assert.match(stopProbe(daemonDown), /^still-running\n/);
+  // A confirmed missing container counts as stopped.
+  const gone = `: > "$LOG"
+docker() { echo "$1" >> "$LOG"; case $1 in inspect) echo "Error: No such object: api" >&2; return 1 ;; *) return 1 ;; esac; }`;
+  assert.match(stopProbe(gone), /^stopped\n/);
+  // A normal stop that takes: no force-remove needed.
+  const clean = `: > "$LOG"
+docker() { echo "$1" >> "$LOG"; case $1 in inspect) echo false ;; esac; }`;
+  const out = stopProbe(clean);
+  assert.match(out, /^stopped\n/);
+  assert.doesNotMatch(out, /\nrm\n/);
+});
+
+test('a probe that cannot run fails closed: the floor is still raised and the image is refused', () => {
+  const { dir, images } = fixture();
+  bash(dir, images, 'raise_rollback_floor broken:1');
+  assert.equal(fs.readFileSync(path.join(dir, 'rollback-floor'), 'utf8'), `${CHAT}\n`, 'recorded despite the failed probe');
+  assert.equal(bash(dir, images, 'if missing=$(image_meets_floor broken:1); then echo allowed; else echo "blocked $missing"; fi'), `blocked ${CHAT}\n`);
+  assert.equal(bash(dir, images, 'image_has_migration broken:1 x && echo 0 || echo $?'), '2\n');
+});
+
+test('container_image distinguishes a missing container from an unreadable one', () => {
+  const run = (dockerBody) => execFileSync('bash', ['-c', `set -euo pipefail\nRELEASE_DIR=/nonexistent\n${dockerBody}\n${floorBlock}\nprintf '[%s]' "$(container_image api)"`], { encoding: 'utf8' });
+  assert.equal(run('docker() { echo "ashbi:old"; }'), '[ashbi:old]');
+  assert.equal(run('docker() { echo "Error: No such object: api" >&2; return 1; }'), '[]');
+  assert.equal(run('docker() { echo "Cannot connect to the Docker daemon" >&2; return 1; }'), '[unknown]');
+});

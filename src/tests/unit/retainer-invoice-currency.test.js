@@ -12,10 +12,10 @@ function retainerApp(t, plan) {
     findUnique: async () => ({ clientId: 'client-a', hoursPerMonth: 10, client: { id: 'client-a', name: 'Client A' }, ...plan }),
     update: async ({ data }) => data,
   };
-  return buildInvoiceApp(t, retainerRoutes, db).then((app) => ({ app, db }));
+  return buildInvoiceApp(t, retainerRoutes, db, { prefix: '/api/retainers' }).then((app) => ({ app, db }));
 }
 
-const url = '/retainer/client-a/generate-invoice';
+const url = '/api/retainers/client-a/generate-invoice';
 
 test('a retainer invoice defaults to CAD and bills the CAD amount', async (t) => {
   const { app, db } = await retainerApp(t, { monthlyAmountCad: 2000, monthlyAmountUsd: 1500 });

@@ -37,7 +37,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [BrandSettings](#model-brandsettings) | `brand_settings` | yes | no | 15 |
 | [BreakGlassGrant](#model-breakglassgrant) | `break_glass_grants` | yes | no | 14 |
 | [CalendarEvent](#model-calendarevent) | `calendar_events` | no | no | 22 |
-| [ChatMessage](#model-chatmessage) | `chat_messages` | no | no | 20 |
+| [ChatMessage](#model-chatmessage) | `chat_messages` | no | no | 22 |
 | [ChatReaction](#model-chatreaction) | `chat_reactions` | no | no | 7 |
 | [Client](#model-client) | `clients` | yes | yes | 53 |
 | [ClientEmailMapping](#model-clientemailmapping) | `client_email_mappings` | no | no | 8 |
@@ -112,8 +112,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [TaskTemplate](#model-tasktemplate) | `task_templates` | yes | no | 8 |
 | [Template](#model-template) | `templates` | yes | no | 11 |
 | [Thread](#model-thread) | `threads` | no | no | 28 |
-| [TimeEntry](#model-timeentry) | `time_entries` | no | yes | 23 |
-| [TimeSession](#model-timesession) | `time_sessions` | no | no | 15 |
+| [TimeEntry](#model-timeentry) | `time_entries` | no | yes | 25 |
+| [TimeSession](#model-timesession) | `time_sessions` | no | no | 16 |
 | [TrashedItem](#model-trasheditem) | `trashed_items` | yes | yes | 9 |
 | [UnmatchedEmail](#model-unmatchedemail) | `unmatched_emails` | yes | no | 15 |
 | [User](#model-user) | `users` | yes | no | 52 |
@@ -570,6 +570,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Constraints and indexes:
   - `@@index([projectId])`
   - `@@index([projectId, createdAt])`
+  - `@@index([projectId, visibility, createdAt])`
   - `@@index([projectId, externalSource, externalMessageId])`
   - `@@index([projectId, externalSource, externalThreadId])`
   - `@@index([parentId])`
@@ -584,8 +585,10 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `externalAuthorName` | String | optional |  |  |  |
 | `externalMessageId` | String | optional |  |  | Provider-native message identifier for durable reconciliation |
 | `externalThreadId` | String | optional |  |  | Provider-native root-thread identifier |
+| `visibility` | String | required | `"INTERNAL"` |  |  |
 | `isEdited` | Boolean | required | `false` |  |  |
 | `editedAt` | DateTime | optional |  |  |  |
+| `removedAt` | DateTime | optional |  |  |  |
 | `parentId` | String | optional |  |  | For thread replies |
 | `projectId` | String | required |  |  |  |
 | `authorId` | String | optional |  |  |  |
@@ -2662,7 +2665,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `date` | DateTime | required | `now()` |  |  |
 | `billable` | Boolean | required | `true` |  |  |
 | `hourlyRate` | Float | optional |  |  | Override rate for this entry |
-| `source` | String | required | `"MANUAL"` |  |  |
+| `source` | String | required | `"MANUAL"` |  | MANUAL, TIMER |
+| `timeSessionId` | String | unique, optional |  |  |  |
 | `invoiced` | Boolean | required | `false` |  | Has this been included in an invoice? |
 | `invoiceId` | String | optional |  |  | Link to invoice if billed |
 | `reviewStatus` | String | required | `"PENDING"` |  | PENDING, APPROVED, REJECTED |
@@ -2679,6 +2683,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `project` | Project | required |  | → Project, via (projectId) → (id), onDelete Cascade |  |
 | `user` | User | required |  | → User, via (userId) → (id) |  |
 | `invoice` | Invoice | optional |  | → Invoice, via (invoiceId) → (id), onDelete SetNull |  |
+| `timeSession` | TimeSession | optional |  | → TimeSession, via (timeSessionId) → (id), onDelete SetNull |  |
 
 ### Model TimeSession
 
@@ -2690,6 +2695,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   - `@@index([projectId])`
   - `@@index([isRunning])`
   - `@@index([taskId])`
+  - `@@unique([userId], map: "time_sessions_one_running_per_user", where: raw("\"isRunning\" = true"))`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -2702,12 +2708,13 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `duration` | Int | required | `0` |  | Duration in minutes (calculated on stop) |
 | `description` | String | optional |  |  |  |
 | `billable` | Boolean | required | `true` |  |  |
-| `isRunning` | Boolean | required | `false` |  | True if timer is currently running |
+| `isRunning` | Boolean | required | `false` |  |  |
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 | `user` | User | required |  | → User, via (userId) → (id) |  |
 | `project` | Project | required |  | → Project, via (projectId) → (id), onDelete Cascade |  |
 | `task` | Task | optional |  | → Task, via (taskId) → (id), onDelete SetNull |  |
+| `timeEntry` | TimeEntry | optional |  | → TimeEntry |  |
 
 ### Model TrashedItem
 

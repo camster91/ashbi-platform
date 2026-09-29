@@ -2,6 +2,25 @@
 
 import { validateBody, timeEntryCreateNewSchema, timeEntryUpdateNewSchema, timesheetRejectSchema } from '../validators/schemas.js';
 
+/**
+ * H6: an APPROVED or invoiced time entry is locked against edit and delete,
+ * for its owner and admins alike. An admin reopens an approved entry with
+ * the explicit reject action (PATCH /api/timesheets/:id/reject, which needs
+ * a reason); invoiced time stays locked because it is already billed.
+ *
+ * @param {{ reviewStatus?: string, invoiced?: boolean, invoiceId?: string | null }} entry
+ * @returns {{ code: string, error: string } | null}
+ */
+export function timeEntryLock(entry) {
+  if (entry.invoiced || entry.invoiceId) {
+    return { code: 'TIME_ENTRY_INVOICED', error: 'This time entry has been invoiced and can no longer be changed' };
+  }
+  if (entry.reviewStatus === 'APPROVED') {
+    return { code: 'TIME_ENTRY_APPROVED', error: 'This time entry is approved. An admin must reject it before it can be changed' };
+  }
+  return null;
+}
+
 export default async function timeRoutes(fastify) {
   // Get time entries for a project
   fastify.get('/projects/:projectId/time-entries', {
@@ -140,7 +159,7 @@ export default async function timeRoutes(fastify) {
     const entry = await request.prisma.timeEntry.create({
       data: {
         description,
-        duration: parseInt(duration),
+        duration: Math.round(duration),
         date: date ? new Date(date) : new Date(),
         billable,
         taskId,
@@ -190,8 +209,11 @@ export default async function timeRoutes(fastify) {
       return reply.status(403).send({ error: 'Cannot edit this time entry' });
     }
 
+    const editLock = timeEntryLock(existing);
+    if (editLock) return reply.status(409).send(editLock);
+
     const data = {};
-    if (duration !== undefined) data.duration = parseInt(duration);
+    if (duration !== undefined) data.duration = Math.round(duration);
     if (description !== undefined) data.description = description;
     if (date !== undefined) data.date = new Date(date);
     if (billable !== undefined) data.billable = billable;
@@ -225,6 +247,9 @@ export default async function timeRoutes(fastify) {
     if (existing.userId !== request.user.id && request.user.role !== 'ADMIN') {
       return reply.status(403).send({ error: 'Cannot delete this time entry' });
     }
+
+    const deleteLock = timeEntryLock(existing);
+    if (deleteLock) return reply.status(409).send(deleteLock);
 
     await request.prisma.timeEntry.delete({ where: { id } });
 
@@ -392,6 +417,9 @@ export default async function timeRoutes(fastify) {
     const { id } = request.params;
     const existing = await request.prisma.timeEntry.findUnique({ where: { id } });
     if (!existing) return reply.status(404).send({ error: 'Time entry not found' });
+    if (existing.invoiced || existing.invoiceId) {
+      return reply.status(409).send({ code: 'TIME_ENTRY_INVOICED', error: 'This time entry has been invoiced and can no longer be changed' });
+    }
 
     return request.prisma.timeEntry.update({
       where: { id },

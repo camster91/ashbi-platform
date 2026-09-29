@@ -1,5 +1,7 @@
 // Task routes
 
+import { findTasksInPriorityOrder } from '../services/task-priority-order.js';
+import { sortByTaskPriority, taskPriorityRank } from '../shared/task-priority.js';
 import { validateBody, createTaskSchema, updateTaskSchema, taskUpdateSchema, taskBulkUpdateSchema, taskNoteCreateSchema, taskNoteUpdateSchema, taskDependencyCreateSchema, taskCreateQuickSchema } from '../validators/schemas.js';
 import { z } from 'zod';
 import bus, { EVENTS } from '../utils/events.js';
@@ -54,15 +56,15 @@ export default async function taskRoutes(fastify) {
       where.assigneeId = assigneeId;
     }
 
+    // Most urgent first (CRITICAL > HIGH > NORMAL > LOW), not alphabetical.
     const [tasks, total] = await Promise.all([
-      request.prisma.task.findMany({
+      findTasksInPriorityOrder(request.prisma.task, {
         where,
         include: {
           project: { select: { id: true, name: true, clientId: true } },
           assignee: { select: { id: true, name: true } }
         },
         orderBy: [
-          { priority: 'asc' },
           { dueDate: 'asc' },
           { createdAt: 'desc' }
         ],
@@ -86,7 +88,9 @@ export default async function taskRoutes(fastify) {
     // thousands of open tasks. Caller can use pagination params if they need
     // more — previously this returned every assigned task with no `take`.
     const { limit = '200', offset = '0' } = request.query ?? {};
-    const tasks = await request.prisma.task.findMany({
+    // Priority order is applied in the database so offset pagination follows
+    // the global CRITICAL > HIGH > NORMAL > LOW order, not per page.
+    const tasks = await findTasksInPriorityOrder(request.prisma.task, {
       where: {
         assigneeId: request.user.id,
         status: { not: 'COMPLETED' }
@@ -101,7 +105,6 @@ export default async function taskRoutes(fastify) {
         }
       },
       orderBy: [
-        { priority: 'asc' },
         { dueDate: 'asc' }
       ],
       take: Math.min(parseInt(limit, 10) || 200, 500),
@@ -600,10 +603,18 @@ export default async function taskRoutes(fastify) {
       orderBy: [
         { milestoneId: 'asc' },
         { startDate: 'asc' },
-        { dueDate: 'asc' },
-        { priority: 'asc' }
+        { dueDate: 'asc' }
       ]
     });
+    // Priority breaks ties inside equal milestone/start/due (semantic order).
+    const sameSlot = (a, b) => a.milestoneId === b.milestoneId
+      && String(a.startDate) === String(b.startDate) && String(a.dueDate) === String(b.dueDate);
+    for (let i = 1; i < tasks.length; i += 1) {
+      for (let j = i; j > 0 && sameSlot(tasks[j - 1], tasks[j])
+        && taskPriorityRank(tasks[j - 1].priority) > taskPriorityRank(tasks[j].priority); j -= 1) {
+        [tasks[j - 1], tasks[j]] = [tasks[j], tasks[j - 1]];
+      }
+    }
 
     // Compute effective status (BLOCKED if dependsOn is not completed)
     const ganttTasks = tasks.map(task => {
@@ -646,16 +657,15 @@ export default async function taskRoutes(fastify) {
   }, async (request) => {
     const { projectId } = request.params;
 
-    const tasks = await request.prisma.task.findMany({
+    const tasks = sortByTaskPriority(await request.prisma.task.findMany({
       where: { projectId },
       include: {
         assignee: { select: { id: true, name: true, email: true } }
       },
       orderBy: [
-        { priority: 'asc' },
         { dueDate: 'asc' }
       ]
-    });
+    }));
 
     // Group by status
     const board = {

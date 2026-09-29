@@ -105,14 +105,16 @@ test('project collaboration routes are owned by an ordered domain registrar', as
   const registrar = fs.readFileSync(registrarUrl, 'utf8');
   const { registerCollaborationRoutes } = await import(registrarUrl.href);
   const routeNames = ['message', 'revision', 'calendar', 'comment', 'attachment', 'time', 'milestone', 'review', 'review-portal'];
+  // Modules whose routes span several roots (e.g. /projects/:id/milestones
+  // and /milestones/:id) mount at /api so their URLs are not double-prefixed.
   const expectedPrefixes = [
     '/api/messages',
-    '/api/revisions',
+    '/api',
     '/api/calendar',
-    '/api/comments',
+    '/api',
     '/api/attachments',
-    '/api/time',
-    '/api/milestones',
+    '/api',
+    '/api',
     '/api/reviews',
     '/api/portal/review',
   ];
@@ -309,7 +311,7 @@ const DOMAIN_REGISTRARS = [
       ['time-tracking', '/api/time-tracking'],
       ['time-sessions', '/api/time-sessions'],
       ['creative-brief', '/api/creative-brief'],
-      ['asset-library', '/api/asset-library'],
+      ['asset-library', '/api/assets'],
       ['template', '/api/templates'],
       ['portal', '/api/portal'],
       ['onboarding', '/api/onboarding'],

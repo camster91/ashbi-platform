@@ -72,6 +72,20 @@ sound: unique `operationId`s, declared path parameters, and resolvable `$ref`s.
   is maintained by hand for that integration. It is separate from this
   document.
 
+## SPA ↔ route contract
+
+`src/tests/unit/spa-api-route-contract.test.js` parses every `request(...)`
+call and `${API_BASE}/...` URL in `web/src/lib/api.js` and fails when a
+method + path matches no registered route. Intentional exceptions live in its
+`ALLOWLIST` with a reason. Route modules whose paths span several roots
+(revisions, comments, time entries/timesheets, milestones) mount at `/api`;
+single-root modules use relative paths under their prefix. The 2026-09-27
+normalisation retired unreachable double-prefixed URLs such as
+`/api/calendar/calendar`, `/api/milestones/milestones/:id`,
+`/api/approvals/approvals`, `/api/retainers/retainer`,
+`/api/asset-library/assets` and `/api/time/...`; only the SPA consumed them,
+so no aliases were kept.
+
 ## Auth schemes
 
 | Scheme | Access matrix guard | What the client sends |

@@ -147,17 +147,12 @@ export default async function responseRoutes(fastify) {
     });
 
     for (const admin of admins) {
-      await request.prisma.notification.create({
-        data: {
-          type: 'RESPONSE_PENDING',
-          title: 'Response needs approval',
-          message: `A response to "${response.thread.subject}" is pending approval`,
-          data: JSON.stringify({ responseId: id, threadId: response.threadId }),
-          userId: admin.id
-        }
+      await fastify.notify(admin.id, {
+        type: 'RESPONSE_PENDING',
+        title: 'Response needs approval',
+        message: `A response to "${response.thread.subject}" is pending approval`,
+        data: { responseId: id, threadId: response.threadId },
       });
-
-      fastify.notify(admin.id, 'RESPONSE_PENDING', { responseId: id });
     }
 
     return response;
@@ -193,17 +188,12 @@ export default async function responseRoutes(fastify) {
     });
 
     // Notify the drafter
-    await request.prisma.notification.create({
-      data: {
-        type: 'RESPONSE_APPROVED',
-        title: 'Response approved',
-        message: `Your response to "${response.thread.subject}" has been approved`,
-        data: JSON.stringify({ responseId: id, threadId: response.threadId }),
-        userId: response.draftedBy.id
-      }
+    await fastify.notify(response.draftedBy.id, {
+      type: 'RESPONSE_APPROVED',
+      title: 'Response approved',
+      message: `Your response to "${response.thread.subject}" has been approved`,
+      data: { responseId: id, threadId: response.threadId },
     });
-
-    fastify.notify(response.draftedBy.id, 'RESPONSE_APPROVED', { responseId: id });
 
     return response;
   });
@@ -239,17 +229,12 @@ export default async function responseRoutes(fastify) {
     });
 
     // Notify the drafter
-    await request.prisma.notification.create({
-      data: {
-        type: 'RESPONSE_REJECTED',
-        title: 'Response needs revision',
-        message: `Your response to "${response.thread.subject}" was returned: ${reason}`,
-        data: JSON.stringify({ responseId: id, threadId: response.threadId }),
-        userId: response.draftedBy.id
-      }
+    await fastify.notify(response.draftedBy.id, {
+      type: 'RESPONSE_REJECTED',
+      title: 'Response needs revision',
+      message: `Your response to "${response.thread.subject}" was returned: ${reason}`,
+      data: { responseId: id, threadId: response.threadId },
     });
-
-    fastify.notify(response.draftedBy.id, 'RESPONSE_REJECTED', { responseId: id });
 
     return response;
   });

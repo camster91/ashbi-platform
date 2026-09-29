@@ -14,7 +14,8 @@ import { clearStaleSessionCookie } from '../auth/request-session.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { contentDisposition } from '../utils/send-file.js';
 import { ATTACHMENT_UNDER_REVIEW, isAttachmentUnderReview, isForeignKeyViolation } from '../services/media-review.service.js';
-import { validateBody, validateParams, clientPortalMessageSchema, requestAccessSchema, fileUpload, clientPortalTokenRedeemSchema, clientPortalRevisionResponseSchema, clientPortalFeedbackSchema } from '../validators/schemas.js';
+import { emitChatEvent, toClientChatPayload } from '../auth/project-room-access.js';
+import { validateBody, validateParams, validateQuery, chatMessageListQuerySchema, clientPortalMessageSchema, requestAccessSchema, fileUpload, clientPortalTokenRedeemSchema, clientPortalRevisionResponseSchema, clientPortalFeedbackSchema } from '../validators/schemas.js';
 import { invoicePublicAccessFailure, INVOICE_OPEN_STATUSES } from '../utils/public-document-access.js';
 import { outboundSignal } from '../utils/outbound-timeouts.js';
 
@@ -530,33 +531,41 @@ export default async function clientPortalRoutes(fastify) {
   // ── Messages / Chat ──────────────────────────────────────────────────────────
 
   // GET /api/client-portal/projects/:id/messages
-  fastify.get('/projects/:id/messages', { preHandler: clientAuth }, async (request, reply) => {
+  // Only the client-visible conversation (visibility CLIENT): internal team
+  // chat and Slack imports are never returned. Newest page, oldest-first.
+  fastify.get('/projects/:id/messages', { preHandler: [clientAuth, validateQuery(chatMessageListQuerySchema)] }, async (request, reply) => {
     const { clientId } = request.clientUser;
     const { id } = request.params;
-    const { limit = '50', before, after } = request.query;
+    const { limit, before, after, beforeId, afterId } = request.query;
 
     const project = await request.prisma.project.findFirst({ where: { id, clientId } });
     if (!project) {
       return reply.status(404).send({ error: 'Project not found' });
     }
 
-    const where = { projectId: id };
-    if (before) where.createdAt = { lt: new Date(before) };
-    else if (after) where.createdAt = { gt: new Date(after) };
+    // The cursor is (createdAt, id): with an id, messages sharing the boundary
+    // timestamp are split by id instead of being skipped.
+    const where = { projectId: id, visibility: 'CLIENT', removedAt: null };
+    if (before) {
+      const at = new Date(before);
+      if (beforeId) where.OR = [{ createdAt: { lt: at } }, { createdAt: at, id: { lt: beforeId } }];
+      else where.createdAt = { lt: at };
+    } else if (after) {
+      const at = new Date(after);
+      if (afterId) where.OR = [{ createdAt: { gt: at } }, { createdAt: at, id: { gt: afterId } }];
+      else where.createdAt = { gt: at };
+    }
 
     const messages = await request.prisma.chatMessage.findMany({
       where,
       include: {
-        author: { select: { id: true, name: true, email: true } }
+        author: { select: { id: true, name: true } }
       },
-      orderBy: { createdAt: 'asc' },
-      take: parseInt(limit)
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit
     });
 
-    return messages.map(m => ({
-      ...m,
-      metadata: m.metadata ? JSON.parse(m.metadata) : null
-    }));
+    return messages.reverse().map(toClientChatPayload);
   });
 
   // POST /api/client-portal/projects/:id/messages
@@ -593,6 +602,7 @@ export default async function clientPortalRoutes(fastify) {
       data: {
         content,
         type,
+        visibility: 'CLIENT',
         projectId: id,
         authorId: authorUser.id
       },
@@ -601,16 +611,11 @@ export default async function clientPortalRoutes(fastify) {
       }
     });
 
-    // Broadcast to project room via Socket.IO
-    fastify.io.to(`project:${id}`).emit('chat:message', {
-      ...message,
-      metadata: message.metadata ? JSON.parse(message.metadata) : null
-    });
+    // Staff see it in the internal room; the client room gets the portal shape.
+    const clientMessage = toClientChatPayload(message);
+    emitChatEvent(fastify.io, message, 'chat:message', { ...message, metadata: null }, clientMessage);
 
-    return reply.status(201).send({
-      ...message,
-      metadata: message.metadata ? JSON.parse(message.metadata) : null
-    });
+    return reply.status(201).send(clientMessage);
   });
 
   // ── Documents / File Uploads ─────────────────────────────────────────────────
@@ -976,7 +981,9 @@ export default async function clientPortalRoutes(fastify) {
       where: {
         projectId: { in: projectIds },
         createdAt: { gte: weekAgo },
-        type: 'TEXT'
+        type: 'TEXT',
+        visibility: 'CLIENT',
+        removedAt: null
       }
     });
 

@@ -23,6 +23,7 @@ import {
   Trash2,
   ExternalLink
 } from 'lucide-react';
+import { TASK_PRIORITIES } from '@shared/task-priority.js';
 import { api } from '../lib/api';
 import { formatDate, cn } from '../lib/utils';
 import NotionEditor from '../components/NotionEditor';
@@ -206,7 +207,7 @@ function PropertiesPanel({ task, onUpdate }) {
       label: 'Priority', 
       icon: Flag,
       value: task?.priority,
-      options: ['CRITICAL', 'HIGH', 'NORMAL', 'LOW']
+      options: TASK_PRIORITIES
     },
     { 
       key: 'dueDate', 

@@ -84,7 +84,103 @@ docker load -i "$ARCHIVE" >/dev/null
 ACTUAL_IMAGE_ID=$(docker image inspect "$IMAGE" --format '{{.Id}}')
 [[ $ACTUAL_IMAGE_ID == "$IMAGE_ID" ]] || die 'loaded image ID does not match the approved artifact'
 
+# --- rollback floor ---
+# Some migrations close a confidentiality gap that older images do not know
+# about: an image without them would serve data the new rules keep private
+# (20260927030000: internal project chat is hidden from client sessions only
+# by images that filter on chat_messages.visibility). Once such a migration is
+# applied, no image lacking it may serve again, not even as an automatic
+# rollback: the release fails closed instead. The floor is recorded per host.
+ROLLBACK_FLOOR_FILE="$RELEASE_DIR/rollback-floor"
+ROLLBACK_FLOOR_MIGRATIONS=(20260927030000_chat_message_visibility)
+# 0: the image carries the migration; 1: it confirmably does not (`test`
+# exited 1); 2: the probe itself could not run (daemon/runtime failure).
+# Every caller treats 2 as the unsafe answer (fail closed).
+image_has_migration() {
+  local rc=0
+  docker run --rm --entrypoint test "$1" -d "/app/prisma/migrations/$2" >/dev/null 2>&1 || rc=$?
+  case $rc in 0) return 0 ;; 1) return 1 ;; *) return 2 ;; esac
+}
+# Prints the first floor migration the image lacks (or cannot be probed for)
+# and fails; succeeds only when the image carries every recorded floor migration.
+image_meets_floor() {
+  local image=$1 name
+  [[ -f $ROLLBACK_FLOOR_FILE ]] || return 0
+  while IFS= read -r name; do
+    [[ -n $name ]] || continue
+    image_has_migration "$image" "$name" || { echo "$name"; return 1; }
+  done < "$ROLLBACK_FLOOR_FILE"
+  return 0
+}
+# After an image's migrations are applied, record the floor migrations it
+# carries. A migration is left out only when the image confirmably lacks it;
+# if the probe cannot run, the migration is recorded (fail closed).
+raise_rollback_floor() {
+  local image=$1 name rc
+  for name in "${ROLLBACK_FLOOR_MIGRATIONS[@]}"; do
+    rc=0
+    image_has_migration "$image" "$name" || rc=$?
+    ((rc == 1)) && continue
+    grep -qxF "$name" "$ROLLBACK_FLOOR_FILE" 2>/dev/null || echo "$name" >> "$ROLLBACK_FLOOR_FILE"
+  done
+}
+# Image of a container: the name, "" when docker confirms there is no such
+# container, or "unknown" when it cannot be read (callers fail closed).
+container_image() {
+  local out
+  if out=$(docker inspect --format '{{.Config.Image}}' "$1" 2>&1) && [[ -n $out ]]; then
+    echo "$out"
+  elif [[ $out == *"No such"* ]]; then
+    echo ""
+  else
+    echo unknown
+  fi
+}
+# "true"/"false" when docker reports the container's state, "gone" when docker
+# confirms it does not exist, "unknown" when the state could not be read.
+container_state() {
+  local out
+  if out=$(docker inspect --format '{{.State.Running}}' "$1" 2>&1); then
+    [[ $out == true || $out == false ]] && echo "$out" || echo unknown
+  elif [[ $out == *"No such"* ]]; then
+    echo gone
+  else
+    echo unknown
+  fi
+}
+# Stop a container that must no longer serve; force-remove it if a stop does
+# not take. Succeeds only when it is positively known to be stopped or gone:
+# an unreadable state (e.g. the daemon is unavailable) fails closed.
+stop_below_floor() {
+  local name=$1 timeout=$2 state
+  docker stop --time "$timeout" "$name" >/dev/null 2>&1 || true
+  state=$(container_state "$name")
+  if [[ $state != false && $state != gone ]]; then
+    docker rm -f "$name" >/dev/null 2>&1 || true
+    state=$(container_state "$name")
+  fi
+  [[ $state == false || $state == gone ]]
+}
+# --- end rollback floor ---
+
+if ! FLOOR_MISSING=$(image_meets_floor "$IMAGE"); then
+  record rollback_floor_blocked "missing=$FLOOR_MISSING"
+  die "image lacks migration $FLOOR_MISSING, which this database already applied (rollback floor)"
+fi
+
 docker run --rm --network "$NETWORK" --env-file "$ENV_FILE" "$IMAGE" npx prisma migrate deploy
+raise_rollback_floor "$IMAGE"
+# A live image below the floor must stop serving the moment the migration is
+# applied, not at cutover: until then it would serve what the new schema keeps
+# private. If the release then fails, it stays down (fail closed).
+LIVE_IMAGE=$(container_image "$CONTAINER")
+if [[ -n $LIVE_IMAGE ]] && { [[ $LIVE_IMAGE == unknown ]] || ! image_meets_floor "$LIVE_IMAGE" >/dev/null; }; then
+  stop_below_floor "$CONTAINER" 30 && stop_below_floor "$WORKER_CONTAINER" 120 || {
+    record legacy_stop_failed "image=$LIVE_IMAGE"
+    die 'could not stop the pre-migration image below the rollback floor'
+  }
+  record legacy_stopped_below_floor "image=$LIVE_IMAGE"
+fi
 docker run --rm --network "$NETWORK" --env-file "$ENV_FILE" "$IMAGE" npx prisma migrate status
 
 PREVIOUS_IMAGE=$(docker inspect --format '{{.Config.Image}}' "$CONTAINER" 2>/dev/null || true)
@@ -99,7 +195,13 @@ CUTOVER_STARTED=false
 emergency_rollback() {
   local status=$?
   trap - EXIT
-  if ((status != 0)) && [[ $CUTOVER_STARTED == true ]] && docker inspect "$ROLLBACK_CONTAINER" >/dev/null 2>&1; then
+  if ((status != 0)) && [[ $CUTOVER_STARTED == true ]] && docker inspect "$ROLLBACK_CONTAINER" >/dev/null 2>&1 \
+    && ! image_meets_floor "$PREVIOUS_IMAGE" >/dev/null; then
+    # Fail closed: remove the rejected candidate and restore nothing.
+    docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+    docker rm -f "$WORKER_CONTAINER" >/dev/null 2>&1 || true
+    record rollback_floor_blocked "previous=$PREVIOUS_IMAGE" || true
+  elif ((status != 0)) && [[ $CUTOVER_STARTED == true ]] && docker inspect "$ROLLBACK_CONTAINER" >/dev/null 2>&1; then
     docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
     docker rm -f "$WORKER_CONTAINER" >/dev/null 2>&1 || true
     docker rename "$ROLLBACK_CONTAINER" "$CONTAINER" >/dev/null 2>&1 || true
@@ -144,6 +246,15 @@ start_container() {
 }
 
 restore_previous() {
+  local floor_missing
+  if [[ -n $PREVIOUS_IMAGE ]] && ! floor_missing=$(image_meets_floor "$PREVIOUS_IMAGE"); then
+    # Fail closed: the previous image would serve data this schema keeps
+    # private, so remove the rejected candidate and restore nothing.
+    docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+    docker rm -f "$WORKER_CONTAINER" >/dev/null 2>&1 || true
+    record rollback_floor_blocked "previous=$PREVIOUS_IMAGE;missing=$floor_missing"
+    return 1
+  fi
   docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
   docker rm -f "$WORKER_CONTAINER" >/dev/null 2>&1 || true
   if [[ -n $PREVIOUS_IMAGE ]]; then

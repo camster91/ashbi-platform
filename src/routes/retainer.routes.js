@@ -5,7 +5,7 @@ import { clampTake } from '../utils/query-limits.js';
 
 export default async function retainerRoutes(fastify) {
   // GET /retainer — list all retainer plans with client info
-  fastify.get('/retainer', {
+  fastify.get('/', {
     onRequest: [fastify.authenticate]
   }, async (request) => {
     const plans = await request.prisma.retainerPlan.findMany({
@@ -33,7 +33,7 @@ export default async function retainerRoutes(fastify) {
   });
 
   // POST /retainer — create a retainer plan for a client
-  fastify.post('/retainer', {
+  fastify.post('/', {
     onRequest: [fastify.authenticate],
     preHandler: [validateBody(createRetainerSchema)]
   }, async (request, reply) => {
@@ -76,7 +76,7 @@ export default async function retainerRoutes(fastify) {
   });
 
   // PUT /retainer/:clientId — update a retainer plan
-  fastify.put('/retainer/:clientId', {
+  fastify.put('/:clientId', {
     onRequest: [fastify.authenticate],
     preHandler: [validateBody(updateRetainerSchema)]
   }, async (request, reply) => {
@@ -108,7 +108,7 @@ export default async function retainerRoutes(fastify) {
 
 
   // GET /retainer/:clientId — plan + hours used + % remaining + revision count
-  fastify.get('/retainer/:clientId', {
+  fastify.get('/:clientId', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const { clientId } = request.params;
@@ -135,7 +135,7 @@ export default async function retainerRoutes(fastify) {
   });
 
   // POST /retainer/:clientId/log-hours — log time and update hoursUsed
-  fastify.post('/retainer/:clientId/log-hours', {
+  fastify.post('/:clientId/log-hours', {
     onRequest: [fastify.authenticate],
     preHandler: [validateBody(logRetainerHoursSchema)]
   }, async (request, reply) => {
@@ -184,7 +184,7 @@ export default async function retainerRoutes(fastify) {
   });
 
   // GET /retainer/:clientId/status — full status with scope creep risk
-  fastify.get('/retainer/:clientId/status', {
+  fastify.get('/:clientId/status', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     const { clientId } = request.params;
@@ -217,7 +217,7 @@ export default async function retainerRoutes(fastify) {
   });
 
   // POST /retainer/:clientId/generate-invoice — create a monthly retainer invoice
-  fastify.post('/retainer/:clientId/generate-invoice', {
+  fastify.post('/:clientId/generate-invoice', {
     onRequest: [fastify.authenticate],
     preHandler: validateBody(retainerGenerateInvoiceSchema),
   }, async (request, reply) => {
@@ -302,7 +302,7 @@ export default async function retainerRoutes(fastify) {
   });
 
   // POST /retainer/check-all — check all clients, return any at risk (>80%)
-  fastify.post('/retainer/check-all', {
+  fastify.post('/check-all', {
     onRequest: [fastify.authenticate]
   }, async (request, reply) => {
     if (request.user.role !== 'BOT' && request.user.role !== 'ADMIN') {
