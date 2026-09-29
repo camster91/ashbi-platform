@@ -27,16 +27,22 @@ export async function findTasksInPriorityOrder(delegate, { where = {}, include, 
       offset -= counts[i];
       continue;
     }
-    const page = await delegate.findMany({
-      where: { AND: [where, buckets[i]] },
-      ...(include ? { include } : {}),
-      ...(select ? { select } : {}),
-      orderBy,
-      skip: offset,
-      take: remaining,
-    });
-    rows.push(...page);
-    remaining -= page.length;
+    // A delegate may cap one findMany (soft-deletable models return at most
+    // 100 rows), so keep reading this bucket until its counted rows run out.
+    while (remaining > 0 && offset < counts[i]) {
+      const page = await delegate.findMany({
+        where: { AND: [where, buckets[i]] },
+        ...(include ? { include } : {}),
+        ...(select ? { select } : {}),
+        orderBy,
+        skip: offset,
+        take: remaining,
+      });
+      if (page.length === 0) break;
+      rows.push(...page);
+      remaining -= page.length;
+      offset += page.length;
+    }
     offset = 0;
   }
   return rows;

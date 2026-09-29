@@ -82,6 +82,14 @@ test('threads are one level deep and ordered by latest activity', {
     })) });
     const flooded = (await app.inject({ method: 'GET', url: `/api/projects/${ids.project}/messages?limit=2` })).json();
     assert.deepEqual(flooded.map((t) => t.content), ['newest', 'old-thread']);
+    // A long thread returns only its latest REPLY_WINDOW replies, oldest
+    // first, plus the total so the page stays bounded.
+    const floodedThread = flooded.find((t) => t.content === 'old-thread');
+    assert.equal(floodedThread.replies.length, 100);
+    assert.equal(floodedThread.replyCount, await raw.chatMessage.count({ where: { parentId: mid('old-thread') } }));
+    assert.ok(floodedThread.replyCount > 200);
+    assert.equal(floodedThread.replies[0].content, 'flood 100');
+    assert.equal(floodedThread.replies.at(-1).content, 'flood 199');
 
     // Threads sharing one activity timestamp are split across pages by id,
     // never skipped.

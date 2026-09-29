@@ -44,10 +44,13 @@ function presentMessage(message) {
   return presented;
 }
 
+// Replies returned per thread in the history listing.
+export const REPLY_WINDOW = 100;
+
 export default async function chatRoutes(fastify) {
   // Threads for a project, newest activity first: a thread's activity is its
   // latest message (the first message or any reply; replies are one level).
-  // Returned oldest-first by that activity, each with all its replies. The
+  // Returned oldest-first by that activity, each with its latest REPLY_WINDOW replies. The
   // `before`/`after` cursors apply to a thread's latest activity, so a thread
   // is never repeated on an older page, and a page holds `limit` threads.
   fastify.get('/projects/:projectId/messages', {
@@ -97,19 +100,28 @@ export default async function chatRoutes(fastify) {
         reactions: {
           include: { user: { select: { id: true, name: true } } }
         },
+        // Each thread carries at most its latest REPLY_WINDOW replies, so a
+        // page stays bounded however long a thread grows; replyCount tells
+        // the client how many exist.
         replies: {
           where: { projectId },
           include: {
             author: { select: { id: true, name: true } }
           },
-          orderBy: { createdAt: 'asc' }
-        }
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          take: REPLY_WINDOW,
+        },
+        _count: { select: { replies: { where: { projectId } } } },
       },
     });
 
     return threads
       .sort((a, b) => rank.get(a.id) - rank.get(b.id))
-      .map((thread) => ({ ...presentMessage(thread), lastActivityAt: toIso(lastActivityAt.get(thread.id)) }));
+      .map(({ _count, ...thread }) => ({
+        ...presentMessage({ ...thread, replies: [...(thread.replies ?? [])].reverse() }),
+        replyCount: _count?.replies ?? thread.replies?.length ?? 0,
+        lastActivityAt: toIso(lastActivityAt.get(thread.id)),
+      }));
   });
 
   // Send a chat message
