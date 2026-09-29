@@ -129,6 +129,7 @@ test('a timer stopped before a full minute records no entry, even when it rounds
     const db = fakeDb({ sessions: [{ id: 's1', userId: 'u1', projectId: 'p1', isRunning: true, startTime: new Date(Date.now() - seconds * 1000) }] });
     await run(db, () => stopTimer('s1', 'u1'));
     assert.equal(db.entries.length, 0, `${seconds}s`);
+    assert.equal(db.sessions[0].duration, 0, `${seconds}s session keeps 0 minutes, so summaries never count it`);
   }
   const db = fakeDb({ sessions: [{ id: 's1', userId: 'u1', projectId: 'p1', isRunning: true, startTime: new Date(Date.now() - 61 * 1000) }] });
   await run(db, () => stopTimer('s1', 'u1'));
