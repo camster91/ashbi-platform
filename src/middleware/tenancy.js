@@ -56,9 +56,26 @@ export function isTenancyExemptUrl(url) {
     url.startsWith('/api/mailgun') ||
     url.startsWith('/api/slack/events') ||
     url.startsWith('/api/slack/oauth/callback') ||
-    url === '/api/health' ||
-    url === '/api/live'
+    // Probes read no tenant data; match the path so `?strict=1` and the
+    // staff/loopback detail view are covered too.
+    /^\/api\/(?:live|health(?:\/details)?)(?:\?|$)/.test(url)
   );
+}
+
+/**
+ * The active support-impersonation context (#416) set by the global hook in
+ * src/index.js, reduced to what audit writes need.
+ * @param {any} request
+ */
+function impersonationOf(request) {
+  const context = request.impersonation;
+  if (!context) return null;
+  return {
+    organizationId: context.organizationId,
+    actorUserId: context.actorUserId,
+    subjectUserId: context.subjectUserId,
+    sessionId: context.sessionId,
+  };
 }
 
 /**
@@ -80,7 +97,7 @@ export async function tenancyMiddleware(request, reply) {
 
   if (isTenancyExemptUrl(request.url)) {
     request.prisma = prisma; // Use global for auth/portal/health/public routes
-    enterRequestContext({ prisma, organizationId: null });
+    enterRequestContext({ prisma, organizationId: null, impersonation: impersonationOf(request) });
     return;
   }
 
@@ -125,6 +142,7 @@ export async function tenancyMiddleware(request, reply) {
     organizationId,
     requestId: request.id,
     feature: request.routeOptions?.url ?? null,
+    impersonation: impersonationOf(request),
   });
 
   logger.debug({ organizationId }, '🛡️ Tenancy: Request scoped via Proxy');

@@ -1,3 +1,4 @@
+// @ts-check
 // Pino redaction for credential-bearing fields (#416: service credentials are
 // never exposed in ordinary logs). Fastify's default request serializer does
 // not log headers, so these paths are defense in depth for code that logs a
@@ -39,7 +40,9 @@ const CAPABILITY_URL_PATTERNS = Object.freeze([
   new RegExp(`(/api/(?:proposals/client|contracts/sign|estimates/view|invoices/client)/)${SEGMENT}`, 'g'),
   // The project status link /portal/:token (not the named portal pages).
   new RegExp(`(/(?:api/)?portal/)(?!(?:review|proposal|contract|invoice|form|estimate|book|booking)(?=[/?#\\s"'<>]|$))${SEGMENT}`, 'g'),
-  /([?&](?:token|viewToken|signToken)=)[^&#\s"'<>]+/g,
+  // OAuth callbacks carry the signed `state` and the one-time authorization
+  // `code` in the query string.
+  /([?&](?:token|viewToken|signToken|state|code)=)[^&#\s"'<>]+/g,
 ]);
 
 /**

@@ -103,7 +103,7 @@ describe('client portal chat only exposes client-visible messages', () => {
 
   after(async () => app.close());
 
-  const auth = () => ({ authorization: `Bearer ${app.jwt.sign({ ...user, contactId: contact.id }, { expiresIn: '1h' })}` });
+  const auth = () => ({ authorization: `Bearer ${app.jwt.sign({ ...user, contactId: contact.id, typ: 'client_session' }, { expiresIn: '1h' })}` });
 
   it('never returns internal or Slack-imported messages to the client', async () => {
     const response = await app.inject({ method: 'GET', url: `/api/client-portal/projects/${PROJECT}/messages`, headers: auth() });

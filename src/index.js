@@ -15,11 +15,20 @@ import { fileURLToPath } from 'url';
 
 import env from './config/env.js';
 import prisma from './config/db.js';
-import { apiRateLimitMax, isNonApiRequest } from './config/rateLimit.js';
+import { pubSubRedisSource } from './jobs/queue.js';
+import { apiRateLimitKey, createApiRateLimitMax, createRateLimitRedis, isNonApiRequest } from './config/rateLimit.js';
 import { trustHops } from './config/trust-proxy.js';
+import { clearStaleSessionCookie, resolveRequestSession } from './auth/request-session.js';
+import { requestTimeoutMs } from './config/http.js';
+import { spaStaticOptions } from './config/static-cache.js';
 import { isCurrentUserSession } from './auth/session.js';
 import { createNotifier } from './services/notification.service.js';
+import {
+  actorHasOpenView, applyImpersonation, createImpersonationHook, createViewSocketRevoker, socketHandshakeDuringView,
+  startViewSocketSweep,
+} from './auth/impersonation.js';
 import { createJoinProjectHandler, createLeaveProjectHandler } from './auth/project-room-access.js';
+import { createSocketAuthMiddleware } from './auth/socket-auth.js';
 import { clientAcquisitionCorsOptions, loadClientAcquisitionConfig } from './services/client-acquisition.contract.js';
 import { initHermesBridge } from './agents/hub-hermes.integration.js';
 
@@ -39,23 +48,38 @@ import { registerClientCommunicationRoutes } from './domains/client-communicatio
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-import logger from './utils/logger.js';
+import logger, { resolveLoggerSettings } from './utils/logger.js';
 import { LOG_REDACT_OPTIONS, serializeRequestForLog } from './utils/log-redaction.js';
 import { initSubscribers } from './subscribers/index.js';
 import { registerCallSignalling } from './services/call-signalling.service.js';
 import { tenancyMiddleware } from './middleware/tenancy.js';
 import { getAuthProvider } from './auth/index.js';
-import { toClientErrorBody } from './utils/http-errors.js';
+import { clientErrorStatus, toClientErrorBody } from './utils/http-errors.js';
 import { buildHelmetOptions, permissionsPolicy } from './config/security-headers.js';
 import { initSentry, Sentry } from './observability/sentry.js';
-import { checkRuntimeHealth, closeRuntimeHealth } from './services/runtime-health.service.js';
+import {
+  checkRuntimeHealth,
+  closeRuntimeHealth,
+  HEALTH_DETAIL_ROLES,
+  healthStatusCode,
+  isLoopbackPeer,
+  isStrictHealthQuery,
+  publicHealthView,
+} from './services/runtime-health.service.js';
 import { getRequestPrisma } from './utils/request-context.js';
 
 /**
  * Construct the complete API application without binding a network port.
  * Runtime-only bridges can be disabled for isolated construction tests.
  */
-export async function buildApp({ initializeRuntime = true, jwtSecret = env.jwtSecret, trustProxy = env.trustProxy } = {}) {
+export async function buildApp({
+  initializeRuntime = true,
+  jwtSecret = env.jwtSecret,
+  trustProxy = env.trustProxy,
+  // Tests pass these to exercise the production static-serving path.
+  serveBuiltSpa = env.serveBuiltSpa,
+  spaRoot = path.join(__dirname, '../dist'),
+} = {}) {
 // Initialize Sentry error monitoring
 if (initializeRuntime && initSentry('api', [Sentry.fastifyIntegration()])) {
   logger.info('[Sentry] Error monitoring initialized');
@@ -64,12 +88,19 @@ if (initializeRuntime && initSentry('api', [Sentry.fastifyIntegration()])) {
 }
 
 // Initialize Fastify
+const requestLogSettings = resolveLoggerSettings(env);
 const fastify = Fastify({
+  // Bound slow request bodies (see src/config/http.js); handler time is not limited.
+  requestTimeout: requestTimeoutMs(),
   // Off by default; TRUST_PROXY=1 behind Traefik so per-IP rate limits and
   // audit IP prefixes see the client, not the proxy.
   trustProxy: typeof trustProxy === 'number' ? trustHops(trustProxy) : trustProxy,
   logger: {
-    level: env.isDev ? 'debug' : 'info',
+    // Same level policy as the app logger (src/utils/logger.js): silent under
+    // test unless LOG_LEVEL is set, and then synchronously to stderr so the
+    // Node test runner's stdout frame channel stays clean.
+    level: requestLogSettings.level,
+    ...(env.isTest ? { stream: requestLogSettings.destination } : {}),
     // Never write API keys, session cookies or passwords to request logs.
     redact: { ...LOG_REDACT_OPTIONS, paths: [...LOG_REDACT_OPTIONS.paths] },
     // Nor capability tokens carried in the URL (review share links).
@@ -120,9 +151,17 @@ await fastify.register(cors, {
 });
 await fastify.register(cookie);
 await fastify.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } });
+const rateLimitRedis = createRateLimitRedis();
+if (rateLimitRedis) fastify.addHook('onClose', async () => { rateLimitRedis.disconnect(); });
 await fastify.register(rateLimit, {
   global: true,
-  max: apiRateLimitMax(),
+  // Signed-in traffic is keyed by the verified user (higher limit); anonymous
+  // traffic stays per IP. Route-level limits (login, MFA, share links) keep
+  // their own keys. Counters live in Redis when available so every API
+  // replica shares them; skipOnError keeps the API up if Redis is not.
+  keyGenerator: apiRateLimitKey,
+  max: createApiRateLimitMax(),
+  ...(rateLimitRedis ? { redis: rateLimitRedis, nameSpace: 'ashbi-rate-limit:' } : {}),
   timeWindow: '1 minute',
   skipOnError: true,
   // Frontend navigation loads many immutable chunks in parallel. Counting those
@@ -130,6 +169,36 @@ await fastify.register(rateLimit, {
   allowList: isNonApiRequest,
 });
 await fastify.register(jwt, { secret: jwtSecret, cookie: { cookieName: 'token', signed: false } });
+
+// Global Error Handler. Registered before any route plugin: an encapsulated
+// plugin keeps the error handler its parent had when it was registered, so a
+// handler set after the routes would never apply to them and they would fall
+// back to Fastify's default, which sends raw error messages (Prisma
+// invocations, tenancy details) to clients.
+fastify.setErrorHandler((error, request, reply) => {
+  const statusCode = clientErrorStatus(error);
+  const logFields = {
+    errorName: error.name,
+    errorCode: typeof error.code === 'string' ? error.code : undefined,
+    statusCode,
+    route: request.routeOptions?.url || 'unknown',
+    method: request.method,
+    traceId: request.id,
+  };
+  if (statusCode >= 500) {
+    request.log.error(logFields, 'Global request error');
+    Sentry.captureException(error, {
+      extra: {
+        route: request.routeOptions?.url || 'unknown',
+        method: request.method,
+        traceId: request.id,
+      },
+    });
+  } else {
+    request.log.info(logFields, 'Request rejected');
+  }
+  reply.status(statusCode).send(toClientErrorBody(error, { traceId: request.id }));
+});
 
 // JWT verification hook — runs for ALL /api/* requests BEFORE tenancyMiddleware
 fastify.addHook('onRequest', async (request, reply) => {
@@ -143,38 +212,43 @@ fastify.addHook('onRequest', async (request, reply) => {
     request.url === '/api/health' ||
     request.url === '/api/live'
   ) return;
-  let jwtVerified = false;
-  try {
-    await request.jwtVerify();
-    jwtVerified = true;
-  } catch {
-    // No valid token — let route-specific auth handle 401
-  }
-  if (jwtVerified) {
-    try {
-      if (!(await isCurrentUserSession(prisma, request.user))) {
-        return reply.status(401).send({ error: 'Session expired or revoked' });
-      }
-    } catch {
-      return reply.status(401).send({ error: 'Unable to validate session' });
-    }
-  }
+  // A token that is not a current session (stale, revoked, untyped, or not a
+  // session at all) makes the request anonymous and its cookie is cleared:
+  // each route's own guard decides, so public routes never 401 because of a
+  // stale cookie (src/auth/request-session.js).
+  // If the session store is unreachable the request is also anonymous here
+  // (the cookie is kept); guarded routes then answer 401 themselves.
+  const session = await resolveRequestSession(request, prisma);
+  if (session === 'stale') clearStaleSessionCookie(request, reply);
+  if (session === 'error') request.log.warn('Session validation unavailable; continuing without a session');
 });
 
-// Auth decorators
+// Support impersonation (#416, docs/privileged-actions.md): when the `imp`
+// cookie names a live, read-only view, swap request.user for the viewed
+// person and refuse writes and sensitive areas. Runs for /api/auth too.
+fastify.addHook('onRequest', createImpersonationHook({ prisma, isCurrentUserSession }));
+
+// Auth decorators. Re-verifying the session cookie resets request.user to the
+// signed-in admin, so an active impersonation is re-applied afterwards.
 fastify.decorate('authenticate', async (request, reply) => {
-  try {
-    await request.jwtVerify();
-    if (!(await isCurrentUserSession(prisma, request.user))) throw new Error('Revoked session');
-  } catch (err) { return reply.status(401).send({ error: 'Unauthorized' }); }
+  const session = await resolveRequestSession(request, prisma);
+  if (session !== 'current') {
+    if (session === 'stale') clearStaleSessionCookie(request, reply);
+    return reply.status(401).send({ error: 'Unauthorized' });
+  }
+  applyImpersonation(request);
+  return undefined;
 });
 
 fastify.decorate('adminOnly', async (request, reply) => {
-  try {
-    await request.jwtVerify();
-    if (!(await isCurrentUserSession(prisma, request.user))) throw new Error('Revoked session');
-    if (request.user.role !== 'ADMIN') return reply.status(403).send({ error: 'Admin access required' });
-  } catch (err) { return reply.status(401).send({ error: 'Unauthorized' }); }
+  const session = await resolveRequestSession(request, prisma);
+  if (session !== 'current') {
+    if (session === 'stale') clearStaleSessionCookie(request, reply);
+    return reply.status(401).send({ error: 'Unauthorized' });
+  }
+  applyImpersonation(request);
+  if (request.user.role !== 'ADMIN') return reply.status(403).send({ error: 'Admin access required' });
+  return undefined;
 });
 
 // Infrastructure
@@ -220,14 +294,35 @@ fastify.get('/api/live', async () => ({
   revision: process.env.APP_REVISION || 'unknown',
 }));
 
-fastify.get('/api/health', async (_request, reply) => {
+// Public readiness: database + Redis decide the status code; a stale worker
+// is reported as degraded (still 200). `?strict=1` also requires the worker.
+fastify.get('/api/health', async (request, reply) => {
   const report = await checkRuntimeHealth();
-  return reply.code(report.ready ? 200 : 503).send(report);
+  const strict = isStrictHealthQuery(request.query);
+  return reply.code(healthStatusCode(report, { strict })).send(publicHealthView(report));
+});
+
+// Detailed report (failed jobs, backup, alerting, image digest): staff
+// sessions, or the deploy controller via `docker exec` on container loopback.
+fastify.get('/api/health/details', {
+  onRequest: [async function healthDetailsGuard(request, reply) {
+    if (isLoopbackPeer(request)) return;
+    await fastify.authenticate(request, reply);
+    if (reply.sent) return reply;
+    if (!HEALTH_DETAIL_ROLES.includes(request.user?.role)) {
+      return reply.status(403).send({ error: 'Staff access required', code: 'FORBIDDEN' });
+    }
+  }],
+}, async (request, reply) => {
+  const report = await checkRuntimeHealth();
+  const strict = isStrictHealthQuery(request.query);
+  return reply.code(healthStatusCode(report, { strict })).send(report);
 });
 
 // Static files
-if (env.serveBuiltSpa) {
-  await fastify.register(fastifyStatic, { root: path.join(__dirname, '../dist'), prefix: '/' });
+if (serveBuiltSpa) {
+  // Hashed /assets/* are immutable; index.html, sw.js and the manifest revalidate.
+  await fastify.register(fastifyStatic, spaStaticOptions(spaRoot));
   fastify.setNotFoundHandler((request, reply) => {
     if (!request.url.startsWith('/api/')) return reply.sendFile('index.html');
     reply.status(404).send({ error: 'Not found' });
@@ -237,57 +332,57 @@ if (env.serveBuiltSpa) {
 // Proposal PDFs are served only via authenticated /api/proposal-builder/:id/pdf
 // (and portal token routes). Do not expose storage/proposals/ as public static files.
 
-// Global Error Handler (Enterprise Grade)
-fastify.setErrorHandler((error, request, reply) => {
-  const statusCode = error.statusCode || 500;
-  request.log.error({
-    errorName: error.name,
-    statusCode,
-    route: request.routeOptions?.url || 'unknown',
-    method: request.method,
-    traceId: request.id,
-  }, 'Global request error');
-  Sentry.captureException(error, {
-    extra: {
-      route: request.routeOptions?.url || 'unknown',
-      method: request.method,
-      traceId: request.id,
-    },
-  });
-  reply.status(statusCode).send(toClientErrorBody(error, { traceId: request.id }));
-});
-
 // Socket.IO
 const io = new SocketIO(fastify.server, { cors: { origin: env.isDev ? 'http://localhost:*' : env.corsOrigins, credentials: true } });
+// Starting a support view drops the admin's sockets on every API instance
+// (Redis pub/sub; there is no shared Socket.IO adapter). The sweep is the
+// fallback if a revocation message is lost.
+// Pub/sub needs its own reconnecting connections (the producer connection
+// fails fast and would drop the SUBSCRIBE issued before Redis is ready).
+const viewSocketRevoker = createViewSocketRevoker({ io, redis: pubSubRedisSource(), logger: fastify.log });
+fastify.decorate('revokeSupportViewSockets', (userId) => viewSocketRevoker.revoke(userId));
+const stopViewSocketSweep = startViewSocketSweep(io, prisma, fastify.log);
 fastify.addHook('onClose', async () => {
+  stopViewSocketSweep();
+  await viewSocketRevoker.close();
   await new Promise((resolve) => io.close(resolve));
 });
-io.use(async (socket, next) => {
-  try {
-    // Accept an explicit auth payload for native/non-browser clients or the
-    // same httpOnly cookie used by browser sessions. Never accept query-string
-    // tokens: WebSocket upgrade URLs are routinely logged by proxies.
-    const cookieToken = fastify.parseCookie(socket.handshake.headers.cookie || '').token;
-    const token = socket.handshake.auth?.token || cookieToken;
-    if (!token) return next(new Error('Authentication required'));
-    const decoded = await fastify.jwt.verify(token);
-    if (!(await isCurrentUserSession(prisma, decoded))) {
-      return next(new Error('Invalid token'));
-    }
-    socket.userId = decoded.id || decoded.contactId;
-    socket.userRole = decoded.role;
-    socket.organizationId = decoded.organizationId;
-    socket.clientId = decoded.clientId;
-    next();
-  } catch (err) { next(new Error('Invalid token')); }
-});
+// Handshake: sessions only (src/auth/socket-auth.js). Realtime is paused
+// during a support view (#416): a handshake carrying the view cookie is
+// refused before verification, and an admin with an open view is refused
+// after the session is verified.
+io.use(createSocketAuthMiddleware({
+  verifyToken: (token) => fastify.jwt.verify(token),
+  parseCookie: (header) => fastify.parseCookie(header),
+  prisma,
+  refuseBeforeVerify: (cookies) => (socketHandshakeDuringView(cookies) ? 'Realtime is paused during a support view' : null),
+  refuseAfterVerify: async (decoded) => ((await actorHasOpenView(prisma, decoded)) ? 'Realtime is paused during a support view' : null),
+}));
 
 // Socket.IO connection handling. Without this, the client-emitted `join` /
 // `join-project` events were never handled, so room-scoped notifications
 // (io.to(`user:...`)) were never delivered. Rooms are authorized server-side.
 io.on('connection', (socket) => {
-  // Auto-join the authenticated user's own room so notify() reaches them.
-  if (socket.userId) socket.join(`user:${socket.userId}`);
+  // A support view that opened while the handshake was in flight must not
+  // leave this socket with the admin's realtime access. The socket waits in
+  // a pending room (which starting a view also drops) and every event it
+  // sends waits on a re-check; only then does it join the user's own room,
+  // so notify() reaches it.
+  const pendingRoom = `pending-user:${socket.userId}`;
+  if (socket.userId) socket.join(pendingRoom);
+  const cleared = socket.userId && socket.organizationId
+    ? actorHasOpenView(prisma, { id: socket.userId, organizationId: socket.organizationId }).then((open) => !open, () => false)
+    : Promise.resolve(true);
+  socket.use((_packet, next) => {
+    cleared.then((ok) => (ok ? next() : next(new Error('Realtime is paused during a support view'))));
+  });
+  cleared.then((ok) => {
+    if (!ok) { socket.disconnect(true); return; }
+    if (socket.userId) {
+      socket.join(`user:${socket.userId}`);
+      socket.leave(pendingRoom);
+    }
+  });
 
   // Explicit join is only allowed for the caller's own user room.
   socket.on('join', (userId) => {

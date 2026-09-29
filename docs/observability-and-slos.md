@@ -5,7 +5,10 @@ scrubbed Sentry events when `SENTRY_DSN` is set, and signed operational webhook
 alerts when `NOTIFICATION_WEBHOOK_URL` and `OBSERVABILITY_OWNER` are set. Every
 signal carries `APP_REVISION`, environment, and service role (`api` or `worker`).
 Production is observability-degraded until both a destination and a named owner
-are configured; `/api/health` exposes that state without exposing credentials.
+are configured; the staff/deploy-only `/api/health/details` view exposes that
+state (never credentials). The public `/api/health` probe reports only
+dependency states, `degraded`, and the revision; see
+`docs/deployment-and-rollback.md` "Health endpoints".
 
 ## Initial service objectives
 
@@ -38,7 +41,9 @@ Before production clearance and quarterly thereafter, perform these drills in
 staging and attach timestamps plus redacted delivery evidence to the tracking
 issue:
 
-1. Stop the staging worker and confirm readiness fails after 45 seconds.
+1. Stop the staging worker and confirm, after 45 seconds, that `/api/health`
+   stays 200 with `status: "degraded"` and `checks.worker.status:
+   "unavailable"`, while `/api/health?strict=1` (and the deploy gate) returns 503.
 2. Enqueue a deliberately failing non-client test job and confirm one
    final-attempt alert reaches `OBSERVABILITY_OWNER` within five minutes.
 3. Deploy a wrong-revision test candidate and confirm automatic rollback.

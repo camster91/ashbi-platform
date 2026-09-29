@@ -91,7 +91,7 @@ Sign off as Cameron Ashley, Ashbi Design.`;
         reminders.push({
           invoiceId: invoice.id,
           invoiceNumber: invoice.invoiceNumber,
-          error: err.message,
+          error: 'Reminder could not be generated',
         });
       }
     }

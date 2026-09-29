@@ -6,6 +6,25 @@ import { validateBody, createTaskSchema, updateTaskSchema, taskUpdateSchema, tas
 import { z } from 'zod';
 import bus, { EVENTS } from '../utils/events.js';
 
+/**
+ * Why a task's assignee or dependency reference is unacceptable, or null.
+ * `prisma` is the request-scoped client, so both lookups only see this
+ * organization's records: a user or task of another workspace reads as
+ * missing. (The tenant proxy also refuses such writes; this answers with a
+ * clear 400 instead of a generic 404.)
+ */
+async function taskReferenceProblem(prisma, { assigneeId, dependsOnId }) {
+  if (assigneeId) {
+    const assignee = await prisma.user.findFirst({ where: { id: assigneeId }, select: { id: true } });
+    if (!assignee) return 'Assignee not found in this workspace';
+  }
+  if (dependsOnId) {
+    const dependency = await prisma.task.findFirst({ where: { id: dependsOnId }, select: { id: true } });
+    if (!dependency) return 'Dependency task not found';
+  }
+  return null;
+}
+
 export default async function taskRoutes(fastify) {
   // List all tasks with filters
   fastify.get('/', {
@@ -169,6 +188,9 @@ export default async function taskRoutes(fastify) {
     if (assigneeId !== undefined) data.assigneeId = assigneeId;
     if (blockedBy !== undefined) data.blockedBy = blockedBy;
     if (dependsOnId !== undefined) data.dependsOnId = dependsOnId || null;
+
+    const referenceProblem = await taskReferenceProblem(request.prisma, { assigneeId: data.assigneeId, dependsOnId: data.dependsOnId });
+    if (referenceProblem) return reply.status(400).send({ error: referenceProblem });
 
     const prevTask = await request.prisma.task.findUnique({ where: { id } });
     const task = await request.prisma.task.update({
@@ -520,6 +542,9 @@ export default async function taskRoutes(fastify) {
       return reply.status(400).send({ error: 'A task cannot depend on itself' });
     }
 
+    const referenceProblem = await taskReferenceProblem(request.prisma, { dependsOnId });
+    if (referenceProblem) return reply.status(400).send({ error: referenceProblem });
+
     // Prevent circular dependencies
     if (dependsOnId) {
       let currentId = dependsOnId;
@@ -680,9 +705,12 @@ export default async function taskRoutes(fastify) {
   fastify.post('/:projectId/quick', {
     onRequest: [fastify.authenticate],
     preHandler: [validateBody(taskCreateQuickSchema)],
-  }, async (request) => {
+  }, async (request, reply) => {
     const { projectId } = request.params;
     const { title, assigneeId, priority = 'NORMAL', status = 'PENDING' } = request.body;
+
+    const referenceProblem = await taskReferenceProblem(request.prisma, { assigneeId });
+    if (referenceProblem) return reply.status(400).send({ error: referenceProblem });
 
     const task = await request.prisma.task.create({
       data: {

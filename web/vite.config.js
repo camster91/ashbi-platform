@@ -52,7 +52,6 @@ const nodeModule = (names) => new RegExp(`[\\\\/]node_modules[\\\\/](?:${names.j
 export const VENDOR_CHUNK_GROUPS = [
   { name: 'vendor-react', test: nodeModule(['react', 'react-dom', 'react-router', 'react-router-dom', 'scheduler']), priority: 30 },
   { name: 'vendor-query', test: nodeModule(['@tanstack']), priority: 20 },
-  { name: 'vendor-radix', test: nodeModule(['@radix-ui']), priority: 20 },
   { name: 'vendor-utils', test: nodeModule(['date-fns', 'framer-motion']), priority: 20 },
   { name: 'vendor-socket', test: nodeModule(['socket.io-client', 'engine.io-client', 'socket.io-parser', 'engine.io-parser', '@socket.io']), priority: 20 },
   { name: 'vendor-ui', test: nodeModule(['lucide-react', 'clsx', 'tailwind-merge']), priority: 10 },

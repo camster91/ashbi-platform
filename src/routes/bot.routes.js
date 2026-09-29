@@ -8,6 +8,7 @@ import { sendWebhookNotification } from '../utils/webhook.js';
 import { safeEqual } from '../utils/crypto.js';
 import { createScopedPrisma } from '../utils/prisma-tenant-proxy.js';
 import { enterRequestContext } from '../utils/request-context.js';
+import { validateBody, botTaskUpdateSchema } from '../validators/schemas.js';
 
 // Ultra-fast in-memory cache for AI requests
 const aiCache = {
@@ -71,8 +72,11 @@ export default async function botRoutes(fastify) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
 
+    // Typed `bot_access`: it is not a user session, so session verifiers
+    // (fastify.authenticate, the /api hook, sockets) refuse it. Bot routes
+    // authenticate with the BOT_SECRET bearer itself.
     const token = fastify.jwt.sign(
-      { id: 'bot', role: 'BOT', email: 'bot@system' },
+      { typ: 'bot_access', id: 'bot', role: 'BOT', email: 'bot@system' },
       { expiresIn: '30d' }
     );
 
@@ -327,13 +331,25 @@ export default async function botRoutes(fastify) {
   });
 
   // PATCH /task/:id — update a task
-  fastify.patch('/task/:id', { preHandler: requireBotAuth }, async (request, reply) => {
+  fastify.patch('/task/:id', { preHandler: [requireBotAuth, validateBody(botTaskUpdateSchema)] }, async (request, reply) => {
     const existing = await fastify.prisma.task.findUnique({ where: { id: request.params.id } });
     if (!existing) return reply.status(404).send({ error: 'Task not found' });
 
+    // Only validated task fields: never pass the request body to Prisma, or
+    // a caller could rewrite projectId, dependsOnId or nested relations.
+    const { tags, dueDate, ...fields } = request.body;
+    const data = { ...fields };
+    if (tags !== undefined) data.tags = JSON.stringify(tags);
+    if (dueDate !== undefined) data.dueDate = dueDate ? new Date(dueDate) : null;
+    if (fields.status === 'COMPLETED' && existing.status !== 'COMPLETED') data.completedAt = new Date();
+    if (fields.assigneeId) {
+      const assignee = await fastify.prisma.user.findFirst({ where: { id: fields.assigneeId }, select: { id: true } });
+      if (!assignee) return reply.status(400).send({ error: 'Assignee not found in this workspace' });
+    }
+
     const task = await fastify.prisma.task.update({
       where: { id: request.params.id },
-      data: request.body
+      data,
     });
 
     aiCache.invalidate('dashboard');
@@ -566,8 +582,10 @@ export default async function botRoutes(fastify) {
         // Fire webhook (non-blocking)
         sendWebhookNotification(notification).catch(() => {});
         // Fire HITL email for approval (non-blocking)
+        // Return the inner chain so the .catch below covers the create and the
+        // email, not only the dynamic import.
         import('../utils/hitl-email.service.js').then(({ sendApprovalHITLEmail }) => {
-          fastify.prisma.notification.create({
+          return fastify.prisma.notification.create({
             data: {
               type: 'HITL_REQUIRED',
               title: approval.title,
@@ -576,7 +594,7 @@ export default async function botRoutes(fastify) {
               data: JSON.stringify({ type: 'APPROVAL', refId: approval.id }),
             }
           }).then(hitlNotif => sendApprovalHITLEmail({ notificationId: hitlNotif.id, approval }))
-        }).catch(err => fastify.log.error('Approval HITL email error:', err.message));
+        }).catch(err => fastify.log.error({ err }, 'Approval HITL email error'));
       }
     } catch (notifErr) {
       fastify.log.error('Failed to create approval notification:', notifErr.message);
@@ -767,22 +785,6 @@ export default async function botRoutes(fastify) {
     });
 
     return { success: true, jobId: job.id, message: 'Weekly digest generation queued' };
-  });
-
-  // POST /system/restart-gateway — safely restart OpenClaw gateway via watchdog
-  fastify.post('/system/restart-gateway', { preHandler: requireBotAuth }, async (request, reply) => {
-    const watchdogScript = process.env.WATCHDOG_SCRIPT || path.join(os.homedir(), '.openclaw', 'workspace', 'watchdog', 'openclaw-watchdog.js');
-    const scriptPath = path.resolve(watchdogScript);
-    
-    if (!scriptPath.startsWith(os.homedir())) {
-      return reply.status(400).send({ error: 'Invalid watchdog path' });
-    }
-    
-    exec(`node "${scriptPath}" restart`, (err) => {
-      if (err) fastify.log.error('Watchdog restart error:', err.message);
-    });
-
-    return { status: 'restart initiated', timestamp: new Date().toISOString() };
   });
 
   // GET /system/gateway-status — check gateway health via watchdog

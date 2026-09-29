@@ -25,7 +25,7 @@ export default async function trashRoutes(fastify) {
       });
       return { success: true, ...result };
     } catch (error) {
-      if (error.statusCode) return reply.status(error.statusCode).send({ error: error.message });
+      if (error.statusCode >= 400 && error.statusCode < 500) return reply.status(error.statusCode).send({ error: error.message });
       throw error;
     }
   });
@@ -39,7 +39,7 @@ export default async function trashRoutes(fastify) {
       });
       return { success: true, ...result };
     } catch (error) {
-      if (error.statusCode) return reply.status(error.statusCode).send({ error: error.message });
+      if (error.statusCode >= 400 && error.statusCode < 500) return reply.status(error.statusCode).send({ error: error.message });
       throw error;
     }
   });
@@ -58,7 +58,10 @@ export default async function trashRoutes(fastify) {
         });
         deleted++;
       } catch (error) {
-        failures.push({ id: item.id, error: error.message });
+        // Only the service's own 4xx messages are caller-safe.
+        const safe = error.statusCode >= 400 && error.statusCode < 500;
+        if (!safe) request.log.error({ errorName: error?.name, trashId: item.id }, 'Permanent deletion failed');
+        failures.push({ id: item.id, error: safe ? error.message : 'Permanent deletion failed' });
       }
     }
 

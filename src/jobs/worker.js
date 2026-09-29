@@ -5,7 +5,8 @@ import os from 'node:os';
 
 import {
   closeQueueInfrastructure,
-  connection,
+  getWorkerConnection,
+  hydrateEmailJobData,
   QUEUES,
   scheduleEscalationCheck,
   setupRecurringJobs,
@@ -25,11 +26,17 @@ import {
   checkOverdueInvoicesForAllOrganizations,
 } from '../services/automation.service.js';
 import { resolveEmbeddingOrganizationId } from './embedding-ownership.js';
+import { checkAllEscalations, checkThreadEscalation, runForEachOrganization } from './escalation.js';
 import { dispatchDomainEvents } from '../services/domain-event-dispatcher.service.js';
 import { initSentry, Sentry } from '../observability/sentry.js';
 import { sendOperationalAlert } from '../observability/alerts.js';
+import { createShutdown, installProcessHandlers } from '../utils/process-lifecycle.js';
 
 initSentry('worker');
+
+// Workers and the heartbeat use the blocking-safe connection; producers in
+// queue.js keep their own fail-fast connection.
+const connection = getWorkerConnection();
 
 // Helper to create workers with error handling for Redis unavailability
 function createWorker(queueName, processor, options = {}) {
@@ -95,20 +102,29 @@ const emailWorker = createWorker(
     const result = await runTenantJob(
       prisma,
       job.data?.organizationId,
-      () => processEmailPipeline(job.data),
+      () => processEmailPipeline(hydrateEmailJobData(job.data)),
       backgroundPrisma,
     );
 
-    // Schedule escalation if thread was created
+    // Schedule escalation if thread was created. The email is already
+    // processed: a scheduling failure must not fail (and re-run) the job;
+    // the periodic escalation sweep still covers the thread.
     if (result.threadId) {
       const priority = result.analysis?.urgency || 'NORMAL';
       const delayHours = env.slaDefaults[priority] || 24;
-      await scheduleEscalationCheck(result.threadId, delayHours * 3600000);
+      try {
+        await scheduleEscalationCheck(result.threadId, delayHours * 3600000);
+      } catch (err) {
+        console.error(`[email] Could not schedule escalation for thread ${result.threadId}:`, err?.message);
+      }
     }
 
     return result;
   },
-  { concurrency: 5 }
+  // The pipeline is not idempotent: a stalled job (its worker died or lost
+  // the lock) is failed and kept for a deliberate replay, never re-run
+  // automatically on another worker, which could duplicate its writes.
+  { concurrency: 5, maxStalledCount: 0 }
 );
 
 // Project Health Worker
@@ -166,18 +182,30 @@ const escalationWorker = createWorker(
     if (job.name === 'check-all-escalations') {
       console.log('Checking all threads for escalation');
       const organizationIds = await resolveTenantOrganizationIds(prisma);
-      const results = [];
-      for (const organizationId of organizationIds) {
-        results.push(await runTenantJob(prisma, organizationId, () => checkAllEscalations(), backgroundPrisma));
-      }
-      return { organizations: results };
+      // Each tenant runs in isolation; one failing organization no longer
+      // aborts the sweep for the others.
+      return runForEachOrganization(
+        organizationIds,
+        (organizationId) => runTenantJob(
+          prisma,
+          organizationId,
+          () => checkAllEscalations({ prisma, slaDefaults: env.slaDefaults, logger }),
+          backgroundPrisma,
+        ),
+        {
+          logger,
+          onError: (err, organizationId) => {
+            if (env.sentryDsn) Sentry.captureException(err, { tags: { queue: QUEUES.ESCALATION }, extra: { organizationId } });
+          },
+        },
+      );
     }
 
     if (job.name === 'check-escalation' && job.data.threadId) {
       return runTenantJob(
         prisma,
         job.data?.organizationId,
-        () => checkThreadEscalation(job.data.threadId),
+        () => checkThreadEscalation(job.data.threadId, { prisma, slaDefaults: env.slaDefaults }),
         backgroundPrisma,
       );
     }
@@ -210,115 +238,6 @@ const notificationWorker = createWorker(
   },
   { concurrency: 10 }
 );
-
-/**
- * Check all threads for escalation needs
- */
-async function checkAllEscalations() {
-  const now = new Date();
-
-  // Find threads needing response that are past SLA
-  const threads = await prisma.thread.findMany({
-    where: {
-      status: 'AWAITING_RESPONSE',
-      slaBreached: false
-    },
-    include: {
-      assignedTo: true
-    }
-  });
-
-  let escalated = 0;
-
-  for (const thread of threads) {
-    const result = await checkThreadEscalation(thread.id, thread);
-    if (result.escalated) escalated++;
-  }
-
-  return { checked: threads.length, escalated };
-}
-
-/**
- * Check single thread for escalation
- */
-async function checkThreadEscalation(threadId, existingThread = null) {
-  const thread = existingThread || await prisma.thread.findUnique({
-    where: { id: threadId },
-    include: { assignedTo: true }
-  });
-
-  if (!thread || thread.status === 'RESOLVED') {
-    return { skipped: true, reason: 'Thread not found or resolved' };
-  }
-
-  const now = new Date();
-  const hoursSinceActivity = (now - new Date(thread.lastActivityAt)) / (1000 * 60 * 60);
-  const slaHours = env.slaDefaults[thread.priority] || 24;
-
-  const notifications = [];
-
-  if (hoursSinceActivity >= 4 && hoursSinceActivity < 8 && thread.assignedToId) {
-    notifications.push({
-      userId: thread.assignedToId,
-      type: 'SLA_WARNING',
-      title: 'Response needed soon',
-      message: `Thread "${thread.subject}" needs attention (${Math.round(hoursSinceActivity)}h without response)`,
-      data: { threadId }
-    });
-  }
-
-  if (hoursSinceActivity >= 8) {
-    const admins = await prisma.user.findMany({
-      where: { role: 'ADMIN', isActive: true }
-    });
-
-    for (const admin of admins) {
-      notifications.push({
-        userId: admin.id,
-        type: 'ESCALATION',
-        title: 'Thread escalation',
-        message: `Thread "${thread.subject}" has had no response for ${Math.round(hoursSinceActivity)} hours`,
-        data: { threadId, assigneeId: thread.assignedToId }
-      });
-    }
-  }
-
-  if (hoursSinceActivity >= slaHours && !thread.slaBreached) {
-    await prisma.thread.update({
-      where: { id: threadId },
-      data: { slaBreached: true }
-    });
-
-    const admins = await prisma.user.findMany({
-      where: { role: 'ADMIN', isActive: true }
-    });
-
-    for (const admin of admins) {
-      notifications.push({
-        userId: admin.id,
-        type: 'SLA_BREACH',
-        title: 'SLA BREACH',
-        message: `Thread "${thread.subject}" has breached SLA (${Math.round(hoursSinceActivity)}h without response)`,
-        data: { threadId, priority: thread.priority }
-      });
-    }
-  }
-
-  // PERFORMANCE (audit 2026-07-09, swarm finding): the previous loop
-  // issued one INSERT per notification — at 2 admins × 2 escalation paths
-  // that's 4 round-trips per escalation event. Use createMany for a
-  // single round-trip. Not in a transaction because notifications are
-  // independently-fanout; partial failure is acceptable.
-  if (notifications.length > 0) {
-    await prisma.notification.createMany({ data: notifications });
-  }
-
-  return {
-    escalated: notifications.length > 0,
-    notifications: notifications.length,
-    hoursSinceActivity: Math.round(hoursSinceActivity)
-  };
-}
 
 // Weekly Digest Worker (src/jobs/weekly-digest.js)
 const weeklyDigestWorker = createWorker(
@@ -426,34 +345,26 @@ heartbeatInterval.unref();
 
 console.log(`Workers started (${activeWorkers.length}/8 active)`);
 
-let shuttingDown = false;
-async function shutdown(signal) {
-  if (shuttingDown) return;
-  shuttingDown = true;
-  clearInterval(heartbeatInterval);
-  logger.info({ signal }, 'Worker: draining active jobs');
-  await Promise.all(activeWorkers.map((worker) => worker.close()));
-  await closeQueueInfrastructure();
-  await prisma.$disconnect();
-  logger.info('Worker: shutdown complete');
-}
-
-process.on('SIGINT', () => shutdown('SIGINT').then(() => process.exit(0)).catch((err) => {
-  logger.fatal({ err }, 'Worker: graceful shutdown failed');
-  process.exit(1);
-}));
-process.on('SIGTERM', () => shutdown('SIGTERM').then(() => process.exit(0)).catch((err) => {
-  logger.fatal({ err }, 'Worker: graceful shutdown failed');
-  process.exit(1);
-}));
-
-process.on('unhandledRejection', (reason) => {
-  logger.error({ err: reason }, 'Worker: unhandled promise rejection');
-  if (env.sentryDsn) Sentry.captureException(reason);
+// Same lifecycle as the API (src/utils/process-lifecycle.js): one idempotent
+// drain, so a second signal joins it instead of exiting mid-drain. The
+// deadline sits under the container's 120s stop timeout.
+const shutdown = createShutdown({
+  logger,
+  timeoutMs: 110_000,
+  steps: [
+    ['heartbeat', () => clearInterval(heartbeatInterval)],
+    ['workers', async () => {
+      logger.info('Worker: draining active jobs');
+      await Promise.all(activeWorkers.map((worker) => worker.close()));
+    }],
+    ['queues', () => closeQueueInfrastructure()],
+    ['database', () => prisma.$disconnect()],
+  ],
+  flush: env.sentryDsn ? () => Sentry.flush(2_000) : undefined,
 });
 
-process.on('uncaughtException', (err) => {
-  logger.fatal({ err }, 'Worker: uncaught exception');
-  if (env.sentryDsn) Sentry.captureException(err);
-  shutdown('uncaughtException').finally(() => process.exit(1));
+installProcessHandlers({
+  shutdown,
+  logger,
+  captureException: env.sentryDsn ? (error) => Sentry.captureException(error) : undefined,
 });

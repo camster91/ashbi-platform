@@ -82,6 +82,8 @@ test('sending an invoice emits invoice.sent with the correlation id', async (t) 
     invoice: {
       findUnique: async () => draftInvoice(),
       update: async ({ data }) => ({ ...draftInvoice(), ...data, client: { id: 'client-1', name: 'Acme' } }),
+      // Send claims DRAFT -> SENT before any side effect.
+      updateMany: async () => ({ count: 1 }),
     },
   });
   const response = await app.inject({ method: 'POST', url: '/inv-1/send', payload: {} });
@@ -103,7 +105,9 @@ test('a failing audit store does not fail the invoice send', async (t) => {
     auditEvent: auditStore({ failing: true }),
     invoice: {
       findUnique: async () => draftInvoice(),
-      update: async ({ data }) => ({ ...draftInvoice(), ...data }),
+      // The send already claimed DRAFT -> SENT, so the stored row is SENT.
+      update: async ({ data }) => ({ ...draftInvoice(), status: 'SENT', ...data }),
+      updateMany: async () => ({ count: 1 }),
     },
   });
   const response = await app.inject({ method: 'POST', url: '/inv-1/send', payload: {} });
@@ -178,7 +182,12 @@ test('bulk actions emit one event per changed invoice', async (t) => {
     invoice: {
       findUnique: async ({ where }) => invoices[where.id] ?? null,
       update: async ({ where, data }) => ({ ...invoices[where.id], ...data }),
-      updateMany: async ({ where }) => ({ count: where.status.notIn.includes(invoices[where.id]?.status) ? 0 : 1 }),
+      updateMany: async ({ where }) => {
+        const status = invoices[where.id]?.status;
+        // Send claims `status: 'DRAFT'`; settlement guards `status: { notIn }`.
+        const matches = typeof where.status === 'string' ? status === where.status : !where.status.notIn.includes(status);
+        return { count: matches ? 1 : 0 };
+      },
     },
     invoicePayment: { create: async ({ data }) => ({ id: `pay-${data.invoiceId}`, ...data }) },
     client: { findUnique: async () => ({ organizationId: 'org-1' }) },
@@ -201,8 +210,10 @@ test('bulk actions emit one event per changed invoice', async (t) => {
   audit.events.length = 0;
   invoices['inv-a'] = draftInvoice({ id: 'inv-a' });
   const sent = await app.inject({ method: 'POST', url: '/bulk/send', payload: { ids: ['inv-a', 'inv-b'] } });
-  assert.deepEqual(sent.json(), { sent: 1 });
-  assert.deepEqual(audit.events.map((event) => [event.action, event.entityId]), [['invoice.sent', 'inv-a']]);
+  // Bulk send goes through the single-send path and reports each item.
+  assert.equal(sent.json().sent, 1);
+  assert.deepEqual(sent.json().results.map((result) => [result.id, result.ok]), [['inv-a', true], ['inv-b', false]]);
+  assert.deepEqual(audit.events.map((event) => [event.action, event.entityId, event.metadata.bulk]), [['invoice.sent', 'inv-a', true]]);
 });
 
 test('a settled Stripe checkout is audited as a webhook actor; a replay is not', async () => {
@@ -533,14 +544,14 @@ test('a client deleting a portal document is audited as a CLIENT actor', async (
     contact: { findFirst: async () => ({ id: 'contact-a', email: portalUser.email, clientId: 'client-a' }) },
     client: { findFirst: async () => ({ id: 'client-a', organizationId: 'org-a' }) },
     attachment: {
-      findUnique: async () => ({ id: 'doc-1', entityType: 'PROJECT', entityId: 'proj-1', path: 'uploads/none-such-file', mimeType: 'application/pdf', size: 42, filename: 'secret-plan.pdf' }),
+      findUnique: async () => ({ id: 'doc-1', entityType: 'PROJECT', entityId: 'proj-1', path: 'uploads/none-such-file', mimeType: 'application/pdf', size: 42, filename: '0b6c7a4e-stored.pdf', originalName: 'secret-plan.pdf', uploadedById: 'portal-user' }),
       delete: async () => ({}),
     },
     project: { findFirst: async () => ({ id: 'proj-1' }) },
     reviewSession: { count: async () => 0 },
   };
   const app = await buildApp(t, clientPortalRoutes, prisma, { user: null, jwtPlugins: true });
-  const token = app.jwt.sign({ ...portalUser, contactId: 'contact-a' }, { expiresIn: '1h' });
+  const token = app.jwt.sign({ ...portalUser, contactId: 'contact-a', typ: 'client_session' }, { expiresIn: '1h' });
   const response = await app.inject({ method: 'DELETE', url: '/documents/doc-1', headers: { authorization: `Bearer ${token}` } });
   assert.equal(response.statusCode, 200, response.body);
   assert.equal(audit.events.length, 1);
@@ -548,5 +559,6 @@ test('a client deleting a portal document is audited as a CLIENT actor', async (
     [audit.events[0].action, audit.events[0].actorType, audit.events[0].actorUserId, audit.events[0].organizationId, audit.events[0].entityType],
     ['client_portal.document_deleted', 'CLIENT', 'portal-user', 'org-a', 'attachment'],
   );
-  assert.deepEqual(audit.events[0].metadata, { projectId: 'proj-1', clientId: 'client-a', mimeType: 'application/pdf', size: 42 });
+  assert.deepEqual(audit.events[0].metadata, { projectId: 'proj-1', clientId: 'client-a', mimeType: 'application/pdf', size: 42, storedFilename: '0b6c7a4e-stored.pdf', fileRetained: true });
+  assert.doesNotMatch(JSON.stringify(audit.events[0]), /secret-plan/);
 });

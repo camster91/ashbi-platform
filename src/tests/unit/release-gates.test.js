@@ -95,6 +95,15 @@ describe('mandatory release gates', () => {
     assert.ok(validateReleaseGates(root).some((failure) => failure.includes('worker readiness')));
   });
 
+  it('fails closed when the rollback fallback to the public health probe is removed', () => {
+    const root = copyWorkflows();
+    const deploy = path.join(root, 'scripts', 'deploy-vps-direct.sh');
+    const source = fs.readFileSync(deploy, 'utf8');
+    assert.match(source, /\|\| curl -fsS --max-time 5 "http:\/\/127\.0\.0\.1:\$\{HOST_PORT\}\/api\/health"/);
+    fs.writeFileSync(deploy, source.replace(/\n\s*\|\| curl -fsS --max-time 5 "http:\/\/127\.0\.0\.1:\$\{HOST_PORT\}\/api\/health" 2>\/dev\/null \\/, ''));
+    assert.ok(validateReleaseGates(root).some((failure) => failure.includes('operator rollback')));
+  });
+
   it('fails closed when dependency-aware readiness is removed from direct deployment', () => {
     const root = copyWorkflows();
     const deploy = path.join(root, 'scripts', 'deploy-vps-direct.sh');

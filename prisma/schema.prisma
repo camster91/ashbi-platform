@@ -2,7 +2,7 @@
 
 generator client {
   provider        = "prisma-client-js"
-  previewFeatures = ["postgresqlExtensions"]
+  previewFeatures = ["postgresqlExtensions", "partialIndexes"]
 }
 
 datasource db {
@@ -70,7 +70,11 @@ model Organization {
   aiProviderConnection AiProviderConnection?
   aiUsageRecords  AiUsageRecord[]
   reviewSessions  ReviewSession[]
+  invoices        Invoice[]
+  documentNumberSequences DocumentNumberSequence[]
   domainEvents    DomainEvent[]
+  impersonationSessions ImpersonationSession[]
+  breakGlassGrants      BreakGlassGrant[]
 
   @@map("organizations")
 }
@@ -256,6 +260,7 @@ model Contact {
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@unique([email, clientId])
+  @@index([clientId])
   @@map("contacts")
 }
 
@@ -385,6 +390,7 @@ model Task {
   @@index([dependsOnId])
   @@index([assigneeId])
   @@index([projectId, status])
+  @@index([milestoneId])
   @@map("tasks")
 }
 
@@ -400,6 +406,10 @@ model Thread {
   snoozedUntil    DateTime?
   slaDeadline     DateTime?
   slaBreached     Boolean   @default(false)
+  // Escalation dedupe: highest level notified (1 = SLA_WARNING,
+  // 2 = ESCALATION) in the activity cycle that began before lastEscalatedAt.
+  lastEscalationLevel Int       @default(0)
+  lastEscalatedAt     DateTime?
   aiAnalysis      String? // JSON: full AI analysis result
   matchConfidence Float     @default(0)
   matchReason     String?
@@ -446,7 +456,7 @@ model Message {
   // Relations
   thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
 
-  @@index([threadId])
+  @@index([threadId, receivedAt])
   @@index([receivedAt])
   @@map("messages")
 }
@@ -462,6 +472,7 @@ model InternalNote {
   thread Thread @relation(fields: [threadId], references: [id], onDelete: Cascade)
   author User   @relation(fields: [authorId], references: [id])
 
+  @@index([threadId])
   @@map("internal_notes")
 }
 
@@ -489,6 +500,7 @@ model Response {
 
   @@index([status])
   @@index([createdAt])
+  @@index([threadId])
   @@map("responses")
 }
 
@@ -602,6 +614,7 @@ model ChatMessage {
   @@index([projectId, visibility, createdAt])
   @@index([projectId, externalSource, externalMessageId])
   @@index([projectId, externalSource, externalThreadId])
+  @@index([parentId])
   @@map("chat_messages")
 }
 
@@ -617,6 +630,7 @@ model ChatReaction {
   user    User        @relation(fields: [userId], references: [id])
 
   @@unique([messageId, userId, emoji])
+  @@index([userId])
   @@map("chat_reactions")
 }
 
@@ -645,6 +659,7 @@ model Note {
 
   @@index([projectId, parentId])
   @@index([projectId, isTemplate])
+  @@index([parentId])
   @@map("notes")
 }
 
@@ -666,6 +681,7 @@ model Milestone {
   tasks   Task[]  @relation("MilestoneTasks")
 
   @@index([deletedAt])
+  @@index([projectId])
   @@map("milestones")
 }
 
@@ -705,6 +721,7 @@ model TimeEntry {
   @@index([invoiceId])
   @@index([reviewStatus])
   @@index([userId, date])
+  @@index([taskId])
   @@map("time_entries")
 }
 
@@ -766,6 +783,7 @@ model TaskComment {
   task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
   author User @relation("CommentAuthor", fields: [authorId], references: [id])
 
+  @@index([taskId])
   @@map("task_comments")
 }
 
@@ -812,6 +830,7 @@ model EventAttendee {
   user  User          @relation(fields: [userId], references: [id])
 
   @@unique([eventId, userId])
+  @@index([userId])
   @@map("event_attendees")
 }
 
@@ -865,6 +884,7 @@ model Report {
   // Relations
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
+  @@index([clientId])
   @@map("reports")
 }
 
@@ -958,6 +978,7 @@ model Proposal {
   @@index([status])
   @@index([clientId, status])
   @@index([validUntil])
+  @@index([projectId])
   @@map("proposals")
 }
 
@@ -970,6 +991,7 @@ model ProposalLineItem {
   proposalId  String
   proposal    Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
 
+  @@index([proposalId])
   @@map("proposal_line_items")
 }
 
@@ -1018,7 +1040,13 @@ model Contract {
 
 model Invoice {
   id            String    @id @default(cuid())
-  invoiceNumber String    @unique
+  // Unique per organization (see @@unique below), allocated from
+  // DocumentNumberSequence inside the create transaction.
+  invoiceNumber String
+  // Owning organization, always equal to client.organizationId: the app sets
+  // it and a database trigger (invoices_set_organization_id) derives it from
+  // the client on insert/client change. Nullable only for rollout safety.
+  organizationId String?
   status        String    @default("DRAFT") // DRAFT | SENT | PAID | OVERDUE | VOID
   title         String?
   dueDate       DateTime?
@@ -1026,7 +1054,7 @@ model Invoice {
 
   // Bonsai migration fields
   bonsaiInvoiceId String? // Original Bonsai invoice ID
-  currency        String  @default("USD") // USD | CAD
+  currency        String  @default("CAD") // ISO 4217 (src/utils/money.js); shown on UI/PDF/email and charged by Stripe
   amountUsd       Float? // For multi-currency tracking
   amountCad       Float?
   daysToPayActual Int? // Historical: actual days client took to pay
@@ -1064,7 +1092,10 @@ model Invoice {
   isRecurring             Boolean   @default(false)
   recurringInterval       String? // MONTHLY | QUARTERLY | ANNUALLY
   recurringNextDate       DateTime?
+  // Overdue job: last reminder claimed/sent, and when the single 7-day
+  // escalation went out (escalated invoices leave the job's working set).
   reminderSentAt          DateTime?
+  overdueEscalatedAt      DateTime?
   viewToken               String?   @unique @default(cuid())
   publicAccessExpiresAt   DateTime?
   publicAccessRevokedAt   DateTime?
@@ -1075,21 +1106,41 @@ model Invoice {
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 
-  client      Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  createdBy   User              @relation("InvoiceCreator", fields: [createdById], references: [id])
-  lineItems   InvoiceLineItem[]
-  payments    InvoicePayment[]
-  timeEntries TimeEntry[]
-  expenses    Expense[]
+  client       Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  organization Organization?     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User              @relation("InvoiceCreator", fields: [createdById], references: [id])
+  lineItems    InvoiceLineItem[]
+  payments     InvoicePayment[]
+  timeEntries  TimeEntry[]
+  expenses     Expense[]
   // Soft delete
   deletedAt   DateTime?
 
   // Autosave draft
   draftData String? // JSON of unsaved form data
 
+  @@unique([organizationId, invoiceNumber])
   @@index([status, dueDate])
+  @@index([status, overdueEscalatedAt, dueDate])
   @@index([clientId, status])
   @@map("invoices")
+}
+
+// Per-organization document counters (invoice numbers today). A row is
+// incremented atomically (INSERT ... ON CONFLICT DO UPDATE ... RETURNING)
+// inside the transaction that creates the document, so concurrent creates
+// get distinct consecutive numbers and a rolled-back create frees its number.
+model DocumentNumberSequence {
+  organizationId String
+  kind           String // INVOICE
+  period         Int // calendar year (UTC) the numbers belong to
+  lastValue      Int
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@id([organizationId, kind, period])
+  @@map("document_number_sequences")
 }
 
 model InvoiceLineItem {
@@ -1103,6 +1154,7 @@ model InvoiceLineItem {
   invoiceId   String
   invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
+  @@index([invoiceId])
   @@map("invoice_line_items")
 }
 
@@ -1111,13 +1163,18 @@ model InvoicePayment {
   amount        Float
   method        String   @default("BANK") // STRIPE | BANK | TRANSFER | CHEQUE | CASH | OTHER (legacy rows may hold CHECK)
   notes         String?
-  transactionId String?  @unique
+  // Stripe payment intent/session id, or a manual bank/cheque reference.
+  // Only Stripe ids are unique (partial index below): manual references may
+  // legitimately repeat across invoices.
+  transactionId String?
   paidAt        DateTime @default(now())
   invoiceId     String
   createdAt     DateTime @default(now())
 
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
+  @@unique([transactionId], map: "invoice_payments_stripe_transactionId_key", where: raw("method = 'STRIPE'"))
+  @@index([invoiceId])
   @@map("invoice_payments")
 }
 
@@ -1400,6 +1457,7 @@ model EmailTriageDraft {
 
   item EmailTriageItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
+  @@index([itemId])
   @@map("email_triage_drafts")
 }
 
@@ -1416,6 +1474,8 @@ model AiTeamMessage {
   project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
 
   @@index([agentRole, createdAt])
+  @@index([clientId])
+  @@index([projectId])
   @@map("ai_team_messages")
 }
 
@@ -1485,6 +1545,7 @@ model RevenueSnapshot {
   client Client? @relation(fields: [clientId], references: [id])
 
   @@unique([month, clientId])
+  @@index([clientId])
   @@map("revenue_snapshots")
 }
 
@@ -1510,6 +1571,7 @@ model Approval {
   @@index([status])
   @@index([type])
   @@index([createdAt])
+  @@index([projectId])
   @@map("approvals")
 }
 
@@ -1567,6 +1629,7 @@ model ClientEmailMapping {
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   @@unique([emailAddress, clientId])
+  @@index([clientId])
   @@map("client_email_mappings")
 }
 
@@ -1580,6 +1643,7 @@ model PushSubscription {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("push_subscriptions")
 }
 
@@ -1604,6 +1668,7 @@ model AshChatMessage {
   content        String          @db.Text
   createdAt      DateTime        @default(now())
 
+  @@index([conversationId])
   @@map("ash_chat_messages")
 }
 
@@ -1637,6 +1702,7 @@ model IntakeForm {
   client    Client?              @relation(fields: [clientId], references: [id])
   responses IntakeFormResponse[]
 
+  @@index([clientId])
   @@map("intake_forms")
 }
 
@@ -1651,6 +1717,7 @@ model IntakeFormResponse {
 
   form IntakeForm @relation(fields: [formId], references: [id], onDelete: Cascade)
 
+  @@index([formId])
   @@map("intake_form_responses")
 }
 
@@ -1757,6 +1824,7 @@ model CreativeBrief {
   project Project? @relation(fields: [projectId], references: [id])
 
   @@index([clientId])
+  @@index([projectId])
   @@map("creative_briefs")
 }
 
@@ -1797,6 +1865,7 @@ model Asset {
 
   client Client? @relation(fields: [clientId], references: [id])
 
+  @@index([clientId])
   @@map("assets")
 }
 
@@ -1828,9 +1897,8 @@ model TimeSession {
   duration    Int       @default(0) // Duration in minutes (calculated on stop)
   description String?
   billable    Boolean   @default(true)
-  // True if timer is currently running. At most one per user: enforced by the
-  // partial unique index time_sessions_one_running_per_user (migration
-  // 20260927040000_timer_time_entries), which Prisma cannot express.
+  // True if timer is currently running. At most one per user (partial unique
+  // index below, created by migration 20260927040000_timer_time_entries).
   isRunning   Boolean   @default(false)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -1843,6 +1911,8 @@ model TimeSession {
   @@index([userId])
   @@index([projectId])
   @@index([isRunning])
+  @@index([taskId])
+  @@unique([userId], map: "time_sessions_one_running_per_user", where: raw("\"isRunning\" = true"))
   @@map("time_sessions")
 }
 
@@ -1875,6 +1945,7 @@ model ClientInvitation {
 
   client Client @relation(fields: [clientId], references: [id])
 
+  @@index([clientId])
   @@map("client_invitations")
 }
 
@@ -1898,7 +1969,57 @@ model ApiKey {
 
   user User @relation(fields: [userId], references: [id])
 
+  @@index([userId])
   @@map("api_keys")
+}
+
+// Audited support impersonation (#416, docs/privileged-actions.md): an ADMIN
+// views the app as a non-admin staff (TEAM/STAFF) or CLIENT member of the same organization, read-only
+// and for a fixed, non-renewable window. Actor and subject carry no FK so the
+// record outlives either account; the audit trail is in audit_events.
+model ImpersonationSession {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actorUserId    String
+  subjectUserId  String
+  subjectRole    String // TEAM, STAFF or CLIENT (CHECK constraint)
+  reason         String // 10 to 500 characters (CHECK constraint)
+  readOnly       Boolean      @default(true)
+  startedAt      DateTime     @default(now())
+  expiresAt      DateTime // at most 60 minutes after startedAt (CHECK constraint)
+  endedAt        DateTime?
+  endReason      String? // stopped, expired, superseded, signed_out, revoked_* (CHECK constraint)
+  endedById      String? // No FK: history must outlive the actor account
+
+  @@index([organizationId, startedAt])
+  @@index([actorUserId, endedAt])
+  @@index([subjectUserId, endedAt])
+  @@map("impersonation_sessions")
+}
+
+// Emergency (break-glass) recovery of an organization's administrator access
+// (#416, docs/privileged-actions.md). Issued only by the operator CLI
+// scripts/break-glass.mjs when BREAK_GLASS_ENABLED=true; single use and short
+// lived. Only the SHA-256 of the token is stored.
+model BreakGlassGrant {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  targetUserId   String // No FK: history must outlive the account
+  operatorId     String // Platform operator user id (PLATFORM_OPERATOR_USER_IDS); may belong to another organization
+  reason         String // 10 to 500 characters (CHECK constraint)
+  promoteToAdmin Boolean      @default(false)
+  tokenHash      String       @unique
+  issuedByOsUser String // OS user the operator CLI ran as (the operator id is only claimed)
+  issuedFromHost String // Host name the operator CLI ran on
+  createdAt      DateTime     @default(now())
+  expiresAt      DateTime // at most 60 minutes after createdAt (CHECK constraint)
+  redeemedAt     DateTime?
+  revokedAt      DateTime?
+
+  @@index([organizationId, createdAt])
+  @@map("break_glass_grants")
 }
 
 // Confirmation and audit ledger for actions requested through the tenant API
@@ -1955,7 +2076,12 @@ model Estimate {
   tax         Float     @default(0)
   total       Float     @default(0)
   validUntil  DateTime?
+  // Public link capability: rotated to a 256-bit token on send and valid only
+  // until publicAccessExpiresAt (null = never issued) unless revoked. The
+  // cuid default is a placeholder that no public route accepts.
   viewToken   String    @unique @default(cuid())
+  publicAccessExpiresAt DateTime?
+  publicAccessRevokedAt DateTime?
   sentAt      DateTime?
   // Email delivery tracking, updated by the signed Mailgun events webhook
   deliveryMessageId String?
@@ -1985,6 +2111,7 @@ model RateCard {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([clientId])
   @@map("rate_cards")
 }
 
@@ -2105,6 +2232,7 @@ model SlackImportRecord {
   @@index([organizationId, projectId])
   @@index([runId])
   @@index([chatMessageId])
+  @@index([projectId])
   @@map("slack_import_records")
 }
 
@@ -2151,6 +2279,7 @@ model SlackChannelMapping {
 
   @@unique([installationId, channelId])
   @@index([organizationId, projectId])
+  @@index([projectId])
   @@map("slack_channel_mappings")
 }
 
@@ -2233,6 +2362,7 @@ model WPSite {
 
   @@index([organizationId])
   @@index([status])
+  @@index([clientId])
   @@map("wp_sites")
 }
 
@@ -2304,6 +2434,7 @@ model WPAlert {
   @@index([siteUrl])
   @@index([alertType])
   @@index([createdAt])
+  @@index([siteId])
   @@map("wp_alerts")
 }
 
@@ -2444,6 +2575,7 @@ model ReviewSession {
 
   @@index([organizationId, projectId, createdAt])
   @@index([attachmentId])
+  @@index([projectId])
   @@map("review_sessions")
 }
 
@@ -2534,4 +2666,27 @@ model MailgunWebhookReceipt {
 
   @@index([receivedAt])
   @@map("mailgun_webhook_receipts")
+}
+
+// Single-use guard for client-portal magic links: the jti of each redeemed
+// link. Holds no tenant data (only the random link id), so it is global.
+model ClientPortalLinkRedemption {
+  id         String   @id @default(cuid())
+  jti        String   @unique
+  expiresAt  DateTime
+  redeemedAt DateTime @default(now())
+
+  @@index([expiresAt])
+  @@map("client_portal_link_redemptions")
+}
+
+// Replay guard for the signed inbound email webhook (POST /api/webhooks/email):
+// each accepted signature is recorded once. Holds no tenant data, so it is global.
+model EmailWebhookReceipt {
+  id         String   @id @default(cuid())
+  signature  String   @unique
+  receivedAt DateTime @default(now())
+
+  @@index([receivedAt])
+  @@map("email_webhook_receipts")
 }

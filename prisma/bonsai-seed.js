@@ -244,10 +244,12 @@ async function main() {
     const sentAt = inv.status !== 'DRAFT' ? issueDate : null;
 
     try {
-      await prisma.invoice.upsert({
-        where: { invoiceNumber: inv.number },
-        update: {},
-        create: {
+      // Invoice numbers are unique per organization (not globally), so match
+      // on the client's invoices before creating.
+      const existing = await prisma.invoice.findFirst({ where: { invoiceNumber: inv.number, clientId } });
+      if (existing) { invoiceCount++; continue; }
+      await prisma.invoice.create({
+        data: {
           invoiceNumber: inv.number,
           status: inv.status,
           issueDate,

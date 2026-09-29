@@ -85,7 +85,7 @@ export default async function proposalBuilderRoutes(fastify) {
       };
     } catch (error) {
       console.error('Error generating proposal:', error);
-      return reply.status(500).send({ error: 'Failed to generate proposal', message: error.message });
+      return reply.status(500).send({ error: 'Failed to generate proposal' });
     }
   });
 
@@ -176,7 +176,7 @@ export default async function proposalBuilderRoutes(fastify) {
       };
     } catch (error) {
       console.error('Error sending proposal:', error);
-      return reply.status(500).send({ error: 'Failed to send proposal', message: error.message });
+      return reply.status(500).send({ error: 'Failed to send proposal' });
     }
   });
 
@@ -215,7 +215,7 @@ export default async function proposalBuilderRoutes(fastify) {
       return pdfBuffer;
     } catch (error) {
       console.error('Error generating PDF:', error);
-      return reply.status(500).send({ error: 'Failed to generate PDF', message: error.message });
+      return reply.status(500).send({ error: 'Failed to generate PDF' });
     }
   });
 
@@ -260,7 +260,6 @@ export default async function proposalBuilderRoutes(fastify) {
       const status = error.message.includes('not found') ? 404 : 500;
       return reply.status(status).send({
         error: error.message.includes('not found') ? 'Proposal not found' : 'Failed to get proposal',
-        message: error.message
       });
     }
   });
@@ -295,7 +294,7 @@ export default async function proposalBuilderRoutes(fastify) {
       };
     } catch (error) {
       console.error('Error updating proposal:', error);
-      return reply.status(500).send({ error: 'Failed to update proposal', message: error.message });
+      return reply.status(500).send({ error: 'Failed to update proposal' });
     }
   });
 
@@ -311,7 +310,7 @@ export default async function proposalBuilderRoutes(fastify) {
       return stats;
     } catch (error) {
       console.error('Error getting proposal stats:', error);
-      return reply.status(500).send({ error: 'Failed to get stats', message: error.message });
+      return reply.status(500).send({ error: 'Failed to get stats' });
     }
   });
 
@@ -333,7 +332,7 @@ export default async function proposalBuilderRoutes(fastify) {
       };
     } catch (error) {
       console.error('Error accepting proposal:', error);
-      return reply.status(500).send({ error: 'Failed to accept proposal', message: error.message });
+      return reply.status(500).send({ error: 'Failed to accept proposal' });
     }
   });
 

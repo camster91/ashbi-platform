@@ -4,6 +4,7 @@ import bcrypt from 'bcrypt';
 import { validateBody, teamInviteSchema, teamResetPasswordSchema, teamUpdateSchema } from '../validators/schemas.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { requireRecentAuth } from '../auth/reauth.js';
+import { revokeImpersonationsForUser } from '../auth/impersonation.js';
 
 /**
  * preHandler for PUT /:id: changing a member's role or deactivating /
@@ -12,6 +13,15 @@ import { requireRecentAuth } from '../auth/reauth.js';
  * capacity) do not. Compares against the stored state, so a form that
  * resubmits the unchanged role is not prompted.
  */
+/**
+ * preHandler for POST /: creating an ADMIN requires step-up
+ * re-authentication; other roles are not prompted.
+ */
+async function requireRecentAuthForAdminCreation(request, reply) {
+  if ((request.body?.role ?? 'TEAM') !== 'ADMIN') return undefined;
+  return requireRecentAuth(request, reply);
+}
+
 async function requireRecentAuthForAccessChange(request, reply) {
   const { role, isActive } = request.body || {};
   if (!role && isActive === undefined) return undefined;
@@ -77,7 +87,7 @@ export default async function teamRoutes(fastify) {
   // Create team member (admin only)
   fastify.post('/', {
     onRequest: [fastify.adminOnly],
-    preHandler: validateBody(teamInviteSchema),
+    preHandler: [validateBody(teamInviteSchema), requireRecentAuthForAdminCreation],
   }, async (request, reply) => {
     const { email, password, name, role = 'TEAM', skills = [], capacity = 100 } = request.body;
 
@@ -105,6 +115,12 @@ export default async function teamRoutes(fastify) {
         capacity: true,
         isActive: true
       }
+    });
+
+    await recordRequestAuditEvent(request.prisma, request, {
+      action: 'user.created',
+      entityId: user.id,
+      metadata: { role: user.role, via: 'team' },
     });
 
     return reply.status(201).send({
@@ -214,6 +230,12 @@ export default async function teamRoutes(fastify) {
         metadata: { fromActive: before.isActive, toActive: member.isActive },
       });
     }
+    // A support view by or of this member ends with their access change (#416).
+    if (before && role && before.role !== member.role) {
+      await revokeImpersonationsForUser(request.prisma, request, member.id, 'revoked_role_change');
+    } else if (before && before.isActive && member.isActive === false) {
+      await revokeImpersonationsForUser(request.prisma, request, member.id, 'revoked_deactivated');
+    }
 
     return {
       ...member,
@@ -297,6 +319,8 @@ export default async function teamRoutes(fastify) {
       entityId: id,
       metadata: { method: 'admin_reset', apiKeysRevoked: revokedKeys.count },
     });
+    // And any support view by or of them (#416).
+    await revokeImpersonationsForUser(request.prisma, request, id, 'revoked_password_reset');
 
     return { success: true };
   });

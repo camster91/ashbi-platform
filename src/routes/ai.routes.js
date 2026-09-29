@@ -90,7 +90,6 @@ export default async function aiRoutes(fastify) {
       fastify.log.error('AI draft error:', error);
       return reply.status(500).send({
         error: 'Failed to generate response',
-        message: error.message
       });
     }
   });
@@ -162,7 +161,6 @@ Respond with JSON:
       fastify.log.error('AI refine error:', error);
       return reply.status(500).send({
         error: 'Failed to refine response',
-        message: error.message
       });
     }
   });
@@ -251,7 +249,6 @@ Provide a helpful, concise answer.`;
       fastify.log.error('AI ask error:', error);
       return reply.status(500).send({
         error: 'Failed to get answer',
-        message: error.message
       });
     }
   });
@@ -733,7 +730,6 @@ Provide a 2-3 sentence summary of the project's current state.`;
       fastify.log.error('AI summarize error:', error);
       return reply.status(500).send({
         error: 'Failed to generate summary',
-        message: error.message
       });
     }
   });

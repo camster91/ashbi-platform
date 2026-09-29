@@ -54,8 +54,8 @@ this order:
 
 `identity/register-routes.js` also re-exports `authenticateApiKey`, which the
 factory decorates as `authenticateWithApiKey`, so the factory depends only on
-domains. The inline `/api/live` and `/api/health` probes stay in the factory
-because they are infrastructure, not a routes module.
+domains. The inline `/api/live`, `/api/health` and `/api/health/details` probes
+stay in the factory because they are infrastructure, not a routes module.
 
 ### Ordering rules
 

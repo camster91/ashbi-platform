@@ -1,7 +1,9 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth, AuthProvider } from './hooks/useAuth';
+import RateLimitNotice from './components/RateLimitNotice';
 import ErrorBoundary from './components/ErrorBoundary';
+import ImpersonationBanner from './components/ImpersonationBanner';
 import { getPreloadedLogin } from './lib/initial-route';
 import { ToastProvider, useToast } from './hooks/useToast';
 
@@ -17,6 +19,7 @@ function LoginRoute() {
 const UiLab = lazy(() => import('./pages/UiLab'));
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
+const BreakGlass = lazy(() => import('./pages/BreakGlass'));
 const Portal = lazy(() => import('./pages/Portal'));
 const PortalProposal = lazy(() => import('./pages/PortalProposal'));
 const PortalContract = lazy(() => import('./pages/PortalContract'));
@@ -35,7 +38,7 @@ function QueryRoute({ children }) {
 
 function RootRedirect() {
   const { user, isLoading, authState, checkAuth } = useAuth();
-  if (isLoading) return <PageLoader />;
+  if (isLoading) return <PageLoader authState={authState} />;
   if (authState.status === 'error') return <AuthCheckFailure authState={authState} onRetry={checkAuth} />;
   return user ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />;
 }
@@ -92,11 +95,14 @@ const RateCards = lazy(() => import('./pages/RateCards'));
 // Side-nav targets that previously had no route (UX audit finding)
 const Trash = lazy(() => import('./pages/Trash'));
 
-function PageLoader() {
+function PageLoader({ authState }) {
   return (
-    <div role="status" aria-live="polite" aria-label="Checking your session" className="flex items-center justify-center min-h-[60vh] gap-3 text-muted-foreground">
-      <div aria-hidden="true" className="animate-spin motion-reduce:animate-none rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      <span>Checking your session…</span>
+    <div className="min-h-[60vh] flex flex-col items-center justify-center gap-2">
+      <div role="status" aria-live="polite" aria-label="Checking your session" className="flex items-center justify-center gap-3 text-muted-foreground">
+        <div aria-hidden="true" className="animate-spin motion-reduce:animate-none rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <span>Checking your session…</span>
+      </div>
+      <RateLimitNotice authState={authState} />
     </div>
   );
 }
@@ -135,9 +141,11 @@ function AuthCheckFailure({ authState, onRetry }) {
 function PrivateRoute({ children }) {
   const { user, isLoading, authState, checkAuth } = useAuth();
   const location = useLocation();
-  if (isLoading) return <PageLoader />;
+  if (isLoading) return <PageLoader authState={authState} />;
   if (authState.status === 'error') return <AuthCheckFailure authState={authState} onRetry={checkAuth} />;
-  return user ? children : <Navigate to="/login" replace state={{ reason: authState.reason, message: authState.message, returnTo: safePrivateReturn(location) }} />;
+  return user
+    ? <><RateLimitNotice authState={authState} />{children}</>
+    : <Navigate to="/login" replace state={{ reason: authState.reason, message: authState.message, returnTo: safePrivateReturn(location) }} />;
 }
 
 function safePrivateReturn(location) {
@@ -147,7 +155,7 @@ function safePrivateReturn(location) {
 function AdminRoute({ children }) {
   const { user, isLoading, authState, checkAuth } = useAuth();
   const location = useLocation();
-  if (isLoading) return <PageLoader />;
+  if (isLoading) return <PageLoader authState={authState} />;
   if (authState.status === 'error') return <AuthCheckFailure authState={authState} onRetry={checkAuth} />;
   if (!user) return <Navigate to="/login" replace state={{ reason: authState.reason, message: authState.message, returnTo: safePrivateReturn(location) }} />;
   if (user.role !== 'ADMIN') return (
@@ -187,6 +195,7 @@ function AppRoutes() {
           )}
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/break-glass" element={<BreakGlass />} />
           <Route path="/portal/:token" element={<QueryRoute><Portal /></QueryRoute>} />
           <Route path="/portal/proposal/:token" element={<QueryRoute><PortalProposal /></QueryRoute>} />
           <Route path="/portal/contract/:token" element={<QueryRoute><PortalContract /></QueryRoute>} />
@@ -308,6 +317,8 @@ function GlobalErrorHandler({ children }) {
             duration: 0,
             action: retry ? { label: 'Try again', onClick: retry } : undefined,
           });
+        } else if (error.status === 403 && String(error.data?.code || '').startsWith('IMPERSONATION_')) {
+          toast.error('Read-only support view', error.message || 'Changes are not allowed while viewing as another person.');
         } else if (error.status >= 400) {
           toast.error('Request Failed', error.message || 'Please check your input and try again.');
         }
@@ -331,6 +342,7 @@ function App() {
     <AuthProvider>
       <ToastProvider>
         <GlobalErrorHandler>
+          <ImpersonationBanner />
           <AppRoutes />
         </GlobalErrorHandler>
       </ToastProvider>

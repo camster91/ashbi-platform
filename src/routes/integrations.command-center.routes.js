@@ -7,6 +7,7 @@
 // first argument. No global prisma import.
 
 import env from '../config/env.js';
+import { outboundSignal } from '../utils/outbound-timeouts.js';
 
 const GITHUB_ORG = process.env.GITHUB_ORG || 'camster91';
 
@@ -54,8 +55,8 @@ async function fetchGithubSummary() {
 
     // Get recent pushes / open PRs count
     const [reposRes, pullsRes] = await Promise.allSettled([
-      fetch(`https://api.github.com/users/${GITHUB_ORG}/repos?per_page=10&sort=pushed`, { headers }),
-      fetch(`https://api.github.com/search/issues?q=is:pr+is:open+user:${GITHUB_ORG}&per_page=5`, { headers }),
+      fetch(`https://api.github.com/users/${GITHUB_ORG}/repos?per_page=10&sort=pushed`, { headers, signal: outboundSignal('api') }),
+      fetch(`https://api.github.com/search/issues?q=is:pr+is:open+user:${GITHUB_ORG}&per_page=5`, { headers, signal: outboundSignal('api') }),
     ]);
 
     let recentRepos = [];
@@ -83,7 +84,8 @@ async function fetchGithubSummary() {
       health: failingCI > 0 ? 'yellow' : 'green'
     };
   } catch (err) {
-    return { error: err.message, health: 'yellow' };
+    console.error('[command-center] Integration summary failed:', err?.name || 'Error');
+    return { error: 'Integration summary unavailable', health: 'yellow' };
   }
 }
 
@@ -121,7 +123,8 @@ async function fetchVpsSummary() {
       }))
     };
   } catch (err) {
-    return { error: err.message, health: 'yellow' };
+    console.error('[command-center] Integration summary failed:', err?.name || 'Error');
+    return { error: 'Integration summary unavailable', health: 'yellow' };
   }
 }
 
@@ -166,7 +169,8 @@ async function fetchHubTasks(request) {
       health: overdueTasks > 5 ? 'red' : overdueTasks > 0 ? 'yellow' : 'green'
     };
   } catch (err) {
-    return { error: err.message, health: 'yellow' };
+    console.error('[command-center] Integration summary failed:', err?.name || 'Error');
+    return { error: 'Integration summary unavailable', health: 'yellow' };
   }
 }
 
