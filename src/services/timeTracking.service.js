@@ -59,7 +59,8 @@ export function sendTimerError(reply, err) {
  */
 async function closeSession(tx, session, endTime = new Date()) {
   const elapsedMs = endTime.getTime() - new Date(session.startTime).getTime();
-  const duration = Math.max(0, Math.round(elapsedMs / 60000));
+  // Under a full minute records nothing: the session keeps 0 minutes too.
+  const duration = elapsedMs >= 60000 ? Math.max(1, Math.round(elapsedMs / 60000)) : 0;
   const claimed = await tx.timeSession.updateMany({
     where: { id: session.id, userId: session.userId, isRunning: true },
     data: { endTime, duration, isRunning: false },
@@ -170,6 +171,9 @@ export async function createManualEntry(userId, projectId, data) {
 /**
  * Get time summary for a user/project/date range
  */
+// The summary lists at most this many recent entries; totals cover all of them.
+const SUMMARY_ENTRY_LIMIT = 100;
+
 export async function getTimeSummary(userId, filters = {}) {
   const { projectId, startDate, endDate } = filters;
   const range = (startDate || endDate)
@@ -179,46 +183,64 @@ export async function getTimeSummary(userId, filters = {}) {
   // TimeEntry is the canonical record: stopped timers (source TIMER) and
   // manual entries both live there. Timer sessions stopped before timers
   // recorded entries (no linked TimeEntry) are counted too, once each.
-  const [timeEntries, legacySessions] = await Promise.all([
-    prisma.timeEntry.findMany({
-      where: { userId, ...(projectId ? { projectId } : {}), ...(range ? { date: range } : {}) },
-      include: SESSION_INCLUDE,
-      orderBy: { date: 'desc' },
-    }),
-    prisma.timeSession.findMany({
-      where: {
-        userId, isRunning: false, timeEntry: null,
-        ...(projectId ? { projectId } : {}), ...(range ? { startTime: range } : {}),
-      },
-      include: SESSION_INCLUDE,
-      orderBy: { startTime: 'desc' },
-    }),
+  // Totals come from groupBy aggregates, so they cover every record; only the
+  // listed entries are limited (reads of soft-deletable models cap at 100).
+  const entryWhere = { userId, ...(projectId ? { projectId } : {}), ...(range ? { date: range } : {}) };
+  const sessionWhere = {
+    // Legacy only: stopped, with time, and no linked entry (sub-minute
+    // timers keep 0 minutes and no entry, so they never count).
+    userId, isRunning: false, timeEntry: null, duration: { gt: 0 },
+    ...(projectId ? { projectId } : {}), ...(range ? { startTime: range } : {}),
+  };
+  const [entryGroups, sessionGroups, entryCount, sessionCount, recentEntries, recentSessions] = await Promise.all([
+    prisma.timeEntry.groupBy({ by: ['projectId', 'billable'], where: entryWhere, _sum: { duration: true } }),
+    prisma.timeSession.groupBy({ by: ['projectId', 'billable'], where: sessionWhere, _sum: { duration: true } }),
+    prisma.timeEntry.count({ where: entryWhere }),
+    prisma.timeSession.count({ where: sessionWhere }),
+    prisma.timeEntry.findMany({ where: entryWhere, include: SESSION_INCLUDE, orderBy: { date: 'desc' }, take: SUMMARY_ENTRY_LIMIT }),
+    prisma.timeSession.findMany({ where: sessionWhere, include: SESSION_INCLUDE, orderBy: { startTime: 'desc' }, take: SUMMARY_ENTRY_LIMIT }),
   ]);
 
+  const projectTotals = new Map();
+  let totalMinutes = 0;
+  let billableMinutes = 0;
+  for (const group of [...entryGroups, ...sessionGroups]) {
+    const minutes = group._sum?.duration ?? 0;
+    const totals = projectTotals.get(group.projectId) ?? { totalMinutes: 0, billableMinutes: 0 };
+    totals.totalMinutes += minutes;
+    totalMinutes += minutes;
+    if (group.billable) {
+      totals.billableMinutes += minutes;
+      billableMinutes += minutes;
+    }
+    projectTotals.set(group.projectId, totals);
+  }
+
   const entries = [
-    ...timeEntries.map((entry) => ({
+    ...recentEntries.map((entry) => ({
       id: entry.id, kind: 'entry', source: entry.source ?? 'MANUAL', date: entry.date,
       duration: entry.duration, billable: entry.billable, description: entry.description ?? null,
       projectId: entry.projectId, project: entry.project, taskId: entry.taskId ?? null, task: entry.task ?? null,
     })),
-    ...legacySessions.map((session) => ({
+    ...recentSessions.map((session) => ({
       id: session.id, kind: 'session', source: 'TIMER', date: session.startTime,
       duration: session.duration, billable: session.billable, description: session.description ?? null,
       projectId: session.projectId, project: session.project, taskId: session.taskId ?? null, task: session.task ?? null,
     })),
-  ].sort((a, b) => new Date(b.date) - new Date(a.date));
+  ].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, SUMMARY_ENTRY_LIMIT);
 
-  const totalMinutes = entries.reduce((sum, e) => sum + e.duration, 0);
-  const billableMinutes = entries.filter((e) => e.billable).reduce((sum, e) => sum + e.duration, 0);
-
-  const byProject = entries.reduce((acc, e) => {
-    const key = e.projectId;
-    if (!acc[key]) acc[key] = { project: e.project, totalMinutes: 0, billableMinutes: 0, entries: [] };
-    acc[key].totalMinutes += e.duration;
-    if (e.billable) acc[key].billableMinutes += e.duration;
-    acc[key].entries.push(e);
-    return acc;
-  }, {});
+  // Project names for every project with time (read in pages of 100).
+  const projectIds = [...projectTotals.keys()];
+  const projects = new Map();
+  for (let i = 0; i < projectIds.length; i += 100) {
+    const page = await prisma.project.findMany({ where: { id: { in: projectIds.slice(i, i + 100) } }, select: { id: true, name: true } });
+    for (const project of page) projects.set(project.id, project);
+  }
+  const byProject = projectIds.map((id) => ({
+    project: projects.get(id) ?? { id, name: null },
+    ...projectTotals.get(id),
+    entries: entries.filter((entry) => entry.projectId === id),
+  }));
 
   return {
     totalMinutes,
@@ -226,8 +248,10 @@ export async function getTimeSummary(userId, filters = {}) {
     billableMinutes,
     billableHours: Math.round(billableMinutes / 60 * 100) / 100,
     nonBillableMinutes: totalMinutes - billableMinutes,
+    entryCount: entryCount + sessionCount,
     entries,
-    byProject: Object.values(byProject),
+    entriesTruncated: entryCount + sessionCount > entries.length,
+    byProject,
   };
 }
 

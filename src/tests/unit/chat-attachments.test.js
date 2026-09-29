@@ -98,8 +98,11 @@ test('the staff message list batch-loads files for messages and replies (no per-
     { id: 'm0', parentId: null, createdAt: new Date('2026-09-29T10:01:00Z') },
   ];
   const prisma = {
+    project: { findFirst: async () => ({ id: PROJECT }) },
+    // The grouped activity query returns thread roots, newest activity first.
+    $queryRaw: async () => [...new Set(activity.map((row) => row.parentId ?? row.id))].map((rootId) => ({ rootId })),
     chatMessage: {
-      findMany: async (args) => (args.select ? activity : threads.filter((thread) => args.where.id.in.includes(thread.id))),
+      findMany: async (args) => threads.filter((thread) => args.where.id.in.includes(thread.id)),
     },
     attachment: {
       findMany: async (args) => {

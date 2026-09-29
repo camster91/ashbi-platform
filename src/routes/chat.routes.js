@@ -63,40 +63,42 @@ async function attachFiles(prisma, messages) {
 
 
 export default async function chatRoutes(fastify) {
-  // Threads for a project: the top-level messages whose thread (the message
-  // or one of its replies) was most recently active, returned oldest-first by
-  // that activity, each with all its replies nested (replies are one level).
-  // Paging by activity keeps a thread with a new reply visible even when its
-  // first message is older than the page.
+  // Threads for a project, newest activity first: a thread's activity is its
+  // latest message (the first message or any reply; replies are one level).
+  // Returned oldest-first by that activity, each with all its replies. The
+  // `before`/`after` cursors apply to a thread's latest activity, so a thread
+  // is never repeated on an older page, and a page holds `limit` threads.
   fastify.get('/projects/:projectId/messages', {
     onRequest: [fastify.authenticate],
     preHandler: validateQuery(chatMessageListQuerySchema),
-  }, async (request) => {
+  }, async (request, reply) => {
     const { projectId } = request.params;
     const { limit, before, after } = request.query;
 
-    const activityWhere = { projectId };
-    if (before) {
-      activityWhere.createdAt = { lt: new Date(before) };
-    } else if (after) {
-      activityWhere.createdAt = { gt: new Date(after) };
-    }
+    // Tenant check through the scoped client before the raw aggregate below.
+    const project = await request.prisma.project.findFirst({ where: { id: projectId }, select: { id: true } });
+    if (!project) return reply.status(404).send({ error: 'Project not found' });
 
-    const recent = await request.prisma.chatMessage.findMany({
-      where: activityWhere,
-      select: { id: true, parentId: true, createdAt: true },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-    });
-    const lastActivity = new Map();
-    for (const row of recent) {
-      const rootId = row.parentId ?? row.id;
-      if (!lastActivity.has(rootId)) lastActivity.set(rootId, row.createdAt);
-    }
-    if (lastActivity.size === 0) return [];
+    const beforeIso = before ? new Date(before).toISOString() : null;
+    const afterIso = after ? new Date(after).toISOString() : null;
+    const activity = await request.prisma.$queryRaw`
+      SELECT root_id AS "rootId"
+      FROM (
+        SELECT COALESCE("parentId", "id") AS root_id, "createdAt" AS created_at
+        FROM "chat_messages"
+        WHERE "projectId" = ${projectId}
+      ) AS messages
+      GROUP BY root_id
+      HAVING (${beforeIso}::text IS NULL OR MAX(created_at) < (${beforeIso}::timestamptz AT TIME ZONE 'UTC'))
+         AND (${afterIso}::text IS NULL OR MAX(created_at) > (${afterIso}::timestamptz AT TIME ZONE 'UTC'))
+      ORDER BY MAX(created_at) DESC, root_id DESC
+      LIMIT ${limit}`;
+    if (activity.length === 0) return [];
+    // Oldest activity first, matching the previous response order.
+    const rank = new Map(activity.map((row, index) => [row.rootId, activity.length - index]));
 
     const threads = await request.prisma.chatMessage.findMany({
-      where: { projectId, parentId: null, id: { in: [...lastActivity.keys()] } },
+      where: { projectId, parentId: null, id: { in: [...rank.keys()] } },
       include: {
         author: { select: { id: true, name: true, email: true } },
         reactions: {
@@ -112,7 +114,7 @@ export default async function chatRoutes(fastify) {
       },
     });
 
-    const ordered = threads.sort((a, b) => new Date(lastActivity.get(a.id)) - new Date(lastActivity.get(b.id)));
+    const ordered = threads.sort((a, b) => rank.get(a.id) - rank.get(b.id));
     // Files of every thread on the page and of all their replies in one query.
     return (await attachFiles(request.prisma, ordered)).map(presentMessage);
   });
