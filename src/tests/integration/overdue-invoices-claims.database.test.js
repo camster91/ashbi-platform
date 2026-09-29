@@ -4,7 +4,8 @@
 //   - two overlapping runs send each message once;
 //   - a provider failure releases the claim and the retry sends once;
 //   - a reminder on day 1 is followed by exactly one escalation on day 8;
-//   - with more past-due invoices than a page, new ones are still reached.
+//   - with more past-due invoices than a page, new ones are still reached;
+//   - invoices the previous job already escalated are not escalated again.
 // Runs only when TENANT_INTEGRATION_DATABASE_URL points at a disposable,
 // fully migrated database.
 import test from 'node:test';
@@ -12,6 +13,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import prismaPkg from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { readFileSync } from 'node:fs';
 import { checkOverdueInvoicesForOrganizations } from '../../services/automation.service.js';
 
 const databaseUrl = process.env.TENANT_INTEGRATION_DATABASE_URL;
@@ -37,7 +39,7 @@ async function withFixture(run) {
       total: 100, currency: 'CAD', dueDate, sentAt: new Date(dueDate.getTime() - 30 * DAY),
       viewToken: `${org}-token-${n}`, publicAccessExpiresAt: new Date(dueDate.getTime() + 60 * DAY), ...overrides,
     } });
-    await run({ raw, org, invoice });
+    await run({ raw, org, invoice, admin });
   } finally {
     await raw.notification.deleteMany({ where: { user: { organizationId: org } } });
     await raw.activity.deleteMany({ where: { user: { organizationId: org } } });
@@ -144,5 +146,46 @@ test('new overdue invoices are reached even when older ones fill a page', { skip
     assert.equal(result.failed.length, 0);
     assert.equal(result.processed, 7, 'the escalated invoice is not in the working set');
     assert.deepEqual(sent.map((message) => message.invoiceNumber).sort(), ['CLM-7', 'CLM-8']);
+  });
+});
+
+// The legacy backfill (migration 20260927023100) scoped to this fixture's
+// organization, so parallel tests' rows are untouched.
+function legacyEscalationBackfill() {
+  const sql = readFileSync(new URL('../../../prisma/migrations/20260927023100_invoice_overdue_legacy_escalations/migration.sql', import.meta.url), 'utf8');
+  const update = sql.slice(sql.indexOf('UPDATE "invoices"'), sql.indexOf(';', sql.indexOf('UPDATE "invoices"')));
+  assert.match(update, /WHERE i\."overdueEscalatedAt" IS NULL/);
+  return update.replace('WHERE i."overdueEscalatedAt" IS NULL', 'WHERE i."organizationId" = $1 AND i."overdueEscalatedAt" IS NULL');
+}
+
+test('invoices the previous job escalated are not escalated again', { skip, timeout: 120_000 }, async () => {
+  await withFixture(async ({ raw, org, invoice, admin }) => {
+    const longDue = new Date(Date.now() - 20 * DAY);
+    // Escalated by the old job (7+ days overdue on its first pass): OVERDUE,
+    // no reminderSentAt; one of them also has the old 'escalated' activity.
+    await invoice(1, { dueDate: longDue, status: 'OVERDUE' });
+    await invoice(2, { dueDate: longDue, status: 'OVERDUE' });
+    const loggedAt = new Date(longDue.getTime() + 8 * DAY);
+    await raw.activity.create({ data: {
+      type: 'AUTOMATION_RAN', action: 'escalated', entityType: 'INVOICE', entityId: `${org}-inv-2`,
+      entityName: 'CLM-2', userId: admin, createdAt: loggedAt,
+    } });
+    // Reminded by the old job (under 7 days on its first pass), never escalated.
+    await invoice(3, { dueDate: longDue, status: 'OVERDUE', reminderSentAt: new Date(longDue.getTime() + DAY) });
+    // Not yet seen by any job.
+    await invoice(4, { dueDate: new Date(Date.now() - 2 * DAY) });
+
+    await raw.$executeRawUnsafe(legacyEscalationBackfill(), org);
+    const marked = Object.fromEntries((await raw.invoice.findMany({ where: { organizationId: org } }))
+      .map((row) => [row.invoiceNumber, row.overdueEscalatedAt]));
+    assert.ok(marked['CLM-1'], 'no reminder recorded: escalated by the old job');
+    assert.equal(marked['CLM-2'].getTime(), loggedAt.getTime(), 'dated from the escalation activity');
+    assert.equal(marked['CLM-3'], null);
+    assert.equal(marked['CLM-4'], null);
+
+    const { sent, send } = recorder();
+    await checkOverdueInvoicesForOrganizations([org], { db: raw, sendOverdueEmail: send });
+    assert.deepEqual(sent.map((message) => [message.invoiceNumber, message.daysOverdue >= 7 ? 'ESCALATION' : 'REMINDER']).sort(),
+      [['CLM-3', 'ESCALATION'], ['CLM-4', 'REMINDER']]);
   });
 });
