@@ -120,6 +120,8 @@ export function validateReleaseGates(root = process.cwd()) {
     [/restore_previous/, 'does not implement automatic rollback'],
     [/trap emergency_rollback EXIT/, 'does not protect interrupted cutovers'],
     [/imageDigest.*IMAGE_ID/, 'does not verify revision-aware readiness'],
+    [/api\/health\/details\?strict=1[^\n]*\\\n\s*\|\| curl -fsS[^\n]*\/api\/health"/, 'does not fall back to the public health probe for pre-detail images (operator rollback)'],
+    [/log_readiness_diagnostics\n\s*record readiness_failed/, 'does not log health diagnostics before a readiness failure'],
     [/database.*status.*ok[\s\S]*redis.*status.*ok[\s\S]*worker.*status.*ok/, 'does not require dependency-aware readiness'],
     [/start_worker_container/, 'does not start a dedicated worker'],
     [/health:worker/, 'does not require worker readiness'],

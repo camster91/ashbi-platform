@@ -15,9 +15,11 @@ import { fileURLToPath } from 'url';
 
 import env from './config/env.js';
 import prisma from './config/db.js';
-import { connection as redisConnection } from './jobs/queue.js';
-import { apiRateLimitMax, isNonApiRequest } from './config/rateLimit.js';
+import { pubSubRedisSource } from './jobs/queue.js';
+import { apiRateLimitKey, createApiRateLimitMax, createRateLimitRedis, isNonApiRequest } from './config/rateLimit.js';
 import { trustHops } from './config/trust-proxy.js';
+import { requestTimeoutMs } from './config/http.js';
+import { spaStaticOptions } from './config/static-cache.js';
 import { isCurrentUserSession } from './auth/session.js';
 import {
   actorHasOpenView, applyImpersonation, createImpersonationHook, createViewSocketRevoker, socketHandshakeDuringView,
@@ -52,14 +54,29 @@ import { getAuthProvider } from './auth/index.js';
 import { statusCodeForError, toClientErrorBody } from './utils/http-errors.js';
 import { buildHelmetOptions, permissionsPolicy } from './config/security-headers.js';
 import { initSentry, Sentry } from './observability/sentry.js';
-import { checkRuntimeHealth, closeRuntimeHealth } from './services/runtime-health.service.js';
+import {
+  checkRuntimeHealth,
+  closeRuntimeHealth,
+  HEALTH_DETAIL_ROLES,
+  healthStatusCode,
+  isLoopbackPeer,
+  isStrictHealthQuery,
+  publicHealthView,
+} from './services/runtime-health.service.js';
 import { getRequestPrisma } from './utils/request-context.js';
 
 /**
  * Construct the complete API application without binding a network port.
  * Runtime-only bridges can be disabled for isolated construction tests.
  */
-export async function buildApp({ initializeRuntime = true, jwtSecret = env.jwtSecret, trustProxy = env.trustProxy } = {}) {
+export async function buildApp({
+  initializeRuntime = true,
+  jwtSecret = env.jwtSecret,
+  trustProxy = env.trustProxy,
+  // Tests pass these to exercise the production static-serving path.
+  serveBuiltSpa = env.serveBuiltSpa,
+  spaRoot = path.join(__dirname, '../dist'),
+} = {}) {
 // Initialize Sentry error monitoring
 if (initializeRuntime && initSentry('api', [Sentry.fastifyIntegration()])) {
   logger.info('[Sentry] Error monitoring initialized');
@@ -70,6 +87,8 @@ if (initializeRuntime && initSentry('api', [Sentry.fastifyIntegration()])) {
 // Initialize Fastify
 const requestLogSettings = resolveLoggerSettings(env);
 const fastify = Fastify({
+  // Bound slow request bodies (see src/config/http.js); handler time is not limited.
+  requestTimeout: requestTimeoutMs(),
   // Off by default; TRUST_PROXY=1 behind Traefik so per-IP rate limits and
   // audit IP prefixes see the client, not the proxy.
   trustProxy: typeof trustProxy === 'number' ? trustHops(trustProxy) : trustProxy,
@@ -129,9 +148,17 @@ await fastify.register(cors, {
 });
 await fastify.register(cookie);
 await fastify.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } });
+const rateLimitRedis = createRateLimitRedis();
+if (rateLimitRedis) fastify.addHook('onClose', async () => { rateLimitRedis.disconnect(); });
 await fastify.register(rateLimit, {
   global: true,
-  max: apiRateLimitMax(),
+  // Signed-in traffic is keyed by the verified user (higher limit); anonymous
+  // traffic stays per IP. Route-level limits (login, MFA, share links) keep
+  // their own keys. Counters live in Redis when available so every API
+  // replica shares them; skipOnError keeps the API up if Redis is not.
+  keyGenerator: apiRateLimitKey,
+  max: createApiRateLimitMax(),
+  ...(rateLimitRedis ? { redis: rateLimitRedis, nameSpace: 'ashbi-rate-limit:' } : {}),
   timeWindow: '1 minute',
   skipOnError: true,
   // Frontend navigation loads many immutable chunks in parallel. Counting those
@@ -237,14 +264,35 @@ fastify.get('/api/live', async () => ({
   revision: process.env.APP_REVISION || 'unknown',
 }));
 
-fastify.get('/api/health', async (_request, reply) => {
+// Public readiness: database + Redis decide the status code; a stale worker
+// is reported as degraded (still 200). `?strict=1` also requires the worker.
+fastify.get('/api/health', async (request, reply) => {
   const report = await checkRuntimeHealth();
-  return reply.code(report.ready ? 200 : 503).send(report);
+  const strict = isStrictHealthQuery(request.query);
+  return reply.code(healthStatusCode(report, { strict })).send(publicHealthView(report));
+});
+
+// Detailed report (failed jobs, backup, alerting, image digest): staff
+// sessions, or the deploy controller via `docker exec` on container loopback.
+fastify.get('/api/health/details', {
+  onRequest: [async function healthDetailsGuard(request, reply) {
+    if (isLoopbackPeer(request)) return;
+    await fastify.authenticate(request, reply);
+    if (reply.sent) return reply;
+    if (!HEALTH_DETAIL_ROLES.includes(request.user?.role)) {
+      return reply.status(403).send({ error: 'Staff access required', code: 'FORBIDDEN' });
+    }
+  }],
+}, async (request, reply) => {
+  const report = await checkRuntimeHealth();
+  const strict = isStrictHealthQuery(request.query);
+  return reply.code(healthStatusCode(report, { strict })).send(report);
 });
 
 // Static files
-if (env.serveBuiltSpa) {
-  await fastify.register(fastifyStatic, { root: path.join(__dirname, '../dist'), prefix: '/' });
+if (serveBuiltSpa) {
+  // Hashed /assets/* are immutable; index.html, sw.js and the manifest revalidate.
+  await fastify.register(fastifyStatic, spaStaticOptions(spaRoot));
   fastify.setNotFoundHandler((request, reply) => {
     if (!request.url.startsWith('/api/')) return reply.sendFile('index.html');
     reply.status(404).send({ error: 'Not found' });
@@ -279,7 +327,9 @@ const io = new SocketIO(fastify.server, { cors: { origin: env.isDev ? 'http://lo
 // Starting a support view drops the admin's sockets on every API instance
 // (Redis pub/sub; there is no shared Socket.IO adapter). The sweep is the
 // fallback if a revocation message is lost.
-const viewSocketRevoker = createViewSocketRevoker({ io, redis: redisConnection, logger: fastify.log });
+// Pub/sub needs its own reconnecting connections (the producer connection
+// fails fast and would drop the SUBSCRIBE issued before Redis is ready).
+const viewSocketRevoker = createViewSocketRevoker({ io, redis: pubSubRedisSource(), logger: fastify.log });
 fastify.decorate('revokeSupportViewSockets', (userId) => viewSocketRevoker.revoke(userId));
 const stopViewSocketSweep = startViewSocketSweep(io, prisma, fastify.log);
 fastify.addHook('onClose', async () => {

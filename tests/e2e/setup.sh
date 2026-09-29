@@ -31,18 +31,18 @@ docker compose \
   --project-name ashbi-e2e up -d --build
 
 HUB_URL="http://localhost:${HOST_PORT}"
-log "waiting for hub /api/health at $HUB_URL"
+log "waiting for hub /api/health?strict=1 (database, redis, worker) at $HUB_URL"
 DEADLINE=$(( $(date +%s) + 180 ))
 while [ "$(date +%s)" -lt "$DEADLINE" ]; do
-  if curl -fsS "$HUB_URL/api/health" >/dev/null 2>&1; then
+  if curl -fsS "$HUB_URL/api/health?strict=1" >/dev/null 2>&1; then
     log "hub healthy at $HUB_URL"
     break
   fi
   sleep 2
 done
-if ! curl -fsS "$HUB_URL/api/health" >/dev/null 2>&1; then
+if ! curl -fsS "$HUB_URL/api/health?strict=1" >/dev/null 2>&1; then
   log "last /api/health report:"
-  curl -sS "$HUB_URL/api/health" >&2 || true
+  curl -sS "$HUB_URL/api/health?strict=1" >&2 || true
   printf '\n' >&2
   for svc in hub worker; do
     log "docker logs ashbi-e2e-${svc}-1 (tail):"

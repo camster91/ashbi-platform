@@ -109,7 +109,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [TaskComment](#model-taskcomment) | `task_comments` | no | no | 9 |
 | [TaskTemplate](#model-tasktemplate) | `task_templates` | yes | no | 8 |
 | [Template](#model-template) | `templates` | yes | no | 11 |
-| [Thread](#model-thread) | `threads` | no | no | 26 |
+| [Thread](#model-thread) | `threads` | no | no | 28 |
 | [TimeEntry](#model-timeentry) | `time_entries` | no | yes | 23 |
 | [TimeSession](#model-timesession) | `time_sessions` | no | no | 15 |
 | [TrashedItem](#model-trasheditem) | `trashed_items` | yes | yes | 9 |
@@ -244,6 +244,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Soft-deletable: no
 - Constraints and indexes:
   - `@@index([agentRole, createdAt])`
+  - `@@index([clientId])`
+  - `@@index([projectId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -289,6 +291,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Table: `api_keys`
 - Tenant-scoped: no
 - Soft-deletable: no
+- Constraints and indexes:
+  - `@@index([userId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -314,6 +318,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   - `@@index([status])`
   - `@@index([type])`
   - `@@index([createdAt])`
+  - `@@index([projectId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -339,6 +344,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Table: `ash_chat_messages`
 - Tenant-scoped: no
 - Soft-deletable: no
+- Constraints and indexes:
+  - `@@index([conversationId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -372,6 +379,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Table: `assets`
 - Tenant-scoped: no
 - Soft-deletable: no
+- Constraints and indexes:
+  - `@@index([clientId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -561,6 +570,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   - `@@index([projectId, createdAt])`
   - `@@index([projectId, externalSource, externalMessageId])`
   - `@@index([projectId, externalSource, externalThreadId])`
+  - `@@index([parentId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -592,6 +602,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Soft-deletable: no
 - Constraints and indexes:
   - `@@unique([messageId, userId, emoji])`
+  - `@@index([userId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -675,6 +686,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Soft-deletable: no
 - Constraints and indexes:
   - `@@unique([emailAddress, clientId])`
+  - `@@index([clientId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -714,6 +726,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Table: `client_invitations`
 - Tenant-scoped: no
 - Soft-deletable: no
+- Constraints and indexes:
+  - `@@index([clientId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -733,6 +747,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Soft-deletable: no
 - Constraints and indexes:
   - `@@unique([email, clientId])`
+  - `@@index([clientId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -796,6 +811,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Soft-deletable: no
 - Constraints and indexes:
   - `@@index([clientId])`
+  - `@@index([projectId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -929,6 +945,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Table: `email_triage_drafts`
 - Tenant-scoped: no
 - Soft-deletable: no
+- Constraints and indexes:
+  - `@@index([itemId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -1010,6 +1028,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Soft-deletable: no
 - Constraints and indexes:
   - `@@unique([eventId, userId])`
+  - `@@index([userId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -1158,6 +1177,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Table: `intake_forms`
 - Tenant-scoped: no
 - Soft-deletable: no
+- Constraints and indexes:
+  - `@@index([clientId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -1178,6 +1199,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Table: `intake_form_responses`
 - Tenant-scoped: no
 - Soft-deletable: no
+- Constraints and indexes:
+  - `@@index([formId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -1217,6 +1240,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Table: `internal_notes`
 - Tenant-scoped: no
 - Soft-deletable: no
+- Constraints and indexes:
+  - `@@index([threadId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -1308,6 +1333,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Table: `invoice_line_items`
 - Tenant-scoped: no
 - Soft-deletable: no
+- Constraints and indexes:
+  - `@@index([invoiceId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -1328,6 +1355,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Soft-deletable: no
 - Constraints and indexes:
   - `@@unique([transactionId], map: "invoice_payments_stripe_transactionId_key", where: raw("method = 'STRIPE'"))`
+  - `@@index([invoiceId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -1383,7 +1411,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Tenant-scoped: no
 - Soft-deletable: no
 - Constraints and indexes:
-  - `@@index([threadId])`
+  - `@@index([threadId, receivedAt])`
   - `@@index([receivedAt])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
@@ -1411,6 +1439,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Soft-deletable: yes (`deletedAt`)
 - Constraints and indexes:
   - `@@index([deletedAt])`
+  - `@@index([projectId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -1436,6 +1465,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Constraints and indexes:
   - `@@index([projectId, parentId])`
   - `@@index([projectId, isTemplate])`
+  - `@@index([parentId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -1847,6 +1877,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   - `@@index([status])`
   - `@@index([clientId, status])`
   - `@@index([validUntil])`
+  - `@@index([projectId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -1899,6 +1930,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Table: `proposal_line_items`
 - Tenant-scoped: no
 - Soft-deletable: no
+- Constraints and indexes:
+  - `@@index([proposalId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -1970,6 +2003,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Table: `push_subscriptions`
 - Tenant-scoped: no
 - Soft-deletable: no
+- Constraints and indexes:
+  - `@@index([userId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -1986,6 +2021,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Table: `rate_cards`
 - Tenant-scoped: no
 - Soft-deletable: no
+- Constraints and indexes:
+  - `@@index([clientId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -2003,6 +2040,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Table: `reports`
 - Tenant-scoped: no
 - Soft-deletable: no
+- Constraints and indexes:
+  - `@@index([clientId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -2024,6 +2063,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Constraints and indexes:
   - `@@index([status])`
   - `@@index([createdAt])`
+  - `@@index([threadId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -2088,6 +2128,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Soft-deletable: no
 - Constraints and indexes:
   - `@@unique([month, clientId])`
+  - `@@index([clientId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -2178,6 +2219,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Constraints and indexes:
   - `@@index([organizationId, projectId, createdAt])`
   - `@@index([attachmentId])`
+  - `@@index([projectId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -2254,6 +2296,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Constraints and indexes:
   - `@@unique([installationId, channelId])`
   - `@@index([organizationId, projectId])`
+  - `@@index([projectId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -2307,6 +2350,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   - `@@index([organizationId, projectId])`
   - `@@index([runId])`
   - `@@index([chatMessageId])`
+  - `@@index([projectId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -2416,6 +2460,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   - `@@index([dependsOnId])`
   - `@@index([assigneeId])`
   - `@@index([projectId, status])`
+  - `@@index([milestoneId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -2463,6 +2508,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Table: `task_comments`
 - Tenant-scoped: no
 - Soft-deletable: no
+- Constraints and indexes:
+  - `@@index([taskId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -2543,6 +2590,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `snoozedUntil` | DateTime | optional |  |  |  |
 | `slaDeadline` | DateTime | optional |  |  |  |
 | `slaBreached` | Boolean | required | `false` |  |  |
+| `lastEscalationLevel` | Int | required | `0` |  |  |
+| `lastEscalatedAt` | DateTime | optional |  |  |  |
 | `aiAnalysis` | String | optional |  |  | JSON: full AI analysis result |
 | `matchConfidence` | Float | required | `0` |  |  |
 | `matchReason` | String | optional |  |  |  |
@@ -2570,6 +2619,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   - `@@index([invoiceId])`
   - `@@index([reviewStatus])`
   - `@@index([userId, date])`
+  - `@@index([taskId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -2606,6 +2656,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   - `@@index([userId])`
   - `@@index([projectId])`
   - `@@index([isRunning])`
+  - `@@index([taskId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -2748,6 +2799,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   - `@@index([siteUrl])`
   - `@@index([alertType])`
   - `@@index([createdAt])`
+  - `@@index([siteId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -2898,6 +2950,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Constraints and indexes:
   - `@@index([organizationId])`
   - `@@index([status])`
+  - `@@index([clientId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |

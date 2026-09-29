@@ -1,3 +1,4 @@
+import { outboundSignal } from '../utils/outbound-timeouts.js';
 // OpenClaw messaging integration for Agency Hub events
 
 /**
@@ -21,6 +22,7 @@ async function sendOpenClawMessage(channel, content, metadata = {}) {
     };
 
     const response = await fetch(`${openclawUrl}/api/messages`, {
+      signal: outboundSignal('webhook'),
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

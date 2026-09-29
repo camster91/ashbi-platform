@@ -17,6 +17,7 @@ export function safeReturnPath(value) {
 
 export function authFailureReason(error) {
   if (error?.status === 401) return 'signed_out';
+  if (error?.status === 429) return 'rate_limited';
   if (error?.status === 403) return 'forbidden';
   if (error?.name === 'NetworkError' || (typeof navigator !== 'undefined' && navigator.onLine === false)) return 'offline';
   if (error?.name === 'TimeoutError') return 'timeout';
@@ -27,6 +28,17 @@ export function authFailureReason(error) {
 export function sessionEndReason(message) {
   const normalized = typeof message === 'string' ? message.toLowerCase() : '';
   return normalized.includes('revoked') && !normalized.includes('expired') ? 'revoked' : 'expired';
+}
+
+const RATE_LIMIT_RETRY_DEFAULT_MS = 5_000;
+const RATE_LIMIT_RETRY_MAX_MS = 60_000;
+
+// How long to wait before re-checking the session after a 429: the server's
+// Retry-After when present, bounded so the app never waits indefinitely.
+export function rateLimitRetryDelayMs(error) {
+  const seconds = error?.retryAfterSeconds;
+  if (!Number.isFinite(seconds)) return RATE_LIMIT_RETRY_DEFAULT_MS;
+  return Math.min(Math.max(seconds * 1000, 1_000), RATE_LIMIT_RETRY_MAX_MS);
 }
 
 function isSignInScreen(pathname) {
@@ -83,21 +95,29 @@ export function AuthProvider({ children }) {
   const location = useLocation();
   const mountedRef = useRef(true);
   const authCheckSequenceRef = useRef(0);
+  const userRef = useRef(null);
+  const retryTimerRef = useRef(null);
+  const checkAuthRef = useRef(null);
+  userRef.current = user;
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
       authCheckSequenceRef.current += 1;
+      clearTimeout(retryTimerRef.current);
     };
   }, []);
 
   const checkAuth = useCallback(async () => {
     const sequence = ++authCheckSequenceRef.current;
     const isCurrentCheck = () => mountedRef.current && sequence === authCheckSequenceRef.current;
+    clearTimeout(retryTimerRef.current);
+    let waitingToRetry = false;
     if (mountedRef.current) {
-      setIsLoading(true);
-      setAuthState((current) => ({ ...current, status: 'checking' }));
+      // A re-check keeps an already signed-in app on screen.
+      if (!userRef.current) setIsLoading(true);
+      setAuthState((current) => ({ ...current, status: userRef.current ? 'authenticated' : 'checking' }));
     }
     try {
       const userData = await api.me();
@@ -108,7 +128,22 @@ export function AuthProvider({ children }) {
     } catch (error) {
       if (isCurrentCheck()) {
         const reason = authFailureReason(error);
-        if (reason === 'signed_out') {
+        if (reason === 'rate_limited') {
+          // Too many requests is "retry later", never "signed out" or a
+          // blocking error: keep any session on screen, show a notice, and
+          // re-check after Retry-After.
+          const retryInMs = rateLimitRetryDelayMs(error);
+          waitingToRetry = !userRef.current;
+          setAuthState({
+            status: userRef.current ? 'authenticated' : 'checking',
+            reason,
+            message: error.message || '',
+            retryInMs,
+          });
+          retryTimerRef.current = setTimeout(() => {
+            if (isCurrentCheck()) checkAuthRef.current?.();
+          }, retryInMs);
+        } else if (reason === 'signed_out') {
           await purgePrivateCaches();
           if (isCurrentCheck()) {
             setUser(null);
@@ -119,9 +154,10 @@ export function AuthProvider({ children }) {
         }
       }
     } finally {
-      if (isCurrentCheck()) setIsLoading(false);
+      if (isCurrentCheck() && !waitingToRetry) setIsLoading(false);
     }
   }, []);
+  checkAuthRef.current = checkAuth;
 
   useEffect(() => {
     if (!isSignInScreen(window.location.pathname)) {
@@ -136,37 +172,50 @@ export function AuthProvider({ children }) {
     return afterFirstContentfulPaint(checkAuth);
   }, [checkAuth]);
 
+  // Invalidate any in-flight session check and cancel a scheduled 429 retry.
+  // A pending rate-limited check keeps isLoading true until its retry runs;
+  // once invalidated that retry never runs, so isLoading must be settled
+  // here or private routes would spin forever (e.g. a sign-in that
+  // succeeds while the retry is still scheduled).
+  const cancelPendingAuthCheck = useCallback(() => {
+    authCheckSequenceRef.current += 1;
+    clearTimeout(retryTimerRef.current);
+    retryTimerRef.current = null;
+    if (mountedRef.current) setIsLoading(false);
+  }, []);
+
   const finishSignIn = useCallback(async (userData, returnTo) => {
     await purgePrivateCaches();
     if (mountedRef.current) {
+      cancelPendingAuthCheck();
       setUser(userData);
       setAuthState({ status: 'authenticated', reason: null, message: '' });
       navigate(safeReturnPath(returnTo), { replace: true });
     }
     return userData;
-  }, [navigate]);
+  }, [cancelPendingAuthCheck, navigate]);
 
   // Resolves to the signed-in user, or — for staff accounts with two-factor
   // authentication — to { mfaRequired, challengeToken } without a session yet.
   const login = useCallback(async (email, password, returnTo = '/dashboard') => {
-    authCheckSequenceRef.current += 1;
+    cancelPendingAuthCheck();
     const result = await api.login(email, password);
     if (result?.mfaRequired) {
       return { mfaRequired: true, challengeToken: result.challengeToken, expiresInSeconds: result.expiresInSeconds };
     }
     return finishSignIn(result.user, returnTo);
-  }, [finishSignIn]);
+  }, [cancelPendingAuthCheck, finishSignIn]);
 
   // Second sign-in step: factor is { code } or { recoveryCode }.
   const completeMfaLogin = useCallback(async (challengeToken, factor, returnTo = '/dashboard') => {
-    authCheckSequenceRef.current += 1;
+    cancelPendingAuthCheck();
     const result = await api.loginMfa({ challengeToken, ...factor });
     await finishSignIn(result.user, returnTo);
     return result;
-  }, [finishSignIn]);
+  }, [cancelPendingAuthCheck, finishSignIn]);
 
   const logout = useCallback(async () => {
-    authCheckSequenceRef.current += 1;
+    cancelPendingAuthCheck();
     await clearBrowserPushSubscription({ removeFromServer: true });
     try {
       await api.logout();
@@ -179,10 +228,10 @@ export function AuthProvider({ children }) {
       setAuthState({ status: 'unauthenticated', reason: 'signed_out', message: '' });
       navigate('/login', { replace: true });
     }
-  }, [navigate]);
+  }, [cancelPendingAuthCheck, navigate]);
 
   const expireSession = useCallback(async (message = '', reason = sessionEndReason(message)) => {
-    authCheckSequenceRef.current += 1;
+    cancelPendingAuthCheck();
     await clearBrowserPushSubscription();
     await purgePrivateCaches();
     if (!mountedRef.current) return;
@@ -190,7 +239,7 @@ export function AuthProvider({ children }) {
     setUser(null);
     setAuthState({ status: 'unauthenticated', reason, message });
     navigate('/login', { replace: true, state: { reason, message, returnTo } });
-  }, [location.hash, location.pathname, location.search, navigate]);
+  }, [cancelPendingAuthCheck, location.hash, location.pathname, location.search, navigate]);
 
   // Support impersonation (#416): the server keeps the admin's own session
   // and adds a read-only view cookie; /auth/me then answers as the viewed
