@@ -35,6 +35,31 @@ CREATE UNIQUE INDEX "time_entries_timeSessionId_key" ON "time_entries"("timeSess
 -- AddForeignKey
 ALTER TABLE "time_entries" ADD CONSTRAINT "time_entries_timeSessionId_fkey" FOREIGN KEY ("timeSessionId") REFERENCES "time_sessions"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
+-- Link timer entries written before this migration to their session: the
+-- retired time-session routes created a TIMER entry without the session id
+-- and kept the session, so both would count. Identical (user, project, task,
+-- start, duration) rows are paired one to one; anything unmatched stays
+-- unlinked.
+WITH stopped AS (
+  SELECT "id", "userId", "projectId", "taskId", "startTime", "duration",
+         ROW_NUMBER() OVER (PARTITION BY "userId", "projectId", "taskId", "startTime", "duration" ORDER BY "id") AS n
+  FROM "time_sessions"
+  WHERE "isRunning" = false
+), unlinked AS (
+  SELECT "id", "userId", "projectId", "taskId", "date", "duration",
+         ROW_NUMBER() OVER (PARTITION BY "userId", "projectId", "taskId", "date", "duration" ORDER BY "id") AS n
+  FROM "time_entries"
+  WHERE "source" = 'TIMER' AND "timeSessionId" IS NULL
+)
+UPDATE "time_entries" AS e
+SET "timeSessionId" = s."id"
+FROM unlinked x
+JOIN stopped s
+  ON s."userId" = x."userId" AND s."projectId" = x."projectId"
+ AND s."taskId" IS NOT DISTINCT FROM x."taskId"
+ AND s."startTime" = x."date" AND s."duration" = x."duration" AND s.n = x.n
+WHERE e."id" = x."id";
+
 -- Close duplicate running timers (keep the newest per user).
 WITH ranked AS (
   SELECT

@@ -51,3 +51,47 @@ test('duplicate running timers closed by the migration record whole minutes only
     await raw.$disconnect();
   }
 });
+
+function linkEntriesSql(sessions, entries) {
+  const sql = readFileSync(new URL('../../../prisma/migrations/20260927040000_timer_time_entries/migration.sql', import.meta.url), 'utf8');
+  const start = sql.indexOf('WITH stopped AS');
+  return sql.slice(start, sql.indexOf(';', start))
+    .replaceAll('"time_sessions"', sessions)
+    .replaceAll('"time_entries"', entries);
+}
+
+test('the migration links pre-existing TIMER entries to their sessions one to one', {
+  skip: !databaseUrl && 'TENANT_INTEGRATION_DATABASE_URL is not configured',
+  timeout: 60_000,
+}, async () => {
+  const { PrismaClient } = prismaPkg;
+  const raw = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+  try {
+    const links = await raw.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('CREATE TEMP TABLE "ts_link" (LIKE "time_sessions" INCLUDING DEFAULTS) ON COMMIT DROP');
+      await tx.$executeRawUnsafe('CREATE TEMP TABLE "te_link" (LIKE "time_entries" INCLUDING DEFAULTS) ON COMMIT DROP');
+      const start = new Date(Date.UTC(2026, 7, 1, 9));
+      const session = (id, task, duration) => tx.$executeRawUnsafe(
+        `INSERT INTO "ts_link" ("id", "userId", "projectId", "taskId", "startTime", "duration", "billable", "isRunning", "createdAt", "updatedAt")
+         VALUES ($1, 'u', 'p', $2, $3, $4, true, false, now(), now())`, id, task, start, duration);
+      const entry = (id, task, duration, source = 'TIMER') => tx.$executeRawUnsafe(
+        `INSERT INTO "te_link" ("id", "userId", "projectId", "taskId", "date", "duration", "billable", "source", "createdAt", "updatedAt")
+         VALUES ($1, 'u', 'p', $2, $3, $4, true, $5, now(), now())`, id, task, start, duration, source);
+      // Two identical 30-minute timers (no task) and their two entries: paired 1:1.
+      await session('s1', null, 30); await session('s2', null, 30);
+      await entry('e1', null, 30); await entry('e2', null, 30);
+      // A timer with a task and its entry.
+      await session('s3', 't', 45); await entry('e3', 't', 45);
+      // A manual entry with the same shape is never linked; a session without an entry stays legacy.
+      await entry('m1', 't', 45, 'MANUAL');
+      await session('s4', null, 10);
+      await tx.$executeRawUnsafe(linkEntriesSql('"ts_link"', '"te_link"'));
+      return tx.$queryRawUnsafe('SELECT "id", "timeSessionId" FROM "te_link" ORDER BY "id"');
+    });
+    assert.deepEqual(links.map((r) => [r.id, r.timeSessionId]), [
+      ['e1', 's1'], ['e2', 's2'], ['e3', 's3'], ['m1', null],
+    ]);
+  } finally {
+    await raw.$disconnect();
+  }
+});
