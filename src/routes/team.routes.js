@@ -4,6 +4,7 @@ import bcrypt from 'bcrypt';
 import { validateBody, teamInviteSchema, teamResetPasswordSchema, teamUpdateSchema } from '../validators/schemas.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { requireRecentAuth } from '../auth/reauth.js';
+import { revokeImpersonationsForUser } from '../auth/impersonation.js';
 
 /**
  * preHandler for PUT /:id: changing a member's role or deactivating /
@@ -214,6 +215,12 @@ export default async function teamRoutes(fastify) {
         metadata: { fromActive: before.isActive, toActive: member.isActive },
       });
     }
+    // A support view by or of this member ends with their access change (#416).
+    if (before && role && before.role !== member.role) {
+      await revokeImpersonationsForUser(request.prisma, request, member.id, 'revoked_role_change');
+    } else if (before && before.isActive && member.isActive === false) {
+      await revokeImpersonationsForUser(request.prisma, request, member.id, 'revoked_deactivated');
+    }
 
     return {
       ...member,
@@ -297,6 +304,8 @@ export default async function teamRoutes(fastify) {
       entityId: id,
       metadata: { method: 'admin_reset', apiKeysRevoked: revokedKeys.count },
     });
+    // And any support view by or of them (#416).
+    await revokeImpersonationsForUser(request.prisma, request, id, 'revoked_password_reset');
 
     return { success: true };
   });
