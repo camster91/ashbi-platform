@@ -1483,6 +1483,10 @@ export const chatMessageListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).default(50).transform((limit) => Math.min(limit, CHAT_PAGE_MAX)),
   before: z.string().datetime({ offset: true }).optional(),
   after: z.string().datetime({ offset: true }).optional(),
+  // Tie-breakers for the activity cursor: the thread id at that timestamp
+  // (each thread carries lastActivityAt; the cursor is that value + its id).
+  beforeId: cuidId.optional(),
+  afterId: cuidId.optional(),
 });
 
 export const chatMessageUpdateSchema = z.object({

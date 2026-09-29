@@ -25,6 +25,14 @@ import { emitChatEvent, mayNotifyMention, projectRoom, toClientChatPayload } fro
  *
  * @param {Record<string, any>} message
  */
+// The raw aggregate returns TIMESTAMP(3) values (stored in UTC).
+function toIso(value) {
+  if (!value) return null;
+  if (value instanceof Date) return value.toISOString();
+  const text = String(value);
+  return new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(text) ? text : `${text.replace(' ', 'T')}Z`).toISOString();
+}
+
 function presentMessage(message) {
   const presented = { ...message, metadata: safeParse(message.metadata) };
   if (message.removedAt) {
@@ -47,29 +55,40 @@ export default async function chatRoutes(fastify) {
     preHandler: validateQuery(chatMessageListQuerySchema),
   }, async (request, reply) => {
     const { projectId } = request.params;
-    const { limit, before, after } = request.query;
+    const { limit, before, after, beforeId, afterId } = request.query;
 
     // Tenant check through the scoped client before the raw aggregate below.
     const project = await request.prisma.project.findFirst({ where: { id: projectId }, select: { id: true } });
     if (!project) return reply.status(404).send({ error: 'Project not found' });
 
+    // Cursor = (lastActivityAt, thread id): threads that share a timestamp
+    // are split across pages by id, never skipped.
     const beforeIso = before ? new Date(before).toISOString() : null;
     const afterIso = after ? new Date(after).toISOString() : null;
     const activity = await request.prisma.$queryRaw`
-      SELECT root_id AS "rootId"
+      SELECT root_id AS "rootId", MAX(created_at) AS "lastActivityAt"
       FROM (
         SELECT COALESCE("parentId", "id") AS root_id, "createdAt" AS created_at
         FROM "chat_messages"
         WHERE "projectId" = ${projectId}
       ) AS messages
       GROUP BY root_id
-      HAVING (${beforeIso}::text IS NULL OR MAX(created_at) < (${beforeIso}::timestamptz AT TIME ZONE 'UTC'))
-         AND (${afterIso}::text IS NULL OR MAX(created_at) > (${afterIso}::timestamptz AT TIME ZONE 'UTC'))
+      HAVING (${beforeIso}::text IS NULL
+              OR MAX(created_at) < (${beforeIso}::timestamptz AT TIME ZONE 'UTC')
+              OR (${beforeId ?? null}::text IS NOT NULL
+                  AND MAX(created_at) = (${beforeIso}::timestamptz AT TIME ZONE 'UTC')
+                  AND root_id < ${beforeId ?? null}::text))
+         AND (${afterIso}::text IS NULL
+              OR MAX(created_at) > (${afterIso}::timestamptz AT TIME ZONE 'UTC')
+              OR (${afterId ?? null}::text IS NOT NULL
+                  AND MAX(created_at) = (${afterIso}::timestamptz AT TIME ZONE 'UTC')
+                  AND root_id > ${afterId ?? null}::text))
       ORDER BY MAX(created_at) DESC, root_id DESC
       LIMIT ${limit}`;
     if (activity.length === 0) return [];
     // Oldest activity first, matching the previous response order.
     const rank = new Map(activity.map((row, index) => [row.rootId, activity.length - index]));
+    const lastActivityAt = new Map(activity.map((row) => [row.rootId, row.lastActivityAt]));
 
     const threads = await request.prisma.chatMessage.findMany({
       where: { projectId, parentId: null, id: { in: [...rank.keys()] } },
@@ -90,7 +109,7 @@ export default async function chatRoutes(fastify) {
 
     return threads
       .sort((a, b) => rank.get(a.id) - rank.get(b.id))
-      .map(presentMessage);
+      .map((thread) => ({ ...presentMessage(thread), lastActivityAt: toIso(lastActivityAt.get(thread.id)) }));
   });
 
   // Send a chat message
