@@ -11,7 +11,9 @@
 // session of any other client or organization answers 404, exactly like an
 // unknown id.
 //
-// What a client sees: the session's title, status, version and file
+// A session is reachable only once staff shared it with the client
+// (`sharedWithClient`, default off); an unshared session answers 404 like an
+// unknown id. What a client sees: the session's title, status, version and file
 // description, every annotation (staff, share-link guest and client comments
 // alike: review comments have no internal-only flag, see the docs), and the
 // decision history, serialized with publicAnnotation/publicDecision (no staff
@@ -76,13 +78,15 @@ export const CLIENT_REVIEW_LIMITS = Object.freeze({
 const NOT_FOUND = Object.freeze({ error: 'Review not found' });
 
 /**
- * The only review sessions a client portal user may reach: projects of their
+ * The only review sessions a client portal user may reach: sessions staff
+ * shared with the client (`sharedWithClient`, opt-in), on projects of their
  * own client, in their own organization, not in the trash.
  * @param {{ clientId: string, organizationId: string }} clientUser
  */
 export function sessionScope(clientUser) {
   return {
     organizationId: clientUser.organizationId,
+    sharedWithClient: true,
     project: { clientId: clientUser.clientId, organizationId: clientUser.organizationId, deletedAt: null },
   };
 }

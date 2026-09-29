@@ -59,10 +59,15 @@ async function setup(t) {
 
   const staff = (key, method, url, payload) => app.inject({ method, url: `/api/reviews${url}`, payload, headers: { 'x-test-staff': key } });
   const client = (key, method, url, payload) => app.inject({ method, url: `/api/client-portal/reviews${url}`, payload, headers: key ? { 'x-test-client': key } : {} });
-  const createSession = async (key, projectId, attachmentId, title) => {
+  // Sessions are shared with the client unless a test says otherwise:
+  // portal visibility is opt-in.
+  const createSession = async (key, projectId, attachmentId, title, { share = true } = {}) => {
     const response = await staff(key, 'POST', '', { projectId, attachmentId, title });
     assert.equal(response.statusCode, 201, response.body);
-    return response.json().session;
+    const session = response.json().session;
+    assert.equal(session.sharedWithClient, false);
+    if (share) assert.equal((await staff(key, 'POST', `/${session.id}/client-access`, { sharedWithClient: true })).statusCode, 200);
+    return session;
   };
   return { db, staff, client, createSession, notifications };
 }
@@ -112,6 +117,31 @@ describe('client portal reviews', () => {
         assert.equal((await client('a', method, url, payload)).statusCode, 404, `${method} ${url}`);
       }
     }
+  });
+
+  it('shows only reviews staff shared with the client: unshared ones are 404 and unlisted', async (t) => {
+    const { client, staff, createSession } = await setup(t);
+    const shared = await createSession('teamA', 'project-a', 'image-a', 'Shared homepage');
+    const internal = await createSession('teamA', 'project-a', 'video-a', 'Internal walkthrough', { share: false });
+    await staff('teamA', 'POST', `/${internal.id}/annotations`, { body: 'Internal only' });
+
+    assert.deepEqual((await client('a', 'GET', '')).json().sessions.map((s) => s.id), [shared.id]);
+    for (const [method, url, payload] of [
+      ['GET', `/${internal.id}`], ['GET', `/${internal.id}/file`],
+      ['POST', `/${internal.id}/annotations`, { body: 'x' }],
+      ['POST', `/${internal.id}/decisions`, { decision: 'approved' }],
+    ]) {
+      const response = await client('a', method, url, payload);
+      assert.deepEqual([response.statusCode, response.json()], [404, { error: 'Review not found' }], `${method} ${url}`);
+    }
+
+    // Sharing makes it visible; unsharing hides it again.
+    await staff('teamA', 'POST', `/${internal.id}/client-access`, { sharedWithClient: true });
+    assert.equal((await client('a', 'GET', `/${internal.id}`)).statusCode, 200);
+    assert.equal((await client('a', 'GET', '')).json().sessions.length, 2);
+    await staff('teamA', 'POST', `/${internal.id}/client-access`, { sharedWithClient: false });
+    assert.equal((await client('a', 'GET', `/${internal.id}`)).statusCode, 404);
+    assert.deepEqual((await client('a', 'GET', '')).json().sessions.map((s) => s.id), [shared.id]);
   });
 
   it('hides reviews of a trashed project', async (t) => {

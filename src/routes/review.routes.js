@@ -94,6 +94,7 @@ function staffSession(session) {
     version: session.version,
     sourceUrl: session.sourceUrl ?? null,
     captureViewport: session.captureViewport ?? null,
+    sharedWithClient: Boolean(session.sharedWithClient),
     clientCanDecide: Boolean(session.clientCanDecide),
     previousSessionId: session.previousSessionId ?? null,
     nextSessionId: session.nextSession?.id ?? null,
@@ -234,6 +235,9 @@ export default async function reviewRoutes(fastify, options = {}) {
             previousSessionId: previous?.id ?? null,
             sourceUrl,
             captureViewport,
+            // A new version stays shared (or not) with the client like the
+            // version it replaces; client decisions are opted into again.
+            sharedWithClient: Boolean(previous?.sharedWithClient),
             createdById: request.user.id,
           },
           include: SESSION_INCLUDE,
@@ -495,26 +499,37 @@ export default async function reviewRoutes(fastify, options = {}) {
     return reply.status(201).send({ decision: staffDecision(created), status: decision });
   });
 
-  // Whether the project's client portal users may approve or request
-  // changes. Every review of a client's project is visible to that client's
-  // portal users; decisions are opt-in, like share-link decisions.
+  // Client portal access. A review is visible in the project's client portal
+  // only once shared (opt-in, default off; share links are separate), and
+  // its portal users may approve or request changes only while it is shared
+  // and clientCanDecide is on. Unsharing also turns decisions off.
   fastify.post('/:id/client-access', {
     onRequest: [fastify.authenticate],
     preHandler: [requireReviewStaff, validateBody(reviewClientAccessSchema)],
   }, async (request, reply) => {
     const session = await loadSession(request, reply);
     if (!session) return reply;
-    if (!canWriteToSession(session)) return reply.status(409).send({ error: 'This review session is closed' });
-    const { clientCanDecide } = request.body;
-    if (Boolean(session.clientCanDecide) !== clientCanDecide) {
-      await request.prisma.reviewSession.update({ where: { id: session.id }, data: { clientCanDecide } });
+    const before = { sharedWithClient: Boolean(session.sharedWithClient), clientCanDecide: Boolean(session.clientCanDecide) };
+    const sharedWithClient = request.body.sharedWithClient ?? before.sharedWithClient;
+    let clientCanDecide = request.body.clientCanDecide ?? before.clientCanDecide;
+    if (!sharedWithClient) {
+      if (request.body.clientCanDecide === true) {
+        return reply.status(409).send({ error: 'Share the review with the client before letting them decide', code: 'REVIEW_NOT_SHARED' });
+      }
+      clientCanDecide = false;
+    }
+    if (clientCanDecide !== before.clientCanDecide && !canWriteToSession(session)) {
+      return reply.status(409).send({ error: 'This review session is closed' });
+    }
+    if (sharedWithClient !== before.sharedWithClient || clientCanDecide !== before.clientCanDecide) {
+      await request.prisma.reviewSession.update({ where: { id: session.id }, data: { sharedWithClient, clientCanDecide } });
       await recordRequestAuditEvent(request.prisma, request, {
         action: 'review.client_access_changed',
         entityId: session.id,
-        metadata: { clientCanDecide },
+        metadata: { sharedWithClient, clientCanDecide, fromSharedWithClient: before.sharedWithClient, fromClientCanDecide: before.clientCanDecide },
       });
     }
-    return { clientCanDecide };
+    return { sharedWithClient, clientCanDecide };
   });
 
   fastify.get('/:id/share-links', { onRequest: [fastify.authenticate], preHandler: [requireReviewStaff] }, async (request, reply) => {

@@ -150,7 +150,10 @@ export default function ProjectReviews({ projectId }) {
                     </Link>
                     <p className="text-xs text-muted-foreground">{session.media?.fileName} · {session.openAnnotationCount} open comment{session.openAnnotationCount === 1 ? '' : 's'} · {formatDate(session.createdAt)}</p>
                   </div>
-                  <StatusBadge status={session.status} />
+                  <div className="flex items-center gap-2">
+                    {session.sharedWithClient && <span className="rounded-full border border-primary bg-primary/10 px-2 py-0.5 text-xs font-medium text-foreground">Visible to client</span>}
+                    <StatusBadge status={session.status} />
+                  </div>
                 </li>
               ))}
             </ul>

@@ -1980,10 +1980,15 @@ export const reviewCaptureCreateSchema = z.object({
   title: z.string().trim().min(1).max(200),
 }).strict();
 
-// Whether signed-in client portal users may approve or request changes.
+// Client portal access to one review: whether it is shared with the
+// project's client (visible in their portal), and whether their portal users
+// may approve or request changes (only while shared).
 export const reviewClientAccessSchema = z.object({
-  clientCanDecide: z.boolean(),
-}).strict();
+  sharedWithClient: z.boolean().optional(),
+  clientCanDecide: z.boolean().optional(),
+}).strict().refine((value) => value.sharedWithClient !== undefined || value.clientCanDecide !== undefined, {
+  message: 'Set sharedWithClient or clientCanDecide',
+});
 
 export const reviewRecaptureSchema = z.object({
   viewport: reviewCaptureViewport.optional(),

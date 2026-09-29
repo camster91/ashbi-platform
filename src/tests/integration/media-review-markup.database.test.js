@@ -1,7 +1,7 @@
 // Real-database proof for review markup and client portal reviews
 // (docs/media-review.md "Markup" and "Client portal reviews"):
-//   - a signed-in client portal user reaches only review sessions of their
-//     own client's projects: another client in the same organization, and
+//   - a signed-in client portal user reaches only review sessions staff
+//     shared with the client (opt-in), of their own client's projects: another client in the same organization, and
 //     another organization, are invisible and cannot be annotated or decided;
 //   - shape geometry is validated by the API and by the CHECK constraints of
 //     migration 20260929120000_review_markup.
@@ -103,8 +103,31 @@ test('client portal reviews stay inside the client, and markup geometry is enfor
     const a1 = await session('a', fixtures.a1, fixtures.a1.image, 'A1 homepage');
     const a2 = await session('a', fixtures.a2, fixtures.a2.image, 'A2 homepage');
     const b1 = await session('b', fixtures.b1, fixtures.b1.image, 'B1 homepage');
+    // ── Portal visibility is opt-in ─────────────────────────────────────────
+    // A fresh session of the client's own project is not shared: absent from
+    // the list and 404 on every route, like an unknown id.
+    assert.equal((await raw.reviewSession.findUnique({ where: { id: a1.id } })).sharedWithClient, false);
+    assert.deepEqual((await client('a1', 'GET', '')).json().sessions, []);
+    for (const [method, url, payload] of [
+      ['GET', `/${a1.id}`], ['GET', `/${a1.id}/file`],
+      ['POST', `/${a1.id}/annotations`, { body: 'before sharing' }],
+      ['POST', `/${a1.id}/decisions`, { decision: 'approved' }],
+    ]) {
+      assert.equal((await client('a1', method, url, payload)).statusCode, 404, `unshared ${method} ${url}`);
+    }
+    // Client decisions need a shared review (API, and a CHECK constraint).
+    assert.equal((await staff('a', 'POST', `/${a1.id}/client-access`, { clientCanDecide: true })).statusCode, 409);
+    await assert.rejects(raw.reviewSession.update({ where: { id: a1.id }, data: { clientCanDecide: true } }), /check constraint|violates|_check/i);
+    // Sharing makes it visible; unsharing hides it again.
+    assert.equal((await staff('a', 'POST', `/${a1.id}/client-access`, { sharedWithClient: true })).statusCode, 200);
+    assert.equal((await client('a1', 'GET', `/${a1.id}`)).statusCode, 200);
+    assert.deepEqual((await client('a1', 'GET', '')).json().sessions.map((row) => row.id), [a1.id]);
+    assert.equal((await staff('a', 'POST', `/${a1.id}/client-access`, { sharedWithClient: false })).statusCode, 200);
+    assert.equal((await client('a1', 'GET', `/${a1.id}`)).statusCode, 404);
+    assert.deepEqual((await client('a1', 'GET', '')).json().sessions, []);
+
     for (const id of [a1.id, a2.id, b1.id]) {
-      assert.equal((await staff(id === b1.id ? 'b' : 'a', 'POST', `/${id}/client-access`, { clientCanDecide: true })).statusCode, 200);
+      assert.equal((await staff(id === b1.id ? 'b' : 'a', 'POST', `/${id}/client-access`, { sharedWithClient: true, clientCanDecide: true })).statusCode, 200);
     }
     await staff('a', 'POST', `/${a2.id}/annotations`, { body: 'Internal to client A2', shape: 'rect', region: { x: 0.1, y: 0.1, w: 0.2, h: 0.2 } });
 

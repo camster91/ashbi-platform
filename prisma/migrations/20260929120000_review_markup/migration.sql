@@ -2,8 +2,13 @@
 -- reviews" and "Web page review"): drawn shapes on annotations, client
 -- portal authors, and the source of a captured web page.
 --
--- Additive only: five nullable columns, one boolean with a constant default
--- (a catalog-only change since PostgreSQL 11) and CHECK constraints. The two
+-- Additive only: five nullable columns, two booleans with a constant default
+-- (a catalog-only change since PostgreSQL 11) and CHECK constraints.
+--
+-- Client portal visibility is opt-in: every existing session gets
+-- "sharedWithClient" = false (the column default), so no review that existed
+-- before this migration appears in a client's portal until staff share it.
+-- Share links are unaffected (they are already an explicit share). The two
 -- author/actor CHECK constraints are replaced by supersets that also accept
 -- the new `client` author type; every existing row satisfies both the old and
 -- the new form. Rolling back the application image is safe: older code never
@@ -28,6 +33,7 @@ ADD COLUMN "color" TEXT;
 -- AlterTable
 ALTER TABLE "review_sessions" ADD COLUMN "sourceUrl" TEXT,
 ADD COLUMN "captureViewport" TEXT,
+ADD COLUMN "sharedWithClient" BOOLEAN NOT NULL DEFAULT false,
 ADD COLUMN "clientCanDecide" BOOLEAN NOT NULL DEFAULT false;
 
 -- Shapes: pin (a point region), rect (an area region), arrow (two points)
@@ -81,6 +87,11 @@ ALTER TABLE "review_decisions" ADD CONSTRAINT "review_decisions_actor_check"
     OR ("actorType" = 'guest' AND "actorUserId" IS NULL AND "shareLinkId" IS NOT NULL)
     OR ("actorType" = 'client' AND "actorUserId" IS NOT NULL AND "shareLinkId" IS NULL)
   );
+
+-- Client portal decisions are only possible on a review shared with the
+-- client.
+ALTER TABLE "review_sessions" ADD CONSTRAINT "review_sessions_client_decide_check"
+  CHECK ("clientCanDecide" = false OR "sharedWithClient" = true);
 
 -- Web page review: the captured URL and viewport, set together.
 ALTER TABLE "review_sessions" ADD CONSTRAINT "review_sessions_source_url_check"

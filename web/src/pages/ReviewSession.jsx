@@ -159,17 +159,20 @@ function ShareLinks({ sessionId, shareLinks, canCreate, onChanged }) {
   );
 }
 
-/** Whether the project's client portal users may approve or request changes. */
+/**
+ * Client portal access: a review appears in the project's client portal only
+ * once shared (default off); portal decisions need a shared, open review.
+ */
 function ClientAccess({ session, onChanged }) {
   const id = useId();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
-  const toggle = async (event) => {
-    const next = event.target.checked;
+  const shared = Boolean(session.sharedWithClient);
+  const save = async (body) => {
     setPending(true);
     setError('');
     try {
-      await api.setReviewClientAccess(session.id, next);
+      await api.setReviewClientAccess(session.id, body);
       onChanged();
     } catch (err) {
       setError(err?.message || 'The setting could not be saved.');
@@ -180,13 +183,29 @@ function ClientAccess({ session, onChanged }) {
   return (
     <section className="space-y-2 rounded-xl border border-border bg-card p-4" aria-labelledby={`${id}-heading`}>
       <h2 id={`${id}-heading`} className="flex items-center gap-2 font-semibold text-foreground"><Users className="h-4 w-4" aria-hidden="true" />Client portal</h2>
-      <p className="text-sm text-muted-foreground">The client's portal users see every review of their projects, with all comments, and can comment on open reviews.</p>
+      <p className="text-sm text-muted-foreground">
+        Reviews are internal until you share them. Once shared, the client's portal users see this review with all its comments, including the team's, and can comment while it is open. Share links are separate.
+      </p>
       <label className="flex min-h-11 items-center gap-2 text-sm text-foreground">
-        <input type="checkbox" checked={Boolean(session.clientCanDecide)} onChange={toggle} disabled={pending || session.status === 'closed'} className="h-4 w-4" />
+        <input type="checkbox" checked={shared} onChange={(event) => save({ sharedWithClient: event.target.checked })} disabled={pending} className="h-4 w-4" />
+        Share with client
+      </label>
+      <label className="flex min-h-11 items-center gap-2 text-sm text-foreground">
+        <input type="checkbox" checked={Boolean(session.clientCanDecide)} onChange={(event) => save({ clientCanDecide: event.target.checked })} disabled={pending || !shared || session.status === 'closed'} aria-describedby={`${id}-decide-help`} className="h-4 w-4" />
         Let the client approve or request changes in the client portal
       </label>
+      <p id={`${id}-decide-help`} className="text-xs text-muted-foreground">Available once the review is shared. Unsharing turns it off.</p>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
     </section>
+  );
+}
+
+/** Whether the client can see a review in their portal. */
+export function ClientVisibilityBadge({ shared }) {
+  return shared ? (
+    <span className="inline-flex items-center gap-1 rounded-full border border-primary bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-foreground"><Users className="h-3.5 w-3.5" aria-hidden="true" />Visible to client</span>
+  ) : (
+    <span className="inline-flex items-center rounded-full border border-border px-2.5 py-0.5 text-xs font-medium text-muted-foreground">Internal</span>
   );
 }
 
@@ -252,6 +271,7 @@ export default function ReviewSession() {
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-bold text-foreground">{session.title}</h1>
           <StatusBadge status={session.status} />
+          <ClientVisibilityBadge shared={Boolean(session.sharedWithClient)} />
           <span className="text-sm text-muted-foreground">Version {session.version}</span>
         </div>
         <VersionSwitcher versions={data.versions} currentId={session.id} onSelect={(versionId) => navigate(`/review/${versionId}`)} />

@@ -2564,7 +2564,8 @@ model ReviewSession {
   version           Int            @default(1)
   sourceUrl         String? // web page review: the captured http(s) URL (CHECK constraint)
   captureViewport   String? // web page review: desktop or mobile, set with sourceUrl (CHECK constraint)
-  clientCanDecide   Boolean        @default(false) // signed-in client portal users may approve or request changes
+  sharedWithClient  Boolean        @default(false) // visible in the project's client portal (opt-in; share links are separate)
+  clientCanDecide   Boolean        @default(false) // signed-in client portal users may approve or request changes; only while shared (CHECK constraint)
   previousSessionId String?        @unique // the session this version replaces
   previousSession   ReviewSession? @relation("ReviewSessionVersions", fields: [previousSessionId], references: [id], onDelete: SetNull)
   nextSession       ReviewSession? @relation("ReviewSessionVersions")

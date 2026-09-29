@@ -180,18 +180,39 @@ describe('review tracking', () => {
     }
   });
 
-  it('turns client portal decisions on and off, audited, only while open', async (t) => {
+  it('shares with the client (opt-in) and allows client decisions only while shared, audited', async (t) => {
     const { staff, db, createSession } = await setup(t);
     const session = await createSession();
-    assert.equal(session.clientCanDecide, false);
-    const on = await staff('teamA', 'POST', `/${session.id}/client-access`, { clientCanDecide: true });
-    assert.deepEqual([on.statusCode, on.json().clientCanDecide], [200, true]);
-    await staff('teamA', 'POST', `/${session.id}/client-access`, { clientCanDecide: true });
-    assert.equal(db.tables.auditEvent.filter((event) => event.action === 'review.client_access_changed').length, 1);
-    assert.equal((await staff('teamA', 'GET', `/${session.id}`)).json().session.clientCanDecide, true);
-    assert.equal((await staff('adminB', 'POST', `/${session.id}/client-access`, { clientCanDecide: false })).statusCode, 404);
-    await createSession({ previousSessionId: session.id });
-    assert.equal((await staff('teamA', 'POST', `/${session.id}/client-access`, { clientCanDecide: false })).statusCode, 409);
+    assert.deepEqual([session.sharedWithClient, session.clientCanDecide], [false, false]);
+    // Decisions need a shared review.
+    const early = await staff('teamA', 'POST', `/${session.id}/client-access`, { clientCanDecide: true });
+    assert.deepEqual([early.statusCode, early.json().code], [409, 'REVIEW_NOT_SHARED']);
+    assert.equal((await staff('teamA', 'POST', `/${session.id}/client-access`, {})).statusCode, 400);
+    assert.equal((await staff('teamA', 'POST', `/${session.id}/client-access`, { sharedWithClient: 'yes' })).statusCode, 400);
+
+    const shared = await staff('teamA', 'POST', `/${session.id}/client-access`, { sharedWithClient: true, clientCanDecide: true });
+    assert.deepEqual([shared.statusCode, shared.json()], [200, { sharedWithClient: true, clientCanDecide: true }]);
+    await staff('teamA', 'POST', `/${session.id}/client-access`, { sharedWithClient: true });
+    const events = db.tables.auditEvent.filter((event) => event.action === 'review.client_access_changed');
+    assert.equal(events.length, 1);
+    assert.deepEqual(events[0].metadata, { sharedWithClient: true, clientCanDecide: true, fromSharedWithClient: false, fromClientCanDecide: false });
+    assert.deepEqual(
+      [(await staff('teamA', 'GET', `/${session.id}`)).json().session.sharedWithClient, (await staff('teamA', 'GET', `/${session.id}`)).json().session.clientCanDecide],
+      [true, true],
+    );
+    assert.equal((await staff('adminB', 'POST', `/${session.id}/client-access`, { sharedWithClient: false })).statusCode, 404);
+
+    // Unsharing turns client decisions off too.
+    const unshared = await staff('teamA', 'POST', `/${session.id}/client-access`, { sharedWithClient: false });
+    assert.deepEqual(unshared.json(), { sharedWithClient: false, clientCanDecide: false });
+    await staff('teamA', 'POST', `/${session.id}/client-access`, { sharedWithClient: true });
+
+    // A new version inherits the sharing; decisions start off again.
+    const v2 = await createSession({ previousSessionId: session.id });
+    assert.deepEqual([v2.sharedWithClient, v2.clientCanDecide], [true, false]);
+    // A closed version can still be unshared, but not opened to decisions.
+    assert.equal((await staff('teamA', 'POST', `/${session.id}/client-access`, { clientCanDecide: true })).statusCode, 409);
+    assert.equal((await staff('teamA', 'POST', `/${session.id}/client-access`, { sharedWithClient: false })).statusCode, 200);
   });
 });
 
@@ -230,8 +251,11 @@ describe('web page review', () => {
   it('recaptures as the next version, closing the previous one', async (t) => {
     const { staff, captures, createSession } = await setup(t, { webCaptureEnabled: true });
     const v1 = (await staff('teamA', 'POST', '/capture', { projectId: 'project-a', url: 'https://example.com/', title: 'Home' })).json().session;
+    assert.equal(v1.sharedWithClient, false);
+    await staff('teamA', 'POST', `/${v1.id}/client-access`, { sharedWithClient: true });
     const v2 = await staff('teamA', 'POST', `/${v1.id}/recapture`, { viewport: 'mobile' });
     assert.equal(v2.statusCode, 201, v2.body);
+    assert.equal(v2.json().session.sharedWithClient, true, 'a recapture stays shared like the version it replaces');
     assert.deepEqual(
       [v2.json().session.version, v2.json().session.previousSessionId, v2.json().session.sourceUrl, v2.json().session.captureViewport, v2.json().session.title],
       [2, v1.id, 'https://example.com/', 'mobile', 'Home'],

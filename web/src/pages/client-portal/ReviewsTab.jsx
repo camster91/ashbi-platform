@@ -4,11 +4,12 @@ import { Alert, Button, Card, LoadingState } from '../../components/ui';
 import { API, Icons, fmtDate, pageTitleClass, portalFetch, sectionTitleClass } from './shared';
 
 // Reviews tab of the signed-in client portal (docs/media-review.md "Client
-// portal reviews"): the review sessions of the client's own projects, each
-// opened on the shared review surface. The client comments as their contact,
-// can draw markup, and approves or requests changes when the team allowed it
-// for that review. Every comment on a review of the client's project is
-// shown, including the team's: review comments have no internal-only flag.
+// portal reviews"): the review sessions the team shared with the client
+// (opt-in; unshared reviews never reach the portal), on the client's own
+// projects, each opened on the common review surface. The client comments as
+// their contact, can draw markup, and approves or requests changes when the
+// team allowed it for that review. Every comment on a shared review is shown,
+// including the team's: review comments have no internal-only flag.
 
 async function portalJson(path, token, options = {}) {
   const headers = { ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) };

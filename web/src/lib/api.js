@@ -657,8 +657,9 @@ export const api = {
     request('/reviews/capture', { method: 'POST', body: data }),
   recaptureReviewPage: (id, data = {}) =>
     request(`/reviews/${encodeURIComponent(id)}/recapture`, { method: 'POST', body: data }),
-  setReviewClientAccess: (id, clientCanDecide) =>
-    request(`/reviews/${encodeURIComponent(id)}/client-access`, { method: 'POST', body: { clientCanDecide } }),
+  // { sharedWithClient?, clientCanDecide? }
+  setReviewClientAccess: (id, data) =>
+    request(`/reviews/${encodeURIComponent(id)}/client-access`, { method: 'POST', body: data }),
   // Step-up: a 403 REAUTH_REQUIRED opens the re-authentication dialog.
   createReviewShareLink: (id, data) =>
     request(`/reviews/${encodeURIComponent(id)}/share-links`, { method: 'POST', body: data }),

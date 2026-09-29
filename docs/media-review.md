@@ -36,8 +36,9 @@ deferred to #310.
 4. A decision (`approved` or `changes_requested`, with an optional note) is
    appended to the session's decision history and becomes the session status.
    Decisions are never edited: record a new one to change the outcome.
-5. Clients signed in to the **client portal** see every review of their own
-   projects in its Reviews tab and comment there as themselves (see
+5. A review is **internal** until staff turn on **Share with client**. Shared
+   reviews appear in the Reviews tab of the project's **client portal**,
+   where the client's signed-in users comment as themselves (see
    [Client portal reviews](#client-portal-reviews)).
    To involve someone without a portal account, staff create a **share link** (step-up
    re-authentication required) and send the `/portal/review/:token` URL. The
@@ -54,12 +55,13 @@ Session statuses: `open`, `approved`, `changes_requested`, `closed`.
 ## Data model
 
 Migrations `20260926140000_media_review` and `20260929120000_review_markup`
-(markup columns, the `client` author type, `clientCanDecide` and the web
+(markup columns, the `client` author type, `sharedWithClient`,
+`clientCanDecide` and the web
 capture source); field reference in [data-dictionary.md](data-dictionary.md).
 
 | Model | Notes |
 | --- | --- |
-| `ReviewSession` | `organizationId`, `projectId`, `attachmentId`, `title`, `status`, `version`, `previousSessionId` (unique), `createdById`, `clientCanDecide` (client portal decisions allowed, default off), and for web page reviews `sourceUrl` and `captureViewport` (set together). A direct tenant model; the tenant proxy verifies that the project, the attachment and the previous session belong to the caller's organization before a create. |
+| `ReviewSession` | `organizationId`, `projectId`, `attachmentId`, `title`, `status`, `version`, `previousSessionId` (unique), `createdById`, `sharedWithClient` (visible in the client portal, default off; every session that existed before the migration is off), `clientCanDecide` (client portal decisions allowed, default off, only while shared: a CHECK constraint), and for web page reviews `sourceUrl` and `captureViewport` (set together). A direct tenant model; the tenant proxy verifies that the project, the attachment and the previous session belong to the caller's organization before a create. |
 | `ReviewAnnotation` | `authorType` is `staff` (`authorUserId` set), `guest` (`authorName`, optional `authorEmail`, and the `shareLinkId` it came through) or `client` (a signed-in client portal user: `authorUserId` is the CLIENT user, `authorEmail` the contact's email). Markup: `shape` (`pin`, `rect`, `arrow`, `pen`), `points` (JSON, arrows and strokes) and `color`. The author name is a snapshot. `body` is plain text of at most 5,000 characters. Optional `timecodeMs`, region (`regionX/Y/W/H`, all or none, inside the unit square) or `pageNumber`; `resolvedAt`/`resolvedById` set together. |
 | `ReviewDecision` | `decision`, `actorType` (`staff`, `guest` or `client`), actor name/email/user id, `shareLinkId`, `note` (at most 2,000 characters). **Append-only**: a trigger rejects every `UPDATE`, every `TRUNCATE`, and any `DELETE` except the cascade from deleting the session; the request-scoped Prisma proxy rejects update, upsert and delete. |
 | `ReviewShareLink` | `tokenHash` (SHA-256 hex, unique), `label`, `expiresAt`, `revokedAt`/`revokedById`, `allowDecision`, `createdById`, `lastUsedAt`. |
@@ -97,7 +99,7 @@ Staff API, `/api/reviews` (staff session, ADMIN or TEAM, tenant-scoped):
 | `POST /api/reviews/:id/annotations` | Add an annotation or reply: `{ body, parentId?, timecodeMs?, pageNumber?, region?, shape?, points?, color?, mentionUserIds? }`. |
 | `POST /api/reviews/:id/annotations/:annotationId/resolve` | `{ resolved: true \| false }`. |
 | `POST /api/reviews/:id/decisions` | `{ decision, note? }`. |
-| `POST /api/reviews/:id/client-access` | `{ clientCanDecide }`: whether the client portal may decide (audited as `review.client_access_changed`). |
+| `POST /api/reviews/:id/client-access` | `{ sharedWithClient?, clientCanDecide? }` (at least one): share the review with the project's client portal, and whether its users may decide. `clientCanDecide: true` on an unshared review answers `409 REVIEW_NOT_SHARED`; unsharing also turns decisions off; decisions cannot be turned on for a closed version. Audited as `review.client_access_changed` when something changes. |
 | `GET /api/reviews/capabilities` | `{ webCapture: { enabled, viewports } }`, so the UI hides web page review while it is off. |
 | `POST /api/reviews/capture` | Web page review: `{ projectId, url, viewport? (desktop, mobile), title }`. 10 per 10 minutes per IP. |
 | `POST /api/reviews/:id/recapture` | Capture the session's URL again as the next version: `{ viewport? }`. Same limit. |
@@ -137,7 +139,7 @@ Client portal API, `/api/client-portal/reviews` (client portal session,
 | `GET /api/client-portal/reviews/:id` | One session: file description, `versions`, `permissions`, annotations and decisions (public serialization). | 60 / minute | 120 / minute |
 | `GET /api/client-portal/reviews/:id/file` | The session's file only (same headers, scan seam and ranges as the share-link file route). | 30 / minute | 60 / minute |
 | `POST /api/client-portal/reviews/:id/annotations` | `{ body, parentId?, timecodeMs?, pageNumber?, region?, shape?, points?, color? }`, as the signed-in contact. | 20 / 10 minutes | 30 / 10 minutes |
-| `POST /api/client-portal/reviews/:id/decisions` | `{ decision, note? }`, only when the session has `clientCanDecide`. | 10 / 10 minutes | 5 / 10 minutes |
+| `POST /api/client-portal/reviews/:id/decisions` | `{ decision, note? }`, only on a shared session with `clientCanDecide`. | 10 / 10 minutes | 5 / 10 minutes |
 
 The per-user limits are keyed on the client user id (`crv:<route>:<userId>`)
 and answer `429 CLIENT_REVIEW_RATE_LIMITED` with `Retry-After`.
@@ -228,42 +230,53 @@ message and the download link, and page comments still work.
 ## Client portal reviews
 
 The signed-in client portal (`/client-portal`, magic-link session typed
-`client_session`) has a **Reviews** tab. It lists the review sessions of the
-signed-in client's own projects: the API confines every query to sessions
-whose project has the session's `clientId` and `organizationId` and is not in
-the trash (`sessionScope` in `src/routes/client-portal-review.routes.js`);
-another client's session, in the same or another organization, answers `404`
-exactly like an unknown id, on every route. `/api/client-portal` is
+`client_session`) has a **Reviews** tab. It lists the review sessions staff
+**shared with the client**, on the signed-in client's own projects: the API
+confines every query to sessions with `sharedWithClient = true` whose project
+has the session's `clientId` and `organizationId` and is not in the trash
+(`sessionScope` in `src/routes/client-portal-review.routes.js`). An unshared
+session of the client's own project, and any session of another client in
+the same or another organization, answers `404` exactly like an unknown id,
+on every route (list, view, file, comment, decide).
+
+Sharing is **opt-in**, like internal-by-default project chat: a new review
+is internal, and every review that existed before this change stayed
+internal (the migration sets `sharedWithClient = false`). Staff turn on
+**Share with client** on the review page (which then shows a *Visible to
+client* badge; the project's review list shows it too) and can unshare at
+any time, which hides the review from the portal again and turns client
+decisions off. A new version (including a web page recapture) inherits the
+sharing of the version it replaces; client decisions must be turned on
+again. Share links are unaffected: a share link is already an explicit
+share. `/api/client-portal` is
 tenancy-exempt and gets the raw Prisma client, like the other portal routes,
 so this scoping is the routes' own; a real-database test
 (`src/tests/integration/media-review-markup.database.test.js`) proves a
-client cannot see, fetch, annotate or decide on another client's session.
+client cannot see, fetch, annotate or decide on another client's session,
+nor on an unshared session of their own project until it is shared (and
+again after it is unshared).
 
 What a client sees and can do:
 
 - the session's title, status, version, project name and file description
   (never the storage path; for a web page review, only that it is a
   desktop/mobile capture, never the captured URL, which may be internal);
-- **every comment on the review**, from the team, share-link guests and
+- on a shared review, **every comment on it**, from the team, share-link guests and
   client users alike, with the same public serialization as share links (no
   staff user ids, guest emails or share-link ids). Review comments have **no
-  internal-only flag**: anything written on a review of a client's project is
-  visible to that client's portal users. Keep internal discussion in project
-  chat (which is internal by default) or tasks;
+  internal-only flag**: once a review is shared, everything written on it is
+  visible to that client's portal users. Keep internal discussion on an
+  unshared review, in project chat (internal by default) or in tasks;
 - comment and reply, with markup, as themselves: the author name is their
   contact name, `authorType` is `client`, `authorUserId` their CLIENT user;
   the name cannot be chosen;
 - approve or request changes only when staff turned on **Let the client
-  approve or request changes in the client portal** for that session
+  approve or request changes in the client portal** for that shared session
   (`clientCanDecide`, default off, like share-link decisions); otherwise
   `403 CLIENT_DECISION_NOT_ALLOWED`. Portal decisions are recorded with
   `actorType: client` and audited with `via: client_portal`;
 - closed sessions (older versions) are read-only; the version switcher
-  shows all versions of the chain within the client's project.
-
-Existing reviews became visible in the portal when this shipped: every
-review of a client's project, including ones started before, is listed for
-that client's portal users.
+  shows the shared versions of the chain within the client's project.
 
 A support view (admin impersonating a client user, #416) is read-only, as
 everywhere in the portal.
