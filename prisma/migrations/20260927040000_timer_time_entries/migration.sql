@@ -17,8 +17,12 @@
 -- neither reads the column nor creates a second running timer on purpose
 -- (if it races, the insert now fails instead of corrupting timers).
 
--- Block concurrent timer writes (reads continue) for the rest of this
--- migration's transaction, so no new duplicate running timer can appear
+-- Prisma does not wrap a migration in a transaction, so this one is explicit:
+-- either every step below applies or none does.
+BEGIN;
+
+-- First statement of the transaction: block concurrent timer writes (reads
+-- continue) until COMMIT, so no new duplicate running timer can appear
 -- between closing the duplicates and creating the unique index.
 LOCK TABLE "time_sessions" IN SHARE ROW EXCLUSIVE MODE;
 
@@ -50,3 +54,5 @@ WHERE s."id" = ranked."id" AND ranked."nextStart" IS NOT NULL;
 
 -- One running timer per user.
 CREATE UNIQUE INDEX "time_sessions_one_running_per_user" ON "time_sessions"("userId") WHERE "isRunning" = true;
+
+COMMIT;

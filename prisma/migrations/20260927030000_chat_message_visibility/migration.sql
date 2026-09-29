@@ -15,6 +15,11 @@
 -- rewrite, the backfill touches only client-authored rows, and the old
 -- application image ignores both columns.
 
+-- Prisma does not wrap a migration in a transaction, so this one is explicit:
+-- the column, backfill, check constraint and index apply together or not at
+-- all.
+BEGIN;
+
 -- AlterTable
 ALTER TABLE "chat_messages" ADD COLUMN "visibility" TEXT NOT NULL DEFAULT 'INTERNAL';
 ALTER TABLE "chat_messages" ADD COLUMN "removedAt" TIMESTAMP(3);
@@ -24,11 +29,12 @@ UPDATE "chat_messages"
 SET "visibility" = 'CLIENT'
 WHERE "authorId" IN (SELECT "id" FROM "users" WHERE "role" = 'CLIENT');
 
--- Only the two known visibilities are valid. Migrations run in one
--- transaction, so this validates in place; the table is small and every row
--- already satisfies the check.
+-- Only the two known visibilities are valid. Validated in place inside this
+-- transaction; every row already satisfies the check after the backfill.
 ALTER TABLE "chat_messages"
   ADD CONSTRAINT "chat_messages_visibility_check" CHECK ("visibility" IN ('INTERNAL', 'CLIENT'));
 
 -- CreateIndex
 CREATE INDEX "chat_messages_projectId_visibility_createdAt_idx" ON "chat_messages"("projectId", "visibility", "createdAt");
+
+COMMIT;
