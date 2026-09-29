@@ -566,8 +566,10 @@ export default async function botRoutes(fastify) {
         // Fire webhook (non-blocking)
         sendWebhookNotification(notification).catch(() => {});
         // Fire HITL email for approval (non-blocking)
+        // Return the inner chain so the .catch below covers the create and the
+        // email, not only the dynamic import.
         import('../utils/hitl-email.service.js').then(({ sendApprovalHITLEmail }) => {
-          fastify.prisma.notification.create({
+          return fastify.prisma.notification.create({
             data: {
               type: 'HITL_REQUIRED',
               title: approval.title,
@@ -576,7 +578,7 @@ export default async function botRoutes(fastify) {
               data: JSON.stringify({ type: 'APPROVAL', refId: approval.id }),
             }
           }).then(hitlNotif => sendApprovalHITLEmail({ notificationId: hitlNotif.id, approval }))
-        }).catch(err => fastify.log.error('Approval HITL email error:', err.message));
+        }).catch(err => fastify.log.error({ err }, 'Approval HITL email error'));
       }
     } catch (notifErr) {
       fastify.log.error('Failed to create approval notification:', notifErr.message);

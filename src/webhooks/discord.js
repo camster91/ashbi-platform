@@ -1,3 +1,4 @@
+import { outboundSignal } from '../utils/outbound-timeouts.js';
 // Discord webhook integration for Agency Hub events
 
 const DISCORD_WEBHOOKS = Object.freeze({
@@ -17,6 +18,7 @@ export async function sendDiscordWebhook(webhookUrl, data) {
 
   try {
     const response = await fetch(webhookUrl, {
+      signal: outboundSignal('webhook'),
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

@@ -84,6 +84,7 @@ export CORS_ORIGIN=https://hub.ashbi.ca
 3. Trigger a deploy — `deploy-coolify.yml` will write the new value to
    `/opt/ashbi-platform/.env` (chmod 600) and restart the container.
 4. Verify the new value is in use: `curl https://hub.ashbi.ca/api/health`
+   (expect `checks.database.status: "ok"`)
    and check `docker logs ashbi-platform` for `AuthenticationFailed` (which
    would mean a downstream container is still using the old password).
 5. If rotating a service-token secret (Stripe, Mailgun, etc.), also update

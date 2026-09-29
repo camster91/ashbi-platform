@@ -37,8 +37,10 @@ test('process lifecycle is isolated from application construction', () => {
   assert.doesNotMatch(factory, /\.listen\s*\(/);
   assert.doesNotMatch(factory, /process\.on\s*\(/);
   assert.match(server, /await buildApp\(\)/);
-  assert.match(server, /process\.once\('SIGINT'/);
-  assert.match(server, /process\.once\('SIGTERM'/);
+  assert.match(server, /installProcessHandlers\(/);
+  const lifecycle = fs.readFileSync(new URL('../../utils/process-lifecycle.js', import.meta.url), 'utf8');
+  assert.match(lifecycle, /proc\.on\('SIGINT'/);
+  assert.match(lifecycle, /proc\.on\('SIGTERM'/);
   assert.equal(packageJson.scripts['start:api'], 'node --import ./src/tracing.js src/server.js');
 });
 

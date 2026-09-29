@@ -1,3 +1,4 @@
+import { outboundSignal } from '../utils/outbound-timeouts.js';
 // Optional Slack-compatible incoming webhook integration.
 // No credentials are required unless SLACK_AGENCY_HUB_WEBHOOK_URL is configured.
 
@@ -14,6 +15,7 @@ export async function sendSlackWebhook(payload, webhookUrl = SLACK_WEBHOOK_URL) 
 
   try {
     const response = await fetch(webhookUrl, {
+      signal: outboundSignal('webhook'),
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),

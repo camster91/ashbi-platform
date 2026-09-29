@@ -7,6 +7,7 @@ import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import crypto from 'crypto';
 import { resolveTenantOrganizationIds, runTenantJob } from '../jobs/tenant-iteration.js';
+import { outboundSignal } from '../utils/outbound-timeouts.js';
 
 // ==================== EMAIL HELPER ====================
 
@@ -641,6 +642,7 @@ async function executeSendTelegram(config, triggerData) {
 
   // Send via Telegram API
   const response = await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    signal: outboundSignal('webhook'),
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -687,6 +689,7 @@ async function executeWebhookCall(config, triggerData) {
   const resolvedBody = resolveTemplate(body || '{}', triggerData);
 
   const response = await fetch(resolvedUrl, {
+    signal: outboundSignal('webhook'),
     method,
     headers: {
       'Content-Type': 'application/json',
@@ -866,6 +869,7 @@ async function executeWorkflowAction(action, context, runId) {
         const hermesUrl = process.env.HERMES_WEBHOOK_URL || 'http://localhost:8080/webhook';
         try {
           const resp = await fetch(hermesUrl, {
+            signal: outboundSignal('webhook'),
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

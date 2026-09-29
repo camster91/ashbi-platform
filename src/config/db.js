@@ -16,12 +16,14 @@ const { PrismaClient } = prismaPkg;
 // only `log:` throws "PrismaClient needs non-empty, valid PrismaClientOptions".
 // Use the official pg driver adapter and pass DATABASE_URL through it.
 import { PrismaPg } from '@prisma/adapter-pg';
+import { databasePoolConfig } from './db-pool.js';
 import { withSoftDelete } from '../services/soft-delete.service.js';
 
 // Prisma 7: lazy proxy to defer PrismaClient construction
 const globalForPrisma = /** @type {{ ashbiRawPrisma?: InstanceType<typeof PrismaClient> }} */ (globalThis);
 const buildBase = () => new PrismaClient({
-  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+  // Explicit, env-tunable pool size and timeouts (DATABASE_POOL_*).
+  adapter: new PrismaPg(databasePoolConfig()),
   log: process.env.NODE_ENV === 'development'
     ? ['query', 'info', 'warn', 'error']
     : ['warn', 'error'],

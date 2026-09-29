@@ -4,6 +4,7 @@
 import prisma from '../config/db.js';
 import { randomUUID } from 'node:crypto';
 import { aiGovernance } from '../ai/governance.js';
+import { outboundSignal } from '../utils/outbound-timeouts.js';
 
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
 const EMBEDDING_MODEL = 'nomic-embed-text';
@@ -23,6 +24,7 @@ export async function generateEmbedding(text) {
     headers.Authorization = `Bearer ${process.env.OLLAMA_API_KEY}`;
   }
   const response = await fetch(`${OLLAMA_BASE_URL}/api/embed`, {
+    signal: outboundSignal('embedding'),
     method: 'POST',
     headers,
     body: JSON.stringify({
