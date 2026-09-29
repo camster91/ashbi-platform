@@ -64,6 +64,11 @@ const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
 // Capturing a page starts a browser: a tight per-IP budget on top of the
 // capture service's own concurrency limit.
 const CAPTURE_LIMIT = { max: 10, timeWindow: '10 minutes' };
+const CAPTURE_SERVER_ERRORS = Object.freeze({
+  WEB_CAPTURE_FAILED: 'The page could not be loaded. Check that it is public and try again.',
+  WEB_CAPTURE_TIMEOUT: 'The page did not finish loading in time.',
+  WEB_CAPTURE_UNAVAILABLE: 'Web page capture is not available on this server.',
+});
 export const WEB_CAPTURE_DISABLED = Object.freeze({
   error: 'Web page review is not enabled on this server',
   code: 'WEB_REVIEW_CAPTURE_DISABLED',
@@ -264,7 +269,10 @@ export default async function reviewRoutes(fastify, options = {}) {
       capture = await captureWebPage({ url, viewport });
     } catch (err) {
       if (err instanceof WebCaptureError) {
-        reply.status(err.statusCode).send({ error: err.message, code: err.code });
+        // 4xx: the service's own fixed, caller-safe messages (e.g. why a URL
+        // was refused). 5xx: a fixed message per code, never err.message.
+        if (err.statusCode < 500) reply.status(err.statusCode).send({ error: err.message, code: err.code });
+        else reply.status(err.statusCode).send({ error: CAPTURE_SERVER_ERRORS[err.code] ?? CAPTURE_SERVER_ERRORS.WEB_CAPTURE_FAILED, code: err.code });
         return null;
       }
       throw err;

@@ -253,4 +253,11 @@ describe('web page review', () => {
     assert.equal(db.tables.reviewSession.length, 0);
     assert.equal(db.tables.attachment.filter((row) => row.mimeType === 'image/png' && row.id.startsWith('attachment-')).length, 0);
   });
+
+  it('answers server-side capture failures with a fixed message per code', async (t) => {
+    const timeout = new WebCaptureError('WEB_CAPTURE_TIMEOUT', 'internal detail: goto timed out at 10.0.0.1', 504);
+    const { staff } = await setup(t, { webCaptureEnabled: true, captureWebPage: async () => { throw timeout; } });
+    const response = await staff('teamA', 'POST', '/capture', { projectId: 'project-a', url: 'https://example.com/', title: 'x' });
+    assert.deepEqual([response.statusCode, response.json()], [504, { error: 'The page did not finish loading in time.', code: 'WEB_CAPTURE_TIMEOUT' }]);
+  });
 });

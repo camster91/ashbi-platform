@@ -1932,7 +1932,8 @@ const reviewRegion = z.object({
 // The combination rules (which shape needs which anchor) are checked by
 // annotationPositionError against the reviewed media kind.
 const reviewUnit = z.number().min(0).max(1);
-const reviewPoints = z.array(z.tuple([reviewUnit, reviewUnit])).min(2).max(500);
+// Pairs as fixed-length arrays (the OpenAPI generator has no tuple support).
+const reviewPoints = z.array(z.array(reviewUnit).length(2)).min(2).max(500);
 
 const reviewAnnotationFields = {
   body: z.string().trim().min(1).max(5_000),

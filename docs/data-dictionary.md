@@ -96,9 +96,9 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Response](#model-response) | `responses` | no | no | 18 |
 | [RetainerPlan](#model-retainerplan) | `retainer_plans` | no | yes | 23 |
 | [RevenueSnapshot](#model-revenuesnapshot) | `revenue_snapshots` | no | no | 20 |
-| [ReviewAnnotation](#model-reviewannotation) | `review_annotations` | no | no | 23 |
+| [ReviewAnnotation](#model-reviewannotation) | `review_annotations` | no | no | 26 |
 | [ReviewDecision](#model-reviewdecision) | `review_decisions` | no | no | 11 |
-| [ReviewSession](#model-reviewsession) | `review_sessions` | yes | no | 19 |
+| [ReviewSession](#model-reviewsession) | `review_sessions` | yes | no | 22 |
 | [ReviewShareLink](#model-reviewsharelink) | `review_share_links` | no | no | 13 |
 | [RevisionRound](#model-revisionround) | `revision_rounds` | no | no | 10 |
 | [SlackChannelMapping](#model-slackchannelmapping) | `slack_channel_mappings` | yes | no | 13 |
@@ -2207,8 +2207,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `parentId` | String | optional |  |  |  |
 | `parent` | ReviewAnnotation | optional |  | → ReviewAnnotation, via (parentId) → (id), onDelete Cascade, "ReviewAnnotationThread" |  |
 | `replies` | ReviewAnnotation[] | list, required |  | → ReviewAnnotation, "ReviewAnnotationThread" |  |
-| `authorType` | String | required |  |  | staff or guest (CHECK constraint) |
-| `authorUserId` | String | optional |  |  | staff author; no FK: history must outlive the actor account |
+| `authorType` | String | required |  |  | staff, guest (share link) or client (signed-in client portal user) (CHECK constraint) |
+| `authorUserId` | String | optional |  |  | staff or client portal author; no FK: history must outlive the actor account |
 | `authorName` | String | required |  |  |  |
 | `authorEmail` | String | optional |  |  | guest only, optional |
 | `shareLinkId` | String | optional |  |  | guest only: the link the comment came through |
@@ -2220,6 +2220,9 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `regionW` | Float | optional |  |  |  |
 | `regionH` | Float | optional |  |  |  |
 | `pageNumber` | Int | optional |  |  |  |
+| `shape` | String | optional |  |  | pin, rect, arrow or pen; every shape also has a region (CHECK constraints) |
+| `points` | Json | optional |  |  | arrow and pen: 2..500 normalized [x, y] pairs (CHECK constraint) |
+| `color` | String | optional |  |  | red, orange, yellow, green, blue or purple (CHECK constraint) |
 | `resolvedAt` | DateTime | optional |  |  |  |
 | `resolvedById` | String | optional |  |  | No FK: history must outlive the actor account |
 | `createdAt` | DateTime | required | `now()` |  |  |
@@ -2239,7 +2242,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `sessionId` | String | required |  |  |  |
 | `session` | ReviewSession | required |  | → ReviewSession, via (sessionId) → (id), onDelete Cascade |  |
 | `decision` | String | required |  |  | approved or changes_requested (CHECK constraint) |
-| `actorType` | String | required |  |  | staff or guest (CHECK constraint) |
+| `actorType` | String | required |  |  | staff, guest (share link) or client (signed-in client portal user) (CHECK constraint) |
 | `actorUserId` | String | optional |  |  | No FK: history must outlive the actor account |
 | `actorName` | String | required |  |  |  |
 | `actorEmail` | String | optional |  |  |  |
@@ -2269,6 +2272,9 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `title` | String | required |  |  |  |
 | `status` | String | required | `"open"` |  | open, approved, changes_requested, closed (CHECK constraint) |
 | `version` | Int | required | `1` |  |  |
+| `sourceUrl` | String | optional |  |  | web page review: the captured http(s) URL (CHECK constraint) |
+| `captureViewport` | String | optional |  |  | web page review: desktop or mobile, set with sourceUrl (CHECK constraint) |
+| `clientCanDecide` | Boolean | required | `false` |  | signed-in client portal users may approve or request changes |
 | `previousSessionId` | String | unique, optional |  |  | the session this version replaces |
 | `previousSession` | ReviewSession | optional |  | → ReviewSession, via (previousSessionId) → (id), onDelete SetNull, "ReviewSessionVersions" |  |
 | `nextSession` | ReviewSession | optional |  | → ReviewSession, "ReviewSessionVersions" |  |
