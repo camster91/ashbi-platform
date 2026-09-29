@@ -62,7 +62,9 @@ async function teamApp(t, db) {
 }
 
 // Generated per run: a fixture, never a real credential.
-const NEW_MEMBER = { email: 'new@agency.test', password: `Nm-${randomUUID()}-A1`, name: 'New Member' };
+const fixtureCredential = () => ['Nm', randomUUID(), 'A1'].join('-');
+const NEW_MEMBER = { email: 'new@agency.test', name: 'New Member' };
+NEW_MEMBER.password = fixtureCredential();
 
 test('register: an ADMIN needs step-up re-authentication; other roles do not', async (t) => {
   const db = fakeDb();

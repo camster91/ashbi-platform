@@ -2673,6 +2673,7 @@ model EmailWebhookReceipt {
   signature   String    @unique
   receivedAt  DateTime  @default(now())
   processedAt DateTime?
+  claimToken  String
 
   @@index([receivedAt])
   @@map("email_webhook_receipts")

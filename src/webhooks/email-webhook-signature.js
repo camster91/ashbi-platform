@@ -34,43 +34,57 @@ export function verifyEmailWebhook({ secret, timestamp, signature, rawBody }, { 
 }
 
 /**
- * How long an unfinished claim blocks a retry of the same delivery. A claim is
- * finished when the email was processed; one whose processing was interrupted
- * (the process died, or releasing it failed) is taken over by a retry after
- * the lease, while the delivery's timestamp is still inside the window.
+ * Claim lease. The handler renews it every EMAIL_WEBHOOK_CLAIM_RENEW_MS while
+ * it processes, so a live delivery keeps its claim however long the pipeline
+ * takes; only a claim whose handler died (renewals stopped) expires and can be
+ * taken over by a retry, while the delivery's timestamp is still in the window.
  */
-export const EMAIL_WEBHOOK_CLAIM_LEASE_MS = 2 * 60 * 1000;
+export const EMAIL_WEBHOOK_CLAIM_LEASE_MS = 60 * 1000;
+export const EMAIL_WEBHOOK_CLAIM_RENEW_MS = 20 * 1000;
 
 /**
- * Claim a signature for processing. False when the delivery was already
- * processed, or is being processed now (a claim younger than the lease).
+ * Claim a signature for processing. Returns the claim's owner token, or null
+ * when the delivery was already processed or its claim is still live.
+ * Renewal, completion and release are fenced by that token, so a handler
+ * whose claim was taken over can never touch the new owner's receipt.
  * Old receipts are pruned.
+ * @returns {Promise<string | null>}
  */
 export async function claimEmailWebhookSignature(prisma, signature, { now = new Date(), leaseMs = EMAIL_WEBHOOK_CLAIM_LEASE_MS } = {}) {
+  const claimToken = crypto.randomUUID();
   let claimed = false;
   try {
-    await prisma.emailWebhookReceipt.create({ data: { signature, receivedAt: now } });
+    await prisma.emailWebhookReceipt.create({ data: { signature, receivedAt: now, claimToken } });
     claimed = true;
   } catch (err) {
     if (/** @type {any} */ (err)?.code !== 'P2002') throw err;
-    // Take over an interrupted claim: never finished and older than the lease.
+    // Take over a dead claim: never finished and not renewed within the lease.
     const takeover = await prisma.emailWebhookReceipt.updateMany({
       where: { signature, processedAt: null, receivedAt: { lt: new Date(now.getTime() - leaseMs) } },
-      data: { receivedAt: now },
+      data: { receivedAt: now, claimToken },
     });
     claimed = takeover.count === 1;
   }
-  if (!claimed) return false;
+  if (!claimed) return null;
   const cutoff = new Date(now.getTime() - 2 * EMAIL_WEBHOOK_MAX_AGE_MS);
   await prisma.emailWebhookReceipt.deleteMany({ where: { receivedAt: { lt: cutoff } } }).catch(() => {});
-  return true;
+  return claimToken;
+}
+
+/** Extend a live claim; false when it is no longer this owner's. */
+export async function renewEmailWebhookClaim(prisma, signature, claimToken, { now = new Date() } = {}) {
+  const renewed = await prisma.emailWebhookReceipt.updateMany({
+    where: { signature, claimToken, processedAt: null },
+    data: { receivedAt: now },
+  });
+  return renewed.count === 1;
 }
 
 /** The delivery was processed: from now on it is only ever a replay. */
-export async function markEmailWebhookProcessed(prisma, signature, { now = new Date() } = {}) {
-  await prisma.emailWebhookReceipt.updateMany({ where: { signature }, data: { processedAt: now } });
+export async function markEmailWebhookProcessed(prisma, signature, claimToken, { now = new Date() } = {}) {
+  await prisma.emailWebhookReceipt.updateMany({ where: { signature, claimToken }, data: { processedAt: now } });
 }
 
-export async function releaseEmailWebhookSignature(prisma, signature) {
-  await prisma.emailWebhookReceipt.deleteMany({ where: { signature } }).catch(() => {});
+export async function releaseEmailWebhookSignature(prisma, signature, claimToken) {
+  await prisma.emailWebhookReceipt.deleteMany({ where: { signature, claimToken, processedAt: null } }).catch(() => {});
 }

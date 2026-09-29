@@ -8,7 +8,8 @@ import {validateBody, webhookEmailTestSchema} from '../validators/schemas.js';
 import { runTenantJob } from '../jobs/tenant-iteration.js';
 import { prisma as backgroundPrisma } from '../config/db.js';
 import {
-  claimEmailWebhookSignature, markEmailWebhookProcessed, releaseEmailWebhookSignature, verifyEmailWebhook,
+  EMAIL_WEBHOOK_CLAIM_RENEW_MS, claimEmailWebhookSignature, markEmailWebhookProcessed, releaseEmailWebhookSignature,
+  renewEmailWebhookClaim, verifyEmailWebhook,
 } from '../webhooks/email-webhook-signature.js';
 
 export default async function webhookRoutes(fastify) {
@@ -40,9 +41,16 @@ export default async function webhookRoutes(fastify) {
     }
     // /api/webhooks is tenancy-exempt: request.prisma is the unscoped client.
     const receipts = request.prisma ?? backgroundPrisma;
-    if (!(await claimEmailWebhookSignature(receipts, verification.signature))) {
+    const claimToken = await claimEmailWebhookSignature(receipts, verification.signature);
+    if (!claimToken) {
       return reply.status(409).send({ error: 'Webhook delivery was already processed' });
     }
+    // Keep the claim live while the (possibly slow, AI-backed) pipeline runs,
+    // so a provider retry cannot take it over from a handler still working.
+    const renewal = setInterval(() => {
+      renewEmailWebhookClaim(receipts, verification.signature, claimToken).catch(() => {});
+    }, EMAIL_WEBHOOK_CLAIM_RENEW_MS);
+    renewal.unref?.();
 
     try {
       // Parse the incoming email
@@ -57,7 +65,7 @@ export default async function webhookRoutes(fastify) {
       );
       // Finished: a later delivery with this signature is a replay. Until
       // this runs, an interrupted claim is retryable after its lease.
-      await markEmailWebhookProcessed(receipts, verification.signature).catch((err) => {
+      await markEmailWebhookProcessed(receipts, verification.signature, claimToken).catch((err) => {
         fastify.log.warn({ errorName: err?.name }, 'Could not mark the email webhook processed');
       });
 
@@ -69,9 +77,11 @@ export default async function webhookRoutes(fastify) {
       };
     } catch (error) {
       // Release the signature so the sender's retry of this delivery is accepted.
-      await releaseEmailWebhookSignature(receipts, verification.signature);
+      await releaseEmailWebhookSignature(receipts, verification.signature, claimToken);
       fastify.log.error({ errorName: error?.name }, 'Email processing error');
       return reply.status(500).send({ error: 'Email processing failed' });
+    } finally {
+      clearInterval(renewal);
     }
   });
 
