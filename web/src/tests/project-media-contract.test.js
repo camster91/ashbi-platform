@@ -3,12 +3,16 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const media = readFileSync(resolve(process.cwd(), 'src/components/project/ProjectMedia.jsx'), 'utf8');
+// The recorder itself is shared with the chat capture dialog (docs/chat-media.md).
+const recorderLib = readFileSync(resolve(process.cwd(), 'src/lib/media-recorder.js'), 'utf8');
 const project = readFileSync(resolve(process.cwd(), 'src/pages/Project.jsx'), 'utf8');
 
 describe('project media collaboration contract', () => {
   it('exposes a project-scoped screen recording flow with a bounded upload', () => {
     expect(media).toContain('navigator.mediaDevices.getDisplayMedia');
-    expect(media).toContain('new MediaRecorder');
+    expect(media).toContain('startCappedRecording(stream');
+    expect(recorderLib).toContain('Recorder = globalThis.MediaRecorder');
+    expect(recorderLib).toContain('new Recorder(stream');
     expect(media).toContain("api.uploadAttachment(file, 'PROJECT', projectId)");
     expect(media).toContain('MAX_RECORDING_BYTES');
     expect(media).toContain('MAX_RECORDING_DURATION_MS');

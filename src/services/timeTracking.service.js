@@ -180,31 +180,22 @@ export async function getTimeSummary(userId, filters = {}) {
     ? { ...(startDate ? { gte: new Date(startDate) } : {}), ...(endDate ? { lte: new Date(endDate) } : {}) }
     : undefined;
 
-  // TimeEntry is the canonical record: stopped timers (source TIMER) and
-  // manual entries both live there. Timer sessions stopped before timers
-  // recorded entries (no linked TimeEntry) are counted too, once each.
-  // Totals come from groupBy aggregates, so they cover every record; only the
-  // listed entries are limited (reads of soft-deletable models cap at 100).
+  // TimeEntry is the canonical record, as for timesheets, reports and
+  // budgets: stopped timers (source TIMER) and manual entries both live
+  // there. Timer sessions are not counted separately. Totals come from
+  // groupBy aggregates over every entry; only the listed entries are limited
+  // (reads of soft-deletable models cap at 100).
   const entryWhere = { userId, ...(projectId ? { projectId } : {}), ...(range ? { date: range } : {}) };
-  const sessionWhere = {
-    // Legacy only: stopped, with time, and no linked entry (sub-minute
-    // timers keep 0 minutes and no entry, so they never count).
-    userId, isRunning: false, timeEntry: null, duration: { gt: 0 },
-    ...(projectId ? { projectId } : {}), ...(range ? { startTime: range } : {}),
-  };
-  const [entryGroups, sessionGroups, entryCount, sessionCount, recentEntries, recentSessions] = await Promise.all([
+  const [entryGroups, entryCount, recentEntries] = await Promise.all([
     prisma.timeEntry.groupBy({ by: ['projectId', 'billable'], where: entryWhere, _sum: { duration: true } }),
-    prisma.timeSession.groupBy({ by: ['projectId', 'billable'], where: sessionWhere, _sum: { duration: true } }),
     prisma.timeEntry.count({ where: entryWhere }),
-    prisma.timeSession.count({ where: sessionWhere }),
     prisma.timeEntry.findMany({ where: entryWhere, include: SESSION_INCLUDE, orderBy: { date: 'desc' }, take: SUMMARY_ENTRY_LIMIT }),
-    prisma.timeSession.findMany({ where: sessionWhere, include: SESSION_INCLUDE, orderBy: { startTime: 'desc' }, take: SUMMARY_ENTRY_LIMIT }),
   ]);
 
   const projectTotals = new Map();
   let totalMinutes = 0;
   let billableMinutes = 0;
-  for (const group of [...entryGroups, ...sessionGroups]) {
+  for (const group of entryGroups) {
     const minutes = group._sum?.duration ?? 0;
     const totals = projectTotals.get(group.projectId) ?? { totalMinutes: 0, billableMinutes: 0 };
     totals.totalMinutes += minutes;
@@ -216,18 +207,12 @@ export async function getTimeSummary(userId, filters = {}) {
     projectTotals.set(group.projectId, totals);
   }
 
-  const entries = [
-    ...recentEntries.map((entry) => ({
-      id: entry.id, kind: 'entry', source: entry.source ?? 'MANUAL', date: entry.date,
-      duration: entry.duration, billable: entry.billable, description: entry.description ?? null,
-      projectId: entry.projectId, project: entry.project, taskId: entry.taskId ?? null, task: entry.task ?? null,
-    })),
-    ...recentSessions.map((session) => ({
-      id: session.id, kind: 'session', source: 'TIMER', date: session.startTime,
-      duration: session.duration, billable: session.billable, description: session.description ?? null,
-      projectId: session.projectId, project: session.project, taskId: session.taskId ?? null, task: session.task ?? null,
-    })),
-  ].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, SUMMARY_ENTRY_LIMIT);
+  const entries = recentEntries.map((entry) => ({
+    id: entry.id, source: entry.source ?? 'MANUAL', date: entry.date,
+    duration: entry.duration, billable: entry.billable, description: entry.description ?? null,
+    projectId: entry.projectId, project: entry.project, taskId: entry.taskId ?? null, task: entry.task ?? null,
+    timeSessionId: entry.timeSessionId ?? null,
+  }));
 
   // Project names for every project with time (read in pages of 100).
   const projectIds = [...projectTotals.keys()];
@@ -248,9 +233,9 @@ export async function getTimeSummary(userId, filters = {}) {
     billableMinutes,
     billableHours: Math.round(billableMinutes / 60 * 100) / 100,
     nonBillableMinutes: totalMinutes - billableMinutes,
-    entryCount: entryCount + sessionCount,
+    entryCount,
     entries,
-    entriesTruncated: entryCount + sessionCount > entries.length,
+    entriesTruncated: entryCount > entries.length,
     byProject,
   };
 }

@@ -133,8 +133,22 @@ test('client payload helpers drop internal fields and internal messages', () => 
   assert.equal(toClientChatPayload({ id: 'm', visibility: 'CLIENT', content: 'gone', removedAt: new Date() }), null);
   assert.deepEqual(
     toClientChatPayload({ id: 'm', projectId: 'p', visibility: 'CLIENT', content: 'hi', metadata: '{"mentions":[]}', externalSource: 'SLACK', author: { id: 'u', name: 'Avery', email: 'a@x' } }),
-    { id: 'm', projectId: 'p', content: 'hi', visibility: 'CLIENT', author: { id: 'u', name: 'Avery' } },
+    { id: 'm', projectId: 'p', content: 'hi', visibility: 'CLIENT', author: { id: 'u', name: 'Avery' }, attachments: [] },
   );
+});
+
+test('client chat payload reduces attachments to the client shape and never carries INTERNAL files', () => {
+  const attachments = [
+    { id: 'a1', filename: 'uuid-1.png', originalName: 'shot.png', mimeType: 'image/png', size: 10, path: '/uploads/uuid-1.png', uploadedById: 'staff', organizationId: 'org-1', entityId: 'm' },
+    { id: 'a2', filename: 'uuid-2.webm', originalName: 'bad.webm', mimeType: 'video/webm', size: 20, path: '/uploads/quarantine/uuid-2.webm', uploadedById: 'staff', organizationId: 'org-1', entityId: 'm' },
+  ];
+  assert.equal(toClientChatPayload({ id: 'm', projectId: 'p', visibility: 'INTERNAL', content: 'secret', attachments }), null);
+  const payload = toClientChatPayload({ id: 'm', projectId: 'p', visibility: 'CLIENT', content: 'see', attachments });
+  assert.deepEqual(payload.attachments, [
+    { id: 'a1', name: 'shot.png', mimeType: 'image/png', size: 10, url: '/api/client-portal/chat-attachments/a1' },
+  ], 'client fields only; quarantined files withheld');
+  const serialised = JSON.stringify(payload);
+  for (const leak of ['uuid-1', '/uploads/', 'staff', 'org-1']) assert.ok(!serialised.includes(leak), `client payload leaks ${leak}`);
 });
 
 test('join-project refuses unauthorized, invalid and failing lookups with a negative ack', async () => {

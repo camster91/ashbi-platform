@@ -432,6 +432,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Soft-deletable: no
 - Constraints and indexes:
   - `@@index([organizationId])`
+  - `@@index([entityType, entityId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
@@ -443,7 +444,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `size` | Int | required |  |  | Size in bytes |
 | `path` | String | required |  |  | Storage path or URL |
 | `thumbnailPath` | String | optional |  |  | For images |
-| `entityType` | String | required |  |  | PROJECT, TASK, CHAT, NOTE |
+| `entityType` | String | required |  |  |  |
 | `entityId` | String | required |  |  |  |
 | `uploadedById` | String | required |  |  |  |
 | `createdAt` | DateTime | required | `now()` |  |  |

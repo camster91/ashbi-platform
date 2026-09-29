@@ -10,12 +10,12 @@ import timeTrackingRoutes from '../../routes/time-tracking.routes.js';
 import { purgeFixtureAuditEvents } from '../helpers/audit-cleanup.js';
 
 // GET /api/time-tracking/summary counts the canonical TimeEntry records
-// (timer and manual) plus timer sessions stopped before timers recorded an
-// entry, never a timer twice (Codex P2 on #480: manual entries were missing).
+// (timer and manual), like timesheets and reports; timer sessions are never
+// counted separately, so no timer can count twice (Codex findings on #480).
 const databaseUrl = process.env.TENANT_INTEGRATION_DATABASE_URL;
 const MINUTE = 60_000;
 
-test('the time summary includes manual entries, timer entries and legacy sessions once each', {
+test('the time summary counts timer and manual entries, never sessions separately', {
   skip: !databaseUrl && 'TENANT_INTEGRATION_DATABASE_URL is not configured',
   timeout: 60_000,
 }, async () => {
@@ -31,7 +31,8 @@ test('the time summary includes manual entries, timer entries and legacy session
     await raw.user.createMany({ data: [ids.user, ids.other].map((id) => ({ id, email: `${id}@example.com`, name: id, password: 'x', role: 'TEAM', organizationId: ids.org })) });
 
     const day = new Date('2026-09-10T10:00:00.000Z');
-    // A legacy timer session stopped before timers recorded entries: 30 min.
+    // A timer session without an entry (e.g. before timers recorded entries)
+    // is not recorded time: 30 min that must not count.
     await raw.timeSession.create({ data: { userId: ids.user, projectId: ids.project, startTime: day, endTime: new Date(day.getTime() + 30 * MINUTE), duration: 30, isRunning: false } });
     // A timer that recorded its entry: 45 min, counted once (via the entry).
     const timed = await raw.timeSession.create({ data: { userId: ids.user, projectId: ids.project, startTime: day, endTime: new Date(day.getTime() + 45 * MINUTE), duration: 45, isRunning: false } });
@@ -56,15 +57,15 @@ test('the time summary includes manual entries, timer entries and legacy session
     const summary = await app.inject({ method: 'GET', url: '/api/time-tracking/summary' });
     assert.equal(summary.statusCode, 200, summary.body);
     const body = summary.json();
-    assert.equal(body.totalMinutes, 30 + 45 + 20);
-    assert.equal(body.billableMinutes, 30 + 45);
+    assert.equal(body.totalMinutes, 45 + 20);
+    assert.equal(body.billableMinutes, 45);
     assert.equal(body.nonBillableMinutes, 20);
-    assert.equal(body.entries.length, 3);
-    assert.deepEqual(body.entries.map((e) => e.source).sort(), ['MANUAL', 'TIMER', 'TIMER']);
+    assert.equal(body.entries.length, 2);
+    assert.deepEqual(body.entries.map((e) => e.source).sort(), ['MANUAL', 'TIMER']);
     assert.equal(body.byProject.length, 1);
-    assert.equal(body.byProject[0].totalMinutes, 95);
+    assert.equal(body.byProject[0].totalMinutes, 65);
 
-    assert.equal(body.entryCount, 3);
+    assert.equal(body.entryCount, 2);
     assert.equal(body.entriesTruncated, false);
 
     // Beyond the 100-row read cap: totals still include every entry.
@@ -72,9 +73,9 @@ test('the time summary includes manual entries, timer entries and legacy session
       userId: ids.user, projectId: ids.project, duration: 2, date: new Date(day.getTime() - (i + 1) * MINUTE), source: 'MANUAL',
     })) });
     const large = (await app.inject({ method: 'GET', url: '/api/time-tracking/summary' })).json();
-    assert.equal(large.totalMinutes, 95 + 300, 'every entry counts, not just the listed ones');
-    assert.equal(large.byProject[0].totalMinutes, 95 + 300);
-    assert.equal(large.entryCount, 153);
+    assert.equal(large.totalMinutes, 65 + 300, 'every entry counts, not just the listed ones');
+    assert.equal(large.byProject[0].totalMinutes, 65 + 300);
+    assert.equal(large.entryCount, 152);
     assert.equal(large.entries.length, 100);
     assert.equal(large.entriesTruncated, true);
 

@@ -99,7 +99,9 @@ test('a chat mention writes one row', async () => {
     activity: { create: async () => ({}) },
     user: { findMany: async () => [{ id: 'dana', name: 'Dana' }] },
     notification: { create: async () => { throw new Error('routes must not create notification rows directly'); } },
+    attachment: { findMany: async () => [] },
   };
+  prisma.$transaction = async (work) => work(prisma);
   app.addHook('onRequest', async (request) => { request.prisma = prisma; });
   await app.register(chatRoutes, { prefix: '/api' });
   try {
