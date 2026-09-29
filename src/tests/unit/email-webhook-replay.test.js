@@ -14,7 +14,7 @@ const { default: webhookRoutes } = await import('../../routes/webhook.routes.js'
 const {
   signEmailWebhook, verifyEmailWebhook, recordEmailWebhookReceipt, emailWebhookJobId,
 } = await import('../../webhooks/email-webhook-signature.js');
-const { emailQueue } = await import('../../jobs/queue.js');
+const { emailQueue, hydrateEmailJobData } = await import('../../jobs/queue.js');
 
 function receiptStore() {
   const rows = new Map();
@@ -189,4 +189,15 @@ test('the route never re-serialises the body and queues before recording the rec
     assert.match(emailWorker, /try \{\s*await scheduleEscalationCheck/, 'a scheduling failure never fails a processed email job');
     assert.match(emailWorker, /maxStalledCount: 0/, 'a stalled email job is failed for replay, never re-run');
   });
+});
+
+test('queued email data gets its receivedAt back as a Date before the pipeline runs', () => {
+  const sent = { subject: 'Hi', receivedAt: new Date('2026-09-29T10:00:00.000Z') };
+  const overTheWire = JSON.parse(JSON.stringify(sent));
+  assert.equal(typeof overTheWire.receivedAt, 'string');
+  const hydrated = hydrateEmailJobData(overTheWire);
+  assert.ok(hydrated.receivedAt instanceof Date);
+  assert.equal(hydrated.receivedAt.toISOString(), '2026-09-29T10:00:00.000Z');
+  assert.equal(hydrateEmailJobData({ receivedAt: 'not a date' }).receivedAt, undefined);
+  assert.equal(hydrateEmailJobData({}).receivedAt, undefined);
 });

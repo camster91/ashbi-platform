@@ -183,6 +183,15 @@ export const INBOUND_EMAIL_JOB_OPTIONS = Object.freeze({
   removeOnFail: { age: 30 * 24 * 60 * 60 },
 });
 
+/**
+ * Job data travels as JSON, so Date fields arrive as ISO strings. Restore
+ * them before the pipeline writes them to DateTime columns.
+ */
+export function hydrateEmailJobData(data = {}) {
+  const receivedAt = data.receivedAt ? new Date(data.receivedAt) : undefined;
+  return { ...data, receivedAt: receivedAt && !Number.isNaN(receivedAt.getTime()) ? receivedAt : undefined };
+}
+
 export async function queueInboundEmailDelivery(emailData, { organizationId, jobId }) {
   if (!organizationId) throw new Error('Tenancy Error: an organization is required to enqueue an inbound email');
   const job = await emailQueue.add('process-email', { ...emailData, organizationId }, { ...INBOUND_EMAIL_JOB_OPTIONS, jobId });

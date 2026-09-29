@@ -6,6 +6,7 @@ import os from 'node:os';
 import {
   closeQueueInfrastructure,
   getWorkerConnection,
+  hydrateEmailJobData,
   QUEUES,
   scheduleEscalationCheck,
   setupRecurringJobs,
@@ -101,7 +102,7 @@ const emailWorker = createWorker(
     const result = await runTenantJob(
       prisma,
       job.data?.organizationId,
-      () => processEmailPipeline(job.data),
+      () => processEmailPipeline(hydrateEmailJobData(job.data)),
       backgroundPrisma,
     );
 
