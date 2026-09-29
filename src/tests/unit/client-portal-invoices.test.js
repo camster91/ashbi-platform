@@ -59,7 +59,7 @@ describe('client portal invoices', () => {
   after(async () => app.close());
 
   it('lists sent, overdue and paid invoices only, and links Pay to the public invoice page', async () => {
-    const bearer = app.jwt.sign({ ...user, contactId: 'contact-a' }, { expiresIn: '1h' });
+    const bearer = app.jwt.sign({ ...user, contactId: 'contact-a', typ: 'client_session' }, { expiresIn: '1h' });
     const response = await app.inject({ method: 'GET', url: '/api/client-portal/invoices', headers: { authorization: `Bearer ${bearer}` } });
     assert.equal(response.statusCode, 200, response.body);
     const invoices = response.json();
