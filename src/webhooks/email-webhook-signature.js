@@ -6,6 +6,9 @@
 // where rawBody is the exact request body bytes. A delivery is accepted only
 // within EMAIL_WEBHOOK_MAX_AGE_MS of its timestamp, and each signature only
 // once (email_webhook_receipts), so a captured request cannot be replayed.
+// Accepted deliveries are handed to the email-processing queue (a durable,
+// retried job keyed by the signature), so processing never depends on the
+// sender retrying within the timestamp window.
 // This follows the Mailgun events webhook (src/services/mailgun-delivery.service.js).
 
 import crypto from 'node:crypto';
@@ -33,58 +36,30 @@ export function verifyEmailWebhook({ secret, timestamp, signature, rawBody }, { 
   return { ok: true, signature: signature.toLowerCase() };
 }
 
-/**
- * Claim lease. The handler renews it every EMAIL_WEBHOOK_CLAIM_RENEW_MS while
- * it processes, so a live delivery keeps its claim however long the pipeline
- * takes; only a claim whose handler died (renewals stopped) expires and can be
- * taken over by a retry, while the delivery's timestamp is still in the window.
- */
-export const EMAIL_WEBHOOK_CLAIM_LEASE_MS = 60 * 1000;
-export const EMAIL_WEBHOOK_CLAIM_RENEW_MS = 20 * 1000;
+/** Whether a delivery with this signature was already accepted. */
+export async function emailWebhookAlreadyAccepted(prisma, signature) {
+  const receipt = await prisma.emailWebhookReceipt.findUnique({ where: { signature }, select: { id: true } });
+  return Boolean(receipt);
+}
 
 /**
- * Claim a signature for processing. Returns the claim's owner token, or null
- * when the delivery was already processed or its claim is still live.
- * Renewal, completion and release are fenced by that token, so a handler
- * whose claim was taken over can never touch the new owner's receipt.
- * Old receipts are pruned.
- * @returns {Promise<string | null>}
+ * Record an accepted delivery. False when another request recorded it first.
+ * Old receipts (past twice the timestamp window, when any replay is stale
+ * anyway) are pruned.
  */
-export async function claimEmailWebhookSignature(prisma, signature, { now = new Date(), leaseMs = EMAIL_WEBHOOK_CLAIM_LEASE_MS } = {}) {
-  const claimToken = crypto.randomUUID();
-  let claimed = false;
+export async function recordEmailWebhookReceipt(prisma, signature, { now = new Date() } = {}) {
   try {
-    await prisma.emailWebhookReceipt.create({ data: { signature, receivedAt: now, claimToken } });
-    claimed = true;
+    await prisma.emailWebhookReceipt.create({ data: { signature, receivedAt: now } });
   } catch (err) {
-    if (/** @type {any} */ (err)?.code !== 'P2002') throw err;
-    // Take over a dead claim: never finished and not renewed within the lease.
-    const takeover = await prisma.emailWebhookReceipt.updateMany({
-      where: { signature, processedAt: null, receivedAt: { lt: new Date(now.getTime() - leaseMs) } },
-      data: { receivedAt: now, claimToken },
-    });
-    claimed = takeover.count === 1;
+    if (/** @type {any} */ (err)?.code === 'P2002') return false;
+    throw err;
   }
-  if (!claimed) return null;
   const cutoff = new Date(now.getTime() - 2 * EMAIL_WEBHOOK_MAX_AGE_MS);
   await prisma.emailWebhookReceipt.deleteMany({ where: { receivedAt: { lt: cutoff } } }).catch(() => {});
-  return claimToken;
+  return true;
 }
 
-/** Extend a live claim; false when it is no longer this owner's. */
-export async function renewEmailWebhookClaim(prisma, signature, claimToken, { now = new Date() } = {}) {
-  const renewed = await prisma.emailWebhookReceipt.updateMany({
-    where: { signature, claimToken, processedAt: null },
-    data: { receivedAt: now },
-  });
-  return renewed.count === 1;
-}
-
-/** The delivery was processed: from now on it is only ever a replay. */
-export async function markEmailWebhookProcessed(prisma, signature, claimToken, { now = new Date() } = {}) {
-  await prisma.emailWebhookReceipt.updateMany({ where: { signature, claimToken }, data: { processedAt: now } });
-}
-
-export async function releaseEmailWebhookSignature(prisma, signature, claimToken) {
-  await prisma.emailWebhookReceipt.deleteMany({ where: { signature, claimToken, processedAt: null } }).catch(() => {});
+/** Queue job id for a delivery: re-enqueueing the same delivery is a no-op. */
+export function emailWebhookJobId(signature) {
+  return `email-webhook-${signature}`;
 }

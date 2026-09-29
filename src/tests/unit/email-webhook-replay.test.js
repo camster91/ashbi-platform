@@ -12,9 +12,9 @@ process.env.BOT_ORGANIZATION_ID = 'org-bot';
 
 const { default: webhookRoutes } = await import('../../routes/webhook.routes.js');
 const {
-  EMAIL_WEBHOOK_CLAIM_LEASE_MS, signEmailWebhook, verifyEmailWebhook, claimEmailWebhookSignature, markEmailWebhookProcessed,
-  releaseEmailWebhookSignature, renewEmailWebhookClaim,
+  signEmailWebhook, verifyEmailWebhook, recordEmailWebhookReceipt, emailWebhookJobId,
 } = await import('../../webhooks/email-webhook-signature.js');
+const { emailQueue, hydrateEmailJobData } = await import('../../jobs/queue.js');
 
 function receiptStore() {
   const rows = new Map();
@@ -26,9 +26,10 @@ function receiptStore() {
     get seen() { return new Set(rows.keys()); },
     rows,
     emailWebhookReceipt: {
+      findUnique: async ({ where }) => (rows.has(where.signature) ? { id: where.signature } : null),
       create: async ({ data }) => {
         if (rows.has(data.signature)) throw Object.assign(new Error('Unique constraint failed'), { code: 'P2002' });
-        rows.set(data.signature, { processedAt: null, ...data });
+        rows.set(data.signature, { ...data });
         return data;
       },
       updateMany: async ({ where, data }) => {
@@ -63,40 +64,8 @@ test('verification uses the raw body and a bounded timestamp', () => {
 
 test('a signature is accepted once', async () => {
   const store = receiptStore();
-  assert.equal(typeof await claimEmailWebhookSignature(store, 'abc'), 'string');
-  assert.equal(await claimEmailWebhookSignature(store, 'abc'), null);
-});
-
-test('a dead claim is retryable after its lease; a live, renewed claim and a processed delivery never are', async () => {
-  const store = receiptStore();
-  const t0 = new Date('2026-09-29T00:00:00Z');
-  const later = (ms) => new Date(t0.getTime() + ms);
-  const LEASE = EMAIL_WEBHOOK_CLAIM_LEASE_MS;
-
-  // The handler died after claiming: no renewals, never processed.
-  const lost = await claimEmailWebhookSignature(store, 'lost', { now: t0 });
-  assert.ok(lost);
-  assert.equal(await claimEmailWebhookSignature(store, 'lost', { now: later(LEASE / 2) }), null, 'in flight: still leased');
-  const retry = await claimEmailWebhookSignature(store, 'lost', { now: later(LEASE + 1) });
-  assert.ok(retry && retry !== lost, 'a retry takes the dead claim over with a new token');
-  // The old owner is fenced off: it can no longer renew, complete or release.
-  assert.equal(await renewEmailWebhookClaim(store, 'lost', lost, { now: later(LEASE + 2) }), false);
-  await releaseEmailWebhookSignature(store, 'lost', lost);
-  await markEmailWebhookProcessed(store, 'lost', lost, { now: later(LEASE + 3) });
-  assert.equal(store.rows.get('lost').claimToken, retry);
-  assert.equal(store.rows.get('lost').processedAt, null);
-
-  // A slow but live handler renews, so a retry never takes its claim.
-  const slow = await claimEmailWebhookSignature(store, 'slow', { now: t0 });
-  for (let step = 1; step <= 10; step += 1) {
-    assert.equal(await renewEmailWebhookClaim(store, 'slow', slow, { now: later(step * LEASE / 3) }), true);
-    assert.equal(await claimEmailWebhookSignature(store, 'slow', { now: later(step * LEASE / 3 + LEASE / 2) }), null);
-  }
-
-  // A processed delivery stays a replay, however late it comes back.
-  const done = await claimEmailWebhookSignature(store, 'done', { now: t0 });
-  await markEmailWebhookProcessed(store, 'done', done, { now: later(1_000) });
-  assert.equal(await claimEmailWebhookSignature(store, 'done', { now: later(LEASE + 1) }), null);
+  assert.equal(await recordEmailWebhookReceipt(store, 'abc'), true);
+  assert.equal(await recordEmailWebhookReceipt(store, 'abc'), false);
 });
 
 test('the route refuses unsigned, legacy-signed, stale and replayed deliveries', async (t) => {
@@ -135,8 +104,7 @@ test('the route refuses unsigned, legacy-signed, stale and replayed deliveries',
   assert.equal(store.seen.size, 0);
 });
 
-test('the route claims the signature before processing and rejects a replay', async (t) => {
-  const store = receiptStore();
+function signedApp(t, store) {
   const app = Fastify({ logger: false });
   app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
     req.rawBody = body;
@@ -145,23 +113,91 @@ test('the route claims the signature before processing and rejects a replay', as
   app.decorate('authenticate', async () => {});
   app.decorate('prisma', store);
   app.addHook('onRequest', async (request) => { request.prisma = store; });
-  await app.register(webhookRoutes);
   t.after(() => app.close());
+  return app;
+}
 
-  const rawBody = JSON.stringify({ from: 'a@example.test', subject: 'Hi', text: 'Hello' });
+function captureQueue(t, { failTimes = 0 } = {}) {
+  const jobs = [];
+  const original = emailQueue.add;
+  let failures = failTimes;
+  emailQueue.add = async (name, data, opts) => {
+    if (failures > 0) { failures -= 1; throw Object.assign(new Error('redis down'), { code: 'QUEUE_UNAVAILABLE' }); }
+    jobs.push({ name, data, opts });
+    return { id: opts.jobId };
+  };
+  t.after(() => { emailQueue.add = original; });
+  return jobs;
+}
+
+const signedDelivery = (rawBody) => {
   const timestamp = String(Math.floor(Date.now() / 1000));
   const signature = signEmailWebhook(process.env.WEBHOOK_SECRET, timestamp, rawBody);
-  // An earlier delivery of exactly this request was accepted.
-  await claimEmailWebhookSignature(store, signature);
-  const replay = await app.inject({
-    method: 'POST', url: '/email',
-    headers: { 'content-type': 'application/json', 'x-webhook-timestamp': timestamp, 'x-webhook-signature': signature },
-    payload: rawBody,
-  });
-  assert.equal(replay.statusCode, 409, replay.body);
+  return { signature, headers: { 'content-type': 'application/json', 'x-webhook-timestamp': timestamp, 'x-webhook-signature': signature } };
+};
 
-  const source = (await import('node:fs')).readFileSync(new URL('../../routes/webhook.routes.js', import.meta.url), 'utf8');
-  const emailRoute = source.slice(source.indexOf("fastify.post('/email'"), source.indexOf("fastify.post('/email/test'"));
-  assert.doesNotMatch(emailRoute, /JSON\.stringify\(request\.body\)/);
-  assert.ok(emailRoute.indexOf('claimEmailWebhookSignature') < emailRoute.indexOf('parseEmail(request.body)'));
+test('an accepted delivery is queued durably, keyed by its signature, and a replay is refused', async (t) => {
+  const store = receiptStore();
+  const jobs = captureQueue(t);
+  const app = signedApp(t, store);
+  await app.register(webhookRoutes);
+
+  const rawBody = JSON.stringify({ from: 'a@example.test', subject: 'Hi', text: 'Hello' });
+  const { signature, headers } = signedDelivery(rawBody);
+  const accepted = await app.inject({ method: 'POST', url: '/email', headers, payload: rawBody });
+  assert.equal(accepted.statusCode, 202, accepted.body);
+  assert.equal(jobs.length, 1);
+  assert.equal(jobs[0].opts.jobId, emailWebhookJobId(signature));
+  assert.equal(jobs[0].data.organizationId, 'org-bot');
+  // The pipeline is not idempotent: the job runs once and a failure is kept for replay.
+  assert.equal(jobs[0].opts.attempts, 1);
+  assert.ok(jobs[0].opts.removeOnFail.age >= 7 * 24 * 60 * 60, 'failed deliveries are retained for replay');
+  assert.equal(store.seen.has(signature), true);
+
+  const replay = await app.inject({ method: 'POST', url: '/email', headers, payload: rawBody });
+  assert.equal(replay.statusCode, 409, replay.body);
+  assert.equal(jobs.length, 1, 'a replay is never queued');
+});
+
+test('when the queue is unavailable nothing is recorded, so the sender\'s retry is accepted', async (t) => {
+  const store = receiptStore();
+  const jobs = captureQueue(t, { failTimes: 1 });
+  const app = signedApp(t, store);
+  await app.register(webhookRoutes);
+
+  const rawBody = JSON.stringify({ from: 'b@example.test', subject: 'Retry', text: 'Hello' });
+  const { signature, headers } = signedDelivery(rawBody);
+  const first = await app.inject({ method: 'POST', url: '/email', headers, payload: rawBody });
+  assert.equal(first.statusCode, 503, first.body);
+  assert.equal(store.seen.has(signature), false);
+
+  const retry = await app.inject({ method: 'POST', url: '/email', headers, payload: rawBody });
+  assert.equal(retry.statusCode, 202, retry.body);
+  assert.equal(jobs.length, 1);
+  assert.equal(jobs[0].opts.jobId, emailWebhookJobId(signature));
+});
+
+test('the route never re-serialises the body and queues before recording the receipt', () => {
+  return import('node:fs').then((fs) => {
+    const source = fs.readFileSync(new URL('../../routes/webhook.routes.js', import.meta.url), 'utf8');
+    const emailRoute = source.slice(source.indexOf("fastify.post('/email'"), source.indexOf("fastify.post('/email/test'"));
+    assert.doesNotMatch(emailRoute, /JSON\.stringify\(request\.body\)/);
+    assert.doesNotMatch(emailRoute, /processEmailPipeline/, 'processing happens in the worker, not the request');
+    assert.ok(emailRoute.indexOf('queueInboundEmailDelivery(') < emailRoute.indexOf('recordEmailWebhookReceipt('));
+    const worker = fs.readFileSync(new URL('../../jobs/worker.js', import.meta.url), 'utf8');
+    const emailWorker = worker.slice(worker.indexOf('QUEUES.EMAIL_PROCESSING'), worker.indexOf('// Project Health Worker'));
+    assert.match(emailWorker, /try \{\s*await scheduleEscalationCheck/, 'a scheduling failure never fails a processed email job');
+    assert.match(emailWorker, /maxStalledCount: 0/, 'a stalled email job is failed for replay, never re-run');
+  });
+});
+
+test('queued email data gets its receivedAt back as a Date before the pipeline runs', () => {
+  const sent = { subject: 'Hi', receivedAt: new Date('2026-09-29T10:00:00.000Z') };
+  const overTheWire = JSON.parse(JSON.stringify(sent));
+  assert.equal(typeof overTheWire.receivedAt, 'string');
+  const hydrated = hydrateEmailJobData(overTheWire);
+  assert.ok(hydrated.receivedAt instanceof Date);
+  assert.equal(hydrated.receivedAt.toISOString(), '2026-09-29T10:00:00.000Z');
+  assert.equal(hydrateEmailJobData({ receivedAt: 'not a date' }).receivedAt, undefined);
+  assert.equal(hydrateEmailJobData({}).receivedAt, undefined);
 });

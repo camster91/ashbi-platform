@@ -8,9 +8,9 @@ import {validateBody, webhookEmailTestSchema} from '../validators/schemas.js';
 import { runTenantJob } from '../jobs/tenant-iteration.js';
 import { prisma as backgroundPrisma } from '../config/db.js';
 import {
-  EMAIL_WEBHOOK_CLAIM_RENEW_MS, claimEmailWebhookSignature, markEmailWebhookProcessed, releaseEmailWebhookSignature,
-  renewEmailWebhookClaim, verifyEmailWebhook,
+  emailWebhookAlreadyAccepted, emailWebhookJobId, recordEmailWebhookReceipt, verifyEmailWebhook,
 } from '../webhooks/email-webhook-signature.js';
+import { queueInboundEmailDelivery } from '../jobs/queue.js';
 
 export default async function webhookRoutes(fastify) {
   // Email webhook endpoint
@@ -41,48 +41,34 @@ export default async function webhookRoutes(fastify) {
     }
     // /api/webhooks is tenancy-exempt: request.prisma is the unscoped client.
     const receipts = request.prisma ?? backgroundPrisma;
-    const claimToken = await claimEmailWebhookSignature(receipts, verification.signature);
-    if (!claimToken) {
+    if (await emailWebhookAlreadyAccepted(receipts, verification.signature)) {
       return reply.status(409).send({ error: 'Webhook delivery was already processed' });
     }
-    // Keep the claim live while the (possibly slow, AI-backed) pipeline runs,
-    // so a provider retry cannot take it over from a handler still working.
-    const renewal = setInterval(() => {
-      renewEmailWebhookClaim(receipts, verification.signature, claimToken).catch(() => {});
-    }, EMAIL_WEBHOOK_CLAIM_RENEW_MS);
-    renewal.unref?.();
 
+    // Durable handoff: the delivery is queued (idempotently, keyed by its
+    // signature) before the receipt is recorded, so a crash in between lets
+    // the sender's retry through without a duplicate job, and processing is
+    // retried by the worker rather than depending on the sender.
+    let emailData;
     try {
-      // Parse the incoming email
-      const emailData = await parseEmail(request.body);
-
-      // Process through AI pipeline (async in production, sync for simplicity here)
-      const result = await runTenantJob(
-        fastify.prisma,
-        env.botOrganizationId,
-        () => processEmailPipeline(emailData),
-        backgroundPrisma,
-      );
-      // Finished: a later delivery with this signature is a replay. Until
-      // this runs, an interrupted claim is retryable after its lease.
-      await markEmailWebhookProcessed(receipts, verification.signature, claimToken).catch((err) => {
-        fastify.log.warn({ errorName: err?.name }, 'Could not mark the email webhook processed');
-      });
-
-      return {
-        success: true,
-        threadId: result.threadId,
-        matched: result.matched,
-        needsTriage: result.needsTriage
-      };
+      emailData = await parseEmail(request.body);
     } catch (error) {
-      // Release the signature so the sender's retry of this delivery is accepted.
-      await releaseEmailWebhookSignature(receipts, verification.signature, claimToken);
-      fastify.log.error({ errorName: error?.name }, 'Email processing error');
-      return reply.status(500).send({ error: 'Email processing failed' });
-    } finally {
-      clearInterval(renewal);
+      fastify.log.warn({ errorName: error?.name }, 'Unparseable inbound email');
+      return reply.status(400).send({ error: 'Email payload could not be parsed' });
     }
+    try {
+      await queueInboundEmailDelivery(emailData, {
+        organizationId: env.botOrganizationId,
+        jobId: emailWebhookJobId(verification.signature),
+      });
+    } catch (error) {
+      fastify.log.error({ errorName: error?.name }, 'Could not queue inbound email');
+      return reply.status(503).send({ error: 'Email could not be queued; retry the delivery' });
+    }
+    if (!(await recordEmailWebhookReceipt(receipts, verification.signature))) {
+      return reply.status(409).send({ error: 'Webhook delivery was already processed' });
+    }
+    return reply.status(202).send({ accepted: true });
   });
 
   // Manual email submission (for testing)
