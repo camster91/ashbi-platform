@@ -59,7 +59,8 @@ export function sendTimerError(reply, err) {
  */
 async function closeSession(tx, session, endTime = new Date()) {
   const elapsedMs = endTime.getTime() - new Date(session.startTime).getTime();
-  const duration = Math.max(0, Math.round(elapsedMs / 60000));
+  // Under a full minute records nothing: the session keeps 0 minutes too.
+  const duration = elapsedMs >= 60000 ? Math.max(1, Math.round(elapsedMs / 60000)) : 0;
   const claimed = await tx.timeSession.updateMany({
     where: { id: session.id, userId: session.userId, isRunning: true },
     data: { endTime, duration, isRunning: false },
@@ -186,7 +187,9 @@ export async function getTimeSummary(userId, filters = {}) {
   // listed entries are limited (reads of soft-deletable models cap at 100).
   const entryWhere = { userId, ...(projectId ? { projectId } : {}), ...(range ? { date: range } : {}) };
   const sessionWhere = {
-    userId, isRunning: false, timeEntry: null,
+    // Legacy only: stopped, with time, and no linked entry (sub-minute
+    // timers keep 0 minutes and no entry, so they never count).
+    userId, isRunning: false, timeEntry: null, duration: { gt: 0 },
     ...(projectId ? { projectId } : {}), ...(range ? { startTime: range } : {}),
   };
   const [entryGroups, sessionGroups, entryCount, sessionCount, recentEntries, recentSessions] = await Promise.all([
