@@ -187,6 +187,14 @@ const env = {
   // Hub URL (used for links in emails etc.)
   hubUrl: process.env.HUB_URL || 'https://hub.ashbi.ca',
 
+  // Web page review capture (docs/media-review.md "Web page review"): off
+  // unless explicitly enabled, because it runs a headless browser on the API
+  // host. WEB_REVIEW_CHROMIUM_PATH points at the Chromium executable when the
+  // browser is not the one bundled for playwright-core (e.g. Alpine's
+  // `chromium` package).
+  webReviewCaptureEnabled: process.env.WEB_REVIEW_CAPTURE_ENABLED === 'true',
+  webReviewChromiumPath: process.env.WEB_REVIEW_CHROMIUM_PATH || undefined,
+
   // OpenClaw (ops integration)
   openclawUrl: process.env.OPENCLAW_URL || 'http://localhost:3000',
   openclawApiKey: process.env.OPENCLAW_API_KEY,

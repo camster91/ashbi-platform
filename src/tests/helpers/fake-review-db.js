@@ -49,7 +49,7 @@ function compareValues(a, b) {
 
 export function createFakeReviewDb() {
   const tables = {
-    organization: [], user: [], client: [], project: [], attachment: [],
+    organization: [], user: [], client: [], contact: [], project: [], attachment: [],
     reviewSession: [], reviewAnnotation: [], reviewDecision: [], reviewShareLink: [], auditEvent: [],
   };
 
@@ -208,6 +208,27 @@ export function seedReviewOrganizations(db) {
       file('pdf', 'Brochure.pdf', 'application/pdf'),
       file('sheet', 'Budget.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
     );
+  }
+  return db;
+}
+
+/**
+ * A second client in organization A (client-a2) with its own project and
+ * image, and one portal contact and CLIENT user per client, for the client
+ * portal review routes.
+ * @param {ReturnType<typeof createFakeReviewDb>} db
+ */
+export function seedPortalClients(db) {
+  const t = db.tables;
+  t.client.push({ id: 'client-a2', organizationId: 'org-a', name: 'Client A2' });
+  t.project.push({ id: 'project-a2', organizationId: 'org-a', clientId: 'client-a2', name: 'Other client site', deletedAt: null });
+  t.attachment.push({
+    id: 'image-a2', organizationId: 'org-a', filename: 'image-a2.bin', originalName: 'Other.png', mimeType: 'image/png', size: 1024,
+    path: '/uploads/image-a2.bin', entityType: 'PROJECT', entityId: 'project-a2', uploadedById: 'admin-a', createdAt: new Date(),
+  });
+  for (const [clientId, organizationId] of [['client-a', 'org-a'], ['client-a2', 'org-a'], ['client-b', 'org-b']]) {
+    t.contact.push({ id: `contact-${clientId}`, clientId, name: `Contact of ${clientId}`, email: `${clientId}@clients.test` });
+    t.user.push({ id: `user-${clientId}`, organizationId, clientId, role: 'CLIENT', isActive: true, email: `${clientId}@clients.test`, name: `Contact of ${clientId}` });
   }
   return db;
 }

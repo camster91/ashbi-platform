@@ -13,6 +13,9 @@ import { formatInvoiceDate } from '../lib/format';
 // Their Suspense fallback is a named polite status with the slow-state copy.
 const ProjectDetail = lazy(() => import('./client-portal/ProjectDetail'));
 const DocumentsTab = lazy(() => import('./client-portal/DocumentsTab'));
+// Media review is loaded only when the Reviews tab opens (it brings the review
+// surface; its PDF viewer is a further lazy chunk plus a worker).
+const ReviewsTab = lazy(() => import('./client-portal/ReviewsTab'));
 
 // Interactive cards keep a full-strength boundary (#317): Card's default
 // `border-border/60` is below 3:1 on the cream page.
@@ -573,6 +576,7 @@ function PortalDashboard({ token }) {
     { id: 'invoices', label: `Invoices (${invoices.length})`, icon: Icons.invoices },
     { id: 'contracts', label: `Contracts (${contracts.length})`, icon: Icons.documents },
     { id: 'documents', label: 'Documents', icon: Icons.documents },
+    { id: 'reviews', label: 'Reviews', icon: Icons.overview },
     { id: 'chat', label: 'Chat', icon: Icons.chat },
   ];
 
@@ -641,6 +645,11 @@ function PortalDashboard({ token }) {
         {activeTab === 'documents' && (
           <Suspense fallback={<LoadingState label="Loading documents..." />}>
             <DocumentsTab projects={projects} token={token} />
+          </Suspense>
+        )}
+        {activeTab === 'reviews' && (
+          <Suspense fallback={<LoadingState label="Loading reviews..." />}>
+            <ReviewsTab token={token} />
           </Suspense>
         )}
         {activeTab === 'chat' && <ChatTab projects={projects} token={token} />}

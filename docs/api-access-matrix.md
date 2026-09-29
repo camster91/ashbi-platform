@@ -46,12 +46,12 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | api-key + scope ai_bridge:actions | 2 |
 | api-key + scope ai_bridge:read | 1 |
 | bot-secret | 40 |
-| client-portal | 22 |
+| client-portal | 27 |
 | public | 51 |
 | recent-auth + staff | 4 |
-| staff | 361 |
+| staff | 365 |
 | staff (inline) | 1 |
-| **total** | 537 |
+| **total** | 546 |
 
 ## Routes by prefix
 
@@ -331,6 +331,11 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | POST | `/api/client-portal/projects/:id/upload` | client-portal | exempt |  |
 | POST | `/api/client-portal/request-access` | public | exempt | magic link: Emails a client portal magic link. |
 | GET | `/api/client-portal/retainer` | client-portal | exempt |  |
+| GET | `/api/client-portal/reviews` | client-portal | exempt |  |
+| GET | `/api/client-portal/reviews/:id` | client-portal | exempt |  |
+| POST | `/api/client-portal/reviews/:id/annotations` | client-portal | exempt |  |
+| POST | `/api/client-portal/reviews/:id/decisions` | client-portal | exempt |  |
+| GET | `/api/client-portal/reviews/:id/file` | client-portal | exempt |  |
 | GET | `/api/client-portal/unread-count` | client-portal | exempt |  |
 | POST | `/api/client-portal/verify-token` | public | exempt | magic link: Exchanges the emailed magic-link token for a portal session cookie. |
 
@@ -786,10 +791,14 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | GET | `/api/reviews/:id` | staff | scoped |  |
 | POST | `/api/reviews/:id/annotations` | staff | scoped |  |
 | POST | `/api/reviews/:id/annotations/:annotationId/resolve` | staff | scoped |  |
+| POST | `/api/reviews/:id/client-access` | staff | scoped |  |
 | POST | `/api/reviews/:id/decisions` | staff | scoped |  |
+| POST | `/api/reviews/:id/recapture` | staff | scoped |  |
 | GET | `/api/reviews/:id/share-links` | staff | scoped |  |
 | POST | `/api/reviews/:id/share-links` | recent-auth + staff | scoped |  |
 | POST | `/api/reviews/:id/share-links/:linkId/revoke` | staff | scoped |  |
+| GET | `/api/reviews/capabilities` | staff | scoped |  |
+| POST | `/api/reviews/capture` | staff | scoped |  |
 
 ### /api/revisions
 

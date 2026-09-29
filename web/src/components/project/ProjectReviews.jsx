@@ -1,7 +1,7 @@
 import { useId, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ClipboardCheck } from 'lucide-react';
+import { ClipboardCheck, Globe } from 'lucide-react';
 import { api } from '../../lib/api';
 import { cn, formatDate } from '../../lib/utils';
 import { StatusBadge } from '../review/MediaReview';
@@ -12,6 +12,73 @@ import { StatusBadge } from '../review/MediaReview';
 
 const REVIEWABLE = /^(image\/(jpeg|png|gif|webp)|application\/pdf|video\/(mp4|webm)|audio\/(webm|mpeg|wav|x-wav|wave))(;|$)/i;
 const control = 'min-h-11 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+const submitButton = 'min-h-11 inline-flex items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50';
+
+/**
+ * Web page review (docs/media-review.md "Web page review"): the server
+ * captures a full-page screenshot of a public URL and opens a review on it.
+ * Shown only when the server has the capture enabled.
+ */
+export function WebPageReviewForm({ projectId, onCreated }) {
+  const id = useId();
+  const [url, setUrl] = useState('');
+  const [viewport, setViewport] = useState('desktop');
+  const [title, setTitle] = useState('');
+  const [error, setError] = useState('');
+  const [pending, setPending] = useState(false);
+  const urlRef = useRef(null);
+
+  const submit = async (event) => {
+    event.preventDefault();
+    let parsed;
+    try {
+      parsed = new URL(url.trim());
+    } catch {
+      parsed = null;
+    }
+    if (!parsed || (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')) {
+      setError('Enter a full web address starting with http:// or https://.');
+      urlRef.current?.focus();
+      return;
+    }
+    setError('');
+    setPending(true);
+    try {
+      const result = await api.captureReviewPage({ projectId, url: parsed.href, viewport, title: title.trim() || parsed.hostname });
+      onCreated(result.session);
+    } catch (err) {
+      setError(err?.message || 'The page could not be captured.');
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <form onSubmit={submit} className="space-y-3" aria-labelledby={`${id}-heading`} noValidate>
+      <h3 id={`${id}-heading`} className="flex items-center gap-2 text-sm font-semibold text-foreground"><Globe className="h-4 w-4" aria-hidden="true" />Review a web page</h3>
+      <div className="space-y-1">
+        <label htmlFor={`${id}-url`} className="block text-sm font-medium text-foreground">Page address</label>
+        <input id={`${id}-url`} ref={urlRef} type="url" inputMode="url" placeholder="https://" value={url} onChange={(event) => setUrl(event.target.value)} maxLength={2048} aria-describedby={`${id}-url-help`} className={control} />
+        <p id={`${id}-url-help`} className="text-xs text-muted-foreground">A public page. The server takes a full-page screenshot without signing in; private and internal addresses are refused.</p>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="space-y-1">
+          <label htmlFor={`${id}-viewport`} className="block text-sm font-medium text-foreground">Screen size</label>
+          <select id={`${id}-viewport`} value={viewport} onChange={(event) => setViewport(event.target.value)} className={control}>
+            <option value="desktop">Desktop (1440 px wide)</option>
+            <option value="mobile">Mobile (390 px wide)</option>
+          </select>
+        </div>
+        <div className="space-y-1">
+          <label htmlFor={`${id}-title`} className="block text-sm font-medium text-foreground">Title (optional)</label>
+          <input id={`${id}-title`} value={title} onChange={(event) => setTitle(event.target.value)} maxLength={200} className={control} />
+        </div>
+      </div>
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      <button type="submit" disabled={pending} className={submitButton}>{pending ? 'Capturing the page…' : 'Capture and review'}</button>
+    </form>
+  );
+}
 
 export default function ProjectReviews({ projectId }) {
   const id = useId();
@@ -27,6 +94,8 @@ export default function ProjectReviews({ projectId }) {
 
   const sessionsQuery = useQuery({ queryKey: ['review-sessions', projectId], queryFn: () => api.getReviewSessions(projectId) });
   const filesQuery = useQuery({ queryKey: ['review-files', projectId], queryFn: () => api.getAttachments('PROJECT', projectId) });
+  const capabilities = useQuery({ queryKey: ['review-capabilities'], queryFn: () => api.getReviewCapabilities(), staleTime: 5 * 60 * 1000 });
+  const webCaptureEnabled = Boolean(capabilities.data?.webCapture?.enabled);
   const sessions = sessionsQuery.data?.sessions || [];
   const files = useMemo(() => (Array.isArray(filesQuery.data) ? filesQuery.data : []).filter((file) => REVIEWABLE.test(file.mimeType || '')), [filesQuery.data]);
   const versionable = sessions.filter((session) => !session.nextSessionId);
@@ -60,7 +129,7 @@ export default function ProjectReviews({ projectId }) {
     <section className="rounded-xl border border-border bg-card" aria-labelledby={`${id}-heading`}>
       <div className="border-b border-border px-5 py-4">
         <h2 id={`${id}-heading`} className="flex items-center gap-2 font-semibold text-foreground"><ClipboardCheck className="h-5 w-5 text-primary" aria-hidden="true" />Media review</h2>
-        <p className="mt-1 text-sm text-muted-foreground">Collect pinned and timestamped feedback and approvals on images, PDFs, video and recordings, from the team and the client.</p>
+        <p className="mt-1 text-sm text-muted-foreground">Collect marked-up, pinned and timestamped feedback and approvals on images, PDFs, video, recordings{webCaptureEnabled ? ' and web pages' : ''}, from the team and the client.</p>
       </div>
       <div className="grid grid-cols-1 gap-6 p-5 lg:grid-cols-2">
         <div>
@@ -81,7 +150,10 @@ export default function ProjectReviews({ projectId }) {
                     </Link>
                     <p className="text-xs text-muted-foreground">{session.media?.fileName} · {session.openAnnotationCount} open comment{session.openAnnotationCount === 1 ? '' : 's'} · {formatDate(session.createdAt)}</p>
                   </div>
-                  <StatusBadge status={session.status} />
+                  <div className="flex items-center gap-2">
+                    {session.sharedWithClient && <span className="rounded-full border border-primary bg-primary/10 px-2 py-0.5 text-xs font-medium text-foreground">Visible to client</span>}
+                    <StatusBadge status={session.status} />
+                  </div>
                 </li>
               ))}
             </ul>
@@ -116,12 +188,24 @@ export default function ProjectReviews({ projectId }) {
                 </div>
               )}
               {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-              <button type="submit" disabled={pending} className={cn('min-h-11 inline-flex items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50')}>
+              <button type="submit" disabled={pending} className={cn(submitButton)}>
                 {pending ? 'Starting…' : 'Start review'}
               </button>
             </>
           )}
         </form>
+        {webCaptureEnabled && (
+          <div className="lg:col-start-2">
+            <WebPageReviewForm
+              projectId={projectId}
+              onCreated={async (session) => {
+                await queryClient.invalidateQueries({ queryKey: ['review-sessions', projectId] });
+                await queryClient.invalidateQueries({ queryKey: ['review-files', projectId] });
+                navigate(`/review/${session.id}`);
+              }}
+            />
+          </div>
+        )}
       </div>
     </section>
   );

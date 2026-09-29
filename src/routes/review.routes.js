@@ -5,6 +5,17 @@
 // attachment and previous version belong to the caller's organization, and
 // that annotations, decisions and share links are reached only through a
 // session of that organization.
+//
+// Web page review (POST /capture, POST /:id/recapture) renders a public URL
+// in a headless browser behind the SSRF controls of
+// src/services/web-capture.service.js. It is off unless
+// WEB_REVIEW_CAPTURE_ENABLED=true; while off both routes answer
+// 503 WEB_REVIEW_CAPTURE_DISABLED.
+
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { randomUUID } from 'node:crypto';
+import env from '../config/env.js';
 
 import {
   validateBody,
@@ -15,7 +26,11 @@ import {
   reviewAnnotationResolveSchema,
   reviewDecisionCreateSchema,
   reviewShareLinkCreateSchema,
+  reviewCaptureCreateSchema,
+  reviewRecaptureSchema,
+  reviewClientAccessSchema,
 } from '../validators/schemas.js';
+import { captureWebPage as defaultCaptureWebPage, WebCaptureError } from '../services/web-capture.service.js';
 import { requireRecentAuth } from '../auth/reauth.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { scanReviewMedia } from '../services/media-scan.service.js';
@@ -39,7 +54,25 @@ import {
   staffAnnotation,
   staffDecision,
   staffShareLink,
+  loadVersionChain,
+  findMentionableStaff,
+  notifyReviewStaff,
+  commentExcerpt,
 } from '../services/media-review.service.js';
+
+const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
+// Capturing a page starts a browser: a tight per-IP budget on top of the
+// capture service's own concurrency limit.
+const CAPTURE_LIMIT = { max: 10, timeWindow: '10 minutes' };
+const CAPTURE_SERVER_ERRORS = Object.freeze({
+  WEB_CAPTURE_FAILED: 'The page could not be loaded. Check that it is public and try again.',
+  WEB_CAPTURE_TIMEOUT: 'The page did not finish loading in time.',
+  WEB_CAPTURE_UNAVAILABLE: 'Web page capture is not available on this server.',
+});
+export const WEB_CAPTURE_DISABLED = Object.freeze({
+  error: 'Web page review is not enabled on this server',
+  code: 'WEB_REVIEW_CAPTURE_DISABLED',
+});
 
 const STAFF_ROLES = new Set(['ADMIN', 'TEAM']);
 
@@ -59,6 +92,10 @@ function staffSession(session) {
     title: session.title,
     status: session.status,
     version: session.version,
+    sourceUrl: session.sourceUrl ?? null,
+    captureViewport: session.captureViewport ?? null,
+    sharedWithClient: Boolean(session.sharedWithClient),
+    clientCanDecide: Boolean(session.clientCanDecide),
     previousSessionId: session.previousSessionId ?? null,
     nextSessionId: session.nextSession?.id ?? null,
     createdById: session.createdById,
@@ -73,7 +110,22 @@ const SESSION_INCLUDE = {
   nextSession: { select: { id: true } },
 };
 
-export default async function reviewRoutes(fastify) {
+/** "example.com-desktop-2026-09-29.png": the stored name of a page capture. */
+function captureFileName(url, viewport) {
+  const host = new URL(url).hostname.replace(/[^a-z0-9.-]/gi, '').slice(0, 100) || 'page';
+  return `${host}-${viewport}-${new Date().toISOString().slice(0, 10)}.png`;
+}
+
+/**
+ * @param {any} fastify
+ * @param {{ webCaptureEnabled?: boolean, captureWebPage?: Function, uploadDir?: string }} [options]
+ *   test seams: the feature flag, the capture service and the upload directory
+ */
+export default async function reviewRoutes(fastify, options = {}) {
+  const webCaptureEnabled = () => options.webCaptureEnabled ?? env.webReviewCaptureEnabled;
+  const captureWebPage = options.captureWebPage ?? defaultCaptureWebPage;
+  const uploadDir = options.uploadDir ?? UPLOAD_DIR;
+
   async function loadSession(request, reply) {
     const session = await request.prisma.reviewSession.findFirst({
       where: { id: request.params.id, project: { deletedAt: null } },
@@ -132,28 +184,60 @@ export default async function reviewRoutes(fastify) {
     if (scan.verdict === 'blocked') return reply.status(422).send({ error: 'This file did not pass the media scan', code: 'MEDIA_BLOCKED' });
     if (scan.verdict === 'pending') return reply.status(409).send({ error: 'This file is still being scanned; try again shortly', code: 'MEDIA_SCAN_PENDING' });
 
-    let version = 1;
     let previous = null;
     if (previousSessionId) {
-      previous = await request.prisma.reviewSession.findFirst({
-        where: { id: previousSessionId, projectId },
-        include: { nextSession: { select: { id: true } } },
-      });
-      if (!previous) return reply.status(404).send({ error: 'Previous review session not found in this project' });
-      if (previous.nextSession) return reply.status(409).send({ error: 'That review session already has a newer version' });
-      version = previous.version + 1;
+      previous = await loadPrevious(request, reply, previousSessionId, projectId);
+      if (!previous) return reply;
     }
 
-    let session;
+    const session = await createVersionedSession(request, reply, { projectId, attachmentId, title, previous });
+    if (!session) return reply;
+
+    await recordRequestAuditEvent(request.prisma, request, {
+      action: 'review.session_created',
+      entityId: session.id,
+      metadata: { projectId, attachmentId, version: session.version, previousSessionId: previous?.id ?? null, mediaKind: kind },
+    });
+    return reply.status(201).send({ session: staffSession(session) });
+  });
+
+  /** The session a new version replaces, or send 404/409 and return null. */
+  async function loadPrevious(request, reply, previousSessionId, projectId) {
+    const previous = await request.prisma.reviewSession.findFirst({
+      where: { id: previousSessionId, projectId },
+      include: { nextSession: { select: { id: true } } },
+    });
+    if (!previous) {
+      reply.status(404).send({ error: 'Previous review session not found in this project' });
+      return null;
+    }
+    if (previous.nextSession) {
+      reply.status(409).send({ error: 'That review session already has a newer version' });
+      return null;
+    }
+    return previous;
+  }
+
+  /**
+   * Create a session, as the next version of `previous` (which is closed in
+   * the same transaction) when given. Sends 409 and returns null when a
+   * concurrent request created that version first.
+   */
+  async function createVersionedSession(request, reply, { projectId, attachmentId, title, previous, sourceUrl = null, captureViewport = null }) {
     try {
-      session = await request.prisma.$transaction(async (tx) => {
+      return await request.prisma.$transaction(async (tx) => {
         const created = await tx.reviewSession.create({
           data: {
             projectId,
             attachmentId,
             title: sanitizePlainText(title).slice(0, 200) || 'Review',
-            version,
+            version: previous ? previous.version + 1 : 1,
             previousSessionId: previous?.id ?? null,
+            sourceUrl,
+            captureViewport,
+            // A new version stays shared (or not) with the client like the
+            // version it replaces; client decisions are opted into again.
+            sharedWithClient: Boolean(previous?.sharedWithClient),
             createdById: request.user.id,
           },
           include: SESSION_INCLUDE,
@@ -165,30 +249,137 @@ export default async function reviewRoutes(fastify) {
       });
     } catch (err) {
       // Unique previousSessionId: a concurrent request created the version first.
-      if (err?.code === 'P2002') return reply.status(409).send({ error: 'That review session already has a newer version' });
+      if (err?.code === 'P2002') {
+        reply.status(409).send({ error: 'That review session already has a newer version' });
+        return null;
+      }
       throw err;
     }
+  }
 
+  // Whether optional review features are available (the UI hides what is not).
+  fastify.get('/capabilities', { onRequest: [fastify.authenticate], preHandler: [requireReviewStaff] }, async () => ({
+    webCapture: { enabled: Boolean(webCaptureEnabled()), viewports: ['desktop', 'mobile'] },
+  }));
+
+  /**
+   * Capture `url`, store the PNG as a project attachment (the same storage
+   * and file policy as uploads) and return the attachment, or send the
+   * capture error and return null.
+   */
+  async function captureToAttachment(request, reply, { projectId, url, viewport }) {
+    let capture;
+    try {
+      capture = await captureWebPage({ url, viewport });
+    } catch (err) {
+      if (err instanceof WebCaptureError) {
+        // 4xx: the service's own fixed, caller-safe messages (e.g. why a URL
+        // was refused). 5xx: a fixed message per code, never err.message.
+        if (err.statusCode < 500) reply.status(err.statusCode).send({ error: err.message, code: err.code });
+        else reply.status(err.statusCode).send({ error: CAPTURE_SERVER_ERRORS[err.code] ?? CAPTURE_SERVER_ERRORS.WEB_CAPTURE_FAILED, code: err.code });
+        return null;
+      }
+      throw err;
+    }
+    const filename = `${randomUUID()}.png`;
+    const filepath = path.join(uploadDir, filename);
+    await fs.mkdir(uploadDir, { recursive: true });
+    await fs.writeFile(filepath, capture.png);
+    try {
+      const attachment = await request.prisma.attachment.create({
+        data: {
+          filename,
+          originalName: captureFileName(capture.url, capture.viewport),
+          mimeType: 'image/png',
+          size: capture.png.length,
+          path: `/uploads/${filename}`,
+          entityType: 'PROJECT',
+          entityId: projectId,
+          uploadedById: request.user.id,
+          organizationId: request.user.organizationId,
+        },
+      });
+      return { attachment, capture };
+    } catch (err) {
+      await fs.unlink(filepath).catch(() => {});
+      throw err;
+    }
+  }
+
+  // Web page review: capture a public URL and put the screenshot up for
+  // review.
+  fastify.post('/capture', {
+    onRequest: [fastify.authenticate],
+    config: { rateLimit: CAPTURE_LIMIT },
+    preHandler: [requireReviewStaff, validateBody(reviewCaptureCreateSchema)],
+  }, async (request, reply) => {
+    if (!webCaptureEnabled()) return reply.status(503).send(WEB_CAPTURE_DISABLED);
+    const { projectId, url, viewport, title } = request.body;
+    const project = await request.prisma.project.findFirst({ where: { id: projectId }, select: { id: true } });
+    if (!project) return reply.status(404).send({ error: 'Project not found' });
+    const captured = await captureToAttachment(request, reply, { projectId, url, viewport });
+    if (!captured) return reply;
+    const { attachment, capture } = captured;
+    const session = await createVersionedSession(request, reply, {
+      projectId, attachmentId: attachment.id, title, previous: null, sourceUrl: capture.url, captureViewport: capture.viewport,
+    });
+    if (!session) return reply;
     await recordRequestAuditEvent(request.prisma, request, {
       action: 'review.session_created',
       entityId: session.id,
-      metadata: { projectId, attachmentId, version, previousSessionId: previous?.id ?? null, mediaKind: kind },
+      metadata: {
+        projectId, attachmentId: attachment.id, version: 1, previousSessionId: null, mediaKind: 'image',
+        sourceHost: new URL(capture.url).host, captureViewport: capture.viewport, captureTruncated: capture.truncated,
+      },
     });
-    return reply.status(201).send({ session: staffSession(session) });
+    return reply.status(201).send({ session: staffSession(session), capture: { truncated: capture.truncated, finalUrl: capture.finalUrl } });
+  });
+
+  // Capture a web page review's URL again, as the next version.
+  fastify.post('/:id/recapture', {
+    onRequest: [fastify.authenticate],
+    config: { rateLimit: CAPTURE_LIMIT },
+    preHandler: [requireReviewStaff, validateBody(reviewRecaptureSchema)],
+  }, async (request, reply) => {
+    if (!webCaptureEnabled()) return reply.status(503).send(WEB_CAPTURE_DISABLED);
+    const current = await loadSession(request, reply);
+    if (!current) return reply;
+    if (!current.sourceUrl) return reply.status(422).send({ error: 'Only web page reviews can be recaptured', code: 'NOT_A_WEB_CAPTURE' });
+    const previous = await loadPrevious(request, reply, current.id, current.projectId);
+    if (!previous) return reply;
+    const viewport = request.body.viewport ?? current.captureViewport ?? 'desktop';
+    const captured = await captureToAttachment(request, reply, { projectId: current.projectId, url: current.sourceUrl, viewport });
+    if (!captured) return reply;
+    const { attachment, capture } = captured;
+    const session = await createVersionedSession(request, reply, {
+      projectId: current.projectId, attachmentId: attachment.id, title: current.title, previous, sourceUrl: capture.url, captureViewport: capture.viewport,
+    });
+    if (!session) return reply;
+    await recordRequestAuditEvent(request.prisma, request, {
+      action: 'review.session_created',
+      entityId: session.id,
+      metadata: {
+        projectId: current.projectId, attachmentId: attachment.id, version: session.version, previousSessionId: previous.id, mediaKind: 'image',
+        sourceHost: new URL(capture.url).host, captureViewport: capture.viewport, captureTruncated: capture.truncated,
+      },
+    });
+    return reply.status(201).send({ session: staffSession(session), capture: { truncated: capture.truncated, finalUrl: capture.finalUrl } });
   });
 
   // One session with its annotations, decisions and share links.
   fastify.get('/:id', { onRequest: [fastify.authenticate], preHandler: [requireReviewStaff] }, async (request, reply) => {
     const session = await loadSession(request, reply);
     if (!session) return reply;
-    const [threads, decisions, shareLinks] = await Promise.all([
+    const [threads, decisions, shareLinks, versions] = await Promise.all([
       loadAnnotationThreads(request.prisma, session.id, ANNOTATIONS_PER_SESSION_MAX),
       request.prisma.reviewDecision.findMany({ where: { sessionId: session.id }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 200 }),
       request.prisma.reviewShareLink.findMany({ where: { sessionId: session.id }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 100 }),
+      loadVersionChain(request.prisma, session, { projectId: session.projectId }),
     ]);
     const now = new Date();
     return {
       session: staffSession(session),
+      versions,
       annotations: threads.annotations.map(staffAnnotation),
       annotationTotal: threads.total,
       annotationsTruncated: threads.truncated,
@@ -214,6 +405,8 @@ export default async function reviewRoutes(fastify) {
     }
     const body = sanitizePlainText(input.body);
     if (!body) return reply.status(400).send({ error: 'body: Comment cannot be empty' });
+    const mentioned = await findMentionableStaff(request.prisma, request.user.organizationId, input.mentionUserIds);
+    if (!mentioned) return reply.status(400).send({ error: 'Mentions must be active team members of your organization', code: 'INVALID_MENTION' });
     const limit = await annotationLimitFailure(request.prisma, { sessionId: session.id });
     if (limit) return reply.status(409).send(limit);
     let annotation;
@@ -236,6 +429,12 @@ export default async function reviewRoutes(fastify) {
       if (err instanceof ReviewSessionClosedError) return reply.status(409).send({ error: 'This review session is closed', code: err.code });
       throw err;
     }
+    await notifyReviewStaff(fastify, mentioned.map((user) => user.id), {
+      type: 'MENTION',
+      title: 'You were mentioned in a review',
+      message: `${annotation.authorName} mentioned you on "${session.title}": ${commentExcerpt(body)}`,
+      data: { reviewSessionId: session.id, projectId: session.projectId, annotationId: annotation.id },
+    }, { actorUserId: request.user.id, log: request.log });
     return reply.status(201).send({ annotation: staffAnnotation(annotation) });
   });
 
@@ -298,6 +497,39 @@ export default async function reviewRoutes(fastify) {
       metadata: { decisionId: created.id, decision, fromStatus: session.status, toStatus: decision, via: 'staff' },
     });
     return reply.status(201).send({ decision: staffDecision(created), status: decision });
+  });
+
+  // Client portal access. A review is visible in the project's client portal
+  // only once shared (opt-in, default off; share links are separate), and
+  // its portal users may approve or request changes only while it is shared
+  // and clientCanDecide is on. Unsharing also turns decisions off.
+  fastify.post('/:id/client-access', {
+    onRequest: [fastify.authenticate],
+    preHandler: [requireReviewStaff, validateBody(reviewClientAccessSchema)],
+  }, async (request, reply) => {
+    const session = await loadSession(request, reply);
+    if (!session) return reply;
+    const before = { sharedWithClient: Boolean(session.sharedWithClient), clientCanDecide: Boolean(session.clientCanDecide) };
+    const sharedWithClient = request.body.sharedWithClient ?? before.sharedWithClient;
+    let clientCanDecide = request.body.clientCanDecide ?? before.clientCanDecide;
+    if (!sharedWithClient) {
+      if (request.body.clientCanDecide === true) {
+        return reply.status(409).send({ error: 'Share the review with the client before letting them decide', code: 'REVIEW_NOT_SHARED' });
+      }
+      clientCanDecide = false;
+    }
+    if (clientCanDecide !== before.clientCanDecide && !canWriteToSession(session)) {
+      return reply.status(409).send({ error: 'This review session is closed' });
+    }
+    if (sharedWithClient !== before.sharedWithClient || clientCanDecide !== before.clientCanDecide) {
+      await request.prisma.reviewSession.update({ where: { id: session.id }, data: { sharedWithClient, clientCanDecide } });
+      await recordRequestAuditEvent(request.prisma, request, {
+        action: 'review.client_access_changed',
+        entityId: session.id,
+        metadata: { sharedWithClient, clientCanDecide, fromSharedWithClient: before.sharedWithClient, fromClientCanDecide: before.clientCanDecide },
+      });
+    }
+    return { sharedWithClient, clientCanDecide };
   });
 
   fastify.get('/:id/share-links', { onRequest: [fastify.authenticate], preHandler: [requireReviewStaff] }, async (request, reply) => {

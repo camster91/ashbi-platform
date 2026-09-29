@@ -1499,6 +1499,122 @@
         },
         "type": "object"
       },
+      "ClientPortalReviewAnnotation": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "maxLength": 5000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "color": {
+            "enum": [
+              "red",
+              "orange",
+              "yellow",
+              "green",
+              "blue",
+              "purple"
+            ],
+            "type": "string"
+          },
+          "pageNumber": {
+            "maximum": 10000,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "parentId": {
+            "maxLength": 50,
+            "minLength": 1,
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "items": {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            "maxItems": 500,
+            "minItems": 2,
+            "type": "array"
+          },
+          "region": {
+            "additionalProperties": false,
+            "properties": {
+              "h": {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              "w": {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              "x": {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              "y": {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              }
+            },
+            "required": [
+              "x",
+              "y",
+              "w",
+              "h"
+            ],
+            "type": "object"
+          },
+          "shape": {
+            "enum": [
+              "pin",
+              "rect",
+              "arrow",
+              "pen"
+            ],
+            "type": "string"
+          },
+          "timecodeMs": {
+            "maximum": 86400000,
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "body"
+        ],
+        "type": "object"
+      },
+      "ClientPortalReviewDecision": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "approved",
+              "changes_requested"
+            ],
+            "type": "string"
+          },
+          "note": {
+            "maxLength": 2000,
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "type": "object"
+      },
       "ClientPortalRevisionResponse": {
         "properties": {
           "action": {
@@ -4000,6 +4116,26 @@
             "minLength": 1,
             "type": "string"
           },
+          "color": {
+            "enum": [
+              "red",
+              "orange",
+              "yellow",
+              "green",
+              "blue",
+              "purple"
+            ],
+            "type": "string"
+          },
+          "mentionUserIds": {
+            "items": {
+              "maxLength": 50,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 20,
+            "type": "array"
+          },
           "pageNumber": {
             "maximum": 10000,
             "minimum": 1,
@@ -4009,6 +4145,21 @@
             "maxLength": 50,
             "minLength": 1,
             "type": "string"
+          },
+          "points": {
+            "items": {
+              "items": {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            "maxItems": 500,
+            "minItems": 2,
+            "type": "array"
           },
           "region": {
             "additionalProperties": false,
@@ -4042,6 +4193,15 @@
             ],
             "type": "object"
           },
+          "shape": {
+            "enum": [
+              "pin",
+              "rect",
+              "arrow",
+              "pen"
+            ],
+            "type": "string"
+          },
           "timecodeMs": {
             "maximum": 86400000,
             "minimum": 0,
@@ -4063,6 +4223,53 @@
         "required": [
           "resolved"
         ],
+        "type": "object"
+      },
+      "ReviewCaptureCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "projectId": {
+            "maxLength": 50,
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "url": {
+            "format": "uri",
+            "maxLength": 2048,
+            "minLength": 1,
+            "type": "string"
+          },
+          "viewport": {
+            "default": "desktop",
+            "enum": [
+              "desktop",
+              "mobile"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "projectId",
+          "url",
+          "title"
+        ],
+        "type": "object"
+      },
+      "ReviewClientAccess": {
+        "additionalProperties": false,
+        "properties": {
+          "clientCanDecide": {
+            "type": "boolean"
+          },
+          "sharedWithClient": {
+            "type": "boolean"
+          }
+        },
         "type": "object"
       },
       "ReviewDecisionCreate": {
@@ -4093,6 +4300,17 @@
             "minLength": 1,
             "type": "string"
           },
+          "color": {
+            "enum": [
+              "red",
+              "orange",
+              "yellow",
+              "green",
+              "blue",
+              "purple"
+            ],
+            "type": "string"
+          },
           "email": {
             "format": "email",
             "maxLength": 254,
@@ -4112,6 +4330,21 @@
             "maxLength": 50,
             "minLength": 1,
             "type": "string"
+          },
+          "points": {
+            "items": {
+              "items": {
+                "maximum": 1,
+                "minimum": 0,
+                "type": "number"
+              },
+              "maxItems": 2,
+              "minItems": 2,
+              "type": "array"
+            },
+            "maxItems": 500,
+            "minItems": 2,
+            "type": "array"
           },
           "region": {
             "additionalProperties": false,
@@ -4144,6 +4377,15 @@
               "h"
             ],
             "type": "object"
+          },
+          "shape": {
+            "enum": [
+              "pin",
+              "rect",
+              "arrow",
+              "pen"
+            ],
+            "type": "string"
           },
           "timecodeMs": {
             "maximum": 86400000,
@@ -4186,6 +4428,19 @@
           "name",
           "decision"
         ],
+        "type": "object"
+      },
+      "ReviewRecapture": {
+        "additionalProperties": false,
+        "properties": {
+          "viewport": {
+            "enum": [
+              "desktop",
+              "mobile"
+            ],
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "ReviewSessionCreate": {
@@ -8774,6 +9029,7 @@
                 "review.decision_recorded",
                 "review.share_link_created",
                 "review.share_link_revoked",
+                "review.client_access_changed",
                 "estimate.approved",
                 "estimate.declined",
                 "estimate.link_revoked",
@@ -13567,6 +13823,278 @@
           }
         ],
         "summary": "GET /api/client-portal/retainer",
+        "tags": [
+          "client-portal"
+        ],
+        "x-access": "client-portal",
+        "x-tenancy": "exempt"
+      }
+    },
+    "/api/client-portal/reviews": {
+      "get": {
+        "operationId": "get_api_client_portal_reviews",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "projectId",
+            "required": false,
+            "schema": {
+              "maxLength": 50,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "clientPortalCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/client-portal/reviews",
+        "tags": [
+          "client-portal"
+        ],
+        "x-access": "client-portal",
+        "x-tenancy": "exempt"
+      }
+    },
+    "/api/client-portal/reviews/{id}": {
+      "get": {
+        "operationId": "get_api_client_portal_reviews_id",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "maxLength": 50,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "clientPortalCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/client-portal/reviews/:id",
+        "tags": [
+          "client-portal"
+        ],
+        "x-access": "client-portal",
+        "x-tenancy": "exempt"
+      }
+    },
+    "/api/client-portal/reviews/{id}/annotations": {
+      "post": {
+        "operationId": "post_api_client_portal_reviews_id_annotations",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "maxLength": 50,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientPortalReviewAnnotation"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "clientPortalCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/client-portal/reviews/:id/annotations",
+        "tags": [
+          "client-portal"
+        ],
+        "x-access": "client-portal",
+        "x-tenancy": "exempt"
+      }
+    },
+    "/api/client-portal/reviews/{id}/decisions": {
+      "post": {
+        "operationId": "post_api_client_portal_reviews_id_decisions",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "maxLength": 50,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientPortalReviewDecision"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "clientPortalCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/client-portal/reviews/:id/decisions",
+        "tags": [
+          "client-portal"
+        ],
+        "x-access": "client-portal",
+        "x-tenancy": "exempt"
+      }
+    },
+    "/api/client-portal/reviews/{id}/file": {
+      "get": {
+        "operationId": "get_api_client_portal_reviews_id_file",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "maxLength": 50,
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "clientPortalCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/client-portal/reviews/:id/file",
         "tags": [
           "client-portal"
         ],
@@ -26024,6 +26552,91 @@
         "x-tenancy": "scoped"
       }
     },
+    "/api/reviews/capabilities": {
+      "get": {
+        "operationId": "get_api_reviews_capabilities",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/reviews/capabilities",
+        "tags": [
+          "reviews"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/reviews/capture": {
+      "post": {
+        "operationId": "post_api_reviews_capture",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewCaptureCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/reviews/capture",
+        "tags": [
+          "reviews"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
     "/api/reviews/{id}": {
       "get": {
         "operationId": "get_api_reviews_id",
@@ -26208,6 +26821,68 @@
         "x-tenancy": "scoped"
       }
     },
+    "/api/reviews/{id}/client-access": {
+      "post": {
+        "operationId": "post_api_reviews_id_client_access",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewClientAccess"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/reviews/:id/client-access",
+        "tags": [
+          "reviews"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
     "/api/reviews/{id}/decisions": {
       "post": {
         "operationId": "post_api_reviews_id_decisions",
@@ -26263,6 +26938,68 @@
           }
         ],
         "summary": "POST /api/reviews/:id/decisions",
+        "tags": [
+          "reviews"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/reviews/{id}/recapture": {
+      "post": {
+        "operationId": "post_api_reviews_id_recapture",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewRecapture"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/reviews/:id/recapture",
         "tags": [
           "reviews"
         ],
