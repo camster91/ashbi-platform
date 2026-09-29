@@ -14,7 +14,7 @@ const databaseUrl = process.env.TENANT_INTEGRATION_DATABASE_URL;
 
 function scopedBackfill() {
   const sql = readFileSync(new URL('../../../prisma/migrations/20260927030000_chat_message_visibility/migration.sql', import.meta.url), 'utf8');
-  const start = sql.indexOf('UPDATE "chat_messages"');
+  const start = sql.indexOf('UPDATE "chat_messages"', sql.indexOf('-- Backfill:'));
   const update = sql.slice(start, sql.indexOf(';', start));
   assert.match(update, /WHERE m\."authorId" = u\."id"/);
   return update.replace('WHERE m."authorId" = u."id"', 'WHERE p."organizationId" = $1 AND m."authorId" = u."id"');

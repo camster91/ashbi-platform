@@ -45,7 +45,11 @@ test('chat message reads scope included replies to the requested project', async
   });
   app.decorate('prisma', {
     chatMessage: {
-      findMany: async (args) => { calls.push(args); return []; },
+      // First the activity query (ids only), then the thread query.
+      findMany: async (args) => {
+        calls.push(args);
+        return args.include ? [] : [{ id: 'c123456789012345678901299', parentId: null, createdAt: new Date() }];
+      },
     },
   });
   app.addHook('onRequest', async (request) => { request.prisma = app.prisma; });
@@ -55,7 +59,10 @@ test('chat message reads scope included replies to the requested project', async
     const projectId = 'c123456789012345678901235';
     const response = await app.inject({ method: 'GET', url: `/api/projects/${projectId}/messages` });
     assert.equal(response.statusCode, 200, response.body);
-    assert.deepEqual(calls[0].include.replies.where, { projectId });
+    assert.deepEqual(calls[0].where, { projectId }, 'activity is read within the project');
+    const threadQuery = calls.find((args) => args.include);
+    assert.equal(threadQuery.where.projectId, projectId);
+    assert.deepEqual(threadQuery.include.replies.where, { projectId });
   } finally {
     await app.close();
   }

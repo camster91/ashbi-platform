@@ -85,13 +85,21 @@ test('the staff message list batch-loads files for messages and replies (no per-
   const attachmentQueries = [];
   const app = Fastify();
   app.decorate('authenticate', async (request) => { request.user = STAFF; });
+  const threads = [
+    { id: 'm2', content: 'second', metadata: null, replies: [{ id: 'r1', parentId: 'm2', content: 'reply', metadata: null }] },
+    { id: 'm1', content: 'first', metadata: null, replies: [] },
+    { id: 'm0', content: '', metadata: null, removedAt: new Date(), replies: [] },
+  ];
+  // Newest activity first: the reply r1 is the latest, then m1, then m0.
+  const activity = [
+    { id: 'r1', parentId: 'm2', createdAt: new Date('2026-09-29T10:03:00Z') },
+    { id: 'm2', parentId: null, createdAt: new Date('2026-09-29T10:02:30Z') },
+    { id: 'm1', parentId: null, createdAt: new Date('2026-09-29T10:02:00Z') },
+    { id: 'm0', parentId: null, createdAt: new Date('2026-09-29T10:01:00Z') },
+  ];
   const prisma = {
     chatMessage: {
-      findMany: async () => [
-        { id: 'm2', content: 'second', metadata: null, replies: [{ id: 'r1', content: 'reply', metadata: null }] },
-        { id: 'm1', content: 'first', metadata: null, replies: [] },
-        { id: 'm0', content: '', metadata: null, removedAt: new Date(), replies: [] },
-      ],
+      findMany: async (args) => (args.select ? activity : threads.filter((thread) => args.where.id.in.includes(thread.id))),
     },
     attachment: {
       findMany: async (args) => {
@@ -111,7 +119,7 @@ test('the staff message list batch-loads files for messages and replies (no per-
     assert.equal(response.statusCode, 200, response.body);
     assert.equal(attachmentQueries.length, 1, 'one attachment query per page');
     assert.deepEqual(attachmentQueries[0].where.entityId.in.sort(), ['m0', 'm1', 'm2', 'r1']);
-    const [removed, first, second] = response.json();
+    const [removed, first, second] = response.json(); // oldest activity first
     assert.deepEqual(first.attachments.map((file) => file.url), ['/api/attachments/uploads/a.png']);
     assert.deepEqual(second.attachments, []);
     assert.equal(second.replies[0].attachments[0].id, 'f2');
