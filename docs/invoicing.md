@@ -107,6 +107,12 @@ the public link): one reminder, then one escalation from 7 days overdue
   new overdue invoices are always reached.
 - Each invoice and each organization is processed in isolation; activity
   logging and notifications are best-effort.
+- **Upgrade from the previous job.** Migrations `20260927023000` and
+  `20260927023100` mark invoices the previous job already escalated (its
+  escalation never set `reminderSentAt`): rows whose reminder went out 7+
+  days after the due date, rows with its `escalated` activity, and open
+  OVERDUE rows with no reminder recorded. They get no second urgent email.
+  Invoices the previous job only reminded may still get the one escalation.
 
 ## Retainer invoices
 
