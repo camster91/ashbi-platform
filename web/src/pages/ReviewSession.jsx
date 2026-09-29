@@ -1,10 +1,10 @@
 import { useId, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Copy, Link2, ShieldAlert } from 'lucide-react';
+import { ArrowLeft, Copy, Globe, Link2, RefreshCw, ShieldAlert, Users } from 'lucide-react';
 import { api } from '../lib/api';
 import { cn, formatDate, formatDateTime } from '../lib/utils';
-import MediaReview, { StatusBadge } from '../components/review/MediaReview';
+import MediaReview, { StatusBadge, VersionSwitcher } from '../components/review/MediaReview';
 import ConfirmDialog from '../components/ConfirmDialog';
 import QueryErrorState from '../components/QueryErrorState';
 import { LoadingState } from '../components/ui';
@@ -159,11 +159,78 @@ function ShareLinks({ sessionId, shareLinks, canCreate, onChanged }) {
   );
 }
 
+/** Whether the project's client portal users may approve or request changes. */
+function ClientAccess({ session, onChanged }) {
+  const id = useId();
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState('');
+  const toggle = async (event) => {
+    const next = event.target.checked;
+    setPending(true);
+    setError('');
+    try {
+      await api.setReviewClientAccess(session.id, next);
+      onChanged();
+    } catch (err) {
+      setError(err?.message || 'The setting could not be saved.');
+    } finally {
+      setPending(false);
+    }
+  };
+  return (
+    <section className="space-y-2 rounded-xl border border-border bg-card p-4" aria-labelledby={`${id}-heading`}>
+      <h2 id={`${id}-heading`} className="flex items-center gap-2 font-semibold text-foreground"><Users className="h-4 w-4" aria-hidden="true" />Client portal</h2>
+      <p className="text-sm text-muted-foreground">The client's portal users see every review of their projects, with all comments, and can comment on open reviews.</p>
+      <label className="flex min-h-11 items-center gap-2 text-sm text-foreground">
+        <input type="checkbox" checked={Boolean(session.clientCanDecide)} onChange={toggle} disabled={pending || session.status === 'closed'} className="h-4 w-4" />
+        Let the client approve or request changes in the client portal
+      </label>
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+    </section>
+  );
+}
+
+/** Source of a web page review, with a recapture as the next version. */
+function WebCaptureSource({ session, canRecapture, onRecaptured }) {
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState('');
+  const recapture = async () => {
+    setPending(true);
+    setError('');
+    try {
+      const result = await api.recaptureReviewPage(session.id, {});
+      onRecaptured(result.session.id);
+    } catch (err) {
+      setError(err?.message || 'The page could not be captured again.');
+    } finally {
+      setPending(false);
+    }
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card p-3 text-sm">
+      <Globe className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+      <p className="min-w-0 text-foreground">
+        Web page captured ({session.captureViewport === 'mobile' ? 'mobile, 390 px' : 'desktop, 1440 px'}):{' '}
+        <a href={session.sourceUrl} target="_blank" rel="noopener noreferrer" className="break-all text-primary underline-offset-2 hover:underline">{session.sourceUrl}</a>
+      </p>
+      {canRecapture && (
+        <button type="button" onClick={recapture} disabled={pending} className={cn(buttonBase, 'border border-border text-foreground hover:bg-muted')}>
+          <RefreshCw className="h-4 w-4" aria-hidden="true" />{pending ? 'Capturing…' : 'Recapture as a new version'}
+        </button>
+      )}
+      {error && <p role="alert" className="w-full text-destructive">{error}</p>}
+    </div>
+  );
+}
+
 export default function ReviewSession() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const queryKey = ['review-session', id];
   const { data, isLoading, error, refetch, isFetching } = useQuery({ queryKey, queryFn: () => api.getReviewSession(id) });
+  const capabilities = useQuery({ queryKey: ['review-capabilities'], queryFn: () => api.getReviewCapabilities(), staleTime: 5 * 60 * 1000 });
+  const team = useQuery({ queryKey: ['review-mentionables'], queryFn: () => api.getTeam(), staleTime: 5 * 60 * 1000 });
   const refresh = () => queryClient.invalidateQueries({ queryKey });
 
   if (isLoading) return <LoadingState label="Loading review…" />;
@@ -172,6 +239,9 @@ export default function ReviewSession() {
   const { session, annotations, decisions, shareLinks } = data;
   const canWrite = session.status !== 'closed';
   const media = { ...session.media, url: api.attachmentFileUrl(session.media.filename) };
+  const mentionables = (Array.isArray(team.data) ? team.data : [])
+    .filter((user) => user.isActive !== false && (user.role === 'ADMIN' || user.role === 'TEAM') && user.name)
+    .map((user) => ({ id: user.id, name: user.name }));
 
   return (
     <div className="space-y-6">
@@ -184,13 +254,23 @@ export default function ReviewSession() {
           <StatusBadge status={session.status} />
           <span className="text-sm text-muted-foreground">Version {session.version}</span>
         </div>
+        <VersionSwitcher versions={data.versions} currentId={session.id} onSelect={(versionId) => navigate(`/review/${versionId}`)} />
         <nav aria-label="Versions" className="flex flex-wrap gap-3 text-sm">
           {session.previousSessionId && <Link to={`/review/${session.previousSessionId}`} className="min-h-11 inline-flex items-center text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Previous version</Link>}
           {session.nextSessionId && <Link to={`/review/${session.nextSessionId}`} className="min-h-11 inline-flex items-center text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Newer version</Link>}
         </nav>
       </div>
 
+      {session.sourceUrl && (
+        <WebCaptureSource
+          session={session}
+          canRecapture={!session.nextSessionId && Boolean(capabilities.data?.webCapture?.enabled)}
+          onRecaptured={(nextId) => { queryClient.invalidateQueries({ queryKey: ['review-sessions', session.projectId] }); navigate(`/review/${nextId}`); }}
+        />
+      )}
+
       <MediaReview
+        key={session.id}
         media={media}
         status={session.status}
         annotations={annotations}
@@ -198,10 +278,13 @@ export default function ReviewSession() {
         canComment={canWrite}
         canResolve
         canDecide={canWrite}
+        mentionables={mentionables}
         onAddAnnotation={async (body) => { const result = await api.addReviewAnnotation(id, body); await refresh(); return result.annotation; }}
         onResolve={async (annotationId, resolved) => { await api.resolveReviewAnnotation(id, annotationId, resolved); await refresh(); }}
         onDecide={async (body) => { await api.recordReviewDecision(id, body); await refresh(); }}
       />
+
+      <ClientAccess session={session} onChanged={refresh} />
 
       <ShareLinks sessionId={id} shareLinks={shareLinks} canCreate={canWrite} onChanged={refresh} />
     </div>
