@@ -14,6 +14,7 @@ import { clearStaleSessionCookie } from '../auth/request-session.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { contentDisposition } from '../utils/send-file.js';
 import { ATTACHMENT_UNDER_REVIEW, isAttachmentUnderReview, isForeignKeyViolation } from '../services/media-review.service.js';
+import clientPortalReviewRoutes from './client-portal-review.routes.js';
 import { emitChatEvent, toClientChatPayload } from '../auth/project-room-access.js';
 import { validateBody, validateParams, validateQuery, chatMessageListQuerySchema, clientPortalMessageSchema, requestAccessSchema, fileUpload, clientPortalTokenRedeemSchema, clientPortalRevisionResponseSchema, clientPortalFeedbackSchema } from '../validators/schemas.js';
 import { invoicePublicAccessFailure, INVOICE_OPEN_STATUSES } from '../utils/public-document-access.js';
@@ -991,4 +992,8 @@ export default async function clientPortalRoutes(fastify) {
 
     return { recentMessages, upcomingDeadlines };
   });
+
+  // Media review for the client's own projects (docs/media-review.md
+  // "Client portal reviews"), behind this plugin's clientAuth guard.
+  await fastify.register(clientPortalReviewRoutes, { prefix: '/reviews', clientAuth });
 }

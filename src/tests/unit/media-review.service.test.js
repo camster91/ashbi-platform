@@ -61,8 +61,49 @@ test('anchors must match the media kind', () => {
   assert.ok(review.annotationPositionError('image', { region: { x: 0.5, y: 0.5, w: 0.6, h: 0.1 } }));
   assert.ok(review.annotationPositionError('video', { parentId: 'p', timecodeMs: 1 }));
   assert.deepEqual(review.annotationPositionData({ region: { x: 0.1, y: 0.2, w: 0.3, h: 0.4 } }), {
-    timecodeMs: null, pageNumber: null, regionX: 0.1, regionY: 0.2, regionW: 0.3, regionH: 0.4,
+    timecodeMs: null, pageNumber: null, regionX: 0.1, regionY: 0.2, regionW: 0.3, regionH: 0.4, shape: 'rect', color: null,
   });
+});
+
+test('markup shapes are normalized, bounded and tied to the right anchor', () => {
+  const err = review.annotationPositionError;
+  // Pins and areas on images; a bare region still means pin or area.
+  assert.equal(err('image', { shape: 'pin', region: { x: 0.5, y: 0.5, w: 0, h: 0 } }), null);
+  assert.equal(err('image', { shape: 'rect', region: { x: 0.1, y: 0.1, w: 0.2, h: 0.2 }, color: 'blue' }), null);
+  assert.ok(err('image', { shape: 'pin', region: { x: 0.5, y: 0.5, w: 0.1, h: 0 } }));
+  assert.ok(err('image', { shape: 'rect', region: { x: 0.1, y: 0.1, w: 0, h: 0.2 } }));
+  assert.ok(err('image', { shape: 'rect', points: [[0, 0], [1, 1]] }));
+  // Arrows are exactly two points; strokes 2..500 points, all within 0..1.
+  assert.equal(err('image', { shape: 'arrow', points: [[0.1, 0.1], [0.4, 0.3]] }), null);
+  assert.ok(err('image', { shape: 'arrow', points: [[0.1, 0.1], [0.4, 0.3], [0.5, 0.5]] }));
+  assert.equal(err('image', { shape: 'pen', points: Array.from({ length: 500 }, (_, i) => [i / 500, 0.5]) }), null);
+  assert.ok(err('image', { shape: 'pen', points: Array.from({ length: 501 }, () => [0.5, 0.5]) }));
+  assert.ok(err('image', { shape: 'pen', points: [[0.5, 0.5]] }));
+  assert.ok(err('image', { shape: 'pen', points: [[0.5, 0.5], [1.2, 0.5]] }));
+  assert.ok(err('image', { shape: 'pen', points: [[0.5, 0.5], [0.5]] }));
+  assert.ok(err('image', { shape: 'pen', points: [[0.5, 0.5], [Number.NaN, 0.5]] }));
+  assert.ok(err('image', { shape: 'pen', points: [[0.5, 0.5], [0.6, 0.6]], region: { x: 0, y: 0, w: 1, h: 1 } }));
+  assert.ok(err('image', { shape: 'arrow' }));
+  assert.ok(err('image', { points: [[0, 0], [1, 1]] }), 'points without a shape');
+  assert.ok(err('image', { shape: 'hexagon', region: { x: 0, y: 0, w: 0, h: 0 } }));
+  assert.ok(err('image', { shape: 'pin', region: { x: 0, y: 0, w: 0, h: 0 }, color: 'pink' }));
+  assert.ok(err('image', { color: 'red' }), 'a color needs a shape');
+  // PDF shapes need their page; video shapes need their frame; audio has none.
+  assert.equal(err('pdf', { pageNumber: 2, shape: 'rect', region: { x: 0.1, y: 0.1, w: 0.2, h: 0.2 } }), null);
+  assert.ok(err('pdf', { shape: 'rect', region: { x: 0.1, y: 0.1, w: 0.2, h: 0.2 } }));
+  assert.equal(err('video', { timecodeMs: 1500, shape: 'arrow', points: [[0.1, 0.1], [0.2, 0.2]] }), null);
+  assert.ok(err('video', { shape: 'arrow', points: [[0.1, 0.1], [0.2, 0.2]] }));
+  assert.ok(err('audio', { timecodeMs: 1500, shape: 'pin', region: { x: 0, y: 0, w: 0, h: 0 } }));
+  // Replies carry no markup.
+  assert.ok(err('image', { parentId: 'p', color: 'red' }));
+  assert.ok(err('image', { parentId: 'p', shape: 'pen', points: [[0, 0], [1, 1]] }));
+
+  // Arrows and strokes store their bounding box as the region.
+  assert.deepEqual(review.annotationPositionData({ timecodeMs: 1500, shape: 'pen', points: [[0.5, 0.25], [0.25, 0.75], [0.75, 0.5]], color: 'green' }), {
+    timecodeMs: 1500, pageNumber: null, regionX: 0.25, regionY: 0.25, regionW: 0.5, regionH: 0.5,
+    shape: 'pen', points: [[0.5, 0.25], [0.25, 0.75], [0.75, 0.5]], color: 'green',
+  });
+  assert.deepEqual(review.publicAnnotation({ id: 'a', regionX: 0.1, regionY: 0.1, regionW: 0, regionH: 0, body: 'x', createdAt: new Date(0) }).shape, 'pin');
 });
 
 test('only images, PDFs, video and audio are reviewable', () => {

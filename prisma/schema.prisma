@@ -2562,6 +2562,9 @@ model ReviewSession {
   title             String
   status            String         @default("open") // open, approved, changes_requested, closed (CHECK constraint)
   version           Int            @default(1)
+  sourceUrl         String? // web page review: the captured http(s) URL (CHECK constraint)
+  captureViewport   String? // web page review: desktop or mobile, set with sourceUrl (CHECK constraint)
+  clientCanDecide   Boolean        @default(false) // signed-in client portal users may approve or request changes
   previousSessionId String?        @unique // the session this version replaces
   previousSession   ReviewSession? @relation("ReviewSessionVersions", fields: [previousSessionId], references: [id], onDelete: SetNull)
   nextSession       ReviewSession? @relation("ReviewSessionVersions")
@@ -2579,11 +2582,14 @@ model ReviewSession {
   @@map("review_sessions")
 }
 
-// A comment on a review session: optionally pinned to a video/audio timecode,
-// or to a normalized image region / PDF page, and optionally a reply
-// (parentId) in the same session. The author is a staff user (authorUserId)
-// or a named guest who came in through a share link (shareLinkId); the name
-// is a snapshot so the thread survives account changes.
+// A comment on a review session: optionally pinned to a video/audio timecode
+// and/or a PDF page, optionally marked up with a shape (pin, area, arrow or
+// freehand stroke, normalized to the image, page or video frame), and
+// optionally a reply (parentId) in the same session. The author is a staff
+// user (authorUserId), a named guest who came in through a share link
+// (shareLinkId), or a signed-in client portal user (authorUserId); the name
+// is a snapshot so the thread survives account changes. Shape rules are
+// CHECK constraints in migration 20260929120000_review_markup.
 model ReviewAnnotation {
   id           String             @id @default(cuid())
   sessionId    String
@@ -2591,8 +2597,8 @@ model ReviewAnnotation {
   parentId     String?
   parent       ReviewAnnotation?  @relation("ReviewAnnotationThread", fields: [parentId], references: [id], onDelete: Cascade)
   replies      ReviewAnnotation[] @relation("ReviewAnnotationThread")
-  authorType   String // staff or guest (CHECK constraint)
-  authorUserId String? // staff author; no FK: history must outlive the actor account
+  authorType   String // staff, guest (share link) or client (signed-in client portal user) (CHECK constraint)
+  authorUserId String? // staff or client portal author; no FK: history must outlive the actor account
   authorName   String
   authorEmail  String? // guest only, optional
   shareLinkId  String? // guest only: the link the comment came through
@@ -2604,6 +2610,9 @@ model ReviewAnnotation {
   regionW      Float?
   regionH      Float?
   pageNumber   Int?
+  shape        String? // pin, rect, arrow or pen; every shape also has a region (CHECK constraints)
+  points       Json? // arrow and pen: 2..500 normalized [x, y] pairs (CHECK constraint)
+  color        String? // red, orange, yellow, green, blue or purple (CHECK constraint)
   resolvedAt   DateTime?
   resolvedById String? // No FK: history must outlive the actor account
   createdAt    DateTime           @default(now())
@@ -2623,7 +2632,7 @@ model ReviewDecision {
   sessionId   String
   session     ReviewSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   decision    String // approved or changes_requested (CHECK constraint)
-  actorType   String // staff or guest (CHECK constraint)
+  actorType   String // staff, guest (share link) or client (signed-in client portal user) (CHECK constraint)
   actorUserId String? // No FK: history must outlive the actor account
   actorName   String
   actorEmail  String?

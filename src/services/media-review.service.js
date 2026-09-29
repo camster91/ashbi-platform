@@ -140,33 +140,109 @@ export function sanitizeGuestName(name) {
   return sanitizePlainText(name).replace(/\s+/g, ' ').slice(0, GUEST_NAME_MAX).trim();
 }
 
-// ── Annotation positions ────────────────────────────────────────────────────
+// ── Annotation positions and markup shapes ─────────────────────────────────
+// Geometry is normalized to the unit square of the reviewed surface (the
+// image, the PDF page or the video frame), so it survives any display size.
+//   pin   a point: region {x, y, w: 0, h: 0}
+//   rect  an area: region {x, y, w > 0, h > 0}
+//   arrow two points [[x1, y1], [x2, y2]] (tail, head)
+//   pen   a freehand stroke of 2..500 points
+// Arrows and strokes also store their bounding box in the region columns, so
+// every shape has a region (the list view and older clients use it).
+export const ANNOTATION_SHAPES = Object.freeze(['pin', 'rect', 'arrow', 'pen']);
+export const ANNOTATION_COLORS = Object.freeze(['red', 'orange', 'yellow', 'green', 'blue', 'purple']);
+export const SHAPE_POINTS_MAX = 500;
+
+const isUnit = (value) => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1;
+
+/** Why a point list is not a list of normalized [x, y] pairs, or null. */
+function pointsError(points, shape) {
+  if (!Array.isArray(points)) return 'points must be a list of [x, y] pairs';
+  if (points.length < 2 || points.length > SHAPE_POINTS_MAX) return `A ${shape} needs 2 to ${SHAPE_POINTS_MAX} points`;
+  if (shape === 'arrow' && points.length !== 2) return 'An arrow has exactly two points';
+  for (const point of points) {
+    if (!Array.isArray(point) || point.length !== 2 || !isUnit(point[0]) || !isUnit(point[1])) {
+      return 'Every point must be an [x, y] pair with each value from 0 to 1';
+    }
+  }
+  return null;
+}
+
+/** The bounding box of a point list, as a region. */
+export function boundingRegion(points) {
+  const xs = points.map((point) => point[0]);
+  const ys = points.map((point) => point[1]);
+  const x = Math.min(...xs);
+  const y = Math.min(...ys);
+  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
+}
+
+/** The shape an input describes: explicit, or pin/rect from a bare region. */
+function shapeOf(input) {
+  if (input.shape) return input.shape;
+  if (input.region) return input.region.w === 0 && input.region.h === 0 ? 'pin' : 'rect';
+  return null;
+}
+
 /**
- * Check an annotation's anchor against the reviewed media: a timecode for
- * video/audio, a normalized region for images, a page number for PDFs.
- * Replies carry no anchor. Returns an error message or null.
+ * Check an annotation's anchor and markup against the reviewed media:
+ *   - video and audio take a timecode; a shape on a video needs the
+ *     timecode of the frame it was drawn on; audio has no shapes;
+ *   - images take a shape;
+ *   - PDFs take a page number; a shape on a PDF needs its page.
+ * Replies carry no anchor and no markup. Returns an error message or null.
  *
  * @param {'image' | 'pdf' | 'video' | 'audio' | null} kind
- * @param {{ timecodeMs?: number | null, region?: object | null, pageNumber?: number | null, parentId?: string | null }} input
+ * @param {{ timecodeMs?: number | null, region?: any, pageNumber?: number | null, parentId?: string | null, shape?: string | null, points?: any, color?: string | null }} input
  */
 export function annotationPositionError(kind, input) {
   const hasTimecode = input.timecodeMs !== undefined && input.timecodeMs !== null;
   const hasRegion = input.region !== undefined && input.region !== null;
   const hasPage = input.pageNumber !== undefined && input.pageNumber !== null;
-  if (input.parentId && (hasTimecode || hasRegion || hasPage)) return 'Replies cannot have a timecode, region or page';
+  const hasShape = input.shape !== undefined && input.shape !== null;
+  const hasPoints = input.points !== undefined && input.points !== null;
+  const hasColor = input.color !== undefined && input.color !== null;
+  const marked = hasRegion || hasShape || hasPoints;
+  if (input.parentId && (hasTimecode || marked || hasPage || hasColor)) return 'Replies cannot have a timecode, shape or page';
   if (hasTimecode && kind !== 'video' && kind !== 'audio') return 'A timecode applies only to video or audio';
-  if (hasRegion && kind !== 'image') return 'A region applies only to images';
   if (hasPage && kind !== 'pdf') return 'A page number applies only to PDFs';
-  if (hasRegion) {
-    const { x, y, w, h } = /** @type {any} */ (input.region);
-    if (x + w > 1 || y + h > 1) return 'The region must lie within the image';
+  if (marked) {
+    if (kind === 'audio' || !kind) return 'Shapes apply only to images, PDF pages and video frames';
+    if (kind === 'pdf' && !hasPage) return 'A shape on a PDF needs the page it is drawn on';
+    if (kind === 'video' && !hasTimecode) return 'A shape on a video needs the timecode of its frame';
   }
-  return null;
+  if (hasColor && !marked) return 'A color applies only to a shape';
+  if (hasColor && !ANNOTATION_COLORS.includes(/** @type {string} */ (input.color))) return 'Unknown shape color';
+  if (hasShape && !ANNOTATION_SHAPES.includes(/** @type {string} */ (input.shape))) return 'Unknown shape';
+  if (!marked) return null;
+  if (hasPoints && !hasShape) return 'Points need a shape (arrow or pen)';
+
+  const shape = shapeOf(input);
+  if (shape === 'pin' || shape === 'rect') {
+    if (hasPoints) return `A ${shape} is described by its region, not by points`;
+    if (!hasRegion) return `A ${shape} needs a region`;
+    const { x, y, w, h } = input.region;
+    if (![x, y, w, h].every(isUnit)) return 'Region values must be from 0 to 1';
+    if (x + w > 1 || y + h > 1) return 'The region must lie within the media';
+    if (shape === 'pin' && (w !== 0 || h !== 0)) return 'A pin is a point: its width and height are 0';
+    if (shape === 'rect' && (w <= 0 || h <= 0)) return 'An area needs a width and a height';
+    return null;
+  }
+  // arrow or pen: the geometry is the point list; the region is derived.
+  if (hasRegion) return `A ${shape} is described by its points, not by a region`;
+  if (!hasPoints) return `A ${shape} needs points`;
+  return pointsError(input.points, shape);
 }
 
-/** Flatten an annotation input's anchor into its columns. */
+/**
+ * Flatten an annotation input's anchor and markup into its columns. `points`
+ * is omitted when there are none: Prisma refuses a literal null for a JSON
+ * column, and an omitted column stays SQL NULL.
+ */
 export function annotationPositionData(input) {
-  const region = input.region ?? null;
+  const shape = shapeOf(input);
+  const points = (shape === 'arrow' || shape === 'pen') && Array.isArray(input.points) ? input.points : null;
+  const region = points ? boundingRegion(points) : (input.region ?? null);
   return {
     timecodeMs: input.timecodeMs ?? null,
     pageNumber: input.pageNumber ?? null,
@@ -174,6 +250,9 @@ export function annotationPositionData(input) {
     regionY: region ? region.y : null,
     regionW: region ? region.w : null,
     regionH: region ? region.h : null,
+    shape,
+    ...(points ? { points: points.map(([x, y]) => [x, y]) } : {}),
+    color: shape ? (input.color ?? null) : null,
   };
 }
 
@@ -197,6 +276,9 @@ export function publicAnnotation(annotation) {
     body: annotation.body,
     timecodeMs: annotation.timecodeMs ?? null,
     region: regionOf(annotation),
+    shape: annotation.shape ?? (regionOf(annotation) ? (annotation.regionW === 0 && annotation.regionH === 0 ? 'pin' : 'rect') : null),
+    points: Array.isArray(annotation.points) ? annotation.points : null,
+    color: annotation.color ?? null,
     pageNumber: annotation.pageNumber ?? null,
     resolved: Boolean(annotation.resolvedAt),
     resolvedAt: annotation.resolvedAt ?? null,
@@ -362,4 +444,88 @@ export async function lockOpenSession(tx, sessionId) {
 
 export function canWriteToSession(session) {
   return session.status !== 'closed';
+}
+
+// ── Versions ────────────────────────────────────────────────────────────────
+const VERSION_CHAIN_MAX = 50;
+const VERSION_SELECT = { id: true, version: true, status: true, title: true, createdAt: true, previousSessionId: true, nextSession: { select: { id: true } } };
+
+/**
+ * Every version of a review, oldest first: the session, the versions it
+ * replaces and the versions that replace it (at most 50 each way). `where`
+ * narrows every hop (e.g. to a client's projects); a hop that does not match
+ * ends the chain.
+ * @param {any} prisma
+ * @param {{ id: string }} session
+ * @param {object} [where]
+ */
+export async function loadVersionChain(prisma, session, where = {}) {
+  const find = (id) => prisma.reviewSession.findFirst({ where: { ...where, id }, select: VERSION_SELECT });
+  const current = await find(session.id);
+  if (!current) return [];
+  const older = [];
+  let cursor = current;
+  while (cursor.previousSessionId && older.length < VERSION_CHAIN_MAX) {
+    cursor = await find(cursor.previousSessionId);
+    if (!cursor) break;
+    older.unshift(cursor);
+  }
+  const newer = [];
+  cursor = current;
+  while (cursor.nextSession?.id && newer.length < VERSION_CHAIN_MAX) {
+    cursor = await find(cursor.nextSession.id);
+    if (!cursor) break;
+    newer.push(cursor);
+  }
+  return [...older, current, ...newer].map((row) => ({
+    id: row.id, version: row.version, status: row.status, title: row.title, createdAt: row.createdAt,
+  }));
+}
+
+// ── Notifications ───────────────────────────────────────────────────────────
+const MENTIONABLE_ROLES = ['ADMIN', 'TEAM'];
+
+/**
+ * The staff users a comment @mentions: active ADMIN or TEAM members of the
+ * organization. Returns null when any id is not one (the route answers 400).
+ * @param {any} prisma
+ * @param {string} organizationId
+ * @param {string[]} [ids]
+ */
+export async function findMentionableStaff(prisma, organizationId, ids = []) {
+  const unique = [...new Set(ids)];
+  if (!unique.length) return [];
+  const users = await prisma.user.findMany({
+    where: { id: { in: unique }, organizationId, isActive: true, role: { in: MENTIONABLE_ROLES } },
+    select: { id: true, name: true },
+  });
+  return users.length === unique.length ? users : null;
+}
+
+/**
+ * Notify staff about review activity through the application's single
+ * notification path (fastify.notify). Never notifies the actor, never
+ * notifies anyone twice, and never fails the request: a notification is a
+ * convenience, the comment or decision is already saved.
+ * @param {any} fastify
+ * @param {Array<string | null | undefined>} userIds
+ * @param {{ type: string, title: string, message: string, data: object }} notification
+ * @param {{ actorUserId?: string | null, log?: any }} [options]
+ */
+export async function notifyReviewStaff(fastify, userIds, notification, { actorUserId = null, log } = {}) {
+  if (typeof fastify?.notify !== 'function') return;
+  const recipients = [...new Set(userIds.filter(Boolean))].filter((id) => id !== actorUserId);
+  for (const userId of recipients) {
+    try {
+      await fastify.notify(userId, notification);
+    } catch (err) {
+      log?.warn?.({ err: { message: err?.message }, type: notification.type }, 'review notification failed');
+    }
+  }
+}
+
+/** Short, single-line excerpt of a comment for a notification. */
+export function commentExcerpt(body, max = 140) {
+  const line = String(body ?? '').replace(/\s+/g, ' ').trim();
+  return line.length > max ? `${line.slice(0, max - 1)}…` : line;
 }

@@ -40,6 +40,8 @@ import {
   sanitizeGuestName,
   sanitizePlainText,
   shareLinkFailure,
+  notifyReviewStaff,
+  commentExcerpt,
 } from '../services/media-review.service.js';
 
 const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
@@ -261,6 +263,12 @@ export default async function reviewPortalRoutes(fastify) {
       if (err instanceof ReviewSessionClosedError) return reply.status(409).send({ error: 'This review is closed', code: err.code });
       throw err;
     }
+    await notifyReviewStaff(fastify, [session.createdById], {
+      type: 'REVIEW_COMMENT',
+      title: 'New client comment on a review',
+      message: `${name} commented on "${session.title}": ${commentExcerpt(body)}`,
+      data: { reviewSessionId: session.id, projectId: session.projectId, annotationId: annotation.id },
+    }, { log: request.log });
     return reply.status(201).send({ annotation: publicAnnotation(annotation) });
   });
 
@@ -314,6 +322,12 @@ export default async function reviewPortalRoutes(fastify) {
       entityId: session.id,
       metadata: { decisionId: created.id, decision, fromStatus: session.status, toStatus: decision, via: 'share_link', shareLinkId: link.id },
     });
+    await notifyReviewStaff(fastify, [session.createdById], {
+      type: 'REVIEW_DECISION',
+      title: decision === 'approved' ? 'A client approved a review' : 'A client requested changes',
+      message: `${name} ${decision === 'approved' ? 'approved' : 'requested changes on'} "${session.title}"`,
+      data: { reviewSessionId: session.id, projectId: session.projectId, decisionId: created.id },
+    }, { log: request.log });
     return reply.status(201).send({ decision: publicDecision(created), status: decision });
   });
 }

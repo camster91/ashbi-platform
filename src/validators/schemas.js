@@ -1927,12 +1927,22 @@ const reviewRegion = z.object({
   h: z.number().min(0).max(1),
 }).strict();
 
+// Markup shapes (docs/media-review.md "Markup"): a point list of normalized
+// [x, y] pairs for arrows (exactly two) and freehand strokes (at most 500).
+// The combination rules (which shape needs which anchor) are checked by
+// annotationPositionError against the reviewed media kind.
+const reviewUnit = z.number().min(0).max(1);
+const reviewPoints = z.array(z.tuple([reviewUnit, reviewUnit])).min(2).max(500);
+
 const reviewAnnotationFields = {
   body: z.string().trim().min(1).max(5_000),
   parentId: cuidId.optional(),
   timecodeMs: z.number().int().min(0).max(86_400_000).optional(),
   region: reviewRegion.optional(),
   pageNumber: z.number().int().min(1).max(10_000).optional(),
+  shape: z.enum(['pin', 'rect', 'arrow', 'pen']).optional(),
+  points: reviewPoints.optional(),
+  color: z.enum(['red', 'orange', 'yellow', 'green', 'blue', 'purple']).optional(),
 };
 
 const reviewGuestFields = {
@@ -1951,7 +1961,32 @@ export const reviewSessionCreateSchema = z.object({
   previousSessionId: cuidId.optional(),
 }).strict();
 
-export const reviewAnnotationCreateSchema = z.object(reviewAnnotationFields).strict();
+// Staff comments may @mention teammates (active ADMIN/TEAM users of the
+// organization, checked by the route), who are notified.
+export const reviewAnnotationCreateSchema = z.object({
+  ...reviewAnnotationFields,
+  mentionUserIds: z.array(cuidId).max(20).optional(),
+}).strict();
+
+// Web page review (docs/media-review.md "Web page review"): the URL is
+// checked again by the capture service's SSRF policy after these bounds.
+const reviewCaptureViewport = z.enum(['desktop', 'mobile']);
+
+export const reviewCaptureCreateSchema = z.object({
+  projectId: cuidId,
+  url: z.string().trim().min(1).max(2_048).url(),
+  viewport: reviewCaptureViewport.default('desktop'),
+  title: z.string().trim().min(1).max(200),
+}).strict();
+
+// Whether signed-in client portal users may approve or request changes.
+export const reviewClientAccessSchema = z.object({
+  clientCanDecide: z.boolean(),
+}).strict();
+
+export const reviewRecaptureSchema = z.object({
+  viewport: reviewCaptureViewport.optional(),
+}).strict();
 
 export const reviewAnnotationResolveSchema = z.object({
   resolved: z.boolean(),
@@ -1972,6 +2007,21 @@ export const reviewGuestAnnotationSchema = z.object({ ...reviewGuestFields, ...r
 
 export const reviewGuestDecisionSchema = z.object({
   ...reviewGuestFields,
+  decision: z.enum(['approved', 'changes_requested']),
+  note: z.string().trim().max(2_000).optional(),
+}).strict();
+
+// Signed-in client portal (/api/client-portal/reviews): the author is the
+// session's contact, so there is no name or email field.
+export const clientPortalReviewParamsSchema = z.object({ id: cuidId });
+
+export const clientPortalReviewListQuerySchema = z.object({
+  projectId: cuidId.optional(),
+}).strict();
+
+export const clientPortalReviewAnnotationSchema = z.object(reviewAnnotationFields).strict();
+
+export const clientPortalReviewDecisionSchema = z.object({
   decision: z.enum(['approved', 'changes_requested']),
   note: z.string().trim().max(2_000).optional(),
 }).strict();
