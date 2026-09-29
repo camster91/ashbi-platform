@@ -18,6 +18,7 @@ import prisma from './config/db.js';
 import { pubSubRedisSource } from './jobs/queue.js';
 import { apiRateLimitKey, createApiRateLimitMax, createRateLimitRedis, isNonApiRequest } from './config/rateLimit.js';
 import { trustHops } from './config/trust-proxy.js';
+import { clearStaleSessionCookie, resolveRequestSession } from './auth/request-session.js';
 import { requestTimeoutMs } from './config/http.js';
 import { spaStaticOptions } from './config/static-cache.js';
 import { isCurrentUserSession } from './auth/session.js';
@@ -26,6 +27,7 @@ import {
   startViewSocketSweep,
 } from './auth/impersonation.js';
 import { createJoinProjectHandler } from './auth/project-room-access.js';
+import { createSocketAuthMiddleware } from './auth/socket-auth.js';
 import { clientAcquisitionCorsOptions, loadClientAcquisitionConfig } from './services/client-acquisition.contract.js';
 import { initHermesBridge } from './agents/hub-hermes.integration.js';
 
@@ -51,7 +53,7 @@ import { initSubscribers } from './subscribers/index.js';
 import { registerCallSignalling } from './services/call-signalling.service.js';
 import { tenancyMiddleware } from './middleware/tenancy.js';
 import { getAuthProvider } from './auth/index.js';
-import { statusCodeForError, toClientErrorBody } from './utils/http-errors.js';
+import { clientErrorStatus, toClientErrorBody } from './utils/http-errors.js';
 import { buildHelmetOptions, permissionsPolicy } from './config/security-headers.js';
 import { initSentry, Sentry } from './observability/sentry.js';
 import {
@@ -167,6 +169,36 @@ await fastify.register(rateLimit, {
 });
 await fastify.register(jwt, { secret: jwtSecret, cookie: { cookieName: 'token', signed: false } });
 
+// Global Error Handler. Registered before any route plugin: an encapsulated
+// plugin keeps the error handler its parent had when it was registered, so a
+// handler set after the routes would never apply to them and they would fall
+// back to Fastify's default, which sends raw error messages (Prisma
+// invocations, tenancy details) to clients.
+fastify.setErrorHandler((error, request, reply) => {
+  const statusCode = clientErrorStatus(error);
+  const logFields = {
+    errorName: error.name,
+    errorCode: typeof error.code === 'string' ? error.code : undefined,
+    statusCode,
+    route: request.routeOptions?.url || 'unknown',
+    method: request.method,
+    traceId: request.id,
+  };
+  if (statusCode >= 500) {
+    request.log.error(logFields, 'Global request error');
+    Sentry.captureException(error, {
+      extra: {
+        route: request.routeOptions?.url || 'unknown',
+        method: request.method,
+        traceId: request.id,
+      },
+    });
+  } else {
+    request.log.info(logFields, 'Request rejected');
+  }
+  reply.status(statusCode).send(toClientErrorBody(error, { traceId: request.id }));
+});
+
 // JWT verification hook — runs for ALL /api/* requests BEFORE tenancyMiddleware
 fastify.addHook('onRequest', async (request, reply) => {
   if (!request.url.startsWith('/api/')) return;
@@ -179,22 +211,15 @@ fastify.addHook('onRequest', async (request, reply) => {
     request.url === '/api/health' ||
     request.url === '/api/live'
   ) return;
-  let jwtVerified = false;
-  try {
-    await request.jwtVerify();
-    jwtVerified = true;
-  } catch {
-    // No valid token — let route-specific auth handle 401
-  }
-  if (jwtVerified) {
-    try {
-      if (!(await isCurrentUserSession(prisma, request.user))) {
-        return reply.status(401).send({ error: 'Session expired or revoked' });
-      }
-    } catch {
-      return reply.status(401).send({ error: 'Unable to validate session' });
-    }
-  }
+  // A token that is not a current session (stale, revoked, untyped, or not a
+  // session at all) makes the request anonymous and its cookie is cleared:
+  // each route's own guard decides, so public routes never 401 because of a
+  // stale cookie (src/auth/request-session.js).
+  // If the session store is unreachable the request is also anonymous here
+  // (the cookie is kept); guarded routes then answer 401 themselves.
+  const session = await resolveRequestSession(request, prisma);
+  if (session === 'stale') clearStaleSessionCookie(request, reply);
+  if (session === 'error') request.log.warn('Session validation unavailable; continuing without a session');
 });
 
 // Support impersonation (#416, docs/privileged-actions.md): when the `imp`
@@ -205,20 +230,24 @@ fastify.addHook('onRequest', createImpersonationHook({ prisma, isCurrentUserSess
 // Auth decorators. Re-verifying the session cookie resets request.user to the
 // signed-in admin, so an active impersonation is re-applied afterwards.
 fastify.decorate('authenticate', async (request, reply) => {
-  try {
-    await request.jwtVerify();
-    if (!(await isCurrentUserSession(prisma, request.user))) throw new Error('Revoked session');
-    applyImpersonation(request);
-  } catch (err) { return reply.status(401).send({ error: 'Unauthorized' }); }
+  const session = await resolveRequestSession(request, prisma);
+  if (session !== 'current') {
+    if (session === 'stale') clearStaleSessionCookie(request, reply);
+    return reply.status(401).send({ error: 'Unauthorized' });
+  }
+  applyImpersonation(request);
+  return undefined;
 });
 
 fastify.decorate('adminOnly', async (request, reply) => {
-  try {
-    await request.jwtVerify();
-    if (!(await isCurrentUserSession(prisma, request.user))) throw new Error('Revoked session');
-    applyImpersonation(request);
-    if (request.user.role !== 'ADMIN') return reply.status(403).send({ error: 'Admin access required' });
-  } catch (err) { return reply.status(401).send({ error: 'Unauthorized' }); }
+  const session = await resolveRequestSession(request, prisma);
+  if (session !== 'current') {
+    if (session === 'stale') clearStaleSessionCookie(request, reply);
+    return reply.status(401).send({ error: 'Unauthorized' });
+  }
+  applyImpersonation(request);
+  if (request.user.role !== 'ADMIN') return reply.status(403).send({ error: 'Admin access required' });
+  return undefined;
 });
 
 // Infrastructure
@@ -302,26 +331,6 @@ if (serveBuiltSpa) {
 // Proposal PDFs are served only via authenticated /api/proposal-builder/:id/pdf
 // (and portal token routes). Do not expose storage/proposals/ as public static files.
 
-// Global Error Handler (Enterprise Grade)
-fastify.setErrorHandler((error, request, reply) => {
-  const statusCode = statusCodeForError(error);
-  request.log.error({
-    errorName: error.name,
-    statusCode,
-    route: request.routeOptions?.url || 'unknown',
-    method: request.method,
-    traceId: request.id,
-  }, 'Global request error');
-  Sentry.captureException(error, {
-    extra: {
-      route: request.routeOptions?.url || 'unknown',
-      method: request.method,
-      traceId: request.id,
-    },
-  });
-  reply.status(statusCode).send(toClientErrorBody(error, { traceId: request.id }));
-});
-
 // Socket.IO
 const io = new SocketIO(fastify.server, { cors: { origin: env.isDev ? 'http://localhost:*' : env.corsOrigins, credentials: true } });
 // Starting a support view drops the admin's sockets on every API instance
@@ -337,28 +346,17 @@ fastify.addHook('onClose', async () => {
   await viewSocketRevoker.close();
   await new Promise((resolve) => io.close(resolve));
 });
-io.use(async (socket, next) => {
-  try {
-    // Accept an explicit auth payload for native/non-browser clients or the
-    // same httpOnly cookie used by browser sessions. Never accept query-string
-    // tokens: WebSocket upgrade URLs are routinely logged by proxies.
-    const cookies = fastify.parseCookie(socket.handshake.headers.cookie || '');
-    if (socketHandshakeDuringView(cookies)) return next(new Error('Realtime is paused during a support view'));
-    const cookieToken = cookies.token;
-    const token = socket.handshake.auth?.token || cookieToken;
-    if (!token) return next(new Error('Authentication required'));
-    const decoded = await fastify.jwt.verify(token);
-    if (!(await isCurrentUserSession(prisma, decoded))) {
-      return next(new Error('Invalid token'));
-    }
-    if (await actorHasOpenView(prisma, decoded)) return next(new Error('Realtime is paused during a support view'));
-    socket.userId = decoded.id || decoded.contactId;
-    socket.userRole = decoded.role;
-    socket.organizationId = decoded.organizationId;
-    socket.clientId = decoded.clientId;
-    next();
-  } catch (err) { next(new Error('Invalid token')); }
-});
+// Handshake: sessions only (src/auth/socket-auth.js). Realtime is paused
+// during a support view (#416): a handshake carrying the view cookie is
+// refused before verification, and an admin with an open view is refused
+// after the session is verified.
+io.use(createSocketAuthMiddleware({
+  verifyToken: (token) => fastify.jwt.verify(token),
+  parseCookie: (header) => fastify.parseCookie(header),
+  prisma,
+  refuseBeforeVerify: (cookies) => (socketHandshakeDuringView(cookies) ? 'Realtime is paused during a support view' : null),
+  refuseAfterVerify: async (decoded) => ((await actorHasOpenView(prisma, decoded)) ? 'Realtime is paused during a support view' : null),
+}));
 
 // Socket.IO connection handling. Without this, the client-emitted `join` /
 // `join-project` events were never handled, so room-scoped notifications

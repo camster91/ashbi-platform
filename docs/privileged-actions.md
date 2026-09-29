@@ -76,6 +76,7 @@ once.
 | Action | Route | How it is protected |
 | --- | --- | --- |
 | Create an API key | `POST /api/api-keys` | `requireRecentAuth` |
+| Create an administrator | `POST /api/team` with `role: ADMIN`, `POST /api/auth/register` (after bootstrap) with `role: ADMIN` | `requireRecentAuth` only for the `ADMIN` role (other roles are not prompted); every created account emits `user.created { role, via }`. The bootstrap admin (first user, `ADMIN_INVITE_TOKEN`) is unchanged |
 | Change a member's role, or deactivate / reactivate a member | `PUT /api/team/:id` | `requireRecentAuthForAccessChange`: `requireRecentAuth` only when the role or active state actually changes; name, skills and capacity edits are not prompted |
 | Reset another member's password | `POST /api/team/:id/reset-password` | `requireRecentAuth` (added beyond the issue's list: it hands the admin the member's account) |
 | Reveal a stored credential | `GET /api/credentials/:id`, `GET /api/credentials/:id/password` | `requireRecentAuth` (in addition to the existing purpose-tagged credential-access audit) |
@@ -130,6 +131,60 @@ The guarded actions keep emitting their own events (`api_key.created`,
 `ai.connection_revoked`, `ai.tool_approved`, `ai.tool_rejected`,
 `ai.tool_executed`, `ai.tool_failed`, `review.share_link_created`, and the
 credential vault's access records). See [audit-events.md](audit-events.md).
+
+## Session token types
+
+Every JWT signed with `JWT_SECRET` carries an explicit `typ`, and only two of
+them are sessions (`src/auth/session.js`):
+
+| `typ` | Issued by | Accepted by |
+| --- | --- | --- |
+| `session` | staff sign-in (`/api/auth/login`, `/api/auth/login/mfa`), recovery-code reissue | the `/api` hook, `fastify.authenticate` / `adminOnly`, Socket.IO |
+| `client_session` | `/api/client-portal/verify-token`, `/api/auth/client/login`, `/api/auth/client/signup` | the same verifiers (tenancy still refuses CLIENT sessions on staff APIs) and the client-portal guard, which accepts **only** this type |
+| `client_magic_link` | `/api/client-portal/request-access` (emailed) | only `/api/client-portal/verify-token`, **once**: its `jti` is recorded in `client_portal_link_redemptions` |
+| `bot_access` | `/api/bot/auth` | nothing (bot routes authenticate with the `BOT_SECRET` bearer) |
+
+A session must also carry a user `id` and an integer `sessionVersion`, and the
+`typ` must match the role (`client_session` exactly for `CLIENT`). OAuth
+`state` (Google Calendar, Slack; also bound to the initiating browser by an
+httpOnly `oauth_state_<purpose>` cookie that the callback requires and
+clears, so a captured state cannot be replayed), re-authentication cookies
+and MFA challenge tokens are signed with keys *derived* from `JWT_SECRET` per purpose
+(`src/auth/oauth-state.js`, `src/auth/reauth.js`, `src/auth/mfa.js`), so they
+never verify as a session at all. Request logs and browser telemetry redact
+OAuth `state` and `code` query parameters.
+
+**Migration:** session tokens issued before `typ` existed are refused, so every
+signed-in user (staff and portal clients) signs in once more after the
+release. Magic links emailed before the release no longer work; clients
+request a new one.
+
+## Credential throttles
+
+Sign-in and account-recovery endpoints carry a per-IP route limit plus
+failure-only per-account budgets (`src/auth/credential-throttle.js`):
+
+| Endpoint | Per IP (route) | Failures per account + IP | Failures per account (backstop) |
+| --- | --- | --- | --- |
+| `POST /api/auth/login` | 20 / 15 min | 10 / 15 min | 100 / 15 min |
+| `POST /api/auth/client/login` | 20 / 15 min | 10 / 15 min | 100 / 15 min |
+| `POST /api/auth/client/signup` | 20 / 15 min | 5 / hour | 50 / hour |
+| `POST /api/auth/reset-password` | 20 / 15 min | - | - |
+| `POST /api/client-portal/request-access` | 10 / 15 min | 5 / 15 min (every request) | 20 / 15 min (every request) |
+| `POST /api/client-portal/verify-token` | 20 / 15 min | - | - |
+
+A failure is a 400/401/403/404 answer; successful sign-ins never consume the
+budget, so an attacker hammering an account from their own address does not
+lock out its owner signing in from elsewhere. Unknown emails still cost one
+bcrypt comparison, so timing does not reveal registered emails. The limits use
+the app's rate-limit plugin and its store: Redis in deployed environments
+(staging, production), shared by every API instance, and in memory only in
+local development and tests. Like the global limiter they skip on a store
+error, so a Redis outage relaxes the throttles instead of blocking sign-in.
+
+**Residual risk:** an attacker controlling many addresses can exhaust an
+account's backstop and lock it for the rest of that window. The backstop is
+set high enough that this takes a large, noisy attack.
 
 ## API keys (service credentials)
 
@@ -360,6 +415,11 @@ To cancel an unused grant: `node scripts/break-glass.mjs revoke --grant <id>
   [Ending and revocation](#ending-and-revocation)).
 
 ## Known limitations
+
+- **Organization-level MFA enforcement** is not implemented: creating or
+  promoting an administrator requires step-up re-authentication, but an
+  organization cannot yet require every administrator to enrol in two-factor
+  authentication. Tracked as a follow-up to the security audit at 8687cf9.
 
 - Two-factor re-authentication shares the sign-in attempt budget. Someone
   holding only a stolen session cookie can therefore use bad codes to lock the

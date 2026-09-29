@@ -130,7 +130,7 @@ async function buildApp(t, { db = seedIdentityOrganizations(createFakeIdentityDb
   const session = (id) => {
     const user = db.tables.user.find((row) => row.id === id);
     // A fixed iat so the reauth helper's binding matches.
-    return app.jwt.sign({ id: user.id, email: user.email, name: user.name, role: user.role, clientId: user.clientId, organizationId: user.organizationId, sessionVersion: user.sessionVersion, iat: SESSION_IAT }, { expiresIn: '7d' });
+    return app.jwt.sign({ typ: user.role === 'CLIENT' ? 'client_session' : 'session', id: user.id, email: user.email, name: user.name, role: user.role, clientId: user.clientId, organizationId: user.organizationId, sessionVersion: user.sessionVersion, iat: SESSION_IAT }, { expiresIn: '7d' });
   };
   const cookiesFor = (id, extra = {}) => ({ token: session(id), ...extra });
   const stepUp = (id) => reauthCookies({ id, sessionVersion: db.tables.user.find((row) => row.id === id).sessionVersion, iat: SESSION_IAT });
@@ -409,8 +409,11 @@ describe('while viewing as someone', () => {
   it('works for a client user through the client portal, and not through staff APIs', async (t) => {
     const { startOk, app } = await buildApp(t);
     const { cookies } = await startOk('admin-a', 'client-user-a');
+    // The client portal guard accepts only typ client_session: the viewed
+    // subject's claims carry it, so the view still reaches the portal.
     const portal = await app.inject({ method: 'GET', url: '/api/client-portal/me', cookies });
     assert.equal(portal.statusCode, 200, portal.body);
+    assert.doesNotMatch(String(portal.headers['set-cookie'] ?? ''), /(^|,\s*)token=;/, 'the admin session cookie is kept');
     assert.equal(portal.json().client.name, 'Client A');
     const staff = await app.inject({ method: 'GET', url: '/api/probe', cookies });
     assert.equal(staff.statusCode, 403);
@@ -550,7 +553,7 @@ describe('ending a support view', () => {
     const { startOk, app, db } = await buildApp(t);
     const { cookie } = await startOk();
     db.tables.user.find((u) => u.id === 'admin-a').sessionVersion += 1;
-    const fresh = app.jwt.sign({ id: 'admin-a', role: 'ADMIN', organizationId: 'org-a', sessionVersion: 1, iat: SESSION_IAT });
+    const fresh = app.jwt.sign({ typ: 'session', id: 'admin-a', role: 'ADMIN', organizationId: 'org-a', sessionVersion: 1, iat: SESSION_IAT });
     const me = await app.inject({ method: 'GET', url: '/api/auth/me', cookies: { token: fresh, [IMPERSONATION_COOKIE]: cookie.value } });
     assert.deepEqual([me.statusCode, me.json().code], [409, 'IMPERSONATION_ENDED']);
     assert.ok(cleared(me));

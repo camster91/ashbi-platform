@@ -7,6 +7,8 @@ const localProvider = readFileSync(new URL('../../auth/providers/local.provider.
 const clientPortal = readFileSync(new URL('../../routes/client-portal.routes.js', import.meta.url), 'utf8');
 const auditScript = readFileSync(new URL('../../../scripts/audit-password-hashes.mjs', import.meta.url), 'utf8');
 const server = readFileSync(new URL('../../index.js', import.meta.url), 'utf8');
+const requestSession = readFileSync(new URL('../../auth/request-session.js', import.meta.url), 'utf8');
+const socketAuth = readFileSync(new URL('../../auth/socket-auth.js', import.meta.url), 'utf8');
 
 describe('authentication session contract', () => {
   it('does not return reusable client JWTs in authentication response bodies', () => {
@@ -35,8 +37,10 @@ describe('authentication session contract', () => {
   });
 
   it('checks the database session version for both HTTP and Socket.IO', () => {
-    assert.ok((server.match(/isCurrentUserSession\(prisma,/g) || []).length >= 3);
-    assert.match(server, /io\.use\([\s\S]*isCurrentUserSession\(prisma, decoded\)/);
+    assert.ok((server.match(/resolveRequestSession\(request, prisma\)/g) || []).length >= 3);
+    assert.match(requestSession, /isCurrentUserSession\(prisma, request\.user\)/);
+    assert.match(server, /io\.use\(createSocketAuthMiddleware\(/);
+    assert.match(socketAuth, /isCurrentUserSession\(prisma, decoded\)/);
   });
 
   it('removes account-bound push endpoints during authenticated logout', () => {

@@ -4,10 +4,10 @@ import { parseEmail } from '../utils/emailParser.js';
 import { processEmailPipeline } from '../services/pipeline.service.js';
 import { clearExpiredCheckout, handleCheckoutFailure, handleWebhook, recordCheckoutAuditEvents, recordCompletedCheckout } from '../services/stripe.service.js';
 import env from '../config/env.js';
-import crypto from 'crypto';
 import {validateBody, webhookEmailTestSchema} from '../validators/schemas.js';
 import { runTenantJob } from '../jobs/tenant-iteration.js';
 import { prisma as backgroundPrisma } from '../config/db.js';
+import { claimEmailWebhookSignature, releaseEmailWebhookSignature, verifyEmailWebhook } from '../webhooks/email-webhook-signature.js';
 
 export default async function webhookRoutes(fastify) {
   // Email webhook endpoint
@@ -19,27 +19,27 @@ export default async function webhookRoutes(fastify) {
     if (!env.botOrganizationId) {
       return reply.status(503).send({ error: 'Webhook tenant is not configured' });
     }
-    const signature = request.headers['x-webhook-signature'];
-    if (!signature) {
-      return reply.status(401).send({ error: 'Missing webhook signature' });
-    }
-    const expectedSig = crypto
-      .createHmac('sha256', env.webhookSecret)
-      .update(JSON.stringify(request.body))
-      .digest('hex');
-
-    // SECURITY: timing-safe compare — string `!==` short-circuits on first
-    // byte mismatch and leaks the matching prefix length to a network
-    // attacker. `crypto.timingSafeEqual` is constant-time per byte.
-    let sigBuf, expectedBuf;
-    try {
-      sigBuf = Buffer.from(signature, 'hex');
-      expectedBuf = Buffer.from(expectedSig, 'hex');
-    } catch {
+    // Signed over the raw body with a timestamp, accepted once (replay-safe):
+    // see src/webhooks/email-webhook-signature.js for the header contract.
+    const verification = verifyEmailWebhook({
+      secret: env.webhookSecret,
+      timestamp: request.headers['x-webhook-timestamp'],
+      signature: request.headers['x-webhook-signature'],
+      rawBody: request.rawBody,
+    });
+    if (!verification.ok) {
+      if (verification.reason === 'missing') {
+        return reply.status(401).send({ error: 'Missing webhook signature or timestamp' });
+      }
+      if (verification.reason === 'stale') {
+        return reply.status(401).send({ error: 'Webhook timestamp is outside the accepted window' });
+      }
       return reply.status(401).send({ error: 'Invalid webhook signature' });
     }
-    if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
-      return reply.status(401).send({ error: 'Invalid webhook signature' });
+    // /api/webhooks is tenancy-exempt: request.prisma is the unscoped client.
+    const receipts = request.prisma ?? backgroundPrisma;
+    if (!(await claimEmailWebhookSignature(receipts, verification.signature))) {
+      return reply.status(409).send({ error: 'Webhook delivery was already processed' });
     }
 
     try {
@@ -61,7 +61,9 @@ export default async function webhookRoutes(fastify) {
         needsTriage: result.needsTriage
       };
     } catch (error) {
-      fastify.log.error('Email processing error:', error);
+      // Release the signature so the sender's retry of this delivery is accepted.
+      await releaseEmailWebhookSignature(receipts, verification.signature);
+      fastify.log.error({ errorName: error?.name }, 'Email processing error');
       return reply.status(500).send({ error: 'Email processing failed' });
     }
   });

@@ -10,11 +10,17 @@ import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { recordContractSigned, recordProposalApproved } from '../services/domain-event-producers.js';
 import env from '../config/env.js';
 
+// Per-IP limits for the unauthenticated capability-link routes that still use
+// the legacy never-expiring project and intake-form view tokens (security
+// audit M1; moving those to expiring, revocable links is tracked separately).
+const LEGACY_LINK_VIEW_RATE_LIMIT = { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } };
+const LEGACY_LINK_SUBMIT_RATE_LIMIT = { config: { rateLimit: { max: 10, timeWindow: '15 minutes' } } };
+
 export default async function portalRoutes(fastify) {
   // ==================== PROJECT PORTAL ====================
 
   // Public project portal view
-  fastify.get('/:token', async (request, reply) => {
+  fastify.get('/:token', LEGACY_LINK_VIEW_RATE_LIMIT, async (request, reply) => {
     const { token } = request.params;
 
     const project = await request.prisma.project.findUnique({
@@ -471,7 +477,7 @@ export default async function portalRoutes(fastify) {
   // ==================== INTAKE FORMS ====================
 
   // Public: get form by viewToken
-  fastify.get('/form/:viewToken', async (request, reply) => {
+  fastify.get('/form/:viewToken', LEGACY_LINK_VIEW_RATE_LIMIT, async (request, reply) => {
     const { viewToken } = request.params;
 
     const form = await request.prisma.intakeForm.findUnique({
@@ -499,7 +505,7 @@ export default async function portalRoutes(fastify) {
   });
 
   // Public: submit response to form
-  fastify.post('/form/:viewToken', { preHandler: [validateBody(formSubmitSchema)] }, async (request, reply) => {
+  fastify.post('/form/:viewToken', { ...LEGACY_LINK_SUBMIT_RATE_LIMIT, preHandler: [validateBody(formSubmitSchema)] }, async (request, reply) => {
     const { viewToken } = request.params;
     const { answers, respondentName, respondentEmail } = request.body;
 

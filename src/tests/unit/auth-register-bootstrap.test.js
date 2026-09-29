@@ -120,7 +120,7 @@ test('an admin registering a later user places them in the admin organization', 
   });
   db.client.user.findUnique = async ({ where }) => db.users.find((row) => (where.id ? row.id === where.id : row.email === where.email)) ?? null;
   const app = await buildApp(t, db);
-  const token = app.signFor({ id: 'admin-1', role: 'ADMIN', organizationId: 'org-a', sessionVersion: 0 });
+  const token = app.signFor({ typ: 'session', id: 'admin-1', role: 'ADMIN', organizationId: 'org-a', sessionVersion: 0 });
 
   const response = await app.inject({
     method: 'POST',

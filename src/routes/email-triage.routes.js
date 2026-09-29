@@ -142,7 +142,7 @@ Option 1: Standard professional reply. Option 2: Shorter/friendlier alternative.
     } catch (err) {
       if (isAiControlError(err)) return sendAiError(reply, err);
       fastify.log.error('Email draft error:', err);
-      return reply.status(500).send({ error: 'Failed to generate drafts', message: err.message });
+      return reply.status(500).send({ error: 'Failed to generate drafts' });
     }
   });
 

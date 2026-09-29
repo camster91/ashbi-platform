@@ -1,14 +1,16 @@
 // Authentication routes
 
 import crypto from 'crypto';
-import bcrypt from 'bcrypt';
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import env from '../config/env.js';
 import logger from '../utils/logger.js';
 import { isCurrentUserSession, revokeUserSessions, sessionCookieOptions, signUserSession } from '../auth/session.js';
 import { recordAuditEvent, recordRequestAuditEvent } from '../services/audit-event.service.js';
-import { clearReauthCookieOptions, REAUTH_COOKIE } from '../auth/reauth.js';
+import { clearReauthCookieOptions, REAUTH_COOKIE, recentAuthProblem, sendReauthRequired } from '../auth/reauth.js';
+import { dummyPasswordCheck, hashPassword, upgradeLegacyHash, verifyPassword, warmDummyPasswordHash } from '../auth/password.js';
+import { accountThrottle } from '../auth/credential-throttle.js';
+import { AccountWithoutOrganizationError } from '../auth/providers/local.provider.js';
 import {
   IMPERSONATION_COOKIE,
   clearImpersonationCookieOptions,
@@ -30,27 +32,15 @@ import {
   updateProfileSchema
 } from '../validators/schemas.js';
 
-const BCRYPT_ROUNDS = 12;
-
-async function hashPassword(password) {
-  return bcrypt.hash(password, BCRYPT_ROUNDS);
-}
-
-async function verifyPassword(password, hash) {
-  // Support legacy SHA-256 hashes (auto-upgrade on next login)
-  if (!hash.startsWith('$2')) {
-    const sha256 = crypto.createHash('sha256').update(password).digest('hex');
-    return sha256 === hash;
-  }
-  return bcrypt.compare(password, hash);
-}
-
-async function upgradeHashIfNeeded(prisma, userId, password, currentHash) {
-  if (!currentHash.startsWith('$2')) {
-    const newHash = await hashPassword(password);
-    await prisma.user.update({ where: { id: userId }, data: { password: newHash } });
-  }
-}
+// Per-account budgets for the credential endpoints (on top of the per-IP
+// route limits): see src/auth/credential-throttle.js.
+// Failures only; the per-account (email-only) number is a backstop against
+// distributed sprays and is deliberately much higher than the account+IP one.
+const ACCOUNT_LIMITS = {
+  login: { perAccountAndIp: { max: 10, timeWindow: '15 minutes' }, perAccount: { max: 100, timeWindow: '15 minutes' } },
+  clientLogin: { perAccountAndIp: { max: 10, timeWindow: '15 minutes' }, perAccount: { max: 100, timeWindow: '15 minutes' } },
+  clientSignup: { perAccountAndIp: { max: 5, timeWindow: '1 hour' }, perAccount: { max: 50, timeWindow: '1 hour' } },
+};
 
 // At most one auth.login_failed event per account per window, so a password
 // spraying run cannot flood audit_events (the IP rate limit bounds attempts;
@@ -158,11 +148,17 @@ export default async function authRoutes(fastify) {
       }
     }
   };
+  const loginAccountThrottle = accountThrottle(fastify, { name: 'login', ...ACCOUNT_LIMITS.login });
+  const clientLoginAccountThrottle = accountThrottle(fastify, { name: 'client-login', ...ACCOUNT_LIMITS.clientLogin });
+  const clientSignupAccountThrottle = accountThrottle(fastify, { name: 'client-signup', ...ACCOUNT_LIMITS.clientSignup });
+  // Compute the unknown-email comparison hash before the first sign-in.
+  void warmDummyPasswordHash();
 
   // Login
   fastify.post('/login', {
     ...authRateLimit,
-    preHandler: [validateBody(loginSchema)],
+    preHandler: [validateBody(loginSchema), loginAccountThrottle.guard],
+    onSend: loginAccountThrottle.onSend,
   }, async (request, reply) => {
     const { email, password } = request.body;
 
@@ -182,6 +178,11 @@ export default async function authRoutes(fastify) {
         .setCookie('token', token, sessionCookieOptions({ includeMaxAge: true }))
         .send({ user });
     } catch (err) {
+      if (err instanceof AccountWithoutOrganizationError) {
+        // The password was right; say what is wrong instead of guessing a
+        // workspace (the old behavior attached the account to a shared one).
+        return reply.status(403).send({ error: err.message, code: err.code });
+      }
       void auditLoginFailure(request.prisma, request, { email }, 'staff');
       return reply.status(401).send({ error: 'Invalid credentials' });
     }
@@ -295,6 +296,11 @@ export default async function authRoutes(fastify) {
       } catch (err) {
         return reply.status(401).send({ error: 'Unauthorized — admin login required' });
       }
+      // Minting another administrator is a privileged action: step-up
+      // re-authentication, like promoting a member (docs/privileged-actions.md).
+      if (role === 'ADMIN' && recentAuthProblem(request) !== null) {
+        return sendReauthRequired(reply);
+      }
     }
 
     // Check if email already exists
@@ -327,6 +333,11 @@ export default async function authRoutes(fastify) {
       const user = await request.prisma.user.create({
         data: { ...userData, organizationId: request.user.organizationId },
         select,
+      });
+      await recordRequestAuditEvent(request.prisma, request, {
+        action: 'user.created',
+        entityId: user.id,
+        metadata: { role: user.role, via: 'register' },
       });
       return reply.status(201).send(user);
     }
@@ -403,7 +414,9 @@ export default async function authRoutes(fastify) {
 
   // Client signup via invitation token
   fastify.post('/client/signup', {
-    preHandler: [validateBody(clientSignupSchema)],
+    ...authRateLimit,
+    preHandler: [validateBody(clientSignupSchema), clientSignupAccountThrottle.guard],
+    onSend: clientSignupAccountThrottle.onSend,
   }, async (request, reply) => {
     const { token, email, password } = request.body;
 
@@ -438,6 +451,15 @@ export default async function authRoutes(fastify) {
       return reply.status(400).send({ error: 'Account already exists' });
     }
 
+    // Every account belongs to an organization: the inviting client's.
+    const invitedClient = await request.prisma.client.findUnique({
+      where: { id: invitation.clientId },
+      select: { organizationId: true },
+    });
+    if (!invitedClient?.organizationId) {
+      return reply.status(404).send({ error: 'Invalid invitation token' });
+    }
+
     // Create user
     const user = await request.prisma.user.create({
       data: {
@@ -446,6 +468,7 @@ export default async function authRoutes(fastify) {
         name: email.split('@')[0], // Use email prefix as default name
         role: 'CLIENT',
         clientId: invitation.clientId,
+        organizationId: invitedClient.organizationId,
         isActive: true
       }
     });
@@ -472,7 +495,9 @@ export default async function authRoutes(fastify) {
 
   // Client login
   fastify.post('/client/login', {
-    preHandler: [validateBody(clientLoginSchema)],
+    ...authRateLimit,
+    preHandler: [validateBody(clientLoginSchema), clientLoginAccountThrottle.guard],
+    onSend: clientLoginAccountThrottle.onSend,
   }, async (request, reply) => {
     const { email, password } = request.body;
 
@@ -484,6 +509,8 @@ export default async function authRoutes(fastify) {
     });
 
     if (!user) {
+      // Same bcrypt cost as a real check: timing must not reveal the email.
+      await dummyPasswordCheck(password);
       return reply.status(401).send({ error: 'Invalid email or password' });
     }
 
@@ -492,8 +519,9 @@ export default async function authRoutes(fastify) {
       return reply.status(401).send({ error: 'Invalid email or password' });
     }
 
-    // Auto-upgrade legacy SHA-256 hash to bcrypt
-    await upgradeHashIfNeeded(request.prisma, user.id, password, user.password);
+    // A legacy SHA-256 hash is accepted once and replaced with bcrypt before
+    // the session is issued (the sign-in fails if the rehash cannot be saved).
+    await upgradeLegacyHash(request.prisma, user, password);
 
     if (!user.isActive) {
       return reply.status(401).send({ error: 'Account is inactive' });
@@ -595,6 +623,7 @@ export default async function authRoutes(fastify) {
 
   // Reset password with token
   fastify.post('/reset-password', {
+    ...authRateLimit,
     preHandler: [validateBody(resetPasswordSchema)],
   }, async (request, reply) => {
     try {

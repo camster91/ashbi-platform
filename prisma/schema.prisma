@@ -2062,7 +2062,12 @@ model Estimate {
   tax         Float     @default(0)
   total       Float     @default(0)
   validUntil  DateTime?
+  // Public link capability: rotated to a 256-bit token on send and valid only
+  // until publicAccessExpiresAt (null = never issued) unless revoked. The
+  // cuid default is a placeholder that no public route accepts.
   viewToken   String    @unique @default(cuid())
+  publicAccessExpiresAt DateTime?
+  publicAccessRevokedAt DateTime?
   sentAt      DateTime?
   // Email delivery tracking, updated by the signed Mailgun events webhook
   deliveryMessageId String?
@@ -2647,4 +2652,27 @@ model MailgunWebhookReceipt {
 
   @@index([receivedAt])
   @@map("mailgun_webhook_receipts")
+}
+
+// Single-use guard for client-portal magic links: the jti of each redeemed
+// link. Holds no tenant data (only the random link id), so it is global.
+model ClientPortalLinkRedemption {
+  id         String   @id @default(cuid())
+  jti        String   @unique
+  expiresAt  DateTime
+  redeemedAt DateTime @default(now())
+
+  @@index([expiresAt])
+  @@map("client_portal_link_redemptions")
+}
+
+// Replay guard for the signed inbound email webhook (POST /api/webhooks/email):
+// each accepted signature is recorded once. Holds no tenant data, so it is global.
+model EmailWebhookReceipt {
+  id         String   @id @default(cuid())
+  signature  String   @unique
+  receivedAt DateTime @default(now())
+
+  @@index([receivedAt])
+  @@map("email_webhook_receipts")
 }

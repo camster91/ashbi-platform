@@ -68,8 +68,13 @@ test('sending an estimate without email delivery succeeds and never logs its vie
 
   assert.equal(response.statusCode, 200, response.body);
   assert.equal(response.json().status, 'SENT');
-  // Staff recover the client link from the authenticated response, not from logs.
-  assert.equal(response.json().viewToken, VIEW_TOKEN);
+  // Staff recover the client link from the authenticated response, not from
+  // logs. Sending rotates the draft's placeholder into a 256-bit link token.
+  const { viewToken, publicAccessExpiresAt } = response.json();
+  assert.notEqual(viewToken, VIEW_TOKEN);
+  assert.match(viewToken, /^[A-Za-z0-9_-]{43}$/);
+  assert.ok(new Date(publicAccessExpiresAt) > new Date());
+  assert.ok(lines.every((line) => !line.includes(viewToken)));
   assert.ok(lines.length > 0, 'expected a non-sensitive delivery warning');
   assertNoTokenInLogs(lines);
 });
@@ -91,7 +96,8 @@ test('sending an estimate emails the client its amount and portal link', async (
   assert.equal(sent[0].domain, 'mail.ashbi.test');
   assert.equal(sent[0].message.to, 'client@example.test');
   assert.match(sent[0].message.subject, /\$1[,.\u00a0\u202f]?200/);
-  assert.ok(sent[0].message.html.includes(`/portal/estimate/${VIEW_TOKEN}`));
+  assert.ok(!sent[0].message.html.includes(`/portal/estimate/${VIEW_TOKEN}`), 'the draft placeholder token is never emailed');
+  assert.ok(sent[0].message.html.includes(`/portal/estimate/${response.json().viewToken}`));
   assertNoTokenInLogs(lines);
 });
 

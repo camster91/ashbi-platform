@@ -14,7 +14,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   which reads hide soft-deleted rows is in [soft-delete-policy.md](soft-delete-policy.md).
 - **Notes** combine `///` doc comments and trailing `//` comments from the schema.
 
-103 models, 0 enums, 50 tenant-scoped, 13 soft-deletable.
+105 models, 0 enums, 50 tenant-scoped, 13 soft-deletable.
 
 ## Model index
 
@@ -43,6 +43,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [ClientEmailMapping](#model-clientemailmapping) | `client_email_mappings` | no | no | 8 |
 | [ClientEmbedding](#model-clientembedding) | `client_embeddings` | no | no | 10 |
 | [ClientInvitation](#model-clientinvitation) | `client_invitations` | no | no | 8 |
+| [ClientPortalLinkRedemption](#model-clientportallinkredemption) | `client_portal_link_redemptions` | no | no | 4 |
 | [Contact](#model-contact) | `contacts` | no | no | 9 |
 | [Contract](#model-contract) | `contracts` | no | yes | 31 |
 | [CreativeBrief](#model-creativebrief) | `creative_briefs` | no | no | 16 |
@@ -52,7 +53,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [DomainEvent](#model-domainevent) | `domain_events` | yes | no | 23 |
 | [EmailTriageDraft](#model-emailtriagedraft) | `email_triage_drafts` | no | no | 10 |
 | [EmailTriageItem](#model-emailtriageitem) | `email_triage_items` | yes | no | 14 |
-| [Estimate](#model-estimate) | `estimates` | no | yes | 21 |
+| [EmailWebhookReceipt](#model-emailwebhookreceipt) | `email_webhook_receipts` | no | no | 3 |
+| [Estimate](#model-estimate) | `estimates` | no | yes | 23 |
 | [EventAttendee](#model-eventattendee) | `event_attendees` | no | no | 7 |
 | [Expense](#model-expense) | `expenses` | no | yes | 19 |
 | [FormDraft](#model-formdraft) | `form_drafts` | yes | no | 13 |
@@ -740,6 +742,21 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `client` | Client | required |  | → Client, via (clientId) → (id) |  |
 
+### Model ClientPortalLinkRedemption
+
+- Table: `client_portal_link_redemptions`
+- Tenant-scoped: no
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@index([expiresAt])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `jti` | String | unique, required |  |  |  |
+| `expiresAt` | DateTime | required |  |  |  |
+| `redeemedAt` | DateTime | required | `now()` |  |  |
+
 ### Model Contact
 
 - Table: `contacts`
@@ -988,6 +1005,20 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 | `drafts` | EmailTriageDraft[] | list, required |  | → EmailTriageDraft |  |
 
+### Model EmailWebhookReceipt
+
+- Table: `email_webhook_receipts`
+- Tenant-scoped: no
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@index([receivedAt])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `signature` | String | unique, required |  |  |  |
+| `receivedAt` | DateTime | required | `now()` |  |  |
+
 ### Model Estimate
 
 - Table: `estimates`
@@ -1011,6 +1042,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `total` | Float | required | `0` |  |  |
 | `validUntil` | DateTime | optional |  |  |  |
 | `viewToken` | String | unique, required | `cuid()` |  |  |
+| `publicAccessExpiresAt` | DateTime | optional |  |  |  |
+| `publicAccessRevokedAt` | DateTime | optional |  |  |  |
 | `sentAt` | DateTime | optional |  |  |  |
 | `deliveryMessageId` | String | optional |  |  |  |
 | `deliveryStatus` | String | optional |  |  | ACCEPTED \| DELIVERED \| FAILED \| BOUNCED \| COMPLAINED |

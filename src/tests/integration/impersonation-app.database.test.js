@@ -34,7 +34,7 @@ test('the real application enforces a read-only support view end to end', {
     const client = await prisma.client.create({ data: { organizationId: org, name: 'App Client' } });
 
     const iat = Math.floor(Date.now() / 1000) - 30;
-    const session = app.jwt.sign({ id: admin.id, email: admin.email, name: admin.name, role: 'ADMIN', organizationId: org, sessionVersion: 0, iat }, { expiresIn: '1h' });
+    const session = app.jwt.sign({ typ: 'session', id: admin.id, email: admin.email, name: admin.name, role: 'ADMIN', organizationId: org, sessionVersion: 0, iat }, { expiresIn: '1h' });
     const adminCookies = { token: session, ...reauthCookies({ id: admin.id, sessionVersion: 0, iat }) };
 
     // Sockets the admin already had are dropped when the view starts.

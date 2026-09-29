@@ -54,7 +54,7 @@ describe('client portal signed contract download', () => {
 
   after(async () => app.close());
 
-  const auth = () => ({ authorization: `Bearer ${app.jwt.sign({ ...user, contactId: contact.id, sessionVersion }, { expiresIn: '1h' })}` });
+  const auth = () => ({ authorization: `Bearer ${app.jwt.sign({ ...user, contactId: contact.id, sessionVersion, typ: 'client_session' }, { expiresIn: '1h' })}` });
 
   it('streams a PDF of the client\'s own signed contract', async () => {
     const response = await app.inject({ method: 'GET', url: '/api/client-portal/contracts/contract-a/pdf', headers: auth() });
