@@ -149,7 +149,9 @@ test('an accepted delivery is queued durably, keyed by its signature, and a repl
   assert.equal(jobs.length, 1);
   assert.equal(jobs[0].opts.jobId, emailWebhookJobId(signature));
   assert.equal(jobs[0].data.organizationId, 'org-bot');
-  assert.ok(jobs[0].opts.attempts >= 3, 'the worker retries processing');
+  // The pipeline is not idempotent: the job runs once and a failure is kept for replay.
+  assert.equal(jobs[0].opts.attempts, 1);
+  assert.ok(jobs[0].opts.removeOnFail.age >= 7 * 24 * 60 * 60, 'failed deliveries are retained for replay');
   assert.equal(store.seen.has(signature), true);
 
   const replay = await app.inject({ method: 'POST', url: '/email', headers, payload: rawBody });
@@ -182,5 +184,8 @@ test('the route never re-serialises the body and queues before recording the rec
     assert.doesNotMatch(emailRoute, /JSON\.stringify\(request\.body\)/);
     assert.doesNotMatch(emailRoute, /processEmailPipeline/, 'processing happens in the worker, not the request');
     assert.ok(emailRoute.indexOf('queueInboundEmailDelivery(') < emailRoute.indexOf('recordEmailWebhookReceipt('));
+    const worker = fs.readFileSync(new URL('../../jobs/worker.js', import.meta.url), 'utf8');
+    const emailWorker = worker.slice(worker.indexOf('QUEUES.EMAIL_PROCESSING'), worker.indexOf('// Project Health Worker'));
+    assert.match(emailWorker, /try \{\s*await scheduleEscalationCheck/, 'a scheduling failure never fails a processed email job');
   });
 });

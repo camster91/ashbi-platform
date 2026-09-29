@@ -105,11 +105,17 @@ const emailWorker = createWorker(
       backgroundPrisma,
     );
 
-    // Schedule escalation if thread was created
+    // Schedule escalation if thread was created. The email is already
+    // processed: a scheduling failure must not fail (and re-run) the job;
+    // the periodic escalation sweep still covers the thread.
     if (result.threadId) {
       const priority = result.analysis?.urgency || 'NORMAL';
       const delayHours = env.slaDefaults[priority] || 24;
-      await scheduleEscalationCheck(result.threadId, delayHours * 3600000);
+      try {
+        await scheduleEscalationCheck(result.threadId, delayHours * 3600000);
+      } catch (err) {
+        console.error(`[email] Could not schedule escalation for thread ${result.threadId}:`, err?.message);
+      }
     }
 
     return result;
