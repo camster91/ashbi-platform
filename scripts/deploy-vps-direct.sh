@@ -93,11 +93,16 @@ ACTUAL_IMAGE_ID=$(docker image inspect "$IMAGE" --format '{{.Id}}')
 # rollback: the release fails closed instead. The floor is recorded per host.
 ROLLBACK_FLOOR_FILE="$RELEASE_DIR/rollback-floor"
 ROLLBACK_FLOOR_MIGRATIONS=(20260927030000_chat_message_visibility)
+# 0: the image carries the migration; 1: it confirmably does not (`test`
+# exited 1); 2: the probe itself could not run (daemon/runtime failure).
+# Every caller treats 2 as the unsafe answer (fail closed).
 image_has_migration() {
-  docker run --rm --entrypoint test "$1" -d "/app/prisma/migrations/$2" >/dev/null 2>&1
+  local rc=0
+  docker run --rm --entrypoint test "$1" -d "/app/prisma/migrations/$2" >/dev/null 2>&1 || rc=$?
+  case $rc in 0) return 0 ;; 1) return 1 ;; *) return 2 ;; esac
 }
-# Prints the first floor migration the image lacks and fails; succeeds when
-# the image carries every recorded floor migration.
+# Prints the first floor migration the image lacks (or cannot be probed for)
+# and fails; succeeds only when the image carries every recorded floor migration.
 image_meets_floor() {
   local image=$1 name
   [[ -f $ROLLBACK_FLOOR_FILE ]] || return 0
@@ -107,13 +112,29 @@ image_meets_floor() {
   done < "$ROLLBACK_FLOOR_FILE"
   return 0
 }
-# After an image's migrations are applied, record the floor migrations it carries.
+# After an image's migrations are applied, record the floor migrations it
+# carries. A migration is left out only when the image confirmably lacks it;
+# if the probe cannot run, the migration is recorded (fail closed).
 raise_rollback_floor() {
-  local image=$1 name
+  local image=$1 name rc
   for name in "${ROLLBACK_FLOOR_MIGRATIONS[@]}"; do
-    image_has_migration "$image" "$name" || continue
+    rc=0
+    image_has_migration "$image" "$name" || rc=$?
+    ((rc == 1)) && continue
     grep -qxF "$name" "$ROLLBACK_FLOOR_FILE" 2>/dev/null || echo "$name" >> "$ROLLBACK_FLOOR_FILE"
   done
+}
+# Image of a container: the name, "" when docker confirms there is no such
+# container, or "unknown" when it cannot be read (callers fail closed).
+container_image() {
+  local out
+  if out=$(docker inspect --format '{{.Config.Image}}' "$1" 2>&1) && [[ -n $out ]]; then
+    echo "$out"
+  elif [[ $out == *"No such"* ]]; then
+    echo ""
+  else
+    echo unknown
+  fi
 }
 # "true"/"false" when docker reports the container's state, "gone" when docker
 # confirms it does not exist, "unknown" when the state could not be read.
@@ -152,8 +173,8 @@ raise_rollback_floor "$IMAGE"
 # A live image below the floor must stop serving the moment the migration is
 # applied, not at cutover: until then it would serve what the new schema keeps
 # private. If the release then fails, it stays down (fail closed).
-LIVE_IMAGE=$(docker inspect --format '{{.Config.Image}}' "$CONTAINER" 2>/dev/null || true)
-if [[ -n $LIVE_IMAGE ]] && ! image_meets_floor "$LIVE_IMAGE" >/dev/null; then
+LIVE_IMAGE=$(container_image "$CONTAINER")
+if [[ -n $LIVE_IMAGE ]] && { [[ $LIVE_IMAGE == unknown ]] || ! image_meets_floor "$LIVE_IMAGE" >/dev/null; }; then
   stop_below_floor "$CONTAINER" 30 && stop_below_floor "$WORKER_CONTAINER" 120 || {
     record legacy_stop_failed "image=$LIVE_IMAGE"
     die 'could not stop the pre-migration image below the rollback floor'
