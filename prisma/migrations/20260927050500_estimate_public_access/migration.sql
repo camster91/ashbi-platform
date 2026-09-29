@@ -11,6 +11,16 @@
 --   * DRAFT and answered estimates get no window; sending a draft issues one.
 -- Rolling back the image is safe: older code ignores the new columns and the
 -- rotated tokens are still unique strings.
+--
+-- Atomicity: Prisma does not wrap a PostgreSQL migration in a transaction, so
+-- the explicit BEGIN/COMMIT makes the column additions and the rotation
+-- all-or-nothing: the columns never exist without the rotation (which would
+-- leave the old cuid links live with no access window). The ALTER takes an
+-- ACCESS EXCLUSIVE lock on "estimates" (a small table) until COMMIT; the
+-- lock_timeout makes the deploy fail fast and roll back cleanly instead of
+-- queueing behind a long transaction; rerun it when the database is quieter.
+BEGIN;
+SET LOCAL lock_timeout = '5s';
 
 -- AlterTable
 ALTER TABLE "estimates" ADD COLUMN "publicAccessExpiresAt" TIMESTAMP(3),
@@ -25,3 +35,5 @@ SET "viewToken" = replace(gen_random_uuid()::text || gen_random_uuid()::text, '-
       WHEN "status" = 'SENT' THEN CURRENT_TIMESTAMP + INTERVAL '30 days'
       ELSE NULL
     END;
+
+COMMIT;

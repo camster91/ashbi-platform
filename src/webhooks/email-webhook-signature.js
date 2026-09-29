@@ -33,17 +33,42 @@ export function verifyEmailWebhook({ secret, timestamp, signature, rawBody }, { 
   return { ok: true, signature: signature.toLowerCase() };
 }
 
-/** Record a signature; false when it was already used. Old receipts are pruned. */
-export async function claimEmailWebhookSignature(prisma, signature, { now = new Date() } = {}) {
+/**
+ * How long an unfinished claim blocks a retry of the same delivery. A claim is
+ * finished when the email was processed; one whose processing was interrupted
+ * (the process died, or releasing it failed) is taken over by a retry after
+ * the lease, while the delivery's timestamp is still inside the window.
+ */
+export const EMAIL_WEBHOOK_CLAIM_LEASE_MS = 2 * 60 * 1000;
+
+/**
+ * Claim a signature for processing. False when the delivery was already
+ * processed, or is being processed now (a claim younger than the lease).
+ * Old receipts are pruned.
+ */
+export async function claimEmailWebhookSignature(prisma, signature, { now = new Date(), leaseMs = EMAIL_WEBHOOK_CLAIM_LEASE_MS } = {}) {
+  let claimed = false;
   try {
     await prisma.emailWebhookReceipt.create({ data: { signature, receivedAt: now } });
+    claimed = true;
   } catch (err) {
-    if (/** @type {any} */ (err)?.code === 'P2002') return false;
-    throw err;
+    if (/** @type {any} */ (err)?.code !== 'P2002') throw err;
+    // Take over an interrupted claim: never finished and older than the lease.
+    const takeover = await prisma.emailWebhookReceipt.updateMany({
+      where: { signature, processedAt: null, receivedAt: { lt: new Date(now.getTime() - leaseMs) } },
+      data: { receivedAt: now },
+    });
+    claimed = takeover.count === 1;
   }
+  if (!claimed) return false;
   const cutoff = new Date(now.getTime() - 2 * EMAIL_WEBHOOK_MAX_AGE_MS);
   await prisma.emailWebhookReceipt.deleteMany({ where: { receivedAt: { lt: cutoff } } }).catch(() => {});
   return true;
+}
+
+/** The delivery was processed: from now on it is only ever a replay. */
+export async function markEmailWebhookProcessed(prisma, signature, { now = new Date() } = {}) {
+  await prisma.emailWebhookReceipt.updateMany({ where: { signature }, data: { processedAt: now } });
 }
 
 export async function releaseEmailWebhookSignature(prisma, signature) {

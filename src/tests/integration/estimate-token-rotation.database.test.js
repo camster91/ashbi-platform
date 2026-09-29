@@ -16,7 +16,11 @@ test('rotation gives SENT estimates a fresh token and access window, drafts none
   timeout: 60_000,
 }, async () => {
   const migration = readFileSync(new URL('../../../prisma/migrations/20260927050500_estimate_public_access/migration.sql', import.meta.url), 'utf8');
-  const update = migration.slice(migration.indexOf('UPDATE "estimates"'));
+  // Only the UPDATE: the file's own BEGIN/COMMIT must not end this test's
+  // transaction (which is rolled back).
+  const start = migration.indexOf('UPDATE "estimates"');
+  const update = migration.slice(start, migration.indexOf(';', start) + 1);
+  assert.doesNotMatch(update, /COMMIT|BEGIN/);
   const { PrismaClient } = prismaPkg;
   const raw = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
   const suffix = randomUUID().slice(0, 8);

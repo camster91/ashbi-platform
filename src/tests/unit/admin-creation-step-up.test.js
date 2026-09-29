@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 // M5 (security audit at 8687cf9): POST /api/auth/register (role from the
 // body) and POST /api/team could mint an ADMIN with just a session. Creating
 // an administrator now requires step-up re-authentication and is audited.
@@ -60,7 +61,8 @@ async function teamApp(t, db) {
   return app;
 }
 
-const NEW_MEMBER = { email: 'new@agency.test', password: 'New-Member-Passw0rd', name: 'New Member' };
+// Generated per run: a fixture, never a real credential.
+const NEW_MEMBER = { email: 'new@agency.test', password: `Nm-${randomUUID()}-A1`, name: 'New Member' };
 
 test('register: an ADMIN needs step-up re-authentication; other roles do not', async (t) => {
   const db = fakeDb();
