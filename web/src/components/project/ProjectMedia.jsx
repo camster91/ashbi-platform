@@ -15,8 +15,9 @@ import {
   pickFallbackDevice,
   summarizeStats,
 } from '../../lib/call-resilience';
+import { MAX_UPLOAD_BYTES, canRecord, recordingFileName, startCappedRecording } from '../../lib/media-recorder';
 
-const MAX_RECORDING_BYTES = 50 * 1024 * 1024;
+const MAX_RECORDING_BYTES = MAX_UPLOAD_BYTES;
 const MAX_RECORDING_MINUTES = Math.round(MAX_RECORDING_DURATION_MS / 60_000);
 const DEFAULT_ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
 const CONNECTION_LOST_MESSAGE = `The call connection was lost and could not be restored after ${MAX_ICE_RESTART_ATTEMPTS} reconnection attempts. You are still in the call; the other participant can rejoin.`;
@@ -64,7 +65,6 @@ export default function ProjectMedia({ projectId }) {
   const [activeCameraId, setActiveCameraId] = useState('');
   const recorderRef = useRef(null);
   const recordingStreamRef = useRef(null);
-  const recordingTimersRef = useRef({});
   const callIdRef = useRef(null);
   // Calls are 1:1: the peer is bound to one remote user, and every signal is
   // addressed to that user instead of the whole project room.
@@ -578,65 +578,54 @@ export default function ProjectMedia({ projectId }) {
     }
   };
 
-  const clearRecordingTimers = () => {
-    clearInterval(recordingTimersRef.current.tick);
-    clearTimeout(recordingTimersRef.current.limit);
-    recordingTimersRef.current = {};
-  };
+  const stopRecording = () => recorderRef.current?.stop();
 
-  const stopRecording = () => recorderRef.current?.state === 'recording' && recorderRef.current.stop();
-
+  // Recording uses the shared capped recorder (lib/media-recorder.js), which
+  // stops itself at MAX_RECORDING_DURATION_MS or just before the 50 MB upload
+  // cap (MAX_RECORDING_BYTES), whichever comes first.
   const startRecording = async () => {
     setRecordingError('');
     setRecordingNotice('');
-    if (!navigator.mediaDevices?.getDisplayMedia || !globalThis.MediaRecorder) {
+    if (!navigator.mediaDevices?.getDisplayMedia || !canRecord()) {
       return setRecordingError('This browser does not support screen recording.');
     }
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-      const chunks = [];
-      const recorder = new MediaRecorder(stream, MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? { mimeType: 'video/webm;codecs=vp9,opus' } : undefined);
-      recorder.ondataavailable = ({ data }) => { if (data.size) chunks.push(data); };
-      recorder.onstop = async () => {
-        clearRecordingTimers();
-        stream.getTracks().forEach((track) => track.stop());
-        recordingStreamRef.current = null;
-        setRecording(false);
-        const blob = new Blob(chunks, { type: 'video/webm' });
-        if (!blob.size) return setRecordingError('No recording data was captured.');
-        if (blob.size > MAX_RECORDING_BYTES) return setRecordingError('This recording is over the 50 MB project upload limit. Record a shorter clip.');
-        setUploading(true);
-        try {
-          const file = new File([blob], `screen-recording-${new Date().toISOString().replace(/[:.]/g, '-')}.webm`, { type: 'video/webm' });
-          await api.uploadAttachment(file, 'PROJECT', projectId);
-          await refreshRecordings();
-        } catch (error) { setRecordingError(error.message || 'Recording upload failed.'); }
-        finally { setUploading(false); }
-      };
-      stream.getVideoTracks()[0].onended = stopRecording;
-      recorderRef.current = recorder;
       recordingStreamRef.current = stream;
-      recorder.start(1000);
-      setRecording(true);
-      // Cap duration alongside the 50 MB size limit: count down, then stop and upload.
-      const startedAt = Date.now();
       setRecordingRemainingMs(MAX_RECORDING_DURATION_MS);
-      recordingTimersRef.current = {
-        tick: setInterval(() => setRecordingRemainingMs(Math.max(0, MAX_RECORDING_DURATION_MS - (Date.now() - startedAt))), 1000),
-        limit: setTimeout(() => {
-          setRecordingNotice(`Recording reached the ${MAX_RECORDING_MINUTES}-minute limit, so it stopped and is being uploaded.`);
-          stopRecording();
-        }, MAX_RECORDING_DURATION_MS),
-      };
+      recorderRef.current = startCappedRecording(stream, {
+        maxBytes: MAX_RECORDING_BYTES,
+        maxDurationMs: MAX_RECORDING_DURATION_MS,
+        onProgress: ({ remainingMs }) => setRecordingRemainingMs(remainingMs),
+        onStop: async ({ blob, reason, overLimit, mimeType }) => {
+          stream.getTracks().forEach((track) => track.stop());
+          recordingStreamRef.current = null;
+          recorderRef.current = null;
+          setRecording(false);
+          if (reason === 'duration') setRecordingNotice(`Recording reached the ${MAX_RECORDING_MINUTES}-minute limit, so it stopped and is being uploaded.`);
+          if (reason === 'size') setRecordingNotice('Recording reached the 50 MB upload limit, so it stopped and is being uploaded.');
+          if (!blob.size) return setRecordingError('No recording data was captured.');
+          if (overLimit) return setRecordingError('This recording is over the 50 MB project upload limit. Record a shorter clip.');
+          setUploading(true);
+          try {
+            const file = new File([blob], recordingFileName('screen-recording', mimeType), { type: mimeType });
+            await api.uploadAttachment(file, 'PROJECT', projectId);
+            await refreshRecordings();
+          } catch (error) { setRecordingError(error.message || 'Recording upload failed.'); }
+          finally { setUploading(false); }
+        },
+      });
+      stream.getVideoTracks()[0].onended = () => recorderRef.current?.stop('ended');
+      setRecording(true);
     } catch (error) {
+      recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+      recordingStreamRef.current = null;
       if (error.name !== 'NotAllowedError') setRecordingError('Screen recording could not start.');
     }
   };
 
   useEffect(() => () => {
-    clearInterval(recordingTimersRef.current.tick);
-    clearTimeout(recordingTimersRef.current.limit);
-    recorderRef.current?.state === 'recording' && recorderRef.current.stop();
+    recorderRef.current?.stop();
     recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
   }, []);
 
