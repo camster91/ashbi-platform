@@ -11,14 +11,21 @@
 -- version during a rolling deploy) still get it set. The new unique index is
 -- built before the global one is dropped, so uniqueness never lapses; the
 -- global index is strictly stronger, so existing data cannot violate it.
--- Prisma sends this file as one script, which PostgreSQL runs as a single
--- implicit transaction: every lock taken here (the backfill UPDATE's row
--- locks, the unique-index build's SHARE lock that blocks invoice writes, the
--- trigger/constraint changes) is held until the whole migration commits.
--- invoices is small, so the window is short; run it in a quiet period. The
--- previous app version keeps working after this migration:
+-- Atomicity: Prisma does not wrap a PostgreSQL migration in a transaction,
+-- so the body is an explicit BEGIN/COMMIT: a failure part-way (for example
+-- the lock timeout) rolls everything back and the deploy can simply be
+-- rerun. lock_timeout (SET LOCAL, this transaction only) makes the migration
+-- fail fast instead of queueing behind a long transaction and stalling the
+-- writers queued behind it; rerun the deploy when the database is quieter.
+-- Every lock taken here (the backfill UPDATE's row locks, the unique-index
+-- build's SHARE lock that blocks invoice writes, the trigger and constraint
+-- changes) is held until COMMIT; invoices is small, so the window is short.
+-- The previous app version keeps working after this migration:
 -- its max()+1 numbering is still per organization, and the new allocator
 -- skips any number such a writer already used.
+
+BEGIN;
+SET LOCAL lock_timeout = '5s';
 
 -- 1. Owning organization, derived from the client.
 ALTER TABLE "invoices" ADD COLUMN "organizationId" TEXT;
@@ -76,3 +83,5 @@ WHERE i."organizationId" IS NOT NULL
 GROUP BY i."organizationId", m[1]
 ON CONFLICT ("organizationId", "kind", "period") DO UPDATE
   SET "lastValue" = GREATEST("document_number_sequences"."lastValue", EXCLUDED."lastValue");
+
+COMMIT;
