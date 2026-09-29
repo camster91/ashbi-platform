@@ -29,4 +29,11 @@ describe('chat thread cache', () => {
     const next = applyChatEdit(before, { id: 'r1', content: 'x' });
     expect(next[1]).toBe(before[1]);
   });
+  it('keeps replyCount in step when a reply is deleted', () => {
+    const windowed = [{ id: 't1', replyCount: 2, replies: [{ id: 'r1' }, { id: 'r2' }] }];
+    const next = applyChatDelete(windowed, 'r2');
+    expect(next[0].replies).toHaveLength(1);
+    expect(next[0].replyCount).toBe(1);
+    expect(next[0].replyCount > next[0].replies.length).toBe(false);
+  });
 });
