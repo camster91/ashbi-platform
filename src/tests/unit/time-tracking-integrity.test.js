@@ -4,7 +4,7 @@ import Fastify from 'fastify';
 import { requestStorage } from '../../utils/request-context.js';
 import { startTimer, stopTimer, deleteTimeEntry, createManualEntry, TimerError } from '../../services/timeTracking.service.js';
 import { MAX_TIME_ENTRY_MINUTES, timeEntryCreateSchema, timeEntryUpdateSchema } from '../../validators/schemas.js';
-import timeRoutes, { timeEntryLock } from '../../routes/time.routes.js';
+import timeRoutes, { timeEntryLock, unlockedTimeEntryWhere } from '../../routes/time.routes.js';
 
 // C2/H7/H6 without a database (the race itself is proven against PostgreSQL
 // in src/tests/integration/time-tracking.database.test.js).
@@ -106,8 +106,8 @@ test('approved and invoiced time entries are locked against edit and delete', as
     request.prisma = {
       timeEntry: {
         findUnique: async ({ where }) => ({ id: where.id, userId: 'u1', reviewStatus: 'APPROVED', invoiced: false }),
-        update: async (args) => { writes.push(args); return {}; },
-        delete: async (args) => { writes.push(args); return {}; },
+        updateMany: async (args) => { writes.push(args); return { count: 1 }; },
+        deleteMany: async (args) => { writes.push(args); return { count: 1 }; },
       },
     };
   });
@@ -156,7 +156,7 @@ test('every time-entry write stores the same rounded minutes (never a truncated 
       timeEntry: {
         create: async ({ data }) => { created.push(data); return { id: 'e1', ...data }; },
         findUnique: async ({ where }) => ({ id: where.id, userId: 'u1', reviewStatus: 'PENDING', invoiced: false }),
-        update: async ({ data }) => { updated.push(data); return { id: 'e1', ...data }; },
+        updateMany: async ({ data }) => { updated.push(data); return { count: 1 }; },
       },
       activity: { create: async () => ({}) },
     };
@@ -172,6 +172,37 @@ test('every time-entry write stores the same rounded minutes (never a truncated 
     assert.equal(edit.statusCode, 200, edit.body);
     assert.deepEqual(created.map((data) => data.duration), [1], 'parseInt would have stored 0');
     assert.deepEqual(updated.map((data) => data.duration), [30]);
+  } finally {
+    await app.close();
+  }
+});
+
+test('edits and deletes are conditional on the entry still being unlocked', async () => {
+  const where = unlockedTimeEntryWhere('e1');
+  assert.deepEqual(where, { id: 'e1', deletedAt: null, invoiced: false, invoiceId: null, reviewStatus: { not: 'APPROVED' } });
+
+  // The lock check passes on a stale read, then the approval lands: the
+  // conditional write matches nothing and the route answers 409.
+  let reads = 0;
+  const app = Fastify();
+  app.decorate('authenticate', async (request) => { request.user = { id: 'u1', role: 'TEAM' }; });
+  app.addHook('onRequest', async (request) => {
+    request.prisma = {
+      timeEntry: {
+        findUnique: async ({ where: byId }) => ({ id: byId.id, userId: 'u1', invoiced: false, reviewStatus: reads++ === 0 ? 'PENDING' : 'APPROVED' }),
+        updateMany: async () => ({ count: 0 }),
+        deleteMany: async () => ({ count: 0 }),
+      },
+    };
+  });
+  await app.register(timeRoutes, { prefix: '/api' });
+  try {
+    const edit = await app.inject({ method: 'PUT', url: '/api/time-entries/e1', payload: { description: 'x' } });
+    assert.equal(edit.statusCode, 409, edit.body);
+    assert.equal(edit.json().code, 'TIME_ENTRY_APPROVED');
+    reads = 0;
+    const remove = await app.inject({ method: 'DELETE', url: '/api/time-entries/e1' });
+    assert.equal(remove.statusCode, 409, remove.body);
   } finally {
     await app.close();
   }

@@ -583,6 +583,7 @@ export default async function clientPortalRoutes(fastify) {
     // The cursor is (createdAt, id): with an id, messages sharing the boundary
     // timestamp are split by id instead of being skipped.
     const where = { projectId: id, visibility: 'CLIENT', removedAt: null };
+    const forward = !before && Boolean(after);
     if (before) {
       const at = new Date(before);
       if (beforeId) where.OR = [{ createdAt: { lt: at } }, { createdAt: at, id: { lt: beforeId } }];
@@ -598,14 +599,16 @@ export default async function clientPortalRoutes(fastify) {
       include: {
         author: { select: { id: true, name: true } }
       },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      // `after` pages forward from the cursor (the nearest newer messages);
+      // otherwise the page is the newest before the cursor, or overall.
+      orderBy: forward ? [{ createdAt: 'asc' }, { id: 'asc' }] : [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit
     });
 
     // Only CLIENT messages are loaded above, so only their files are; each is
     // reduced to the client shape by toClientChatPayload (docs/chat-media.md).
     const byMessage = await loadChatAttachments(request.prisma, messages.map((message) => message.id));
-    return withAttachments(messages.reverse(), byMessage).map(toClientChatPayload);
+    return withAttachments(forward ? messages : messages.reverse(), byMessage).map(toClientChatPayload);
   });
 
   // POST /api/client-portal/projects/:id/chat-uploads — a file for a portal

@@ -158,6 +158,14 @@ describe('client portal chat only exposes client-visible messages', () => {
     }
   });
 
+  it('pages forward from an after cursor to the nearest newer messages', async () => {
+    const all = (await app.inject({ method: 'GET', url: `/api/client-portal/projects/${PROJECT}/messages?limit=100`, headers: auth() })).json();
+    const cursor = all[4];
+    const url = `/api/client-portal/projects/${PROJECT}/messages?limit=3&after=${encodeURIComponent(cursor.createdAt)}&afterId=${cursor.id}`;
+    const next = (await app.inject({ method: 'GET', url, headers: auth() })).json();
+    assert.deepEqual(next.map((message) => message.id), all.slice(5, 8).map((message) => message.id), 'the three messages right after the cursor, oldest first');
+  });
+
   it('validates and caps the page size (M6)', async () => {
     const bad = await app.inject({ method: 'GET', url: `/api/client-portal/projects/${PROJECT}/messages?limit=abc`, headers: auth() });
     assert.equal(bad.statusCode, 400);
