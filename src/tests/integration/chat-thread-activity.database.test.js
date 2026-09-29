@@ -64,6 +64,12 @@ test('threads are one level deep and ordered by latest activity', {
     assert.deepEqual(threads.map((t) => t.content), ['newest', 'old-thread']);
     assert.deepEqual(threads[1].replies.map((r) => r.content), ['late-reply']);
 
+    // Several newest messages in one thread still yield `limit` distinct threads.
+    await message('burst-1', 4, { parentId: mid('old-thread') });
+    await message('burst-2', 5, { parentId: mid('old-thread') });
+    const distinct = (await app.inject({ method: 'GET', url: `/api/projects/${ids.project}/messages?limit=2` })).json();
+    assert.deepEqual(distinct.map((t) => t.content), ['newest', 'old-thread'], 'two threads, not one');
+
     // A reply to a reply joins the thread (one level).
     const nested = await app.inject({
       method: 'POST', url: `/api/projects/${ids.project}/messages`,

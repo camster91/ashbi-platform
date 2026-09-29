@@ -56,16 +56,30 @@ export default async function chatRoutes(fastify) {
       activityWhere.createdAt = { gt: new Date(after) };
     }
 
-    const recent = await request.prisma.chatMessage.findMany({
-      where: activityWhere,
-      select: { id: true, parentId: true, createdAt: true },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-    });
+    // Walk the newest messages in batches until `limit` distinct threads are
+    // found (several recent replies may share one thread), with a
+    // (createdAt, id) cursor so equal timestamps are never skipped.
     const lastActivity = new Map();
-    for (const row of recent) {
-      const rootId = row.parentId ?? row.id;
-      if (!lastActivity.has(rootId)) lastActivity.set(rootId, row.createdAt);
+    const batchSize = Math.min(limit * 4, 200);
+    let cursor = null;
+    for (let round = 0; round < 25 && lastActivity.size < limit; round += 1) {
+      const where = cursor
+        ? { AND: [activityWhere, { OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { lt: cursor.id } }] }] }
+        : activityWhere;
+      const batch = await request.prisma.chatMessage.findMany({
+        where,
+        select: { id: true, parentId: true, createdAt: true },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: batchSize,
+      });
+      for (const row of batch) {
+        const rootId = row.parentId ?? row.id;
+        if (lastActivity.has(rootId)) continue;
+        if (lastActivity.size >= limit) break;
+        lastActivity.set(rootId, row.createdAt);
+      }
+      if (batch.length < batchSize) break;
+      cursor = batch[batch.length - 1];
     }
     if (lastActivity.size === 0) return [];
 
