@@ -115,6 +115,16 @@ raise_rollback_floor() {
     grep -qxF "$name" "$ROLLBACK_FLOOR_FILE" 2>/dev/null || echo "$name" >> "$ROLLBACK_FLOOR_FILE"
   done
 }
+# Stop a container that must no longer serve; force-remove it if a stop does
+# not take. Succeeds only when it is verifiably not running (or gone).
+stop_below_floor() {
+  local name=$1 timeout=$2
+  docker stop --time "$timeout" "$name" >/dev/null 2>&1 || true
+  if [[ $(docker inspect --format '{{.State.Running}}' "$name" 2>/dev/null) == true ]]; then
+    docker rm -f "$name" >/dev/null 2>&1 || true
+  fi
+  [[ $(docker inspect --format '{{.State.Running}}' "$name" 2>/dev/null) != true ]]
+}
 # --- end rollback floor ---
 
 if ! FLOOR_MISSING=$(image_meets_floor "$IMAGE"); then
@@ -129,8 +139,10 @@ raise_rollback_floor "$IMAGE"
 # private. If the release then fails, it stays down (fail closed).
 LIVE_IMAGE=$(docker inspect --format '{{.Config.Image}}' "$CONTAINER" 2>/dev/null || true)
 if [[ -n $LIVE_IMAGE ]] && ! image_meets_floor "$LIVE_IMAGE" >/dev/null; then
-  docker stop "$CONTAINER" >/dev/null 2>&1 || true
-  docker stop --time 120 "$WORKER_CONTAINER" >/dev/null 2>&1 || true
+  stop_below_floor "$CONTAINER" 30 && stop_below_floor "$WORKER_CONTAINER" 120 || {
+    record legacy_stop_failed "image=$LIVE_IMAGE"
+    die 'could not stop the pre-migration image below the rollback floor'
+  }
   record legacy_stopped_below_floor "image=$LIVE_IMAGE"
 fi
 docker run --rm --network "$NETWORK" --env-file "$ENV_FILE" "$IMAGE" npx prisma migrate status
