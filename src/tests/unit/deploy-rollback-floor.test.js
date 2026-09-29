@@ -89,3 +89,20 @@ docker() { echo "$1" >> "$LOG"; case $1 in stop) return 1 ;; rm) RUNNING=false ;
 docker() { echo "$1" >> "$LOG"; case $1 in stop|rm) return 1 ;; inspect) echo true ;; esac; }`;
   assert.match(stopProbe(unkillable), /^still-running\n/);
 });
+
+test('stop_below_floor fails closed when the container state cannot be read', () => {
+  // Daemon unavailable: stop, rm and inspect all fail with a non-"No such" error.
+  const daemonDown = `: > "$LOG"
+docker() { echo "$1" >> "$LOG"; echo "Cannot connect to the Docker daemon" >&2; return 1; }`;
+  assert.match(stopProbe(daemonDown), /^still-running\n/);
+  // A confirmed missing container counts as stopped.
+  const gone = `: > "$LOG"
+docker() { echo "$1" >> "$LOG"; case $1 in inspect) echo "Error: No such object: api" >&2; return 1 ;; *) return 1 ;; esac; }`;
+  assert.match(stopProbe(gone), /^stopped\n/);
+  // A normal stop that takes: no force-remove needed.
+  const clean = `: > "$LOG"
+docker() { echo "$1" >> "$LOG"; case $1 in inspect) echo false ;; esac; }`;
+  const out = stopProbe(clean);
+  assert.match(out, /^stopped\n/);
+  assert.doesNotMatch(out, /\nrm\n/);
+});
