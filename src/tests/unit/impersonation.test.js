@@ -27,6 +27,8 @@ const {
   createImpersonationHook,
   impersonationDenial,
   signImpersonationToken,
+  VIEW_REVOKE_CHANNEL,
+  createViewSocketRevoker,
   socketHandshakeDuringView,
   verifyImpersonationToken,
 } = await import('../../auth/impersonation.js');
@@ -607,5 +609,71 @@ describe('realtime during a support view', () => {
     assert.equal(socketHandshakeDuringView({ token: 't', [IMPERSONATION_COOKIE]: 'anything' }), true);
     assert.equal(socketHandshakeDuringView({ token: 't' }), false);
     assert.equal(socketHandshakeDuringView(null), false);
+  });
+});
+
+describe('support-view socket revocation across instances', () => {
+  // An in-memory stand-in for Redis pub/sub shared by two API instances.
+  function fakeRedis() {
+    const subscribers = [];
+    const client = () => {
+      const handlers = {};
+      const self = {
+        on(event, fn) { (handlers[event] ||= []).push(fn); return self; },
+        async subscribe(channel) { subscribers.push({ channel, deliver: (message) => (handlers.message || []).forEach((fn) => fn(channel, message)) }); },
+        async publish(channel, message) { subscribers.filter((s) => s.channel === channel).forEach((s) => s.deliver(message)); return 1; },
+        async quit() {},
+      };
+      return self;
+    };
+    return { duplicate: client };
+  }
+  const fakeIo = () => {
+    const dropped = [];
+    return { dropped, in(rooms) { return { disconnectSockets() { dropped.push(rooms); } }; } };
+  };
+
+  it('drops the admin\'s sockets on this instance and, through pub/sub, on the others', async () => {
+    const redis = fakeRedis();
+    const [ioA, ioB] = [fakeIo(), fakeIo()];
+    const a = createViewSocketRevoker({ io: ioA, redis });
+    const b = createViewSocketRevoker({ io: ioB, redis });
+    await new Promise((resolve) => setImmediate(resolve));
+    a.revoke('admin-1');
+    await new Promise((resolve) => setImmediate(resolve));
+    const rooms = ['user:admin-1', 'pending-user:admin-1'];
+    assert.deepEqual(ioA.dropped[0], rooms);
+    assert.ok(ioB.dropped.some((r) => JSON.stringify(r) === JSON.stringify(rooms)), 'the other instance drops them too');
+    await a.close();
+    await b.close();
+  });
+
+  it('ignores malformed messages and works locally without Redis', async () => {
+    const io = fakeIo();
+    const local = createViewSocketRevoker({ io, logger: { warn() {} } });
+    local.revoke('admin-2');
+    assert.deepEqual(io.dropped, [['user:admin-2', 'pending-user:admin-2']]);
+    const redis = fakeRedis();
+    const ioB = fakeIo();
+    createViewSocketRevoker({ io: ioB, redis, logger: { warn() {} } });
+    await new Promise((resolve) => setImmediate(resolve));
+    await redis.duplicate().publish(VIEW_REVOKE_CHANNEL, 'not json');
+    await redis.duplicate().publish(VIEW_REVOKE_CHANNEL, JSON.stringify({ userId: 42 }));
+    assert.deepEqual(ioB.dropped, []);
+  });
+});
+
+describe('a view start waits for the cross-instance revocation', () => {
+  const io = { in() { return { disconnectSockets() {} }; } };
+  const redisWith = (publish) => ({ duplicate: () => ({ on() {}, async subscribe() {}, publish, async quit() {} }) });
+  it('resolves once published', async () => {
+    const revoker = createViewSocketRevoker({ io, redis: redisWith(async () => 1) });
+    await revoker.revoke('a');
+  });
+  it('rejects when publishing fails or stalls', async () => {
+    const failing = createViewSocketRevoker({ io, redis: redisWith(async () => { throw new Error('down'); }), logger: { warn() {} } });
+    await assert.rejects(failing.revoke('a'), /down/);
+    const stalled = createViewSocketRevoker({ io, redis: redisWith(() => new Promise(() => {})), logger: { warn() {} } });
+    await assert.rejects(stalled.revoke('a', { timeoutMs: 20 }), /timed out/);
   });
 });

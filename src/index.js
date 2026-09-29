@@ -15,11 +15,15 @@ import { fileURLToPath } from 'url';
 
 import env from './config/env.js';
 import prisma from './config/db.js';
+import { connection as redisConnection } from './jobs/queue.js';
 import { apiRateLimitMax, isNonApiRequest } from './config/rateLimit.js';
 import { trustHops } from './config/trust-proxy.js';
 import { clearStaleSessionCookie, resolveRequestSession } from './auth/request-session.js';
 import { isCurrentUserSession } from './auth/session.js';
-import { actorHasOpenView, applyImpersonation, createImpersonationHook, socketHandshakeDuringView } from './auth/impersonation.js';
+import {
+  actorHasOpenView, applyImpersonation, createImpersonationHook, createViewSocketRevoker, socketHandshakeDuringView,
+  startViewSocketSweep,
+} from './auth/impersonation.js';
 import { createJoinProjectHandler } from './auth/project-room-access.js';
 import { createSocketAuthMiddleware } from './auth/socket-auth.js';
 import { clientAcquisitionCorsOptions, loadClientAcquisitionConfig } from './services/client-acquisition.contract.js';
@@ -276,7 +280,15 @@ if (env.serveBuiltSpa) {
 
 // Socket.IO
 const io = new SocketIO(fastify.server, { cors: { origin: env.isDev ? 'http://localhost:*' : env.corsOrigins, credentials: true } });
+// Starting a support view drops the admin's sockets on every API instance
+// (Redis pub/sub; there is no shared Socket.IO adapter). The sweep is the
+// fallback if a revocation message is lost.
+const viewSocketRevoker = createViewSocketRevoker({ io, redis: redisConnection, logger: fastify.log });
+fastify.decorate('revokeSupportViewSockets', (userId) => viewSocketRevoker.revoke(userId));
+const stopViewSocketSweep = startViewSocketSweep(io, prisma, fastify.log);
 fastify.addHook('onClose', async () => {
+  stopViewSocketSweep();
+  await viewSocketRevoker.close();
   await new Promise((resolve) => io.close(resolve));
 });
 // Handshake: sessions only (src/auth/socket-auth.js). Realtime is paused

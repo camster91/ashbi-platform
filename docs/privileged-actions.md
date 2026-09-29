@@ -276,7 +276,11 @@ person's password. Code: `src/auth/impersonation.js`,
   view of theirs is open: the socket authenticates the admin's own session
   and would otherwise join the admin's rooms. A handshake carrying the view
   cookie, or from an admin with an open view, is refused, and starting a
-  view drops the admin's existing sockets (other tabs share the cookie).
+  view drops the admin's existing sockets (other tabs share the cookie) on
+  every API instance: locally at once, and on the others through Redis
+  pub/sub (there is no shared Socket.IO adapter). As a fallback for a lost
+  message, each instance also sweeps its sockets every 10 seconds and drops
+  those of admins with an open view.
   Live updates resume after the view ends and the page reloads.
 
 ### Read-only and blocked areas
@@ -335,6 +339,7 @@ The web app shows these refusals as a "Read-only support view" message.
 | The admin signed out | `signed_out` |
 | An admin reset the password of either person (`POST /api/team/:id/reset-password`), or either used a reset link | `revoked_password_reset` |
 | Either person changed their own password | `revoked_password_change` |
+| The start could not revoke the admin's sockets on every API instance (Redis publish failed or took over 2 s); the request answers `503 IMPERSONATION_START_FAILED` | `start_failed` |
 | Either person's role changed (`PUT /api/team/:id`) | `revoked_role_change` |
 | Either person was deactivated | `revoked_deactivated` |
 
@@ -426,6 +431,13 @@ To cancel an unused grant: `node scripts/break-glass.mjs revoke --grant <id>
   the same second share a binding. The impersonation cookie uses the same binding.
 - Support views are read-only; there is no audited write-through mode.
 - Realtime (Socket.IO) is off for the admin, on every device, while a view of theirs is open; screens do not update live.
+- Cross-instance socket revocation is published over Redis and awaited, but
+  not acknowledged per instance. If one API instance's Redis subscriber is
+  down while its sockets stay connected, that instance drops the admin's
+  sockets on its next 10-second sweep instead of at once. Those sockets
+  belong to the admin's own browser and carry only the admin's own access.
+  A shared Socket.IO adapter (tracked in #290) would make revocation, and
+  every room broadcast, cluster-wide.
 - Break-glass has no web console for operators and relies on the CLI running
   with production database access; the operator identity is the
   `--operator` id checked against `PLATFORM_OPERATOR_USER_IDS`, not a

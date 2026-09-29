@@ -19,6 +19,7 @@ import {
   impersonationCookieOptions,
   impersonationStartProblem,
   signImpersonationToken,
+  viewSocketRooms,
 } from '../auth/impersonation.js';
 import { BreakGlassError, isBreakGlassEnabled, redeemBreakGlassGrant } from '../auth/break-glass.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
@@ -118,7 +119,18 @@ export default async function privilegedAccessRoutes(fastify, options = {}) {
     // pending room while their connection is re-checked. Drop them; the view
     // row is committed, so the handshake refuses the admin's reconnects until
     // the view ends, whether or not the cookie has arrived yet.
-    fastify.io?.in([`user:${actor.id}`, `pending-user:${actor.id}`]).disconnectSockets(true);
+    // On every API instance: locally now, the others through pub/sub. If the
+    // other instances cannot be told, the view does not start (fail closed).
+    try {
+      if (fastify.revokeSupportViewSockets) await fastify.revokeSupportViewSockets(actor.id);
+      else fastify.io?.in(viewSocketRooms(actor.id)).disconnectSockets(true);
+    } catch (err) {
+      request.log.error({ err: { message: err?.message } }, 'Support-view socket revocation failed; ending the view');
+      await endImpersonationSessions(db, {
+        organizationId, where: { id: row.id }, reason: 'start_failed', endedById: actor.id, requestId: request.id, ip: request.ip,
+      });
+      return reply.status(503).send({ error: 'The support view could not be started safely. Try again.', code: 'IMPERSONATION_START_FAILED' });
+    }
 
     // The viewed person is told, in-app, who is looking and why.
     const notification = {

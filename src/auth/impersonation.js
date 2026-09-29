@@ -45,6 +45,7 @@ export const IMPERSONATION_ENDED_CODE = 'IMPERSONATION_ENDED';
 export const IMPERSONATION_END_REASONS = Object.freeze([
   'stopped', 'expired', 'superseded', 'signed_out',
   'revoked_password_reset', 'revoked_role_change', 'revoked_deactivated', 'revoked_password_change',
+  'start_failed',
 ]);
 
 const TOKEN_TYPE = 'impersonation';
@@ -222,6 +223,123 @@ export async function actorHasOpenView(prisma, actor, { nowMs = Date.now() } = {
     select: { id: true },
   });
   return Boolean(open);
+}
+
+/** Longest a view start waits for the cross-instance revocation to publish. */
+export const VIEW_REVOKE_PUBLISH_TIMEOUT_MS = 2_000;
+
+/** Pub/sub channel that carries "drop this admin's sockets" to every API instance. */
+export const VIEW_REVOKE_CHANNEL = 'ashbi:support-view:revoke-sockets';
+
+/** Rooms holding a user's sockets: cleared ones and ones awaiting the view re-check. */
+export function viewSocketRooms(userId) {
+  return [`user:${userId}`, `pending-user:${userId}`];
+}
+
+/**
+ * Drops an admin's sockets on every API instance when a view starts: locally
+ * at once, and through Redis pub/sub on the others (there is no shared
+ * Socket.IO adapter). Without Redis (tests) only the local drop runs; the
+ * periodic sweep remains the fallback if a message is lost.
+ * @param {{ io: any, redis?: any, logger?: { warn: Function } }} options
+ *   `redis` is an ioredis client to duplicate for publishing and subscribing.
+ */
+export function createViewSocketRevoker({ io, redis = null, logger = defaultLogger }) {
+  const dropLocal = (userId) => io.in(viewSocketRooms(userId)).disconnectSockets(true);
+  const warn = (message) => (err) => logger.warn({ err: { message: err?.message } }, message);
+  let publisher = null;
+  let subscriber = null;
+  if (redis && typeof redis.duplicate === 'function') {
+    publisher = redis.duplicate();
+    subscriber = redis.duplicate();
+    publisher.on?.('error', warn('Support-view revocation publisher error'));
+    subscriber.on?.('error', warn('Support-view revocation subscriber error'));
+    subscriber.on('message', (channel, message) => {
+      if (channel !== VIEW_REVOKE_CHANNEL) return;
+      try {
+        const { userId } = JSON.parse(message);
+        if (typeof userId === 'string' && userId) dropLocal(userId);
+      } catch (err) {
+        warn('Ignoring a malformed support-view revocation')(err);
+      }
+    });
+    Promise.resolve(subscriber.subscribe(VIEW_REVOKE_CHANNEL)).catch(warn('Support-view revocation subscribe failed'));
+  }
+  return {
+    /**
+     * Resolves once the revocation is published to the other instances, or
+     * rejects if that fails or takes longer than `timeoutMs`; the caller must
+     * not report the view as started unless it resolved.
+     */
+    async revoke(userId, { timeoutMs = VIEW_REVOKE_PUBLISH_TIMEOUT_MS } = {}) {
+      dropLocal(userId);
+      if (!publisher) return;
+      let timer;
+      try {
+        await Promise.race([
+          Promise.resolve(publisher.publish(VIEW_REVOKE_CHANNEL, JSON.stringify({ userId }))),
+          new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Revocation publish timed out')), timeoutMs); }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+    async close() {
+      await Promise.allSettled([subscriber?.quit?.(), publisher?.quit?.()]);
+    },
+  };
+}
+
+/** How often each instance sweeps its sockets for admins with an open view. */
+export const VIEW_SOCKET_SWEEP_MS = 10_000;
+
+/**
+ * Disconnect this instance's sockets whose user has an open support view.
+ * The fallback behind the pub/sub revocation: if a revocation message is
+ * lost (Redis briefly unavailable), the sweep still reaches the sockets
+ * within one interval.
+ * @param {Iterable<any>} sockets This instance's connected sockets.
+ * @param {any} prisma Raw client.
+ * @returns {Promise<number>} Sockets disconnected.
+ */
+export async function sweepSocketsDuringViews(sockets, prisma, { nowMs = Date.now() } = {}) {
+  const candidates = [...sockets].filter((socket) => socket?.userId && socket.organizationId);
+  if (candidates.length === 0) return 0;
+  const open = await prisma.impersonationSession.findMany({
+    where: {
+      actorUserId: { in: [...new Set(candidates.map((socket) => socket.userId))] },
+      endedAt: null,
+      expiresAt: { gt: new Date(nowMs) },
+    },
+    select: { actorUserId: true, organizationId: true },
+  });
+  const viewing = new Set(open.map((row) => `${row.organizationId}:${row.actorUserId}`));
+  let dropped = 0;
+  for (const socket of candidates) {
+    if (viewing.has(`${socket.organizationId}:${socket.userId}`)) {
+      socket.disconnect(true);
+      dropped += 1;
+    }
+  }
+  return dropped;
+}
+
+/**
+ * Run the sweep on this API instance. It is connection hygiene, not a
+ * business schedule: each instance can only see and drop its own sockets,
+ * so it cannot be a worker job. Returns a stop function.
+ * @param {any} io Socket.IO server.
+ * @param {any} prisma Raw client.
+ * @param {{ warn: Function }} logger
+ */
+export function startViewSocketSweep(io, prisma, logger, { intervalMs = VIEW_SOCKET_SWEEP_MS } = {}) {
+  const timer = setInterval(() => {
+    sweepSocketsDuringViews(io.of('/').sockets.values(), prisma).catch((err) => {
+      logger.warn({ err: { message: err?.message } }, 'Support-view socket sweep failed');
+    });
+  }, intervalMs);
+  timer.unref?.();
+  return () => clearInterval(timer);
 }
 
 /**

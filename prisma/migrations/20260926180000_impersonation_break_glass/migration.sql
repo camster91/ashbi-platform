@@ -82,7 +82,8 @@ ALTER TABLE "impersonation_sessions" ADD CONSTRAINT "impersonation_sessions_end_
 ALTER TABLE "impersonation_sessions" ADD CONSTRAINT "impersonation_sessions_endReason_check"
   CHECK ("endReason" IS NULL OR "endReason" IN (
     'stopped', 'expired', 'superseded', 'signed_out',
-    'revoked_password_reset', 'revoked_role_change', 'revoked_deactivated', 'revoked_password_change'
+    'revoked_password_reset', 'revoked_role_change', 'revoked_deactivated', 'revoked_password_change',
+    'start_failed'
   ));
 
 ALTER TABLE "break_glass_grants" ADD CONSTRAINT "break_glass_grants_reason_check"
