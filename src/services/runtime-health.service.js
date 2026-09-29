@@ -225,7 +225,7 @@ export function isLoopbackPeer(request, { enabled = loopbackHealthDetailsEnabled
   return FORWARDING_HEADERS.every((name) => headers[name] === undefined);
 }
 
-export const HEALTH_DETAIL_ROLES = Object.freeze(['ADMIN', 'TEAM']);
+export const HEALTH_DETAIL_ROLES = Object.freeze(['ADMIN', 'TEAM', 'STAFF']);
 
 export async function closeRuntimeHealth() {
   if (!healthRedis) return;
