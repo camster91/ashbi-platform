@@ -278,11 +278,15 @@ export default function ProjectChat({ projectId }) {
                     </div>
                   </div>
                   {!msg.removedAt && <ChatAttachments messageId={msg.id} />}
+                  {msg.replyCount > (msg.replies?.length ?? 0) && (
+                    <p className="mt-2 text-xs text-gray-500">Showing the latest {msg.replies?.length ?? 0} of {msg.replyCount} replies.</p>
+                  )}
                   {msg.replies?.length > 0 && (
                     <ul className="mt-2 space-y-1 border-l-2 border-gray-200 pl-3" aria-label="Replies">
                       {msg.replies.map((replyMessage) => (
                         <li key={replyMessage.id} className="text-sm text-gray-800">
                           <span className="text-xs text-gray-500">{replyMessage.author?.name || replyMessage.externalAuthorName || 'Unknown sender'}: </span>
+                          <VisibilityBadge visibility={replyMessage.visibility} />{' '}
                           {replyMessage.removedAt ? <em>Message deleted</em> : replyMessage.content}
                         </li>
                       ))}

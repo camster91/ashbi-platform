@@ -69,6 +69,23 @@ test('paginated lists are ordered by priority in the database, across pages', as
   assert.deepEqual(page3.map((row) => row.id), ['low-b', 'low-c']);
 });
 
+test('a bucket larger than one capped findMany is read to the end before lower priorities', async () => {
+  // Soft-deletable models cap findMany at 100 rows; a short page is not the
+  // end of the bucket.
+  const rows = [
+    ...Array.from({ length: 150 }, (_, i) => ({ id: `critical-${String(i).padStart(3, '0')}`, priority: 'CRITICAL' })),
+    { id: 'high-a', priority: 'HIGH' },
+  ];
+  const plain = fakeTaskDelegate(rows);
+  const capped = { ...plain, findMany: async (args) => plain.findMany({ ...args, take: Math.min(args.take, 100) }) };
+  const first = await findTasksInPriorityOrder(capped, { where: {}, skip: 0, take: 200 });
+  assert.equal(first.length, 151);
+  assert.deepEqual(first.slice(0, 150).map((row) => row.priority), Array(150).fill('CRITICAL'));
+  assert.equal(first[150].id, 'high-a');
+  const second = await findTasksInPriorityOrder(capped, { where: {}, skip: 120, take: 10 });
+  assert.deepEqual(second.map((row) => row.id), Array.from({ length: 10 }, (_, i) => `critical-${120 + i}`));
+});
+
 test('GET /api/tasks/my pages through the global priority order', async () => {
   const rows = [
     { id: 'n1', priority: 'NORMAL', category: 'UPCOMING' }, { id: 'l1', priority: 'LOW', category: 'UPCOMING' },
