@@ -9,13 +9,14 @@ import {
 import { api } from '../../lib/api';
 import { formatRelativeTime } from '../../lib/utils';
 import Skeleton from '../ui/Skeleton';
+import { QueryErrorState } from '../QueryErrorState';
 
 export default function ProjectContextCard({ projectId }) {
   const queryClient = useQueryClient();
   const [localNotes, setLocalNotes] = useState('');
   const [notesDirty, setNotesDirty] = useState(false);
 
-  const { data: context, isLoading } = useQuery({
+  const { data: context, isLoading, isError, error: contextError, refetch, isFetching } = useQuery({
     queryKey: ['project-context', projectId],
     queryFn: () => api.getProjectContext(projectId),
   });
@@ -50,6 +51,10 @@ export default function ProjectContextCard({ projectId }) {
         </div>
       </div>
     );
+  }
+
+  if (isError) {
+    return <QueryErrorState error={contextError} message="Project context could not be loaded" onRetry={refetch} isRetrying={isFetching} />;
   }
 
   return (
