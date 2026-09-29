@@ -6,7 +6,7 @@ export default async function aiContextRoutes(fastify) {
   // Get all AI context key/value pairs
   fastify.get('/', {
     onRequest: [fastify.authenticate]
-  }, async () => {
+  }, async (request) => {
     const rows = await request.prisma.aiContext.findMany({
       orderBy: { key: 'asc' }
     });
@@ -50,7 +50,7 @@ export default async function aiContextRoutes(fastify) {
   // Get context as a formatted system prompt prefix (used by AI agents)
   fastify.get('/prompt', {
     onRequest: [fastify.authenticate]
-  }, async () => {
+  }, async (request) => {
     const rows = await request.prisma.aiContext.findMany();
     const context = rows.reduce((acc, r) => {
       acc[r.key] = r.value;

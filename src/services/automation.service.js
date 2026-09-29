@@ -459,7 +459,7 @@ export async function checkOverdueInvoices() {
 // ==================== WORKFLOW ENGINE ====================
 
 export async function executeWorkflow(workflow, triggerData = {}) {
-  const { id: workflowId, name, actions, triggerType, triggerConfig } = workflow;
+  const { id: workflowId, name, actions } = workflow;
   const runId = crypto.randomUUID();
   let status = 'SUCCESS';
   let error = null;
@@ -468,7 +468,7 @@ export async function executeWorkflow(workflow, triggerData = {}) {
   console.log(`[Workflow] Starting execution: ${name} (${workflowId})`);
 
   // Create run record
-  const run = await prisma.workflowRun.create({
+  await prisma.workflowRun.create({
     data: {
       id: runId,
       workflowId,
@@ -555,11 +555,11 @@ async function executeAction(action, triggerData, workflow) {
     case 'SEND_EMAIL':
       return executeSendEmail(config, triggerData);
     case 'CREATE_TASK':
-      return executeCreateTask(config, triggerData);
+      return executeCreateTask(config, triggerData, workflow);
     case 'SEND_TELEGRAM':
       return executeSendTelegram(config, triggerData);
     case 'UPDATE_DEAL_STAGE':
-      return executeUpdateDealStage(config, triggerData);
+      return executeUpdateDealStage(config, triggerData, workflow);
     case 'WEBHOOK_CALL':
       return executeWebhookCall(config, triggerData);
     case 'CONDITION':
@@ -591,7 +591,7 @@ async function executeSendEmail(config, triggerData) {
   return { simulated: true, to: resolvedTo, subject: resolvedSubject };
 }
 
-async function executeCreateTask(config, triggerData) {
+async function executeCreateTask(config, triggerData, workflow) {
   const { title, description, projectId, assigneeId, priority = 'NORMAL' } = config;
 
   const resolvedTitle = resolveTemplate(title, triggerData);
@@ -619,7 +619,7 @@ async function executeCreateTask(config, triggerData) {
   });
 
   await logAutomation('WORKFLOW_ACTION', 'created', 'TASK', task.id, task.title,
-    { workflowName: workflow.name, actionType: 'CREATE_TASK' });
+    { workflowName: workflow?.name, actionType: 'CREATE_TASK' });
 
   return { taskId: task.id, title: task.title };
 }
@@ -660,7 +660,7 @@ async function executeSendTelegram(config, triggerData) {
   return { messageId: data.result.message_id };
 }
 
-async function executeUpdateDealStage(config, triggerData) {
+async function executeUpdateDealStage(config, triggerData, workflow) {
   const { dealId, stage } = config;
 
   const resolvedDealId = resolveTemplate(dealId, triggerData);
@@ -677,7 +677,7 @@ async function executeUpdateDealStage(config, triggerData) {
   });
 
   await logAutomation('WORKFLOW_ACTION', 'updated', 'PIPELINE_DEAL', deal.id, deal.title,
-    { workflowName: workflow.name, newStage: resolvedStage });
+    { workflowName: workflow?.name, newStage: resolvedStage });
 
   return { dealId: deal.id, newStage: resolvedStage };
 }

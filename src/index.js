@@ -45,7 +45,7 @@ import { registerClientCommunicationRoutes } from './domains/client-communicatio
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-import logger from './utils/logger.js';
+import logger, { resolveLoggerSettings } from './utils/logger.js';
 import { LOG_REDACT_OPTIONS, serializeRequestForLog } from './utils/log-redaction.js';
 import { initSubscribers } from './subscribers/index.js';
 import { registerCallSignalling } from './services/call-signalling.service.js';
@@ -78,6 +78,7 @@ if (initializeRuntime && initSentry('api', [Sentry.fastifyIntegration()])) {
 }
 
 // Initialize Fastify
+const requestLogSettings = resolveLoggerSettings(env);
 const fastify = Fastify({
   // Bound slow request bodies (see src/config/http.js); handler time is not limited.
   requestTimeout: requestTimeoutMs(),
@@ -85,7 +86,11 @@ const fastify = Fastify({
   // audit IP prefixes see the client, not the proxy.
   trustProxy: typeof trustProxy === 'number' ? trustHops(trustProxy) : trustProxy,
   logger: {
-    level: env.isDev ? 'debug' : 'info',
+    // Same level policy as the app logger (src/utils/logger.js): silent under
+    // test unless LOG_LEVEL is set, and then synchronously to stderr so the
+    // Node test runner's stdout frame channel stays clean.
+    level: requestLogSettings.level,
+    ...(env.isTest ? { stream: requestLogSettings.destination } : {}),
     // Never write API keys, session cookies or passwords to request logs.
     redact: { ...LOG_REDACT_OPTIONS, paths: [...LOG_REDACT_OPTIONS.paths] },
     // Nor capability tokens carried in the URL (review share links).

@@ -93,6 +93,8 @@ test('per-user limit defaults to 600/min, is env-configurable and never below th
 test('the in-memory store is used in tests; Redis is used when configured', () => {
   assert.equal(createRateLimitRedis({ nodeEnv: 'test', redisUrl: 'redis://localhost:6379' }), null);
   assert.equal(createRateLimitRedis({ nodeEnv: 'development', redisUrl: '' }), null);
+  // Deployed environments (staging too) never fall back to per-process counters.
+  assert.throws(() => createRateLimitRedis({ nodeEnv: 'staging', redisUrl: '' }), /REDIS_URL is required/);
   const redis = createRateLimitRedis({ nodeEnv: 'development', redisUrl: 'redis://127.0.0.1:1/0' });
   try {
     assert.equal(redis.options.enableOfflineQueue, false);

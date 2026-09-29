@@ -11,11 +11,12 @@ const DEFAULT_REDIS_URL = 'redis://localhost:6379';
  * so a valid URL is passed through unchanged; rediss:// also gets an explicit
  * TLS block.
  *
- * Production fails fast when REDIS_URL is missing or unparseable instead of
+ * Deployed environments (staging and production, env.isDeployed) fail fast
+ * when REDIS_URL is missing or unparseable instead of
  * silently falling back to localhost (a queue that "works" against the wrong
  * Redis loses every job). Other environments fall back to local Redis.
  */
-export function resolveRedisUrl(rawUrl = process.env.REDIS_URL, { production = env.isProduction } = {}) {
+export function resolveRedisUrl(rawUrl = process.env.REDIS_URL, { production = env.isDeployed } = {}) {
   const value = typeof rawUrl === 'string' ? rawUrl.trim() : '';
   let parsed = null;
   try {
@@ -29,7 +30,7 @@ export function resolveRedisUrl(rawUrl = process.env.REDIS_URL, { production = e
   if (production) {
     throw new Error(value
       ? 'REDIS_URL must be a redis:// or rediss:// URL with a host'
-      : 'REDIS_URL is required in production');
+      : 'REDIS_URL is required in deployed environments (staging, production)');
   }
   return { url: DEFAULT_REDIS_URL, tls: false };
 }

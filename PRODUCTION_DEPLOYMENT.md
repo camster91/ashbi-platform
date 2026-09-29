@@ -33,6 +33,19 @@ The CI gate `.github/workflows/check-secrets.yml` blocks PRs that hardcode
 any of these patterns: `postgresql://user:password@host` (>= 20 char non-placeholder
 password), `redis://...:password@host`, `sk_live_*` / `sk_test_*`, `AKIA*`.
 
+## NODE_ENV and staging
+
+`src/config/env.js` accepts only `development`, `test`, `staging` and
+`production` (unset means `development`); any other value stops startup with
+`Unsupported NODE_ENV`. `staging` and `production` are *deployed* environments
+(`env.isDeployed`) and get the same security behaviour: startup secret
+validation, Secure/SameSite=Strict cookies, HSTS and upgrade-insecure-requests,
+generic 5xx bodies without `detail`, `ADMIN_INVITE_TOKEN` required for the
+first admin, fail-closed Hermes and Mailgun webhooks, no `API_RATE_LIMIT_MAX`
+override, and 503 when a password-reset email cannot be sent. Only
+production-specific tuning differs (Sentry trace sample rate, the default VAPID
+key path, and serving the built SPA without `SERVE_BUILT_SPA=true`).
+
 ## Pre-Deployment Security Checklist
 
 ### ✅ Environment Variables Setup

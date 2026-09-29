@@ -18,7 +18,9 @@ export function toClientErrorBody(error, { traceId } = {}) {
     };
   }
   const isServerError = statusCode >= 500;
-  const isDev = process.env.NODE_ENV !== 'production';
+  // Only the local environments (development, test) may see 5xx details;
+  // staging and production get the generic body. Read at call time.
+  const isDev = ['development', 'test'].includes(process.env.NODE_ENV || 'development');
   const exposeMessage = error.expose === true && typeof error.message === 'string';
 
   return {

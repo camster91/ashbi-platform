@@ -57,7 +57,7 @@ export function initHermesBridge(fastify) {
       const signature = request.headers['x-hermes-signature'];
 
       if (!env.hermesWebhookSecret) {
-        if (env.isProduction) {
+        if (env.isDeployed) {
           return reply.status(503).send({ error: 'Hermes webhook secret not configured' });
         }
       } else {

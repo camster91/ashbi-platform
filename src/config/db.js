@@ -1,3 +1,4 @@
+// @ts-check
 // Prisma Client with Soft Delete + Autosave Interception
 // Import: import prisma from '../config/db.js'
 
@@ -19,7 +20,7 @@ import { databasePoolConfig } from './db-pool.js';
 import { withSoftDelete } from '../services/soft-delete.service.js';
 
 // Prisma 7: lazy proxy to defer PrismaClient construction
-const globalForPrisma = /** @type {{ ashbiRawPrisma?: PrismaClient }} */ (globalThis);
+const globalForPrisma = /** @type {{ ashbiRawPrisma?: InstanceType<typeof PrismaClient> }} */ (globalThis);
 const buildBase = () => new PrismaClient({
   // Explicit, env-tunable pool size and timeouts (DATABASE_POOL_*).
   adapter: new PrismaPg(databasePoolConfig()),

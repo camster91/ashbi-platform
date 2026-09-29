@@ -590,7 +590,6 @@
   "POST /api/bot/project",
   "POST /api/bot/project/:id/note",
   "POST /api/bot/reports/generate/:clientId",
-  "POST /api/bot/system/restart-gateway",
   "POST /api/bot/task",
   "POST /api/bot/tasks/bulk",
   "POST /api/bot/thread",
