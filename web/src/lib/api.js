@@ -66,19 +66,25 @@ function requestReauth(endpoint) {
 }
 
 function dispatchApiError(error, endpoint, retry) {
-  console.group('%cAPI Error', 'color: #ef4444; font-weight: bold;');
-  console.error('Endpoint:', endpoint);
-  console.error('Error:', error.message);
-  if (error.status) {
-    console.error('Status:', error.status);
+  // Response bodies and stack traces are for local debugging only; production
+  // builds log a single line without them.
+  if (import.meta.env.DEV) {
+    console.group('%cAPI Error', 'color: #ef4444; font-weight: bold;');
+    console.error('Endpoint:', endpoint);
+    console.error('Error:', error.message);
+    if (error.status) {
+      console.error('Status:', error.status);
+    }
+    if (error.data) {
+      console.error('Response data:', error.data);
+    }
+    if (error.stack) {
+      console.error('Stack trace:', error.stack);
+    }
+    console.groupEnd();
+  } else {
+    console.error(`API error${error.status ? ` ${error.status}` : ''}: ${endpoint}`);
   }
-  if (error.data) {
-    console.error('Response data:', error.data);
-  }
-  if (error.stack) {
-    console.error('Stack trace:', error.stack);
-  }
-  console.groupEnd();
 
   // Dispatch to global callback if set
   if (onApiError) {

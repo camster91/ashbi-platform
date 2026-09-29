@@ -1,3 +1,4 @@
+// @ts-check
 // Which reverse proxies Fastify trusts for the client address (#417 security
 // review, docs/deployment-and-rollback.md "Client IP behind a proxy").
 //

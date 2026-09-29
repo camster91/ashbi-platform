@@ -1,3 +1,4 @@
+// @ts-check
 // Pino redaction for credential-bearing fields (#416: service credentials are
 // never exposed in ordinary logs). Fastify's default request serializer does
 // not log headers, so these paths are defense in depth for code that logs a

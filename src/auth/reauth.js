@@ -83,7 +83,7 @@ export function verifyReauthToken(token, { nowMs = Date.now() } = {}) {
   return claims;
 }
 
-export function reauthCookieOptions({ isProduction = env.isProduction } = {}) {
+export function reauthCookieOptions({ isProduction = env.isDeployed } = {}) {
   return {
     path: '/',
     httpOnly: true,
@@ -94,7 +94,7 @@ export function reauthCookieOptions({ isProduction = env.isProduction } = {}) {
 }
 
 /** Options for clearing the cookie; must match name, path, secure and sameSite. */
-export function clearReauthCookieOptions({ isProduction = env.isProduction } = {}) {
+export function clearReauthCookieOptions({ isProduction = env.isDeployed } = {}) {
   const { maxAge: _maxAge, ...options } = reauthCookieOptions({ isProduction });
   return options;
 }

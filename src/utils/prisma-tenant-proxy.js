@@ -1,3 +1,4 @@
+// @ts-check
 import logger from './logger.js';
 import { withSoftDelete } from '../services/soft-delete.service.js';
 
@@ -247,6 +248,7 @@ export const tenantModelPolicy = Object.freeze({
  *   → { project: { client: { organizationId: 'org_abc' } } }
  */
 function buildTenantWhere(path, organizationId) {
+  /** @type {Record<string, any>} */
   let result = { organizationId };
   for (let i = path.length - 1; i >= 0; i--) {
     result = { [path[i]]: result };
@@ -295,7 +297,7 @@ export function createScopedPrisma(prisma, organizationId) {
       // Not a Prisma model or non-object → return as-is (still has soft-delete)
       if (typeof model !== 'object' || model === null) return model;
 
-      const modelKey = modelName.toLowerCase();
+      const modelKey = String(modelName).toLowerCase();
       const isDirect = DIRECT_SCOPED_MODELS.has(modelKey);
       const tenantPath = TENANT_PATHS[modelKey];
 
@@ -313,6 +315,9 @@ export function createScopedPrisma(prisma, organizationId) {
 
       return new Proxy(model, {
         get(modelTarget, methodName) {
+          // Prisma delegate methods are string keys; pass symbol lookups
+          // (inspection, iteration, Promise checks) straight through.
+          if (typeof methodName !== 'string') return modelTarget[methodName];
           const method = modelTarget[methodName];
           if (typeof method !== 'function') return method;
           if (APPEND_ONLY_MODELS.has(modelKey) && APPEND_ONLY_BLOCKED_METHODS.has(methodName)) {
