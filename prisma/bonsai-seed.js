@@ -8,6 +8,7 @@
  */
 
 import { PrismaClient } from '@prisma/client';
+import { bonsaiInvoiceAmount } from './bonsai-invoice-amount.js';
 
 const prisma = new PrismaClient();
 
@@ -237,13 +238,14 @@ async function main() {
       continue;
     }
 
-    const amount = inv.amountUsd || (inv.amountCad * 0.80);
     const issueDate = new Date(inv.issueDate);
     const dueDate = inv.dueDate ? new Date(inv.dueDate) : undefined;
     const paidAt = inv.paidDate ? new Date(inv.paidDate) : null;
     const sentAt = inv.status !== 'DRAFT' ? issueDate : null;
 
     try {
+      // Stored in the source currency (the column defaults to CAD otherwise).
+      const { currency, amount } = bonsaiInvoiceAmount(inv);
       // Invoice numbers are unique per organization (not globally), so match
       // on the client's invoices before creating.
       const existing = await prisma.invoice.findFirst({ where: { invoiceNumber: inv.number, clientId } });
@@ -257,6 +259,7 @@ async function main() {
           subtotal: amount,
           tax: 0,
           total: amount,
+          currency,
           taxRate: 0,
           taxType: 'NONE',
           notes: inv.notes || null,
