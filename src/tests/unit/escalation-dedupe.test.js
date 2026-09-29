@@ -214,3 +214,18 @@ test('a failed notification fan-out rolls the claim back so a retry still sends'
   assert.equal(prisma.rows[0].lastEscalationLevel, 2);
   assert.equal(prisma.rows[0].slaBreached, true);
 });
+
+test('with no active admin the admin levels stay unclaimed until one is active', async () => {
+  const prisma = fakePrisma([{ id: 't1', subject: 'Late', lastActivityAt: at(0) }]);
+  const findAdmins = prisma.user.findMany;
+  prisma.user.findMany = async () => [];
+
+  await checkThreadEscalation('t1', { prisma, slaDefaults: SLA, now: at(25) });
+  assert.equal(prisma.rows[0].lastEscalationLevel, 0, 'ESCALATION not claimed with no recipient');
+  assert.equal(prisma.rows[0].slaBreached, false, 'SLA breach not claimed with no recipient');
+  assert.deepEqual(prisma.notifications, []);
+
+  prisma.user.findMany = findAdmins;
+  await checkThreadEscalation('t1', { prisma, slaDefaults: SLA, now: at(25.25) });
+  assert.deepEqual(prisma.notifications.map((n) => n.type), ['ESCALATION', 'ESCALATION', 'SLA_BREACH', 'SLA_BREACH']);
+});

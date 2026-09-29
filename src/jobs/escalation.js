@@ -77,6 +77,9 @@ export async function checkThreadEscalation(threadId, {
   }
   // Read outside the transaction; only the claims and the fan-out must be atomic.
   const admins = wantsEscalation || wantsBreach ? await activeAdmins(prisma) : [];
+  // With no one to tell (no active admin right now), leave the admin levels
+  // unclaimed so a later sweep alerts the first admin who becomes active.
+  const canNotifyAdmins = admins.length > 0;
 
   // Claims and notifications commit together: if the fan-out fails (or the
   // worker dies) the claims roll back, so the next attempt sends the alert
@@ -93,7 +96,7 @@ export async function checkThreadEscalation(threadId, {
       });
     }
 
-    if (wantsEscalation && await claimEscalationLevel(tx, thread, ESCALATION_LEVELS.ESCALATION, now)) {
+    if (wantsEscalation && canNotifyAdmins && await claimEscalationLevel(tx, thread, ESCALATION_LEVELS.ESCALATION, now)) {
       for (const admin of admins) {
         pending.push({
           userId: admin.id,
@@ -105,7 +108,7 @@ export async function checkThreadEscalation(threadId, {
       }
     }
 
-    if (wantsBreach) {
+    if (wantsBreach && canNotifyAdmins) {
       // slaBreached is the once-only marker for the breach notification.
       const claimed = await tx.thread.updateMany({
         where: { id: thread.id, slaBreached: false },
