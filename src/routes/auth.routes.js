@@ -457,8 +457,11 @@ export default async function authRoutes(fastify) {
     }
 
     // Check if user already exists
-    const existingUser = await request.prisma.user.findUnique({
-      where: { email }
+    // Accounts created before addresses were normalised may be stored in
+    // mixed case, so any case variant counts as an existing account.
+    const existingUser = await request.prisma.user.findFirst({
+      where: { email: { equals: email, mode: 'insensitive' } },
+      select: { id: true },
     });
 
     if (existingUser) {
@@ -535,15 +538,16 @@ export default async function authRoutes(fastify) {
     onSend: clientLoginAccountThrottle.onSend,
   }, async (request, reply) => {
     const { password } = request.body;
-    // Stored addresses are lower-cased at signup; match how forgot-password
-    // and signup normalise the address.
-    const email = request.body.email.trim().toLowerCase();
+    // New accounts are stored lower-cased, but accounts created before that
+    // may be in mixed case (the invited address as typed), so match any case.
+    const email = request.body.email.trim();
 
     const user = await request.prisma.user.findFirst({
       where: {
-        email,
+        email: { equals: email, mode: 'insensitive' },
         role: 'CLIENT'
-      }
+      },
+      orderBy: { createdAt: 'asc' },
     });
 
     if (!user) {
@@ -587,8 +591,10 @@ export default async function authRoutes(fastify) {
     try {
       const { email } = request.body;
 
-      const user = await request.prisma.user.findUnique({
-        where: { email: email.toLowerCase().trim() }
+      // Any case variant: older accounts may be stored in mixed case.
+      const user = await request.prisma.user.findFirst({
+        where: { email: { equals: email.trim(), mode: 'insensitive' } },
+        orderBy: { createdAt: 'asc' },
       });
 
       // Always return success (don't leak if email exists)

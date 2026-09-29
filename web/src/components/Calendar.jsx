@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import Modal from './Modal';
+import { QueryErrorState } from './QueryErrorState';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
@@ -19,7 +20,7 @@ export default function Calendar({ projectId }) {
   const monthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
 
   // Fetch events
-  const { data: events = [], isLoading } = useQuery({
+  const { data: events = [], isLoading, isError, error: eventsError, refetch, isFetching } = useQuery({
     queryKey: ['calendar', projectId, monthStart.toISOString()],
     queryFn: () => api.getCalendarEvents({
       startDate: monthStart.toISOString(),
@@ -90,6 +91,10 @@ export default function Calendar({ projectId }) {
     const today = new Date();
     return date.toDateString() === today.toDateString();
   };
+
+  if (isError) {
+    return <QueryErrorState error={eventsError} message="Calendar events could not be loaded" onRetry={refetch} isRetrying={isFetching} />;
+  }
 
   return (
     <div className="bg-card rounded-lg border">

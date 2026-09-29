@@ -14,14 +14,14 @@ export default function CreateProjectModal({ isOpen, onClose, preselectedClientI
   const [error, setError] = useState('');
 
   // Fetch clients for dropdown
-  const { data: clients } = useQuery({
+  const { data: clients, isError: clientsFailed, refetch: refetchClients } = useQuery({
     queryKey: ['clients'],
     queryFn: () => api.getClients(),
     enabled: isOpen,
   });
 
   // Fetch team members for default owner
-  const { data: team } = useQuery({
+  const { data: team, isError: teamFailed, refetch: refetchTeam } = useQuery({
     queryKey: ['team'],
     queryFn: () => api.getTeam(),
     enabled: isOpen,
@@ -90,6 +90,14 @@ export default function CreateProjectModal({ isOpen, onClose, preselectedClientI
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Create New Project">
       <form onSubmit={handleSubmit}>
+        {(clientsFailed || teamFailed) && (
+          <div role="alert" className="mb-4 p-3 text-sm rounded-lg border border-border bg-muted text-foreground">
+            {clientsFailed ? 'Clients' : 'Team members'} could not be loaded, so the list below may be empty.{' '}
+            <button type="button" onClick={() => { if (clientsFailed) refetchClients(); if (teamFailed) refetchTeam(); }} className="underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded">
+              Try again
+            </button>
+          </div>
+        )}
         {error && (
           <div id="create-project-error" role="alert" className="mb-4 p-3 text-sm text-red-600 bg-red-50 rounded-lg">
             {error}

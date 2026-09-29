@@ -72,6 +72,16 @@ describe('TaskPage content autosave', () => {
     expect(body.content[1]).toMatchObject({ type: 'paragraph', content: 'Push the serif much further' });
   });
 
+  it('clearing the title restores the saved title instead of sending an empty one', async () => {
+    renderTask();
+    const title = await screen.findByLabelText('Task title');
+    fireEvent.change(title, { target: { value: '   ' } });
+    fireEvent.blur(title);
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 50)); });
+    expect(updateTaskContent).not.toHaveBeenCalledWith('task-1', expect.objectContaining({ title: expect.anything() }));
+    expect(title).toHaveValue('Logo concepts round 2');
+  });
+
   it('title edits send only the title, never the block content', async () => {
     renderTask();
     const title = await screen.findByLabelText('Task title');

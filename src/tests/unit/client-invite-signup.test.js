@@ -39,8 +39,12 @@ async function buildApp(t, { invitation, contacts = [], existingUser = null, fai
       },
     },
     user: {
-      findUnique: async () => existingUser,
-      findFirst: async ({ where }) => db.users.find((u) => u.email === where.email && u.role === where.role) ?? null,
+      findFirst: async ({ where }) => {
+        // Case-insensitive, as the routes query it.
+        const same = (u) => u.email.toLowerCase() === where.email.equals.toLowerCase();
+        if (!where.role) return existingUser ?? db.users.find(same) ?? null;
+        return db.users.find((u) => same(u) && u.role === where.role) ?? null;
+      },
       create: async ({ data }) => {
         await new Promise((resolve) => setImmediate(resolve));
         const user = { id: `user-${db.users.length + 1}`, sessionVersion: 0, ...data };
@@ -175,5 +179,15 @@ describe('client invitation signup', () => {
     });
     assert.equal(res.statusCode, 200, res.body);
     assert.equal(res.json().user.email, 'olivia@northwind.example');
+  });
+
+  it('client login still finds an older account stored in mixed case', async (t) => {
+    const { app, db } = await buildApp(t, { invitation: invite() });
+    const { hashPassword } = await import('../../auth/password.js');
+    db.users.push({ id: 'legacy', email: 'Jane@Acme.Example', role: 'CLIENT', isActive: true, sessionVersion: 0, clientId: 'client-a', organizationId: 'org-a', password: await hashPassword('Str0ng!Passphrase') });
+    for (const typed of ['Jane@Acme.Example', 'jane@acme.example']) {
+      const res = await app.inject({ method: 'POST', url: '/client/login', payload: { email: typed, password: 'Str0ng!Passphrase' } });
+      assert.notEqual(res.statusCode, 401, `${typed}: ${res.body}`);
+    }
   });
 });

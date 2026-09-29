@@ -71,7 +71,7 @@ export default function NotificationsDropdown() {
   const toast = useToast();
   const navigate = useNavigate();
 
-  const { data: notifications } = useQuery({
+  const { data: notifications, isError: notificationsFailed, refetch: refetchNotifications } = useQuery({
     queryKey: ['notifications'],
     queryFn: () => api.getNotifications({ limit: 10 }).then((r) => r?.notifications ?? []),
     refetchInterval: 30000,
@@ -185,7 +185,14 @@ export default function NotificationsDropdown() {
 
           {/* List */}
           <div className="max-h-96 overflow-y-auto">
-            {notifications?.length === 0 ? (
+            {notificationsFailed && !notifications ? (
+              <div role="alert" className="p-6 text-center text-sm text-muted-foreground">
+                Notifications could not be loaded.{' '}
+                <button type="button" onClick={() => refetchNotifications()} className="underline text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded">
+                  Try again
+                </button>
+              </div>
+            ) : notifications?.length === 0 ? (
               <div className="p-6 text-center text-muted-foreground text-sm">
                 <Bell className="w-8 h-8 mx-auto mb-2 opacity-30" />
                 No notifications
