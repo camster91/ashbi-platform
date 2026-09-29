@@ -21,6 +21,27 @@ export function timeEntryLock(entry) {
   return null;
 }
 
+/**
+ * `where` for an entry that is still editable. Edits and deletes are
+ * conditional on it, so an approval or invoice that commits after the lock
+ * check still wins (the write matches nothing and the caller gets 409).
+ * @param {string} id
+ */
+export function unlockedTimeEntryWhere(id) {
+  return { id, deletedAt: null, invoiced: false, invoiceId: null, reviewStatus: { not: 'APPROVED' } };
+}
+
+/** Answer a conditional write that matched nothing: 409 with the lock, or 404. */
+async function lockedWriteReply(request, reply, id) {
+  const current = await request.prisma.timeEntry.findUnique({ where: { id } });
+  if (!current) return reply.status(404).send({ error: 'Time entry not found' });
+  return reply.status(409).send(timeEntryLock(current) ?? { code: 'TIME_ENTRY_CHANGED', error: 'This time entry changed. Reload and try again' });
+}
+
+// Rows read per query when building a weekly timesheet (soft-deletable
+// reads are capped at 100 rows each).
+const TIMESHEET_PAGE = 100;
+
 export default async function timeRoutes(fastify) {
   // Get time entries for a project
   fastify.get('/projects/:projectId/time-entries', {
@@ -219,16 +240,16 @@ export default async function timeRoutes(fastify) {
     if (billable !== undefined) data.billable = billable;
     if (taskId !== undefined) data.taskId = taskId;
 
-    const entry = await request.prisma.timeEntry.update({
+    const { count } = await request.prisma.timeEntry.updateMany({ where: unlockedTimeEntryWhere(id), data });
+    if (count === 0) return lockedWriteReply(request, reply, id);
+
+    return request.prisma.timeEntry.findUnique({
       where: { id },
-      data,
       include: {
         user: { select: { id: true, name: true } },
         task: { select: { id: true, title: true } }
       }
     });
-
-    return entry;
   });
 
   // Delete time entry
@@ -251,7 +272,8 @@ export default async function timeRoutes(fastify) {
     const deleteLock = timeEntryLock(existing);
     if (deleteLock) return reply.status(409).send(deleteLock);
 
-    await request.prisma.timeEntry.delete({ where: { id } });
+    const { count } = await request.prisma.timeEntry.deleteMany({ where: unlockedTimeEntryWhere(id) });
+    if (count === 0) return lockedWriteReply(request, reply, id);
 
     return { success: true };
   });
@@ -344,15 +366,24 @@ export default async function timeRoutes(fastify) {
     const where = { date: { gte: start, lt: end } };
     if (request.user.role !== 'ADMIN') where.userId = request.user.id;
 
-    const entries = await request.prisma.timeEntry.findMany({
-      where,
-      include: {
-        user: { select: { id: true, name: true, hourlyRate: true } },
-        project: { select: { id: true, name: true } },
-        task: { select: { id: true, title: true } }
-      },
-      orderBy: [{ userId: 'asc' }, { date: 'asc' }]
-    });
+    // Read the whole week in pages: a single read stops at 100 rows, which
+    // would understate the totals.
+    const entries = [];
+    for (;;) {
+      const page = await request.prisma.timeEntry.findMany({
+        where,
+        include: {
+          user: { select: { id: true, name: true, hourlyRate: true } },
+          project: { select: { id: true, name: true } },
+          task: { select: { id: true, title: true } }
+        },
+        orderBy: [{ userId: 'asc' }, { date: 'asc' }, { id: 'asc' }],
+        skip: entries.length,
+        take: TIMESHEET_PAGE,
+      });
+      entries.push(...page);
+      if (page.length < TIMESHEET_PAGE) break;
+    }
 
     // Group by user, then by day
     const byUser = {};
