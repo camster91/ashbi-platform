@@ -159,7 +159,7 @@ export default async function timeRoutes(fastify) {
     const entry = await request.prisma.timeEntry.create({
       data: {
         description,
-        duration: parseInt(duration),
+        duration: Math.round(duration),
         date: date ? new Date(date) : new Date(),
         billable,
         taskId,
@@ -213,7 +213,7 @@ export default async function timeRoutes(fastify) {
     if (editLock) return reply.status(409).send(editLock);
 
     const data = {};
-    if (duration !== undefined) data.duration = parseInt(duration);
+    if (duration !== undefined) data.duration = Math.round(duration);
     if (description !== undefined) data.description = description;
     if (date !== undefined) data.date = new Date(date);
     if (billable !== undefined) data.billable = billable;

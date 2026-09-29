@@ -144,3 +144,34 @@ test('manual durations that round to zero minutes are refused', () => {
   assert.equal(timeEntryCreateSchema.safeParse({ projectId: 'p1', duration: 0.5 }).success, true, 'rounds to 1');
   assert.equal(timeEntryCreateSchema.safeParse({ projectId: 'p1', duration: 90 }).success, true);
 });
+
+test('every time-entry write stores the same rounded minutes (never a truncated 0)', async () => {
+  const created = [];
+  const updated = [];
+  const app = Fastify();
+  app.decorate('authenticate', async (request) => { request.user = { id: 'u1', role: 'TEAM' }; });
+  app.addHook('onRequest', async (request) => {
+    request.prisma = {
+      timeEntry: {
+        create: async ({ data }) => { created.push(data); return { id: 'e1', ...data }; },
+        findUnique: async ({ where }) => ({ id: where.id, userId: 'u1', reviewStatus: 'PENDING', invoiced: false }),
+        update: async ({ data }) => { updated.push(data); return { id: 'e1', ...data }; },
+      },
+      activity: { create: async () => ({}) },
+    };
+  });
+  await app.register(timeRoutes, { prefix: '/api' });
+  try {
+    const projectId = 'cjld2cjxh0000qzrmn831i7rn';
+    const tooSmall = await app.inject({ method: 'POST', url: '/api/time-entries', payload: { projectId, duration: 0.4 } });
+    assert.equal(tooSmall.statusCode, 400);
+    const half = await app.inject({ method: 'POST', url: '/api/time-entries', payload: { projectId, duration: 0.6 } });
+    assert.equal(half.statusCode, 201, half.body);
+    const edit = await app.inject({ method: 'PUT', url: '/api/time-entries/e1', payload: { duration: 29.6 } });
+    assert.equal(edit.statusCode, 200, edit.body);
+    assert.deepEqual(created.map((data) => data.duration), [1], 'parseInt would have stored 0');
+    assert.deepEqual(updated.map((data) => data.duration), [30]);
+  } finally {
+    await app.close();
+  }
+});
