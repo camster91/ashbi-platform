@@ -26,6 +26,21 @@ BEGIN;
 ALTER TABLE "chat_messages" ADD COLUMN "visibility" TEXT NOT NULL DEFAULT 'INTERNAL';
 ALTER TABLE "chat_messages" ADD COLUMN "removedAt" TIMESTAMP(3);
 
+-- Replies are one level deep: re-parent any reply to a reply onto the first
+-- message of its thread (depth-guarded so a malformed cycle cannot loop).
+WITH RECURSIVE chain AS (
+  SELECT "id", "parentId" AS "rootId", 1 AS depth
+  FROM "chat_messages" WHERE "parentId" IS NOT NULL
+  UNION ALL
+  SELECT c."id", p."parentId", c.depth + 1
+  FROM chain c JOIN "chat_messages" p ON p."id" = c."rootId"
+  WHERE p."parentId" IS NOT NULL AND c.depth < 50
+)
+UPDATE "chat_messages" AS m
+SET "parentId" = c."rootId"
+FROM chain c JOIN "chat_messages" r ON r."id" = c."rootId" AND r."parentId" IS NULL
+WHERE m."id" = c."id" AND m."parentId" IS DISTINCT FROM c."rootId";
+
 -- Backfill: the portal conversation the clients themselves wrote, i.e.
 -- messages by a CLIENT-role user on a project of that user's own client. The
 -- current role alone is not enough: an account changed to CLIENT (possibly

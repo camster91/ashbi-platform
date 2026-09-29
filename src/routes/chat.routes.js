@@ -37,8 +37,11 @@ function presentMessage(message) {
 }
 
 export default async function chatRoutes(fastify) {
-  // Top-level messages for a project (newest page, returned oldest-first),
-  // each with its replies nested.
+  // Threads for a project: the top-level messages whose thread (the message
+  // or one of its replies) was most recently active, returned oldest-first by
+  // that activity, each with all its replies nested (replies are one level).
+  // Paging by activity keeps a thread with a new reply visible even when its
+  // first message is older than the page.
   fastify.get('/projects/:projectId/messages', {
     onRequest: [fastify.authenticate],
     preHandler: validateQuery(chatMessageListQuerySchema),
@@ -46,17 +49,42 @@ export default async function chatRoutes(fastify) {
     const { projectId } = request.params;
     const { limit, before, after } = request.query;
 
-    const where = { projectId, parentId: null };
-
-    // Cursor-based pagination
+    const activityWhere = { projectId };
     if (before) {
-      where.createdAt = { lt: new Date(before) };
+      activityWhere.createdAt = { lt: new Date(before) };
     } else if (after) {
-      where.createdAt = { gt: new Date(after) };
+      activityWhere.createdAt = { gt: new Date(after) };
     }
 
-    const messages = await request.prisma.chatMessage.findMany({
-      where,
+    // Walk the newest messages in batches until `limit` distinct threads are
+    // found (several recent replies may share one thread), with a
+    // (createdAt, id) cursor so equal timestamps are never skipped.
+    const lastActivity = new Map();
+    const batchSize = Math.min(limit * 4, 200);
+    let cursor = null;
+    for (let round = 0; round < 25 && lastActivity.size < limit; round += 1) {
+      const where = cursor
+        ? { AND: [activityWhere, { OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { lt: cursor.id } }] }] }
+        : activityWhere;
+      const batch = await request.prisma.chatMessage.findMany({
+        where,
+        select: { id: true, parentId: true, createdAt: true },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: batchSize,
+      });
+      for (const row of batch) {
+        const rootId = row.parentId ?? row.id;
+        if (lastActivity.has(rootId)) continue;
+        if (lastActivity.size >= limit) break;
+        lastActivity.set(rootId, row.createdAt);
+      }
+      if (batch.length < batchSize) break;
+      cursor = batch[batch.length - 1];
+    }
+    if (lastActivity.size === 0) return [];
+
+    const threads = await request.prisma.chatMessage.findMany({
+      where: { projectId, parentId: null, id: { in: [...lastActivity.keys()] } },
       include: {
         author: { select: { id: true, name: true, email: true } },
         reactions: {
@@ -70,11 +98,11 @@ export default async function chatRoutes(fastify) {
           orderBy: { createdAt: 'asc' }
         }
       },
-      orderBy: { createdAt: 'desc' },
-      take: limit
     });
 
-    return messages.reverse().map(presentMessage);
+    return threads
+      .sort((a, b) => new Date(lastActivity.get(a.id)) - new Date(lastActivity.get(b.id)))
+      .map(presentMessage);
   });
 
   // Send a chat message
@@ -85,6 +113,7 @@ export default async function chatRoutes(fastify) {
     const { projectId } = request.params;
     const { content, type = 'TEXT', metadata, parentId } = request.body;
     let visibility = request.body.visibility ?? 'INTERNAL';
+    let threadParentId = null;
 
     if (!content?.trim()) {
       return reply.status(400).send({ error: 'Message content is required' });
@@ -94,12 +123,18 @@ export default async function chatRoutes(fastify) {
     if (parentId) {
       const parent = await request.prisma.chatMessage.findFirst({
         where: { id: parentId, projectId },
-        select: { id: true, visibility: true },
+        select: { id: true, visibility: true, parentId: true },
       });
       if (!parent) return reply.status(409).send({ error: 'Reply parent must belong to the same project' });
+      // Replies are one level deep: a reply to a reply joins its thread.
+      const root = parent.parentId
+        ? await request.prisma.chatMessage.findFirst({ where: { id: parent.parentId, projectId }, select: { id: true, visibility: true } })
+        : parent;
+      if (!root) return reply.status(409).send({ error: 'Reply parent must belong to the same project' });
+      threadParentId = root.id;
       // A reply to internal chat can never leak to the client. A reply in the
       // client conversation keeps the requested visibility (never promoted).
-      if ((parent.visibility ?? 'INTERNAL') !== 'CLIENT') visibility = 'INTERNAL';
+      if ((parent.visibility ?? 'INTERNAL') !== 'CLIENT' || (root.visibility ?? 'INTERNAL') !== 'CLIENT') visibility = 'INTERNAL';
     }
 
     // Extract mentions from content (@username)
@@ -116,7 +151,7 @@ export default async function chatRoutes(fastify) {
         type,
         visibility,
         metadata: metadata ? JSON.stringify(metadata) : null,
-        parentId,
+        parentId: threadParentId,
         projectId,
         authorId: request.user.id
       },
