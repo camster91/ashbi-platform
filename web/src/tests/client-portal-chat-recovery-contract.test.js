@@ -11,7 +11,9 @@ describe('client portal chat recovery', () => {
     expect(source).toContain('setChatInput(\'\');');
     expect(source).toContain('setInput(\'\');');
     expect(source).toContain("role=\"alert\"");
-    expect(source).toContain('disabled={!value.trim() || sending}');
+    // Send needs text or an uploaded file (docs/chat-media.md), never while sending.
+    expect(source).toContain('disabled={!canSendPortalMessage(value, attachments) || sending}');
+    expect(source).toContain("return Boolean(text.trim()) || (attachments?.readyIds.length ?? 0) > 0;");
   });
 
   it('does not present a failed chat history request as an empty conversation', () => {

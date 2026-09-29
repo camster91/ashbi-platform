@@ -4,7 +4,7 @@ import ConfirmDialog from '../../components/ConfirmDialog';
 import { Alert, Button, Card, LoadingState } from '../../components/ui';
 import SlowNotice, { SLOW_WRITE_INLINE as slowWrite } from '../../components/ui/SlowNotice';
 import { cn } from '../../lib/utils';
-import { portalFetch, downloadPortalDocument, deletePortalDocument, fmtDate, fmtRelative, projectStatusLabel, projectStatusColor, priorityLabel, priorityColor, Icons, useProjectChat, PortalChatComposer, PortalProgress, PortalDocumentList, PortalUploadZone, StatusBadge, portalFieldStyles, pageTitleClass, sectionTitleClass, labelClass } from './shared';
+import { portalFetch, downloadPortalDocument, deletePortalDocument, fmtDate, fmtRelative, projectStatusLabel, projectStatusColor, priorityLabel, priorityColor, Icons, useProjectChat, PortalChatComposer, PortalMessageAttachments, canSendPortalMessage, PortalProgress, PortalDocumentList, PortalUploadZone, StatusBadge, portalFieldStyles, pageTitleClass, sectionTitleClass, labelClass } from './shared';
 
 // ── Project Detail (Kanban + Chat + Documents) ────────────────────────────────
 export default function ProjectDetail({ projectId, token, onBack }) {
@@ -27,7 +27,7 @@ export default function ProjectDetail({ projectId, token, onBack }) {
   const [submittingWorkflow, setSubmittingWorkflow] = useState(false);
   const chatEndRef = useRef(null);
   const fileInputRef = useRef(null);
-  const { messages, connected, sendMessage, sendError, sending, messagesError, loadingMessages, reloadMessages } = useProjectChat(projectId, token);
+  const { messages, connected, sendMessage, sendError, sending, messagesError, loadingMessages, reloadMessages, attachments } = useProjectChat(projectId, token);
 
   useEffect(() => {
     async function load() {
@@ -60,7 +60,7 @@ export default function ProjectDetail({ projectId, token, onBack }) {
 
   async function handleSendMessage(e) {
     e.preventDefault();
-    if (!chatInput.trim()) return;
+    if (!canSendPortalMessage(chatInput, attachments)) return;
     try {
       await sendMessage(chatInput);
       setChatInput('');
@@ -358,12 +358,13 @@ export default function ProjectDetail({ projectId, token, onBack }) {
                     </span>
                   </div>
                   <p className="text-sm leading-normal text-foreground">{msg.content}</p>
+                  <PortalMessageAttachments attachments={msg.attachments} />
                 </Card>
               ))
             )}
             <div ref={chatEndRef} />
           </div>
-          <PortalChatComposer value={chatInput} onChange={e => setChatInput(e.target.value)} onSubmit={handleSendMessage} connected={connected} sending={sending} sendError={sendError} />
+          <PortalChatComposer value={chatInput} onChange={e => setChatInput(e.target.value)} onSubmit={handleSendMessage} connected={connected} sending={sending} sendError={sendError} attachments={attachments} />
         </div>
       )}
 

@@ -1330,9 +1330,18 @@
       },
       "ChatMessageCreate": {
         "properties": {
+          "attachmentIds": {
+            "items": {
+              "maxLength": 50,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 10,
+            "type": "array"
+          },
           "content": {
+            "default": "",
             "maxLength": 50000,
-            "minLength": 1,
             "type": "string"
           },
           "metadata": {
@@ -1363,9 +1372,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "content"
-        ],
         "type": "object"
       },
       "ChatMessageUpdate": {
@@ -1467,9 +1473,18 @@
       },
       "ClientPortalMessage": {
         "properties": {
+          "attachmentIds": {
+            "items": {
+              "maxLength": 50,
+              "minLength": 1,
+              "type": "string"
+            },
+            "maxItems": 10,
+            "type": "array"
+          },
           "content": {
+            "default": "",
             "maxLength": 10000,
-            "minLength": 1,
             "type": "string"
           },
           "type": {
@@ -1482,9 +1497,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "content"
-        ],
         "type": "object"
       },
       "ClientPortalRevisionResponse": {
@@ -12255,6 +12267,118 @@
         "x-tenancy": "scoped"
       }
     },
+    "/api/chat/projects/{projectId}/uploads": {
+      "post": {
+        "operationId": "post_api_chat_projects_projectId_uploads",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/chat/projects/:projectId/uploads",
+        "tags": [
+          "chat"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/chat/projects/{projectId}/uploads/{attachmentId}": {
+      "delete": {
+        "operationId": "delete_api_chat_projects_projectId_uploads_attachmentId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "projectId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "attachmentId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "DELETE /api/chat/projects/:projectId/uploads/:attachmentId",
+        "tags": [
+          "chat"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
     "/api/client-acquisition/config": {
       "get": {
         "operationId": "get_api_client_acquisition_config",
@@ -12386,6 +12510,55 @@
           "client-acquisition"
         ],
         "x-access": "public",
+        "x-tenancy": "exempt"
+      }
+    },
+    "/api/client-portal/chat-attachments/{attachmentId}": {
+      "get": {
+        "operationId": "get_api_client_portal_chat_attachments_attachmentId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "attachmentId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "clientPortalCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/client-portal/chat-attachments/:attachmentId",
+        "tags": [
+          "client-portal"
+        ],
+        "x-access": "client-portal",
         "x-tenancy": "exempt"
       }
     },
@@ -12792,6 +12965,112 @@
           }
         ],
         "summary": "GET /api/client-portal/projects/:id",
+        "tags": [
+          "client-portal"
+        ],
+        "x-access": "client-portal",
+        "x-tenancy": "exempt"
+      }
+    },
+    "/api/client-portal/projects/{id}/chat-uploads": {
+      "post": {
+        "operationId": "post_api_client_portal_projects_id_chat_uploads",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "clientPortalCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/client-portal/projects/:id/chat-uploads",
+        "tags": [
+          "client-portal"
+        ],
+        "x-access": "client-portal",
+        "x-tenancy": "exempt"
+      }
+    },
+    "/api/client-portal/projects/{id}/chat-uploads/{attachmentId}": {
+      "delete": {
+        "operationId": "delete_api_client_portal_projects_id_chat_uploads_attachmentId",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "attachmentId",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "clientPortalCookie": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "DELETE /api/client-portal/projects/:id/chat-uploads/:attachmentId",
         "tags": [
           "client-portal"
         ],

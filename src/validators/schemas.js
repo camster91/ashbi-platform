@@ -380,9 +380,14 @@ export const recalculateHealthSchema = z.object({
   clientId: cuidId.optional(),
 });
 export const clientPortalMessageSchema = z.object({
-  content: z.string().min(1).max(10000),
+  content: z.string().max(10000).default(''),
   type: z.enum(['TEXT', 'IMAGE', 'FILE']).optional().default('TEXT'),
-});
+  // Pending uploads from POST /projects/:id/chat-uploads (docs/chat-media.md).
+  attachmentIds: z.array(z.string().min(1).max(50)).max(10).optional(),
+}).refine(
+  (value) => Boolean(value.content?.trim()) || (value.attachmentIds?.length ?? 0) > 0,
+  { message: 'A message needs text or at least one attachment', path: ['content'] },
+);
 
 export const requestAccessSchema = z.object({
   email: email,
@@ -1501,13 +1506,21 @@ export const calendarRsvpSchema = z.object({
 // always takes its parent's visibility.
 export const CHAT_VISIBILITIES = /** @type {const} */ (['INTERNAL', 'CLIENT']);
 
+// Chat media (docs/chat-media.md): a message lists the pending uploads it
+// sends (at most 10). Text is optional when files are attached.
+export const CHAT_MESSAGE_MAX_ATTACHMENTS = 10;
+const chatAttachmentIds = z.array(cuidId).max(CHAT_MESSAGE_MAX_ATTACHMENTS);
+const hasTextOrAttachments = (value) => Boolean(value.content?.trim()) || (value.attachmentIds?.length ?? 0) > 0;
+const textOrAttachmentsMessage = { message: 'A message needs text or at least one attachment', path: ['content'] };
+
 export const chatMessageCreateSchema = z.object({
-  content: z.string().min(1).max(50_000),
+  content: z.string().max(50_000).default(''),
   type: z.enum(['TEXT', 'IMAGE', 'FILE', 'SYSTEM']).default('TEXT'),
   metadata: z.record(z.string(), z.unknown()).optional(),
   parentId: cuidId.optional(),
   visibility: z.enum(CHAT_VISIBILITIES).default('INTERNAL'),
-});
+  attachmentIds: chatAttachmentIds.optional(),
+}).refine(hasTextOrAttachments, textOrAttachmentsMessage);
 
 // Chat history pages: non-numeric or non-positive limits are rejected, large
 // ones are capped so one request cannot pull a project's whole history.

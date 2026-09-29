@@ -104,7 +104,10 @@ describe('client portal chat only exposes client-visible messages', () => {
       },
       chatMessage,
       task: { count: async () => 0 },
+      // No chat files in this fixture (docs/chat-media.md).
+      attachment: { findMany: async () => [], updateMany: async () => ({ count: 0 }) },
     };
+    prisma.$transaction = async (work) => work(prisma);
     io = recordingIo();
     app.decorate('prisma', prisma);
     app.decorate('io', io);
@@ -222,7 +225,9 @@ describe('staff chat visibility and realtime rooms', () => {
       activity: { create: async () => ({}) },
       user: { findMany: async () => [] },
       notification: { create: async () => ({}) },
+      attachment: { findMany: async () => [], updateMany: async () => ({ count: 0 }) },
     };
+    prisma.$transaction = async (work) => work(prisma);
     app.decorate('prisma', prisma);
     app.addHook('onRequest', async (request) => { request.prisma = prisma; });
     return { app, io, rows, prisma };

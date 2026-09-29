@@ -7,6 +7,10 @@ import { inputStyles } from '../../components/ui/Input';
 import SlowNotice, { SLOW_WRITE_INLINE as slowWrite } from '../../components/ui/SlowNotice';
 import { formatInvoiceMoney } from '../../lib/format';
 import { cn } from '../../lib/utils';
+import { uploadFileWithProgress } from '../../lib/upload';
+import MessageAttachments from '../../components/media/MessageAttachments';
+import { AttachmentToolbar, AttachmentTray, useCaptureDialog, useDropAndPaste } from '../../components/media/ComposerAttachments';
+import { useAttachmentDraft } from '../../components/media/useAttachmentDraft';
 
 export const API = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '') : '';
 export const SOCKET_URL = import.meta.env.PROD ? window.location.origin : 'http://localhost:3000';
@@ -222,6 +226,20 @@ export function useProjectChat(projectId, token) {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const socketRef = useRef(null);
   const sendInFlightRef = useRef(false);
+  // Files for the message being written upload first (pending chat uploads);
+  // the send claims them with the message (docs/chat-media.md). Portal
+  // messages are always client-visible.
+  const attachments = useAttachmentDraft({
+    upload: (file, options) => uploadFileWithProgress(
+      `${API}/api/client-portal/projects/${projectId}/chat-uploads`,
+      file,
+      { ...options, headers: token ? { Authorization: `Bearer ${token}` } : {} },
+    ),
+    discard: (attachmentId) => portalFetch(`/api/client-portal/projects/${projectId}/chat-uploads/${attachmentId}`, token, { method: 'DELETE' }),
+  });
+  const { reset: resetAttachments, clear: clearAttachments } = attachments;
+  const attachmentIdsRef = useRef([]);
+  attachmentIdsRef.current = attachments.readyIds;
 
   const reloadMessages = useCallback(async () => {
     if (!projectId) return;
@@ -243,6 +261,7 @@ export function useProjectChat(projectId, token) {
     if (!projectId) return;
     setMessages([]);
     setMessagesError('');
+    resetAttachments();
 
     const socket = io(SOCKET_URL, {
       auth: token ? { token } : {},
@@ -272,10 +291,11 @@ export function useProjectChat(projectId, token) {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [projectId, token]);
+  }, [projectId, token, resetAttachments]);
 
   const sendMessage = useCallback(async (content) => {
-    if (!content.trim()) return;
+    const attachmentIds = attachmentIdsRef.current;
+    if (!content.trim() && !attachmentIds.length) return;
     if (sendInFlightRef.current) {
       throw new Error('A message is already sending. Wait for it to finish before retrying.');
     }
@@ -286,13 +306,14 @@ export function useProjectChat(projectId, token) {
       const res = await portalFetch(`/api/client-portal/projects/${projectId}/messages`, token, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content })
+        body: JSON.stringify(attachmentIds.length ? { content, attachmentIds } : { content })
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `Message could not be sent (${res.status}).`);
       }
       const msg = await res.json();
+      clearAttachments(attachmentIds);
       setMessages(prev => {
         if (prev.some(m => m.id === msg.id)) return prev;
         return [...prev, msg];
@@ -305,24 +326,55 @@ export function useProjectChat(projectId, token) {
       sendInFlightRef.current = false;
       setSending(false);
     }
-  }, [projectId, reloadMessages, token]);
+  }, [projectId, reloadMessages, token, clearAttachments]);
 
-  return { messages, connected, sendMessage, sendError, sending, messagesError, loadingMessages, reloadMessages };
+  return { messages, connected, sendMessage, sendError, sending, messagesError, loadingMessages, reloadMessages, attachments };
 }
 
-export function PortalChatComposer({ value, onChange, onSubmit, connected, sending, sendError }) {
+/** Whether the portal composer has something to send. */
+export function canSendPortalMessage(text, attachments) {
+  if (attachments?.uploading || attachments?.hasErrors) return false;
+  return Boolean(text.trim()) || (attachments?.readyIds.length ?? 0) > 0;
+}
+
+/** Files of a portal chat message; URLs are the client-portal download route. */
+export function PortalMessageAttachments({ attachments }) {
+  return <MessageAttachments attachments={attachments} resolveUrl={(url) => `${API}${url}`} />;
+}
+
+function PortalComposerAttachments({ attachments, sending, children }) {
+  const capture = useCaptureDialog(attachments);
+  const { dragging, handlers } = useDropAndPaste(attachments, { disabled: sending });
+  return (
+    <div {...handlers} className={cn('flex flex-col gap-2', dragging && 'rounded-lg outline outline-2 outline-dashed outline-primary')}>
+      <AttachmentTray draft={attachments} capture={capture} />
+      <div className="flex gap-2">
+        <AttachmentToolbar draft={attachments} capture={capture} disabled={sending} showLabels={false} />
+        {children}
+      </div>
+      {capture.element}
+    </div>
+  );
+}
+
+export function PortalChatComposer({ value, onChange, onSubmit, connected, sending, sendError, attachments }) {
+  const input = (
+    <>
+      <Input type="text" value={value} onChange={onChange} placeholder={attachments ? 'Type a message, or paste a screenshot...' : 'Type a message...'} aria-label="Message to project team" className={cn(portalFieldClass, 'flex-1')} />
+      <Button type="submit" className={cn('shrink-0', busyLabelButtonClass)} disabled={!canSendPortalMessage(value, attachments) || sending} aria-busy={sending || undefined} aria-label="Send message" slowAfterMs={false}>
+        {sending ? 'Sending…' : Icons.send}
+      </Button>
+    </>
+  );
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-2 rounded-b-2xl border border-border bg-card px-4 py-3">
       <div role="status" aria-live="polite" className={cn('flex items-center gap-1 text-xs', connected ? 'text-success' : 'text-destructive')}>
         <span aria-hidden="true" className={cn('inline-block h-1.5 w-1.5 rounded-full', connected ? 'bg-success' : 'bg-destructive')} />
         {connected ? 'Connected' : 'Reconnecting...'}
       </div>
-      <div className="flex gap-2">
-        <Input type="text" value={value} onChange={onChange} placeholder="Type a message..." aria-label="Message to project team" className={cn(portalFieldClass, 'flex-1')} />
-        <Button type="submit" className={cn('shrink-0', busyLabelButtonClass)} disabled={!value.trim() || sending} aria-busy={sending || undefined} aria-label="Send message" slowAfterMs={false}>
-          {sending ? 'Sending…' : Icons.send}
-        </Button>
-      </div>
+      {attachments
+        ? <PortalComposerAttachments attachments={attachments} sending={sending}>{input}</PortalComposerAttachments>
+        : <div className="flex gap-2">{input}</div>}
       <SlowNotice active={sending} {...slowWrite} />
       {sendError && <p role="alert" className="text-sm text-destructive">{sendError} Your text is still in the composer.</p>}
     </form>

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { preferredScrollBehavior } from '../lib/motion';
 import './client-portal/portal.css';
-import { API, portalFetch, downloadPortalInvoice, downloadPortalContract, fmt, fmtDate, statusBadge, StatusBadge, projectStatusLabel, projectStatusColor, Icons, useProjectChat, PortalChatComposer, PortalProgress, usePortalLightTheme, portalFieldClass, portalFieldStyles, busyLabelButtonClass, pageTitleClass, sectionTitleClass, labelClass } from './client-portal/shared';
+import { API, portalFetch, downloadPortalInvoice, downloadPortalContract, fmt, fmtDate, statusBadge, StatusBadge, projectStatusLabel, projectStatusColor, Icons, useProjectChat, PortalChatComposer, PortalMessageAttachments, canSendPortalMessage, PortalProgress, usePortalLightTheme, portalFieldClass, portalFieldStyles, busyLabelButtonClass, pageTitleClass, sectionTitleClass, labelClass } from './client-portal/shared';
 import { Alert, Button, Card, CardDescription, CardTitle, Input, LoadingState, StatCard } from '../components/ui';
 import { buttonStyles } from '../components/ui/Button';
 import SlowNotice, { SLOW_WRITE_INLINE as slowWrite } from '../components/ui/SlowNotice';
@@ -432,7 +432,7 @@ function ContractsTab({ contracts, token }) {
 // ── Chat Tab (Global) ─────────────────────────────────────────────────────────
 function ChatTab({ projects, token }) {
   const [selectedProjectId, setSelectedProjectId] = useState(projects[0]?.id || '');
-  const { messages, connected, sendMessage, sendError, sending, messagesError, loadingMessages, reloadMessages } = useProjectChat(selectedProjectId, token);
+  const { messages, connected, sendMessage, sendError, sending, messagesError, loadingMessages, reloadMessages, attachments } = useProjectChat(selectedProjectId, token);
   const [input, setInput] = useState('');
   const chatEndRef = useRef(null);
 
@@ -442,7 +442,7 @@ function ChatTab({ projects, token }) {
 
   async function handleSend(e) {
     e.preventDefault();
-    if (!input.trim()) return;
+    if (!canSendPortalMessage(input, attachments)) return;
     try {
       await sendMessage(input);
       setInput('');
@@ -482,12 +482,13 @@ function ChatTab({ projects, token }) {
                   </span>
                 </div>
                 <p className="text-sm leading-normal text-foreground">{msg.content}</p>
+                <PortalMessageAttachments attachments={msg.attachments} />
               </Card>
             ))
           )}
           <div ref={chatEndRef} />
         </div>
-        <PortalChatComposer value={input} onChange={e => setInput(e.target.value)} onSubmit={handleSend} connected={connected} sending={sending} sendError={sendError} />
+        <PortalChatComposer value={input} onChange={e => setInput(e.target.value)} onSubmit={handleSend} connected={connected} sending={sending} sendError={sendError} attachments={attachments} />
       </div>
     </div>
   );
