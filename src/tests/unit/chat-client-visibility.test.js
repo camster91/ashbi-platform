@@ -25,11 +25,15 @@ function recordingIo() {
 /** A tiny in-memory chatMessage delegate that honours the filters used. */
 function chatStore(rows) {
   const matches = (row, where = {}) => Object.entries(where).every(([key, value]) => {
-    if (key === 'createdAt') {
-      if (value.lt && !(row.createdAt < value.lt)) return false;
-      if (value.gt && !(row.createdAt > value.gt)) return false;
+    if (key === 'OR') return value.some((clause) => matches(row, clause));
+    if ((key === 'createdAt' || key === 'id') && value && typeof value === 'object' && !('in' in value)) {
+      const current = key === 'createdAt' ? row.createdAt.getTime() : row.id;
+      const bound = (edge) => (key === 'createdAt' ? edge.getTime() : edge);
+      if (value.lt !== undefined && !(current < bound(value.lt))) return false;
+      if (value.gt !== undefined && !(current > bound(value.gt))) return false;
       return true;
     }
+    if (key === 'createdAt') return row.createdAt.getTime() === value.getTime();
     if (value && typeof value === 'object' && 'in' in value) return value.in.includes(row[key]);
     return (row[key] ?? null) === value;
   });
@@ -37,8 +41,16 @@ function chatStore(rows) {
     rows,
     findMany: async ({ where, orderBy, take }) => {
       let result = rows.filter((row) => matches(row, where));
-      const direction = orderBy?.createdAt ?? 'asc';
-      result = result.sort((a, b) => (direction === 'asc' ? a.createdAt - b.createdAt : b.createdAt - a.createdAt));
+      const order = Array.isArray(orderBy) ? orderBy : [orderBy ?? { createdAt: 'asc' }];
+      result = result.sort((a, b) => {
+        for (const clause of order) {
+          const [key, direction] = Object.entries(clause)[0];
+          const x = key === 'createdAt' ? a.createdAt.getTime() : a[key];
+          const y = key === 'createdAt' ? b.createdAt.getTime() : b[key];
+          if (x !== y) return (x < y ? -1 : 1) * (direction === 'asc' ? 1 : -1);
+        }
+        return 0;
+      });
       if (take) result = result.slice(0, take);
       return result.map((row) => ({ ...row, author: { id: row.authorId, name: 'Someone', email: 'someone@example.com' } }));
     },
@@ -124,6 +136,23 @@ describe('client portal chat only exposes client-visible messages', () => {
     assert.equal(ids.length, 50);
     assert.equal(ids[0], 'client-10');
     assert.equal(ids.at(-1), 'client-59');
+  });
+
+  it('pages through messages that share a timestamp with the (createdAt, id) cursor', async () => {
+    const tiedAt = new Date('2031-01-01T00:00:00.000Z');
+    for (const n of [1, 2, 3]) {
+      chatMessage.rows.push({ id: `tie-${n}`, projectId: PROJECT, authorId: 'portal-user', content: `tie ${n}`, visibility: 'CLIENT', removedAt: null, parentId: null, metadata: null, createdAt: tiedAt });
+    }
+    try {
+      const first = (await app.inject({ method: 'GET', url: `/api/client-portal/projects/${PROJECT}/messages?limit=2`, headers: auth() })).json();
+      assert.deepEqual(first.map((message) => message.id), ['tie-2', 'tie-3']);
+      const cursor = first[0];
+      const url = `/api/client-portal/projects/${PROJECT}/messages?limit=2&before=${encodeURIComponent(tiedAt.toISOString())}&beforeId=${cursor.id}`;
+      const next = (await app.inject({ method: 'GET', url, headers: auth() })).json();
+      assert.equal(next.at(-1).id, 'tie-1', 'the tied message left over from the first page is not skipped');
+    } finally {
+      chatMessage.rows.splice(chatMessage.rows.findIndex((row) => row.id === 'tie-1'), 3);
+    }
   });
 
   it('validates and caps the page size (M6)', async () => {

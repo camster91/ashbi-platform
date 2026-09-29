@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
-import { applyChatDelete, applyChatEdit } from '../lib/chat-thread-cache';
+import { applyChatDelete, applyChatEdit, hasChatMessage } from '../lib/chat-thread-cache';
 import { useSocket } from '../hooks/useSocket';
 import { useAuth } from '../hooks/useAuth';
 import { preferredScrollBehavior } from '../lib/motion';
@@ -89,7 +89,9 @@ export default function ProjectChat({ projectId }) {
 
       // Listen for deletions
       socket.on('chat:deleted', ({ messageId, tombstoned }) => {
-        if (tombstoned) {
+        // A reply outside the cached window (older than the latest replies
+        // loaded) still changes its thread's replyCount: refetch.
+        if (tombstoned || !hasChatMessage(queryClient.getQueryData(['chat', projectId]), messageId)) {
           queryClient.invalidateQueries({ queryKey: ['chat', projectId] });
           return;
         }
