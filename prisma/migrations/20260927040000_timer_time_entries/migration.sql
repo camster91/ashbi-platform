@@ -35,11 +35,19 @@ CREATE UNIQUE INDEX "time_entries_timeSessionId_key" ON "time_entries"("timeSess
 -- AddForeignKey
 ALTER TABLE "time_entries" ADD CONSTRAINT "time_entries_timeSessionId_fkey" FOREIGN KEY ("timeSessionId") REFERENCES "time_sessions"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
+-- Normalise ended timers still flagged running: the retired time-session
+-- routes set endTime and duration on the previous timer when another was
+-- started but left isRunning true. A timer with an end time is stopped.
+UPDATE "time_sessions"
+SET "isRunning" = false, "updatedAt" = CURRENT_TIMESTAMP
+WHERE "isRunning" = true AND "endTime" IS NOT NULL;
+
 -- Link timer entries written before this migration to their session: the
 -- retired time-session routes created a TIMER entry without the session id
 -- and kept the session, so both would count. Identical (user, project, task,
--- start, duration) rows are paired one to one; anything unmatched stays
--- unlinked.
+-- start, duration) rows are paired one to one; anything unmatched (for
+-- example an entry edited afterwards) stays unlinked. The link is provenance
+-- only: summaries and reports count TimeEntry rows, never sessions.
 WITH stopped AS (
   SELECT "id", "userId", "projectId", "taskId", "startTime", "duration",
          ROW_NUMBER() OVER (PARTITION BY "userId", "projectId", "taskId", "startTime", "duration" ORDER BY "id") AS n

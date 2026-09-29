@@ -95,3 +95,43 @@ test('the migration links pre-existing TIMER entries to their sessions one to on
     await raw.$disconnect();
   }
 });
+
+function normaliseSql(table) {
+  const sql = readFileSync(new URL('../../../prisma/migrations/20260927040000_timer_time_entries/migration.sql', import.meta.url), 'utf8');
+  const start = sql.indexOf('UPDATE "time_sessions"\nSET "isRunning" = false, "updatedAt" = CURRENT_TIMESTAMP');
+  assert.ok(start > 0, 'normalisation statement present');
+  return sql.slice(start, sql.indexOf(';', start)).replaceAll('"time_sessions"', table);
+}
+
+test('ended timers still flagged running are stopped before duplicates are closed', {
+  skip: !databaseUrl && 'TENANT_INTEGRATION_DATABASE_URL is not configured',
+  timeout: 60_000,
+}, async () => {
+  const { PrismaClient } = prismaPkg;
+  const raw = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+  try {
+    const rows = await raw.$transaction(async (tx) => {
+      await tx.$executeRawUnsafe('CREATE TEMP TABLE "ts_stale" (LIKE "time_sessions" INCLUDING DEFAULTS) ON COMMIT DROP');
+      const t0 = Date.UTC(2026, 8, 1, 9);
+      const insert = (id, offsetMinutes, endMinutes) => tx.$executeRawUnsafe(
+        `INSERT INTO "ts_stale" ("id", "userId", "projectId", "startTime", "endTime", "duration", "billable", "isRunning", "createdAt", "updatedAt")
+         VALUES ($1, 'u', 'p', $2, $3, $4, true, true, now(), now())`,
+        id, new Date(t0 + offsetMinutes * 60_000), endMinutes === null ? null : new Date(t0 + endMinutes * 60_000), endMinutes === null ? 0 : endMinutes - offsetMinutes,
+      );
+      // Two ended timers left flagged running by the retired routes, then the real running one.
+      await insert('old-1', 0, 20);
+      await insert('old-2', 30, 50);
+      await insert('live', 60, null);
+      await tx.$executeRawUnsafe(normaliseSql('"ts_stale"'));
+      await tx.$executeRawUnsafe(closeDuplicatesSql('"ts_stale"'));
+      return tx.$queryRawUnsafe('SELECT "id", "isRunning", "duration" FROM "ts_stale" ORDER BY "id"');
+    });
+    assert.deepEqual(rows.map((r) => [r.id, r.isRunning, r.duration]), [
+      ['live', true, 0],
+      ['old-1', false, 20],
+      ['old-2', false, 20],
+    ], 'ended timers keep their recorded duration and the real timer stays the only running one');
+  } finally {
+    await raw.$disconnect();
+  }
+});
