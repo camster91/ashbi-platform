@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyChatDelete, applyChatEdit } from '../lib/chat-thread-cache';
+import { applyChatDelete, applyChatEdit, hasChatMessage } from '../lib/chat-thread-cache';
 
 const threads = () => [
   { id: 't1', content: 'first', replies: [{ id: 'r1', content: 'reply one' }, { id: 'r2', content: 'reply two' }] },
@@ -35,5 +35,11 @@ describe('chat thread cache', () => {
     expect(next[0].replies).toHaveLength(1);
     expect(next[0].replyCount).toBe(1);
     expect(next[0].replyCount > next[0].replies.length).toBe(false);
+  });
+  it('knows whether a deleted message is cached, so hidden replies trigger a refetch', () => {
+    expect(hasChatMessage(threads(), 't2')).toBe(true);
+    expect(hasChatMessage(threads(), 'r2')).toBe(true);
+    expect(hasChatMessage(threads(), 'hidden-old-reply')).toBe(false);
+    expect(hasChatMessage(undefined, 'r1')).toBe(false);
   });
 });
