@@ -177,13 +177,14 @@ A failure is a 400/401/403/404 answer; successful sign-ins never consume the
 budget, so an attacker hammering an account from their own address does not
 lock out its owner signing in from elsewhere. Unknown emails still cost one
 bcrypt comparison, so timing does not reveal registered emails. The limits use
-the app's rate-limit store, which is per API instance (in memory).
+the app's rate-limit plugin and its store: Redis in deployed environments
+(staging, production), shared by every API instance, and in memory only in
+local development and tests. Like the global limiter they skip on a store
+error, so a Redis outage relaxes the throttles instead of blocking sign-in.
 
 **Residual risk:** an attacker controlling many addresses can exhaust an
 account's backstop and lock it for the rest of that window. The backstop is
-set high enough that this takes a large, noisy attack; per-instance counters
-mean a multi-instance deployment multiplies every budget by its instance
-count.
+set high enough that this takes a large, noisy attack.
 
 ## API keys (service credentials)
 

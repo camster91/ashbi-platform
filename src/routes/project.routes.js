@@ -1,6 +1,6 @@
 // Project routes
 
-import { refreshProjectPlan, getProjectBudgetMetrics } from '../services/project.service.js';
+import { refreshProjectPlan, getProjectBudgetMetrics, normalizeHealthHistory } from '../services/project.service.js';
 import { safeParse } from '../utils/safeParse.js';
 import { queueEmbedding } from '../jobs/queue.js';
 import aiClient from '../ai/client.js';
@@ -298,28 +298,23 @@ export default async function projectRoutes(fastify) {
     return reply.status(201).send(task);
   });
 
-  // Get project health history (for charts)
+  // Get project health history (for charts): always an array of
+  // { health, score, timestamp }, oldest first. Read-only; the hourly health
+  // job records the points.
   fastify.get('/:id/health-history', {
     onRequest: [fastify.authenticate]
-  }, async (request) => {
+  }, async (request, reply) => {
     const { id } = request.params;
 
     const project = await fastify.prisma.project.findUnique({
       where: { id },
       select: { healthHistory: true, health: true, healthScore: true, updatedAt: true }
     });
+    if (!project) return reply.status(404).send({ error: 'Project not found' });
 
-    // If no history exists yet, seed with current health as first entry
-    if (!project.healthHistory || project.healthHistory.length === 0) {
-      const historyEntry = { health: project.health, score: project.healthScore, timestamp: project.updatedAt.toISOString() };
-      await fastify.prisma.project.update({
-        where: { id },
-        data: { healthHistory: [historyEntry] }
-      });
-      return [historyEntry];
-    }
-
-    return project.healthHistory;
+    const history = normalizeHealthHistory(project.healthHistory);
+    if (history.length > 0) return history;
+    return [{ health: project.health, score: project.healthScore, timestamp: project.updatedAt.toISOString() }];
   });
 
   // ==================== COMMUNICATIONS ====================

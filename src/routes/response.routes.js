@@ -283,7 +283,10 @@ export default async function responseRoutes(fastify) {
       where: { id: response.threadId },
       data: {
         status: 'OPEN',
-        lastActivityAt: new Date()
+        lastActivityAt: new Date(),
+        // A response ends the escalation cycle (src/jobs/escalation.js).
+        lastEscalationLevel: 0,
+        lastEscalatedAt: null
       }
     });
 

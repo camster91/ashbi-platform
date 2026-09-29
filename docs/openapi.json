@@ -17153,6 +17153,42 @@
         "x-tenancy": "exempt"
       }
     },
+    "/api/health/details": {
+      "get": {
+        "operationId": "get_api_health_details",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/health/details",
+        "tags": [
+          "health"
+        ],
+        "x-access": "staff (inline)",
+        "x-tenancy": "exempt"
+      }
+    },
     "/api/inbox": {
       "get": {
         "operationId": "get_api_inbox",

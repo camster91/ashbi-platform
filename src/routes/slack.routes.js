@@ -3,6 +3,7 @@ import { consumeOAuthState, issueOAuthState } from '../auth/oauth-state.js';
 import { validateBody, slackInstallationSchema, slackChannelMappingSchema } from '../validators/schemas.js';
 import env from '../config/env.js';
 import { revokeSlackToken } from '../services/slack-outbound.service.js';
+import { outboundSignal } from '../utils/outbound-timeouts.js';
 
 const SLACK_BOT_SCOPES = ['channels:history', 'chat:write'];
 
@@ -64,6 +65,7 @@ export default async function slackAdminRoutes(fastify, options = {}) {
 
     const credentials = Buffer.from(`${slackClientId}:${slackClientSecret}`).toString('base64');
     const tokenResponse = await fetchImpl('https://slack.com/api/oauth.v2.access', {
+      signal: outboundSignal('oauth'),
       method: 'POST',
       headers: { Authorization: `Basic ${credentials}`, 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ code, redirect_uri: slackRedirectUri }),

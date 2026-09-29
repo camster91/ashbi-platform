@@ -191,33 +191,83 @@ async function syncTasksFromPlan(prisma, projectId, plan) {
   }
 }
 
+export const HEALTH_HISTORY_LIMIT = 90;
+export const HEALTH_HISTORY_MIN_INTERVAL_MS = 24 * 60 * 60 * 1000;
+// Finished projects keep their last score; scoring them hourly is wasted work.
+export const HEALTH_INACTIVE_STATUSES = Object.freeze(['LAUNCHED', 'CANCELLED']);
+const HEALTH_UPDATE_CONCURRENCY = 10;
+
 /**
- * Update health scores for all projects (called by health worker cron)
+ * The stored Json? history as an array of points. Earlier code wrote
+ * `{ push: point }` (Prisma stored the literal object on the Json column),
+ * so that legacy shape is recovered as a one-point history.
  */
-export async function updateAllProjectHealth(prismaClient) {
+export function normalizeHealthHistory(value) {
+  if (value && !Array.isArray(value) && typeof value === 'object' && value.push && typeof value.push === 'object') {
+    value = [value.push];
+  }
+  if (!Array.isArray(value)) return [];
+  return value.filter((point) => point && typeof point === 'object' && typeof point.timestamp === 'string');
+}
+
+/**
+ * Append a point when the health changed or the newest point is at least a
+ * day old, keeping the newest HEALTH_HISTORY_LIMIT points. Returns null when
+ * nothing needs to be written.
+ */
+export function nextHealthHistory(history, point, { now = Date.now() } = {}) {
+  const points = normalizeHealthHistory(history);
+  const last = points[points.length - 1];
+  const changed = !last || last.health !== point.health || last.score !== point.score;
+  const stale = !last || now - Date.parse(last.timestamp) >= HEALTH_HISTORY_MIN_INTERVAL_MS;
+  if (!changed && !stale) return null;
+  return [...points, point].slice(-HEALTH_HISTORY_LIMIT);
+}
+
+/**
+ * Update health scores for active projects (called by the hourly health job).
+ * `healthHistory` is a Json? column, so it is read, extended and capped here.
+ * (`{ push }` only works on scalar lists; on Json Prisma stored the literal
+ * `{"push": point}` object, overwriting the history every hour.)
+ * Projects whose score, status and history are unchanged are not written.
+ */
+export async function updateAllProjectHealth(prismaClient, { now = new Date() } = {}) {
   const prisma = prismaClient || (await import('../config/db.js')).default;
 
   const projects = await prisma.project.findMany({
-    include: {
-      threads: { where: { status: { not: 'RESOLVED' } } }
-    }
+    where: { status: { notIn: [...HEALTH_INACTIVE_STATUSES] } },
+    select: {
+      id: true,
+      health: true,
+      healthScore: true,
+      healthHistory: true,
+      threads: {
+        where: { status: { not: 'RESOLVED' } },
+        select: { priority: true, status: true, lastActivityAt: true },
+      },
+    },
   });
 
-  let updated = 0;
+  const writes = [];
   for (const project of projects) {
     const score = calculateHealthScore(project, project.threads);
     const health = getHealthStatus(score);
-    await prisma.project.update({
+    const history = nextHealthHistory(
+      project.healthHistory,
+      { health, score, timestamp: now.toISOString() },
+      { now: now.getTime() },
+    );
+    if (!history && score === project.healthScore && health === project.health) continue;
+    writes.push({
       where: { id: project.id },
-      data: {
-        healthScore: score,
-        health,
-        healthHistory: { push: { health, score, timestamp: new Date().toISOString() } }
-      }
+      data: { healthScore: score, health, ...(history ? { healthHistory: history } : {}) },
     });
-    updated++;
   }
 
-  console.log(`[health] Updated ${updated} projects`);
-  return updated;
+  for (let index = 0; index < writes.length; index += HEALTH_UPDATE_CONCURRENCY) {
+    await Promise.all(writes.slice(index, index + HEALTH_UPDATE_CONCURRENCY).map((args) => prisma.project.update(args)));
+  }
+
+  console.log(`[health] Scored ${projects.length} active projects, updated ${writes.length}`);
+  return writes.length;
 }

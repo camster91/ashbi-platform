@@ -1,0 +1,184 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import test from 'node:test';
+
+import {
+  checkAllEscalations,
+  checkThreadEscalation,
+  currentEscalationLevel,
+  runForEachOrganization,
+} from '../../jobs/escalation.js';
+
+const SLA = { CRITICAL: 2, HIGH: 12, NORMAL: 24, LOW: 48 };
+const HOUR = 60 * 60 * 1000;
+const T0 = Date.parse('2026-09-27T00:00:00.000Z');
+
+function matches(row, where) {
+  return Object.entries(where).every(([key, condition]) => {
+    const value = row[key];
+    if (condition && typeof condition === 'object' && !(condition instanceof Date)) {
+      if ('lt' in condition) return value < condition.lt;
+      throw new Error(`unsupported filter ${key}`);
+    }
+    if (condition instanceof Date) return value instanceof Date && value.getTime() === condition.getTime();
+    return value === condition;
+  });
+}
+
+function fakePrisma(threads) {
+  const notifications = [];
+  const rows = threads.map((thread) => ({
+    status: 'AWAITING_RESPONSE',
+    priority: 'NORMAL',
+    slaBreached: false,
+    lastEscalationLevel: 0,
+    lastEscalatedAt: null,
+    assignedToId: 'assignee',
+    ...thread,
+  }));
+  return {
+    notifications,
+    rows,
+    thread: {
+      findMany: async ({ where }) => rows.filter((row) => matches(row, where)).map((row) => ({ ...row })),
+      findUnique: async ({ where }) => {
+        const row = rows.find((candidate) => candidate.id === where.id);
+        return row ? { ...row } : null;
+      },
+      updateMany: async ({ where, data }) => {
+        const hit = rows.filter((row) => matches(row, where));
+        for (const row of hit) Object.assign(row, data);
+        return { count: hit.length };
+      },
+    },
+    user: { findMany: async () => [{ id: 'admin-1' }, { id: 'admin-2' }] },
+    notification: { createMany: async ({ data }) => { notifications.push(...data); return { count: data.length }; } },
+  };
+}
+
+const at = (hours) => new Date(T0 + hours * HOUR);
+
+test('each escalation level notifies once per thread across repeated 15-minute sweeps', async () => {
+  const prisma = fakePrisma([{ id: 't1', subject: 'Late', lastActivityAt: at(0) }]);
+  // 4h..8h: the assignee gets exactly one SLA_WARNING over 16 sweeps.
+  for (let minutes = 4 * 60; minutes < 8 * 60; minutes += 15) {
+    await checkAllEscalations({ prisma, slaDefaults: SLA, now: new Date(T0 + minutes * 60_000) });
+  }
+  assert.deepEqual(prisma.notifications.map((n) => n.type), ['SLA_WARNING']);
+
+  // 8h..23h: one ESCALATION per admin, not one per sweep.
+  for (let minutes = 8 * 60; minutes < 23 * 60; minutes += 15) {
+    await checkAllEscalations({ prisma, slaDefaults: SLA, now: new Date(T0 + minutes * 60_000) });
+  }
+  assert.deepEqual(prisma.notifications.map((n) => n.type), ['SLA_WARNING', 'ESCALATION', 'ESCALATION']);
+
+  // Past the 24h SLA: one breach notification per admin, then the thread leaves the sweep.
+  for (let minutes = 24 * 60; minutes < 26 * 60; minutes += 15) {
+    await checkAllEscalations({ prisma, slaDefaults: SLA, now: new Date(T0 + minutes * 60_000) });
+  }
+  assert.equal(prisma.notifications.filter((n) => n.type === 'SLA_BREACH').length, 2);
+  assert.equal(prisma.notifications.length, 5);
+});
+
+test('the per-thread delayed check and the sweep share the dedupe marker', async () => {
+  const prisma = fakePrisma([{ id: 't1', subject: 'Late', lastActivityAt: at(0) }]);
+  await checkThreadEscalation('t1', { prisma, slaDefaults: SLA, now: at(9) });
+  await checkAllEscalations({ prisma, slaDefaults: SLA, now: at(9.25) });
+  await checkThreadEscalation('t1', { prisma, slaDefaults: SLA, now: at(9.5) });
+  assert.deepEqual(prisma.notifications.map((n) => n.type), ['ESCALATION', 'ESCALATION']);
+  assert.equal(prisma.rows[0].lastEscalationLevel, 2);
+});
+
+test('concurrent checks of the same thread notify once', async () => {
+  const prisma = fakePrisma([{ id: 't1', subject: 'Late', lastActivityAt: at(0) }]);
+  const snapshot = await prisma.thread.findUnique({ where: { id: 't1' } });
+  await Promise.all([
+    checkThreadEscalation('t1', { prisma, slaDefaults: SLA, existingThread: { ...snapshot }, now: at(5) }),
+    checkThreadEscalation('t1', { prisma, slaDefaults: SLA, existingThread: { ...snapshot }, now: at(5) }),
+  ]);
+  assert.deepEqual(prisma.notifications.map((n) => n.type), ['SLA_WARNING']);
+});
+
+test('new activity (a response) starts a fresh escalation cycle', async () => {
+  const prisma = fakePrisma([{ id: 't1', subject: 'Late', lastActivityAt: at(0) }]);
+  await checkAllEscalations({ prisma, slaDefaults: SLA, now: at(5) });
+  assert.equal(prisma.notifications.length, 1);
+
+  // Client writes again at 6h: the clock restarts and so does the level.
+  prisma.rows[0].lastActivityAt = at(6);
+  assert.equal(currentEscalationLevel(prisma.rows[0]), 0);
+  await checkAllEscalations({ prisma, slaDefaults: SLA, now: at(10.5) });
+  await checkAllEscalations({ prisma, slaDefaults: SLA, now: at(10.75) });
+  assert.deepEqual(prisma.notifications.map((n) => n.type), ['SLA_WARNING', 'SLA_WARNING']);
+});
+
+test('one failing thread does not stop the sweep for the others', async () => {
+  const prisma = fakePrisma([
+    { id: 'bad', subject: 'Bad', lastActivityAt: at(0) },
+    { id: 'good', subject: 'Good', lastActivityAt: at(0) },
+  ]);
+  const updateMany = prisma.thread.updateMany;
+  prisma.thread.updateMany = async (args) => {
+    if (args.where.id === 'bad') throw new Error('row lock timeout');
+    return updateMany(args);
+  };
+  const errors = [];
+  const result = await checkAllEscalations({
+    prisma,
+    slaDefaults: SLA,
+    now: at(5),
+    logger: { error: (meta) => errors.push(meta.threadId) },
+  });
+  assert.deepEqual(result, { checked: 2, escalated: 1, failed: 1 });
+  assert.deepEqual(errors, ['bad']);
+});
+
+test('one failing organization does not abort the others; the job still fails for retry', async () => {
+  const seen = [];
+  const reported = [];
+  await assert.rejects(
+    runForEachOrganization(['org-a', 'org-b', 'org-c'], async (organizationId) => {
+      seen.push(organizationId);
+      if (organizationId === 'org-b') throw new Error('tenant database error');
+      return { checked: 1 };
+    }, { logger: { error() {} }, onError: (_error, organizationId) => reported.push(organizationId) }),
+    (error) => {
+      assert.deepEqual(error.failedOrganizationIds, ['org-b']);
+      assert.deepEqual(error.organizations.map((entry) => entry.organizationId), ['org-a', 'org-c']);
+      return true;
+    },
+  );
+  assert.deepEqual(seen, ['org-a', 'org-b', 'org-c']);
+  assert.deepEqual(reported, ['org-b']);
+
+  const ok = await runForEachOrganization(['org-a'], async () => ({ checked: 0 }));
+  assert.deepEqual(ok, { organizations: [{ organizationId: 'org-a', checked: 0 }] });
+});
+
+test('schema, migration and response route carry the escalation marker', () => {
+  const schema = fs.readFileSync(new URL('../../../prisma/schema.prisma', import.meta.url), 'utf8');
+  assert.match(schema, /lastEscalationLevel\s+Int\s+@default\(0\)/);
+  assert.match(schema, /lastEscalatedAt\s+DateTime\?/);
+  const migration = fs.readFileSync(
+    new URL('../../../prisma/migrations/20260927045000_thread_escalation_dedupe/migration.sql', import.meta.url),
+    'utf8',
+  );
+  assert.match(migration, /ADD COLUMN "lastEscalationLevel"/);
+  const responses = fs.readFileSync(new URL('../../routes/response.routes.js', import.meta.url), 'utf8');
+  assert.match(responses, /lastEscalationLevel: 0/);
+  const worker = fs.readFileSync(new URL('../../jobs/worker.js', import.meta.url), 'utf8');
+  assert.match(worker, /runForEachOrganization\(/);
+});
+
+test('a claim from a stale snapshot loses when the marker moved since it was read', async () => {
+  const prisma = fakePrisma([{ id: 't1', subject: 'Late', lastActivityAt: at(0), lastEscalationLevel: 1, lastEscalatedAt: at(5) }]);
+  const stale = await prisma.thread.findUnique({ where: { id: 't1' } });
+  // After this snapshot the client wrote again (new cycle) and another check
+  // already sent that cycle's warning; the stale ESCALATION must not fire.
+  prisma.rows[0].lastActivityAt = at(6);
+  prisma.rows[0].lastEscalationLevel = 1;
+  prisma.rows[0].lastEscalatedAt = at(8.5);
+  await checkThreadEscalation('t1', { prisma, slaDefaults: SLA, existingThread: stale, now: at(9) });
+  assert.deepEqual(prisma.notifications, []);
+  assert.equal(prisma.rows[0].lastEscalatedAt.getTime(), at(8.5).getTime());
+});

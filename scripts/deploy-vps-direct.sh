@@ -138,6 +138,7 @@ start_container() {
     -v "$DATA_DIR/config:/app/config" \
     --env-file "$ENV_FILE" \
     -e APP_REVISION="$revision" -e APP_IMAGE_DIGEST="$digest" \
+    --stop-timeout 30 \
     --label ashbi.release.managed=true \
     "$image" >/dev/null
 }
@@ -192,9 +193,38 @@ if ! start_worker_container "$WORKER_CONTAINER" "$IMAGE" "$REVISION" "$IMAGE_ID"
   die 'candidate worker container failed to start'
 fi
 
+# The detailed, strict readiness view (worker heartbeat, image digest) is not
+# public. It is served to container-loopback callers, so read it through
+# `docker exec` inside the candidate API container.
+#
+# Images built before /api/health/details existed (an operator rollback to an
+# older artifact) answer 404 there, so fall back to the public /api/health.
+# Those older images publish the full report (imageDigest, worker, revision)
+# on it, so the same checks below apply unchanged. Current images do not put
+# imageDigest in the public body, so the fallback can never satisfy the gate
+# for them: they must pass through the strict detailed view.
+strict_readiness() {
+  docker exec "$CONTAINER" wget -qO- -T 5 "http://127.0.0.1:3002/api/health/details?strict=1" 2>/dev/null \
+    || curl -fsS --max-time 5 "http://127.0.0.1:${HOST_PORT}/api/health" 2>/dev/null \
+    || true
+}
+
+# Diagnostics for a failed gate: busybox wget prints nothing on a 503, so read
+# the non-strict views (which answer 200 while database and Redis are up) and
+# whatever the public probe returns, including its error body.
+log_readiness_diagnostics() {
+  echo "readiness diagnostics (detailed, non-strict):" >&2
+  docker exec "$CONTAINER" wget -qO- -T 5 "http://127.0.0.1:3002/api/health/details" >&2 2>/dev/null || echo "(unavailable)" >&2
+  echo >&2
+  echo "readiness diagnostics (public /api/health):" >&2
+  curl -sS --max-time 5 "http://127.0.0.1:${HOST_PORT}/api/health" >&2 || echo "(unavailable)" >&2
+  echo >&2
+  echo "worker health: ${WORKER_HEALTH:-(none)}" >&2
+}
+
 READY=false
 for _ in $(seq 1 30); do
-  BODY=$(curl -fsS --max-time 5 "http://127.0.0.1:${HOST_PORT}/api/health" || true)
+  BODY=$(strict_readiness)
   WORKER_HEALTH=$(docker exec "$WORKER_CONTAINER" npm run --silent health:worker 2>/dev/null || true)
   if [[ $BODY == *"\"ready\":true"* \
     && $BODY == *"\"database\":{\"status\":\"ok\"}"* \
@@ -210,6 +240,7 @@ for _ in $(seq 1 30); do
 done
 
 if [[ $READY != true ]]; then
+  log_readiness_diagnostics
   record readiness_failed "previous=$PREVIOUS_IMAGE"
   restore_previous || die 'candidate failed readiness and rollback also failed'
   die 'candidate failed revision-aware readiness; previous release restored'

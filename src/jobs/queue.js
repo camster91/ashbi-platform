@@ -1,35 +1,110 @@
 // BullMQ Queue Setup
 
-import { Queue, QueueEvents } from 'bullmq';
+import { Queue } from 'bullmq';
 import IORedis from 'ioredis';
-import env from '../config/env.js';
+import { redisConnectionArgs, resolveRedisUrl } from '../config/redis.js';
 import { withCurrentTenantJobData } from './tenant-iteration.js';
 import { QUEUES } from './queue-names.js';
 export { QUEUES } from './queue-names.js';
 
-// Create Redis connection - parse URL manually to handle special chars in password
-function parseRedisUrl(url) {
-  const match = url.match(/^redis:\/\/(?::(.+)@)?([^:]+):(\d+)/);
-  if (match) {
-    return { password: match[1] ? decodeURIComponent(match[1]) : undefined, host: match[2], port: parseInt(match[3]) };
-  }
-  return { host: 'localhost', port: 6379 };
-}
-const { host: redisHost, port: redisPort, password: redisPassword } = parseRedisUrl(env.redisUrl);
+export { redisConnectionArgs, resolveRedisUrl };
 
 // Do not connect to real Redis during tests
 const isTestEnv = process.env.NODE_ENV === 'test';
 
-const connection = isTestEnv ? {} : new IORedis({
-  host: redisHost,
-  port: redisPort,
-  password: redisPassword,
-  maxRetriesPerRequest: null
+// Producers (API routes, the scheduler bootstrap) must fail fast while Redis
+// is down instead of parking the HTTP request in ioredis' offline queue.
+export const PRODUCER_REDIS_OPTIONS = Object.freeze({
+  enableOfflineQueue: false,
+  connectTimeout: 2_000,
+  maxRetriesPerRequest: 1,
+});
+export const PRODUCER_ADD_TIMEOUT_MS = 5_000;
+
+// BullMQ workers issue blocking commands and require unlimited retries.
+export const WORKER_REDIS_OPTIONS = Object.freeze({ maxRetriesPerRequest: null });
+
+// Pub/sub (support-view socket revocation) must queue SUBSCRIBE until Redis is
+// reachable and resubscribe after reconnects: default offline queue on.
+export const PUBSUB_REDIS_OPTIONS = Object.freeze({ maxRetriesPerRequest: null, enableOfflineQueue: true });
+
+function createConnection(overrides) {
+  const redis = new IORedis(...redisConnectionArgs(process.env.REDIS_URL, overrides));
+  // An unhandled 'error' event would crash the process; readiness and the
+  // producer guard report the outage instead.
+  redis.on('error', () => {});
+  return redis;
+}
+
+const connection = isTestEnv ? {} : createConnection(PRODUCER_REDIS_OPTIONS);
+let workerConnection;
+
+/**
+ * Source for pub/sub connections: `duplicate()` opens a new connection with
+ * PUBSUB_REDIS_OPTIONS (callers own and close it). Null in tests.
+ */
+export function pubSubRedisSource() {
+  if (isTestEnv) return null;
+  return { duplicate: () => createConnection(PUBSUB_REDIS_OPTIONS) };
+}
+
+/** Blocking-safe connection for BullMQ workers and the worker heartbeat. */
+export function getWorkerConnection() {
+  if (isTestEnv) return connection;
+  if (!workerConnection) workerConnection = createConnection(WORKER_REDIS_OPTIONS);
+  return workerConnection;
+}
+
+export class QueueUnavailableError extends Error {
+  constructor(message = 'Job queue is unavailable') {
+    super(message);
+    this.name = 'QueueUnavailableError';
+    this.code = 'QUEUE_UNAVAILABLE';
+    this.statusCode = 503;
+  }
+}
+
+/**
+ * Wrap a queue's add() so it rejects immediately while the producer
+ * connection is not ready, and after `timeoutMs` if Redis stalls mid-command.
+ * Without this BullMQ waits for the connection's first 'ready' indefinitely.
+ */
+export function guardProducerAdd(add, redis, timeoutMs = PRODUCER_ADD_TIMEOUT_MS) {
+  return async function guardedAdd(...args) {
+    if (redis?.status !== 'ready') {
+      throw new QueueUnavailableError(`Job queue is unavailable (redis ${redis?.status || 'unknown'})`);
+    }
+    let timer;
+    try {
+      return await Promise.race([
+        add.apply(this, args),
+        new Promise((_, reject) => {
+          // Not unref'd: an in-flight add is real work, and the timer is
+          // always cleared when the add settles.
+          timer = setTimeout(() => reject(new QueueUnavailableError('Job queue add timed out')), timeoutMs);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+}
+
+// Retention for every queue: completed jobs are kept for a day (at most
+// 1000), failed jobs for 14 days, so Redis memory stays bounded while
+// failures remain inspectable. Explicit per-add options still win.
+export const DEFAULT_JOB_RETENTION = Object.freeze({
+  removeOnComplete: Object.freeze({ age: 24 * 60 * 60, count: 1000 }),
+  removeOnFail: Object.freeze({ age: 14 * 24 * 60 * 60 }),
 });
 
-// Mock Queue classes for tests
+// Mock Queue class for tests
 class MockQueue {
-  constructor(name) { this.name = name; }
+  constructor(name, opts = {}) {
+    this.name = name;
+    this.opts = opts;
+    this.defaultJobOptions = opts.defaultJobOptions;
+  }
   async add() { return { id: 'mock-job-id' }; }
   async upsertJobScheduler() { return { id: 'mock-scheduler-id' }; }
   async removeRepeatable() { return true; }
@@ -38,33 +113,44 @@ class MockQueue {
   async close() {}
 }
 
-class MockQueueEvents {
-  constructor(name) { this.name = name; }
-  on() {}
-  async close() {}
+class ProducerQueue extends Queue {
+  constructor(name, opts) {
+    super(name, opts);
+    this.add = guardProducerAdd(super.add, connection).bind(this);
+  }
 }
 
-const QueueClass = isTestEnv ? MockQueue : Queue;
-const QueueEventsClass = isTestEnv ? MockQueueEvents : QueueEvents;
+const QueueClass = isTestEnv ? MockQueue : ProducerQueue;
+
+function createQueue(name) {
+  return new QueueClass(name, {
+    connection,
+    defaultJobOptions: {
+      removeOnComplete: { ...DEFAULT_JOB_RETENTION.removeOnComplete },
+      removeOnFail: { ...DEFAULT_JOB_RETENTION.removeOnFail },
+    },
+  });
+}
 
 // Create queues
-export const emailQueue = new QueueClass(QUEUES.EMAIL_PROCESSING, { connection });
-export const healthQueue = new QueueClass(QUEUES.PROJECT_HEALTH, { connection });
-export const escalationQueue = new QueueClass(QUEUES.ESCALATION, { connection });
-export const notificationQueue = new QueueClass(QUEUES.NOTIFICATIONS, { connection });
-export const weeklyDigestQueue = new QueueClass(QUEUES.WEEKLY_DIGEST, { connection });
-export const embeddingQueue = new QueueClass(QUEUES.EMBEDDING, { connection });
-export const scheduledQueue = new QueueClass(QUEUES.SCHEDULED, { connection });
-export const domainEventsQueue = new QueueClass(QUEUES.DOMAIN_EVENTS, { connection });
-
-// Queue event handlers
-const emailQueueEvents = new QueueEventsClass(QUEUES.EMAIL_PROCESSING, { connection });
-emailQueueEvents.on('completed', ({ jobId }) => {
-  console.log(`Email processing job ${jobId} completed`);
-});
-emailQueueEvents.on('failed', ({ jobId, failedReason }) => {
-  console.error(`Email processing job ${jobId} failed: ${failedReason}`);
-});
+export const emailQueue = createQueue(QUEUES.EMAIL_PROCESSING);
+export const healthQueue = createQueue(QUEUES.PROJECT_HEALTH);
+export const escalationQueue = createQueue(QUEUES.ESCALATION);
+export const notificationQueue = createQueue(QUEUES.NOTIFICATIONS);
+export const weeklyDigestQueue = createQueue(QUEUES.WEEKLY_DIGEST);
+export const embeddingQueue = createQueue(QUEUES.EMBEDDING);
+export const scheduledQueue = createQueue(QUEUES.SCHEDULED);
+export const domainEventsQueue = createQueue(QUEUES.DOMAIN_EVENTS);
+export const ALL_QUEUES = Object.freeze([
+  emailQueue,
+  healthQueue,
+  escalationQueue,
+  notificationQueue,
+  weeklyDigestQueue,
+  embeddingQueue,
+  scheduledQueue,
+  domainEventsQueue,
+]);
 
 /**
  * Add email to processing queue
@@ -217,19 +303,32 @@ export async function setupRecurringJobs() {
   console.log('Recurring jobs scheduled');
 }
 
-export async function closeQueueInfrastructure() {
-  await Promise.all([
-    emailQueueEvents.close(),
-    emailQueue.close(),
-    healthQueue.close(),
-    escalationQueue.close(),
-    notificationQueue.close(),
-    weeklyDigestQueue.close(),
-    embeddingQueue.close(),
-    scheduledQueue.close(),
-    domainEventsQueue.close(),
-  ]);
-  if (!isTestEnv) await connection.quit();
+let queueInfrastructureClosing;
+
+async function closeRedis(redis) {
+  if (!redis || typeof redis.quit !== 'function' || redis.status === 'end') return;
+  try {
+    // quit() waits for Redis; while Redis is down disconnect() is immediate.
+    if (redis.status === 'ready') await redis.quit();
+    else redis.disconnect();
+  } catch {
+    redis.disconnect();
+  }
+}
+
+/**
+ * Close every queue plus the producer and worker Redis connections. Safe to
+ * call more than once (API shutdown and worker shutdown both use it).
+ */
+export function closeQueueInfrastructure() {
+  if (!queueInfrastructureClosing) {
+    queueInfrastructureClosing = (async () => {
+      await Promise.allSettled(ALL_QUEUES.map((queue) => queue.close()));
+      if (isTestEnv) return;
+      await Promise.all([closeRedis(connection), closeRedis(workerConnection)]);
+    })();
+  }
+  return queueInfrastructureClosing;
 }
 
 export { connection };
