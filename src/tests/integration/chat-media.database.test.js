@@ -193,6 +193,13 @@ test('chat media: atomic send, client isolation and pending purge', {
     // ── Client B: nothing of client A's project ───────────────────────────
     assert.equal((await download(clientShot.id, asClientB)).statusCode, 404, 'another client\'s file');
     assert.equal((await app.inject({ method: 'GET', url: `/api/client-portal/projects/${ids.projectA}/messages`, headers: asClientB })).statusCode, 404);
+    // ── A trashed or cancelled project's files are gone from the portal too ─
+    await raw.project.update({ where: { id: ids.projectA }, data: { deletedAt: new Date() } });
+    assert.equal((await download(clientShot.id, asClientA)).statusCode, 404, 'file of a trashed project');
+    await raw.project.update({ where: { id: ids.projectA }, data: { deletedAt: null, status: 'CANCELLED' } });
+    assert.equal((await download(clientShot.id, asClientA)).statusCode, 404, 'file of a cancelled project');
+    await raw.project.update({ where: { id: ids.projectA }, data: { status: 'STARTING_UP' } });
+    assert.equal((await download(clientShot.id, asClientA)).statusCode, 200, 'restored project serves its files again');
 
     // ── Client A sends files: always CLIENT, claim is theirs only ─────────
     const clientUpload = async (projectId, headers, name, type, bytes) => {

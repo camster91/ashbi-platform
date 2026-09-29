@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -304,5 +304,35 @@ describe('bundle boundaries', () => {
     for (const file of ['src/components/media/ComposerAttachments.jsx', 'src/components/media/MessageAttachments.jsx', 'src/components/media/useAttachmentDraft.js', 'src/components/ProjectChat.jsx', 'src/pages/client-portal/shared.jsx', 'src/pages/ClientPortal.jsx']) {
       expect(read(file), file).not.toMatch(/from ['"][^'"]*(CaptureDialog|MarkupEditor|capture-streams)['"]/);
     }
+  });
+});
+
+describe('attachment draft bookkeeping', () => {
+
+  it('after a send, only the sent files leave the tray; one added mid-send stays', async () => {
+    let n = 0;
+    const upload = vi.fn(async () => ({ id: `att-${(n += 1)}` }));
+    const { result } = renderHook(() => useAttachmentDraft({ upload, discard: vi.fn(async () => ({})) }));
+    act(() => { result.current.addFiles([png('sent.png')]); });
+    await waitFor(() => expect(result.current.readyIds).toEqual(['att-1']));
+    const sentIds = result.current.readyIds;
+    act(() => { result.current.addFiles([png('added-while-sending.png')]); });
+    await waitFor(() => expect(result.current.readyIds).toEqual(['att-1', 'att-2']));
+    act(() => { result.current.clear(sentIds); });
+    expect(result.current.items.map((item) => item.name)).toEqual(['added-while-sending.png']);
+  });
+
+  it('discards a pending upload from the project it was uploaded to, even after a project switch', async () => {
+    const discards = [];
+    const upload = vi.fn(async () => ({ id: 'att-old' }));
+    const { result, rerender } = renderHook(({ projectId }) => useAttachmentDraft({
+      upload,
+      discard: async (attachmentId) => { discards.push([projectId, attachmentId]); },
+    }), { initialProps: { projectId: 'project-old' } });
+    act(() => { result.current.addFiles([png()]); });
+    await waitFor(() => expect(result.current.readyIds).toEqual(['att-old']));
+    rerender({ projectId: 'project-new' });
+    act(() => { result.current.reset(); });
+    expect(discards).toEqual([['project-old', 'att-old']]);
   });
 });
