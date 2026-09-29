@@ -21,6 +21,16 @@ export function staticCacheControl(filePath, root) {
   return SHORT_PUBLIC_CACHE;
 }
 
+/**
+ * @fastify/static 10 calls setHeaders with the Fastify reply (`header()`);
+ * earlier majors passed the raw Node ServerResponse (`setHeader()`). Support
+ * both so a dependency change cannot turn every static response into a 500.
+ */
+export function setCacheControl(res, value) {
+  if (typeof res?.header === 'function') res.header('Cache-Control', value);
+  else res.setHeader('Cache-Control', value);
+}
+
 /** Options for `fastify.register(fastifyStatic, ...)`. */
 export function spaStaticOptions(root) {
   return {
@@ -28,8 +38,8 @@ export function spaStaticOptions(root) {
     prefix: '/',
     // Our setHeaders owns Cache-Control (send's default is max-age=0).
     cacheControl: false,
-    setHeaders(reply, filePath) {
-      reply.header('Cache-Control', staticCacheControl(filePath, root));
+    setHeaders(res, filePath) {
+      setCacheControl(res, staticCacheControl(filePath, root));
     },
   };
 }

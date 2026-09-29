@@ -107,4 +107,47 @@ describe('session check under rate limiting', () => {
     expect(app).toMatch(/<PageLoader authState=\{authState\} \/>/);
     expect(app).toMatch(/<RateLimitNotice authState=\{authState\} \/>\{children\}/);
   });
+
+  it('a sign-in that succeeds while a 429 retry is pending clears loading and renders the private route', async () => {
+    fetch.mockImplementation(async (url) => {
+      if (String(url).endsWith('/auth/me')) return tooMany('30');
+      if (String(url).endsWith('/auth/login')) return response(200, { user });
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    let auth;
+    function Capture() {
+      auth = useAuth();
+      return null;
+    }
+    // Mirrors App.jsx PrivateRoute: a loader while checking, else the page.
+    function Private() {
+      const { user: current, isLoading } = useAuth();
+      if (isLoading) return <p>Checking your session…</p>;
+      return current ? <h1>Private dashboard</h1> : <p>Signed out</p>;
+    }
+    render(
+      <MemoryRouter initialEntries={['/login']}>
+        <AuthProvider>
+          <Capture />
+          <Routes>
+            <Route path="/login" element={<p>Login page</p>} />
+            <Route path="/dashboard" element={<Private />} />
+          </Routes>
+        </AuthProvider>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(auth.authState.reason).toBe('rate_limited'));
+    expect(auth.isLoading).toBe(true);
+
+    await act(async () => { await auth.login('staff@example.com', 'correct horse', '/dashboard'); });
+
+    expect(auth.isLoading).toBe(false);
+    expect(auth.user).toEqual(user);
+    expect(await screen.findByRole('heading', { name: 'Private dashboard' })).toBeTruthy();
+    expect(screen.queryByText('Checking your session…')).toBeNull();
+    // The cancelled retry never fires another /auth/me.
+    const meCalls = fetch.mock.calls.filter(([url]) => String(url).endsWith('/auth/me')).length;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(fetch.mock.calls.filter(([url]) => String(url).endsWith('/auth/me')).length).toBe(meCalls);
+  });
 });

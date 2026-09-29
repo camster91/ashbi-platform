@@ -71,7 +71,14 @@ import { getRequestPrisma } from './utils/request-context.js';
  * Construct the complete API application without binding a network port.
  * Runtime-only bridges can be disabled for isolated construction tests.
  */
-export async function buildApp({ initializeRuntime = true, jwtSecret = env.jwtSecret, trustProxy = env.trustProxy } = {}) {
+export async function buildApp({
+  initializeRuntime = true,
+  jwtSecret = env.jwtSecret,
+  trustProxy = env.trustProxy,
+  // Tests pass these to exercise the production static-serving path.
+  serveBuiltSpa = env.serveBuiltSpa,
+  spaRoot = path.join(__dirname, '../dist'),
+} = {}) {
 // Initialize Sentry error monitoring
 if (initializeRuntime && initSentry('api', [Sentry.fastifyIntegration()])) {
   logger.info('[Sentry] Error monitoring initialized');
@@ -312,9 +319,9 @@ fastify.get('/api/health/details', {
 });
 
 // Static files
-if (env.serveBuiltSpa) {
+if (serveBuiltSpa) {
   // Hashed /assets/* are immutable; index.html, sw.js and the manifest revalidate.
-  await fastify.register(fastifyStatic, spaStaticOptions(path.join(__dirname, '../dist')));
+  await fastify.register(fastifyStatic, spaStaticOptions(spaRoot));
   fastify.setNotFoundHandler((request, reply) => {
     if (!request.url.startsWith('/api/')) return reply.sendFile('index.html');
     reply.status(404).send({ error: 'Not found' });

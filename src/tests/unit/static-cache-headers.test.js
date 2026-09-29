@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import http from 'node:http';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -13,6 +15,7 @@ import {
   SHORT_PUBLIC_CACHE,
   spaStaticOptions,
 } from '../../config/static-cache.js';
+import { buildApp } from '../../index.js';
 
 function builtSpa() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'spa-dist-'));
@@ -59,4 +62,45 @@ test('hashed assets are immutable; the SPA shell, service worker and manifest re
 test('the API factory registers the SPA with the cache policy', () => {
   const factory = fs.readFileSync(new URL('../../index.js', import.meta.url), 'utf8');
   assert.match(factory, /register\(fastifyStatic, spaStaticOptions\(/);
+});
+
+test('setHeaders works with a raw Node ServerResponse as well as a Fastify reply', () => {
+  const root = builtSpa();
+  const { setHeaders } = spaStaticOptions(root);
+  // Older @fastify/static majors pass the raw ServerResponse, which has
+  // setHeader() but no header(); the callback must not throw there.
+  const raw = new http.ServerResponse(new http.IncomingMessage(new net.Socket()));
+  setHeaders(raw, path.join(root, 'assets', 'index-4f9a1c2b.js'));
+  assert.equal(raw.getHeader('cache-control'), IMMUTABLE_ASSET_CACHE);
+  const headers = {};
+  setHeaders({ header: (name, value) => { headers[name] = value; } }, path.join(root, 'index.html'));
+  assert.deepEqual(headers, { 'Cache-Control': REVALIDATE_CACHE });
+});
+
+test('the real API factory serves the built SPA with the cache policy (production path)', async () => {
+  const app = await buildApp({
+    initializeRuntime: false,
+    jwtSecret: 'test-only-jwt-secret',
+    serveBuiltSpa: true,
+    spaRoot: builtSpa(),
+  });
+  try {
+    const cases = [
+      ['/', REVALIDATE_CACHE, /<div id="root">/],
+      ['/assets/index-4f9a1c2b.js', IMMUTABLE_ASSET_CACHE, /console\.log/],
+      ['/projects/abc?tab=files', REVALIDATE_CACHE, /<div id="root">/],
+      ['/sw.js', REVALIDATE_CACHE, /addEventListener/],
+    ];
+    for (const [url, cache, body] of cases) {
+      const response = await app.inject({ method: 'GET', url });
+      assert.equal(response.statusCode, 200, `${url}: ${response.body.slice(0, 200)}`);
+      assert.equal(response.headers['cache-control'], cache, url);
+      assert.match(response.body, body, url);
+    }
+    const missingApi = await app.inject({ method: 'GET', url: '/api/definitely-not-a-route' });
+    assert.notEqual(missingApi.statusCode, 200);
+    assert.doesNotMatch(missingApi.body, /<div id="root">/, 'unknown API routes never fall back to the SPA');
+  } finally {
+    await app.close();
+  }
 });

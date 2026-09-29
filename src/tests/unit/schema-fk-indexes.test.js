@@ -109,8 +109,11 @@ test('the FK index migration fails fast on locks; the messages swap runs concurr
   const statements = (sql) => sql.replace(/--.*$/gm, '').split(';').map((part) => part.trim()).filter(Boolean);
 
   const fk = read('20260927070000_fk_indexes');
-  assert.match(statements(fk)[0], /^SET lock_timeout = '5s'$/);
-  assert.equal(statements(fk).at(-1), 'RESET lock_timeout');
+  // Explicit transaction: Prisma does not wrap PostgreSQL migrations itself,
+  // so without it a failure part-way would leave earlier indexes committed.
+  assert.equal(statements(fk)[0], 'BEGIN');
+  assert.match(statements(fk)[1], /^SET LOCAL lock_timeout = '5s'$/);
+  assert.equal(statements(fk).at(-1), 'COMMIT');
   assert.doesNotMatch(fk.replace(/--.*$/gm, ''), /"messages"|DROP INDEX|CONCURRENTLY/);
 
   const create = statements(read('20260927070100_messages_thread_received_index'));

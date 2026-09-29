@@ -36,9 +36,22 @@ function fakePrisma(threads) {
     assignedToId: 'assignee',
     ...thread,
   }));
-  return {
+  const prisma = {
     notifications,
     rows,
+    // Interactive transaction with rollback: restore rows and notifications
+    // when the callback throws, like Postgres would.
+    $transaction: async (callback) => {
+      const rowSnapshot = rows.map((row) => ({ ...row }));
+      const notificationCount = notifications.length;
+      try {
+        return await callback(prisma);
+      } catch (error) {
+        rows.splice(0, rows.length, ...rowSnapshot);
+        notifications.splice(notificationCount);
+        throw error;
+      }
+    },
     thread: {
       findMany: async ({ where }) => rows.filter((row) => matches(row, where)).map((row) => ({ ...row })),
       findUnique: async ({ where }) => {
@@ -54,6 +67,7 @@ function fakePrisma(threads) {
     user: { findMany: async () => [{ id: 'admin-1' }, { id: 'admin-2' }] },
     notification: { createMany: async ({ data }) => { notifications.push(...data); return { count: data.length }; } },
   };
+  return prisma;
 }
 
 const at = (hours) => new Date(T0 + hours * HOUR);
@@ -181,4 +195,37 @@ test('a claim from a stale snapshot loses when the marker moved since it was rea
   await checkThreadEscalation('t1', { prisma, slaDefaults: SLA, existingThread: stale, now: at(9) });
   assert.deepEqual(prisma.notifications, []);
   assert.equal(prisma.rows[0].lastEscalatedAt.getTime(), at(8.5).getTime());
+});
+
+test('a failed notification fan-out rolls the claim back so a retry still sends', async () => {
+  const prisma = fakePrisma([{ id: 't1', subject: 'Late', lastActivityAt: at(0) }]);
+  const createMany = prisma.notification.createMany;
+  prisma.notification.createMany = async () => { throw new Error('connection reset'); };
+
+  await assert.rejects(checkThreadEscalation('t1', { prisma, slaDefaults: SLA, now: at(25) }), /connection reset/);
+  assert.equal(prisma.rows[0].lastEscalationLevel, 0, 'ESCALATION level not claimed');
+  assert.equal(prisma.rows[0].lastEscalatedAt, null);
+  assert.equal(prisma.rows[0].slaBreached, false, 'SLA breach marker not claimed');
+  assert.deepEqual(prisma.notifications, []);
+
+  prisma.notification.createMany = createMany;
+  await checkThreadEscalation('t1', { prisma, slaDefaults: SLA, now: at(25.25) });
+  assert.deepEqual(prisma.notifications.map((n) => n.type), ['ESCALATION', 'ESCALATION', 'SLA_BREACH', 'SLA_BREACH']);
+  assert.equal(prisma.rows[0].lastEscalationLevel, 2);
+  assert.equal(prisma.rows[0].slaBreached, true);
+});
+
+test('with no active admin the admin levels stay unclaimed until one is active', async () => {
+  const prisma = fakePrisma([{ id: 't1', subject: 'Late', lastActivityAt: at(0) }]);
+  const findAdmins = prisma.user.findMany;
+  prisma.user.findMany = async () => [];
+
+  await checkThreadEscalation('t1', { prisma, slaDefaults: SLA, now: at(25) });
+  assert.equal(prisma.rows[0].lastEscalationLevel, 0, 'ESCALATION not claimed with no recipient');
+  assert.equal(prisma.rows[0].slaBreached, false, 'SLA breach not claimed with no recipient');
+  assert.deepEqual(prisma.notifications, []);
+
+  prisma.user.findMany = findAdmins;
+  await checkThreadEscalation('t1', { prisma, slaDefaults: SLA, now: at(25.25) });
+  assert.deepEqual(prisma.notifications.map((n) => n.type), ['ESCALATION', 'ESCALATION', 'SLA_BREACH', 'SLA_BREACH']);
 });

@@ -248,3 +248,9 @@ test('health routes: public probe is minimal, details need staff or container lo
     await closeRuntimeHealth();
   }
 });
+
+test('health details are open to every staff role (ADMIN, TEAM, STAFF), never to clients or bots', async () => {
+  const { HEALTH_DETAIL_ROLES } = await import('../../services/runtime-health.service.js');
+  for (const role of ['ADMIN', 'TEAM', 'STAFF']) assert.ok(HEALTH_DETAIL_ROLES.includes(role), role);
+  for (const role of ['CLIENT', 'BOT']) assert.equal(HEALTH_DETAIL_ROLES.includes(role), false, role);
+});

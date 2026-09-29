@@ -172,37 +172,50 @@ export function AuthProvider({ children }) {
     return afterFirstContentfulPaint(checkAuth);
   }, [checkAuth]);
 
+  // Invalidate any in-flight session check and cancel a scheduled 429 retry.
+  // A pending rate-limited check keeps isLoading true until its retry runs;
+  // once invalidated that retry never runs, so isLoading must be settled
+  // here or private routes would spin forever (e.g. a sign-in that
+  // succeeds while the retry is still scheduled).
+  const cancelPendingAuthCheck = useCallback(() => {
+    authCheckSequenceRef.current += 1;
+    clearTimeout(retryTimerRef.current);
+    retryTimerRef.current = null;
+    if (mountedRef.current) setIsLoading(false);
+  }, []);
+
   const finishSignIn = useCallback(async (userData, returnTo) => {
     await purgePrivateCaches();
     if (mountedRef.current) {
+      cancelPendingAuthCheck();
       setUser(userData);
       setAuthState({ status: 'authenticated', reason: null, message: '' });
       navigate(safeReturnPath(returnTo), { replace: true });
     }
     return userData;
-  }, [navigate]);
+  }, [cancelPendingAuthCheck, navigate]);
 
   // Resolves to the signed-in user, or — for staff accounts with two-factor
   // authentication — to { mfaRequired, challengeToken } without a session yet.
   const login = useCallback(async (email, password, returnTo = '/dashboard') => {
-    authCheckSequenceRef.current += 1;
+    cancelPendingAuthCheck();
     const result = await api.login(email, password);
     if (result?.mfaRequired) {
       return { mfaRequired: true, challengeToken: result.challengeToken, expiresInSeconds: result.expiresInSeconds };
     }
     return finishSignIn(result.user, returnTo);
-  }, [finishSignIn]);
+  }, [cancelPendingAuthCheck, finishSignIn]);
 
   // Second sign-in step: factor is { code } or { recoveryCode }.
   const completeMfaLogin = useCallback(async (challengeToken, factor, returnTo = '/dashboard') => {
-    authCheckSequenceRef.current += 1;
+    cancelPendingAuthCheck();
     const result = await api.loginMfa({ challengeToken, ...factor });
     await finishSignIn(result.user, returnTo);
     return result;
-  }, [finishSignIn]);
+  }, [cancelPendingAuthCheck, finishSignIn]);
 
   const logout = useCallback(async () => {
-    authCheckSequenceRef.current += 1;
+    cancelPendingAuthCheck();
     await clearBrowserPushSubscription({ removeFromServer: true });
     try {
       await api.logout();
@@ -215,10 +228,10 @@ export function AuthProvider({ children }) {
       setAuthState({ status: 'unauthenticated', reason: 'signed_out', message: '' });
       navigate('/login', { replace: true });
     }
-  }, [navigate]);
+  }, [cancelPendingAuthCheck, navigate]);
 
   const expireSession = useCallback(async (message = '', reason = sessionEndReason(message)) => {
-    authCheckSequenceRef.current += 1;
+    cancelPendingAuthCheck();
     await clearBrowserPushSubscription();
     await purgePrivateCaches();
     if (!mountedRef.current) return;
@@ -226,7 +239,7 @@ export function AuthProvider({ children }) {
     setUser(null);
     setAuthState({ status: 'unauthenticated', reason, message });
     navigate('/login', { replace: true, state: { reason, message, returnTo } });
-  }, [location.hash, location.pathname, location.search, navigate]);
+  }, [cancelPendingAuthCheck, location.hash, location.pathname, location.search, navigate]);
 
   // Support impersonation (#416): the server keeps the admin's own session
   // and adds a read-only view cookie; /auth/me then answers as the viewed
