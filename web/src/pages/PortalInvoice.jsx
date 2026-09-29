@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
-import { formatMoney, formatInvoiceDate } from '../lib/money';
+import { formatInvoiceMoney, formatInvoiceDate } from '../lib/format';
 import LoadingState from '../components/ui/LoadingState';
 
 const statusConfig = {
@@ -178,8 +178,8 @@ export default function PortalInvoice() {
                     <tr key={i} className="hover:bg-slate-50/50">
                       <td className="px-6 py-4 text-sm text-slate-700">{item.description}</td>
                       <td className="px-6 py-4 text-sm text-slate-600 text-right">{qty}</td>
-                      <td className="px-6 py-4 text-sm text-slate-600 text-right">{formatMoney(rate, currency)}</td>
-                      <td className="px-6 py-4 text-sm font-medium text-slate-800 text-right">{formatMoney(amount, currency)}</td>
+                      <td className="px-6 py-4 text-sm text-slate-600 text-right">{formatInvoiceMoney(rate, currency)}</td>
+                      <td className="px-6 py-4 text-sm font-medium text-slate-800 text-right">{formatInvoiceMoney(amount, currency)}</td>
                     </tr>
                   );
                 })}
@@ -191,23 +191,23 @@ export default function PortalInvoice() {
           <div className="border-t border-slate-200 bg-slate-50 px-6 py-4 space-y-2">
             <div className="flex items-center justify-between text-sm">
               <span className="text-slate-500">Subtotal</span>
-              <span className="text-slate-700">{formatMoney(subtotal, currency)}</span>
+              <span className="text-slate-700">{formatInvoiceMoney(subtotal, currency)}</span>
             </div>
             {discount > 0 && (
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-500">Discount</span>
-                <span className="text-green-700">-{formatMoney(discount, currency)}</span>
+                <span className="text-green-700">-{formatInvoiceMoney(discount, currency)}</span>
               </div>
             )}
             {tax > 0 && (
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-500">{taxLabel}</span>
-                <span className="text-slate-700">{formatMoney(tax, currency)}</span>
+                <span className="text-slate-700">{formatInvoiceMoney(tax, currency)}</span>
               </div>
             )}
             <div className="flex items-center justify-between pt-2 border-t border-slate-200">
               <span className="text-sm font-semibold text-slate-700">Total</span>
-              <span className="text-xl font-bold text-slate-800">{formatMoney(total, currency)}</span>
+              <span className="text-xl font-bold text-slate-800">{formatInvoiceMoney(total, currency)}</span>
             </div>
           </div>
         </div>
@@ -233,7 +233,7 @@ export default function PortalInvoice() {
               ) : (
                 <CreditCard className="w-4 h-4" />
               )}
-              Pay Now - {formatMoney(total, currency)}
+              Pay Now - {formatInvoiceMoney(total, currency)}
             </button>
             {payMutation.isError && (
               <p role="alert" className="text-sm text-red-600 text-center mt-3">Payment initiation failed. Please try again.</p>

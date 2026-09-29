@@ -5,7 +5,7 @@ import { io } from 'socket.io-client';
 import { Badge, Button, Card, Input } from '../../components/ui';
 import { inputStyles } from '../../components/ui/Input';
 import SlowNotice, { SLOW_WRITE_INLINE as slowWrite } from '../../components/ui/SlowNotice';
-import { formatMoney } from '../../lib/money';
+import { formatInvoiceMoney } from '../../lib/format';
 import { cn } from '../../lib/utils';
 
 export const API = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '') : '';
@@ -87,7 +87,7 @@ export function usePortalLightTheme() {
 // Invoice amounts always carry their own currency code ("$1,250.00 CAD"); a
 // missing currency means the invoice default (CAD), never USD.
 export function fmt(amount, currency) {
-  return formatMoney(amount, currency);
+  return formatInvoiceMoney(amount, currency);
 }
 export function fmtDate(d) {
   if (!d) return '—';

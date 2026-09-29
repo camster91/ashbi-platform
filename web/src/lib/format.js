@@ -6,12 +6,12 @@
 // default (CAD renders as "$", other currencies get their prefix, e.g.
 // "US$"). Call setFormatLocale() once an organization locale exists.
 //
-// Invoice, client-portal, PDF and email currency rendering live on the payments
-// branch (its own money helper) and will be unified with formatMoney() later.
+// Invoice documents (staff invoice pages, the public invoice page and the
+// client portal) use formatInvoiceMoney(), the "$1,250.00 CAD" form that the
+// server's PDFs and emails also render (src/utils/money.js).
 
 export const DEFAULT_LOCALE = 'en-CA';
-// Matches the app's invoice default. The payments branch keeps its own
-// money helper for invoice/portal/PDF/email; the two will be unified later.
+// Matches the app's invoice default.
 export const DEFAULT_CURRENCY = 'CAD';
 
 let activeLocale = DEFAULT_LOCALE;
@@ -71,7 +71,7 @@ export function formatDateTime(value, options = {}) {
 export function formatMoney(amount, currency = DEFAULT_CURRENCY, { compact = false, ...options } = {}) {
   const numeric = Number(amount);
   const value = Number.isFinite(numeric) ? numeric : 0;
-  const code = typeof currency === 'string' && /^[A-Za-z]{3}$/.test(currency) ? currency.toUpperCase() : DEFAULT_CURRENCY;
+  const code = currencyCode(currency);
   return new Intl.NumberFormat(activeLocale, {
     style: 'currency',
     currency: code,
@@ -80,4 +80,52 @@ export function formatMoney(amount, currency = DEFAULT_CURRENCY, { compact = fal
       : { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
     ...options,
   }).format(value);
+}
+
+function currencyCode(currency) {
+  return typeof currency === 'string' && /^[A-Za-z]{3}$/.test(currency.trim())
+    ? currency.trim().toUpperCase()
+    : DEFAULT_CURRENCY;
+}
+
+/**
+ * "$1,250.00 CAD" — the invoice-document form, with the currency code always
+ * spelled out. Mirrors src/utils/money.js on the server (fixed en-CA locale,
+ * narrow symbol) so the UI, PDFs and emails render an invoice identically.
+ */
+export function formatInvoiceMoney(amount, currency) {
+  const code = currencyCode(currency);
+  const value = Number(amount) || 0;
+  let formatted;
+  try {
+    formatted = new Intl.NumberFormat(DEFAULT_LOCALE, {
+      style: 'currency',
+      currency: code,
+      currencyDisplay: 'narrowSymbol',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  } catch {
+    formatted = value.toFixed(2);
+  }
+  return `${formatted} ${code}`;
+}
+
+/**
+ * Invoice due/issue dates are calendar dates stored in UTC (a date-only due
+ * date is the end of that day, UTC), so render them in UTC to show the day
+ * that was chosen regardless of the viewer's timezone. "—" when missing.
+ */
+export function formatInvoiceDate(date, { month = 'short' } = {}) {
+  if (!date) return '—';
+  const value = new Date(date);
+  if (Number.isNaN(value.getTime())) return '—';
+  return value.toLocaleDateString(undefined, { year: 'numeric', month, day: 'numeric', timeZone: 'UTC' });
+}
+
+/** "YYYY-MM-DD" for an <input type="date"> from a stored invoice date. */
+export function toDateInputValue(date) {
+  if (!date) return '';
+  const value = new Date(date);
+  return Number.isNaN(value.getTime()) ? '' : value.toISOString().slice(0, 10);
 }

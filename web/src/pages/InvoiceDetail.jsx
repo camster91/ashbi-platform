@@ -16,7 +16,7 @@ import Modal, { ModalFooter } from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import QueryErrorState from '../components/QueryErrorState';
 import { buildInvoiceUpdatePayload, INVOICE_CURRENCY_OPTIONS } from '../lib/invoice-payloads';
-import { formatMoney, formatInvoiceDate, toDateInputValue } from '../lib/money';
+import { formatInvoiceMoney, formatInvoiceDate, toDateInputValue } from '../lib/format';
 
 const HST_RATE = 13;
 const INITIAL_PAYMENT_FORM = { paymentMethod: 'BANK', paymentNotes: '', transactionId: '' };
@@ -48,7 +48,7 @@ const STATUS_CONFIG = {
 };
 
 function fmt(n, currency) {
-  return formatMoney(n, currency);
+  return formatInvoiceMoney(n, currency);
 }
 
 function formatDate(date) {
