@@ -54,7 +54,8 @@ describe('Credentials secret reads', () => {
   });
 
   it('opens the edit form with the decrypted password on success', async () => {
-    passwordImpl = async () => ({ password: 's3cret' });
+    // A placeholder, not a credential: the value is irrelevant to this test.
+    passwordImpl = async () => ({ password: 'placeholder-value' });
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Edit WP Admin' }));
     expect(await screen.findByText('Edit Credential')).toBeInTheDocument();
