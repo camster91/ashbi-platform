@@ -97,11 +97,13 @@ after(async () => {
   if (skip) return;
   try {
     await rawPrisma.contract.deleteMany({ where: { clientId: testClientId } });
+    await rawPrisma.proposalVersion.deleteMany({ where: { proposal: { clientId: testClientId } } });
     await rawPrisma.proposalLineItem.deleteMany({ where: { proposal: { clientId: testClientId } } });
     await rawPrisma.proposal.deleteMany({ where: { clientId: testClientId } });
     await rawPrisma.task.deleteMany({ where: { project: { clientId: testClientId } } });
     await rawPrisma.project.deleteMany({ where: { clientId: testClientId } });
     await rawPrisma.activity.deleteMany({ where: { userId: testUserId } });
+    await rawPrisma.notification.deleteMany({ where: { userId: testUserId } });
     await rawPrisma.contact.deleteMany({ where: { clientId: testClientId } });
     await rawPrisma.client.delete({ where: { id: testClientId } }).catch(() => null);
     await rawPrisma.user.delete({ where: { id: testUserId } }).catch(() => null);
@@ -179,6 +181,49 @@ describe('Proposal CRUD', { skip }, () => {
     assert.equal(body.id, createdProposalId);
     assert.ok(body.lineItems.length > 0);
     console.log(`  ✓ Got proposal detail`);
+  });
+
+  test('PUT /api/proposals/:id — edits title, line items and discount with server totals', async () => {
+    const titleOnly = await fastify.inject({
+      method: 'PUT',
+      url: `/api/proposals/${createdProposalId}`,
+      headers: authHeaders(),
+      payload: { title: 'Brand Redesign Proposal (rev)' },
+    });
+    assert.equal(titleOnly.statusCode, 200, titleOnly.body);
+
+    const res = await fastify.inject({
+      method: 'PUT',
+      url: `/api/proposals/${createdProposalId}`,
+      headers: authHeaders(),
+      payload: {
+        title: 'Brand Redesign Proposal',
+        discount: 500,
+        lineItems: [
+          { description: 'Brand Strategy', quantity: 1, unitPrice: 5000 },
+          { description: 'Visual Identity', quantity: 1, unitPrice: 3000 },
+        ],
+      },
+    });
+    assert.equal(res.statusCode, 200, res.body);
+    const body = JSON.parse(res.body);
+    assert.equal(body.subtotal, 8000);
+    assert.equal(body.discount, 500);
+    assert.equal(body.total, 7500);
+    assert.equal(body.lineItems.length, 2);
+
+    const versions = await rawPrisma.proposalVersion.findMany({ where: { proposalId: createdProposalId } });
+    assert.equal(versions.length, 2);
+
+    // Restore the discount-free shape the rest of this suite expects.
+    const reset = await fastify.inject({
+      method: 'PUT',
+      url: `/api/proposals/${createdProposalId}`,
+      headers: authHeaders(),
+      payload: { discount: 0 },
+    });
+    assert.equal(reset.statusCode, 200, reset.body);
+    assert.equal(JSON.parse(reset.body).total, 8000);
   });
 
   test('POST /api/proposals/:id/send — send proposal', async () => {
@@ -296,14 +341,21 @@ describe('Contract CRUD', { skip }, () => {
     assert.ok(body.signedAt);
     assert.equal(body.signerName, 'Jane Prop');
     assert.ok(body.signedContentHash);
-    let createdProject;
-    for (let attempt = 0; attempt < 20 && !createdProject; attempt += 1) {
-      createdProject = await rawPrisma.project.findFirst({
-        where: { clientId: testClientId, id: { not: testProjectId } },
-      });
-      if (!createdProject) await new Promise(resolve => setTimeout(resolve, 25));
+    // The proposal was scoped to testProjectId, so signing continues that
+    // project instead of forking a new one (creation when the proposal has no
+    // project is covered by contract-signed-project.database.test.js). Wait
+    // for the fire-and-forget automation to finish (its admin notification).
+    let signedNotice;
+    for (let attempt = 0; attempt < 40 && !signedNotice; attempt += 1) {
+      const notices = await rawPrisma.notification.findMany({ where: { userId: testUserId, type: 'CONTRACT_SIGNED' } });
+      signedNotice = notices.map((notice) => (typeof notice.data === 'string' ? JSON.parse(notice.data) : notice.data))
+        .find((data) => data?.contractId === createdContractId);
+      if (!signedNotice) await new Promise(resolve => setTimeout(resolve, 25));
     }
-    assert.equal(createdProject?.organizationId, testOrganizationId);
+    assert.ok(signedNotice, 'the contract-signed automation ran');
+    assert.equal(signedNotice.projectId, testProjectId);
+    const projects = await rawPrisma.project.findMany({ where: { clientId: testClientId } });
+    assert.deepEqual(projects.map((project) => project.id), [testProjectId]);
     const events = await rawPrisma.domainEvent.findMany({ where: { aggregateType: 'contract', aggregateId: createdContractId } });
     assert.deepEqual(events.map((event) => [event.type, event.organizationId, event.payload.documentHash]), [['contract.signed', testOrganizationId, body.signedContentHash]]);
     assert.doesNotMatch(JSON.stringify(events[0].payload), /Jane Prop/);

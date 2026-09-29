@@ -129,8 +129,9 @@ test('agency sells, contracts, invoices and collects payment end to end', async 
     await clientPage.goto(invoiceLink);
     await expect(clientPage.getByRole('heading', { name: 'Invoice', exact: true })).toBeVisible();
     await expect(clientPage.getByText(invoice.invoiceNumber).first()).toBeVisible();
-    await expect(clientPage.getByText(money(INVOICE_TOTAL), { exact: true })).toBeVisible();
-    await expect(clientPage.getByRole('button', { name: `Pay Now - $${money(INVOICE_TOTAL)}` })).toBeVisible();
+    // Amounts carry the invoice's own currency; proposal invoices default to CAD.
+    await expect(clientPage.getByText(`$${money(INVOICE_TOTAL)} CAD`, { exact: true })).toBeVisible();
+    await expect(clientPage.getByRole('button', { name: `Pay Now - $${money(INVOICE_TOTAL)} CAD` })).toBeVisible();
   });
 
   await test.step('admin records the manual payment', async () => {

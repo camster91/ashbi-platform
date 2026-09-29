@@ -9,6 +9,7 @@ import {
   validateUploadedFile,
 } from '../security/file-upload-policy.js';
 import { API_KEY_MAX_EXPIRY_DAYS, API_KEY_SCOPES } from '../auth/api-key-scopes.js';
+import { INVOICE_CURRENCIES } from '../utils/money.js';
 
 // ── Reusable field validators ──────────────────────────────────────────────
 const email = z.string().email().max(255);
@@ -175,9 +176,45 @@ export const updateClientSchema = z.object({
 });
 
 // ── Invoice schemas ───────────────────────────────────────────────────────
+// The staff UI sends <input type="date"> values ("YYYY-MM-DD"); API clients
+// may send full ISO datetimes. A date-only due date means the end of that
+// calendar day in UTC (so an invoice is not overdue until the day is over and
+// the UI, which shows invoice dates in UTC, renders the chosen day); a
+// date-only issue date means the start of that day in UTC. Both normalize to
+// an ISO string.
+const DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
+const isoDateTime = z.string().datetime({ offset: true });
+
+function isCalendarDate(value) {
+  const match = DATE_ONLY_PATTERN.exec(value);
+  if (!match) return false;
+  const [, year, month, day] = match.map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+function invoiceDateInput({ endOfDay }) {
+  return z.string().trim()
+    .refine((value) => (DATE_ONLY_PATTERN.test(value) ? isCalendarDate(value) : isoDateTime.safeParse(value).success), {
+      message: 'Expected a date (YYYY-MM-DD) or an ISO 8601 datetime',
+    })
+    .transform((value) => {
+      if (DATE_ONLY_PATTERN.test(value)) return `${value}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}Z`;
+      return new Date(value).toISOString();
+    });
+}
+
+const invoiceDueDate = invoiceDateInput({ endOfDay: true });
+const invoiceIssueDate = invoiceDateInput({ endOfDay: false });
+// ISO 4217 allowlist (src/utils/money.js); accepts lower-case codes.
+const invoiceCurrency = z.preprocess(
+  (value) => (typeof value === 'string' ? value.trim().toUpperCase() : value),
+  z.enum(/** @type {[string, ...string[]]} */ ([...INVOICE_CURRENCIES])),
+);
+
 const invoiceRouteLineItemSchema = z.object({
   description: z.string().min(1).max(500),
-  itemType: z.enum(['LABOR', 'MATERIAL', 'MATERIALS', 'EXPENSE', 'DISCOUNT', 'OTHER']).optional().default('LABOR'),
+  itemType: z.enum(['LABOR', 'MATERIAL', 'MATERIALS', 'EXPENSE', 'DISCOUNT', 'CUSTOM', 'OTHER']).optional().default('LABOR'),
   quantity: z.number().positive(),
   unitPrice: z.number().nonnegative(),
   total: z.number().nonnegative().optional(),
@@ -187,10 +224,13 @@ const invoiceRouteLineItemSchema = z.object({
 export const createInvoiceSchema = z.object({
   clientId: cuidId,
   projectId: cuidId.optional(),
-  title: z.string().min(1).max(200),
-  issueDate: z.string().datetime().optional(),
-  dueDate: z.string().datetime(),
-  currency: z.enum(['CAD', 'USD']).optional().default('CAD'),
+  // Optional: the route derives "Invoice for <client>" when omitted.
+  title: z.string().trim().max(200).optional(),
+  issueDate: invoiceIssueDate.optional(),
+  // Omitted or null means "due upon receipt".
+  dueDate: invoiceDueDate.nullable().optional(),
+  // Omitted means the organization default (see defaultInvoiceCurrency).
+  currency: invoiceCurrency.optional(),
   taxRate: z.number().min(0).max(50).optional().default(13),
   discountAmount: z.number().min(0).optional().default(0),
   notes: z.string().max(2000).optional(),
@@ -214,11 +254,12 @@ export const createExpenseSchema = z.object({
 
 // ── Invoice update schema ─────────────────────────────────────────────────
 export const updateInvoiceSchema = z.object({
-  title: z.string().min(1).max(200).optional(),
+  title: z.string().trim().max(200).optional(),
   status: z.enum(['DRAFT', 'SENT', 'VIEWED', 'PAID', 'VOID']).optional(),
-  issueDate: z.string().datetime().optional(),
-  dueDate: z.string().datetime().optional(),
-  currency: z.enum(['CAD', 'USD']).optional(),
+  issueDate: invoiceIssueDate.optional(),
+  // null clears the due date ("due upon receipt").
+  dueDate: invoiceDueDate.nullable().optional(),
+  currency: invoiceCurrency.optional(),
   taxRate: z.number().min(0).max(50).optional(),
   discountAmount: z.number().min(0).optional(),
   notes: z.string().max(2000).optional(),
@@ -429,8 +470,10 @@ export const logRetainerHoursSchema = z.object({
   projectId: cuidId.optional(),
 });
 
+// Retainer plans carry a monthly CAD and/or USD amount; the invoice bills the
+// amount in the requested currency (default CAD, the invoice default).
 export const generateRetainerInvoiceSchema = z.object({
-  currency: z.enum(['USD', 'CAD']).optional().default('USD'),
+  currency: z.enum(['CAD', 'USD']).optional().default('CAD'),
   daysUntilDue: z.number().int().positive().optional().default(30),
   resetHours: z.boolean().optional().default(false),
 });
@@ -781,6 +824,8 @@ const proposalLineItemInput = z.object({
   category: z.string().min(1).max(50).optional(),
 });
 
+const proposalDiscount = z.number().nonnegative().max(10_000_000);
+
 export const proposalCreateSchema = z.object({
   clientId: cuidId,
   title: z.string().min(1).max(200),
@@ -788,6 +833,8 @@ export const proposalCreateSchema = z.object({
   // a $0 quote and likely a misuse. The handler also checks this manually
   // but we surface it at validation time too.
   lineItems: z.array(proposalLineItemInput).min(1).max(100),
+  // Flat amount off the subtotal; the server clamps the total at zero.
+  discount: proposalDiscount.optional(),
   notes: z.string().max(10_000).optional(),
   validUntil: z.string().datetime().optional(),
   projectId: cuidId.optional(),
@@ -801,6 +848,9 @@ export const proposalUpdateSchema = z.object({
   validUntil: z.string().datetime().optional(),
   projectId: cuidId.optional(),
   status: z.enum(['DRAFT', 'SENT', 'VIEWED', 'APPROVED', 'DECLINED']).optional(),
+  // Replacing line items or the discount recomputes subtotal/total server-side.
+  lineItems: z.array(proposalLineItemInput).min(1).max(100).optional(),
+  discount: proposalDiscount.optional(),
 });
 
 // Bulk operations take a list of IDs
@@ -1804,7 +1854,8 @@ export const calendarEventUpdateSchema = calendarEventCreateSchema.partial();
 export const credentialUpsertSchema = credentialCreateSchema;
 
 export const retainerGenerateInvoiceSchema = z.object({
-  currency: z.enum(['USD', 'CAD', 'EUR', 'GBP']).default('USD'),
+  // Only CAD/USD: a plan has no EUR/GBP amount to bill (see above).
+  currency: z.enum(['CAD', 'USD']).default('CAD'),
   daysUntilDue: z.number().int().positive().max(180).default(30),
   resetHours: z.boolean().default(false),
 });

@@ -70,6 +70,32 @@ async function recordProposalDelivery(prisma, proposalId, delivery) {
   return data;
 }
 
+function roundMoney(value) {
+  return Math.round((Number(value) || 0) * 100) / 100;
+}
+
+function computeProposalLineItems(lineItems) {
+  return lineItems.map(item => {
+    const quantity = item.quantity ?? 1;
+    return {
+      description: item.description,
+      quantity,
+      unitPrice: item.unitPrice,
+      total: roundMoney(quantity * item.unitPrice),
+    };
+  });
+}
+
+// Subtotal from the line items; a discount can reduce the total to zero but
+// never below it.
+function proposalTotals(lineItems, discount = 0) {
+  const subtotal = roundMoney(lineItems.reduce((sum, item) => sum + (Number(item.total) || 0), 0));
+  const total = roundMoney(Math.max(0, subtotal - (Number(discount) || 0)));
+  return { subtotal, total };
+}
+
+export const PROPOSAL_BULK_SEND_MAX = 25;
+
 export default async function proposalRoutes(fastify) {
   // List all proposals
   fastify.get('/', {
@@ -129,16 +155,9 @@ export default async function proposalRoutes(fastify) {
   }, async (request, reply) => {
     const { clientId, title, lineItems, notes, validUntil, projectId } = request.body;
 
-    const computedLineItems = lineItems.map(item => ({
-      description: item.description,
-      quantity: item.quantity ?? 1,
-      unitPrice: item.unitPrice,
-      total: (item.quantity ?? 1) * item.unitPrice
-    }));
-
-    const subtotal = computedLineItems.reduce((sum, item) => sum + item.total, 0);
+    const computedLineItems = computeProposalLineItems(lineItems);
     const discount = request.body.discount || 0;
-    const total = subtotal - discount;
+    const { subtotal, total } = proposalTotals(computedLineItems, discount);
 
     const proposal = await request.prisma.$transaction(async (tx) => {
       const created = await tx.proposal.create({
@@ -182,7 +201,7 @@ export default async function proposalRoutes(fastify) {
   }, async (request, reply) => {
     const { id } = request.params;
 
-    const existing = await request.prisma.proposal.findUnique({ where: { id } });
+    const existing = await request.prisma.proposal.findUnique({ where: { id }, include: { lineItems: true } });
 
     if (!existing) {
       return reply.status(404).send({ error: 'Proposal not found' });
@@ -201,25 +220,31 @@ export default async function proposalRoutes(fastify) {
     if (projectId !== undefined) data.projectId = projectId || null;
     if (discount !== undefined) data.discount = discount;
 
+    // The snapshot records the line items the proposal has after this edit:
+    // the replacements when provided, otherwise the unchanged stored ones.
+    const computedLineItems = lineItems ? computeProposalLineItems(lineItems) : null;
+    const snapshotLineItems = (computedLineItems || existing.lineItems || []).map(item => ({
+      description: item.description,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      total: item.total,
+    }));
+
     const proposal = await request.prisma.$transaction(async (tx) => {
       // If lineItems provided, replace them
-      if (lineItems) {
+      if (computedLineItems) {
         await tx.proposalLineItem.deleteMany({ where: { proposalId: id } });
-
-        const computedLineItems = lineItems.map(item => ({
-          description: item.description,
-          quantity: item.quantity ?? 1,
-          unitPrice: item.unitPrice,
-          total: (item.quantity ?? 1) * item.unitPrice,
-          proposalId: id
-        }));
-
-        await tx.proposalLineItem.createMany({ data: computedLineItems });
-
-        const subtotal = computedLineItems.reduce((sum, item) => sum + item.total, 0);
-        const currentDiscount = discount !== undefined ? discount : existing.discount;
-        data.subtotal = subtotal;
-        data.total = subtotal - currentDiscount;
+        await tx.proposalLineItem.createMany({ data: computedLineItems.map(item => ({ ...item, proposalId: id })) });
+      }
+      if (computedLineItems || discount !== undefined) {
+        // Totals are always derived on the server from the line items and
+        // discount that will be stored, never taken from the request.
+        const effectiveDiscount = discount !== undefined ? discount : (existing.discount || 0);
+        const totals = computedLineItems
+          ? proposalTotals(computedLineItems, effectiveDiscount)
+          : proposalTotals(existing.lineItems || [], effectiveDiscount);
+        data.subtotal = totals.subtotal;
+        data.total = totals.total;
       }
 
       const updated = await tx.proposal.update({
@@ -245,8 +270,7 @@ export default async function proposalRoutes(fastify) {
             subtotal: updated.subtotal,
             total: updated.total,
             status: updated.status,
-            // eslint-disable-next-line no-undef -- fixed on the journey-fixes branch
-            lineItems: computedLineItems || existing.lineItems
+            lineItems: snapshotLineItems
           }
         }
       });
@@ -283,27 +307,27 @@ export default async function proposalRoutes(fastify) {
     return { success: true, trashId: trashedItem.id };
   });
 
-  // Send proposal (mark as SENT)
-  fastify.post('/:id/send', {
-    onRequest: [fastify.authenticate]
-  }, async (request, reply) => {
-    const { id } = request.params;
-
+  // Single path for sending a draft proposal (POST /:id/send and bulk send):
+  // issue the public link, email the primary contact, record delivery.
+  // Returns { statusCode, body } so bulk send can report per item.
+  async function sendDraftProposal(request, id) {
     const existing = await request.prisma.proposal.findUnique({ where: { id } });
 
     if (!existing) {
-      return reply.status(404).send({ error: 'Proposal not found' });
+      return { statusCode: 404, body: { error: 'Proposal not found' } };
     }
 
     if (existing.status !== 'DRAFT') {
-      return reply.status(400).send({ error: 'Only draft proposals can be sent' });
+      return { statusCode: 400, body: { error: 'Only draft proposals can be sent', code: 'ALREADY_SENT' } };
     }
     if (existing.validUntil && new Date(existing.validUntil) <= new Date()) {
-      return reply.status(409).send({ error: 'Proposal validity date must be extended before sending' });
+      return { statusCode: 409, body: { error: 'Proposal validity date must be extended before sending' } };
     }
     const access = createPublicAccessWindow(existing.validUntil);
-    const proposal = await request.prisma.proposal.update({
-      where: { id },
+    // Claim DRAFT -> SENT with the new token before emailing, so concurrent
+    // sends (single or bulk) email the client once, with the stored link.
+    const claimed = await request.prisma.proposal.updateMany({
+      where: { id, status: 'DRAFT' },
       data: {
         status: 'SENT',
         sentAt: new Date(),
@@ -311,6 +335,12 @@ export default async function proposalRoutes(fastify) {
         publicAccessExpiresAt: access.expiresAt,
         publicAccessRevokedAt: access.revokedAt,
       },
+    });
+    if (claimed.count !== 1) {
+      return { statusCode: 409, body: { error: 'Proposal is already being sent or was sent', code: 'ALREADY_SENT' } };
+    }
+    const proposal = await request.prisma.proposal.findUnique({
+      where: { id },
       include: {
         client: {
           select: {
@@ -335,7 +365,15 @@ export default async function proposalRoutes(fastify) {
       deliveryFields = await recordProposalDelivery(request.prisma, proposal.id, delivery);
     }
 
-    return withDeliveryState({ ...proposal, ...deliveryFields, emailSent });
+    return { statusCode: 200, body: withDeliveryState({ ...proposal, ...deliveryFields, emailSent }) };
+  }
+
+  // Send proposal (mark as SENT)
+  fastify.post('/:id/send', {
+    onRequest: [fastify.authenticate]
+  }, async (request, reply) => {
+    const { statusCode, body } = await sendDraftProposal(request, request.params.id);
+    return reply.status(statusCode).send(body);
   });
 
   fastify.post('/:id/resend', { onRequest: [fastify.authenticate] }, async (request, reply) => {
@@ -660,12 +698,26 @@ export default async function proposalRoutes(fastify) {
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return reply.status(400).send({ error: 'ids array is required' });
     }
+    // Sequential emails per proposal: capped to stay inside request timeouts.
+    if (ids.length > PROPOSAL_BULK_SEND_MAX) {
+      return reply.status(400).send({ error: `Send at most ${PROPOSAL_BULK_SEND_MAX} proposals per request` });
+    }
 
-    const result = await request.prisma.proposal.updateMany({
-      where: { id: { in: ids }, status: 'DRAFT' },
-      data: { status: 'SENT', sentAt: new Date() }
-    });
+    // Same path as a single send for each proposal; one failure never stops
+    // the rest.
+    const results = [];
+    for (const id of ids) {
+      try {
+        const { statusCode, body } = await sendDraftProposal(request, id);
+        results.push(statusCode === 200
+          ? { id, ok: true, statusCode, emailSent: body.emailSent }
+          : { id, ok: false, statusCode, error: body.error, ...(body.code === 'ALREADY_SENT' ? { reason: 'already_sent' } : {}) });
+      } catch (err) {
+        logger.error({ err, proposalId: id }, 'Bulk proposal send failed for one proposal');
+        results.push({ id, ok: false, statusCode: 500, error: 'Proposal could not be sent' });
+      }
+    }
 
-    return { sent: result.count };
+    return { sent: results.filter((result) => result.ok).length, results };
   });
 }

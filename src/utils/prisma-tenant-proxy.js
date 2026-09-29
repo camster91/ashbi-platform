@@ -40,6 +40,8 @@ const DIRECT_SCOPED_MODELS = new Set([
   'onboardingprogress', 'slackinstallation', 'slackchannelmapping', 'slackeventreceipt', 'googlecalendarconnection', 'notionimportrecord', 'importrun', 'slackimportrecord', 'aibridgeaction',
   'publicinquiry', 'auditevent', 'aiproviderconnection', 'aiusagerecord',
   'reviewsession', 'domainevent',
+  // Per-organization invoice number counters (docs/invoicing.md).
+  'documentnumbersequence',
   // Support impersonation and break-glass grants (#416).
   'impersonationsession', 'breakglassgrant'
 ]);

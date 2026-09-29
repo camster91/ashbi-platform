@@ -1,19 +1,59 @@
 // Invoice routes — full CRUD + send + PDF + payments + templates
-import { CLEARED_CHECKOUT_FIELDS, checkoutPersistenceData, createPaymentLink, ensureCheckoutSession, handleCheckoutFailure, handleWebhook, recordCheckoutAuditEvents, recordCompletedCheckout } from '../services/stripe.service.js';
+import { CLEARED_CHECKOUT_FIELDS, checkoutPersistenceData, createPaymentLink, ensureCheckoutSession, expireCheckoutSession, handleCheckoutFailure, handleWebhook, recordCheckoutAuditEvents, recordCompletedCheckout } from '../services/stripe.service.js';
 import { generateInvoicePdf } from '../utils/generate-invoice-pdf.js';
 import { deliveryFieldsFromSend, withDeliveryState } from '../services/mailgun-delivery.service.js';
-import { generateInvoiceNumber } from '../utils/invoice.js';
-import { createPublicAccessWindow, publicAccessFailure } from '../utils/public-document-access.js';
+import { createNumberedInvoice } from '../utils/invoice.js';
+import { createPublicAccessWindow, invoicePublicAccessFailure, INVOICE_OPEN_STATUSES } from '../utils/public-document-access.js';
 import { validateBody, createInvoiceSchema, updateInvoiceSchema, markInvoicePaidSchema, sendInvoiceSchema, lineItemTemplateCreateSchema, invoiceBulkIdsSchema, invoiceBulkArchiveSchema, bulkMarkPaidSchema } from '../validators/schemas.js';
 import { sendInvoiceDeliveryEmail } from '../services/email.service.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
+import { defaultInvoiceCurrency, normalizeInvoiceCurrency } from '../utils/money.js';
 import { settleInvoiceManually } from '../services/invoice-payment.service.js';
 
 const HST_RATE = 13; // Ontario HST
 const VOID_UNDO_WINDOW_MS = 10_000;
 const VOIDABLE_STATUSES = new Set(['DRAFT', 'SENT', 'OVERDUE']);
 
-export default async function invoiceRoutes(fastify) {
+// Prisma reports the violated unique constraint as meta.target (field list
+// or index name) or, through the pg driver adapter, as
+// meta.driverAdapterError.cause.constraint.
+export function isUniqueViolationOn(error, { index, fields = [] }) {
+  if (error?.code !== 'P2002') return false;
+  const target = error.meta?.target;
+  const targets = Array.isArray(target) ? target : (target ? [target] : []);
+  const constraint = error.meta?.driverAdapterError?.cause?.constraint;
+  if (constraint?.index) targets.push(constraint.index);
+  if (Array.isArray(constraint?.fields)) targets.push(...constraint.fields);
+  return targets.some((value) => value === index || fields.includes(String(value).replace(/"/g, '')));
+}
+
+function roundMoney(value) {
+  return Math.round((Number(value) || 0) * 100) / 100;
+}
+
+// Bulk send works through each draft sequentially (Checkout + email per
+// invoice), so the batch is capped to keep one request well inside proxy and
+// client timeouts; larger batches are sent in several requests.
+export const INVOICE_BULK_SEND_MAX = 25;
+
+/**
+ * @param {any} fastify
+ * @param {{ createPaymentLink?: Function, sendInvoiceDeliveryEmail?: Function, expireCheckoutSession?: Function }} [options]
+ *   Test seams for the Stripe and email providers; production uses the defaults.
+ */
+export default async function invoiceRoutes(fastify, options = {}) {
+  const createCheckout = options.createPaymentLink || createPaymentLink;
+  const deliverInvoiceEmail = options.sendInvoiceDeliveryEmail || sendInvoiceDeliveryEmail;
+  const expireSession = options.expireCheckoutSession || expireCheckoutSession;
+
+  // A voided invoice must not stay payable through a stored Checkout session:
+  // forget it on the invoice and ask Stripe to expire it (best-effort; a
+  // completion that still arrives is refused as INVOICE_VOID).
+  async function retireCheckoutSession(invoice) {
+    if (!invoice.stripeCheckoutSessionId) return;
+    const expired = await expireSession(invoice.stripeCheckoutSessionId, { log: fastify.log });
+    if (!expired) fastify.log.warn({ invoiceId: invoice.id }, 'Voided invoice Checkout session was not expired at Stripe');
+  }
 
   function calcTotals(lineItems, taxRate, discountAmount = 0) {
     const subtotal = lineItems.reduce((sum, li) => sum + li.total, 0);
@@ -49,10 +89,14 @@ export default async function invoiceRoutes(fastify) {
     });
   }
 
+  // Overdue = stored OVERDUE (set by the overdue job) or SENT past its due
+  // date (before the job has run).
+  function isOverdueInvoice(inv, now = new Date()) {
+    return inv.status === 'OVERDUE' || Boolean(inv.status === 'SENT' && inv.dueDate && new Date(inv.dueDate) < now);
+  }
+
   function flagOverdue(inv) {
-    const now = new Date();
-    const isOverdue = inv.status === 'SENT' && inv.dueDate && new Date(inv.dueDate) < now;
-    return withDeliveryState({ ...inv, isOverdue });
+    return withDeliveryState({ ...inv, isOverdue: isOverdueInvoice(inv) });
   }
 
   // ─── GET / — list invoices ──────────────────────────────────────────────────
@@ -63,18 +107,22 @@ export default async function invoiceRoutes(fastify) {
     if (clientId) where.clientId = clientId;
     if (projectId) where.projectId = projectId;
     if (status && status !== 'OVERDUE') where.status = status;
+    const and = [];
     if (status === 'OVERDUE') {
-      where.status = 'SENT';
-      where.dueDate = { lt: new Date() };
+      and.push({ OR: [
+        { status: 'OVERDUE' },
+        { status: 'SENT', dueDate: { lt: new Date() } },
+      ] });
     }
     if (search) {
-      where.OR = [
+      and.push({ OR: [
         { invoiceNumber: { contains: search, mode: 'insensitive' } },
         { title: { contains: search, mode: 'insensitive' } },
         { notes: { contains: search, mode: 'insensitive' } },
         { client: { name: { contains: search, mode: 'insensitive' } } },
-      ];
+      ] });
     }
+    if (and.length) where.AND = and;
 
     const [invoices, total] = await Promise.all([
       fastify.prisma.invoice.findMany({
@@ -98,45 +146,74 @@ export default async function invoiceRoutes(fastify) {
     };
   });
 
+  // Collection stats. Buckets are disjoint so no invoice is counted twice:
+  //   sent    = SENT and not yet past due
+  //   overdue = stored OVERDUE, or SENT past its due date
+  //   totalOutstanding = sent + overdue (every open invoice once)
+  // Money is grouped by currency in `byCurrency`; the top-level amounts are
+  // only filled when every invoice shares one currency (`mixedCurrency`
+  // false), otherwise they are null because adding currencies is meaningless.
+  // Counts are always totals across currencies.
   async function getStats() {
-    // Performance: previously this ran `findMany({ select })` with no `where`
-    // and pulled every invoice row to compute aggregates in JS — a full table
-    // scan on every GET /api/invoices call. Replace with `groupBy` so the
-    // database does the aggregation server-side. The overdue total still
-    // needs a separate aggregation since it depends on `dueDate < now`.
     const now = new Date();
-    const [byStatus, overdueAgg] = await Promise.all([
+    const [byStatus, sentPastDue] = await Promise.all([
       fastify.prisma.invoice.groupBy({
-        by: ['status'],
+        by: ['status', 'currency'],
         _count: { _all: true },
         _sum: { total: true },
       }),
-      fastify.prisma.invoice.aggregate({
+      fastify.prisma.invoice.groupBy({
+        by: ['currency'],
         where: { status: 'SENT', dueDate: { lt: now } },
         _count: { _all: true },
         _sum: { total: true },
       }),
     ]);
 
-    const stats = {
+    const emptyBuckets = () => ({
       draft: { count: 0, amount: 0 },
       sent: { count: 0, amount: 0 },
       paid: { count: 0, amount: 0 },
-      overdue: { count: overdueAgg._count._all, amount: overdueAgg._sum.total ?? 0 },
+      overdue: { count: 0, amount: 0 },
       void: { count: 0, amount: 0 },
       totalOutstanding: 0,
+    });
+    const totals = emptyBuckets();
+    const byCurrency = {};
+    const bucketFor = (currency) => (byCurrency[currency || 'CAD'] ??= emptyBuckets());
+    const add = (buckets, key, count, amount) => {
+      buckets[key].count += count;
+      buckets[key].amount = roundMoney(buckets[key].amount + amount);
     };
 
     for (const row of byStatus) {
-      const key = row.status.toLowerCase();
-      if (stats[key]) {
-        stats[key].count = row._count._all;
-        stats[key].amount = row._sum.total ?? 0;
+      const key = row.status === 'OVERDUE' ? 'overdue' : row.status.toLowerCase();
+      if (!totals[key]) continue;
+      const count = row._count._all;
+      const amount = row._sum.total ?? 0;
+      add(totals, key, count, amount);
+      add(bucketFor(row.currency), key, count, amount);
+    }
+    // Move SENT-but-past-due from "sent" to "overdue".
+    for (const row of sentPastDue) {
+      const count = row._count._all;
+      const amount = row._sum.total ?? 0;
+      for (const buckets of [totals, bucketFor(row.currency)]) {
+        add(buckets, 'sent', -count, -amount);
+        add(buckets, 'overdue', count, amount);
       }
     }
+    for (const buckets of [totals, ...Object.values(byCurrency)]) {
+      buckets.totalOutstanding = roundMoney(buckets.sent.amount + buckets.overdue.amount);
+    }
 
-    stats.totalOutstanding = stats.sent.amount + stats.overdue.amount;
-    return stats;
+    const currencies = Object.keys(byCurrency).sort();
+    const mixedCurrency = currencies.length > 1;
+    if (mixedCurrency) {
+      for (const key of ['draft', 'sent', 'paid', 'overdue', 'void']) totals[key].amount = null;
+      totals.totalOutstanding = null;
+    }
+    return { ...totals, currencies, mixedCurrency, byCurrency };
   }
 
   // ─── GET /stats — collections dashboard ────────────────────────────────────
@@ -207,19 +284,25 @@ export default async function invoiceRoutes(fastify) {
       discountAmount = 0,
       isRecurring = false,
       recurringInterval,
+      currency,
     } = request.body;
 
     if (!clientId) return reply.status(400).send({ error: 'clientId is required' });
     if (lineItems.length === 0) return reply.status(400).send({ error: 'At least one line item is required' });
 
-    const invoiceNumber = await generateInvoiceNumber();
+    const client = await fastify.prisma.client.findFirst({ where: { id: clientId }, select: { id: true, name: true } });
+    if (!client) return reply.status(404).send({ error: 'Client not found' });
+
     const processedItems = processLineItems(lineItems);
     const { subtotal, tax, total } = calcTotals(processedItems, taxRate, discountAmount);
 
-    return fastify.prisma.invoice.create({
+    // The number is allocated from the organization's counter inside the
+    // same transaction as the insert (src/utils/invoice.js).
+    return createNumberedInvoice(fastify.prisma, {
+      organizationId: request.user.organizationId,
       data: {
-        invoiceNumber,
-        title: title || null,
+        title: title || `Invoice for ${client.name}`,
+        currency: normalizeInvoiceCurrency(currency) || defaultInvoiceCurrency(),
         clientId,
         projectId: projectId || null,
         subtotal,
@@ -267,10 +350,12 @@ export default async function invoiceRoutes(fastify) {
       projectId,
       isRecurring,
       recurringInterval,
+      currency,
     } = request.body;
 
     const updateData = {};
-    if (title !== undefined) updateData.title = title;
+    if (title !== undefined && title !== '') updateData.title = title;
+    if (currency !== undefined) updateData.currency = normalizeInvoiceCurrency(currency);
     if (notes !== undefined) updateData.notes = notes;
     if (internalNotes !== undefined) updateData.internalNotes = internalNotes;
     if (dueDate !== undefined) updateData.dueDate = dueDate ? new Date(dueDate) : null;
@@ -331,8 +416,9 @@ export default async function invoiceRoutes(fastify) {
     const voidedAt = new Date();
     const updated = await request.prisma.invoice.update({
       where: { id: request.params.id },
-      data: { status: 'VOID', voidedAt, voidedFromStatus: invoice.status }
+      data: { status: 'VOID', voidedAt, voidedFromStatus: invoice.status, ...CLEARED_CHECKOUT_FIELDS }
     });
+    await retireCheckoutSession(invoice);
     return {
       ...updated,
       undoExpiresAt: new Date(voidedAt.getTime() + VOID_UNDO_WINDOW_MS),
@@ -361,10 +447,12 @@ export default async function invoiceRoutes(fastify) {
     }, { isolationLevel: 'Serializable' });
   });
 
-  // ─── POST /:id/send — send invoice to client ───────────────────────────────
-  fastify.post('/:id/send', { onRequest: [fastify.authenticate], preHandler: [validateBody(sendInvoiceSchema)] }, async (request, reply) => {
+  // Single path for sending a draft (used by POST /:id/send and bulk send):
+  // issue the public link, try a Checkout session, email the client, audit.
+  // Returns { statusCode, body } so bulk send can report per item.
+  async function sendDraftInvoice(request, invoiceId, { bulk = false } = {}) {
     const invoice = await fastify.prisma.invoice.findUnique({
-      where: { id: request.params.id },
+      where: { id: invoiceId },
       include: {
         client: {
           include: { contacts: { where: { isPrimary: true }, take: 1 } }
@@ -372,24 +460,35 @@ export default async function invoiceRoutes(fastify) {
         lineItems: { orderBy: { position: 'asc' } }
       }
     });
-    if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
-    if (invoice.status !== 'DRAFT') return reply.status(400).send({ error: 'Only draft invoices can be sent' });
+    if (!invoice) return { statusCode: 404, body: { error: 'Invoice not found' } };
+    if (invoice.status !== 'DRAFT') return { statusCode: 400, body: { error: 'Only draft invoices can be sent', code: 'ALREADY_SENT' } };
 
-    const access = createPublicAccessWindow(invoice.dueDate);
-    const updateData = {
-      status: 'SENT',
-      sentAt: new Date(),
-      viewToken: access.token,
-      publicAccessExpiresAt: access.expiresAt,
-      publicAccessRevokedAt: access.revokedAt,
-    };
+    // The link is not tied to the due date: it stays valid while the invoice
+    // is open (see invoicePublicAccessFailure), so overdue reminders work.
+    const access = createPublicAccessWindow();
+    // Claim DRAFT -> SENT with the new token before any side effect, so two
+    // concurrent sends (single or bulk) cannot both create a Checkout session
+    // and email the client, and the emailed link is the stored one.
+    const claimed = await fastify.prisma.invoice.updateMany({
+      where: { id: invoice.id, status: 'DRAFT' },
+      data: {
+        status: 'SENT',
+        sentAt: new Date(),
+        viewToken: access.token,
+        publicAccessExpiresAt: access.expiresAt,
+        publicAccessRevokedAt: access.revokedAt,
+      },
+    });
+    if (claimed.count !== 1) {
+      return { statusCode: 409, body: { error: 'Invoice is already being sent or was sent', code: 'ALREADY_SENT' } };
+    }
+    const updateData = {};
 
     // Attempt Stripe payment link
     try {
-      // The Checkout return URLs must point at the token issued by this send,
-      // not the pre-send token that is about to be replaced.
-      const checkoutInvoice = { ...invoice, viewToken: access.token };
-      const result = await createPaymentLink(checkoutInvoice);
+      // The Checkout return URLs must point at the token issued by this send.
+      const checkoutInvoice = { ...invoice, status: 'SENT', viewToken: access.token };
+      const result = await createCheckout(checkoutInvoice);
       if (result) Object.assign(updateData, checkoutPersistenceData(checkoutInvoice, result));
     } catch (err) {
       fastify.log.warn({ err }, 'Stripe payment link failed — sending without it');
@@ -401,14 +500,14 @@ export default async function invoiceRoutes(fastify) {
     if (primaryContact?.email) {
       try {
         const viewUrl = `${process.env.APP_URL || 'https://hub.ashbi.ca'}/portal/invoice/${access.token}`;
-        const delivery = await sendInvoiceDeliveryEmail({
+        const delivery = await deliverInvoiceEmail({
           to: primaryContact.email,
           clientName: primaryContact.name || invoice.client.name,
           invoiceNumber: invoice.invoiceNumber,
           total: invoice.total,
+          currency: invoice.currency,
           dueDate: invoice.dueDate,
           viewUrl,
-          paymentLink: updateData.stripePaymentLink,
           invoiceId: invoice.id,
         });
         emailSent = delivery.ok;
@@ -421,7 +520,7 @@ export default async function invoiceRoutes(fastify) {
     }
 
     const updated = await fastify.prisma.invoice.update({
-      where: { id: request.params.id },
+      where: { id: invoice.id },
       data: updateData,
       include: {
         client: { select: { id: true, name: true } },
@@ -439,10 +538,17 @@ export default async function invoiceRoutes(fastify) {
         paymentLinkAttached: Boolean(updateData.stripePaymentLink),
         total: invoice.total,
         currency: invoice.currency,
+        ...(bulk ? { bulk: true } : {}),
       },
     });
 
-    return { ...flagOverdue(updated), emailSent };
+    return { statusCode: 200, body: { ...flagOverdue(updated), emailSent } };
+  }
+
+  // ─── POST /:id/send — send invoice to client ───────────────────────────────
+  fastify.post('/:id/send', { onRequest: [fastify.authenticate], preHandler: [validateBody(sendInvoiceSchema)] }, async (request, reply) => {
+    const { statusCode, body } = await sendDraftInvoice(request, request.params.id);
+    return reply.status(statusCode).send(body);
   });
 
   // ─── GET /:id/pdf — generate and download PDF ──────────────────────────────
@@ -519,8 +625,8 @@ export default async function invoiceRoutes(fastify) {
       include: { client: true, lineItems: true }
     });
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
-    if (invoice.status !== 'SENT') return reply.status(409).send({ error: 'Only sent invoices can have a payment link' });
-    const accessFailure = publicAccessFailure(invoice);
+    if (!INVOICE_OPEN_STATUSES.includes(invoice.status)) return reply.status(409).send({ error: 'Only sent or overdue invoices can have a payment link' });
+    const accessFailure = invoicePublicAccessFailure(invoice);
     if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
 
     try {
@@ -568,7 +674,6 @@ export default async function invoiceRoutes(fastify) {
     });
     if (existing) return existing;
 
-    const invoiceNumber = await generateInvoiceNumber();
     const processedItems = proposal.lineItems.map((li, idx) => ({
       description: li.description,
       itemType: 'LABOR',
@@ -581,10 +686,12 @@ export default async function invoiceRoutes(fastify) {
     const { subtotal, tax, total } = calcTotals(processedItems, HST_RATE, proposal.discount || 0);
 
     try {
-      return await fastify.prisma.invoice.create({
+      return await createNumberedInvoice(fastify.prisma, {
+        organizationId: request.user.organizationId,
         data: {
-          invoiceNumber,
           title: `Invoice for: ${proposal.title}`,
+          // Proposals carry no currency; use the organization default.
+          currency: defaultInvoiceCurrency(),
           clientId: proposal.clientId,
           projectId: proposal.projectId || null,
           proposalId: proposal.id,
@@ -601,7 +708,9 @@ export default async function invoiceRoutes(fastify) {
         include: invoiceInclude
       });
     } catch (error) {
-      if (error?.code !== 'P2002') throw error;
+      // Only the one-invoice-per-proposal constraint means "already created";
+      // any other unique violation is a real error.
+      if (!isUniqueViolationOn(error, { index: 'invoices_proposalId_key', fields: ['proposalId'] })) throw error;
       return fastify.prisma.invoice.findUnique({
         where: { proposalId: proposal.id },
         include: invoiceInclude
@@ -619,7 +728,7 @@ export default async function invoiceRoutes(fastify) {
         createdBy: { select: { name: true } }
       }
     });
-    const accessFailure = publicAccessFailure(invoice);
+    const accessFailure = invoicePublicAccessFailure(invoice);
     if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
     // Don't expose internal notes in public view
     const {
@@ -659,8 +768,8 @@ export default async function invoiceRoutes(fastify) {
       },
     });
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
-    if (invoice.status !== 'SENT') return reply.status(409).send({ error: 'Only sent invoices can be resent' });
-    const accessFailure = publicAccessFailure(invoice);
+    if (!INVOICE_OPEN_STATUSES.includes(invoice.status)) return reply.status(409).send({ error: 'Only sent or overdue invoices can be resent' });
+    const accessFailure = invoicePublicAccessFailure(invoice);
     if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
     const contact = invoice.client?.contacts?.[0];
     if (!contact?.email) return reply.status(409).send({ error: 'Primary client email is missing' });
@@ -670,9 +779,9 @@ export default async function invoiceRoutes(fastify) {
       clientName: contact.name || invoice.client.name,
       invoiceNumber: invoice.invoiceNumber,
       total: invoice.total,
+      currency: invoice.currency,
       dueDate: invoice.dueDate,
       viewUrl,
-      paymentLink: invoice.stripePaymentLink,
       invoiceId: invoice.id,
     });
     await request.prisma.invoice.update({ where: { id: invoice.id }, data: deliveryFieldsFromSend(delivery) });
@@ -683,7 +792,7 @@ export default async function invoiceRoutes(fastify) {
   fastify.post('/:id/public-link/rotate', { onRequest: [fastify.authenticate] }, async (request, reply) => {
     const invoice = await request.prisma.invoice.findUnique({ where: { id: request.params.id } });
     if (!invoice) return reply.status(404).send({ error: 'Invoice not found' });
-    if (!['SENT', 'PAID'].includes(invoice.status)) return reply.status(409).send({ error: 'Invoice has not been sent' });
+    if (![...INVOICE_OPEN_STATUSES, 'PAID'].includes(invoice.status)) return reply.status(409).send({ error: 'Invoice has not been sent' });
     const access = createPublicAccessWindow();
     return request.prisma.invoice.update({
       where: { id: invoice.id },
@@ -764,28 +873,26 @@ export default async function invoiceRoutes(fastify) {
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return reply.status(400).send({ error: 'ids array is required' });
     }
-
-    let sent = 0;
-    for (const id of ids) {
-      const invoice = await fastify.prisma.invoice.findUnique({
-        where: { id },
-        include: { client: { include: { contacts: { where: { isPrimary: true }, take: 1 } } } }
-      });
-      if (!invoice || invoice.status !== 'DRAFT') continue;
-
-      await fastify.prisma.invoice.update({
-        where: { id },
-        data: { status: 'SENT', sentAt: new Date() }
-      });
-      await recordRequestAuditEvent(fastify.prisma, request, {
-        action: 'invoice.sent',
-        entityId: id,
-        metadata: { fromStatus: invoice.status, toStatus: 'SENT', bulk: true, deliveryAccepted: false, total: invoice.total, currency: invoice.currency },
-      });
-      sent++;
+    if (ids.length > INVOICE_BULK_SEND_MAX) {
+      return reply.status(400).send({ error: `Send at most ${INVOICE_BULK_SEND_MAX} invoices per request` });
     }
 
-    return { sent };
+    // Each invoice goes through the same path as a single send (claim, public
+    // link, Checkout, email, audit); one failure never stops the rest.
+    const results = [];
+    for (const id of ids) {
+      try {
+        const { statusCode, body } = await sendDraftInvoice(request, id, { bulk: true });
+        results.push(statusCode === 200
+          ? { id, ok: true, statusCode, invoiceNumber: body.invoiceNumber, emailSent: body.emailSent }
+          : { id, ok: false, statusCode, error: body.error, ...(body.code === 'ALREADY_SENT' ? { reason: 'already_sent' } : {}) });
+      } catch (err) {
+        fastify.log.error({ err, invoiceId: id }, 'Bulk invoice send failed for one invoice');
+        results.push({ id, ok: false, statusCode: 500, error: 'Invoice could not be sent' });
+      }
+    }
+
+    return { sent: results.filter((result) => result.ok).length, results };
   });
 
   // ─── POST /bulk/archive — archive (void) multiple invoices ──────────────────
@@ -804,176 +911,12 @@ export default async function invoiceRoutes(fastify) {
 
       await fastify.prisma.invoice.update({
         where: { id },
-        data: { status: 'VOID' }
+        data: { status: 'VOID', voidedAt: new Date(), voidedFromStatus: invoice.status, ...CLEARED_CHECKOUT_FIELDS }
       });
+      await retireCheckoutSession(invoice);
       archived++;
     }
 
     return { archived };
   });
-}
-
-// ─── Invoice HTML/PDF generator ──────────────────────────────────────────────
-function generateInvoiceHTML(invoice) {
-  const client = invoice.client;
-  const lineItems = invoice.lineItems || [];
-  const issueDate = new Date(invoice.issueDate || invoice.createdAt).toLocaleDateString('en-CA', { dateStyle: 'long' });
-  const dueDate = invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString('en-CA', { dateStyle: 'long' }) : 'Upon receipt';
-
-  const fmt = (n) => `$${(n || 0).toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-  const lineItemsHTML = lineItems.map(li => `
-    <tr>
-      <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;">${li.description}</td>
-      <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;text-align:center;">${li.quantity}</td>
-      <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;text-align:right;">${fmt(li.unitPrice)}</td>
-      <td style="padding:10px 12px;border-bottom:1px solid #f1f5f9;text-align:right;font-weight:500;">${fmt(li.total)}</td>
-    </tr>
-  `).join('');
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Invoice ${invoice.invoiceNumber}</title>
-  <style>
-    * { margin:0; padding:0; box-sizing:border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color:#1e293b; background:#fff; }
-    .page { max-width:800px; margin:40px auto; padding:48px; }
-    .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:48px; }
-    .brand { font-size:24px; font-weight:700; color:#2563eb; letter-spacing:-0.5px; }
-    .brand-sub { font-size:12px; color:#64748b; margin-top:2px; }
-    .invoice-meta { text-align:right; }
-    .invoice-number { font-size:28px; font-weight:700; color:#1e293b; }
-    .status-badge { display:inline-block; padding:4px 12px; border-radius:20px; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; margin-top:6px; }
-    .status-DRAFT { background:#f1f5f9; color:#64748b; }
-    .status-SENT { background:#dbeafe; color:#1d4ed8; }
-    .status-PAID { background:#dcfce7; color:#16a34a; }
-    .status-OVERDUE { background:#fee2e2; color:#dc2626; }
-    .status-VOID { background:#f1f5f9; color:#94a3b8; }
-    .parties { display:grid; grid-template-columns:1fr 1fr; gap:32px; margin-bottom:40px; }
-    .party-label { font-size:11px; font-weight:600; text-transform:uppercase; color:#64748b; letter-spacing:0.5px; margin-bottom:8px; }
-    .party-name { font-size:16px; font-weight:600; margin-bottom:4px; }
-    .party-detail { font-size:13px; color:#64748b; }
-    .dates { display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-bottom:40px; padding:20px 24px; background:#f8fafc; border-radius:8px; }
-    .date-label { font-size:11px; color:#64748b; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:4px; }
-    .date-value { font-size:14px; font-weight:500; }
-    table { width:100%; border-collapse:collapse; margin-bottom:24px; }
-    thead th { background:#f8fafc; padding:10px 12px; text-align:left; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#64748b; }
-    thead th:not(:first-child) { text-align:right; }
-    thead th:nth-child(2) { text-align:center; }
-    .totals { margin-left:auto; width:280px; }
-    .totals-row { display:flex; justify-content:space-between; padding:6px 0; font-size:14px; }
-    .totals-row.discount { color:#16a34a; }
-    .totals-row.total { border-top:2px solid #1e293b; margin-top:8px; padding-top:12px; font-size:18px; font-weight:700; }
-    .notes { margin-top:40px; padding:20px 24px; background:#f8fafc; border-radius:8px; }
-    .notes-label { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#64748b; margin-bottom:8px; }
-    .notes-text { font-size:14px; color:#475569; line-height:1.6; }
-    .footer { margin-top:48px; padding-top:24px; border-top:1px solid #e2e8f0; text-align:center; font-size:12px; color:#94a3b8; }
-    .pay-btn { display:inline-block; margin-top:24px; padding:14px 32px; background:#2563eb; color:#fff; text-decoration:none; border-radius:8px; font-weight:600; font-size:15px; }
-    @media print {
-      .page { margin:0; padding:32px; }
-      .no-print { display:none; }
-    }
-  </style>
-</head>
-<body>
-  <div class="page">
-    <div class="header">
-      <div>
-        <div class="brand">Ashbi Design</div>
-        <div class="brand-sub">ashbi.ca · hello@ashbi.ca</div>
-      </div>
-      <div class="invoice-meta">
-        <div class="invoice-number">INVOICE</div>
-        <div style="font-size:16px;color:#64748b;margin-top:4px;">${invoice.invoiceNumber}</div>
-        <span class="status-badge status-${invoice.status}">${invoice.status}</span>
-      </div>
-    </div>
-
-    <div class="parties">
-      <div>
-        <div class="party-label">From</div>
-        <div class="party-name">Ashbi Design</div>
-        <div class="party-detail">Toronto, Ontario, Canada</div>
-        <div class="party-detail">HST: 123456789 RT 0001</div>
-      </div>
-      <div>
-        <div class="party-label">Bill To</div>
-        <div class="party-name">${client?.name || 'Client'}</div>
-        ${client?.domain ? `<div class="party-detail">${client.domain}</div>` : ''}
-      </div>
-    </div>
-
-    <div class="dates">
-      <div>
-        <div class="date-label">Issue Date</div>
-        <div class="date-value">${issueDate}</div>
-      </div>
-      <div>
-        <div class="date-label">Due Date</div>
-        <div class="date-value">${dueDate}</div>
-      </div>
-    </div>
-
-    ${invoice.title ? `<h2 style="margin-bottom:16px;font-size:18px;color:#1e293b;">${invoice.title}</h2>` : ''}
-
-    <table>
-      <thead>
-        <tr>
-          <th style="width:50%">Description</th>
-          <th style="width:12%;text-align:center;">Qty</th>
-          <th style="width:19%;text-align:right;">Unit Price</th>
-          <th style="width:19%;text-align:right;">Amount</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${lineItemsHTML}
-      </tbody>
-    </table>
-
-    <div class="totals">
-      <div class="totals-row">
-        <span>Subtotal</span>
-        <span>${fmt(invoice.subtotal)}</span>
-      </div>
-      ${invoice.discountAmount > 0 ? `
-      <div class="totals-row discount">
-        <span>Discount</span>
-        <span>-${fmt(invoice.discountAmount)}</span>
-      </div>` : ''}
-      <div class="totals-row">
-        <span>${invoice.taxType || 'HST'} (${invoice.taxRate || 13}%)</span>
-        <span>${fmt(invoice.tax)}</span>
-      </div>
-      <div class="totals-row total">
-        <span>Total Due</span>
-        <span>${fmt(invoice.total)} CAD</span>
-      </div>
-      ${invoice.status === 'PAID' && invoice.payments?.length > 0 ? `
-      <div class="totals-row" style="color:#16a34a;margin-top:8px;">
-        <span>✓ Paid</span>
-        <span>${fmt(invoice.total)}</span>
-      </div>` : ''}
-    </div>
-
-    ${invoice.notes ? `
-    <div class="notes">
-      <div class="notes-label">Notes</div>
-      <div class="notes-text">${invoice.notes}</div>
-    </div>` : ''}
-
-    ${invoice.stripePaymentLink && invoice.status === 'SENT' ? `
-    <div style="text-align:center;margin-top:40px;" class="no-print">
-      <a href="${invoice.stripePaymentLink}" class="pay-btn">Pay Now — ${fmt(invoice.total)} CAD</a>
-    </div>` : ''}
-
-    <div class="footer">
-      <p>Thank you for your business!</p>
-      <p style="margin-top:4px;">Ashbi Design · Toronto, Ontario · ashbi.ca</p>
-    </div>
-  </div>
-</body>
-</html>`;
 }
