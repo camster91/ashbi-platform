@@ -13,6 +13,7 @@ process.env.BOT_ORGANIZATION_ID = 'org-bot';
 const { default: webhookRoutes } = await import('../../routes/webhook.routes.js');
 const {
   EMAIL_WEBHOOK_CLAIM_LEASE_MS, signEmailWebhook, verifyEmailWebhook, claimEmailWebhookSignature, markEmailWebhookProcessed,
+  releaseEmailWebhookSignature, renewEmailWebhookClaim,
 } = await import('../../webhooks/email-webhook-signature.js');
 
 function receiptStore() {
@@ -62,24 +63,40 @@ test('verification uses the raw body and a bounded timestamp', () => {
 
 test('a signature is accepted once', async () => {
   const store = receiptStore();
-  assert.equal(await claimEmailWebhookSignature(store, 'abc'), true);
-  assert.equal(await claimEmailWebhookSignature(store, 'abc'), false);
+  assert.equal(typeof await claimEmailWebhookSignature(store, 'abc'), 'string');
+  assert.equal(await claimEmailWebhookSignature(store, 'abc'), null);
 });
 
-test('an interrupted claim is retryable after its lease; a processed delivery never is', async () => {
+test('a dead claim is retryable after its lease; a live, renewed claim and a processed delivery never are', async () => {
   const store = receiptStore();
   const t0 = new Date('2026-09-29T00:00:00Z');
   const later = (ms) => new Date(t0.getTime() + ms);
+  const LEASE = EMAIL_WEBHOOK_CLAIM_LEASE_MS;
 
-  // The process died after claiming: nothing marked it processed.
-  assert.equal(await claimEmailWebhookSignature(store, 'lost', { now: t0 }), true);
-  assert.equal(await claimEmailWebhookSignature(store, 'lost', { now: later(30_000) }), false, 'in flight: still leased');
-  assert.equal(await claimEmailWebhookSignature(store, 'lost', { now: later(EMAIL_WEBHOOK_CLAIM_LEASE_MS + 1) }), true, 'a retry takes the stale claim over');
+  // The handler died after claiming: no renewals, never processed.
+  const lost = await claimEmailWebhookSignature(store, 'lost', { now: t0 });
+  assert.ok(lost);
+  assert.equal(await claimEmailWebhookSignature(store, 'lost', { now: later(LEASE / 2) }), null, 'in flight: still leased');
+  const retry = await claimEmailWebhookSignature(store, 'lost', { now: later(LEASE + 1) });
+  assert.ok(retry && retry !== lost, 'a retry takes the dead claim over with a new token');
+  // The old owner is fenced off: it can no longer renew, complete or release.
+  assert.equal(await renewEmailWebhookClaim(store, 'lost', lost, { now: later(LEASE + 2) }), false);
+  await releaseEmailWebhookSignature(store, 'lost', lost);
+  await markEmailWebhookProcessed(store, 'lost', lost, { now: later(LEASE + 3) });
+  assert.equal(store.rows.get('lost').claimToken, retry);
+  assert.equal(store.rows.get('lost').processedAt, null);
+
+  // A slow but live handler renews, so a retry never takes its claim.
+  const slow = await claimEmailWebhookSignature(store, 'slow', { now: t0 });
+  for (let step = 1; step <= 10; step += 1) {
+    assert.equal(await renewEmailWebhookClaim(store, 'slow', slow, { now: later(step * LEASE / 3) }), true);
+    assert.equal(await claimEmailWebhookSignature(store, 'slow', { now: later(step * LEASE / 3 + LEASE / 2) }), null);
+  }
 
   // A processed delivery stays a replay, however late it comes back.
-  assert.equal(await claimEmailWebhookSignature(store, 'done', { now: t0 }), true);
-  await markEmailWebhookProcessed(store, 'done', { now: later(1_000) });
-  assert.equal(await claimEmailWebhookSignature(store, 'done', { now: later(EMAIL_WEBHOOK_CLAIM_LEASE_MS + 1) }), false);
+  const done = await claimEmailWebhookSignature(store, 'done', { now: t0 });
+  await markEmailWebhookProcessed(store, 'done', done, { now: later(1_000) });
+  assert.equal(await claimEmailWebhookSignature(store, 'done', { now: later(LEASE + 1) }), null);
 });
 
 test('the route refuses unsigned, legacy-signed, stale and replayed deliveries', async (t) => {

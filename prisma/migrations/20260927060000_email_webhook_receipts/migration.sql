@@ -1,7 +1,9 @@
 -- Replay guard for the signed inbound email webhook (POST /api/webhooks/email):
 -- the signature of each accepted delivery is recorded once. processedAt marks
--- a delivery as finished; an unfinished claim older than its lease can be
--- taken over by a retry, so an interrupted delivery is not lost.
+-- a delivery as finished. A live handler renews its claim; a claim whose
+-- handler died expires and can be taken over by a retry, so an interrupted
+-- delivery is not lost. claimToken fences renewal, completion and release to
+-- the claim's current owner.
 --
 -- Additive only: one new table and its indexes. Rolling back the image is safe
 -- (older code never reads it).
@@ -19,6 +21,7 @@ CREATE TABLE "email_webhook_receipts" (
     "signature" TEXT NOT NULL,
     "receivedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "processedAt" TIMESTAMP(3),
+    "claimToken" TEXT NOT NULL,
 
     CONSTRAINT "email_webhook_receipts_pkey" PRIMARY KEY ("id")
 );
