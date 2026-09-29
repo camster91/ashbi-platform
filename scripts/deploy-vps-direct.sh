@@ -115,15 +115,30 @@ raise_rollback_floor() {
     grep -qxF "$name" "$ROLLBACK_FLOOR_FILE" 2>/dev/null || echo "$name" >> "$ROLLBACK_FLOOR_FILE"
   done
 }
-# Stop a container that must no longer serve; force-remove it if a stop does
-# not take. Succeeds only when it is verifiably not running (or gone).
-stop_below_floor() {
-  local name=$1 timeout=$2
-  docker stop --time "$timeout" "$name" >/dev/null 2>&1 || true
-  if [[ $(docker inspect --format '{{.State.Running}}' "$name" 2>/dev/null) == true ]]; then
-    docker rm -f "$name" >/dev/null 2>&1 || true
+# "true"/"false" when docker reports the container's state, "gone" when docker
+# confirms it does not exist, "unknown" when the state could not be read.
+container_state() {
+  local out
+  if out=$(docker inspect --format '{{.State.Running}}' "$1" 2>&1); then
+    [[ $out == true || $out == false ]] && echo "$out" || echo unknown
+  elif [[ $out == *"No such"* ]]; then
+    echo gone
+  else
+    echo unknown
   fi
-  [[ $(docker inspect --format '{{.State.Running}}' "$name" 2>/dev/null) != true ]]
+}
+# Stop a container that must no longer serve; force-remove it if a stop does
+# not take. Succeeds only when it is positively known to be stopped or gone:
+# an unreadable state (e.g. the daemon is unavailable) fails closed.
+stop_below_floor() {
+  local name=$1 timeout=$2 state
+  docker stop --time "$timeout" "$name" >/dev/null 2>&1 || true
+  state=$(container_state "$name")
+  if [[ $state != false && $state != gone ]]; then
+    docker rm -f "$name" >/dev/null 2>&1 || true
+    state=$(container_state "$name")
+  fi
+  [[ $state == false || $state == gone ]]
 }
 # --- end rollback floor ---
 
