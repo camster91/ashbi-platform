@@ -100,7 +100,11 @@ test('the staff message list batch-loads files for messages and replies (no per-
   const prisma = {
     project: { findFirst: async () => ({ id: PROJECT }) },
     // The grouped activity query returns thread roots, newest activity first.
-    $queryRaw: async () => [...new Set(activity.map((row) => row.parentId ?? row.id))].map((rootId) => ({ rootId })),
+    $queryRaw: async () => {
+      const latest = new Map();
+      for (const row of activity) if (!latest.has(row.parentId ?? row.id)) latest.set(row.parentId ?? row.id, row.createdAt);
+      return [...latest].map(([rootId, lastActivityAt]) => ({ rootId, lastActivityAt }));
+    },
     chatMessage: {
       findMany: async (args) => threads.filter((thread) => args.where.id.in.includes(thread.id)),
     },
@@ -127,6 +131,7 @@ test('the staff message list batch-loads files for messages and replies (no per-
     assert.deepEqual(second.attachments, []);
     assert.equal(second.replies[0].attachments[0].id, 'f2');
     assert.deepEqual(removed.attachments, [], 'a deleted message shows no files');
+    assert.equal(second.lastActivityAt, '2026-09-29T10:03:00.000Z', 'thread activity survives the attachment load');
   } finally {
     await app.close();
   }

@@ -83,6 +83,17 @@ test('threads are one level deep and ordered by latest activity', {
     const flooded = (await app.inject({ method: 'GET', url: `/api/projects/${ids.project}/messages?limit=2` })).json();
     assert.deepEqual(flooded.map((t) => t.content), ['newest', 'old-thread']);
 
+    // Threads sharing one activity timestamp are split across pages by id,
+    // never skipped.
+    for (const n of [1, 2, 3]) await message(`tie-${n}`, 30);
+    const tiedFirst = (await app.inject({ method: 'GET', url: `/api/projects/${ids.project}/messages?limit=2` })).json();
+    assert.equal(tiedFirst.length, 2);
+    const cursor = tiedFirst[0];
+    const tiedNext = (await app.inject({ method: 'GET', url: `/api/projects/${ids.project}/messages?limit=2&before=${encodeURIComponent(cursor.lastActivityAt)}&beforeId=${cursor.id}` })).json();
+    const seen = [...tiedFirst, ...tiedNext].map((t) => t.content).filter((c) => c.startsWith('tie-')).sort();
+    assert.deepEqual(seen, ['tie-1', 'tie-2', 'tie-3'], 'every tied thread appears exactly once');
+    assert.equal(cursor.lastActivityAt, at(30).toISOString());
+
     // A reply to a reply joins the thread (one level).
     const nested = await app.inject({
       method: 'POST', url: `/api/projects/${ids.project}/messages`,
