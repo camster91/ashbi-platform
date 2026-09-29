@@ -71,6 +71,8 @@ model Organization {
   aiUsageRecords  AiUsageRecord[]
   reviewSessions  ReviewSession[]
   domainEvents    DomainEvent[]
+  impersonationSessions ImpersonationSession[]
+  breakGlassGrants      BreakGlassGrant[]
 
   @@map("organizations")
 }
@@ -1920,6 +1922,55 @@ model ApiKey {
 
   @@index([userId])
   @@map("api_keys")
+}
+
+// Audited support impersonation (#416, docs/privileged-actions.md): an ADMIN
+// views the app as a non-admin staff (TEAM/STAFF) or CLIENT member of the same organization, read-only
+// and for a fixed, non-renewable window. Actor and subject carry no FK so the
+// record outlives either account; the audit trail is in audit_events.
+model ImpersonationSession {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actorUserId    String
+  subjectUserId  String
+  subjectRole    String // TEAM, STAFF or CLIENT (CHECK constraint)
+  reason         String // 10 to 500 characters (CHECK constraint)
+  readOnly       Boolean      @default(true)
+  startedAt      DateTime     @default(now())
+  expiresAt      DateTime // at most 60 minutes after startedAt (CHECK constraint)
+  endedAt        DateTime?
+  endReason      String? // stopped, expired, superseded, signed_out, revoked_* (CHECK constraint)
+  endedById      String? // No FK: history must outlive the actor account
+
+  @@index([organizationId, startedAt])
+  @@index([actorUserId, endedAt])
+  @@index([subjectUserId, endedAt])
+  @@map("impersonation_sessions")
+}
+
+// Emergency (break-glass) recovery of an organization's administrator access
+// (#416, docs/privileged-actions.md). Issued only by the operator CLI
+// scripts/break-glass.mjs when BREAK_GLASS_ENABLED=true; single use and short
+// lived. Only the SHA-256 of the token is stored.
+model BreakGlassGrant {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  targetUserId   String // No FK: history must outlive the account
+  operatorId     String // Platform operator user id (PLATFORM_OPERATOR_USER_IDS); may belong to another organization
+  reason         String // 10 to 500 characters (CHECK constraint)
+  promoteToAdmin Boolean      @default(false)
+  tokenHash      String       @unique
+  issuedByOsUser String // OS user the operator CLI ran as (the operator id is only claimed)
+  issuedFromHost String // Host name the operator CLI ran on
+  createdAt      DateTime     @default(now())
+  expiresAt      DateTime // at most 60 minutes after createdAt (CHECK constraint)
+  redeemedAt     DateTime?
+  revokedAt      DateTime?
+
+  @@index([organizationId, createdAt])
+  @@map("break_glass_grants")
 }
 
 // Confirmation and audit ledger for actions requested through the tenant API

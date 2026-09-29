@@ -38,8 +38,8 @@ queries; the test keeps a reviewed list of those routes with the reason.
 
 | Access | Routes |
 | --- | --- |
-| admin | 33 |
-| admin + recent-auth | 12 |
+| admin | 34 |
+| admin + recent-auth | 13 |
 | admin + recent-auth (access change) | 1 |
 | admin + staff | 6 |
 | api-key | 1 |
@@ -47,11 +47,11 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | api-key + scope ai_bridge:read | 1 |
 | bot-secret | 41 |
 | client-portal | 19 |
-| public | 50 |
+| public | 51 |
 | recent-auth + staff | 4 |
-| staff | 355 |
+| staff | 357 |
 | staff (inline) | 1 |
-| **total** | 526 |
+| **total** | 531 |
 
 ## Routes by prefix
 
@@ -187,10 +187,15 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | Method | Path | Access | Tenancy | Notes |
 | --- | --- | --- | --- | --- |
 | POST | `/api/auth/admin/clients/:clientId/invite` | staff | exempt | Admin only; the client is looked up with the admin's organizationId. |
+| POST | `/api/auth/break-glass/redeem` | public | exempt | credential exchange: Redeems a single-use, 30-minute break-glass grant issued by a platform operator with scripts/break-glass.mjs (SHA-256-hashed 256-bit token). 404 unless BREAK_GLASS_ENABLED=true; rate limited per IP; audited in the target organization. See docs/privileged-actions.md. |
 | POST | `/api/auth/change-password` | staff | exempt | Changes only the caller's own password. |
 | POST | `/api/auth/client/login` | public | exempt | credential exchange: Client portal password login. |
 | POST | `/api/auth/client/signup` | public | exempt | credential exchange: Requires a client invitation token. |
 | POST | `/api/auth/forgot-password` | public | exempt | credential exchange: Issues a reset email; response does not reveal whether the account exists. |
+| GET | `/api/auth/impersonation` | staff | exempt | Returns only the caller's own support-view state, from the context the impersonation hook verified. |
+| POST | `/api/auth/impersonation` | admin + recent-auth | exempt | Admin only; queries use createScopedPrisma(request.user.organizationId), so a subject in another organization is not found (404). |
+| GET | `/api/auth/impersonation/sessions` | admin | exempt | Admin only; reads through createScopedPrisma(request.user.organizationId). |
+| POST | `/api/auth/impersonation/stop` | staff | exempt | Ends only the caller's own support view(s), through a client scoped to the caller's organization. |
 | POST | `/api/auth/login` | public | exempt | credential exchange: Staff password login. |
 | POST | `/api/auth/login/mfa` | public | exempt | credential exchange: Second login step; requires the short-lived MFA challenge token. |
 | POST | `/api/auth/logout` | public | exempt | credential exchange: Verifies the session cookie in the handler when present; always clears it. |

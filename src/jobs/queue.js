@@ -24,6 +24,10 @@ export const PRODUCER_ADD_TIMEOUT_MS = 5_000;
 // BullMQ workers issue blocking commands and require unlimited retries.
 export const WORKER_REDIS_OPTIONS = Object.freeze({ maxRetriesPerRequest: null });
 
+// Pub/sub (support-view socket revocation) must queue SUBSCRIBE until Redis is
+// reachable and resubscribe after reconnects: default offline queue on.
+export const PUBSUB_REDIS_OPTIONS = Object.freeze({ maxRetriesPerRequest: null, enableOfflineQueue: true });
+
 function createConnection(overrides) {
   const redis = new IORedis(...redisConnectionArgs(process.env.REDIS_URL, overrides));
   // An unhandled 'error' event would crash the process; readiness and the
@@ -34,6 +38,15 @@ function createConnection(overrides) {
 
 const connection = isTestEnv ? {} : createConnection(PRODUCER_REDIS_OPTIONS);
 let workerConnection;
+
+/**
+ * Source for pub/sub connections: `duplicate()` opens a new connection with
+ * PUBSUB_REDIS_OPTIONS (callers own and close it). Null in tests.
+ */
+export function pubSubRedisSource() {
+  if (isTestEnv) return null;
+  return { duplicate: () => createConnection(PUBSUB_REDIS_OPTIONS) };
+}
 
 /** Blocking-safe connection for BullMQ workers and the worker heartbeat. */
 export function getWorkerConnection() {
@@ -66,8 +79,9 @@ export function guardProducerAdd(add, redis, timeoutMs = PRODUCER_ADD_TIMEOUT_MS
       return await Promise.race([
         add.apply(this, args),
         new Promise((_, reject) => {
+          // Not unref'd: an in-flight add is real work, and the timer is
+          // always cleared when the add settles.
           timer = setTimeout(() => reject(new QueueUnavailableError('Job queue add timed out')), timeoutMs);
-          timer.unref?.();
         }),
       ]);
     } finally {

@@ -63,6 +63,22 @@ export function isTenancyExemptUrl(url) {
 }
 
 /**
+ * The active support-impersonation context (#416) set by the global hook in
+ * src/index.js, reduced to what audit writes need.
+ * @param {any} request
+ */
+function impersonationOf(request) {
+  const context = request.impersonation;
+  if (!context) return null;
+  return {
+    organizationId: context.organizationId,
+    actorUserId: context.actorUserId,
+    subjectUserId: context.subjectUserId,
+    sessionId: context.sessionId,
+  };
+}
+
+/**
  * Enterprise Multi-Tenancy Middleware
  *
  * Ensures that every request is scoped to a specific organization.
@@ -81,7 +97,7 @@ export async function tenancyMiddleware(request, reply) {
 
   if (isTenancyExemptUrl(request.url)) {
     request.prisma = prisma; // Use global for auth/portal/health/public routes
-    enterRequestContext({ prisma, organizationId: null });
+    enterRequestContext({ prisma, organizationId: null, impersonation: impersonationOf(request) });
     return;
   }
 
@@ -126,6 +142,7 @@ export async function tenancyMiddleware(request, reply) {
     organizationId,
     requestId: request.id,
     feature: request.routeOptions?.url ?? null,
+    impersonation: impersonationOf(request),
   });
 
   logger.debug({ organizationId }, '🛡️ Tenancy: Request scoped via Proxy');
