@@ -45,12 +45,12 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | api-key | 1 |
 | api-key + scope ai_bridge:actions | 2 |
 | api-key + scope ai_bridge:read | 1 |
-| bot-secret | 41 |
+| bot-secret | 40 |
 | client-portal | 19 |
 | public | 51 |
 | recent-auth + staff | 4 |
-| staff | 359 |
-| **total** | 532 |
+| staff | 357 |
+| **total** | 529 |
 
 ## Routes by prefix
 
@@ -253,7 +253,6 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | GET | `/api/bot/retainer/:clientId` | bot-secret | exempt |  |
 | GET | `/api/bot/sync` | bot-secret | exempt |  |
 | GET | `/api/bot/system/gateway-status` | bot-secret | exempt |  |
-| POST | `/api/bot/system/restart-gateway` | bot-secret | exempt |  |
 | POST | `/api/bot/task` | bot-secret | exempt |  |
 | PATCH | `/api/bot/task/:id` | bot-secret | exempt |  |
 | POST | `/api/bot/tasks/bulk` | bot-secret | exempt |  |
@@ -443,8 +442,6 @@ queries; the test keeps a reviewed list of those routes with the reason.
 | GET | `/api/estimates/:id` | staff | scoped |  |
 | PUT | `/api/estimates/:id` | staff | scoped |  |
 | POST | `/api/estimates/:id/convert` | staff | scoped |  |
-| POST | `/api/estimates/:id/reissue-link` | staff | scoped |  |
-| POST | `/api/estimates/:id/revoke-link` | staff | scoped |  |
 | POST | `/api/estimates/:id/send` | staff | scoped |  |
 | GET | `/api/estimates/view/:viewToken` | public | exempt | capability token: Estimate view link. |
 | POST | `/api/estimates/view/:viewToken/approve` | public | exempt | capability token: Estimate approval via view link. |

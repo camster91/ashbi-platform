@@ -269,8 +269,8 @@ export default async function clientPortalRoutes(fastify) {
       .setCookie('token', sessionToken, {
         path: '/',
         httpOnly: true,
-        secure: env.isProduction,
-        sameSite: env.isProduction ? 'strict' : 'lax',
+        secure: env.isDeployed,
+        sameSite: env.isDeployed ? 'strict' : 'lax',
         maxAge: sessionCookieMaxAge()
       })
       .send({
@@ -290,8 +290,8 @@ export default async function clientPortalRoutes(fastify) {
       .clearCookie('token', {
         path: '/',
         httpOnly: true,
-        secure: env.isProduction,
-        sameSite: env.isProduction ? 'strict' : 'lax',
+        secure: env.isDeployed,
+        sameSite: env.isDeployed ? 'strict' : 'lax',
       })
       .send({ success: true });
   });

@@ -785,22 +785,6 @@ export default async function botRoutes(fastify) {
     return { success: true, jobId: job.id, message: 'Weekly digest generation queued' };
   });
 
-  // POST /system/restart-gateway — safely restart OpenClaw gateway via watchdog
-  fastify.post('/system/restart-gateway', { preHandler: requireBotAuth }, async (request, reply) => {
-    const watchdogScript = process.env.WATCHDOG_SCRIPT || path.join(os.homedir(), '.openclaw', 'workspace', 'watchdog', 'openclaw-watchdog.js');
-    const scriptPath = path.resolve(watchdogScript);
-    
-    if (!scriptPath.startsWith(os.homedir())) {
-      return reply.status(400).send({ error: 'Invalid watchdog path' });
-    }
-    
-    exec(`node "${scriptPath}" restart`, (err) => {
-      if (err) fastify.log.error('Watchdog restart error:', err.message);
-    });
-
-    return { status: 'restart initiated', timestamp: new Date().toISOString() };
-  });
-
   // GET /system/gateway-status — check gateway health via watchdog
   fastify.get('/system/gateway-status', { preHandler: requireBotAuth }, async () => {
     return {

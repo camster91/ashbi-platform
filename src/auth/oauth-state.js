@@ -83,9 +83,9 @@ export function oauthStateCookieName(purpose) {
   return `oauth_state_${purpose}`;
 }
 
-function oauthStateCookieOptions({ isProduction = env.isProduction } = {}) {
+function oauthStateCookieOptions({ isDeployed = env.isDeployed } = {}) {
   // lax: the provider's redirect back is a top-level cross-site GET navigation.
-  return { path: '/api', httpOnly: true, secure: isProduction, sameSite: 'lax' };
+  return { path: '/api', httpOnly: true, secure: isDeployed, sameSite: 'lax' };
 }
 
 /** Sign a state and bind it to this browser. Returns the state to put in the authorize URL. */

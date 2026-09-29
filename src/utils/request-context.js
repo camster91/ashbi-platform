@@ -1,3 +1,4 @@
+// @ts-check
 // Per-request async context for tenant scoping.
 //
 // Why this exists:
