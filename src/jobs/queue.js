@@ -167,6 +167,24 @@ export async function queueEmailForProcessing(emailData) {
 }
 
 /**
+ * Hand a verified inbound email delivery to the worker. `jobId` makes the
+ * enqueue idempotent: a retry of the same delivery (for example after this
+ * process died before recording the receipt) does not create a second job
+ * while the first is retained. Processing retries with backoff.
+ */
+export async function queueInboundEmailDelivery(emailData, { organizationId, jobId }) {
+  if (!organizationId) throw new Error('Tenancy Error: an organization is required to enqueue an inbound email');
+  const job = await emailQueue.add('process-email', { ...emailData, organizationId }, {
+    jobId,
+    attempts: 5,
+    backoff: { type: 'exponential', delay: 5000 },
+    removeOnComplete: { age: 24 * 60 * 60 },
+    removeOnFail: { age: 7 * 24 * 60 * 60 },
+  });
+  return job.id;
+}
+
+/**
  * Schedule project health update
  */
 export async function scheduleHealthUpdate(projectId) {

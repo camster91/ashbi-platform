@@ -2634,11 +2634,9 @@ model ClientPortalLinkRedemption {
 // Replay guard for the signed inbound email webhook (POST /api/webhooks/email):
 // each accepted signature is recorded once. Holds no tenant data, so it is global.
 model EmailWebhookReceipt {
-  id          String    @id @default(cuid())
-  signature   String    @unique
-  receivedAt  DateTime  @default(now())
-  processedAt DateTime?
-  claimToken  String
+  id         String   @id @default(cuid())
+  signature  String   @unique
+  receivedAt DateTime @default(now())
 
   @@index([receivedAt])
   @@map("email_webhook_receipts")

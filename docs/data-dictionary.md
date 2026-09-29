@@ -52,7 +52,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [DomainEvent](#model-domainevent) | `domain_events` | yes | no | 23 |
 | [EmailTriageDraft](#model-emailtriagedraft) | `email_triage_drafts` | no | no | 10 |
 | [EmailTriageItem](#model-emailtriageitem) | `email_triage_items` | yes | no | 14 |
-| [EmailWebhookReceipt](#model-emailwebhookreceipt) | `email_webhook_receipts` | no | no | 5 |
+| [EmailWebhookReceipt](#model-emailwebhookreceipt) | `email_webhook_receipts` | no | no | 3 |
 | [Estimate](#model-estimate) | `estimates` | no | yes | 23 |
 | [EventAttendee](#model-eventattendee) | `event_attendees` | no | no | 7 |
 | [Expense](#model-expense) | `expenses` | no | yes | 19 |
@@ -1000,8 +1000,6 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `id` | String | id, required | `cuid()` |  |  |
 | `signature` | String | unique, required |  |  |  |
 | `receivedAt` | DateTime | required | `now()` |  |  |
-| `processedAt` | DateTime | optional |  |  |  |
-| `claimToken` | String | required |  |  |  |
 
 ### Model Estimate
 
