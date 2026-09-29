@@ -15,17 +15,12 @@ import { randomUUID } from 'node:crypto';
 import prismaPkg from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { buildApp } from '../../index.js';
+import { signUserSession } from '../../auth/session.js';
 
 const databaseUrl = process.env.TENANT_INTEGRATION_DATABASE_URL;
-// The handler that maps Prisma errors is registered after the route plugins
-// on this branch, so Fastify's default handler still answers them; the
-// security branch moves it before the routes. Until then this is reported as
-// a TODO instead of failing.
-const HANDLER_COVERS_ROUTES = process.env.ASHBI_EXPECT_ROUTE_ERROR_HANDLER === '1';
 
 test('a unique violation in POST /api/invoices returns a generic 409', {
   skip: !databaseUrl && 'TENANT_INTEGRATION_DATABASE_URL is not configured',
-  todo: !HANDLER_COVERS_ROUTES && 'passes once the global error handler is registered before the routes (local/security-fixes)',
   timeout: 120_000,
 }, async () => {
   const { PrismaClient } = prismaPkg;
@@ -53,7 +48,8 @@ test('a unique violation in POST /api/invoices returns a generic 409', {
 
     app = await buildApp({ initializeRuntime: false, jwtSecret: 'conflict-test-secret' });
     const stored = await raw.user.findUnique({ where: { id: user } });
-    const token = app.jwt.sign({ id: user, email: stored.email, role: 'ADMIN', organizationId: org, sessionVersion: stored.sessionVersion });
+    // A real, typed staff session exactly as login issues it.
+    const token = signUserSession(app.jwt, stored);
     const response = await app.inject({
       method: 'POST',
       url: '/api/invoices',
