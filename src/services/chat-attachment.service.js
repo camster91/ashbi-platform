@@ -270,7 +270,9 @@ export async function findClientReadableChatAttachment(prisma, { attachmentId, c
       id: attachment.entityId,
       visibility: 'CLIENT',
       removedAt: null,
-      project: { clientId },
+      // Nested relation filters are not soft-delete scoped: exclude trashed
+      // and cancelled projects explicitly, as the portal's project list does.
+      project: { clientId, deletedAt: null, status: { notIn: ['CANCELLED'] } },
     },
     select: { id: true },
   });

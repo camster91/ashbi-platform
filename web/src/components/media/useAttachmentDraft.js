@@ -23,6 +23,10 @@ export function useAttachmentDraft({ upload, discard, max = MAX_MESSAGE_ATTACHME
   const itemsRef = useRef(items);
   itemsRef.current = items;
   const controllers = useRef(new Map());
+  // The discard function in effect when each upload started: the composer's
+  // project can change (portal project switch) while a file is pending, and
+  // the file must be discarded from the project it was uploaded to.
+  const discarders = useRef(new Map());
   const uploadRef = useRef(upload);
   const discardRef = useRef(discard);
   uploadRef.current = upload;
@@ -32,9 +36,16 @@ export function useAttachmentDraft({ upload, discard, max = MAX_MESSAGE_ATTACHME
     setItems((current) => current.map((item) => (item.localId === localId ? { ...item, ...changes } : item)));
   }, []);
 
+  const discardUpload = useCallback((localId, attachmentId) => {
+    const discardFn = discarders.current.get(localId) ?? discardRef.current;
+    discarders.current.delete(localId);
+    if (attachmentId) discardFn?.(attachmentId)?.catch?.(() => {});
+  }, []);
+
   const start = useCallback((item) => {
     const controller = new AbortController();
     controllers.current.set(item.localId, controller);
+    discarders.current.set(item.localId, discardRef.current);
     patch(item.localId, { status: 'uploading', progress: 0, error: '' });
     uploadRef.current(item.file, {
       signal: controller.signal,
@@ -43,7 +54,7 @@ export function useAttachmentDraft({ upload, discard, max = MAX_MESSAGE_ATTACHME
       controllers.current.delete(item.localId);
       // Removed while uploading: the server copy is not wanted.
       if (!itemsRef.current.some((current) => current.localId === item.localId)) {
-        if (uploaded?.id) discardRef.current?.(uploaded.id)?.catch?.(() => {});
+        discardUpload(item.localId, uploaded?.id);
         return;
       }
       patch(item.localId, { status: 'ready', progress: 1, id: uploaded.id });
@@ -52,7 +63,7 @@ export function useAttachmentDraft({ upload, discard, max = MAX_MESSAGE_ATTACHME
       if (error?.name === 'AbortError') return;
       patch(item.localId, { status: 'error', error: error?.message || 'Upload failed.' });
     });
-  }, [patch]);
+  }, [patch, discardUpload]);
 
   const addFiles = useCallback((fileList, { fallbackBase } = {}) => {
     const files = Array.from(fileList || []);
@@ -103,8 +114,8 @@ export function useAttachmentDraft({ upload, discard, max = MAX_MESSAGE_ATTACHME
     release(item);
     itemsRef.current = itemsRef.current.filter((current) => current.localId !== localId);
     setItems(itemsRef.current);
-    if (item.id) discardRef.current?.(item.id)?.catch?.(() => {});
-  }, []);
+    discardUpload(item.localId, item.id);
+  }, [discardUpload]);
 
   const retry = useCallback((localId) => {
     const item = itemsRef.current.find((current) => current.localId === localId);
@@ -117,11 +128,21 @@ export function useAttachmentDraft({ upload, discard, max = MAX_MESSAGE_ATTACHME
     return addFiles([file]);
   }, [addFiles, remove]);
 
-  /** After a successful send: the server owns the files now. */
-  const clear = useCallback(() => {
-    itemsRef.current.forEach((item) => { if (item.previewUrl) URL.revokeObjectURL?.(item.previewUrl); });
-    itemsRef.current = [];
-    setItems([]);
+  /**
+   * After a successful send: the server owns the sent files now. With the
+   * sent ids, only those leave the tray, so a file added while the send was
+   * in flight stays; without ids, the whole tray is cleared.
+   * @param {string[]} [sentIds]
+   */
+  const clear = useCallback((sentIds) => {
+    const sent = Array.isArray(sentIds) ? new Set(sentIds) : null;
+    const leaving = sent ? itemsRef.current.filter((item) => item.id && sent.has(item.id)) : itemsRef.current;
+    leaving.forEach((item) => {
+      if (item.previewUrl) URL.revokeObjectURL?.(item.previewUrl);
+      discarders.current.delete(item.localId);
+    });
+    itemsRef.current = sent ? itemsRef.current.filter((item) => !leaving.includes(item)) : [];
+    setItems(itemsRef.current);
     setNotice('');
   }, []);
 
@@ -130,12 +151,12 @@ export function useAttachmentDraft({ upload, discard, max = MAX_MESSAGE_ATTACHME
     const current = itemsRef.current;
     current.forEach((item) => {
       release(item);
-      if (item.id) discardRef.current?.(item.id)?.catch?.(() => {});
+      discardUpload(item.localId, item.id);
     });
     itemsRef.current = [];
     setItems([]);
     setNotice('');
-  }, []);
+  }, [discardUpload]);
 
   useEffect(() => () => reset(), [reset]);
 

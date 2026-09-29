@@ -141,10 +141,11 @@ export default function ProjectChat({ projectId }) {
       projectId,
       attachmentIds.length ? { content, visibility, attachmentIds } : { content, visibility },
     ),
-    onSuccess: (created) => {
+    onSuccess: (created, { attachmentIds }) => {
       setMessage('');
       setSendError('');
-      draft.clear();
+      // Only the sent files leave the tray: one added while sending stays.
+      draft.clear(attachmentIds);
       // Back to the safe default after each client-visible message, so the
       // next message is internal unless staff choose otherwise again.
       setVisibility('INTERNAL');

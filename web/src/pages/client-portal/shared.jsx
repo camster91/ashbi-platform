@@ -313,7 +313,7 @@ export function useProjectChat(projectId, token) {
         throw new Error(body.error || `Message could not be sent (${res.status}).`);
       }
       const msg = await res.json();
-      clearAttachments();
+      clearAttachments(attachmentIds);
       setMessages(prev => {
         if (prev.some(m => m.id === msg.id)) return prev;
         return [...prev, msg];
