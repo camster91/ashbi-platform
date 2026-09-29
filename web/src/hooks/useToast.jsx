@@ -5,6 +5,7 @@ import { cn } from '../lib/utils';
 const ToastContext = createContext(null);
 
 let toastId = 0;
+const DEDUPE_WINDOW_MS = 5000;
 
 const ICONS = {
   success: CheckCircle,
@@ -124,6 +125,10 @@ export function ToastProvider({ children }) {
   const [isMobile, setIsMobile] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const timers = useRef({});
+  const toastsRef = useRef(toasts);
+  useEffect(() => {
+    toastsRef.current = toasts;
+  }, [toasts]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(max-width: 1023px)');
@@ -163,8 +168,11 @@ export function ToastProvider({ children }) {
     setNow(Date.now());
   }, [dismiss]);
 
+  // Identical toasts (same type, title and message) are shown once: a repeat
+  // while the first is visible, or within DEDUPE_WINDOW_MS of it, is dropped.
+  const recentToasts = useRef(new Map());
+
   const toast = useCallback((type, titleOrOptions, message, duration = 4000) => {
-    const id = ++toastId;
     let title, msg, action;
 
     if (typeof titleOrOptions === 'object') {
@@ -176,6 +184,15 @@ export function ToastProvider({ children }) {
       title = titleOrOptions;
       msg = message;
     }
+
+    const key = `${type}\u0000${title ?? ''}\u0000${msg ?? ''}`;
+    const recent = recentToasts.current.get(key);
+    const nowMs = Date.now();
+    if (recent && (toastsRef.current.some((t) => t.id === recent.id) || nowMs - recent.at < DEDUPE_WINDOW_MS)) {
+      return recent.id;
+    }
+    const id = ++toastId;
+    recentToasts.current.set(key, { id, at: nowMs });
 
     setToasts(prev => [...prev.slice(-4), { id, type, title, message: msg, action, duration }]);
     if (Number.isFinite(duration) && duration > 0) {

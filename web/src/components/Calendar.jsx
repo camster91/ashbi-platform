@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import Modal from './Modal';
+import { QueryErrorState } from './QueryErrorState';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June',
@@ -19,7 +20,7 @@ export default function Calendar({ projectId }) {
   const monthEnd = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
 
   // Fetch events
-  const { data: events = [], isLoading } = useQuery({
+  const { data: events = [], isLoading, isError, error: eventsError, refetch, isFetching } = useQuery({
     queryKey: ['calendar', projectId, monthStart.toISOString()],
     queryFn: () => api.getCalendarEvents({
       startDate: monthStart.toISOString(),
@@ -91,12 +92,16 @@ export default function Calendar({ projectId }) {
     return date.toDateString() === today.toDateString();
   };
 
+  if (isError) {
+    return <QueryErrorState error={eventsError} message="Calendar events could not be loaded" onRetry={refetch} isRetrying={isFetching} />;
+  }
+
   return (
-    <div className="bg-white rounded-lg border">
+    <div className="bg-card rounded-lg border">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b">
         <div className="flex items-center gap-4">
-          <h2 className="text-xl font-semibold text-gray-900">
+          <h2 className="text-xl font-semibold text-foreground">
             {MONTHS[currentDate.getMonth()]} {currentDate.getFullYear()}
           </h2>
           <button
@@ -113,7 +118,7 @@ export default function Calendar({ projectId }) {
             type="button"
             aria-label="Previous month"
             onClick={prevMonth}
-            className="min-h-11 min-w-11 inline-flex items-center justify-center p-2 hover:bg-gray-100 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+            className="min-h-11 min-w-11 inline-flex items-center justify-center p-2 hover:bg-muted rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -123,7 +128,7 @@ export default function Calendar({ projectId }) {
             type="button"
             aria-label="Next month"
             onClick={nextMonth}
-            className="min-h-11 min-w-11 inline-flex items-center justify-center p-2 hover:bg-gray-100 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+            className="min-h-11 min-w-11 inline-flex items-center justify-center p-2 hover:bg-muted rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -148,7 +153,7 @@ export default function Calendar({ projectId }) {
         {/* Day headers */}
         <div className="grid grid-cols-7 gap-1 mb-2">
           {DAYS.map((day) => (
-            <div key={day} className="text-center text-sm font-medium text-gray-500 py-2">
+            <div key={day} className="text-center text-sm font-medium text-muted-foreground py-2">
               {day}
             </div>
           ))}
@@ -160,14 +165,14 @@ export default function Calendar({ projectId }) {
             <div
               key={index}
               onClick={() => handleDayClick(day)}
-              className={`min-h-[100px] border rounded-lg p-1 cursor-pointer hover:bg-gray-50 ${
-                !day.date ? 'bg-gray-50' : ''
+              className={`min-h-[100px] border rounded-lg p-1 cursor-pointer hover:bg-muted/50 ${
+                !day.date ? 'bg-muted/50' : ''
               } ${isToday(day.date) ? 'border-blue-500 border-2' : ''}`}
             >
               {day.date && (
                 <>
                   <div className={`text-sm font-medium mb-1 ${
-                    isToday(day.date) ? 'text-blue-600' : 'text-gray-700'
+                    isToday(day.date) ? 'text-blue-600' : 'text-muted-foreground'
                   }`}>
                     {day.date.getDate()}
                   </div>
@@ -187,7 +192,7 @@ export default function Calendar({ projectId }) {
                       </div>
                     ))}
                     {day.events.length > 3 && (
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-muted-foreground">
                         +{day.events.length - 3} more
                       </div>
                     )}
@@ -204,32 +209,32 @@ export default function Calendar({ projectId }) {
         <Modal isOpen={true} onClose={() => setSelectedEvent(null)} title={selectedEvent.title}>
           <div className="space-y-4">
             <div>
-              <label className="text-sm text-gray-500">Date & Time</label>
-              <p className="text-gray-900">
+              <label className="text-sm text-muted-foreground">Date & Time</label>
+              <p className="text-foreground">
                 {new Date(selectedEvent.startTime).toLocaleString()}
                 {selectedEvent.endTime && ` - ${new Date(selectedEvent.endTime).toLocaleTimeString()}`}
               </p>
             </div>
             {selectedEvent.description && (
               <div>
-                <label className="text-sm text-gray-500">Description</label>
-                <p className="text-gray-900">{selectedEvent.description}</p>
+                <label className="text-sm text-muted-foreground">Description</label>
+                <p className="text-foreground">{selectedEvent.description}</p>
               </div>
             )}
             {selectedEvent.location && (
               <div>
-                <label className="text-sm text-gray-500">Location</label>
-                <p className="text-gray-900">{selectedEvent.location}</p>
+                <label className="text-sm text-muted-foreground">Location</label>
+                <p className="text-foreground">{selectedEvent.location}</p>
               </div>
             )}
             {selectedEvent.attendees?.length > 0 && (
               <div>
-                <label className="text-sm text-gray-500">Attendees</label>
+                <label className="text-sm text-muted-foreground">Attendees</label>
                 <div className="flex flex-wrap gap-2 mt-1">
                   {selectedEvent.attendees.map((a) => (
-                    <span key={a.id} className="text-sm bg-gray-100 px-2 py-1 rounded">
+                    <span key={a.id} className="text-sm bg-muted px-2 py-1 rounded">
                       {a.user.name}
-                      <span className="ml-1 text-xs text-gray-500">({a.status.toLowerCase()})</span>
+                      <span className="ml-1 text-xs text-muted-foreground">({a.status.toLowerCase()})</span>
                     </span>
                   ))}
                 </div>
@@ -277,7 +282,7 @@ function CreateEventModal({ date, projectId, onClose, onSubmit, isLoading }) {
     <Modal isOpen={true} onClose={onClose} title="Create Event">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+          <label className="block text-sm font-medium text-foreground mb-1">Title</label>
           <input
             type="text"
             value={formData.title}
@@ -288,7 +293,7 @@ function CreateEventModal({ date, projectId, onClose, onSubmit, isLoading }) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+          <label className="block text-sm font-medium text-foreground mb-1">Type</label>
           <select
             value={formData.type}
             onChange={(e) => setFormData({ ...formData, type: e.target.value })}
@@ -308,12 +313,12 @@ function CreateEventModal({ date, projectId, onClose, onSubmit, isLoading }) {
             checked={formData.isAllDay}
             onChange={(e) => setFormData({ ...formData, isAllDay: e.target.checked })}
           />
-          <label htmlFor="allDay" className="text-sm text-gray-700">All day event</label>
+          <label htmlFor="allDay" className="text-sm text-muted-foreground">All day event</label>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Start</label>
+            <label className="block text-sm font-medium text-foreground mb-1">Start</label>
             <input
               type={formData.isAllDay ? 'date' : 'datetime-local'}
               value={formData.startTime}
@@ -323,7 +328,7 @@ function CreateEventModal({ date, projectId, onClose, onSubmit, isLoading }) {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">End</label>
+            <label className="block text-sm font-medium text-foreground mb-1">End</label>
             <input
               type={formData.isAllDay ? 'date' : 'datetime-local'}
               value={formData.endTime}
@@ -334,7 +339,7 @@ function CreateEventModal({ date, projectId, onClose, onSubmit, isLoading }) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+          <label className="block text-sm font-medium text-foreground mb-1">Location</label>
           <input
             type="text"
             value={formData.location}
@@ -345,7 +350,7 @@ function CreateEventModal({ date, projectId, onClose, onSubmit, isLoading }) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+          <label className="block text-sm font-medium text-foreground mb-1">Description</label>
           <textarea
             value={formData.description}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -355,7 +360,7 @@ function CreateEventModal({ date, projectId, onClose, onSubmit, isLoading }) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Color</label>
+          <label className="block text-sm font-medium text-foreground mb-1">Color</label>
           <input
             type="color"
             value={formData.color}
@@ -368,7 +373,7 @@ function CreateEventModal({ date, projectId, onClose, onSubmit, isLoading }) {
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg"
+            className="px-4 py-2 text-muted-foreground hover:bg-muted rounded-lg"
           >
             Cancel
           </button>

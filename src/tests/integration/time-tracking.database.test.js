@@ -48,14 +48,36 @@ test('timers record entries, are owner-scoped, race-safe, and approved entries a
       request.user = users[request.headers['x-test-user']];
     });
     const scoped = createScopedPrisma(raw, ids.org);
+    // `x-approve-after-read` simulates an admin approval that commits between
+    // the route's lock check and its write.
+    const approvingAfterRead = new Proxy(scoped, {
+      get(target, key) {
+        if (key !== 'timeEntry') return Reflect.get(target, key);
+        const delegate = target.timeEntry;
+        let first = true;
+        return new Proxy(delegate, {
+          get(model, operation) {
+            if (operation !== 'findUnique') return typeof model[operation] === 'function' ? model[operation].bind(model) : model[operation];
+            return async (args) => {
+              const row = await model.findUnique(args);
+              if (first && row) {
+                first = false;
+                await raw.timeEntry.update({ where: { id: row.id }, data: { reviewStatus: 'APPROVED' } });
+              }
+              return row;
+            };
+          },
+        });
+      },
+    });
     app.addHook('onRequest', async (request) => {
-      request.prisma = scoped;
-      enterRequestContext({ prisma: scoped, organizationId: ids.org });
+      request.prisma = request.headers['x-approve-after-read'] ? approvingAfterRead : scoped;
+      enterRequestContext({ prisma: request.prisma, organizationId: ids.org });
     });
     await app.register(timeTrackingRoutes, { prefix: '/api/time-tracking' });
     await app.register(timeSessionRoutes, { prefix: '/api/time-sessions' });
     await app.register(timeRoutes, { prefix: '/api' });
-    const as = (userId, options) => app.inject({ ...options, headers: { 'x-test-user': userId } });
+    const as = (userId, options) => app.inject({ ...options, headers: { 'x-test-user': userId, ...(options.headers ?? {}) } });
 
     // Start, then backdate so the timer has measurable duration.
     const started = await as(ids.owner, { method: 'POST', url: '/api/time-sessions', payload: { projectId: ids.project, description: 'Design work' } });
@@ -128,6 +150,35 @@ test('timers record entries, are owner-scoped, race-safe, and approved entries a
     assert.equal(reject.statusCode, 200, reject.body);
     const reopenedEdit = await as(ids.owner, { method: 'PUT', url: `/api/time-entries/${entry.id}`, payload: { description: 'fixed' } });
     assert.equal(reopenedEdit.statusCode, 200, reopenedEdit.body);
+
+    // An approval that commits after the lock check still wins: the write is
+    // conditional, so the owner's edit and delete change nothing.
+    for (const method of ['PUT', 'DELETE']) {
+      await raw.timeEntry.update({ where: { id: entry.id }, data: { reviewStatus: 'PENDING' } });
+      const raced = await as(ids.owner, {
+        method, url: `/api/time-entries/${entry.id}`, headers: { 'x-approve-after-read': '1' },
+        ...(method === 'PUT' ? { payload: { description: 'raced edit' } } : {}),
+      });
+      assert.equal(raced.statusCode, 409, `${method} ${raced.body}`);
+      assert.equal(raced.json().code, 'TIME_ENTRY_APPROVED');
+      const stored = await raw.timeEntry.findUnique({ where: { id: entry.id } });
+      assert.equal(stored.description, 'fixed', `${method} left the approved entry unchanged`);
+      assert.equal(stored.deletedAt, null, `${method} did not delete the approved entry`);
+    }
+    await raw.timeEntry.update({ where: { id: entry.id }, data: { reviewStatus: 'REJECTED' } });
+
+    // A weekly timesheet counts every entry of the week, beyond one 100-row read.
+    const weekStart = new Date('2031-03-02T00:00:00.000Z');
+    await raw.timeEntry.createMany({ data: Array.from({ length: 130 }, (_, i) => ({
+      userId: ids.other, projectId: ids.project, duration: 10, billable: i % 2 === 0,
+      date: new Date(weekStart.getTime() + (i % 7) * 86_400_000 + 3_600_000),
+    })) });
+    const week = await as(ids.other, { method: 'GET', url: `/api/timesheets/weekly?weekStart=${weekStart.toISOString()}` });
+    assert.equal(week.statusCode, 200, week.body);
+    const [sheet] = week.json().timesheets;
+    assert.equal(sheet.totalMinutes, 1300, 'all 130 entries are counted');
+    assert.equal(sheet.billableMinutes, 650);
+    assert.equal(Object.values(sheet.days).reduce((sum, day) => sum + day.entries.length, 0), 130);
 
     await raw.timeEntry.update({ where: { id: entry.id }, data: { invoiced: true } });
     const invoicedDelete = await as(ids.admin, { method: 'DELETE', url: `/api/time-entries/${entry.id}` });

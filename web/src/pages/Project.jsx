@@ -28,6 +28,7 @@ import {
   Save,
   DollarSign,
   TrendingUp,
+  MoreHorizontal,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { renderMarkdown } from '../lib/markdown';
@@ -54,6 +55,48 @@ import useSettledFailure from '../hooks/useSettledFailure';
 import Modal from '../components/Modal';
 import { Button, LoadingState } from '../components/ui';
 import ConfirmDialog from '../components/ConfirmDialog';
+
+// Overflow menu for the project header's secondary actions. A native
+// <details> disclosure keeps it dependency-free and keyboard operable.
+function ProjectActionsMenu({ actions }) {
+  const close = (event) => {
+    const details = event.currentTarget.closest('details');
+    if (details) details.open = false;
+  };
+  return (
+    <details
+      className="relative"
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && event.currentTarget.open) {
+          event.currentTarget.open = false;
+          event.currentTarget.querySelector('summary')?.focus();
+        }
+      }}
+    >
+      <summary
+        aria-label="More project actions"
+        className="min-h-11 min-w-11 list-none inline-flex cursor-pointer items-center justify-center gap-1 rounded-lg border border-border px-3 text-sm hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden"
+      >
+        <MoreHorizontal className="w-4 h-4" aria-hidden="true" />
+        <span className="hidden sm:inline" aria-hidden="true">More</span>
+      </summary>
+      <div className="absolute right-0 z-30 mt-2 w-52 overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-lg">
+        {actions.map(({ label, icon: Icon, onSelect, disabled }) => (
+          <button
+            key={label}
+            type="button"
+            disabled={disabled}
+            onClick={(event) => { close(event); onSelect(); }}
+            className="flex min-h-11 w-full items-center gap-2 px-3 text-left text-sm hover:bg-muted focus-visible:bg-muted focus-visible:outline-none disabled:opacity-60"
+          >
+            <Icon className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
+            {label}
+          </button>
+        ))}
+      </div>
+    </details>
+  );
+}
 
 export default function Project() {
   const { id } = useParams();
@@ -187,88 +230,74 @@ export default function Project() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Link
-          to="/projects"
-          aria-label="Back to projects"
-          className="p-2 hover:bg-muted rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <ArrowLeft className="w-5 h-5" aria-hidden="true" />
-        </Link>
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold">{project.name}</h1>
-            <span className={cn('px-2 py-0.5 text-xs font-medium rounded-full', getProjectStatusColor(project.status))}>
-              {getProjectStatusLabel(project.status)}
-            </span>
-          </div>
-          <p className="text-muted-foreground">{project.client?.name}</p>
-          {/* Progress bar */}
-          {project.tasks?.length > 0 && (() => {
-            const total = project.tasks.length;
-            const completed = project.tasks.filter(t => t.status === 'COMPLETED').length;
-            const pct = Math.round((completed / total) * 100);
-            return (
-              <div className="flex items-center gap-3 mt-2 max-w-xs">
-                <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-                  <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${pct}%` }} />
+      {/* Header: title gets the full width; secondary actions live in a menu */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-4">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <Link
+            to="/projects"
+            aria-label="Back to projects"
+            className="mt-0.5 shrink-0 p-2 hover:bg-muted rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <ArrowLeft className="w-5 h-5" aria-hidden="true" />
+          </Link>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <h1 className="text-2xl font-bold break-words">{project.name}</h1>
+              <span className={cn('px-2 py-0.5 text-xs font-medium rounded-full', getProjectStatusColor(project.status))}>
+                {getProjectStatusLabel(project.status)}
+              </span>
+              <span className={cn('px-2 py-0.5 text-xs font-medium rounded-full', getHealthColor(project.health))}>
+                {project.health?.replace(/_/g, ' ')} ({project.healthScore})
+              </span>
+            </div>
+            <p className="text-muted-foreground">{project.client?.name}</p>
+            {/* Progress bar */}
+            {project.tasks?.length > 0 && (() => {
+              const total = project.tasks.length;
+              const completed = project.tasks.filter(t => t.status === 'COMPLETED').length;
+              const pct = Math.round((completed / total) * 100);
+              return (
+                <div className="flex items-center gap-3 mt-2 max-w-xs">
+                  <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="text-xs text-muted-foreground">{completed}/{total} tasks ({pct}%)</span>
                 </div>
-                <span className="text-xs text-muted-foreground">{completed}/{total} tasks ({pct}%)</span>
-              </div>
-            );
-          })()}
+              );
+            })()}
+          </div>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className={cn('px-3 py-1.5 text-sm font-medium rounded-lg', getHealthColor(project.health))}>
-            {project.health?.replace(/_/g, ' ')} ({project.healthScore})
-          </span>
+        <div className="flex shrink-0 items-center gap-2">
           <button
             type="button"
             aria-label="Share project with client"
             onClick={copyPortalLink}
-            className="min-h-11 inline-flex items-center px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-secondary flex items-center gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="min-h-11 inline-flex items-center px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-secondary gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            {shareCopied ? <Check className="w-4 h-4 text-green-500" /> : <Share2 className="w-4 h-4" />}
-            {shareCopied ? 'Copied!' : 'Share with Client'}
-          </button>
-          <button
-            type="button"
-            aria-label="Apply project template"
-            onClick={() => setShowTemplateModal(true)}
-            className="min-h-11 inline-flex items-center px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-secondary flex items-center gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <LayoutTemplate className="w-4 h-4" />
-            Apply Template
+            {shareCopied ? <Check className="w-4 h-4 text-green-500" aria-hidden="true" /> : <Share2 className="w-4 h-4" aria-hidden="true" />}
+            {shareCopied ? 'Copied!' : 'Share'}
           </button>
           <button
             type="button"
             aria-label="Draft project update"
             onClick={() => setShowDraftModal(true)}
-            className="min-h-11 inline-flex items-center px-3 py-1.5 text-sm bg-accent text-accent-foreground rounded-lg hover:opacity-90 flex items-center gap-2 transition-all hover-lift focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="min-h-11 inline-flex items-center px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:opacity-90 gap-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <FileText className="w-4 h-4" />
+            <FileText className="w-4 h-4" aria-hidden="true" />
             Draft Update
           </button>
-          <button
-            type="button"
-            aria-label="Paste project message"
-            onClick={() => setShowPasteModal(true)}
-            className="min-h-11 inline-flex items-center px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-secondary flex items-center gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <ClipboardPaste className="w-4 h-4" />
-            Paste Message
-          </button>
-          <button
-            type="button"
-            aria-label="Refresh project plan"
-            onClick={() => refreshMutation.mutate()}
-            disabled={refreshMutation.isPending}
-            className="min-h-11 inline-flex items-center px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:opacity-90 flex items-center gap-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <RefreshCw className={cn('w-4 h-4', refreshMutation.isPending && 'animate-spin')} />
-            Refresh Plan
-          </button>
+          <ProjectActionsMenu
+            actions={[
+              { label: 'Apply template', icon: LayoutTemplate, onSelect: () => setShowTemplateModal(true) },
+              { label: 'Paste message', icon: ClipboardPaste, onSelect: () => setShowPasteModal(true) },
+              {
+                label: refreshMutation.isPending ? 'Refreshing plan…' : 'Refresh plan',
+                icon: RefreshCw,
+                onSelect: () => refreshMutation.mutate(),
+                disabled: refreshMutation.isPending,
+              },
+            ]}
+          />
         </div>
       </div>
 
@@ -350,7 +379,7 @@ export default function Project() {
           {project.risks?.length > 0 && (
             <div className="bg-card rounded-lg border border-border">
               <div className="px-4 py-3 border-b">
-                <h3 className="font-semibold text-red-600">Risks</h3>
+                <h3 className="font-semibold text-red-700 dark:text-red-400">Risks</h3>
               </div>
               <ul className="divide-y">
                 {project.risks.map((risk, i) => (

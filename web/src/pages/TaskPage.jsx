@@ -27,6 +27,7 @@ import { TASK_PRIORITIES } from '@shared/task-priority.js';
 import { api } from '../lib/api';
 import { formatDate, cn } from '../lib/utils';
 import NotionEditor from '../components/NotionEditor';
+import { normalizeTaskBlocks } from '../lib/taskContent';
 import { Button, Badge, Card, EmptyState, LoadingState } from '../components/ui';
 import QueryErrorState from '../components/QueryErrorState';
 
@@ -95,8 +96,14 @@ function PageHeader({ task, onUpdate, isEditing }) {
   };
 
   const handleTitleBlur = () => {
-    if (title !== task?.title) {
-      onUpdate({ title });
+    const trimmed = title.trim();
+    // A task always has a title: clearing it restores the saved one.
+    if (!trimmed) {
+      setTitle(task?.title || '');
+      return;
+    }
+    if (trimmed !== task?.title) {
+      onUpdate({ title: trimmed });
     }
   };
 
@@ -171,13 +178,20 @@ function PageHeader({ task, onUpdate, isEditing }) {
       </div>
 
       {/* Title input */}
-      <input
-        type="text"
+      {/* A single-line title that wraps instead of clipping on narrow screens. */}
+      <textarea
+        rows={1}
+        aria-label="Task title"
         value={title}
         onChange={handleTitleChange}
         onBlur={handleTitleBlur}
-        onKeyDown={(e) => e.key === 'Enter' && handleTitleBlur()}
-        className="w-full text-4xl font-heading font-bold bg-transparent border-0 outline-none placeholder:text-muted-foreground"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            handleTitleBlur();
+          }
+        }}
+        className="w-full resize-none overflow-hidden break-words [field-sizing:content] text-2xl sm:text-4xl font-heading font-bold bg-transparent border-0 outline-none rounded focus-visible:ring-2 focus-visible:ring-ring placeholder:text-muted-foreground"
         placeholder="Untitled"
       />
     </div>
@@ -235,10 +249,10 @@ function PropertiesPanel({ task, onUpdate }) {
 
   const getPriorityColor = (priority) => {
     const colors = {
-      'CRITICAL': 'text-red-600',
-      'HIGH': 'text-orange-600',
-      'NORMAL': 'text-blue-600',
-      'LOW': 'text-green-600',
+      'CRITICAL': 'text-red-700 dark:text-red-400',
+      'HIGH': 'text-orange-800 dark:text-orange-400',
+      'NORMAL': 'text-blue-700 dark:text-blue-400',
+      'LOW': 'text-green-800 dark:text-green-400',
     };
     return colors[priority] || 'text-muted-foreground';
   };
@@ -473,9 +487,12 @@ export default function TaskPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [content, setContent] = useState([]);
   const [contentSaveError, setContentSaveError] = useState(null);
   const contentSaveTimerRef = useRef(null);
+  // Serialised form of the block content the server currently holds; used to
+  // skip saves when the editor reports content identical to what is stored.
+  const lastSavedContentRef = useRef(null);
+  const loadedTaskIdRef = useRef(null);
 
   const {
     data: task,
@@ -490,21 +507,23 @@ export default function TaskPage() {
     enabled: !!id
   });
 
-  useEffect(() => {
-    if (task?.content) {
-      setContent(task.content);
-    }
-  }, [task]);
+  const initialBlocks = normalizeTaskBlocks(task?.content);
+  if (task && loadedTaskIdRef.current !== task.id) {
+    loadedTaskIdRef.current = task.id;
+    lastSavedContentRef.current = JSON.stringify(initialBlocks);
+  }
 
   useEffect(() => () => clearTimeout(contentSaveTimerRef.current), []);
 
+  // Property/title updates only send the fields that changed; content is saved
+  // separately (and only when it differs from the stored blocks).
   const updateMutation = useMutation({
-    mutationFn: (updates) => api.updateTaskContent(id, { 
-      ...updates, 
-      content: updates.content || content 
-    }),
+    mutationFn: (updates) => api.updateTaskContent(id, updates),
     onSuccess: (_, updates) => {
-      if (Object.hasOwn(updates, 'content')) setContentSaveError(null);
+      if (Object.hasOwn(updates, 'content')) {
+        lastSavedContentRef.current = JSON.stringify(updates.content);
+        setContentSaveError(null);
+      }
       queryClient.invalidateQueries({ queryKey: ['task', id] });
     },
     onError: (_, updates) => {
@@ -524,9 +543,9 @@ export default function TaskPage() {
   };
 
   const handleContentChange = (newContent) => {
-    setContent(newContent);
-    setContentSaveError(null);
     clearTimeout(contentSaveTimerRef.current);
+    if (JSON.stringify(newContent) === lastSavedContentRef.current) return;
+    setContentSaveError(null);
     contentSaveTimerRef.current = setTimeout(() => updateMutation.mutate({ content: newContent }), 500);
   };
 
@@ -593,7 +612,8 @@ export default function TaskPage() {
       {/* Content editor */}
       <div className="min-h-[300px]">
         <NotionEditor
-          initialContent={content}
+          key={task.id}
+          initialContent={initialBlocks}
           onChange={handleContentChange}
           projectId={task.project?.id}
         />

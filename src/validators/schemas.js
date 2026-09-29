@@ -106,13 +106,26 @@ export const inviteClientSchema = z.object({
 });
 
 // ── Project schemas ────────────────────────────────────────────────────────
+// Status vocabularies still differ between the DB model comments and older API
+// enums (#405, owner decision pending). Until they are unified, accept the
+// union: every value the DB model documents plus every value the API already
+// accepted, so no existing client breaks and DB-valid values are not rejected.
+export const PROJECT_STATUS_VALUES = [
+  'STARTING_UP', 'DESIGN_DEV', 'ADDING_CONTENT', 'FINALIZING', 'LAUNCHED', 'ON_HOLD', 'CANCELLED',
+  'ACTIVE', 'COMPLETED', 'DRAFT',
+];
+export const PROJECT_HEALTH_VALUES = ['ON_TRACK', 'NEEDS_ATTENTION', 'AT_RISK', 'OFF_TRACK', 'CRITICAL'];
+export const TASK_STATUS_VALUES = [
+  'PENDING', 'UPCOMING', 'IMMEDIATE', 'IN_PROGRESS', 'BLOCKED', 'WAITING_US', 'WAITING_CLIENT', 'COMPLETED',
+  'TODO', 'REVIEW',
+];
 export const createProjectSchema = z.object({
   name: z.string().min(1).max(200),
   description: z.string().max(5000).optional(),
   clientId: cuidId,
   defaultOwnerId: cuidId.optional(),
-  status: z.enum(['ACTIVE', 'ON_HOLD', 'COMPLETED', 'CANCELLED', 'DRAFT']).optional(),
-  health: z.enum(['ON_TRACK', 'AT_RISK', 'OFF_TRACK', 'CRITICAL']).optional(),
+  status: z.enum(PROJECT_STATUS_VALUES).optional(),
+  health: z.enum(PROJECT_HEALTH_VALUES).optional(),
   hourlyBudget: z.number().positive().optional(),
   startDate: z.string().datetime().optional(),
   endDate: z.string().datetime().optional(),
@@ -121,8 +134,8 @@ export const createProjectSchema = z.object({
 export const updateProjectSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   description: z.string().max(5000).optional(),
-  status: z.enum(['ACTIVE', 'ON_HOLD', 'COMPLETED', 'CANCELLED', 'DRAFT']).optional(),
-  health: z.enum(['ON_TRACK', 'AT_RISK', 'OFF_TRACK', 'CRITICAL']).optional(),
+  status: z.enum(PROJECT_STATUS_VALUES).optional(),
+  health: z.enum(PROJECT_HEALTH_VALUES).optional(),
   clientId: cuidId.optional(),
   hourlyBudget: z.number().positive().optional(),
   startDate: z.string().datetime().nullable().optional(),
@@ -957,6 +970,7 @@ export const bulkMarkPaidSchema = invoiceBulkIdsSchema.extend({
 export const taskCreateSchema = z.object({
   title: z.string().min(1).max(500),
   projectId: cuidId,
+  status: z.enum(TASK_STATUS_VALUES).optional(),
   description: z.string().max(50_000).optional(),
   priority: z.enum(TASK_PRIORITIES).default(DEFAULT_TASK_PRIORITY),
   dueDate: z.string().datetime().nullable().optional(),
@@ -981,19 +995,37 @@ export const taskBulkUpdateSchema = z.object({
   })).min(1).max(100),
 });
 
-export const taskNoteCreateSchema = z.object({
-  content: z.string().min(1).max(10_000),
-  title: z.string().max(200).optional(),
+// Task page body: the canonical format is an array of editor blocks
+// (`[{ type, content, checked?, mentions? }]`). The route stores it as a JSON
+// string in `Task.content` and `GET /api/tasks/:id/page` parses it back to the
+// same array, so clients must send the block array — not a pre-serialised string.
+export const TASK_CONTENT_MAX_BLOCKS = 1000;
+export const TASK_CONTENT_MAX_BYTES = 200_000;
+export const taskContentBlockSchema = z.object({
+  type: z.enum(['paragraph', 'heading1', 'heading2', 'bulletList', 'numberedList', 'todo', 'quote', 'code', 'image']),
+  content: z.string().max(20_000).default(''),
+  checked: z.boolean().optional(),
+  mentions: z.array(z.unknown()).max(50).optional(),
+}).strip();
+export const taskContentBlocksSchema = z
+  .array(taskContentBlockSchema)
+  .max(TASK_CONTENT_MAX_BLOCKS)
+  .refine((blocks) => JSON.stringify(blocks).length <= TASK_CONTENT_MAX_BYTES, {
+    message: `Task content must be at most ${TASK_CONTENT_MAX_BYTES} characters once serialised`,
+  });
+
+export const taskPageContentUpdateSchema = z.object({
+  content: taskContentBlocksSchema.optional(),
+  title: z.string().min(1).max(200).optional(),
   icon: z.string().max(20).optional(),
-  coverImage: z.string().url().max(2048).optional(),
-  // Notion-style properties block (objects keyed by name)
+  coverImage: z.string().url().max(2048).nullable().optional(),
   properties: z.record(z.string(), z.unknown()).optional(),
 });
 
-export const taskNoteUpdateSchema = z.object({
+export const taskSubpageCreateSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   icon: z.string().max(20).optional(),
-  content: z.string().min(1).max(50_000).optional(),
+  content: taskContentBlocksSchema.optional(),
 });
 
 export const taskDependencyCreateSchema = z.object({
@@ -1004,7 +1036,7 @@ export const taskCreateQuickSchema = z.object({
   title: z.string().min(1).max(500),
   assigneeId: cuidId.optional(),
   priority: z.enum(TASK_PRIORITIES).default(DEFAULT_TASK_PRIORITY),
-  status: z.enum(['PENDING', 'IN_PROGRESS', 'BLOCKED', 'REVIEW', 'COMPLETED']).default('PENDING'),
+  status: z.enum(TASK_STATUS_VALUES).default('PENDING'),
 });
 
 export const projectCreateSchema = z.object({
@@ -1398,25 +1430,26 @@ export const taskTemplateSchema = z.object({
 });
 
 // ── Time tracking ────────────────────────────────────────────────────────
-// TimeEntry.duration is in minutes; one entry covers at most one day.
+// TimeEntry.duration is stored and reported in MINUTES (timer sessions and the
+// /summary hours maths use minutes too); one entry covers at most one day.
 export const MAX_TIME_ENTRY_MINUTES = 1440;
-
 // Stored as whole minutes (rounded): a value that rounds to 0 would be a
 // zero-minute entry in timesheets, reports and budgets, so it is refused.
-const timeEntryMinutes = z.number().positive().max(MAX_TIME_ENTRY_MINUTES)
-  .refine((minutes) => Math.round(minutes) >= 1, { message: 'Duration must be at least 1 minute' });
+const timeEntryDurationMinutes = z.number().positive().max(MAX_TIME_ENTRY_MINUTES)
+  .refine((minutes) => Math.round(minutes) >= 1, { message: 'Duration must be at least 1 minute' })
+  .describe('Duration in minutes (not seconds), at least 1 and at most 1440 (24h).');
 
 export const timeEntryCreateSchema = z.object({
   projectId: cuidId,
   taskId: cuidId.optional(),
-  duration: timeEntryMinutes, // minutes, max 24h
+  duration: timeEntryDurationMinutes,
   description: z.string().max(2_000).optional(),
   date: z.string().datetime().optional(),
   billable: z.boolean().default(true),
 });
 
 export const timeEntryUpdateSchema = z.object({
-  duration: timeEntryMinutes.optional(), // minutes
+  duration: timeEntryDurationMinutes.optional(), // minutes
   description: z.string().max(2_000).optional(),
   date: z.string().datetime().optional(),
   billable: z.boolean().optional(),

@@ -33,6 +33,13 @@ export default async function clientRoutes(fastify) {
               threads: true,
               contacts: true
             }
+          },
+          // The list's Contact column shows the primary contact (or the
+          // earliest one when none is marked primary).
+          contacts: {
+            select: { id: true, name: true, email: true, role: true, isPrimary: true },
+            orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+            take: 1
           }
         },
         orderBy: { name: 'asc' },

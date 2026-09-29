@@ -3,7 +3,8 @@ import { io } from 'socket.io-client';
 import { useAuth } from './useAuth';
 import { useQueryClient } from '@tanstack/react-query';
 
-const SOCKET_URL = import.meta.env.PROD ? window.location.origin : 'http://localhost:3000';
+// Same origin in every mode: in dev the Vite proxy forwards /socket.io to the API.
+const SOCKET_URL = window.location.origin;
 
 let sharedSocket = null;
 let sharedUserId = null;

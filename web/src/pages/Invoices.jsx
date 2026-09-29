@@ -15,7 +15,7 @@ import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { buildInvoiceCreatePayload, INVOICE_CURRENCY_OPTIONS } from '../lib/invoice-payloads';
-import { formatMoney, formatInvoiceDate } from '../lib/money';
+import { formatInvoiceMoney, formatInvoiceDate } from '../lib/format';
 
 const HST_RATE = 13;
 
@@ -28,7 +28,7 @@ const STATUS_CONFIG = {
 };
 
 function fmt(n, currency) {
-  return formatMoney(n, currency);
+  return formatInvoiceMoney(n, currency);
 }
 
 // Stats money: one formatted amount when every invoice shares a currency,

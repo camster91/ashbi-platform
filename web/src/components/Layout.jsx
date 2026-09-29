@@ -89,10 +89,17 @@ export default function Layout({ children }) {
 
   const { showModal, closeModal } = useKeyboardShortcuts(navigate);
 
+  // The push-notification invitation is shown once: on the first page where
+  // it can appear. Leaving that page, "Not now" or the close button all
+  // retire it for good (remembered per user); Settings keeps the opt-in.
+  const pushPromptShownOnRef = useRef(null);
   useEffect(() => {
     if (!user?.id) return;
     try {
-      setNotificationPromptDismissed(localStorage.getItem(`push-prompt-snoozed:${user.id}`) === 'true');
+      setNotificationPromptDismissed(
+        localStorage.getItem(`push-prompt-snoozed:${user.id}`) === 'true'
+        || localStorage.getItem(`push-prompt-shown:${user.id}`) === 'true',
+      );
     } catch {
       setNotificationPromptDismissed(false);
     }
@@ -113,7 +120,21 @@ export default function Layout({ children }) {
     try { localStorage.setItem(`push-prompt-snoozed:${user.id}`, 'true'); } catch { /* optional preference */ }
   };
 
-  // Cmd+K / Ctrl+K to open Quick Add
+  const showPushPrompt = Boolean(user && pushSupported && permission === 'default' && !subscribed && !notificationPromptDismissed);
+  useEffect(() => {
+    if (!showPushPrompt) return;
+    if (pushPromptShownOnRef.current === null) {
+      pushPromptShownOnRef.current = location.pathname;
+      try { localStorage.setItem(`push-prompt-shown:${user.id}`, 'true'); } catch { /* optional preference */ }
+    } else if (pushPromptShownOnRef.current !== location.pathname) {
+      setNotificationPromptDismissed(true);
+    }
+  }, [showPushPrompt, location.pathname, user?.id]);
+
+  // Cmd+K / Ctrl+K opens Quick add (create a project, task or client). The
+  // shortcut is advertised on the Create button, not on the search field, so
+  // it is not mistaken for a search shortcut. A full command palette that
+  // also searches is a tracked follow-up.
   useEffect(() => {
     const handler = (e) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -340,7 +361,7 @@ export default function Layout({ children }) {
               <div className="w-8 h-8 rounded-lg bg-[#e6f354] flex items-center justify-center shrink-0">
                 <Sparkles className="w-5 h-5 text-[#2e2958]" />
               </div>
-              {!sidebarCollapsed && <h1 className="text-xl font-heading font-bold text-white">Ashbi</h1>}
+              {!sidebarCollapsed && <p className="text-xl font-heading font-bold text-white">Ashbi</p>}
             </Link>
             {!sidebarCollapsed && (
               <>
@@ -498,7 +519,7 @@ export default function Layout({ children }) {
             >
               <Search className={cn(
                 'absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors duration-200',
-                isSearchFocused ? 'text-[#2e2958]' : 'text-muted-foreground'
+                isSearchFocused ? 'text-foreground' : 'text-muted-foreground'
               )} />
               <input
                 type="text"
@@ -508,17 +529,12 @@ export default function Layout({ children }) {
                 onBlur={() => setIsSearchFocused(false)}
                 placeholder="Search threads, clients, projects..."
                 className={cn(
-                  'w-full pl-10 pr-20 py-2 text-sm bg-muted border-0 rounded-xl',
+                  'w-full pl-10 pr-4 py-2 text-sm bg-muted border-0 rounded-xl',
                   'placeholder:text-muted-foreground',
-                  'focus:outline-none focus:ring-2 focus:ring-[#2e2958]/20 focus:bg-card',
+                  'focus:outline-none focus:ring-2 focus:ring-ring/40 focus:bg-card',
                   'transition-all duration-200'
                 )}
               />
-              <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
-                <kbd className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-sans font-medium text-muted-foreground bg-background border border-border rounded">
-                  <Command className="w-3 h-3" /> K
-                </kbd>
-              </div>
             </div>
           </form>
 
@@ -566,7 +582,7 @@ export default function Layout({ children }) {
         )}
 
         {/* Push notification prompt */}
-        {user && pushSupported && permission === 'default' && !subscribed && !notificationPromptDismissed && (
+        {showPushPrompt && (
           <div className="mx-4 mt-2 lg:mx-6 flex flex-col gap-3 rounded-lg bg-muted border border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between" role="region" aria-labelledby="push-consent-title">
             <div className="flex items-start gap-3">
               <Bell className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden="true" />
@@ -580,6 +596,14 @@ export default function Layout({ children }) {
                 {pushStatus === 'subscribing' ? 'Enabling...' : 'Enable notifications'}
               </Button>
               <Button size="sm" variant="ghost" onClick={snoozeNotificationPrompt}>Not now</Button>
+              <button
+                type="button"
+                onClick={snoozeNotificationPrompt}
+                aria-label="Dismiss notification invitation"
+                className="min-h-11 min-w-11 inline-flex items-center justify-center rounded-lg text-muted-foreground hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <X className="h-4 w-4" aria-hidden="true" />
+              </button>
             </div>
             {pushError && <p className="text-sm text-destructive sm:basis-full" role="alert">{pushError}</p>}
           </div>
@@ -592,7 +616,7 @@ export default function Layout({ children }) {
       </main>
 
       {/* Mobile bottom nav with More menu */}
-      <nav className="fixed bottom-0 inset-x-0 z-40 bg-card/80 backdrop-blur-lg border-t border-border/60 flex lg:hidden safe-area-inset-bottom shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.05)]" role="navigation" aria-label="Mobile navigation">
+      <nav className="fixed bottom-0 inset-x-0 z-40 bg-card border-t border-border/60 flex lg:hidden safe-area-inset-bottom shadow-[0_-4px_10px_-1px_rgba(0,0,0,0.05)]" role="navigation" aria-label="Mobile navigation">
         {[
           { href: '/dashboard', icon: LayoutDashboard, label: 'Home', exact: true },
           { href: '/inbox', icon: Inbox, label: 'Inbox', badge: stats?.needsResponse },
@@ -888,15 +912,20 @@ function QuickCreateMenu({ navigate, isAdmin }) {
         aria-expanded={open}
         aria-haspopup="menu"
         aria-label="Open quick create menu"
+        aria-describedby="quick-add-shortcut-hint"
         className={cn(
           'flex min-h-11 items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2e2958]',
           open ? 'bg-[#e6f354] text-[#2e2958]' : 'bg-[#e6f354] text-[#2e2958] hover:bg-[#d0dd9a]'
         )}
-        title="Quick create"
+        title="Create (press ⌘K or Ctrl+K for Quick add)"
       >
-        <Plus className="w-4 h-4" />
+        <Plus className="w-4 h-4" aria-hidden="true" />
         <span className="hidden sm:inline">Create</span>
+        <kbd className="hidden md:inline-flex items-center gap-0.5 rounded border border-[#2e2958]/30 px-1 text-[11px] font-sans font-medium" aria-hidden="true">
+          <Command className="w-3 h-3" />K
+        </kbd>
       </button>
+      <span id="quick-add-shortcut-hint" className="sr-only">Keyboard shortcut: Command K or Control K opens Quick add.</span>
 
       {open && (
         <div

@@ -72,7 +72,10 @@ function requestReauth(endpoint) {
   return pendingReauth;
 }
 
-function dispatchApiError(error, endpoint, retry) {
+function dispatchApiError(error, endpoint, retry, userInitiated = false) {
+  // A read the user explicitly asked for (a click, not a background query)
+  // is reported like a write: the global handler toasts it.
+  if (userInitiated && error && typeof error === 'object') error.userInitiated = true;
   // Response bodies and stack traces are for local debugging only; production
   // builds log a single line without them.
   if (import.meta.env.DEV) {
@@ -145,7 +148,7 @@ async function request(endpoint, options = {}) {
       // don't trigger global toast/logout for them
       const isAuthEndpoint = endpoint.startsWith('/auth/login') || endpoint.startsWith('/auth/me');
       if (!silent && !isAuthEndpoint) {
-        dispatchApiError(error, endpoint, retry);
+        dispatchApiError(error, endpoint, retry, options.userInitiated);
         if (onUnauthorized) {
           onUnauthorized(data.error || 'Session expired. Please log in again.');
         }
@@ -176,7 +179,7 @@ async function request(endpoint, options = {}) {
         throw error;
       }
       if (!silent) {
-        dispatchApiError(error, endpoint, retry);
+        dispatchApiError(error, endpoint, retry, options.userInitiated);
       }
       throw error;
     }
@@ -188,7 +191,7 @@ async function request(endpoint, options = {}) {
     // Handle timeout errors
     if (error.name === 'AbortError') {
       const timeoutError = new TimeoutError(timeout);
-      dispatchApiError(timeoutError, endpoint, retry);
+      dispatchApiError(timeoutError, endpoint, retry, options.userInitiated);
       throw timeoutError;
     }
 
@@ -196,7 +199,7 @@ async function request(endpoint, options = {}) {
     if (error instanceof TypeError && error.message === 'Failed to fetch') {
       const networkError = new Error('Network error. Please check your connection.');
       networkError.name = 'NetworkError';
-      dispatchApiError(networkError, endpoint, retry);
+      dispatchApiError(networkError, endpoint, retry, options.userInitiated);
       throw networkError;
     }
 
@@ -206,7 +209,7 @@ async function request(endpoint, options = {}) {
     }
 
     // Log and re-throw other errors
-    dispatchApiError(error, endpoint, retry);
+    dispatchApiError(error, endpoint, retry, options.userInitiated);
     throw error;
   }
 }
@@ -892,7 +895,7 @@ export const api = {
   getCredential: (id, purpose = 'view credential detail') =>
     request(`/credentials/${id}`, { headers: { 'X-Credential-Purpose': purpose } }),
   getCredentialPassword: (id, purpose) =>
-    request(`/credentials/${id}/password`, { headers: { 'X-Credential-Purpose': purpose } }),
+    request(`/credentials/${id}/password`, { headers: { 'X-Credential-Purpose': purpose }, userInitiated: true }),
   createCredential: (data) =>
     request('/credentials', { method: 'POST', body: data }),
   updateCredential: (id, data) =>

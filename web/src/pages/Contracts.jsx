@@ -152,7 +152,6 @@ export default function Contracts() {
             variant="outline"
             leftIcon={<Sparkles className="w-4 h-4" />}
             onClick={() => setShowProposalPicker(true)}
-            style={{ borderColor: '#2e2958', color: '#2e2958' }}
           >
             Generate from Proposal
           </Button>

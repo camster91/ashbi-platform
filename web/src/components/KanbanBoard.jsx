@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import LoadingState from './ui/LoadingState';
+import { QueryErrorState } from './QueryErrorState';
 
 const COLUMNS = [
   { id: 'PENDING', title: 'To Do', color: 'bg-gray-100', description: 'Tasks waiting to be started' },
@@ -77,7 +78,7 @@ export default function KanbanBoard({ projectId }) {
   const taskRefs = useRef({});
 
   // Fetch tasks for project
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error: tasksError, refetch, isFetching } = useQuery({
     queryKey: ['project-tasks', projectId],
     queryFn: () => api.getTasks({ projectId })
   });
@@ -284,6 +285,10 @@ export default function KanbanBoard({ projectId }) {
 
   if (isLoading) {
     return <LoadingState label="Loading tasks…" compact className="h-64" spinnerClassName="border-blue-200 border-t-blue-600" />;
+  }
+
+  if (isError) {
+    return <QueryErrorState error={tasksError} message="Tasks could not be loaded" onRetry={refetch} isRetrying={isFetching} />;
   }
 
   return (

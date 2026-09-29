@@ -40,7 +40,11 @@ export default async function dashboardRoutes(fastify) {
       // Calendar events (upcoming 7 days)
       upcomingEvents,
       // Revenue history (last 6 months)
-      revenueHistory
+      revenueHistory,
+      // Draft invoices: prepared but not sent, so NOT outstanding. Reported
+      // separately so the dashboard can say "Drafts $12.2K" instead of
+      // implying there is nothing to bill.
+      draftInvoices
     ] = await Promise.all([
       request.prisma.retainerPlan.findMany({
         where: { retainerStatus: 'ACTIVE' },
@@ -254,7 +258,12 @@ export default async function dashboardRoutes(fastify) {
           AND c."organizationId" = ${request.organizationId}
         GROUP BY month
         ORDER BY month ASC
-      `
+      `,
+      request.prisma.invoice.aggregate({
+        where: { status: 'DRAFT' },
+        _sum: { total: true },
+        _count: { _all: true }
+      })
     ]);
 
     // Calculate MRR
@@ -297,10 +306,16 @@ export default async function dashboardRoutes(fastify) {
     });
 
     return {
+      // MRR counts ACTIVE retainer plans only (monthlyAmountUsd).
       mrr,
+      activeRetainerCount: activeRetainers.length,
+      // Outstanding = SENT + OVERDUE invoices; drafts are reported separately.
       totalOutstanding,
+      outstandingCount: outstandingInvoices.length,
       overdueAmount,
       overdueCount: overdueInvoices.length,
+      draftInvoiceTotal: draftInvoices?._sum?.total || 0,
+      draftInvoiceCount: draftInvoices?._count?._all || 0,
       activeProjects: activeProjectCount,
       pendingApprovals: pendingApprovalCount,
       recentActivity,

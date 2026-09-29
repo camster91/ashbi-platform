@@ -546,6 +546,7 @@ export default async function clientPortalRoutes(fastify) {
     // The cursor is (createdAt, id): with an id, messages sharing the boundary
     // timestamp are split by id instead of being skipped.
     const where = { projectId: id, visibility: 'CLIENT', removedAt: null };
+    const forward = !before && Boolean(after);
     if (before) {
       const at = new Date(before);
       if (beforeId) where.OR = [{ createdAt: { lt: at } }, { createdAt: at, id: { lt: beforeId } }];
@@ -561,11 +562,13 @@ export default async function clientPortalRoutes(fastify) {
       include: {
         author: { select: { id: true, name: true } }
       },
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      // `after` pages forward from the cursor (the nearest newer messages);
+      // otherwise the page is the newest before the cursor, or overall.
+      orderBy: forward ? [{ createdAt: 'asc' }, { id: 'asc' }] : [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit
     });
 
-    return messages.reverse().map(toClientChatPayload);
+    return (forward ? messages : messages.reverse()).map(toClientChatPayload);
   });
 
   // POST /api/client-portal/projects/:id/messages

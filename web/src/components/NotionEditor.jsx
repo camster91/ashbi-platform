@@ -153,6 +153,7 @@ function Block({
     );
 
     const placeholder = block.type === 'paragraph' ? "Type '/' for commands" : '';
+    const blockLabel = `${BLOCK_TYPES[block.type]?.label || 'Text'} block ${index + 1}`;
 
     switch (block.type) {
       case 'todo':
@@ -162,10 +163,12 @@ function Block({
               type="checkbox"
               checked={block.checked || false}
               onChange={(e) => onChange(index, { ...block, checked: e.target.checked })}
+              aria-label={`Mark to-do ${index + 1} as done`}
               className="w-5 h-5 rounded border-border text-primary focus:ring-primary"
             />
             <input
               ref={contentRef}
+              aria-label={blockLabel}
               type="text"
               value={localContent}
               onChange={handleInput}
@@ -183,6 +186,7 @@ function Block({
             <span className="mt-2 w-1.5 h-1.5 rounded-full bg-foreground flex-shrink-0" />
             <input
               ref={contentRef}
+              aria-label={blockLabel}
               type="text"
               value={localContent}
               onChange={handleInput}
@@ -200,6 +204,7 @@ function Block({
             <span className="text-muted-foreground font-medium min-w-[1.5rem]">{index + 1}.</span>
             <input
               ref={contentRef}
+              aria-label={blockLabel}
               type="text"
               value={localContent}
               onChange={handleInput}
@@ -215,6 +220,7 @@ function Block({
         return (
           <input
             ref={contentRef}
+            aria-label={blockLabel}
             type="text"
             value={localContent}
             onChange={handleInput}
@@ -250,13 +256,15 @@ function Block({
 
       {/* Delete button */}
       <button
+        type="button"
+        aria-label="Delete block"
         onClick={() => onDelete(index)}
         className={cn(
-          'opacity-0 group-hover:opacity-100 transition-opacity p-1',
-          'text-muted-foreground hover:text-destructive'
+          'opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity p-1 rounded',
+          'text-muted-foreground hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
         )}
       >
-        <Trash2 className="w-4 h-4" />
+        <Trash2 className="w-4 h-4" aria-hidden="true" />
       </button>
 
       {/* Type selector menu */}
@@ -342,17 +350,26 @@ export default function NotionEditor({
   projectId,
   readOnly = false 
 }) {
-  const [blocks, setBlocks] = useState(initialContent.length > 0 ? initialContent : [
+  const [blocks, setBlocks] = useState(Array.isArray(initialContent) && initialContent.length > 0 ? initialContent : [
     { type: 'paragraph', content: '' }
   ]);
   const [focusedIndex, setFocusedIndex] = useState(0);
   const [mentionResults, setMentionResults] = useState({ users: [], tasks: [] });
   const editorRef = useRef(null);
 
-  // Update parent when blocks change
+  // Notify the parent only when the user actually changed the blocks. Mounting
+  // the editor (or re-rendering the parent with a new onChange identity) must
+  // not emit a change, otherwise the page autosaves unchanged content.
+  const onChangeRef = useRef(onChange);
   useEffect(() => {
-    onChange?.(blocks);
-  }, [blocks, onChange]);
+    onChangeRef.current = onChange;
+  }, [onChange]);
+  const lastEmittedBlocksRef = useRef(blocks);
+  useEffect(() => {
+    if (blocks === lastEmittedBlocksRef.current) return;
+    lastEmittedBlocksRef.current = blocks;
+    onChangeRef.current?.(blocks);
+  }, [blocks]);
 
   // Fetch mention results when needed
   const fetchMentions = useCallback(async (query) => {
@@ -440,8 +457,9 @@ export default function NotionEditor({
       
       {/* Add block button */}
       <button
+        type="button"
         onClick={handleAddBlock}
-        className="flex items-center gap-2 px-8 py-2 text-muted-foreground hover:text-foreground transition-colors opacity-0 hover:opacity-100"
+        className="flex items-center gap-2 px-8 py-2 text-muted-foreground hover:text-foreground transition-colors opacity-0 hover:opacity-100 focus-visible:opacity-100 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <Plus className="w-4 h-4" />
         <span className="text-sm">Add block</span>

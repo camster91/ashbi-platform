@@ -122,18 +122,18 @@ export default function BrandSettings() {
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Company Name</label>
-                <input
+                <label htmlFor="brand-company-name" className="block text-sm font-medium text-foreground mb-1">Company Name</label>
+                <input id="brand-company-name"
                   value={form.companyName || ''}
                   onChange={e => update('companyName', e.target.value)}
                   className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Website</label>
+                <label htmlFor="brand-website" className="block text-sm font-medium text-foreground mb-1">Website</label>
                 <div className="relative">
                   <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <input
+                  <input id="brand-website"
                     value={form.website || ''}
                     onChange={e => update('website', e.target.value)}
                     className="w-full pl-9 pr-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -142,10 +142,10 @@ export default function BrandSettings() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Email</label>
+                <label htmlFor="brand-email" className="block text-sm font-medium text-foreground mb-1">Email</label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <input
+                  <input id="brand-email"
                     type="email"
                     value={form.email || ''}
                     onChange={e => update('email', e.target.value)}
@@ -155,10 +155,10 @@ export default function BrandSettings() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Phone</label>
+                <label htmlFor="brand-phone" className="block text-sm font-medium text-foreground mb-1">Phone</label>
                 <div className="relative">
                   <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <input
+                  <input id="brand-phone"
                     value={form.phone || ''}
                     onChange={e => update('phone', e.target.value)}
                     className="w-full pl-9 pr-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -167,8 +167,8 @@ export default function BrandSettings() {
                 </div>
               </div>
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-foreground mb-1">Address</label>
-                <textarea
+                <label htmlFor="brand-address" className="block text-sm font-medium text-foreground mb-1">Address</label>
+                <textarea id="brand-address"
                   value={form.address || ''}
                   onChange={e => update('address', e.target.value)}
                   rows={2}
@@ -177,8 +177,8 @@ export default function BrandSettings() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">HST / Tax ID</label>
-                <input
+                <label htmlFor="brand-hst-tax-id" className="block text-sm font-medium text-foreground mb-1">HST / Tax ID</label>
+                <input id="brand-hst-tax-id"
                   value={form.taxId || ''}
                   onChange={e => update('taxId', e.target.value)}
                   className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -226,15 +226,15 @@ export default function BrandSettings() {
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Primary Color</label>
+                <label htmlFor="brand-primary-color" className="block text-sm font-medium text-foreground mb-1">Primary Color</label>
                 <div className="flex items-center gap-3">
-                  <input
+                  <input id="brand-primary-color"
                     type="color"
                     value={form.primaryColor || '#c9a84c'}
                     onChange={e => update('primaryColor', e.target.value)}
                     className="w-10 h-10 rounded-lg border border-border cursor-pointer"
                   />
-                  <input
+                  <input aria-label="Primary color hex value"
                     value={form.primaryColor || ''}
                     onChange={e => update('primaryColor', e.target.value)}
                     className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -243,15 +243,15 @@ export default function BrandSettings() {
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Accent Color</label>
+                <label htmlFor="brand-accent-color" className="block text-sm font-medium text-foreground mb-1">Accent Color</label>
                 <div className="flex items-center gap-3">
-                  <input
+                  <input id="brand-accent-color"
                     type="color"
                     value={form.accentColor || '#1e293b'}
                     onChange={e => update('accentColor', e.target.value)}
                     className="w-10 h-10 rounded-lg border border-border cursor-pointer"
                   />
-                  <input
+                  <input aria-label="Accent color hex value"
                     value={form.accentColor || ''}
                     onChange={e => update('accentColor', e.target.value)}
                     className="flex-1 px-3 py-2 rounded-lg border border-border bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/20"
@@ -269,10 +269,10 @@ export default function BrandSettings() {
             </h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">
+                <label htmlFor="brand-invoice-footer" className="block text-sm font-medium text-foreground mb-1">
                   <Receipt className="w-4 h-4 inline mr-1" /> Invoice Footer
                 </label>
-                <textarea
+                <textarea id="brand-invoice-footer"
                   value={form.invoiceFooter || ''}
                   onChange={e => update('invoiceFooter', e.target.value)}
                   rows={2}
@@ -281,10 +281,10 @@ export default function BrandSettings() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">
+                <label htmlFor="brand-proposal-footer" className="block text-sm font-medium text-foreground mb-1">
                   <FileText className="w-4 h-4 inline mr-1" /> Proposal Footer
                 </label>
-                <textarea
+                <textarea id="brand-proposal-footer"
                   value={form.proposalFooter || ''}
                   onChange={e => update('proposalFooter', e.target.value)}
                   rows={2}
@@ -293,10 +293,10 @@ export default function BrandSettings() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-foreground mb-1">
+                <label htmlFor="brand-contract-header" className="block text-sm font-medium text-foreground mb-1">
                   <ScrollText className="w-4 h-4 inline mr-1" /> Contract Header
                 </label>
-                <textarea
+                <textarea id="brand-contract-header"
                   value={form.contractHeader || ''}
                   onChange={e => update('contractHeader', e.target.value)}
                   rows={2}
@@ -343,7 +343,7 @@ export default function BrandSettings() {
                 <div className="flex justify-between">
                   <div>
                     <p className="text-xs text-muted-foreground">INVOICE</p>
-                    <p className="font-bold text-foreground" style={{ color: form.primaryColor || '#c9a84c' }}>INV-2026-0001</p>
+                    <p className="font-bold text-foreground underline decoration-2 underline-offset-4" style={{ textDecorationColor: form.primaryColor || '#c9a84c' }}>INV-2026-0001</p>
                   </div>
                   <div className="text-right">
                     <p className="text-xs text-muted-foreground">Date</p>

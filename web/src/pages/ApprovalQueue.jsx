@@ -141,7 +141,7 @@ export default function ApprovalQueue() {
             )}
           </div>
           <div className="flex gap-2">
-            <select
+            <select aria-label="Filter by status"
               value={filterStatus}
               onChange={e => { setFilterStatus(e.target.value); setSelectedId(null); }}
               className="flex-1 px-2 py-1.5 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
@@ -151,7 +151,7 @@ export default function ApprovalQueue() {
               <option value="APPROVED">Approved</option>
               <option value="REJECTED">Rejected</option>
             </select>
-            <select
+            <select aria-label="Filter by type"
               value={filterType}
               onChange={e => { setFilterType(e.target.value); setSelectedId(null); }}
               className="flex-1 px-2 py-1.5 text-sm border border-border rounded-lg bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary"

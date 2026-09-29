@@ -2,9 +2,10 @@
 
 import { findTasksInPriorityOrder } from '../services/task-priority-order.js';
 import { sortByTaskPriority, taskPriorityRank } from '../shared/task-priority.js';
-import { validateBody, createTaskSchema, updateTaskSchema, taskUpdateSchema, taskBulkUpdateSchema, taskNoteCreateSchema, taskNoteUpdateSchema, taskDependencyCreateSchema, taskCreateQuickSchema } from '../validators/schemas.js';
+import { validateBody, createTaskSchema, updateTaskSchema, taskUpdateSchema, taskBulkUpdateSchema, taskPageContentUpdateSchema, taskSubpageCreateSchema, taskDependencyCreateSchema, taskCreateQuickSchema, TASK_STATUS_VALUES } from '../validators/schemas.js';
 import { z } from 'zod';
 import bus, { EVENTS } from '../utils/events.js';
+import { parseTaskContent } from '../utils/taskContent.js';
 
 /**
  * Why a task's assignee or dependency reference is unacceptable, or null.
@@ -328,13 +329,9 @@ export default async function taskRoutes(fastify) {
       return reply.status(404).send({ error: 'Task not found' });
     }
 
-    // Parse content if it's stored as JSON string
-    let parsedContent = [];
-    try {
-      parsedContent = JSON.parse(task.content || '[]');
-    } catch (e) {
-      parsedContent = [{ type: 'paragraph', content: task.content || '' }];
-    }
+    // Stored as a JSON block array; legacy/malformed values become a
+    // paragraph holding the original value instead of disappearing.
+    const parsedContent = parseTaskContent(task.content);
 
     // Parse properties
     let parsedProperties = {};
@@ -354,7 +351,7 @@ export default async function taskRoutes(fastify) {
   // Update task content (Notion-style blocks)
   fastify.put('/:id/content', {
     onRequest: [fastify.authenticate],
-    preHandler: validateBody(taskNoteCreateSchema),
+    preHandler: validateBody(taskPageContentUpdateSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { content, title, icon, coverImage, properties } = request.body;
@@ -381,7 +378,7 @@ export default async function taskRoutes(fastify) {
   // Create subpage (Notion-style)
   fastify.post('/:id/subpage', {
     onRequest: [fastify.authenticate],
-    preHandler: validateBody(taskNoteUpdateSchema),
+    preHandler: validateBody(taskSubpageCreateSchema),
   }, async (request, reply) => {
     const { id } = request.params;
     const { title, icon, content } = request.body;
@@ -667,13 +664,14 @@ export default async function taskRoutes(fastify) {
       ]
     }));
 
-    // Group by status
-    const board = {
-      PENDING: tasks.filter(t => t.status === 'PENDING'),
-      IN_PROGRESS: tasks.filter(t => t.status === 'IN_PROGRESS'),
-      BLOCKED: tasks.filter(t => t.status === 'BLOCKED'),
-      COMPLETED: tasks.filter(t => t.status === 'COMPLETED')
-    };
+    // Group by status. The four core columns are always present; any other
+    // stored status (WAITING_CLIENT, UPCOMING, REVIEW, …) gets its own key so
+    // no task disappears from the board.
+    const board = { PENDING: [], IN_PROGRESS: [], BLOCKED: [], COMPLETED: [] };
+    for (const task of tasks) {
+      const key = task.status || 'PENDING';
+      (board[key] ??= []).push(task);
+    }
 
     return board;
   });
@@ -681,7 +679,7 @@ export default async function taskRoutes(fastify) {
   // Move task between Kanban columns
   fastify.post('/:id/move', {
     onRequest: [fastify.authenticate],
-    preHandler: validateBody(z.object({ status: z.enum(['TODO', 'PENDING', 'IN_PROGRESS', 'BLOCKED', 'REVIEW', 'COMPLETED']) })),
+    preHandler: validateBody(z.object({ status: z.enum(TASK_STATUS_VALUES) })),
   }, async (request) => {
     const { id } = request.params;
     const { status } = request.body;

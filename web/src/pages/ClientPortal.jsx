@@ -7,7 +7,7 @@ import { Alert, Button, Card, CardDescription, CardTitle, Input, LoadingState, S
 import { buttonStyles } from '../components/ui/Button';
 import SlowNotice, { SLOW_WRITE_INLINE as slowWrite } from '../components/ui/SlowNotice';
 import { cn } from '../lib/utils';
-import { formatInvoiceDate } from '../lib/money';
+import { formatInvoiceDate } from '../lib/format';
 
 // Heavy sections load on demand so the portal route chunk stays in budget.
 // Their Suspense fallback is a named polite status with the slow-state copy.

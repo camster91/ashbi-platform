@@ -9,13 +9,14 @@ import {
 import { api } from '../../lib/api';
 import { formatRelativeTime } from '../../lib/utils';
 import Skeleton from '../ui/Skeleton';
+import { QueryErrorState } from '../QueryErrorState';
 
 export default function ProjectContextCard({ projectId }) {
   const queryClient = useQueryClient();
   const [localNotes, setLocalNotes] = useState('');
   const [notesDirty, setNotesDirty] = useState(false);
 
-  const { data: context, isLoading } = useQuery({
+  const { data: context, isLoading, isError, error: contextError, refetch, isFetching } = useQuery({
     queryKey: ['project-context', projectId],
     queryFn: () => api.getProjectContext(projectId),
   });
@@ -42,7 +43,7 @@ export default function ProjectContextCard({ projectId }) {
 
   if (isLoading) {
     return (
-      <div role="status" aria-live="polite" aria-label="Loading project context" className="bg-white rounded-lg shadow-sm border border-border p-4">
+      <div role="status" aria-live="polite" aria-label="Loading project context" className="bg-card rounded-lg shadow-sm border border-border p-4">
         <span className="sr-only">Loading project context…</span>
         <div className="space-y-3">
           <Skeleton className="h-4 w-1/3" />
@@ -52,9 +53,13 @@ export default function ProjectContextCard({ projectId }) {
     );
   }
 
+  if (isError) {
+    return <QueryErrorState error={contextError} message="Project context could not be loaded" onRetry={refetch} isRetrying={isFetching} />;
+  }
+
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-border">
-      <div className="px-4 py-3 border-b flex items-center justify-between">
+    <div className="bg-card rounded-lg shadow-sm border border-border">
+      <div className="px-4 py-3 border-b border-border flex items-center justify-between">
         <h3 className="font-semibold flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-accent" />
           Project Context
@@ -72,7 +77,7 @@ export default function ProjectContextCard({ projectId }) {
         {context?.aiSummary ? (
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <h4 className="text-xs font-semibold text-gray-500 uppercase">AI Summary</h4>
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase">AI Summary</h4>
               {context.lastCompactedAt && (
                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Clock className="w-3 h-3" />
@@ -80,7 +85,7 @@ export default function ProjectContextCard({ projectId }) {
                 </span>
               )}
             </div>
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded text-sm text-gray-700 whitespace-pre-wrap">
+            <div className="p-3 bg-muted/60 border border-border rounded text-sm text-foreground whitespace-pre-wrap">
               {context.aiSummary}
             </div>
           </div>
@@ -94,7 +99,7 @@ export default function ProjectContextCard({ projectId }) {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <StickyNote className="w-3.5 h-3.5 text-muted-foreground" />
-            <h4 className="text-xs font-semibold text-gray-500 uppercase">Notes</h4>
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase">Notes</h4>
             {saveMutation.isPending && (
               <span className="text-xs text-muted-foreground">Saving...</span>
             )}
@@ -107,7 +112,8 @@ export default function ProjectContextCard({ projectId }) {
             }}
             onBlur={handleBlur}
             rows={4}
-            className="w-full border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 resize-y"
+            aria-label="Project notes"
+            className="w-full border border-border bg-background text-foreground placeholder:text-muted-foreground rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 resize-y"
             placeholder="Add notes about this project's communications..."
           />
         </div>

@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { cn } from '../lib/utils';
+import { formatDate } from '../lib/format';
 import { useToast } from '../hooks/useToast';
 import { Button, Card, EmptyState, SlowNotice, TablePageSkeleton } from '../components/ui';
 import CreateClientModal from '../components/CreateClientModal';
@@ -30,14 +31,14 @@ import QueryErrorState from '../components/QueryErrorState';
 const TIER_HOURS = { '999': 20, '1999': 40, '3999': 80 };
 const TIER_LABEL = { '999': '$999/mo · 20 hrs', '1999': '$1,999/mo · 40 hrs', '3999': '$3,999/mo · 80 hrs' };
 
-function formatDate(dateStr) {
+function formatLastContact(dateStr) {
   if (!dateStr) return '—';
   const d = new Date(dateStr);
   const now = new Date();
   const diffDays = Math.floor((now - d) / (1000 * 60 * 60 * 24));
   if (diffDays === 0) return 'Today';
   if (diffDays === 1) return 'Yesterday';
-  return d.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' });
+  return formatDate(d);
 }
 
 function QuickNoteInput({ clientId, onSaved }) {
@@ -396,7 +397,8 @@ export default function Clients() {
             <tbody className="divide-y divide-border">
               {sorted.map((client) => {
                 const isExpanded = expandedClient === client.id;
-                const primaryEmail = client.contacts?.[0]?.email || (client._count?.contacts > 0 ? null : null);
+                const primaryContact = client.contacts?.[0] || null;
+                const primaryEmail = primaryContact?.email || null;
                 const isAtRisk = client.health === 'AT_RISK';
 
                 return (
@@ -436,14 +438,20 @@ export default function Clients() {
                         </button>
                       </td>
                       <td className="px-4 py-3 text-sm text-muted-foreground hidden sm:table-cell">
-                        {client.contacts?.[0]?.phone ? (
-                          <span className="flex items-center gap-0.5">
-                            <Phone className="w-3 h-3" />{client.contacts[0].phone}
-                          </span>
-                        ) : primaryEmail ? (
-                          <span className="flex items-center gap-0.5">
-                            <Mail className="w-3 h-3" />{primaryEmail}
-                          </span>
+                        {primaryContact ? (
+                          <div className="min-w-0">
+                            <p className="text-foreground truncate">{primaryContact.name}</p>
+                            {primaryContact.phone ? (
+                              <span className="flex items-center gap-0.5 text-xs">
+                                <Phone className="w-3 h-3" aria-hidden="true" />{primaryContact.phone}
+                              </span>
+                            ) : primaryEmail ? (
+                              <a href={`mailto:${primaryEmail}`} className="flex items-center gap-0.5 text-xs hover:text-foreground">
+                                <Mail className="w-3 h-3" aria-hidden="true" />
+                                <span className="truncate max-w-[180px]">{primaryEmail}</span>
+                              </a>
+                            ) : null}
+                          </div>
                         ) : (
                           '—'
                         )}
@@ -460,7 +468,7 @@ export default function Clients() {
                       <td className="px-4 py-3 text-sm text-muted-foreground hidden sm:table-cell">
                         <span className="flex items-center gap-1">
                           <Clock className="w-3 h-3" />
-                          {formatDate(client.lastContactDate || client.updatedAt)}
+                          {formatLastContact(client.lastContactDate || client.updatedAt)}
                         </span>
                       </td>
                       <td className="px-4 py-3">

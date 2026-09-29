@@ -128,7 +128,7 @@ export default function Trash() {
             className="w-full pl-9 pr-3 py-2 border border-border rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
           />
         </div>
-        <select
+        <select aria-label="Filter by type"
           value={typeFilter}
           onChange={e => setTypeFilter(e.target.value)}
           className="px-3 py-2 border border-border rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"

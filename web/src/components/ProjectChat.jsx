@@ -8,20 +8,20 @@ import { preferredScrollBehavior } from '../lib/motion';
 import ConfirmDialog from './ConfirmDialog';
 import LoadingState from './ui/LoadingState';
 import QueryErrorState from './QueryErrorState';
-import { Edit2, Trash2, Lock, Eye } from 'lucide-react';
+import { Edit2, Trash2, Lock, Eye, Paperclip } from 'lucide-react';
 
 // Chat visibility (docs/product-status.md): INTERNAL messages are staff-only;
 // CLIENT messages are also shown to the client in their portal.
 export function VisibilityBadge({ visibility }) {
   if (visibility === 'CLIENT') {
     return (
-      <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-900" title="The client can read this message in their portal">
+      <span className="inline-flex items-center gap-1 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-900 dark:bg-amber-900/40 dark:text-amber-200" title="The client can read this message in their portal">
         <Eye className="h-3 w-3" aria-hidden="true" /> Visible to client
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded bg-gray-200 px-1.5 py-0.5 text-[11px] font-medium text-gray-800" title="Only your team can read this message">
+    <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-foreground" title="Only your team can read this message">
       <Lock className="h-3 w-3" aria-hidden="true" /> Internal
     </span>
   );
@@ -49,6 +49,7 @@ export default function ProjectChat({ projectId }) {
   const [visibility, setVisibility] = useState('INTERNAL');
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   // Fetch messages
   const {
@@ -126,7 +127,9 @@ export default function ProjectChat({ projectId }) {
 
   // Scroll to bottom on new messages
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: preferredScrollBehavior() });
+    // Scroll only the message list — scrollIntoView would also scroll the page.
+    const list = messagesEndRef.current?.parentElement;
+    list?.scrollTo?.({ top: list.scrollHeight, behavior: preferredScrollBehavior() });
   }, [messages]);
 
   const uploadMutation = useMutation({
@@ -230,11 +233,11 @@ export default function ProjectChat({ projectId }) {
   }, {});
 
   if (isLoading) {
-    return <LoadingState label="Loading messages…" compact className="h-64 text-gray-600" spinnerClassName="border-blue-200 border-t-blue-600" />;
+    return <LoadingState label="Loading messages…" compact className="h-64 text-muted-foreground" spinnerClassName="border-primary/20 border-t-primary" />;
   }
 
   return (
-    <div className="flex flex-col h-[500px] bg-white rounded-lg border">
+    <div className="flex flex-col h-[500px] bg-card text-card-foreground rounded-lg border border-border">
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messagesError && (
@@ -248,7 +251,7 @@ export default function ProjectChat({ projectId }) {
         {Object.entries(groupedMessages).map(([date, msgs]) => (
           <div key={date}>
             <div className="flex items-center justify-center my-4">
-              <span className="text-xs text-gray-700 bg-gray-100 px-3 py-1 rounded-full">
+              <span className="text-xs text-muted-foreground bg-muted px-3 py-1 rounded-full">
                 {date === new Date().toLocaleDateString('en-CA') ? 'Today' : date}
               </span>
             </div>
@@ -260,7 +263,7 @@ export default function ProjectChat({ projectId }) {
                 <div className={`max-w-[70%] ${msg.authorId === user?.id ? 'order-2' : ''}`}>
                   <div className={`flex items-center gap-2 mb-0.5 ${msg.authorId === user?.id ? 'justify-end' : ''}`}>
                     {msg.authorId !== user?.id && (
-                      <span className="text-xs text-gray-500 ml-1">{msg.author?.name || msg.externalAuthorName || 'Unknown sender'}</span>
+                      <span className="text-xs text-muted-foreground ml-1">{msg.author?.name || msg.externalAuthorName || 'Unknown sender'}</span>
                     )}
                     <VisibilityBadge visibility={msg.visibility} />
                   </div>
@@ -268,12 +271,12 @@ export default function ProjectChat({ projectId }) {
                     className={`rounded-lg px-4 py-2 ${
                       msg.authorId === user?.id
                         ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-900'
+                        : 'bg-muted text-foreground'
                     }`}
                   >
-                    {msg.removedAt ? <p className="italic opacity-80">Message deleted</p> : editingId === msg.id ? <form onSubmit={(event) => { event.preventDefault(); if (editingContent.trim()) editMutation.mutate({ id: msg.id, content: editingContent.trim() }); }}><input autoFocus value={editingContent} onChange={(event) => setEditingContent(event.target.value)} className="w-full rounded px-2 py-1 text-gray-900" /><div className="mt-2 flex gap-2"><button type="submit" className="text-xs underline">Save</button><button type="button" onClick={() => setEditingId(null)} className="text-xs underline">Cancel</button></div></form> : <p className="whitespace-pre-wrap">{msg.content}</p>}
+                    {msg.removedAt ? <p className="italic opacity-80">Message deleted</p> : editingId === msg.id ? <form onSubmit={(event) => { event.preventDefault(); if (editingContent.trim()) editMutation.mutate({ id: msg.id, content: editingContent.trim() }); }}><input autoFocus value={editingContent} onChange={(event) => setEditingContent(event.target.value)} className="w-full rounded px-2 py-1 bg-background text-foreground" /><div className="mt-2 flex gap-2"><button type="submit" className="text-xs underline">Save</button><button type="button" onClick={() => setEditingId(null)} className="text-xs underline">Cancel</button></div></form> : <p className="whitespace-pre-wrap">{msg.content}</p>}
                     <div className="flex items-center justify-between mt-1">
-                      <span className={`text-xs ${msg.authorId === user?.id ? 'text-blue-50' : 'text-gray-600'}`}>
+                      <span className={`text-xs ${msg.authorId === user?.id ? 'text-blue-50' : 'text-muted-foreground'}`}>
                         {formatTime(msg.createdAt)}
                         {msg.isEdited && ' (edited)'}
                       </span>
@@ -281,20 +284,20 @@ export default function ProjectChat({ projectId }) {
                   </div>
                   {!msg.removedAt && <ChatAttachments messageId={msg.id} />}
                   {msg.replyCount > (msg.replies?.length ?? 0) && (
-                    <p className="mt-2 text-xs text-gray-500">Showing the latest {msg.replies?.length ?? 0} of {msg.replyCount} replies.</p>
+                    <p className="mt-2 text-xs text-muted-foreground">Showing the latest {msg.replies?.length ?? 0} of {msg.replyCount} replies.</p>
                   )}
                   {msg.replies?.length > 0 && (
-                    <ul className="mt-2 space-y-1 border-l-2 border-gray-200 pl-3" aria-label="Replies">
+                    <ul className="mt-2 space-y-1 border-l-2 border-border pl-3" aria-label="Replies">
                       {msg.replies.map((replyMessage) => (
-                        <li key={replyMessage.id} className="text-sm text-gray-800">
-                          <span className="text-xs text-gray-500">{replyMessage.author?.name || replyMessage.externalAuthorName || 'Unknown sender'}: </span>
+                        <li key={replyMessage.id} className="text-sm text-foreground">
+                          <span className="text-xs text-muted-foreground">{replyMessage.author?.name || replyMessage.externalAuthorName || 'Unknown sender'}: </span>
                           <VisibilityBadge visibility={replyMessage.visibility} />{' '}
                           {replyMessage.removedAt ? <em>Message deleted</em> : replyMessage.content}
                         </li>
                       ))}
                     </ul>
                   )}
-                  {msg.authorId === user?.id && !msg.removedAt && editingId !== msg.id && <div className="mt-1 flex justify-end gap-1"><button type="button" onClick={() => { setEditingId(msg.id); setEditingContent(msg.content); }} aria-label="Edit your message" className="min-h-11 min-w-11 p-2 text-gray-500 hover:text-blue-600"><Edit2 className="w-3.5 h-3.5" /></button><button type="button" onClick={() => requestMessageDeletion(msg)} disabled={deleteMutation.isPending} aria-label="Delete your message" className="min-h-11 min-w-11 p-2 text-gray-500 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-50"><Trash2 className="w-3.5 h-3.5" /></button></div>}
+                  {msg.authorId === user?.id && !msg.removedAt && editingId !== msg.id && <div className="mt-1 flex justify-end gap-1"><button type="button" onClick={() => { setEditingId(msg.id); setEditingContent(msg.content); }} aria-label="Edit your message" className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-primary"><Edit2 className="w-3.5 h-3.5" /></button><button type="button" onClick={() => requestMessageDeletion(msg)} disabled={deleteMutation.isPending} aria-label="Delete your message" className="min-h-11 min-w-11 p-2 text-muted-foreground hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"><Trash2 className="w-3.5 h-3.5" /></button></div>}
                   {/* Reactions */}
                   {msg.reactions?.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-1">
@@ -307,7 +310,7 @@ export default function ProjectChat({ projectId }) {
                         <button
                           key={emoji}
                           onClick={() => handleReaction(msg.id, emoji)}
-                          className="text-xs bg-gray-100 hover:bg-gray-200 rounded px-1.5 py-0.5"
+                          className="text-xs bg-muted hover:bg-muted/70 rounded px-1.5 py-0.5"
                         >
                           {emoji} {count}
                         </button>
@@ -320,7 +323,7 @@ export default function ProjectChat({ projectId }) {
                       <button
                         key={emoji}
                         onClick={() => handleReaction(msg.id, emoji)}
-                        className="text-xs hover:bg-gray-100 rounded p-1"
+                        className="text-xs hover:bg-muted rounded p-1"
                       >
                         {emoji}
                       </button>
@@ -332,7 +335,7 @@ export default function ProjectChat({ projectId }) {
           </div>
         ))}
         {!messagesError && messages.length === 0 && (
-          <div className="text-center text-gray-500 py-8">
+          <div className="text-center text-muted-foreground py-8">
             No messages yet. Start the conversation!
           </div>
         )}
@@ -341,27 +344,36 @@ export default function ProjectChat({ projectId }) {
 
       {/* Typing indicator */}
       {typingUsers.length > 0 && (
-        <div className="px-4 py-1 text-xs text-gray-500">
+        <div className="px-4 py-1 text-xs text-muted-foreground">
           Someone is typing...
         </div>
       )}
 
       {/* Input */}
-      <form onSubmit={handleSend} className={`border-t p-3 ${visibility === 'CLIENT' ? 'bg-amber-50' : ''}`}>
+      <form onSubmit={handleSend} className={`border-t border-border p-3 ${visibility === 'CLIENT' ? 'bg-amber-50 dark:bg-amber-950/30' : ''}`}>
         <fieldset className="mb-2 flex flex-wrap items-center gap-2 text-xs">
           <legend className="sr-only">Who can read this message</legend>
-          <label className={`inline-flex min-h-11 cursor-pointer items-center gap-1 rounded border px-2 ${visibility === 'INTERNAL' ? 'border-gray-700 bg-gray-100 font-semibold' : 'border-gray-300'}`}>
+          <label className={`inline-flex min-h-11 cursor-pointer items-center gap-1 rounded border px-2 ${visibility === 'INTERNAL' ? 'border-foreground/60 bg-muted font-semibold' : 'border-border'}`}>
             <input type="radio" name={`chat-visibility-${projectId}`} value="INTERNAL" checked={visibility === 'INTERNAL'} onChange={() => setVisibility('INTERNAL')} />
             <Lock className="h-3 w-3" aria-hidden="true" /> Internal (team only)
           </label>
-          <label className={`inline-flex min-h-11 cursor-pointer items-center gap-1 rounded border px-2 ${visibility === 'CLIENT' ? 'border-amber-700 bg-amber-100 font-semibold text-amber-900' : 'border-gray-300'}`}>
+          <label className={`inline-flex min-h-11 cursor-pointer items-center gap-1 rounded border px-2 ${visibility === 'CLIENT' ? 'border-amber-700 bg-amber-100 font-semibold text-amber-900 dark:bg-amber-900/40 dark:text-amber-200' : 'border-border'}`}>
             <input type="radio" name={`chat-visibility-${projectId}`} value="CLIENT" checked={visibility === 'CLIENT'} onChange={() => setVisibility('CLIENT')} />
             <Eye className="h-3 w-3" aria-hidden="true" /> Visible to client
           </label>
-          {visibility === 'CLIENT' && <span role="status" className="text-amber-900">The client will see this message in their portal.</span>}
+          {visibility === 'CLIENT' && <span role="status" className="text-amber-900 dark:text-amber-200">The client will see this message in their portal.</span>}
         </fieldset>
         <div className="flex gap-2">
-          <input type="file" onChange={(event) => setAttachment(event.target.files?.[0] || null)} aria-label="Attach a file to this message" className="max-w-32 text-xs" />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            aria-label="Attach a file to this message"
+            className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Paperclip className="h-4 w-4" aria-hidden="true" />
+            <span className="hidden sm:inline" aria-hidden="true">Attach</span>
+          </button>
+          <input ref={fileInputRef} type="file" onChange={(event) => setAttachment(event.target.files?.[0] || null)} tabIndex={-1} aria-hidden="true" className="hidden" />
           <input
             type="text"
             value={message}
@@ -371,7 +383,7 @@ export default function ProjectChat({ projectId }) {
             }}
             placeholder={visibility === 'CLIENT' ? 'Message the client...' : 'Message your team... (use @name to mention)'}
             aria-label={visibility === 'CLIENT' ? 'Message visible to the client' : 'Internal message to your team'}
-            className="flex-1 border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="min-w-0 flex-1 border border-border bg-background text-foreground placeholder:text-muted-foreground rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-ring"
           />
           <button
             type="submit"
@@ -381,8 +393,8 @@ export default function ProjectChat({ projectId }) {
             {sendMutation.isPending ? '...' : 'Send'}
           </button>
         </div>
-        {attachment && <p className="mt-1 text-xs text-gray-500">Attaching {attachment.name}</p>}
-        {sendError && <div role="alert" className="mt-2 flex items-center justify-between gap-2 text-sm text-red-600"><span>{sendError}</span><button type="button" onClick={() => attachmentRetry ? uploadMutation.mutate(attachmentRetry) : sendMutation.mutate(message.trim())} disabled={sendMutation.isPending || uploadMutation.isPending || (!attachmentRetry && !message.trim())} className="underline">Try again</button></div>}
+        {attachment && <p className="mt-1 text-xs text-muted-foreground">Attaching {attachment.name}</p>}
+        {sendError && <div role="alert" className="mt-2 flex items-center justify-between gap-2 text-sm text-destructive"><span>{sendError}</span><button type="button" onClick={() => attachmentRetry ? uploadMutation.mutate(attachmentRetry) : sendMutation.mutate(message.trim())} disabled={sendMutation.isPending || uploadMutation.isPending || (!attachmentRetry && !message.trim())} className="underline">Try again</button></div>}
       </form>
       <ConfirmDialog
         isOpen={Boolean(messageToDelete)}

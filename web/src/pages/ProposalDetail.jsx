@@ -176,8 +176,8 @@ export default function ProposalDetail() {
       )}
       {/* Header */}
       <div className="flex items-center gap-4">
-        <button onClick={() => navigate('/proposals')} className="p-2 hover:bg-muted rounded-lg">
-          <ArrowLeft className="w-5 h-5" />
+        <button type="button" aria-label="Back to proposals" onClick={() => navigate('/proposals')} className="p-2 hover:bg-muted rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <ArrowLeft className="w-5 h-5" aria-hidden="true" />
         </button>
         <div className="flex-1">
           {editing ? (

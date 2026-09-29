@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { formatInvoiceDate, formatMoney, toDateInputValue } from '../lib/money';
+import { formatInvoiceDate, formatInvoiceMoney, toDateInputValue } from '../lib/format';
 import { statMoney } from '../pages/Invoices';
 
 describe('invoice money and dates', () => {
   it('formats amounts in the invoice currency with its code', () => {
-    expect(formatMoney(1250, 'CAD')).toBe('$1,250.00 CAD');
-    expect(formatMoney(1250, 'usd')).toBe('$1,250.00 USD');
-    expect(formatMoney(10, 'EUR')).toBe('€10.00 EUR');
-    expect(formatMoney(5)).toBe('$5.00 CAD');
+    expect(formatInvoiceMoney(1250, 'CAD')).toBe('$1,250.00 CAD');
+    expect(formatInvoiceMoney(1250, 'usd')).toBe('$1,250.00 USD');
+    expect(formatInvoiceMoney(10, 'EUR')).toBe('€10.00 EUR');
+    expect(formatInvoiceMoney(5)).toBe('$5.00 CAD');
   });
 
   it('renders a date-only due date as the chosen day in any timezone', () => {
