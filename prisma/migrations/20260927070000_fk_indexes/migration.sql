@@ -2,7 +2,10 @@
 -- "children of X" queries were sequential scans).
 -- src/tests/unit/schema-fk-indexes.test.js keeps new relations indexed.
 --
--- Locking: Prisma applies this file as one transaction, so each table's SHARE
+-- Locking: the explicit BEGIN/COMMIT makes the batch atomic. Prisma does not
+-- wrap a PostgreSQL migration in a transaction on its own, so without it a
+-- failure part-way (for example the lock timeout below) would leave the earlier
+-- indexes committed and a retry would fail on their names. Each table's SHARE
 -- lock (blocks writes to that table, not reads) is held from its CREATE INDEX
 -- until COMMIT, while the previous release keeps serving traffic. At current
 -- table sizes the whole file builds in well under a second. lock_timeout makes
@@ -11,7 +14,8 @@
 -- when the database is quieter. CONCURRENTLY is not allowed inside a
 -- transaction; the messages index swap, on the busiest table, is done
 -- concurrently in the two single-statement migrations that follow.
-SET lock_timeout = '5s';
+BEGIN;
+SET LOCAL lock_timeout = '5s';
 
 -- CreateIndex
 CREATE INDEX "ai_team_messages_clientId_idx" ON "ai_team_messages"("clientId");
@@ -124,4 +128,4 @@ CREATE INDEX "wp_alerts_siteId_idx" ON "wp_alerts"("siteId");
 -- CreateIndex
 CREATE INDEX "wp_sites_clientId_idx" ON "wp_sites"("clientId");
 
-RESET lock_timeout;
+COMMIT;
