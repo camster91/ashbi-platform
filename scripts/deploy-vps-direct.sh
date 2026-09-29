@@ -84,7 +84,46 @@ docker load -i "$ARCHIVE" >/dev/null
 ACTUAL_IMAGE_ID=$(docker image inspect "$IMAGE" --format '{{.Id}}')
 [[ $ACTUAL_IMAGE_ID == "$IMAGE_ID" ]] || die 'loaded image ID does not match the approved artifact'
 
+# --- rollback floor ---
+# Some migrations close a confidentiality gap that older images do not know
+# about: an image without them would serve data the new rules keep private
+# (20260927030000: internal project chat is hidden from client sessions only
+# by images that filter on chat_messages.visibility). Once such a migration is
+# applied, no image lacking it may serve again, not even as an automatic
+# rollback: the release fails closed instead. The floor is recorded per host.
+ROLLBACK_FLOOR_FILE="$RELEASE_DIR/rollback-floor"
+ROLLBACK_FLOOR_MIGRATIONS=(20260927030000_chat_message_visibility)
+image_has_migration() {
+  docker run --rm --entrypoint test "$1" -d "/app/prisma/migrations/$2" >/dev/null 2>&1
+}
+# Prints the first floor migration the image lacks and fails; succeeds when
+# the image carries every recorded floor migration.
+image_meets_floor() {
+  local image=$1 name
+  [[ -f $ROLLBACK_FLOOR_FILE ]] || return 0
+  while IFS= read -r name; do
+    [[ -n $name ]] || continue
+    image_has_migration "$image" "$name" || { echo "$name"; return 1; }
+  done < "$ROLLBACK_FLOOR_FILE"
+  return 0
+}
+# After an image's migrations are applied, record the floor migrations it carries.
+raise_rollback_floor() {
+  local image=$1 name
+  for name in "${ROLLBACK_FLOOR_MIGRATIONS[@]}"; do
+    image_has_migration "$image" "$name" || continue
+    grep -qxF "$name" "$ROLLBACK_FLOOR_FILE" 2>/dev/null || echo "$name" >> "$ROLLBACK_FLOOR_FILE"
+  done
+}
+# --- end rollback floor ---
+
+if ! FLOOR_MISSING=$(image_meets_floor "$IMAGE"); then
+  record rollback_floor_blocked "missing=$FLOOR_MISSING"
+  die "image lacks migration $FLOOR_MISSING, which this database already applied (rollback floor)"
+fi
+
 docker run --rm --network "$NETWORK" --env-file "$ENV_FILE" "$IMAGE" npx prisma migrate deploy
+raise_rollback_floor "$IMAGE"
 docker run --rm --network "$NETWORK" --env-file "$ENV_FILE" "$IMAGE" npx prisma migrate status
 
 PREVIOUS_IMAGE=$(docker inspect --format '{{.Config.Image}}' "$CONTAINER" 2>/dev/null || true)
@@ -99,7 +138,10 @@ CUTOVER_STARTED=false
 emergency_rollback() {
   local status=$?
   trap - EXIT
-  if ((status != 0)) && [[ $CUTOVER_STARTED == true ]] && docker inspect "$ROLLBACK_CONTAINER" >/dev/null 2>&1; then
+  if ((status != 0)) && [[ $CUTOVER_STARTED == true ]] && docker inspect "$ROLLBACK_CONTAINER" >/dev/null 2>&1 \
+    && ! image_meets_floor "$PREVIOUS_IMAGE" >/dev/null; then
+    record rollback_floor_blocked "previous=$PREVIOUS_IMAGE" || true
+  elif ((status != 0)) && [[ $CUTOVER_STARTED == true ]] && docker inspect "$ROLLBACK_CONTAINER" >/dev/null 2>&1; then
     docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
     docker rm -f "$WORKER_CONTAINER" >/dev/null 2>&1 || true
     docker rename "$ROLLBACK_CONTAINER" "$CONTAINER" >/dev/null 2>&1 || true
@@ -144,6 +186,12 @@ start_container() {
 }
 
 restore_previous() {
+  local floor_missing
+  if [[ -n $PREVIOUS_IMAGE ]] && ! floor_missing=$(image_meets_floor "$PREVIOUS_IMAGE"); then
+    # Fail closed: the previous image would serve data this schema keeps private.
+    record rollback_floor_blocked "previous=$PREVIOUS_IMAGE;missing=$floor_missing"
+    return 1
+  fi
   docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
   docker rm -f "$WORKER_CONTAINER" >/dev/null 2>&1 || true
   if [[ -n $PREVIOUS_IMAGE ]]; then

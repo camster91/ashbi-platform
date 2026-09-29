@@ -135,3 +135,12 @@ test('a timer stopped before a full minute records no entry, even when it rounds
   assert.equal(db.entries.length, 1);
   assert.equal(db.entries[0].duration, 1);
 });
+
+test('manual durations that round to zero minutes are refused', () => {
+  for (const duration of [0, 0.2, 0.49, -5]) {
+    assert.equal(timeEntryCreateSchema.safeParse({ projectId: 'p1', duration }).success, false, `create ${duration}`);
+    assert.equal(timeEntryUpdateSchema.safeParse({ duration }).success, false, `update ${duration}`);
+  }
+  assert.equal(timeEntryCreateSchema.safeParse({ projectId: 'p1', duration: 0.5 }).success, true, 'rounds to 1');
+  assert.equal(timeEntryCreateSchema.safeParse({ projectId: 'p1', duration: 90 }).success, true);
+});
