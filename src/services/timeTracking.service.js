@@ -172,33 +172,51 @@ export async function createManualEntry(userId, projectId, data) {
  */
 export async function getTimeSummary(userId, filters = {}) {
   const { projectId, startDate, endDate } = filters;
+  const range = (startDate || endDate)
+    ? { ...(startDate ? { gte: new Date(startDate) } : {}), ...(endDate ? { lte: new Date(endDate) } : {}) }
+    : undefined;
 
-  const where = { userId };
-  if (projectId) where.projectId = projectId;
-  if (startDate || endDate) {
-    where.startTime = {};
-    if (startDate) where.startTime.gte = new Date(startDate);
-    if (endDate) where.startTime.lte = new Date(endDate);
-  }
+  // TimeEntry is the canonical record: stopped timers (source TIMER) and
+  // manual entries both live there. Timer sessions stopped before timers
+  // recorded entries (no linked TimeEntry) are counted too, once each.
+  const [timeEntries, legacySessions] = await Promise.all([
+    prisma.timeEntry.findMany({
+      where: { userId, ...(projectId ? { projectId } : {}), ...(range ? { date: range } : {}) },
+      include: SESSION_INCLUDE,
+      orderBy: { date: 'desc' },
+    }),
+    prisma.timeSession.findMany({
+      where: {
+        userId, isRunning: false, timeEntry: null,
+        ...(projectId ? { projectId } : {}), ...(range ? { startTime: range } : {}),
+      },
+      include: SESSION_INCLUDE,
+      orderBy: { startTime: 'desc' },
+    }),
+  ]);
 
-  const sessions = await prisma.timeSession.findMany({
-    where,
-    include: SESSION_INCLUDE,
-    orderBy: { startTime: 'desc' }
-  });
+  const entries = [
+    ...timeEntries.map((entry) => ({
+      id: entry.id, kind: 'entry', source: entry.source ?? 'MANUAL', date: entry.date,
+      duration: entry.duration, billable: entry.billable, description: entry.description ?? null,
+      projectId: entry.projectId, project: entry.project, taskId: entry.taskId ?? null, task: entry.task ?? null,
+    })),
+    ...legacySessions.map((session) => ({
+      id: session.id, kind: 'session', source: 'TIMER', date: session.startTime,
+      duration: session.duration, billable: session.billable, description: session.description ?? null,
+      projectId: session.projectId, project: session.project, taskId: session.taskId ?? null, task: session.task ?? null,
+    })),
+  ].sort((a, b) => new Date(b.date) - new Date(a.date));
 
-  const totalMinutes = sessions.reduce((sum, s) => sum + s.duration, 0);
-  const billableMinutes = sessions.filter(s => s.billable).reduce((sum, s) => sum + s.duration, 0);
+  const totalMinutes = entries.reduce((sum, e) => sum + e.duration, 0);
+  const billableMinutes = entries.filter((e) => e.billable).reduce((sum, e) => sum + e.duration, 0);
 
-  // Group by project
-  const byProject = sessions.reduce((acc, s) => {
-    const key = s.projectId;
-    if (!acc[key]) {
-      acc[key] = { project: s.project, totalMinutes: 0, billableMinutes: 0, sessions: [] };
-    }
-    acc[key].totalMinutes += s.duration;
-    if (s.billable) acc[key].billableMinutes += s.duration;
-    acc[key].sessions.push(s);
+  const byProject = entries.reduce((acc, e) => {
+    const key = e.projectId;
+    if (!acc[key]) acc[key] = { project: e.project, totalMinutes: 0, billableMinutes: 0, entries: [] };
+    acc[key].totalMinutes += e.duration;
+    if (e.billable) acc[key].billableMinutes += e.duration;
+    acc[key].entries.push(e);
     return acc;
   }, {});
 
@@ -208,8 +226,8 @@ export async function getTimeSummary(userId, filters = {}) {
     billableMinutes,
     billableHours: Math.round(billableMinutes / 60 * 100) / 100,
     nonBillableMinutes: totalMinutes - billableMinutes,
-    sessions,
-    byProject: Object.values(byProject)
+    entries,
+    byProject: Object.values(byProject),
   };
 }
 
