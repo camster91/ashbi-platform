@@ -6,6 +6,7 @@ import os from 'node:os';
 import {
   closeQueueInfrastructure,
   getWorkerConnection,
+  hydrateEmailJobData,
   QUEUES,
   scheduleEscalationCheck,
   setupRecurringJobs,
@@ -101,20 +102,29 @@ const emailWorker = createWorker(
     const result = await runTenantJob(
       prisma,
       job.data?.organizationId,
-      () => processEmailPipeline(job.data),
+      () => processEmailPipeline(hydrateEmailJobData(job.data)),
       backgroundPrisma,
     );
 
-    // Schedule escalation if thread was created
+    // Schedule escalation if thread was created. The email is already
+    // processed: a scheduling failure must not fail (and re-run) the job;
+    // the periodic escalation sweep still covers the thread.
     if (result.threadId) {
       const priority = result.analysis?.urgency || 'NORMAL';
       const delayHours = env.slaDefaults[priority] || 24;
-      await scheduleEscalationCheck(result.threadId, delayHours * 3600000);
+      try {
+        await scheduleEscalationCheck(result.threadId, delayHours * 3600000);
+      } catch (err) {
+        console.error(`[email] Could not schedule escalation for thread ${result.threadId}:`, err?.message);
+      }
     }
 
     return result;
   },
-  { concurrency: 5 }
+  // The pipeline is not idempotent: a stalled job (its worker died or lost
+  // the lock) is failed and kept for a deliberate replay, never re-run
+  // automatically on another worker, which could duplicate its writes.
+  { concurrency: 5, maxStalledCount: 0 }
 );
 
 // Project Health Worker

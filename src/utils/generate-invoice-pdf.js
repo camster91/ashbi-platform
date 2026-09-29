@@ -1,5 +1,6 @@
 // Professional Invoice PDF Generator — uses pdfkit
 import PDFDocument from 'pdfkit';
+import { formatMoney } from './money.js';
 
 const BRAND_BLUE = '#2563eb';
 const DARK = '#1e293b';
@@ -9,24 +10,23 @@ const BORDER = '#e2e8f0';
 const GREEN = '#16a34a';
 const RED = '#dc2626';
 
-function fmt(n) {
-  const num = parseFloat(n) || 0;
-  return '$' + num.toLocaleString('en-CA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
 function fmtDate(d) {
   if (!d) return 'Upon receipt';
-  return new Date(d).toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric' });
+  // Invoice dates are calendar dates stored in UTC (see createInvoiceSchema).
+  return new Date(d).toLocaleDateString('en-CA', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
 }
 
 /**
- * Generate a professional PDF invoice buffer
+ * Generate a professional PDF invoice buffer. Amounts use the invoice's own
+ * currency ("$1,250.00 USD").
  * @param {Object} invoice - Invoice with client, lineItems, payments
+ * @param {{ compress?: boolean }} [options] - compress: false keeps text streams readable (tests)
  * @returns {Promise<Buffer>}
  */
-export async function generateInvoicePdf(invoice) {
+export async function generateInvoicePdf(invoice, { compress = true } = {}) {
+  const fmt = (n) => formatMoney(n, invoice.currency);
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: 'LETTER', margin: 50 });
+    const doc = new PDFDocument({ size: 'LETTER', margin: 50, compress });
     const chunks = [];
 
     doc.on('data', (chunk) => chunks.push(chunk));
@@ -193,7 +193,7 @@ export async function generateInvoicePdf(invoice) {
     doc.font('Helvetica-Bold').fontSize(13).fillColor(DARK)
       .text('Total:', totalsX, rowY, { width: totalsLabelW, align: 'right' });
     doc.font('Helvetica-Bold').fontSize(13).fillColor(DARK)
-      .text(fmt(invoice.total) + ' CAD', totalsX + totalsLabelW, rowY, { width: totalsValueW, align: 'right' });
+      .text(fmt(invoice.total), totalsX + totalsLabelW, rowY, { width: totalsValueW, align: 'right' });
     rowY += 22;
 
     if (invoice.status === 'PAID' || totalPaid > 0) {

@@ -2,7 +2,7 @@
 
 generator client {
   provider        = "prisma-client-js"
-  previewFeatures = ["postgresqlExtensions"]
+  previewFeatures = ["postgresqlExtensions", "partialIndexes"]
 }
 
 datasource db {
@@ -70,6 +70,8 @@ model Organization {
   aiProviderConnection AiProviderConnection?
   aiUsageRecords  AiUsageRecord[]
   reviewSessions  ReviewSession[]
+  invoices        Invoice[]
+  documentNumberSequences DocumentNumberSequence[]
   domainEvents    DomainEvent[]
   impersonationSessions ImpersonationSession[]
   breakGlassGrants      BreakGlassGrant[]
@@ -1038,7 +1040,13 @@ model Contract {
 
 model Invoice {
   id            String    @id @default(cuid())
-  invoiceNumber String    @unique
+  // Unique per organization (see @@unique below), allocated from
+  // DocumentNumberSequence inside the create transaction.
+  invoiceNumber String
+  // Owning organization, always equal to client.organizationId: the app sets
+  // it and a database trigger (invoices_set_organization_id) derives it from
+  // the client on insert/client change. Nullable only for rollout safety.
+  organizationId String?
   status        String    @default("DRAFT") // DRAFT | SENT | PAID | OVERDUE | VOID
   title         String?
   dueDate       DateTime?
@@ -1046,7 +1054,7 @@ model Invoice {
 
   // Bonsai migration fields
   bonsaiInvoiceId String? // Original Bonsai invoice ID
-  currency        String  @default("USD") // USD | CAD
+  currency        String  @default("CAD") // ISO 4217 (src/utils/money.js); shown on UI/PDF/email and charged by Stripe
   amountUsd       Float? // For multi-currency tracking
   amountCad       Float?
   daysToPayActual Int? // Historical: actual days client took to pay
@@ -1084,7 +1092,10 @@ model Invoice {
   isRecurring             Boolean   @default(false)
   recurringInterval       String? // MONTHLY | QUARTERLY | ANNUALLY
   recurringNextDate       DateTime?
+  // Overdue job: last reminder claimed/sent, and when the single 7-day
+  // escalation went out (escalated invoices leave the job's working set).
   reminderSentAt          DateTime?
+  overdueEscalatedAt      DateTime?
   viewToken               String?   @unique @default(cuid())
   publicAccessExpiresAt   DateTime?
   publicAccessRevokedAt   DateTime?
@@ -1095,21 +1106,41 @@ model Invoice {
   createdAt               DateTime  @default(now())
   updatedAt               DateTime  @updatedAt
 
-  client      Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  createdBy   User              @relation("InvoiceCreator", fields: [createdById], references: [id])
-  lineItems   InvoiceLineItem[]
-  payments    InvoicePayment[]
-  timeEntries TimeEntry[]
-  expenses    Expense[]
+  client       Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  organization Organization?     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User              @relation("InvoiceCreator", fields: [createdById], references: [id])
+  lineItems    InvoiceLineItem[]
+  payments     InvoicePayment[]
+  timeEntries  TimeEntry[]
+  expenses     Expense[]
   // Soft delete
   deletedAt   DateTime?
 
   // Autosave draft
   draftData String? // JSON of unsaved form data
 
+  @@unique([organizationId, invoiceNumber])
   @@index([status, dueDate])
+  @@index([status, overdueEscalatedAt, dueDate])
   @@index([clientId, status])
   @@map("invoices")
+}
+
+// Per-organization document counters (invoice numbers today). A row is
+// incremented atomically (INSERT ... ON CONFLICT DO UPDATE ... RETURNING)
+// inside the transaction that creates the document, so concurrent creates
+// get distinct consecutive numbers and a rolled-back create frees its number.
+model DocumentNumberSequence {
+  organizationId String
+  kind           String // INVOICE
+  period         Int // calendar year (UTC) the numbers belong to
+  lastValue      Int
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@id([organizationId, kind, period])
+  @@map("document_number_sequences")
 }
 
 model InvoiceLineItem {
@@ -1132,13 +1163,17 @@ model InvoicePayment {
   amount        Float
   method        String   @default("BANK") // STRIPE | BANK | TRANSFER | CHEQUE | CASH | OTHER (legacy rows may hold CHECK)
   notes         String?
-  transactionId String?  @unique
+  // Stripe payment intent/session id, or a manual bank/cheque reference.
+  // Only Stripe ids are unique (partial index below): manual references may
+  // legitimately repeat across invoices.
+  transactionId String?
   paidAt        DateTime @default(now())
   invoiceId     String
   createdAt     DateTime @default(now())
 
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
+  @@unique([transactionId], map: "invoice_payments_stripe_transactionId_key", where: raw("method = 'STRIPE'"))
   @@index([invoiceId])
   @@map("invoice_payments")
 }
@@ -1862,9 +1897,8 @@ model TimeSession {
   duration    Int       @default(0) // Duration in minutes (calculated on stop)
   description String?
   billable    Boolean   @default(true)
-  // True if timer is currently running. At most one per user: enforced by the
-  // partial unique index time_sessions_one_running_per_user (migration
-  // 20260927040000_timer_time_entries), which Prisma cannot express.
+  // True if timer is currently running. At most one per user (partial unique
+  // index below, created by migration 20260927040000_timer_time_entries).
   isRunning   Boolean   @default(false)
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -1878,6 +1912,7 @@ model TimeSession {
   @@index([projectId])
   @@index([isRunning])
   @@index([taskId])
+  @@unique([userId], map: "time_sessions_one_running_per_user", where: raw("\"isRunning\" = true"))
   @@map("time_sessions")
 }
 
@@ -2041,7 +2076,12 @@ model Estimate {
   tax         Float     @default(0)
   total       Float     @default(0)
   validUntil  DateTime?
+  // Public link capability: rotated to a 256-bit token on send and valid only
+  // until publicAccessExpiresAt (null = never issued) unless revoked. The
+  // cuid default is a placeholder that no public route accepts.
   viewToken   String    @unique @default(cuid())
+  publicAccessExpiresAt DateTime?
+  publicAccessRevokedAt DateTime?
   sentAt      DateTime?
   // Email delivery tracking, updated by the signed Mailgun events webhook
   deliveryMessageId String?
@@ -2626,4 +2666,27 @@ model MailgunWebhookReceipt {
 
   @@index([receivedAt])
   @@map("mailgun_webhook_receipts")
+}
+
+// Single-use guard for client-portal magic links: the jti of each redeemed
+// link. Holds no tenant data (only the random link id), so it is global.
+model ClientPortalLinkRedemption {
+  id         String   @id @default(cuid())
+  jti        String   @unique
+  expiresAt  DateTime
+  redeemedAt DateTime @default(now())
+
+  @@index([expiresAt])
+  @@map("client_portal_link_redemptions")
+}
+
+// Replay guard for the signed inbound email webhook (POST /api/webhooks/email):
+// each accepted signature is recorded once. Holds no tenant data, so it is global.
+model EmailWebhookReceipt {
+  id         String   @id @default(cuid())
+  signature  String   @unique
+  receivedAt DateTime @default(now())
+
+  @@index([receivedAt])
+  @@map("email_webhook_receipts")
 }

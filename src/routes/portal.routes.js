@@ -5,16 +5,22 @@ import { ensureCheckoutSession } from '../services/stripe.service.js';
 import { onProposalApproved, onContractSigned } from '../services/automation.service.js';
 import crypto from 'crypto';
 import { validateBody, bookingSchema, contractSignSchema, formSubmitSchema, proposalDeclineSchema } from '../validators/schemas.js';
-import { publicAccessFailure } from '../utils/public-document-access.js';
+import { invoicePublicAccessFailure, INVOICE_OPEN_STATUSES, publicAccessFailure } from '../utils/public-document-access.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { recordContractSigned, recordProposalApproved } from '../services/domain-event-producers.js';
 import env from '../config/env.js';
+
+// Per-IP limits for the unauthenticated capability-link routes that still use
+// the legacy never-expiring project and intake-form view tokens (security
+// audit M1; moving those to expiring, revocable links is tracked separately).
+const LEGACY_LINK_VIEW_RATE_LIMIT = { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } };
+const LEGACY_LINK_SUBMIT_RATE_LIMIT = { config: { rateLimit: { max: 10, timeWindow: '15 minutes' } } };
 
 export default async function portalRoutes(fastify) {
   // ==================== PROJECT PORTAL ====================
 
   // Public project portal view
-  fastify.get('/:token', async (request, reply) => {
+  fastify.get('/:token', LEGACY_LINK_VIEW_RATE_LIMIT, async (request, reply) => {
     const { token } = request.params;
 
     const project = await request.prisma.project.findUnique({
@@ -394,7 +400,7 @@ export default async function portalRoutes(fastify) {
     if (!invoice) {
       return reply.status(404).send({ error: 'Invoice not found' });
     }
-    const accessFailure = publicAccessFailure(invoice);
+    const accessFailure = invoicePublicAccessFailure(invoice);
     if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
 
     return {
@@ -441,13 +447,16 @@ export default async function portalRoutes(fastify) {
     if (!invoice) {
       return reply.status(404).send({ error: 'Invoice not found' });
     }
-    const accessFailure = publicAccessFailure(invoice);
+    const accessFailure = invoicePublicAccessFailure(invoice);
     if (accessFailure) return reply.status(accessFailure.statusCode).send({ error: accessFailure.error });
     if (invoice.status === 'PAID') {
       return reply.status(400).send({ error: 'Invoice already paid' });
     }
     if (invoice.status === 'VOID') {
       return reply.status(400).send({ error: 'Invoice has been voided' });
+    }
+    if (!INVOICE_OPEN_STATUSES.includes(invoice.status)) {
+      return reply.status(409).send({ error: 'Invoice is not awaiting payment' });
     }
 
     try {
@@ -468,7 +477,7 @@ export default async function portalRoutes(fastify) {
   // ==================== INTAKE FORMS ====================
 
   // Public: get form by viewToken
-  fastify.get('/form/:viewToken', async (request, reply) => {
+  fastify.get('/form/:viewToken', LEGACY_LINK_VIEW_RATE_LIMIT, async (request, reply) => {
     const { viewToken } = request.params;
 
     const form = await request.prisma.intakeForm.findUnique({
@@ -496,7 +505,7 @@ export default async function portalRoutes(fastify) {
   });
 
   // Public: submit response to form
-  fastify.post('/form/:viewToken', { preHandler: [validateBody(formSubmitSchema)] }, async (request, reply) => {
+  fastify.post('/form/:viewToken', { ...LEGACY_LINK_SUBMIT_RATE_LIMIT, preHandler: [validateBody(formSubmitSchema)] }, async (request, reply) => {
     const { viewToken } = request.params;
     const { answers, respondentName, respondentEmail } = request.body;
 

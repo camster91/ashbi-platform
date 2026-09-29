@@ -6,6 +6,7 @@ import { readFile } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import path from 'path';
 import { mailgunTrackingFields } from './mailgun-delivery.service.js';
+import { formatMoney } from '../utils/money.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_DIR = path.join(__dirname, '..', 'emails');
@@ -142,16 +143,20 @@ export async function sendInvoiceCreatedEmail({ to, clientName, invoiceNumber, a
   });
 }
 
-export function buildInvoiceDeliveryEmail({ to, clientName, invoiceNumber, total, dueDate, viewUrl, paymentLink, invoiceId }) {
-  const amount = `${Number(total || 0).toLocaleString('en-CA', {
-    style: 'currency',
-    currency: 'CAD',
-    minimumFractionDigits: 2,
-  })} CAD`;
-  const formattedDueDate = dueDate
+function formatInvoiceDueDate(dueDate) {
+  // Invoice due dates are calendar dates stored in UTC (see createInvoiceSchema).
+  return dueDate
     ? new Date(dueDate).toLocaleDateString('en-CA', { dateStyle: 'long', timeZone: 'UTC' })
     : 'upon receipt';
+}
 
+/**
+ * The "Pay" link always opens the public invoice page (/portal/invoice/:token),
+ * which creates or refreshes a Stripe Checkout session on demand. A stored
+ * Checkout URL expires within 24 hours, so it is never emailed (a
+ * `paymentLink` argument is ignored).
+ */
+export function buildInvoiceDeliveryEmail({ to, clientName, invoiceNumber, total, currency, dueDate, viewUrl, invoiceId }) {
   return {
     to,
     subject: `Invoice ${invoiceNumber} from Ashbi`,
@@ -159,9 +164,9 @@ export function buildInvoiceDeliveryEmail({ to, clientName, invoiceNumber, total
     variables: {
       clientName: clientName || 'there',
       invoiceNumber,
-      amount,
-      dueDate: formattedDueDate,
-      payLink: paymentLink || viewUrl,
+      amount: formatMoney(total, currency),
+      dueDate: formatInvoiceDueDate(dueDate),
+      payLink: viewUrl,
     },
     ...(invoiceId ? { tracking: { documentType: 'invoice', documentId: invoiceId } } : {}),
   };
@@ -176,15 +181,30 @@ export async function sendInvoiceDeliveryEmail(options) {
   }
 }
 
-export async function sendInvoiceOverdueEmail({ to, clientName, invoiceNumber, amount, daysOverdue, payLink, from, replyTo }) {
-  return sendEmail({
+/** Overdue reminder; the pay link is the public invoice page. */
+export function buildInvoiceOverdueEmail({ to, clientName, invoiceNumber, total, currency, daysOverdue, viewUrl, invoiceId }) {
+  return {
     to,
     subject: `Overdue: Invoice ${invoiceNumber}`,
     template: 'invoice-overdue.html',
-    variables: { clientName, invoiceNumber, amount, daysOverdue, payLink },
-    from,
-    replyTo,
-  });
+    variables: {
+      clientName: clientName || 'there',
+      invoiceNumber,
+      amount: formatMoney(total, currency),
+      daysOverdue: String(daysOverdue),
+      payLink: viewUrl,
+    },
+    ...(invoiceId ? { tracking: { documentType: 'invoice', documentId: invoiceId } } : {}),
+  };
+}
+
+export async function sendInvoiceOverdueEmail(options) {
+  try {
+    return await sendEmail(buildInvoiceOverdueEmail(options));
+  } catch (error) {
+    console.error('[email] Invoice overdue reminder preparation failed:', error.message);
+    return { ok: false, error: error.message };
+  }
 }
 
 export async function sendInvoicePaidEmail({ to, clientName, invoiceNumber, amount, paidDate, from, replyTo }) {

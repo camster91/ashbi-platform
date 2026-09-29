@@ -1016,6 +1016,96 @@
         ],
         "type": "object"
       },
+      "BotTaskUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "assigneeId": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "blockedBy": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "category": {
+            "maxLength": 50,
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 10000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "dueDate": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "priority": {
+            "enum": [
+              "CRITICAL",
+              "HIGH",
+              "NORMAL",
+              "LOW"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "PENDING",
+              "UPCOMING",
+              "IMMEDIATE",
+              "IN_PROGRESS",
+              "BLOCKED",
+              "WAITING_US",
+              "WAITING_CLIENT",
+              "COMPLETED"
+            ],
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "maxLength": 50,
+              "type": "string"
+            },
+            "maxItems": 10,
+            "type": "array"
+          },
+          "title": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "BrandSettings": {
         "properties": {
           "companyName": {
@@ -1729,10 +1819,11 @@
             "type": "string"
           },
           "currency": {
-            "default": "CAD",
             "enum": [
               "CAD",
-              "USD"
+              "USD",
+              "EUR",
+              "GBP"
             ],
             "type": "string"
           },
@@ -1742,8 +1833,14 @@
             "type": "number"
           },
           "dueDate": {
-            "format": "date-time",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "internalNotes": {
             "maxLength": 2000,
@@ -1753,7 +1850,6 @@
             "type": "boolean"
           },
           "issueDate": {
-            "format": "date-time",
             "type": "string"
           },
           "lineItems": {
@@ -1772,6 +1868,7 @@
                     "MATERIALS",
                     "EXPENSE",
                     "DISCOUNT",
+                    "CUSTOM",
                     "OTHER"
                   ],
                   "type": "string"
@@ -1836,14 +1933,11 @@
           },
           "title": {
             "maxLength": 200,
-            "minLength": 1,
             "type": "string"
           }
         },
         "required": [
           "clientId",
-          "title",
-          "dueDate",
           "lineItems"
         ],
         "type": "object"
@@ -2192,6 +2286,26 @@
         },
         "required": [
           "error"
+        ],
+        "type": "object"
+      },
+      "EstimatePublicResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "approve",
+              "decline"
+            ],
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 2000,
+            "type": "string"
+          }
+        },
+        "required": [
+          "action"
         ],
         "type": "object"
       },
@@ -3352,6 +3466,11 @@
             "minLength": 1,
             "type": "string"
           },
+          "discount": {
+            "maximum": 10000000,
+            "minimum": 0,
+            "type": "number"
+          },
           "lineItems": {
             "items": {
               "properties": {
@@ -3433,6 +3552,51 @@
             "maxLength": 50,
             "minLength": 1,
             "type": "string"
+          },
+          "discount": {
+            "maximum": 10000000,
+            "minimum": 0,
+            "type": "number"
+          },
+          "lineItems": {
+            "items": {
+              "properties": {
+                "category": {
+                  "maxLength": 50,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "description": {
+                  "maxLength": 500,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "quantity": {
+                  "default": 1,
+                  "exclusiveMinimum": 0,
+                  "maximum": 10000,
+                  "type": "number"
+                },
+                "unit": {
+                  "maxLength": 20,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "unitPrice": {
+                  "maximum": 10000000,
+                  "minimum": 0,
+                  "type": "number"
+                }
+              },
+              "required": [
+                "description",
+                "unitPrice"
+              ],
+              "type": "object"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "type": "array"
           },
           "notes": {
             "maxLength": 10000,
@@ -3796,12 +3960,10 @@
       "RetainerGenerateInvoice": {
         "properties": {
           "currency": {
-            "default": "USD",
+            "default": "CAD",
             "enum": [
-              "USD",
               "CAD",
-              "EUR",
-              "GBP"
+              "USD"
             ],
             "type": "string"
           },
@@ -5227,7 +5389,9 @@
           "currency": {
             "enum": [
               "CAD",
-              "USD"
+              "USD",
+              "EUR",
+              "GBP"
             ],
             "type": "string"
           },
@@ -5236,8 +5400,14 @@
             "type": "number"
           },
           "dueDate": {
-            "format": "date-time",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "internalNotes": {
             "maxLength": 2000,
@@ -5247,7 +5417,6 @@
             "type": "boolean"
           },
           "issueDate": {
-            "format": "date-time",
             "type": "string"
           },
           "lineItems": {
@@ -5266,6 +5435,7 @@
                     "MATERIALS",
                     "EXPENSE",
                     "DISCOUNT",
+                    "CUSTOM",
                     "OTHER"
                   ],
                   "type": "string"
@@ -5353,7 +5523,6 @@
           },
           "title": {
             "maxLength": 200,
-            "minLength": 1,
             "type": "string"
           }
         },
@@ -8524,6 +8693,7 @@
                 "import_run",
                 "review_session",
                 "review_share_link",
+                "estimate",
                 "domain_event",
                 "impersonation_session",
                 "break_glass_grant"
@@ -8553,6 +8723,7 @@
                 "proposal.approved",
                 "contract.signed",
                 "user.role_changed",
+                "user.created",
                 "user.deactivated",
                 "user.reactivated",
                 "auth.login_failed",
@@ -8591,6 +8762,10 @@
                 "review.decision_recorded",
                 "review.share_link_created",
                 "review.share_link_revoked",
+                "estimate.approved",
+                "estimate.declined",
+                "estimate.link_revoked",
+                "estimate.link_reissued",
                 "domain_event.replayed",
                 "domain_event.discarded",
                 "impersonation.started",
@@ -10947,6 +11122,16 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BotTaskUpdate"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "400": {
             "$ref": "#/components/responses/BadRequest"
@@ -15951,6 +16136,16 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EstimatePublicResponse"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "400": {
             "$ref": "#/components/responses/BadRequest"
@@ -16184,6 +16379,110 @@
           }
         ],
         "summary": "POST /api/estimates/:id/convert",
+        "tags": [
+          "estimates"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/estimates/{id}/reissue-link": {
+      "post": {
+        "operationId": "post_api_estimates_id_reissue_link",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/estimates/:id/reissue-link",
+        "tags": [
+          "estimates"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "scoped"
+      }
+    },
+    "/api/estimates/{id}/revoke-link": {
+      "post": {
+        "operationId": "post_api_estimates_id_revoke_link",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/estimates/:id/revoke-link",
         "tags": [
           "estimates"
         ],

@@ -7,13 +7,19 @@ import path from 'path';
 import fs from 'fs/promises';
 import { randomUUID } from 'crypto';
 import bcrypt from 'bcrypt';
-import { isCurrentUserSession, revokeUserSessions, sessionCookieMaxAge, signUserSession } from '../auth/session.js';
+import { CLIENT_SESSION_TOKEN_TYPE, isCurrentUserSession, revokeUserSessions, sessionCookieMaxAge, signUserSession } from '../auth/session.js';
+import { MAGIC_LINK_TOKEN_TYPE, redeemMagicLink } from '../auth/magic-link.js';
+import { accountThrottle } from '../auth/credential-throttle.js';
+import { clearStaleSessionCookie } from '../auth/request-session.js';
 import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { contentDisposition } from '../utils/send-file.js';
 import { ATTACHMENT_UNDER_REVIEW, isAttachmentUnderReview, isForeignKeyViolation } from '../services/media-review.service.js';
 import { emitChatEvent, toClientChatPayload } from '../auth/project-room-access.js';
 import { validateBody, validateParams, validateQuery, chatMessageListQuerySchema, clientPortalMessageSchema, requestAccessSchema, fileUpload, clientPortalTokenRedeemSchema, clientPortalRevisionResponseSchema, clientPortalFeedbackSchema } from '../validators/schemas.js';
+import { invoicePublicAccessFailure, INVOICE_OPEN_STATUSES } from '../utils/public-document-access.js';
 import { outboundSignal } from '../utils/outbound-timeouts.js';
+
+const CLIENT_VISIBLE_INVOICE_STATUSES = [...INVOICE_OPEN_STATUSES, 'PAID'];
 
 const PORTAL_BASE = env.hubUrl;
 const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
@@ -101,6 +107,10 @@ export async function resolvePortalPrincipal(prisma, payload) {
  */
 export function magicLinkClaims(user, contact) {
   return {
+    // Typed and single-use: never a session (session verifiers require a
+    // session typ) and redeemable once (its jti is recorded on redemption).
+    typ: MAGIC_LINK_TOKEN_TYPE,
+    jti: randomUUID(),
     id: user.id,
     contactId: contact.id,
     clientId: contact.clientId,
@@ -115,6 +125,14 @@ export default async function clientPortalRoutes(fastify) {
 
   // ── CLIENT JWT middleware ────────────────────────────────────────────────────
   async function clientAuth(request, reply) {
+    // A token that fails here came from the cookie when there is no
+    // Authorization header; a stale cookie is cleared with the 401 so the
+    // browser is not locked out (and logout always clears it).
+    const reject = (error) => {
+      // During a support view the cookie is the admin's own, valid session.
+      if (!request.impersonation) clearStaleSessionCookie(request, reply);
+      return reply.status(401).send({ error });
+    };
     try {
       // Accept token from Authorization header or cookie only — never from URL query string
       // (query string tokens get leaked in browser history, proxy logs, and Referer headers)
@@ -129,12 +147,24 @@ export default async function clientPortalRoutes(fastify) {
       }
 
       // An admin viewing as this client user (#416): the global hook already
-      // verified the admin's session and the read-only view.
-      const payload = request.impersonation?.user ?? fastify.jwt.verify(rawToken);
+      // verified the admin's session and the read-only view; the subject's
+      // claims carry the client_session type.
+      let payload = request.impersonation?.user;
+      if (!payload) {
+        try {
+          payload = fastify.jwt.verify(rawToken);
+        } catch {
+          return reject('Invalid or expired token');
+        }
+      }
 
-      if (!(await isCurrentUserSession(request.prisma, payload))) return reply.status(401).send({ error: 'Session expired or revoked' });
+      // Only a client-portal session: a staff session, a magic link or any
+      // other token signed with this key is refused.
+      if (!(await isCurrentUserSession(request.prisma, payload, { types: [CLIENT_SESSION_TOKEN_TYPE] }))) {
+        return reject('Session expired or revoked');
+      }
       const principal = await resolvePortalPrincipal(request.prisma, payload);
-      if (!principal) return reply.status(401).send({ error: 'Session expired or revoked' });
+      if (!principal) return reject('Session expired or revoked');
 
       request.clientUser = {
         ...payload,
@@ -149,10 +179,21 @@ export default async function clientPortalRoutes(fastify) {
 
   // ── Auth ─────────────────────────────────────────────────────────────────────
 
+  // Per-email budget for magic-link requests, on top of the per-IP route
+  // limit, so one inbox cannot be flooded from many addresses.
+  const requestAccessAccountThrottle = accountThrottle(fastify, {
+    name: 'portal-link',
+    countAll: true,
+    perAccountAndIp: { max: 5, timeWindow: '15 minutes' },
+    perAccount: { max: 20, timeWindow: '15 minutes' },
+  });
+
   // POST /api/client-portal/request-access
   // Sends a magic link email — link points to /verify-token which sets a secure cookie
   fastify.post('/request-access', {
-    preHandler: [validateBody(requestAccessSchema)],
+    config: { rateLimit: { max: 10, timeWindow: '15 minutes' } },
+    preHandler: [validateBody(requestAccessSchema), requestAccessAccountThrottle.guard],
+    onSend: requestAccessAccountThrottle.onSend,
   }, async (request, reply) => {
     const { email } = request.body;
 
@@ -203,6 +244,7 @@ export default async function clientPortalRoutes(fastify) {
   // Exchanges a magic-link token for an httpOnly secure cookie
   // This avoids JWT tokens appearing in browser history / Referer headers
   fastify.post('/verify-token', {
+    config: { rateLimit: { max: 20, timeWindow: '15 minutes' } },
     preHandler: validateBody(clientPortalTokenRedeemSchema),
   }, async (request, reply) => {
     const { token } = request.body || {};
@@ -211,32 +253,41 @@ export default async function clientPortalRoutes(fastify) {
       return reply.status(400).send({ error: 'Token required' });
     }
 
+    let payload;
     try {
-      const payload = fastify.jwt.verify(token);
-
-      const principal = await resolvePortalPrincipal(request.prisma, payload);
-      if (!principal) return reply.status(401).send({ error: 'Invalid, expired, or revoked token' });
-
-      const sessionToken = signUserSession(fastify.jwt, principal.user, { contactId: principal.contact.id });
-
-      reply
-        .setCookie('token', sessionToken, {
-          path: '/',
-          httpOnly: true,
-          secure: env.isDeployed,
-          sameSite: env.isDeployed ? 'strict' : 'lax',
-          maxAge: sessionCookieMaxAge()
-        })
-        .send({
-          user: {
-            contactId: principal.contact.id,
-            clientId: principal.client.id,
-            role: 'CLIENT'
-          }
-        });
-    } catch (err) {
+      payload = fastify.jwt.verify(token);
+    } catch {
       return reply.status(401).send({ error: 'Invalid or expired token' });
     }
+    if (payload?.typ !== MAGIC_LINK_TOKEN_TYPE || typeof payload.jti !== 'string') {
+      return reply.status(401).send({ error: 'Invalid, expired, or revoked token' });
+    }
+
+    const principal = await resolvePortalPrincipal(request.prisma, payload);
+    if (!principal) return reply.status(401).send({ error: 'Invalid, expired, or revoked token' });
+    if (!(await redeemMagicLink(request.prisma, payload))) {
+      return reply.status(401).send({ error: 'This sign-in link has already been used. Request a new one.', code: 'MAGIC_LINK_USED' });
+    }
+
+    const sessionToken = signUserSession(fastify.jwt, principal.user, { contactId: principal.contact.id });
+
+    reply
+      .setCookie('token', sessionToken, {
+        path: '/',
+        httpOnly: true,
+        secure: env.isDeployed,
+        sameSite: env.isDeployed ? 'strict' : 'lax',
+        maxAge: sessionCookieMaxAge()
+      })
+      .send({
+        user: {
+          contactId: principal.contact.id,
+          clientId: principal.client.id,
+          role: 'CLIENT'
+        }
+      });
+    // Database failures propagate to the sanitised error handler (a 500, not
+    // a misleading "invalid link").
   });
 
   fastify.post('/logout', { preHandler: clientAuth }, async (request, reply) => {
@@ -703,6 +754,12 @@ export default async function clientPortalRoutes(fastify) {
       return reply.status(403).send({ error: 'Not authorized' });
     }
 
+    // Clients may remove only files they uploaded themselves: agency
+    // deliverables and other contacts' files on the project stay put.
+    if (doc.uploadedById !== request.clientUser.id) {
+      return reply.status(403).send({ error: 'You can only delete files you uploaded', code: 'NOT_UPLOADER' });
+    }
+
     // A file under media review is approval evidence (docs/media-review.md):
     // a client cannot approve through a share link and then delete the file.
     if (await isAttachmentUnderReview(request.prisma, docId)) {
@@ -718,21 +775,17 @@ export default async function clientPortalRoutes(fastify) {
       throw err;
     }
 
-    // Delete file from disk
-    try {
-      const filePath = path.join(process.cwd(), doc.path);
-      await fs.unlink(filePath);
-    } catch {
-      // File may already be deleted, continue
-    }
-
+    // The stored file is deliberately NOT unlinked: a client delete removes
+    // the file from the portal only. The bytes stay on disk (named in the
+    // audit event) so staff can recover a mistaken or malicious deletion; the
+    // orphaned-upload audit (npm run audit:uploads) is where they are purged.
     await recordRequestAuditEvent(request.prisma, request, {
       action: 'client_portal.document_deleted',
       actorType: 'CLIENT',
       actorUserId: request.clientUser.id ?? null,
       organizationId: request.clientUser.organizationId,
       entityId: docId,
-      metadata: { projectId: doc.entityId, clientId, mimeType: doc.mimeType, size: doc.size },
+      metadata: { projectId: doc.entityId, clientId, mimeType: doc.mimeType, size: doc.size, storedFilename: doc.filename, fileRetained: true },
     });
 
     return { success: true };
@@ -805,8 +858,12 @@ export default async function clientPortalRoutes(fastify) {
   fastify.get('/invoices', { preHandler: clientAuth }, async (request, reply) => {
     const { clientId } = request.clientUser;
 
+    // Only invoices the client was actually sent: drafts are internal and
+    // void invoices are not owed. Pay/view go through the public invoice page
+    // (/portal/invoice/:token), which creates or refreshes a Stripe Checkout
+    // session on demand; stored Checkout URLs expire and are never exposed.
     const invoices = await request.prisma.invoice.findMany({
-      where: { clientId },
+      where: { clientId, status: { in: CLIENT_VISIBLE_INVOICE_STATUSES } },
       select: {
         id: true,
         invoiceNumber: true,
@@ -816,14 +873,26 @@ export default async function clientPortalRoutes(fastify) {
         issueDate: true,
         dueDate: true,
         paidAt: true,
-        stripePaymentLink: true,
+        updatedAt: true,
         title: true,
-        notes: true
+        notes: true,
+        viewToken: true,
+        publicAccessExpiresAt: true,
+        publicAccessRevokedAt: true,
       },
       orderBy: { issueDate: 'desc' }
     });
 
-    return invoices;
+    return invoices.map(({ viewToken, publicAccessExpiresAt, publicAccessRevokedAt, ...invoice }) => {
+      const linkUsable = Boolean(viewToken)
+        && !invoicePublicAccessFailure({ ...invoice, viewToken, publicAccessExpiresAt, publicAccessRevokedAt });
+      const viewUrl = linkUsable ? `/portal/invoice/${viewToken}` : null;
+      return {
+        ...invoice,
+        viewUrl,
+        payUrl: linkUsable && INVOICE_OPEN_STATUSES.includes(invoice.status) ? viewUrl : null,
+      };
+    });
   });
 
   // GET /api/client-portal/invoices/:id/pdf

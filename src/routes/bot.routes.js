@@ -8,6 +8,7 @@ import { sendWebhookNotification } from '../utils/webhook.js';
 import { safeEqual } from '../utils/crypto.js';
 import { createScopedPrisma } from '../utils/prisma-tenant-proxy.js';
 import { enterRequestContext } from '../utils/request-context.js';
+import { validateBody, botTaskUpdateSchema } from '../validators/schemas.js';
 
 // Ultra-fast in-memory cache for AI requests
 const aiCache = {
@@ -71,8 +72,11 @@ export default async function botRoutes(fastify) {
       return reply.status(401).send({ error: 'Unauthorized' });
     }
 
+    // Typed `bot_access`: it is not a user session, so session verifiers
+    // (fastify.authenticate, the /api hook, sockets) refuse it. Bot routes
+    // authenticate with the BOT_SECRET bearer itself.
     const token = fastify.jwt.sign(
-      { id: 'bot', role: 'BOT', email: 'bot@system' },
+      { typ: 'bot_access', id: 'bot', role: 'BOT', email: 'bot@system' },
       { expiresIn: '30d' }
     );
 
@@ -327,13 +331,25 @@ export default async function botRoutes(fastify) {
   });
 
   // PATCH /task/:id — update a task
-  fastify.patch('/task/:id', { preHandler: requireBotAuth }, async (request, reply) => {
+  fastify.patch('/task/:id', { preHandler: [requireBotAuth, validateBody(botTaskUpdateSchema)] }, async (request, reply) => {
     const existing = await fastify.prisma.task.findUnique({ where: { id: request.params.id } });
     if (!existing) return reply.status(404).send({ error: 'Task not found' });
 
+    // Only validated task fields: never pass the request body to Prisma, or
+    // a caller could rewrite projectId, dependsOnId or nested relations.
+    const { tags, dueDate, ...fields } = request.body;
+    const data = { ...fields };
+    if (tags !== undefined) data.tags = JSON.stringify(tags);
+    if (dueDate !== undefined) data.dueDate = dueDate ? new Date(dueDate) : null;
+    if (fields.status === 'COMPLETED' && existing.status !== 'COMPLETED') data.completedAt = new Date();
+    if (fields.assigneeId) {
+      const assignee = await fastify.prisma.user.findFirst({ where: { id: fields.assigneeId }, select: { id: true } });
+      if (!assignee) return reply.status(400).send({ error: 'Assignee not found in this workspace' });
+    }
+
     const task = await fastify.prisma.task.update({
       where: { id: request.params.id },
-      data: request.body
+      data,
     });
 
     aiCache.invalidate('dashboard');

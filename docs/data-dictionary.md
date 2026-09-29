@@ -14,7 +14,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   which reads hide soft-deleted rows is in [soft-delete-policy.md](soft-delete-policy.md).
 - **Notes** combine `///` doc comments and trailing `//` comments from the schema.
 
-102 models, 0 enums, 48 tenant-scoped, 13 soft-deletable.
+105 models, 0 enums, 50 tenant-scoped, 13 soft-deletable.
 
 ## Model index
 
@@ -43,15 +43,18 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [ClientEmailMapping](#model-clientemailmapping) | `client_email_mappings` | no | no | 8 |
 | [ClientEmbedding](#model-clientembedding) | `client_embeddings` | no | no | 10 |
 | [ClientInvitation](#model-clientinvitation) | `client_invitations` | no | no | 8 |
+| [ClientPortalLinkRedemption](#model-clientportallinkredemption) | `client_portal_link_redemptions` | no | no | 4 |
 | [Contact](#model-contact) | `contacts` | no | no | 9 |
 | [Contract](#model-contract) | `contracts` | no | yes | 31 |
 | [CreativeBrief](#model-creativebrief) | `creative_briefs` | no | no | 16 |
 | [Credential](#model-credential) | `credentials` | yes | no | 16 |
 | [CredentialAccessAudit](#model-credentialaccessaudit) | `credential_access_audits` | yes | no | 11 |
+| [DocumentNumberSequence](#model-documentnumbersequence) | `document_number_sequences` | yes | no | 6 |
 | [DomainEvent](#model-domainevent) | `domain_events` | yes | no | 23 |
 | [EmailTriageDraft](#model-emailtriagedraft) | `email_triage_drafts` | no | no | 10 |
 | [EmailTriageItem](#model-emailtriageitem) | `email_triage_items` | yes | no | 14 |
-| [Estimate](#model-estimate) | `estimates` | no | yes | 21 |
+| [EmailWebhookReceipt](#model-emailwebhookreceipt) | `email_webhook_receipts` | no | no | 3 |
+| [Estimate](#model-estimate) | `estimates` | no | yes | 23 |
 | [EventAttendee](#model-eventattendee) | `event_attendees` | no | no | 7 |
 | [Expense](#model-expense) | `expenses` | no | yes | 19 |
 | [FormDraft](#model-formdraft) | `form_drafts` | yes | no | 13 |
@@ -62,7 +65,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [IntakeFormResponse](#model-intakeformresponse) | `intake_form_responses` | no | no | 8 |
 | [Integration](#model-integration) | `integrations` | yes | no | 11 |
 | [InternalNote](#model-internalnote) | `internal_notes` | no | no | 7 |
-| [Invoice](#model-invoice) | `invoices` | no | yes | 58 |
+| [Invoice](#model-invoice) | `invoices` | yes | yes | 61 |
 | [InvoiceLineItem](#model-invoicelineitem) | `invoice_line_items` | no | no | 9 |
 | [InvoicePayment](#model-invoicepayment) | `invoice_payments` | no | no | 9 |
 | [LineItemTemplate](#model-lineitemtemplate) | `line_item_templates` | yes | no | 11 |
@@ -73,7 +76,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [Notification](#model-notification) | `notifications` | no | no | 10 |
 | [NotionImportRecord](#model-notionimportrecord) | `notion_import_records` | yes | no | 14 |
 | [OnboardingProgress](#model-onboardingprogress) | `onboarding_progress` | yes | no | 12 |
-| [Organization](#model-organization) | `organizations` | no | no | 56 |
+| [Organization](#model-organization) | `organizations` | no | no | 58 |
 | [OutreachSequence](#model-outreachsequence) | `outreach_sequences` | yes | no | 10 |
 | [PipelineDeal](#model-pipelinedeal) | `pipeline_deals` | no | no | 15 |
 | [PipelineStage](#model-pipelinestage) | `pipeline_stages` | yes | no | 10 |
@@ -742,6 +745,21 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `client` | Client | required |  | → Client, via (clientId) → (id) |  |
 
+### Model ClientPortalLinkRedemption
+
+- Table: `client_portal_link_redemptions`
+- Tenant-scoped: no
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@index([expiresAt])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `jti` | String | unique, required |  |  |  |
+| `expiresAt` | DateTime | required |  |  |  |
+| `redeemedAt` | DateTime | required | `now()` |  |  |
+
 ### Model Contact
 
 - Table: `contacts`
@@ -887,6 +905,23 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `keyVersion` | String | optional |  |  |  |
 | `createdAt` | DateTime | required | `now()` |  |  |
 
+### Model DocumentNumberSequence
+
+- Table: `document_number_sequences`
+- Tenant-scoped: yes (`organizationId`)
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@id([organizationId, kind, period])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `organizationId` | String | required |  |  |  |
+| `kind` | String | required |  |  | INVOICE |
+| `period` | Int | required |  |  | calendar year (UTC) the numbers belong to |
+| `lastValue` | Int | required |  |  |  |
+| `updatedAt` | DateTime | required, updatedAt |  |  |  |
+| `organization` | Organization | required |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
+
 ### Model DomainEvent
 
 - Table: `domain_events`
@@ -973,6 +1008,20 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 | `drafts` | EmailTriageDraft[] | list, required |  | → EmailTriageDraft |  |
 
+### Model EmailWebhookReceipt
+
+- Table: `email_webhook_receipts`
+- Tenant-scoped: no
+- Soft-deletable: no
+- Constraints and indexes:
+  - `@@index([receivedAt])`
+
+| Field | Type | Modifiers | Default | Relation | Notes |
+| --- | --- | --- | --- | --- | --- |
+| `id` | String | id, required | `cuid()` |  |  |
+| `signature` | String | unique, required |  |  |  |
+| `receivedAt` | DateTime | required | `now()` |  |  |
+
 ### Model Estimate
 
 - Table: `estimates`
@@ -996,6 +1045,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `total` | Float | required | `0` |  |  |
 | `validUntil` | DateTime | optional |  |  |  |
 | `viewToken` | String | unique, required | `cuid()` |  |  |
+| `publicAccessExpiresAt` | DateTime | optional |  |  |  |
+| `publicAccessRevokedAt` | DateTime | optional |  |  |  |
 | `sentAt` | DateTime | optional |  |  |  |
 | `deliveryMessageId` | String | optional |  |  |  |
 | `deliveryStatus` | String | optional |  |  | ACCEPTED \| DELIVERED \| FAILED \| BOUNCED \| COMPLAINED |
@@ -1241,22 +1292,25 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 ### Model Invoice
 
 - Table: `invoices`
-- Tenant-scoped: no
+- Tenant-scoped: yes (`organizationId`)
 - Soft-deletable: yes (`deletedAt`)
 - Constraints and indexes:
+  - `@@unique([organizationId, invoiceNumber])`
   - `@@index([status, dueDate])`
+  - `@@index([status, overdueEscalatedAt, dueDate])`
   - `@@index([clientId, status])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `id` | String | id, required | `cuid()` |  |  |
-| `invoiceNumber` | String | unique, required |  |  |  |
+| `invoiceNumber` | String | required |  |  |  |
+| `organizationId` | String | optional |  |  |  |
 | `status` | String | required | `"DRAFT"` |  | DRAFT \| SENT \| PAID \| OVERDUE \| VOID |
 | `title` | String | optional |  |  |  |
 | `dueDate` | DateTime | optional |  |  |  |
 | `issueDate` | DateTime | required | `now()` |  |  |
 | `bonsaiInvoiceId` | String | optional |  |  | Original Bonsai invoice ID |
-| `currency` | String | required | `"USD"` |  | USD \| CAD |
+| `currency` | String | required | `"CAD"` |  | ISO 4217 (src/utils/money.js); shown on UI/PDF/email and charged by Stripe |
 | `amountUsd` | Float | optional |  |  | For multi-currency tracking |
 | `amountCad` | Float | optional |  |  |  |
 | `daysToPayActual` | Int | optional |  |  | Historical: actual days client took to pay |
@@ -1290,6 +1344,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `recurringInterval` | String | optional |  |  | MONTHLY \| QUARTERLY \| ANNUALLY |
 | `recurringNextDate` | DateTime | optional |  |  |  |
 | `reminderSentAt` | DateTime | optional |  |  |  |
+| `overdueEscalatedAt` | DateTime | optional |  |  |  |
 | `viewToken` | String | unique, optional | `cuid()` |  |  |
 | `publicAccessExpiresAt` | DateTime | optional |  |  |  |
 | `publicAccessRevokedAt` | DateTime | optional |  |  |  |
@@ -1300,6 +1355,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 | `client` | Client | required |  | → Client, via (clientId) → (id), onDelete Cascade |  |
+| `organization` | Organization | optional |  | → Organization, via (organizationId) → (id), onDelete Cascade |  |
 | `createdBy` | User | required |  | → User, via (createdById) → (id), "InvoiceCreator" |  |
 | `lineItems` | InvoiceLineItem[] | list, required |  | → InvoiceLineItem |  |
 | `payments` | InvoicePayment[] | list, required |  | → InvoicePayment |  |
@@ -1334,6 +1390,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 - Tenant-scoped: no
 - Soft-deletable: no
 - Constraints and indexes:
+  - `@@unique([transactionId], map: "invoice_payments_stripe_transactionId_key", where: raw("method = 'STRIPE'"))`
   - `@@index([invoiceId])`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
@@ -1342,7 +1399,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `amount` | Float | required |  |  |  |
 | `method` | String | required | `"BANK"` |  | STRIPE \| BANK \| TRANSFER \| CHEQUE \| CASH \| OTHER (legacy rows may hold CHECK) |
 | `notes` | String | optional |  |  |  |
-| `transactionId` | String | unique, optional |  |  |  |
+| `transactionId` | String | optional |  |  |  |
 | `paidAt` | DateTime | required | `now()` |  |  |
 | `invoiceId` | String | required |  |  |  |
 | `createdAt` | DateTime | required | `now()` |  |  |
@@ -1600,6 +1657,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `aiProviderConnection` | AiProviderConnection | optional |  | → AiProviderConnection |  |
 | `aiUsageRecords` | AiUsageRecord[] | list, required |  | → AiUsageRecord |  |
 | `reviewSessions` | ReviewSession[] | list, required |  | → ReviewSession |  |
+| `invoices` | Invoice[] | list, required |  | → Invoice |  |
+| `documentNumberSequences` | DocumentNumberSequence[] | list, required |  | → DocumentNumberSequence |  |
 | `domainEvents` | DomainEvent[] | list, required |  | → DomainEvent |  |
 | `impersonationSessions` | ImpersonationSession[] | list, required |  | → ImpersonationSession |  |
 | `breakGlassGrants` | BreakGlassGrant[] | list, required |  | → BreakGlassGrant |  |
@@ -2636,6 +2695,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
   - `@@index([projectId])`
   - `@@index([isRunning])`
   - `@@index([taskId])`
+  - `@@unique([userId], map: "time_sessions_one_running_per_user", where: raw("\"isRunning\" = true"))`
 
 | Field | Type | Modifiers | Default | Relation | Notes |
 | --- | --- | --- | --- | --- | --- |

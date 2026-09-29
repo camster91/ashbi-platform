@@ -13,8 +13,8 @@ const CAPABILITY_PATTERNS = [
   new RegExp(`(/api/(?:proposals/client|contracts/sign|estimates/view|invoices/client)/)${SEGMENT}`, 'g'),
   // The project status link /portal/:token (not the named portal pages).
   new RegExp(`(/(?:api/)?portal/)(?!(?:review|proposal|contract|invoice|form|estimate|book|booking|:token)(?=[/?#\\s"'<>]|$))${SEGMENT}`, 'g'),
-  // Magic-link, reset and view tokens in query strings.
-  /([?&](?:token|viewToken|signToken)=)[^&#\s"'<>]+/g,
+  // Magic-link, reset and view tokens, and OAuth callback state/code, in query strings.
+  /([?&](?:token|viewToken|signToken|state|code)=)[^&#\s"'<>]+/g,
 ];
 
 /** Rewrite every capability token in a string to `:token`. */

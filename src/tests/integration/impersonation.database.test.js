@@ -86,7 +86,7 @@ test('impersonation sessions and break-glass grants stay in their tenant, expire
     await app.register(privilegedAccessRoutes, { prefix: '/api/auth', prisma: raw });
 
     const iat = Math.floor(Date.now() / 1000) - 30;
-    const token = (user) => app.jwt.sign({ id: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId, sessionVersion: user.sessionVersion, iat }, { expiresIn: '1h' });
+    const token = (user) => app.jwt.sign({ typ: user.role === 'CLIENT' ? 'client_session' : 'session', id: user.id, email: user.email, name: user.name, role: user.role, organizationId: user.organizationId, sessionVersion: user.sessionVersion, iat }, { expiresIn: '1h' });
     const adminCookies = { token: token(adminA), ...reauthCookies({ id: adminA.id, sessionVersion: adminA.sessionVersion, iat }) };
 
     const crossTenant = await app.inject({ method: 'POST', url: '/api/auth/impersonation', cookies: adminCookies, payload: { userId: teamB.id, reason: REASON } });

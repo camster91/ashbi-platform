@@ -60,16 +60,19 @@ test('signed-in traffic is keyed by the verified user; anonymous traffic by IP',
   const server = {
     jwt: {
       verify: async (token) => {
-        if (token === 'good-staff') return { id: 'user-1', role: 'TEAM' };
-        if (token === 'good-portal') return { contactId: 'contact-9', role: 'CLIENT' };
+        if (token === 'good-staff') return { typ: 'session', id: 'user-1', role: 'TEAM', sessionVersion: 0 };
+        if (token === 'good-portal') return { typ: 'client_session', id: 'portal-user-9', contactId: 'contact-9', role: 'CLIENT', sessionVersion: 0 };
+        if (token === 'untyped') return { id: 'user-1', role: 'TEAM', sessionVersion: 0 };
         throw new Error('invalid signature');
       },
     },
   };
   const base = { ip: '198.51.100.7', headers: {}, cookies: {}, server };
-  assert.equal(await apiRateLimitKey({ ...base, user: { id: 'from-hook' } }), 'user:from-hook');
+  assert.equal(await apiRateLimitKey({ ...base, user: { typ: 'session', id: 'from-hook', role: 'TEAM', sessionVersion: 0 } }), 'user:from-hook');
   assert.equal(await apiRateLimitKey({ ...base, cookies: { token: 'good-staff' } }), 'user:user-1');
-  assert.equal(await apiRateLimitKey({ ...base, headers: { authorization: 'Bearer good-portal' } }), 'user:contact-9');
+  assert.equal(await apiRateLimitKey({ ...base, headers: { authorization: 'Bearer good-portal' } }), 'user:portal-user-9');
+  // A signed but untyped (pre-release) or non-session token keeps the IP bucket.
+  assert.equal(await apiRateLimitKey({ ...base, cookies: { token: 'untyped' } }), 'ip:198.51.100.7');
   assert.equal(await apiRateLimitKey({ ...base, cookies: { token: 'forged' } }), 'ip:198.51.100.7');
   assert.equal(await apiRateLimitKey(base), 'ip:198.51.100.7');
   // Bot tokens keep the per-IP bucket (and the 100/min anonymous limit).
@@ -117,8 +120,10 @@ test('users sharing one IP get separate buckets; anonymous callers share the IP 
   app.get('/api/thing', async () => ({ ok: true }));
   await app.ready();
   try {
-    const alice = app.jwt.sign({ id: 'alice' });
-    const bob = app.jwt.sign({ id: 'bob' });
+    const alice = app.jwt.sign({ typ: 'session', id: 'alice', role: 'TEAM', sessionVersion: 0 });
+    const bob = app.jwt.sign({ typ: 'session', id: 'bob', role: 'TEAM', sessionVersion: 0 });
+    // Signed with the same secret but not a session: stays in the IP bucket.
+    const magicLink = app.jwt.sign({ typ: 'client_magic_link', jti: 'x', id: 'carol', role: 'CLIENT', sessionVersion: 0 });
     const hit = (token) => app.inject({
       method: 'GET',
       url: '/api/thing',
@@ -132,7 +137,8 @@ test('users sharing one IP get separate buckets; anonymous callers share the IP 
     };
     assert.deepEqual(await codes(alice, 6), [200, 200, 200, 200, 200, 429]);
     assert.deepEqual(await codes(bob, 5), [200, 200, 200, 200, 200], 'bob is not throttled by alice on the same IP');
-    assert.deepEqual(await codes(null, 4), [200, 200, 200, 429], 'anonymous keeps the per-IP limit');
+    assert.deepEqual(await codes(null, 3), [200, 200, 200], 'anonymous keeps the per-IP limit');
+    assert.deepEqual(await codes(magicLink, 1), [429], 'a non-session token shares the IP bucket');
   } finally {
     await app.close();
   }

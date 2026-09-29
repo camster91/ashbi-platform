@@ -42,24 +42,28 @@ describe('revocable user sessions', () => {
   it('rejects legacy, revoked, inactive, and expired sessions', async () => {
     const user = { id: 'user-1', isActive: true, sessionVersion: 1 };
     const prisma = fakePrisma(user);
+    const session = (sessionVersion) => ({ typ: 'session', id: user.id, role: 'TEAM', sessionVersion });
 
-    assert.equal(await isCurrentUserSession(prisma, { id: user.id }), false);
-    assert.equal(await isCurrentUserSession(prisma, { id: user.id, sessionVersion: 1 }), true);
-    await revokeUserSessions(prisma, user.id);
+    assert.equal(await isCurrentUserSession(prisma, { typ: 'session', id: user.id, role: 'TEAM' }), false);
+    // Untyped (pre-typ) sessions are refused: their holders sign in again.
     assert.equal(await isCurrentUserSession(prisma, { id: user.id, sessionVersion: 1 }), false);
+    assert.equal(await isCurrentUserSession(prisma, session(1)), true);
+    await revokeUserSessions(prisma, user.id);
+    assert.equal(await isCurrentUserSession(prisma, session(1)), false);
     user.isActive = false;
-    assert.equal(await isCurrentUserSession(prisma, { id: user.id, sessionVersion: 2 }), false);
+    assert.equal(await isCurrentUserSession(prisma, session(2)), false);
 
     const app = Fastify();
     await app.register(jwt, { secret: 'test-secret-at-least-32-characters' });
-    const expired = app.jwt.sign({ id: user.id, sessionVersion: 2 }, { expiresIn: -1 });
+    const expired = app.jwt.sign(session(2), { expiresIn: -1 });
     assert.throws(() => app.jwt.verify(expired));
     await app.close();
   });
 
-  it('leaves separately bounded capability and bot tokens outside user revocation', async () => {
+  it('refuses capability and bot tokens as sessions instead of exempting them from revocation', async () => {
     const prisma = fakePrisma({ id: 'user-1', isActive: true, sessionVersion: 0 });
-    assert.equal(await isCurrentUserSession(prisma, { contactId: 'contact-1', role: 'CLIENT' }), true);
-    assert.equal(await isCurrentUserSession(prisma, { id: 'bot-1', role: 'BOT' }), true);
+    assert.equal(await isCurrentUserSession(prisma, { contactId: 'contact-1', role: 'CLIENT' }), false);
+    assert.equal(await isCurrentUserSession(prisma, { id: 'bot-1', role: 'BOT' }), false);
+    assert.equal(await isCurrentUserSession(prisma, { typ: 'bot_access', id: 'bot', role: 'BOT' }), false);
   });
 });

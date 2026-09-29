@@ -7,6 +7,7 @@ import { Alert, Button, Card, CardDescription, CardTitle, Input, LoadingState, S
 import { buttonStyles } from '../components/ui/Button';
 import SlowNotice, { SLOW_WRITE_INLINE as slowWrite } from '../components/ui/SlowNotice';
 import { cn } from '../lib/utils';
+import { formatInvoiceDate } from '../lib/money';
 
 // Heavy sections load on demand so the portal route chunk stays in budget.
 // Their Suspense fallback is a named polite status with the slow-state copy.
@@ -123,9 +124,20 @@ function LoginScreen() {
 function OverviewTab({ projects, invoices, retainer, unread, setActiveTab, setSelectedProject }) {
   const activeProjects = projects.filter(p => !['LAUNCHED', 'CANCELLED', 'ON_HOLD'].includes(p.status));
   const overdueInvoices = invoices.filter(i => i.status?.toUpperCase() === 'OVERDUE');
-  const unpaidTotal = invoices
+  // Outstanding amounts are summed per currency; different currencies are
+  // never added together.
+  const unpaidByCurrency = invoices
     .filter(i => ['SENT', 'OVERDUE', 'PENDING'].includes(i.status?.toUpperCase()))
-    .reduce((s, i) => s + (i.total || 0), 0);
+    .reduce((totals, i) => {
+      const currency = (i.currency || 'CAD').toUpperCase();
+      totals[currency] = (totals[currency] || 0) + (i.total || 0);
+      return totals;
+    }, {});
+  const unpaidEntries = Object.entries(unpaidByCurrency);
+  const unpaidTotal = unpaidEntries.reduce((sum, [, amount]) => sum + amount, 0);
+  const unpaidLabel = unpaidEntries.length === 0
+    ? fmt(0)
+    : unpaidEntries.map(([currency, amount]) => fmt(amount, currency)).join(' · ');
 
   const retainerTone = retainer
     ? retainer.percentUsed >= 100 ? 'bg-destructive' : retainer.percentUsed >= 80 ? 'bg-warning' : retainer.percentUsed >= 60 ? 'bg-accent' : 'bg-success'
@@ -154,7 +166,7 @@ function OverviewTab({ projects, invoices, retainer, unread, setActiveTab, setSe
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {/* The tiles are not interactive, so they drop StatCard's hover lift. */}
         <StatCard label="Active Projects" value={activeProjects.length} className={staticStatClass} />
-        <StatCard label="Outstanding" value={fmt(unpaidTotal, 'USD')} variant={unpaidTotal > 0 ? 'warning' : 'success'} className={staticStatClass} />
+        <StatCard label="Outstanding" value={unpaidLabel} variant={unpaidTotal > 0 ? 'warning' : 'success'} className={staticStatClass} />
         <StatCard label="Upcoming Deadlines" value={unread?.upcomingDeadlines ?? 0} variant={(unread?.upcomingDeadlines || 0) > 0 ? 'warning' : 'default'} className={staticStatClass} />
       </div>
 
@@ -229,7 +241,7 @@ function OverviewTab({ projects, invoices, retainer, unread, setActiveTab, setSe
                     {statusBadge(inv.status)}
                   </div>
                   {inv.dueDate && inv.status !== 'PAID' && (
-                    <p className="mt-1 text-xs text-muted-foreground">Due {fmtDate(inv.dueDate)}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">Due {formatInvoiceDate(inv.dueDate)}</p>
                   )}
                 </div>
                 <span className="text-lg font-bold text-foreground">{fmt(inv.total, inv.currency)}</span>
@@ -310,7 +322,9 @@ function InvoicesTab({ invoices, token }) {
         <div className="space-y-3">
           {invoices.map(inv => {
             const isPaid = inv.status?.toUpperCase() === 'PAID';
-            const canPay = !isPaid && ['SENT', 'OVERDUE', 'PENDING', 'DRAFT'].includes(inv.status?.toUpperCase());
+            // Pay opens the public invoice page, which starts a fresh Stripe
+            // Checkout session; void and draft invoices are never payable.
+            const canPay = !isPaid && ['SENT', 'OVERDUE'].includes(inv.status?.toUpperCase()) && Boolean(inv.payUrl);
             return (
               <Card key={inv.id} padding="none" className="p-5">
                 <div className="flex flex-col gap-3">
@@ -324,16 +338,16 @@ function InvoicesTab({ invoices, token }) {
                         <p className="mt-1 truncate text-sm text-muted-foreground">{inv.title || inv.notes}</p>
                       )}
                       <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
-                        {inv.issueDate && <span>Issued: {fmtDate(inv.issueDate)}</span>}
-                        {inv.dueDate && !isPaid && <span>Due: {fmtDate(inv.dueDate)}</span>}
+                        {inv.issueDate && <span>Issued: {formatInvoiceDate(inv.issueDate)}</span>}
+                        {inv.dueDate && !isPaid && <span>Due: {formatInvoiceDate(inv.dueDate)}</span>}
                         {inv.paidAt && <span>Paid: {fmtDate(inv.paidAt)}</span>}
                       </div>
                     </div>
                     <span className="ml-4 text-xl font-bold text-foreground">{fmt(inv.total, inv.currency)}</span>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {canPay && inv.stripePaymentLink && (
-                      <a href={inv.stripePaymentLink} target="_blank" rel="noopener noreferrer" className={buttonStyles({ size: 'sm' })}>
+                    {canPay && (
+                      <a href={inv.payUrl} className={buttonStyles({ size: 'sm' })}>
                         Pay Now
                       </a>
                     )}

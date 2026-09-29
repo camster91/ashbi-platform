@@ -1,6 +1,7 @@
 import IORedis from 'ioredis';
 
 import { redisConnectionArgs } from './redis.js';
+import { isUserSessionPayload } from '../auth/session.js';
 
 export function isNonApiRequest(request) {
   const url = request?.raw?.url || request?.url || '';
@@ -66,8 +67,11 @@ export async function rateLimitPrincipal(request) {
   // Bot credentials are shared automation, not a person: they keep the
   // per-IP bucket and limit instead of one shared high-limit user bucket.
   if (payload?.role === 'BOT') return null;
-  const id = payload?.id ?? payload?.contactId;
-  return id ? String(id) : null;
+  // Only a typed user session earns the user bucket: magic links, OAuth state
+  // and pre-typ sessions are signed with the same secret but are not sessions
+  // (src/auth/session.js).
+  if (!isUserSessionPayload(payload)) return null;
+  return String(payload.id);
 }
 
 /** Global limiter key: `user:<id>` for verified sessions, `ip:<addr>` otherwise. */

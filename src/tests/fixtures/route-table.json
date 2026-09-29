@@ -639,6 +639,8 @@
   "POST /api/estimates",
   "POST /api/estimates/",
   "POST /api/estimates/:id/convert",
+  "POST /api/estimates/:id/reissue-link",
+  "POST /api/estimates/:id/revoke-link",
   "POST /api/estimates/:id/send",
   "POST /api/estimates/view/:viewToken/approve",
   "POST /api/expenses",
