@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth, AuthProvider } from './hooks/useAuth';
 import ErrorBoundary from './components/ErrorBoundary';
+import ImpersonationBanner from './components/ImpersonationBanner';
 import { getPreloadedLogin } from './lib/initial-route';
 import { ToastProvider, useToast } from './hooks/useToast';
 import { apiErrorToast } from './lib/apiErrorToast';
@@ -18,6 +19,7 @@ function LoginRoute() {
 const UiLab = lazy(() => import('./pages/UiLab'));
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 const ResetPassword = lazy(() => import('./pages/ResetPassword'));
+const BreakGlass = lazy(() => import('./pages/BreakGlass'));
 const Portal = lazy(() => import('./pages/Portal'));
 const PortalProposal = lazy(() => import('./pages/PortalProposal'));
 const PortalContract = lazy(() => import('./pages/PortalContract'));
@@ -189,6 +191,7 @@ function AppRoutes() {
           )}
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/break-glass" element={<BreakGlass />} />
           <Route path="/portal/:token" element={<QueryRoute><Portal /></QueryRoute>} />
           <Route path="/portal/proposal/:token" element={<QueryRoute><PortalProposal /></QueryRoute>} />
           <Route path="/portal/contract/:token" element={<QueryRoute><PortalContract /></QueryRoute>} />
@@ -306,6 +309,7 @@ function App() {
     <AuthProvider>
       <ToastProvider>
         <GlobalErrorHandler>
+          <ImpersonationBanner />
           <AppRoutes />
         </GlobalErrorHandler>
       </ToastProvider>

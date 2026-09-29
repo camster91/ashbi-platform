@@ -46,6 +46,7 @@ export function setApiErrorCallback(callback) {
  * request is then retried exactly once.
  */
 export const REAUTH_REQUIRED = 'REAUTH_REQUIRED';
+export const IMPERSONATION_ENDED = 'IMPERSONATION_ENDED';
 let onReauthRequired = null;
 let pendingReauth = null;
 
@@ -68,19 +69,25 @@ function dispatchApiError(error, endpoint, retry, userInitiated = false) {
   // A read the user explicitly asked for (a click, not a background query)
   // is reported like a write: the global handler toasts it.
   if (userInitiated && error && typeof error === 'object') error.userInitiated = true;
-  console.group('%cAPI Error', 'color: #ef4444; font-weight: bold;');
-  console.error('Endpoint:', endpoint);
-  console.error('Error:', error.message);
-  if (error.status) {
-    console.error('Status:', error.status);
+  // Response bodies and stack traces are for local debugging only; production
+  // builds log a single line without them.
+  if (import.meta.env.DEV) {
+    console.group('%cAPI Error', 'color: #ef4444; font-weight: bold;');
+    console.error('Endpoint:', endpoint);
+    console.error('Error:', error.message);
+    if (error.status) {
+      console.error('Status:', error.status);
+    }
+    if (error.data) {
+      console.error('Response data:', error.data);
+    }
+    if (error.stack) {
+      console.error('Stack trace:', error.stack);
+    }
+    console.groupEnd();
+  } else {
+    console.error(`API error${error.status ? ` ${error.status}` : ''}: ${endpoint}`);
   }
-  if (error.data) {
-    console.error('Response data:', error.data);
-  }
-  if (error.stack) {
-    console.error('Stack trace:', error.stack);
-  }
-  console.groupEnd();
 
   // Dispatch to global callback if set
   if (onApiError) {
@@ -150,6 +157,12 @@ async function request(endpoint, options = {}) {
         response.status,
         data
       );
+      // A support view ended while this screen still showed the viewed
+      // person (#416): reload so nothing continues under the wrong identity.
+      if (response.status === 409 && data.code === IMPERSONATION_ENDED && typeof window !== 'undefined') {
+        window.location.reload();
+        throw error;
+      }
       if (response.status === 403 && data.code === REAUTH_REQUIRED && onReauthRequired && !options.reauthRetried) {
         if (await requestReauth(endpoint)) {
           return request(endpoint, { ...options, reauthRetried: true });
@@ -232,6 +245,19 @@ export const api = {
     request('/auth/reauth', { method: 'POST', body: password ? { password } : { code }, silent: true }),
   disableMfa: ({ password, code, recoveryCode }) =>
     request('/auth/mfa/disable', { method: 'POST', body: { password, code, recoveryCode } }),
+  // Support impersonation (#416, docs/privileged-actions.md): an admin views
+  // the app as a team member or client user, read-only, for 30 minutes.
+  // Starting needs recent re-authentication (handled by the reauth prompt).
+  startImpersonation: (userId, reason) =>
+    request('/auth/impersonation', { method: 'POST', body: { userId, reason } }),
+  stopImpersonation: () =>
+    request('/auth/impersonation/stop', { method: 'POST', silent: true }),
+  getImpersonationSessions: () =>
+    request('/auth/impersonation/sessions'),
+  // Break-glass recovery link from a platform operator. Silent: a bad or
+  // used link is shown on the page, never as a global sign-out.
+  redeemBreakGlass: (token, newPassword) =>
+    request('/auth/break-glass/redeem', { method: 'POST', body: { token, newPassword }, silent: true }),
 
   // Inbox
   getInbox: (params = {}) => {

@@ -19,6 +19,8 @@ import { Card, Button, EmptyState, ListPageSkeleton, LoadingState } from '../com
 import QueryErrorState from '../components/QueryErrorState';
 import CreateTeamMemberModal from '../components/CreateTeamMemberModal';
 import MfaResetAction from '../components/MfaResetAction';
+import ImpersonateAction from '../components/ImpersonateAction';
+import SupportAccessLog from '../components/SupportAccessLog';
 import { useAuth } from '../hooks/useAuth';
 
 const roleColors = {
@@ -26,6 +28,9 @@ const roleColors = {
   MEMBER: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
   BOT: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
 };
+
+// Roles an admin may view the app as (#416): never another administrator.
+const VIEWABLE_ROLES = new Set(['TEAM', 'STAFF', 'CLIENT']);
 
 const statusColor = (status) => {
   if (status === 'overloaded') return 'text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/20';
@@ -341,6 +346,9 @@ export default function Team() {
                           </div>
                         )}
                         <div className="flex items-center gap-1 ml-auto shrink-0">
+                          {isAdmin && !currentUser?.impersonation && member.id !== currentUser?.id && member.isActive && VIEWABLE_ROLES.has(member.role) && (
+                            <ImpersonateAction member={member} />
+                          )}
                           {isAdmin && member.id !== currentUser?.id && (member.mfaEnabled || member.mfaLocked) && (
                             <MfaResetAction
                               member={member}
@@ -373,6 +381,7 @@ export default function Team() {
             </div>
             )}
           </div>
+          {isAdmin && !currentUser?.impersonation && <SupportAccessLog />}
         </>
       ) : (
         /* Resource Allocation View */

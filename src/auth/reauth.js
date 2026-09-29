@@ -83,7 +83,7 @@ export function verifyReauthToken(token, { nowMs = Date.now() } = {}) {
   return claims;
 }
 
-export function reauthCookieOptions({ isProduction = env.isProduction } = {}) {
+export function reauthCookieOptions({ isProduction = env.isDeployed } = {}) {
   return {
     path: '/',
     httpOnly: true,
@@ -94,7 +94,7 @@ export function reauthCookieOptions({ isProduction = env.isProduction } = {}) {
 }
 
 /** Options for clearing the cookie; must match name, path, secure and sameSite. */
-export function clearReauthCookieOptions({ isProduction = env.isProduction } = {}) {
+export function clearReauthCookieOptions({ isProduction = env.isDeployed } = {}) {
   const { maxAge: _maxAge, ...options } = reauthCookieOptions({ isProduction });
   return options;
 }
@@ -136,6 +136,14 @@ export function sendReauthRequired(reply) {
  * Use after a session guard; it is not an authentication guard by itself.
  */
 export async function requireRecentAuth(request, reply) {
+  // Step-up actions are never available while an admin views as another
+  // person (#416): the view is read-only and cannot re-authenticate.
+  if (request.impersonation || request.user?.impersonation) {
+    return reply.status(403).send({
+      error: 'This action is not available while viewing as another person.',
+      code: 'IMPERSONATION_BLOCKED',
+    });
+  }
   if (recentAuthProblem(request) !== null) return sendReauthRequired(reply);
   return undefined;
 }

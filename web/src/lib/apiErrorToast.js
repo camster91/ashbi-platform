@@ -46,6 +46,9 @@ export function apiErrorToast(error, retry) {
       action: retryAction,
     };
   }
+  if (error.status === 403 && String(error.data?.code || '').startsWith('IMPERSONATION_')) {
+    return { title: 'Read-only support view', message: error.message || 'Changes are not allowed while viewing as another person.' };
+  }
   if (error.status >= 400) {
     return { title: 'Request failed', message: error.message || 'Please check your input and try again.' };
   }

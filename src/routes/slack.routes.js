@@ -31,7 +31,9 @@ export default async function slackAdminRoutes(fastify, options = {}) {
   const slackRedirectUri = options.slackRedirectUri ?? env.slackRedirectUri;
   const adminOnly = { onRequest: [fastify.authenticate, fastify.adminOnly] };
 
-  fastify.get('/oauth/start', adminOnly, async (request, reply) => {
+  // Side-effecting GET (starts an install bound to the caller): refused during
+  // a support view (#416), in addition to requiring an admin.
+  fastify.get('/oauth/start', { ...adminOnly, config: { sideEffectingGet: true } }, async (request, reply) => {
     if (!slackClientId || !slackClientSecret || !slackRedirectUri) {
       return reply.status(503).send({ error: 'Slack OAuth is not configured', code: 'SLACK_OAUTH_UNAVAILABLE' });
     }

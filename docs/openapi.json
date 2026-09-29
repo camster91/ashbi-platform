@@ -1047,6 +1047,26 @@
         },
         "type": "object"
       },
+      "BreakGlassRedeem": {
+        "additionalProperties": false,
+        "properties": {
+          "newPassword": {
+            "maxLength": 128,
+            "minLength": 8,
+            "type": "string"
+          },
+          "token": {
+            "maxLength": 200,
+            "minLength": 20,
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "newPassword"
+        ],
+        "type": "object"
+      },
       "BulkMarkPaid": {
         "properties": {
           "ids": {
@@ -2297,6 +2317,26 @@
           "to",
           "subject",
           "body"
+        ],
+        "type": "object"
+      },
+      "ImpersonationStart": {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "maxLength": 500,
+            "minLength": 10,
+            "type": "string"
+          },
+          "userId": {
+            "maxLength": 191,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "userId",
+          "reason"
         ],
         "type": "object"
       },
@@ -8476,7 +8516,9 @@
                 "import_run",
                 "review_session",
                 "review_share_link",
-                "domain_event"
+                "domain_event",
+                "impersonation_session",
+                "break_glass_grant"
               ],
               "type": "string"
             }
@@ -8542,7 +8584,12 @@
                 "review.share_link_created",
                 "review.share_link_revoked",
                 "domain_event.replayed",
-                "domain_event.discarded"
+                "domain_event.discarded",
+                "impersonation.started",
+                "impersonation.ended",
+                "break_glass.granted",
+                "break_glass.redeemed",
+                "break_glass.revoked"
               ],
               "type": "string"
             }
@@ -8741,6 +8788,42 @@
         "x-tenancy": "exempt"
       }
     },
+    "/api/auth/break-glass/redeem": {
+      "post": {
+        "operationId": "post_api_auth_break_glass_redeem",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BreakGlassRedeem"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [],
+        "summary": "POST /api/auth/break-glass/redeem",
+        "tags": [
+          "auth"
+        ],
+        "x-access": "public",
+        "x-tenancy": "exempt"
+      }
+    },
     "/api/auth/change-password": {
       "post": {
         "operationId": "post_api_auth_change_password",
@@ -8895,6 +8978,162 @@
           "auth"
         ],
         "x-access": "public",
+        "x-tenancy": "exempt"
+      }
+    },
+    "/api/auth/impersonation": {
+      "get": {
+        "operationId": "get_api_auth_impersonation",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/auth/impersonation",
+        "tags": [
+          "auth"
+        ],
+        "x-access": "staff",
+        "x-tenancy": "exempt"
+      },
+      "post": {
+        "operationId": "post_api_auth_impersonation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImpersonationStart"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/auth/impersonation",
+        "tags": [
+          "auth"
+        ],
+        "x-access": "admin + recent-auth",
+        "x-requires-recent-auth": true,
+        "x-tenancy": "exempt"
+      }
+    },
+    "/api/auth/impersonation/sessions": {
+      "get": {
+        "operationId": "get_api_auth_impersonation_sessions",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "GET /api/auth/impersonation/sessions",
+        "tags": [
+          "auth"
+        ],
+        "x-access": "admin",
+        "x-tenancy": "exempt"
+      }
+    },
+    "/api/auth/impersonation/stop": {
+      "post": {
+        "operationId": "post_api_auth_impersonation_stop",
+        "responses": {
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "2XX": {
+            "description": "Success. Response bodies are not yet described by this contract."
+          }
+        },
+        "security": [
+          {
+            "cookieAuth": []
+          },
+          {
+            "bearerAuth": []
+          }
+        ],
+        "summary": "POST /api/auth/impersonation/stop",
+        "tags": [
+          "auth"
+        ],
+        "x-access": "staff",
         "x-tenancy": "exempt"
       }
     },
@@ -10650,36 +10889,6 @@
           }
         ],
         "summary": "GET /api/bot/system/gateway-status",
-        "tags": [
-          "bot"
-        ],
-        "x-access": "bot-secret",
-        "x-tenancy": "exempt"
-      }
-    },
-    "/api/bot/system/restart-gateway": {
-      "post": {
-        "operationId": "post_api_bot_system_restart_gateway",
-        "responses": {
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "429": {
-            "$ref": "#/components/responses/TooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalError"
-          },
-          "2XX": {
-            "description": "Success. Response bodies are not yet described by this contract."
-          }
-        },
-        "security": [
-          {
-            "botBearer": []
-          }
-        ],
-        "summary": "POST /api/bot/system/restart-gateway",
         "tags": [
           "bot"
         ],
