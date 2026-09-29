@@ -64,6 +64,20 @@ test('the time summary includes manual entries, timer entries and legacy session
     assert.equal(body.byProject.length, 1);
     assert.equal(body.byProject[0].totalMinutes, 95);
 
+    assert.equal(body.entryCount, 3);
+    assert.equal(body.entriesTruncated, false);
+
+    // Beyond the 100-row read cap: totals still include every entry.
+    await raw.timeEntry.createMany({ data: Array.from({ length: 150 }, (_, i) => ({
+      userId: ids.user, projectId: ids.project, duration: 2, date: new Date(day.getTime() - (i + 1) * MINUTE), source: 'MANUAL',
+    })) });
+    const large = (await app.inject({ method: 'GET', url: '/api/time-tracking/summary' })).json();
+    assert.equal(large.totalMinutes, 95 + 300, 'every entry counts, not just the listed ones');
+    assert.equal(large.byProject[0].totalMinutes, 95 + 300);
+    assert.equal(large.entryCount, 153);
+    assert.equal(large.entries.length, 100);
+    assert.equal(large.entriesTruncated, true);
+
     const filtered = await app.inject({ method: 'GET', url: `/api/time-tracking/summary?startDate=2026-09-11T00:00:00.000Z` });
     assert.equal(filtered.json().totalMinutes, 0, 'date filters apply to entries and legacy sessions');
   } finally {
