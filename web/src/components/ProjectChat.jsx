@@ -7,7 +7,10 @@ import { preferredScrollBehavior } from '../lib/motion';
 import ConfirmDialog from './ConfirmDialog';
 import LoadingState from './ui/LoadingState';
 import QueryErrorState from './QueryErrorState';
-import { Edit2, Trash2, Lock, Eye, Paperclip } from 'lucide-react';
+import { Edit2, Trash2, Lock, Eye } from 'lucide-react';
+import MessageAttachments from './media/MessageAttachments';
+import { AttachmentToolbar, AttachmentTray, useCaptureDialog, useDropAndPaste } from './media/ComposerAttachments';
+import { useAttachmentDraft } from './media/useAttachmentDraft';
 
 // Chat visibility (docs/product-status.md): INTERNAL messages are staff-only;
 // CLIENT messages are also shown to the client in their portal.
@@ -26,29 +29,28 @@ export function VisibilityBadge({ visibility }) {
   );
 }
 
-function ChatAttachments({ messageId }) {
-  const { data: attachments = [] } = useQuery({ queryKey: ['chat-attachments', messageId], queryFn: () => api.getAttachments('CHAT', messageId), staleTime: 30000 });
-  if (!attachments.length) return null;
-  return <ul className="mt-2 space-y-1">{attachments.map((file) => <li key={file.id}><a href={`/api/attachments/uploads/${encodeURIComponent(file.filename)}`} target="_blank" rel="noreferrer" className="text-xs underline">{file.originalName}</a></li>)}</ul>;
-}
-
 export default function ProjectChat({ projectId }) {
   const { user } = useAuth();
   const { socket } = useSocket();
   const queryClient = useQueryClient();
   const [message, setMessage] = useState('');
   const [sendError, setSendError] = useState('');
-  const [attachmentRetry, setAttachmentRetry] = useState(null);
   const [isTyping, setIsTyping] = useState(false);
   const [typingUsers, setTypingUsers] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [editingContent, setEditingContent] = useState('');
   const [messageToDelete, setMessageToDelete] = useState(null);
-  const [attachment, setAttachment] = useState(null);
   const [visibility, setVisibility] = useState('INTERNAL');
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
-  const fileInputRef = useRef(null);
+  // Files upload as soon as they are added (pending chat uploads); the send
+  // claims them with the message in one transaction (docs/chat-media.md).
+  const draft = useAttachmentDraft({
+    upload: (file, options) => api.uploadChatFile(projectId, file, options),
+    discard: (attachmentId) => api.discardChatUpload(projectId, attachmentId),
+  });
+  const capture = useCaptureDialog(draft);
+  const { dragging, handlers: dropHandlers } = useDropAndPaste(draft);
 
   // Fetch messages
   const {
@@ -132,36 +134,32 @@ export default function ProjectChat({ projectId }) {
     list?.scrollTo?.({ top: list.scrollHeight, behavior: preferredScrollBehavior() });
   }, [messages]);
 
-  const uploadMutation = useMutation({
-    mutationFn: ({ attachment: retryAttachment, messageId }) => api.uploadAttachment(retryAttachment, 'CHAT', messageId),
-    onSuccess: async (_, { messageId }) => {
-      await queryClient.invalidateQueries({ queryKey: ['chat-attachments', messageId] });
-      setAttachment(null);
-      setAttachmentRetry(null);
-      setSendError('');
-    },
-    onError: (_, retry) => {
-      setAttachmentRetry(retry);
-      setSendError('Message sent, but its attachment was not uploaded. Try again.');
-    },
-  });
-
-  // Send message mutation
+  // Send message mutation. The text and the uploaded files stay in the
+  // composer until the send succeeds, so "Try again" resends both.
   const sendMutation = useMutation({
-    mutationFn: (content) => api.sendChatMessage(projectId, { content, visibility }),
+    mutationFn: ({ content, attachmentIds }) => api.sendChatMessage(
+      projectId,
+      attachmentIds.length ? { content, visibility, attachmentIds } : { content, visibility },
+    ),
     onSuccess: (created) => {
       setMessage('');
       setSendError('');
+      draft.clear();
       // Back to the safe default after each client-visible message, so the
       // next message is internal unless staff choose otherwise again.
       setVisibility('INTERNAL');
-      if (attachment) uploadMutation.mutate({ attachment, messageId: created.id });
-      else setAttachment(null);
+      queryClient.setQueryData(['chat', projectId], (old = []) => (
+        created?.id && !created.parentId && !old.some((m) => m.id === created.id) ? [...old, created] : old
+      ));
     },
-    onError: () => {
-      setSendError('Message not sent. Try again.');
+    onError: (error) => {
+      setSendError(error?.data?.code === 'ATTACHMENT_NOT_PENDING'
+        ? 'Message not sent: an attachment is no longer available. Remove it, add it again and try again.'
+        : 'Message not sent. Try again.');
     }
   });
+  const canSend = (Boolean(message.trim()) || draft.readyIds.length > 0) && !draft.uploading && !draft.hasErrors;
+  const sendCurrent = () => sendMutation.mutate({ content: message.trim(), attachmentIds: draft.readyIds });
   const editMutation = useMutation({ mutationFn: ({ id, content }) => api.editChatMessage(projectId, id, content), onSuccess: () => { setEditingId(null); queryClient.invalidateQueries({ queryKey: ['chat', projectId] }); } });
   const deleteMutation = useMutation({
     mutationFn: (id) => api.deleteChatMessage(projectId, id),
@@ -200,9 +198,9 @@ export default function ProjectChat({ projectId }) {
   // Send message
   const handleSend = (e) => {
     e.preventDefault();
-    if (!message.trim()) return;
+    if (!canSend || sendMutation.isPending) return;
 
-    sendMutation.mutate(message.trim());
+    sendCurrent();
     setSendError('');
     setIsTyping(false);
     socket?.emit('typing', { projectId, isTyping: false });
@@ -282,13 +280,14 @@ export default function ProjectChat({ projectId }) {
                       </span>
                     </div>
                   </div>
-                  {!msg.removedAt && <ChatAttachments messageId={msg.id} />}
+                  {!msg.removedAt && <MessageAttachments attachments={msg.attachments} />}
                   {msg.replies?.length > 0 && (
                     <ul className="mt-2 space-y-1 border-l-2 border-border pl-3" aria-label="Replies">
                       {msg.replies.map((replyMessage) => (
                         <li key={replyMessage.id} className="text-sm text-foreground">
                           <span className="text-xs text-muted-foreground">{replyMessage.author?.name || replyMessage.externalAuthorName || 'Unknown sender'}: </span>
                           {replyMessage.removedAt ? <em>Message deleted</em> : replyMessage.content}
+                          {!replyMessage.removedAt && <MessageAttachments attachments={replyMessage.attachments} />}
                         </li>
                       ))}
                     </ul>
@@ -346,7 +345,7 @@ export default function ProjectChat({ projectId }) {
       )}
 
       {/* Input */}
-      <form onSubmit={handleSend} className={`border-t border-border p-3 ${visibility === 'CLIENT' ? 'bg-amber-50 dark:bg-amber-950/30' : ''}`}>
+      <form onSubmit={handleSend} {...dropHandlers} aria-label="Write a message" className={`border-t border-border p-3 ${visibility === 'CLIENT' ? 'bg-amber-50 dark:bg-amber-950/30' : ''} ${dragging ? 'outline outline-2 outline-dashed outline-primary' : ''}`}>
         <fieldset className="mb-2 flex flex-wrap items-center gap-2 text-xs">
           <legend className="sr-only">Who can read this message</legend>
           <label className={`inline-flex min-h-11 cursor-pointer items-center gap-1 rounded border px-2 ${visibility === 'INTERNAL' ? 'border-foreground/60 bg-muted font-semibold' : 'border-border'}`}>
@@ -359,17 +358,9 @@ export default function ProjectChat({ projectId }) {
           </label>
           {visibility === 'CLIENT' && <span role="status" className="text-amber-900 dark:text-amber-200">The client will see this message in their portal.</span>}
         </fieldset>
+        <AttachmentTray draft={draft} capture={capture} className="mb-2" />
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            aria-label="Attach a file to this message"
-            className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <Paperclip className="h-4 w-4" aria-hidden="true" />
-            <span className="hidden sm:inline" aria-hidden="true">Attach</span>
-          </button>
-          <input ref={fileInputRef} type="file" onChange={(event) => setAttachment(event.target.files?.[0] || null)} tabIndex={-1} aria-hidden="true" className="hidden" />
+          <AttachmentToolbar draft={draft} capture={capture} />
           <input
             type="text"
             value={message}
@@ -383,15 +374,16 @@ export default function ProjectChat({ projectId }) {
           />
           <button
             type="submit"
-            disabled={!message.trim() || sendMutation.isPending}
+            disabled={!canSend || sendMutation.isPending}
             className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {sendMutation.isPending ? '...' : 'Send'}
           </button>
         </div>
-        {attachment && <p className="mt-1 text-xs text-muted-foreground">Attaching {attachment.name}</p>}
-        {sendError && <div role="alert" className="mt-2 flex items-center justify-between gap-2 text-sm text-destructive"><span>{sendError}</span><button type="button" onClick={() => attachmentRetry ? uploadMutation.mutate(attachmentRetry) : sendMutation.mutate(message.trim())} disabled={sendMutation.isPending || uploadMutation.isPending || (!attachmentRetry && !message.trim())} className="underline">Try again</button></div>}
+        <p className="mt-1 text-xs text-muted-foreground">Paste or drop screenshots and files here (up to {draft.max}, 50 MB each).</p>
+        {sendError && <div role="alert" className="mt-2 flex items-center justify-between gap-2 text-sm text-destructive"><span>{sendError}</span><button type="button" onClick={sendCurrent} disabled={sendMutation.isPending || !canSend} className="underline">Try again</button></div>}
       </form>
+      {capture.element}
       <ConfirmDialog
         isOpen={Boolean(messageToDelete)}
         title="Permanently delete this message?"

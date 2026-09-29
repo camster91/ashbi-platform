@@ -5,12 +5,20 @@ import { expect, it } from 'vitest';
 it('keeps a failed project-chat message available for an explicit retry', () => {
   const source = readFileSync(resolve(process.cwd(), 'src/components/ProjectChat.jsx'), 'utf8');
   expect(source).toContain('sendError');
-  expect(source).toContain('attachmentRetry ? uploadMutation.mutate(attachmentRetry) : sendMutation.mutate(message.trim())');
+  expect(source).toContain('onClick={sendCurrent}');
   expect(source).toContain('Message not sent. Try again.');
 });
 
-it('retries a failed attachment against its existing message instead of resending text', () => {
+// Chat media (docs/chat-media.md): files upload before the message is sent and
+// the send claims them atomically, so a failed send never leaves a message
+// without its files; the text and uploaded files stay in the composer (the
+// draft is cleared only on success) and "Try again" resends both.
+it('sends uploaded files with the message and clears them only after a successful send', () => {
   const source = readFileSync(resolve(process.cwd(), 'src/components/ProjectChat.jsx'), 'utf8');
-  expect(source).toContain('attachmentRetry');
-  expect(source).toContain("api.uploadAttachment(retryAttachment, 'CHAT', messageId)");
+  expect(source).toContain('api.uploadChatFile(projectId, file, options)');
+  expect(source).toContain('attachmentIds.length ? { content, visibility, attachmentIds } : { content, visibility }');
+  const onSuccess = source.slice(source.indexOf('onSuccess: (created)'), source.indexOf('onError: (error)'));
+  expect(onSuccess).toContain('draft.clear()');
+  expect(source.slice(source.indexOf('onError: (error)'), source.indexOf('const canSend'))).not.toContain('draft.clear()');
+  expect(source).not.toContain("api.uploadAttachment(retryAttachment, 'CHAT', messageId)");
 });

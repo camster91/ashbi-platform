@@ -1,5 +1,7 @@
 // API client for Agency Hub
 
+import { uploadFileWithProgress } from './upload';
+
 // Use VITE_API_URL for production (external backend), fallback to /api for dev (proxied)
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
@@ -635,6 +637,12 @@ export const api = {
   },
   deleteAttachment: (id) =>
     request(`/attachments/${id}`, { method: 'DELETE' }),
+  // Chat media (docs/chat-media.md): upload first as a pending chat upload,
+  // then send the message with its `attachmentIds`.
+  uploadChatFile: (projectId, file, options = {}) =>
+    uploadFileWithProgress(`${API_BASE}/chat/projects/${projectId}/uploads`, file, options),
+  discardChatUpload: (projectId, attachmentId) =>
+    request(`/chat/projects/${projectId}/uploads/${attachmentId}`, { method: 'DELETE', silent: true }),
   attachmentFileUrl: (filename) => `${API_BASE}/attachments/uploads/${encodeURIComponent(filename)}`,
   // Note: File upload uses FormData, handled separately in components
 
