@@ -362,7 +362,19 @@ and an operator:
    on ports 80/443 directly (the capture proxy connects straight to the
    checked address; an outbound HTTP proxy in front of the host is not
    used);
-5. expects roughly 150 to 300 MB of memory per concurrent capture.
+5. expects roughly 150 to 300 MB of memory per concurrent capture;
+6. provides Chromium's OS sandbox. Captures launch with the sandbox on
+   (`chromiumSandbox: true`; the page is untrusted and runs JavaScript, and
+   the egress proxy only confines Chromium's own network stack, not a
+   compromised renderer). The host must allow unprivileged user namespaces
+   (or ship Chromium's setuid sandbox); in Docker this can need a seccomp
+   profile that permits them. If the sandbox cannot start, capture fails
+   closed with 503 `WEB_CAPTURE_UNAVAILABLE`, never unsandboxed. Running
+   captures in a separate low-privilege container whose only route out is
+   the public internet is the stronger option.
+
+Unresolvable and private hosts get the same 422 message, so the endpoint
+cannot be used to learn which names exist on the server's network.
 
 `playwright-core` (the driver, no browsers) is a runtime dependency.
 

@@ -82,6 +82,21 @@ describe('capture URL policy', () => {
     }
   });
 
+  it('answers unresolvable and private hosts with the same message, so internal names cannot be mapped', async () => {
+    const messageFor = async (url) => {
+      try {
+        await assertCapturableUrl(url, { lookup });
+      } catch (error) {
+        return error.message;
+      }
+      return null;
+    };
+    const unresolvable = await messageFor('http://nowhere.invalid/');
+    assert.ok(unresolvable);
+    assert.equal(await messageFor('http://intranet.corp/'), unresolvable);
+    assert.equal(await messageFor('http://10.0.0.1/'), unresolvable);
+  });
+
   it('filters what the page itself requests', () => {
     assert.equal(isAllowedBrowserRequest('https://cdn.example.com/app.js'), true);
     assert.equal(isAllowedBrowserRequest(`http://${PUBLIC_V4}/img.png`), true);
@@ -261,6 +276,10 @@ describe('captureWebPage', () => {
     const result = await captureWebPage({ url: 'https://example.com/#x', viewport: 'desktop' }, { launcher, lookup });
     assert.deepEqual([result.url, result.viewport, result.width, result.height, result.truncated, result.pageTitle], ['https://example.com/', 'desktop', 1440, 2000, false, 'Example Domain']);
     assert.ok(result.png.equals(PNG));
+    // The untrusted page runs in Chromium's OS sandbox (playwright-core
+    // would otherwise launch with --no-sandbox).
+    assert.equal(calls.launch.chromiumSandbox, true);
+    assert.ok(!calls.launch.args.includes('--no-sandbox'));
     assert.match(calls.launch.args.find((arg) => arg.startsWith('--proxy-server=')), /^--proxy-server=http:\/\/127\.0\.0\.1:\d+$/);
     assert.equal(calls.launch.env.JWT_SECRET, undefined);
     assert.deepEqual(

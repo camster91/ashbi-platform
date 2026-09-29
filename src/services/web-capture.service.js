@@ -85,6 +85,9 @@ function portOf(url) {
  */
 export async function resolvePublicAddresses(host, { lookup = dns.promises.lookup, isAllowedAddress = (address) => !isNonPublicAddress(address) } = {}) {
   const bare = String(host).replace(/^\[|\]$/g, '');
+  // One message for "does not resolve" and "resolves to a private address":
+  // telling them apart would let a caller map which internal names exist.
+  const notPublic = () => rejected('Only public web pages can be captured. Check the address and try again.');
   let addresses;
   if (isIP(bare)) {
     addresses = [bare];
@@ -92,13 +95,11 @@ export async function resolvePublicAddresses(host, { lookup = dns.promises.looku
     try {
       addresses = (await lookup(bare, { all: true, verbatim: true })).map((entry) => entry.address);
     } catch {
-      throw rejected('The address could not be resolved.');
+      throw notPublic();
     }
   }
-  if (!addresses.length) throw rejected('The address could not be resolved.');
-  if (!addresses.every((address) => isAllowedAddress(address))) {
-    throw rejected('Only public web pages can be captured; this address is private, local or reserved.');
-  }
+  if (!addresses.length) throw notPublic();
+  if (!addresses.every((address) => isAllowedAddress(address))) throw notPublic();
   return addresses;
 }
 
@@ -379,6 +380,10 @@ export async function captureWebPage(input, {
     const work = (async () => {
       browser = await launcher({
         headless: true,
+        // The page is untrusted and runs JavaScript: keep Chromium's OS
+        // sandbox on (playwright-core adds --no-sandbox unless this is true).
+        // A host that cannot provide it fails closed (503).
+        chromiumSandbox: true,
         executablePath,
         args: browserArgs(proxy.url),
         timeout: remaining(),
