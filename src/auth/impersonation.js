@@ -119,7 +119,7 @@ export function verifyImpersonationToken(token, { nowMs = Date.now() } = {}) {
   return { ...claims, expired: claims.exp <= Math.floor(nowMs / 1000) };
 }
 
-export function impersonationCookieOptions({ isProduction = env.isProduction, maxAgeSeconds = IMPERSONATION_TTL_SECONDS } = {}) {
+export function impersonationCookieOptions({ isProduction = env.isDeployed, maxAgeSeconds = IMPERSONATION_TTL_SECONDS } = {}) {
   return {
     path: '/',
     httpOnly: true,
@@ -130,7 +130,7 @@ export function impersonationCookieOptions({ isProduction = env.isProduction, ma
 }
 
 /** Options for clearing the cookie; must match name, path, secure and sameSite. */
-export function clearImpersonationCookieOptions({ isProduction = env.isProduction } = {}) {
+export function clearImpersonationCookieOptions({ isProduction = env.isDeployed } = {}) {
   const { maxAge: _maxAge, ...options } = impersonationCookieOptions({ isProduction });
   return options;
 }

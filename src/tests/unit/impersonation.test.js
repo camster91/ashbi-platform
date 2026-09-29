@@ -674,3 +674,20 @@ describe('a view start waits for the cross-instance revocation', () => {
     await assert.rejects(stalled.revoke('a', { timeoutMs: 20 }), /timed out/);
   });
 });
+
+describe('support-view cookie in deployed environments', () => {
+  it('is Secure in every deployed environment, staging included', async () => {
+    const { default: env } = await import('../../config/env.js');
+    const { impersonationCookieOptions, clearImpersonationCookieOptions } = await import('../../auth/impersonation.js');
+    const saved = { isDeployed: env.isDeployed, isProduction: env.isProduction };
+    try {
+      Object.assign(env, { isDeployed: true, isProduction: false }); // staging
+      assert.equal(impersonationCookieOptions().secure, true);
+      assert.equal(clearImpersonationCookieOptions().secure, true);
+      Object.assign(env, { isDeployed: false, isProduction: false }); // development
+      assert.equal(impersonationCookieOptions().secure, false);
+    } finally {
+      Object.assign(env, saved);
+    }
+  });
+});
