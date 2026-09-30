@@ -17,12 +17,16 @@ function fakePrisma({ invoicesByStatus }) {
     get: (target, prop) => target[prop] ?? (async () => (prop === 'count' ? 0 : prop === 'aggregate' ? { _sum: {} } : [])),
   });
   return {
-    retainerPlan: model({ findMany: async () => [] }),
+    retainerPlan: model({ aggregate: async () => ({ _sum: { monthlyAmountUsd: null }, _count: { _all: 0 } }) }),
     invoice: model({
-      findMany: async ({ where }) => where.status.in.flatMap((s) => invoicesByStatus[s] || []),
+      // Evaluates the filters the route sends to the database.
       aggregate: async ({ where }) => {
-        const rows = invoicesByStatus[where.status] || [];
-        return { _sum: { total: rows.reduce((sum, r) => sum + r.total, 0) }, _count: { _all: rows.length } };
+        const statuses = typeof where.status === 'string' ? [where.status] : where.status.in;
+        const rows = statuses
+          .flatMap((status) => (invoicesByStatus[status] || []).map((row) => ({ status, ...row })))
+          .filter((row) => !where.OR || where.OR.some((clause) => (clause.status && row.status === clause.status)
+            || (clause.dueDate && row.dueDate && row.dueDate < clause.dueDate.lt)));
+        return { _sum: { total: rows.length ? rows.reduce((sum, r) => sum + r.total, 0) : null }, _count: { _all: rows.length } };
       },
     }),
     project: model(),
@@ -77,4 +81,15 @@ test('outstanding sums sent and overdue invoices only', async () => {
   assert.equal(stats.outstandingCount, 2);
   assert.equal(stats.overdueCount, 1);
   assert.equal(stats.draftInvoiceTotal, 500);
+});
+
+test('money and counts come from database aggregates, never from a capped list read', async () => {
+  const handler = await statsHandler();
+  const prisma = fakePrisma({ invoicesByStatus: { DRAFT: [], SENT: [], OVERDUE: [] } });
+  prisma.invoice.findMany = async () => { throw new Error('the dashboard must not total invoices from findMany (capped at 100 rows)'); };
+  prisma.retainerPlan.findMany = async () => { throw new Error('the dashboard must not total retainers from findMany (capped at 100 rows)'); };
+  prisma.retainerPlan.aggregate = async () => ({ _sum: { monthlyAmountUsd: 150 * 1000 }, _count: { _all: 150 } });
+  const stats = await handler({ user: { id: 'u1', role: 'ADMIN' }, organizationId: 'org-1', prisma });
+  assert.equal(stats.mrr, 150000);
+  assert.equal(stats.activeRetainerCount, 150);
 });
