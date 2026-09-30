@@ -31,6 +31,7 @@ import {
   pendingRollbackFiles,
   removeRolledBackFiles,
   summaryWithPendingFiles,
+  truncateCodePoints,
   insertInChunks,
   normalizeEmail,
   parseIsoTimestamp,
@@ -335,7 +336,7 @@ async function planAndWrite(db, context) {
       organizationId,
       filename: stored.filename,
       // The Loom title is what people recognise in the project's files.
-      originalName: `${item.title.replace(/[\\/.]+/g, ' ').trim().slice(0, TITLE_MAX) || 'Loom recording'}${item.file.ext}`,
+      originalName: `${truncateCodePoints(item.title.replace(/[\\/.]+/g, ' ').trim(), TITLE_MAX) || 'Loom recording'}${item.file.ext}`,
       mimeType: stored.mimeType,
       size: stored.size,
       path: stored.path,

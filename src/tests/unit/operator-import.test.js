@@ -14,6 +14,7 @@ import {
   removeRolledBackFiles,
   safeFileName,
   summaryWithPendingFiles,
+  truncateCodePoints,
 } from '../../services/operator-import-common.js';
 import {
   LOOM_FILE_TYPES,
@@ -425,4 +426,14 @@ test('rollback file cleanup keeps unremoved paths on the run so a rerun can retr
   const removed = await removeRolledBackFiles(db, { runId: 'run1', paths: pendingRollbackFiles(run), unlink: async () => {} });
   assert.equal(removed, 2);
   assert.deepEqual(run.summary, { created: 2 }, 'the pending list is cleared once every file is gone');
+});
+
+test('truncateCodePoints never splits a surrogate pair', () => {
+  const title = `${'a'.repeat(199)}😀`;
+  assert.equal(title.length, 201, 'the emoji is two UTF-16 units');
+  assert.equal(truncateCodePoints(title, 200), title, 'a 200-code-point title is kept whole');
+  assert.equal(truncateCodePoints(`${title}b`, 200), title);
+  assert.equal(truncateCodePoints(`${'a'.repeat(200)}😀`, 200), 'a'.repeat(200));
+  assert.equal(truncateCodePoints(null, 5), '');
+  assert.ok(!/[\uD800-\uDFFF]$/.test(truncateCodePoints(`${'a'.repeat(199)}😀😀`, 200).slice(-1)) || truncateCodePoints(`${'a'.repeat(199)}😀😀`, 200).endsWith('😀'));
 });

@@ -335,3 +335,12 @@ export async function removeRolledBackFiles(db, { runId, paths, unlink }) {
   }
   return removed;
 }
+
+/**
+ * The first `max` code points of `text`. String#slice counts UTF-16 units and
+ * can split a surrogate pair (an emoji) into an unpaired half.
+ */
+export function truncateCodePoints(text, max) {
+  const points = [...String(text ?? '')];
+  return points.length > max ? points.slice(0, max).join('') : String(text ?? '');
+}

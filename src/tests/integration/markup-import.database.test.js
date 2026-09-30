@@ -334,6 +334,68 @@ test('MarkUp.io import plans, creates reviews, reruns idempotently, reports conf
     assert.equal(afterDelete.report.totals.deletedInHub, 1);
     assert.equal(afterDelete.report.totals.commentsCreated, 0);
 
+    // An import that appends to an existing review locks it and re-reads its
+    // status: a review closed (superseded) while the import waits for it gets
+    // no new comments.
+    const homeRecord = await raw.markupImportRecord.findFirst({ where: { runId: reimport.report.run.id, kind: 'SESSION', fileName: 'homepage.png' } });
+    const homeSessionId = homeRecord.reviewSessionId;
+    const withNewRoot = `${withReply}Website redesign,homepage.png,n1,,10,10,${emails.alice},Alice,A new root comment,open,2025-06-08T09:00:00+02:00,t50,\n`;
+    fs.writeFileSync(csv, withNewRoot);
+    const holdSession = (work) => {
+      let release;
+      const held = new Promise((resolve) => { release = resolve; });
+      let ready = false;
+      const done = raw.$transaction(async (tx) => {
+        await tx.reviewSession.updateMany({ where: { id: homeSessionId, status: { not: 'closed' } }, data: { updatedAt: new Date() } });
+        const value = await work(tx);
+        ready = true;
+        await held;
+        return value;
+      }, { timeout: 60_000 });
+      return { release: () => release(), done, isReady: () => ready };
+    };
+    const closer = holdSession(async (tx) => tx.reviewSession.update({ where: { id: homeSessionId }, data: { status: 'closed' } }));
+    while (!closer.isReady()) await new Promise((resolve) => setTimeout(resolve, 10));
+    const appending = runCliAsync([...base, '--apply'], workDir);
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+    closer.release();
+    await closer.done;
+    const appended = await appending;
+    assert.equal(appended.status, 0, appended.stderr);
+    assert.equal(appended.report.totals.commentsCreated, 0, 'nothing is appended to the review closed while the import waited');
+    assert.ok(appended.report.warnings.some((warning) => warning.code === 'SESSION_CLOSED'));
+    assert.equal(await raw.reviewAnnotation.count({ where: { sessionId: homeSessionId, body: 'A new root comment' } }), 0);
+    await raw.reviewSession.update({ where: { id: homeSessionId }, data: { status: 'open' } });
+
+    // A run that only added comments to an existing review: its rollback
+    // locks that review too, so a reply written to its new root while the
+    // rollback starts blocks it instead of being cascaded away.
+    const rootOnly = runCli([...base, '--apply'], workDir);
+    assert.equal(rootOnly.status, 0, rootOnly.stderr);
+    assert.equal(rootOnly.report.totals.sessionsCreated, 0);
+    assert.equal(rootOnly.report.totals.commentsCreated, 1);
+    const rootOnlyRunId = rootOnly.report.run.id;
+    const newRoot = await raw.reviewAnnotation.findFirst({ where: { sessionId: homeSessionId, body: 'A new root comment' } });
+    const replier = holdSession(async (tx) => tx.reviewAnnotation.create({ data: {
+      sessionId: homeSessionId, parentId: newRoot.id, authorType: 'staff', authorUserId: ids.operator, authorName: 'Operator', body: 'Reply during rollback',
+    } }));
+    while (!replier.isReady()) await new Promise((resolve) => setTimeout(resolve, 10));
+    let rootRollbackDone = false;
+    const rootRollback = runCliAsync(['--organization-id', ids.orgA, '--rollback', rootOnlyRunId], workDir).then((result) => { rootRollbackDone = true; return result; });
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+    assert.equal(rootRollbackDone, false, 'the rollback waits for the open reply transaction');
+    replier.release();
+    const reply = await replier.done;
+    const refusedRoot = await rootRollback;
+    assert.equal(refusedRoot.status, 1, 'the rollback is refused once the reply commits');
+    assert.match(refusedRoot.stderr, /Later work depends on this run/);
+    assert.ok(await raw.reviewAnnotation.findUnique({ where: { id: reply.id } }), 'the concurrent reply survives');
+    await raw.reviewAnnotation.delete({ where: { id: reply.id } });
+    const rootRolledBack = runCli(['--organization-id', ids.orgA, '--rollback', rootOnlyRunId], workDir);
+    assert.equal(rootRolledBack.status, 0, rootRolledBack.stderr);
+    assert.deepEqual(rootRolledBack.report.deleted, { sessions: 0, comments: 1, attachments: 0, files: 0, records: 1 });
+    fs.writeFileSync(csv, withReply);
+
     // Kind and outcome vocabularies are enforced by the database.
     await assert.rejects(raw.markupImportRecord.create({ data: {
       organizationId: ids.orgA, projectId: ids.projectA, runId, kind: 'BOGUS', sourceKey: `markup:bogus-${suffix}`,

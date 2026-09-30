@@ -44,6 +44,7 @@ import {
   pendingRollbackFiles,
   removeRolledBackFiles,
   summaryWithPendingFiles,
+  truncateCodePoints,
   inspectMediaFile,
   insertInChunks,
   normalizeEmail,
@@ -168,7 +169,7 @@ export function parseMarkupCommentRow(row) {
 
   const rawEmail = String(row.author_email ?? '').trim();
   const authorEmail = normalizeEmail(rawEmail);
-  const authorName = sanitizeGuestName(row.author_name) || (authorEmail ? authorEmail.split('@')[0].slice(0, 120) : '') || 'MarkUp reviewer';
+  const authorName = sanitizeGuestName(row.author_name) || (authorEmail ? truncateCodePoints(authorEmail.split('@')[0], GUEST_NAME_MAX) : '') || 'MarkUp reviewer';
   const pin = parseMarkupPin(row.x_percent, row.y_percent);
   const comment = {
     row: row.__line, markupProject, fileName, commentId, threadId, parentCommentId,
@@ -390,7 +391,17 @@ async function planAndWrite(db, context) {
       summary.outcome = 'unchanged';
       report.totals.sessionsUnchanged++;
       reviewSessionId = existing.id;
-      acceptsNew = existing.status !== 'closed';
+      let status = existing.status;
+      if (apply) {
+        // Lock the review for the rest of the import (as lockOpenSession does
+        // for a staff comment) and re-read it: a newer version created since
+        // the ledger was loaded has closed it, and comments must not be
+        // appended to a superseded review. The count below is then exact too.
+        await lockRowsForUpdate(db, 'review_sessions', [existing.id]);
+        const current = await db.reviewSession.findUnique({ where: { id: existing.id }, select: { status: true } });
+        status = current?.status ?? 'closed';
+      }
+      acceptsNew = status !== 'closed';
       existingCount = await db.reviewAnnotation.count({ where: { sessionId: existing.id } });
     } else if (problem) {
       summary.outcome = 'skipped';
@@ -572,7 +583,7 @@ async function planAndWrite(db, context) {
       await db.reviewSession.create({
         data: {
           id: reviewSessionId, organizationId, projectId, attachmentId,
-          title: sanitizePlainText(`${session.markupProject} — ${session.fileName}`).slice(0, 200) || 'MarkUp review',
+          title: truncateCodePoints(sanitizePlainText(`${session.markupProject} — ${session.fileName}`), 200) || 'MarkUp review',
           status: 'open', version: 1, sharedWithClient: false, clientCanDecide: false, createdById: operatorId,
         },
       });
@@ -601,7 +612,7 @@ async function loadPeople(db, organizationId, operatorEmail) {
   const users = await db.user.findMany({ where: { organizationId, isActive: true }, select: { id: true, email: true, role: true, name: true } });
   const staff = users.filter((user) => user.email && STAFF_ROLES.has(user.role));
   const staffByEmail = new Map(staff.map((user) => [user.email.toLowerCase(), user.id]));
-  const staffNameById = new Map(staff.map((user) => [user.id, String(user.name || user.email).slice(0, 120)]));
+  const staffNameById = new Map(staff.map((user) => [user.id, truncateCodePoints(String(user.name || user.email), GUEST_NAME_MAX)]));
   const operatorId = staffByEmail.get(normalizeEmail(operatorEmail) ?? '');
   if (!operatorId) throw new OperatorImportError('UNKNOWN_OPERATOR', 'The operator must be an active ADMIN or TEAM user of this organization');
   return { operatorId, staffByEmail, staffNameById };
@@ -684,6 +695,11 @@ export async function rollbackMarkupImportRun(db, { organizationId, runId }) {
     const annotationIds = records.filter((record) => record.kind === 'ANNOTATION').map((record) => record.annotationId).filter(Boolean);
     const attachmentIds = records.filter((record) => record.kind === 'SESSION').map((record) => record.attachmentId).filter(Boolean);
     const runAnnotations = new Set(annotationIds);
+    // Every review this run touched, including existing reviews it only added
+    // comments to (ANNOTATION records): a reply to one of this run's roots
+    // would otherwise be cascaded away with it. Only SESSION records' reviews
+    // are deleted.
+    const touchedSessionIds = [...new Set(records.map((record) => record.reviewSessionId).filter(Boolean))];
     // Hold the sessions (and their files) until the deletes: every comment,
     // decision, share link or version written to them takes a conflicting
     // lock, so nothing can be added between these checks and the cascade.
@@ -691,7 +707,7 @@ export async function rollbackMarkupImportRun(db, { organizationId, runId }) {
     // locks on the attachment before the previous session, so the same order
     // here cannot deadlock against it.
     await lockRowsForUpdate(transaction, 'attachments', attachmentIds);
-    await lockRowsForUpdate(transaction, 'review_sessions', sessionIds);
+    await lockRowsForUpdate(transaction, 'review_sessions', touchedSessionIds);
 
     const blockers = [];
     const foreignInSessions = (await findInChunks(sessionIds, (ids) => transaction.reviewAnnotation.findMany({
