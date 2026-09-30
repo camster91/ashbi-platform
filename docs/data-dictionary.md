@@ -111,11 +111,11 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | [TaskComment](#model-taskcomment) | `task_comments` | no | no | 9 |
 | [TaskTemplate](#model-tasktemplate) | `task_templates` | yes | no | 8 |
 | [Template](#model-template) | `templates` | yes | no | 11 |
-| [Thread](#model-thread) | `threads` | no | no | 28 |
+| [Thread](#model-thread) | `threads` | no | no | 30 |
 | [TimeEntry](#model-timeentry) | `time_entries` | no | yes | 25 |
 | [TimeSession](#model-timesession) | `time_sessions` | no | no | 16 |
 | [TrashedItem](#model-trasheditem) | `trashed_items` | yes | yes | 9 |
-| [UnmatchedEmail](#model-unmatchedemail) | `unmatched_emails` | yes | no | 15 |
+| [UnmatchedEmail](#model-unmatchedemail) | `unmatched_emails` | yes | no | 16 |
 | [User](#model-user) | `users` | yes | no | 52 |
 | [WPAlert](#model-wpalert) | `wp_alerts` | yes | no | 9 |
 | [WPBackup](#model-wpbackup) | `wp_backups` | yes | no | 15 |
@@ -2643,6 +2643,8 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `clientId` | String | optional |  |  |  |
 | `projectId` | String | optional |  |  |  |
 | `assignedToId` | String | optional |  |  |  |
+| `inboundDeliveryKey` | String | unique, optional |  |  |  |
+| `inboundPipelineStage` | String | optional |  |  | CREATED, ANALYZED, ASSIGNED, REPLANNED, COMPLETED |
 | `createdAt` | DateTime | required | `now()` |  |  |
 | `updatedAt` | DateTime | required, updatedAt |  |  |  |
 | `client` | Client | optional |  | → Client, via (clientId) → (id) |  |
@@ -2772,6 +2774,7 @@ Every Prisma model and enum in `prisma/schema.prisma`, as asked for in #412.
 | `suggestedProjects` | String | optional |  |  | JSON: AI suggestions |
 | `status` | String | required | `"PENDING"` |  | PENDING, RESOLVED, IGNORED |
 | `resolvedAt` | DateTime | optional |  |  |  |
+| `inboundDeliveryKey` | String | unique, optional |  |  |  |
 | `createdAt` | DateTime | required | `now()` |  |  |
 
 ### Model User
