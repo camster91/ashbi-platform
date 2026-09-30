@@ -278,8 +278,9 @@ person's password. Code: `src/auth/impersonation.js`,
   and would otherwise join the admin's rooms. A handshake carrying the view
   cookie, or from an admin with an open view, is refused, and starting a
   view drops the admin's existing sockets (other tabs share the cookie) on
-  every API instance: locally at once, and on the others through Redis
-  pub/sub (there is no shared Socket.IO adapter). As a fallback for a lost
+  every API instance: locally at once, and on the others through the shared
+  Socket.IO Redis adapter plus a dedicated Redis pub/sub message whose publish
+  is awaited before the view is reported as started. As a fallback for a lost
   message, each instance also sweeps its sockets every 10 seconds and drops
   those of admins with an open view.
   Live updates resume after the view ends and the page reloads.
@@ -437,8 +438,10 @@ To cancel an unused grant: `node scripts/break-glass.mjs revoke --grant <id>
   down while its sockets stay connected, that instance drops the admin's
   sockets on its next 10-second sweep instead of at once. Those sockets
   belong to the admin's own browser and carry only the admin's own access.
-  A shared Socket.IO adapter (tracked in #290) would make revocation, and
-  every room broadcast, cluster-wide.
+  The shared Socket.IO Redis adapter (see "Realtime across replicas" in
+  [deployment-and-rollback.md](deployment-and-rollback.md)) also broadcasts
+  the drop to every instance, but that broadcast is fire-and-forget, which is
+  why the awaited pub/sub publish and the sweep remain.
 - Break-glass has no web console for operators and relies on the CLI running
   with production database access; the operator identity is the
   `--operator` id checked against `PLATFORM_OPERATOR_USER_IDS`, not a

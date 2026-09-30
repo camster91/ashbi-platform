@@ -11,6 +11,8 @@ import { sendInvoiceOverdueEmail } from './email.service.js';
 import { formatMoney } from '../utils/money.js';
 import { invoicePublicAccessFailure } from '../utils/public-document-access.js';
 import { outboundSignal } from '../utils/outbound-timeouts.js';
+import { emitNotification } from './notification.service.js';
+import { getRealtimeEmitter } from '../realtime/emitter.js';
 
 // ==================== EMAIL HELPER ====================
 
@@ -45,8 +47,17 @@ async function sendEmail(to, subject, html) {
 
 // ==================== NOTIFICATION HELPER ====================
 
-async function createAdminNotification(type, title, message, data = null, organizationId = null) {
-  const admin = await prisma.user.findFirst({
+/**
+ * Persist an admin notification and deliver it live. Automations run in the
+ * API and in the worker (overdue invoices, workflows), so delivery goes
+ * through the Redis emitter, which reaches the admin's sockets on every API
+ * instance from either process. `db` and `emitter` are injectable for tests.
+ */
+export async function createAdminNotification(type, title, message, data = null, organizationId = null, {
+  db = prisma,
+  emitter = getRealtimeEmitter(),
+} = {}) {
+  const admin = await db.user.findFirst({
     where: { role: 'ADMIN', ...(organizationId ? { organizationId } : {}) },
     select: { id: true }
   });
@@ -56,7 +67,7 @@ async function createAdminNotification(type, title, message, data = null, organi
     return null;
   }
 
-  return prisma.notification.create({
+  const notification = await db.notification.create({
     data: {
       type,
       title,
@@ -65,6 +76,8 @@ async function createAdminNotification(type, title, message, data = null, organi
       userId: admin.id
     }
   });
+  emitNotification(emitter, admin.id, notification);
+  return notification;
 }
 
 // ==================== ACTIVITY LOG HELPER ====================

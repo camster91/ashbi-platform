@@ -25,8 +25,15 @@ function matches(row, where) {
   });
 }
 
+/** Records `to(room).emit(event, payload)` calls in order. */
+function fakeEmitter() {
+  const emits = [];
+  return { emits, to: (room) => ({ emit: (event, payload) => { emits.push({ room, event, payload }); return true; } }) };
+}
+
 function fakePrisma(threads) {
   const notifications = [];
+  let sequence = 0;
   const rows = threads.map((thread) => ({
     status: 'AWAITING_RESPONSE',
     priority: 'NORMAL',
@@ -65,7 +72,13 @@ function fakePrisma(threads) {
       },
     },
     user: { findMany: async () => [{ id: 'admin-1' }, { id: 'admin-2' }] },
-    notification: { createMany: async ({ data }) => { notifications.push(...data); return { count: data.length }; } },
+    notification: {
+      createManyAndReturn: async ({ data }) => {
+        const created = data.map((row) => ({ id: `n${++sequence}`, createdAt: new Date(T0), read: false, ...row }));
+        notifications.push(...created);
+        return created.map((row) => ({ ...row }));
+      },
+    },
   };
   return prisma;
 }
@@ -199,16 +212,18 @@ test('a claim from a stale snapshot loses when the marker moved since it was rea
 
 test('a failed notification fan-out rolls the claim back so a retry still sends', async () => {
   const prisma = fakePrisma([{ id: 't1', subject: 'Late', lastActivityAt: at(0) }]);
-  const createMany = prisma.notification.createMany;
-  prisma.notification.createMany = async () => { throw new Error('connection reset'); };
+  const createMany = prisma.notification.createManyAndReturn;
+  prisma.notification.createManyAndReturn = async () => { throw new Error('connection reset'); };
+  const emitter = fakeEmitter();
 
-  await assert.rejects(checkThreadEscalation('t1', { prisma, slaDefaults: SLA, now: at(25) }), /connection reset/);
+  await assert.rejects(checkThreadEscalation('t1', { prisma, slaDefaults: SLA, now: at(25), emitter }), /connection reset/);
   assert.equal(prisma.rows[0].lastEscalationLevel, 0, 'ESCALATION level not claimed');
   assert.equal(prisma.rows[0].lastEscalatedAt, null);
   assert.equal(prisma.rows[0].slaBreached, false, 'SLA breach marker not claimed');
   assert.deepEqual(prisma.notifications, []);
+  assert.deepEqual(emitter.emits, [], 'a rolled-back fan-out is never announced');
 
-  prisma.notification.createMany = createMany;
+  prisma.notification.createManyAndReturn = createMany;
   await checkThreadEscalation('t1', { prisma, slaDefaults: SLA, now: at(25.25) });
   assert.deepEqual(prisma.notifications.map((n) => n.type), ['ESCALATION', 'ESCALATION', 'SLA_BREACH', 'SLA_BREACH']);
   assert.equal(prisma.rows[0].lastEscalationLevel, 2);
@@ -228,4 +243,57 @@ test('with no active admin the admin levels stay unclaimed until one is active',
   prisma.user.findMany = findAdmins;
   await checkThreadEscalation('t1', { prisma, slaDefaults: SLA, now: at(25.25) });
   assert.deepEqual(prisma.notifications.map((n) => n.type), ['ESCALATION', 'ESCALATION', 'SLA_BREACH', 'SLA_BREACH']);
+});
+
+test('escalation notifications are emitted live to each recipient, only after the transaction commits', async () => {
+  const prisma = fakePrisma([{ id: 't1', subject: 'Late', lastActivityAt: at(0) }]);
+  const emitter = fakeEmitter();
+  const transaction = prisma.$transaction;
+  let committed = false;
+  prisma.$transaction = async (callback) => {
+    const result = await transaction(async (tx) => {
+      const rows = await callback(tx);
+      assert.deepEqual(emitter.emits, [], 'nothing is emitted inside the transaction');
+      return rows;
+    });
+    committed = true;
+    return result;
+  };
+  const originalTo = emitter.to;
+  emitter.to = (room) => { assert.ok(committed, 'emitted before commit'); return originalTo(room); };
+
+  await checkThreadEscalation('t1', { prisma, slaDefaults: SLA, now: at(25), emitter });
+
+  assert.equal(prisma.notifications.length, 4);
+  const expected = prisma.notifications.flatMap((n) => [
+    {
+      room: `user:${n.userId}`,
+      event: 'notification:new',
+      payload: { id: n.id, type: n.type, title: n.title, message: n.message, data: n.data, createdAt: n.createdAt },
+    },
+    { room: `user:${n.userId}`, event: 'notification', payload: { id: n.id, type: n.type, data: n.data } },
+  ]);
+  assert.deepEqual(emitter.emits, expected);
+  assert.deepEqual([...new Set(emitter.emits.map((e) => e.room))], ['user:admin-1', 'user:admin-2']);
+  assert.deepEqual(
+    emitter.emits.filter((e) => e.event === 'notification:new').map((e) => e.payload.type),
+    ['ESCALATION', 'ESCALATION', 'SLA_BREACH', 'SLA_BREACH'],
+  );
+
+  // A repeat sweep claims nothing new, so nothing is re-announced.
+  emitter.emits.length = 0;
+  await checkThreadEscalation('t1', { prisma, slaDefaults: SLA, now: at(25.25), emitter });
+  assert.deepEqual(emitter.emits, []);
+});
+
+test('the sweep delivers the SLA warning live to the assignee', async () => {
+  const prisma = fakePrisma([{ id: 't1', subject: 'Late', lastActivityAt: at(0) }]);
+  const emitter = fakeEmitter();
+  await checkAllEscalations({ prisma, slaDefaults: SLA, now: at(5), emitter });
+  assert.deepEqual(emitter.emits.map((e) => [e.room, e.event, e.payload.type]), [
+    ['user:assignee', 'notification:new', 'SLA_WARNING'],
+    ['user:assignee', 'notification', 'SLA_WARNING'],
+  ]);
+  assert.equal(emitter.emits[0].payload.id, prisma.notifications[0].id);
+  assert.deepEqual(emitter.emits[0].payload.data, { threadId: 't1' });
 });

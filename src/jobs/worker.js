@@ -28,6 +28,8 @@ import {
 } from '../services/automation.service.js';
 import { resolveEmbeddingOrganizationId } from './embedding-ownership.js';
 import { checkAllEscalations, checkThreadEscalation, runForEachOrganization } from './escalation.js';
+import { processNotificationJob } from './notification-job.js';
+import { closeRealtimeEmitter } from '../realtime/emitter.js';
 import { dispatchDomainEvents } from '../services/domain-event-dispatcher.service.js';
 import { initSentry, Sentry } from '../observability/sentry.js';
 import { sendOperationalAlert } from '../observability/alerts.js';
@@ -103,7 +105,7 @@ const emailWorker = createWorker(
     const result = await runTenantJob(
       prisma,
       job.data?.organizationId,
-      () => processEmailPipeline(hydrateEmailJobData(job.data)),
+      () => processEmailPipeline(hydrateEmailJobData(job.data, { jobId: job.id })),
       backgroundPrisma,
     );
 
@@ -122,9 +124,14 @@ const emailWorker = createWorker(
 
     return result;
   },
-  // The pipeline is not idempotent: a stalled job (its worker died or lost
-  // the lock) is failed and kept for a deliberate replay, never re-run
-  // automatically on another worker, which could duplicate its writes.
+  // The pipeline is idempotent per delivery key (inboundDeliveryKey): a
+  // failed attempt is retried with backoff (INBOUND_EMAIL_JOB_OPTIONS) and
+  // resumes the thread or unmatched email the earlier attempt created. A
+  // stalled job (its worker died or lost the lock) is still failed and kept
+  // for a deliberate replay rather than re-run at once on another worker:
+  // the first run may still be executing, and while the unique key prevents
+  // a duplicate record of one kind, two concurrent runs whose AI match
+  // disagrees could create both a thread and an unmatched email.
   { concurrency: 5, maxStalledCount: 0 }
 );
 
@@ -216,27 +223,11 @@ const escalationWorker = createWorker(
   { concurrency: 2 }
 );
 
-// Notification Worker
+// Notification Worker: persists the row, then emits it live through the
+// Redis emitter (src/jobs/notification-job.js).
 const notificationWorker = createWorker(
   QUEUES.NOTIFICATIONS,
-  async (job) => {
-    const { userId, type, title, message, data } = job.data;
-
-    // Create in-app notification
-    await runTenantJob(prisma, job.data?.organizationId, (tenantPrisma) => (
-      tenantPrisma.notification.create({
-        data: {
-          type,
-          title,
-          message,
-          data: data ? JSON.stringify(data) : null,
-          userId
-        }
-      })
-    ), backgroundPrisma);
-
-    return { delivered: true };
-  },
+  (job) => processNotificationJob(job, { prisma, backgroundPrisma }),
   { concurrency: 10 }
 );
 
@@ -361,6 +352,8 @@ const shutdown = createShutdown({
       await Promise.all(activeWorkers.map((worker) => worker.close()));
     }],
     ['queues', () => closeQueueInfrastructure()],
+    // After the workers drain, so their last emits are published first.
+    ['realtime', () => closeRealtimeEmitter()],
     ['database', () => prisma.$disconnect()],
   ],
   flush: env.sentryDsn ? () => Sentry.flush(2_000) : undefined,

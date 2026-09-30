@@ -9,7 +9,15 @@ export const BUDGETS = Object.freeze({
   entryCss: 95 * KB,
   anyJsChunk: 200 * KB,
   publicRouteChunk: 60 * KB,
+  // Web workers (e.g. the pdf.js renderer) are emitted as assets outside the
+  // manifest's chunk graph. They load only when their feature is used, but
+  // each one still has a ceiling so a dependency bump cannot silently double it.
+  workerJs: 1536 * KB,
 });
+
+// A worker bundle: Vite names `new Worker(new URL('./x.worker.js', ...))`
+// outputs `x.worker-<hash>.js`.
+const WORKER_FILE = /\.worker-[\w-]+\.js$/;
 
 export const PUBLIC_ROUTES = Object.freeze([
   'Login', 'ForgotPassword', 'ResetPassword', 'Portal', 'PortalProposal',
@@ -51,6 +59,21 @@ export function validateFrontendBudgets(dist) {
 
   for (const value of Object.values(manifest)) {
     if (value.file?.endsWith('.js')) check(bytes(dist, value.file), BUDGETS.anyJsChunk, `JavaScript chunk ${value.file}`);
+  }
+
+  // Workers are not in the manifest's chunk list, so scan the asset folder.
+  const chunkFiles = new Set(Object.values(manifest).map((value) => value.file).filter(Boolean));
+  const assetsDir = path.join(dist, 'assets');
+  const workerFiles = fs.existsSync(assetsDir)
+    ? fs.readdirSync(assetsDir).filter((name) => WORKER_FILE.test(name)).map((name) => `assets/${name}`)
+    : [];
+  // initialKeys are manifest keys (source paths); compare emitted files.
+  const initialFiles = new Set([...initialKeys].map((key) => manifest[key]?.file).filter(Boolean));
+  for (const file of workerFiles) {
+    if (initialFiles.has(file)) failures.push(`worker ${file} is in the initial JavaScript graph`);
+    // A worker listed as a manifest chunk is already held to anyJsChunk.
+    if (chunkFiles.has(file)) continue;
+    check(bytes(dist, file), BUDGETS.workerJs, `worker ${file}`);
   }
 
   const dynamicImports = new Set(entry.dynamicImports ?? []);

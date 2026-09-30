@@ -37,7 +37,12 @@ export function registerCallSignalling(io, socket) {
     // Deliver only to the addressed participant, and only to their sockets
     // that are authorized for this project (joined via join-project). With the
     // in-memory adapter this resolves in order, so an offer still reaches the
-    // callee before its ICE candidates.
+    // callee before its ICE candidates. With the Redis adapter (several API
+    // replicas, src/realtime/adapter.js) fetchSockets() also returns the
+    // callee's sockets on other instances as RemoteSockets, whose `rooms` and
+    // `emit()` work the same way; requests and replies travel over Redis in
+    // order per instance. If an instance does not answer in time the call
+    // rejects and this signal is dropped, as below.
     let recipients;
     try {
       recipients = await io.in(`user:${to}`).fetchSockets();
