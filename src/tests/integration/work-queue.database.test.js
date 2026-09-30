@@ -38,6 +38,7 @@ test('work queue is tenant-scoped, role-filtered, and assigns each source record
     const user = (id, org, role, name) => raw.user.create({ data: { id, email: `${id}@example.test`, name, password: 'x', role, organizationId: org } });
     const adminA = await user(`${orgA}-admin`, orgA, 'ADMIN', 'Ada Admin');
     const teamA = await user(`${orgA}-team`, orgA, 'TEAM', 'Tom Team');
+    const staffA = await user(`${orgA}-staff`, orgA, 'STAFF', 'Sam Staff');
     const adminB = await user(`${orgB}-admin`, orgB, 'ADMIN', 'Bea Admin');
     const botA = await user(`${orgA}-bot`, orgA, 'BOT', 'Bot');
 
@@ -46,6 +47,8 @@ test('work queue is tenant-scoped, role-filtered, and assigns each source record
     const clientB = await raw.client.create({ data: { name: 'Other tenant client', organizationId: orgB } });
     const projectA = await raw.project.create({ data: { name: 'Acme site', clientId: clientA.id, organizationId: orgA } });
     const projectA2 = await raw.project.create({ data: { name: 'Globex brand', clientId: clientA2.id, organizationId: orgA } });
+    const cancelledA = await raw.project.create({ data: { name: 'Cancelled work', status: 'CANCELLED', clientId: clientA.id, organizationId: orgA } });
+    const trashedA = await raw.project.create({ data: { name: 'Trashed project', clientId: clientA.id, organizationId: orgA, deletedAt: new Date() } });
     const projectB = await raw.project.create({ data: { name: 'Tenant B project', clientId: clientB.id, organizationId: orgB } });
 
     const task = (data) => raw.task.create({ data: { projectId: projectA.id, ...data } });
@@ -57,10 +60,13 @@ test('work queue is tenant-scoped, role-filtered, and assigns each source record
     await task({ title: 'Done already', assigneeId: teamA.id, status: 'COMPLETED' });
     await task({ title: 'Unowned backlog idea' });
     await task({ title: 'Trashed task', assigneeId: teamA.id, deletedAt: new Date() });
+    await task({ title: 'Task on a cancelled project', projectId: cancelledA.id, assigneeId: teamA.id });
+    const tStaff = await task({ title: 'Staff checklist', assigneeId: staffA.id });
     await raw.task.create({ data: { title: 'Tenant B task', projectId: projectB.id, assigneeId: adminB.id } });
 
     const approvalA = await raw.approval.create({ data: { type: 'EMAIL', title: 'Send launch email', projectId: projectA.id, content: '{}', createdBy: 'comms' } });
     await raw.approval.create({ data: { type: 'EMAIL', title: 'Already approved', status: 'APPROVED', projectId: projectA.id, content: '{}', createdBy: 'comms' } });
+    await raw.approval.create({ data: { type: 'EMAIL', title: 'Approval on a trashed project', projectId: trashedA.id, content: '{}', createdBy: 'comms' } });
     await raw.approval.create({ data: { type: 'EMAIL', title: 'Tenant B approval', projectId: projectB.id, content: '{}', createdBy: 'comms' } });
 
     const file = (org, uploader, project, name) => raw.attachment.create({ data: {
@@ -74,6 +80,7 @@ test('work queue is tenant-scoped, role-filtered, and assigns each source record
     const rShared = await review({ title: 'Homepage v1 client', sharedWithClient: true, clientCanDecide: true });
     const rChanges = await review({ title: 'Logo v2', status: 'changes_requested', createdById: adminA.id });
     await review({ title: 'Approved banner', status: 'approved' });
+    await review({ title: 'Review on a cancelled project', projectId: cancelledA.id });
     await raw.reviewSession.create({ data: { organizationId: orgB, projectId: projectB.id, attachmentId: fileB.id, createdById: adminB.id, title: 'Tenant B review' } });
 
     const proposalA = await raw.proposal.create({ data: { title: 'Acme retainer', status: 'SENT', clientId: clientA.id, projectId: projectA.id, createdById: adminA.id, validUntil: past, sentAt: past } });
@@ -89,6 +96,7 @@ test('work queue is tenant-scoped, role-filtered, and assigns each source record
     const principals = {
       adminA: { id: adminA.id, role: 'ADMIN', organizationId: orgA },
       teamA: { id: teamA.id, role: 'TEAM', organizationId: orgA },
+      staffA: { id: staffA.id, role: 'STAFF', organizationId: orgA },
       adminB: { id: adminB.id, role: 'ADMIN', organizationId: orgB },
       botA: { id: botA.id, role: 'BOT', organizationId: orgA },
     };
@@ -124,6 +132,7 @@ test('work queue is tenant-scoped, role-filtered, and assigns each source record
       [`task:${tOverdue.id}`]: 'at_risk',
       [`task:${tWaiting.id}`]: 'waiting_on_client',
       [`task:${tOther.id}`]: 'needs_action',
+      [`task:${tStaff.id}`]: 'needs_action',
       [`approval:${approvalA.id}`]: 'awaiting_approval',
       [`review:${rInternal.id}`]: 'awaiting_approval',
       [`review:${rShared.id}`]: 'waiting_on_client',
@@ -133,8 +142,12 @@ test('work queue is tenant-scoped, role-filtered, and assigns each source record
       [`invoice:${invSent.id}`]: 'waiting_on_client',
       [`invoice:${invOverdue.id}`]: 'at_risk',
     });
-    assert.deepEqual(admin.counts, { needs_action: 3, awaiting_approval: 2, waiting_on_client: 4, at_risk: 4 });
-    assert.equal(admin.total, 13);
+    assert.deepEqual(admin.counts, { needs_action: 4, awaiting_approval: 2, waiting_on_client: 4, at_risk: 4 });
+    assert.equal(admin.total, 14);
+    const titles = admin.rows.map((row) => row.title);
+    for (const excluded of ['Task on a cancelled project', 'Review on a cancelled project', 'Approval on a trashed project']) {
+      assert.ok(!titles.includes(excluded), `${excluded} is not in the queue`);
+    }
 
     const overdueRow = admin.rows.find((row) => row.id === tOverdue.id);
     assert.equal(overdueRow.state, 'OVERDUE');
@@ -143,6 +156,7 @@ test('work queue is tenant-scoped, role-filtered, and assigns each source record
     assert.deepEqual(overdueRow.project, { id: projectA.id, name: 'Acme site' });
     assert.deepEqual(overdueRow.owner, { id: adminA.id, name: 'Ada Admin', role: null });
     assert.equal(overdueRow.ageDays, 0);
+    assert.equal(overdueRow.dueKind, 'date');
     for (const key of ['type', 'id', 'title', 'sourceUrl', 'client', 'project', 'owner', 'state', 'nextAction', 'dueAt', 'ageDays', 'view']) {
       assert.ok(Object.hasOwn(overdueRow, key), `row has ${key}`);
     }
@@ -172,14 +186,24 @@ test('work queue is tenant-scoped, role-filtered, and assigns each source record
       tOverdue.id, approvalA.id, rChanges.id, proposalA.id, contractA.id, invSent.id, invOverdue.id,
     ]));
 
-    // ── TEAM member: no finance or approval rows, and no counts for them ──
+    // ── TEAM member: no finance or approval rows, and no counts for them.
+    // Like GET /api/tasks, only their own tasks even when asking for everyone.
     const team = await queue('teamA');
     assert.deepEqual(team.sources, ['tasks', 'reviews']);
     assert.ok(team.rows.every((row) => row.type === 'task' || row.type === 'review'), 'no finance or approval rows');
-    assert.deepEqual(team.counts, { needs_action: 3, awaiting_approval: 1, waiting_on_client: 2, at_risk: 2 });
-    assert.equal(team.total, 8);
+    assert.deepEqual(new Set(team.rows.map((row) => row.id)), new Set([
+      tAssigned.id, tWaiting.id, tOther.id, rInternal.id, rShared.id, rChanges.id,
+    ]));
+    assert.deepEqual(team.counts, { needs_action: 3, awaiting_approval: 1, waiting_on_client: 2, at_risk: 0 });
+    assert.equal(team.total, 6);
     const teamMine = await queue('teamA', '?owner=me');
     assert.deepEqual(new Set(teamMine.rows.map((row) => row.id)), new Set([tAssigned.id, tWaiting.id, tOther.id, rInternal.id, rShared.id]));
+
+    // ── STAFF: the review routes do not admit STAFF, so no review rows ──
+    const staff = await queue('staffA');
+    assert.deepEqual(staff.sources, ['tasks']);
+    assert.deepEqual(staff.rows.map((row) => row.id), [tStaff.id]);
+    assert.deepEqual(staff.counts, { needs_action: 1, awaiting_approval: 0, waiting_on_client: 0, at_risk: 0 });
 
     // ── Tenant B sees only its own records ──
     const other = await queue('adminB');

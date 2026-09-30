@@ -127,27 +127,70 @@ describe('WorkQueue page', () => {
     expect(screen.getByRole('tab', { name: /Needs action/ })).toHaveFocus();
   });
 
-  it('filters by owner and client through named controls', async () => {
+  it('lets admins filter by owner and client through named controls', async () => {
     const user = userEvent.setup();
-    authState.user = { id: 'u2', name: 'Tom Team', role: 'TEAM' };
     api.getWorkQueue.mockResolvedValue(QUEUE);
     api.getClients.mockResolvedValue({ clients: [{ id: 'c1', name: 'Acme' }, { id: 'c2', name: 'Globex' }] });
     renderQueue();
 
-    // Team members start on their own queue.
-    const ownerSelect = screen.getByLabelText('Owner');
-    expect(ownerSelect).toHaveValue('me');
-    await waitFor(() => expect(api.getWorkQueue).toHaveBeenCalledWith({ owner: 'me', clientId: undefined }));
+    // Client options are read under their own key, past the route's default page of 50.
+    expect(api.getClients).toHaveBeenCalledWith({ limit: 200 });
 
-    await user.selectOptions(ownerSelect, 'everyone');
-    await waitFor(() => expect(api.getWorkQueue).toHaveBeenCalledWith({ owner: 'everyone', clientId: undefined }));
+    const ownerSelect = screen.getByLabelText('Owner');
+    expect(ownerSelect).toHaveValue('everyone');
+    await user.selectOptions(ownerSelect, 'me');
+    await waitFor(() => expect(api.getWorkQueue).toHaveBeenCalledWith({ owner: 'me', clientId: undefined }));
+    expect(screen.getByTestId('location')).toHaveTextContent('owner=me');
 
     const clientSelect = screen.getByLabelText('Client');
     await screen.findByRole('option', { name: 'Globex' });
     await user.selectOptions(clientSelect, 'c2');
-    await waitFor(() => expect(api.getWorkQueue).toHaveBeenCalledWith({ owner: 'everyone', clientId: 'c2' }));
-    expect(screen.getByTestId('location')).toHaveTextContent('owner=everyone');
+    await waitFor(() => expect(api.getWorkQueue).toHaveBeenCalledWith({ owner: 'me', clientId: 'c2' }));
     expect(screen.getByTestId('location')).toHaveTextContent('clientId=c2');
+  });
+
+  it('hides the Owner filter from non-admins, whose tasks are always their own', async () => {
+    authState.user = { id: 'u2', name: 'Tom Team', role: 'TEAM' };
+    api.getWorkQueue.mockResolvedValue(QUEUE);
+    api.getClients.mockResolvedValue({ clients: [] });
+    renderQueue('/queue?owner=me');
+
+    expect(screen.queryByLabelText('Owner')).not.toBeInTheDocument();
+    expect(screen.getByTestId('queue-scope-note')).toHaveTextContent('tasks assigned to you');
+    await waitFor(() => expect(api.getWorkQueue).toHaveBeenCalledWith({ owner: 'everyone', clientId: undefined }));
+    expect(screen.getByLabelText('Client')).toBeInTheDocument();
+  });
+
+  it('keeps a deep-linked client selected when it is not among the loaded options', async () => {
+    api.getWorkQueue.mockResolvedValue(QUEUE);
+    api.getClients.mockResolvedValue({ clients: [{ id: 'c1', name: 'Acme' }] });
+    renderQueue('/queue?clientId=c999');
+
+    await screen.findByRole('option', { name: 'Acme' });
+    const clientSelect = screen.getByLabelText('Client');
+    expect(clientSelect).toHaveValue('c999');
+    expect(screen.getByRole('option', { name: 'Selected client' })).toBeInTheDocument();
+    expect(api.getWorkQueue).toHaveBeenCalledWith({ owner: 'everyone', clientId: 'c999' });
+  });
+
+  it('shows calendar due dates without a time and expiry moments with one', async () => {
+    const user = userEvent.setup();
+    api.getWorkQueue.mockResolvedValue({
+      ...QUEUE,
+      rows: [
+        row({ id: 't9', dueAt: '2026-10-05T00:00:00.000Z', dueKind: 'date' }),
+        row({ type: 'approval', id: 'a9', title: 'Expiring approval', sourceUrl: '/approvals', view: 'awaiting_approval', dueAt: '2026-10-05T12:00:00.000Z', dueKind: 'timestamp' }),
+      ],
+    });
+    api.getClients.mockResolvedValue({ clients: [] });
+    renderQueue();
+
+    const taskLink = await screen.findByRole('link', { name: /Task: Write homepage copy/ });
+    expect(taskLink).toHaveTextContent('Due Oct 5, 2026');
+    expect(taskLink.textContent).not.toMatch(/Due Oct 5, 2026,/);
+    await user.click(screen.getByRole('tab', { name: /Awaiting approval/ }));
+    const approvalLink = await screen.findByRole('link', { name: /Approval: Expiring approval/ });
+    expect(approvalLink.textContent).toMatch(/Due Oct 5, 2026, \d{1,2}:\d{2}/);
   });
 
   it('shows an empty state for a view with no rows', async () => {

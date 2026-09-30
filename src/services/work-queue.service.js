@@ -4,10 +4,15 @@
 // workflow. See docs/operator-queue.md for the source-to-view mapping.
 
 import logger from '../utils/logger.js';
+import { REVIEW_STAFF_ROLES } from './media-review.service.js';
 
 export const WORK_QUEUE_VIEWS = Object.freeze(['needs_action', 'awaiting_approval', 'waiting_on_client', 'at_risk']);
 
-/** Hard cap on rows read from each source per request. */
+/**
+ * Hard cap on rows returned from each source per request. Sources read one
+ * extra row so a source with exactly this many rows is not reported as
+ * truncated.
+ */
 export const WORK_QUEUE_SOURCE_LIMIT = 100;
 
 /** Roles that may open the queue at all (clients and bots may not). */
@@ -19,6 +24,11 @@ export const WORK_QUEUE_STAFF_ROLES = Object.freeze(['ADMIN', 'TEAM', 'STAFF']);
  * to admins, and PATCH /api/approvals/:id, which is admin-only.
  */
 export const WORK_QUEUE_ADMIN_ROLES = Object.freeze(['ADMIN']);
+
+/** Whether the caller sees everyone's tasks (admins) or only their own. */
+export function seesAllTasks(role) {
+  return WORK_QUEUE_ADMIN_ROLES.includes(role);
+}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const OPEN_TASK_STATUSES = ['PENDING', 'IN_PROGRESS', 'BLOCKED'];
@@ -37,6 +47,11 @@ export function ageInDays(from, now = new Date()) {
   return Math.max(0, Math.floor((now.getTime() - start) / DAY_MS));
 }
 
+// Overdue rule, shared with the dashboard, the invoice list and the weekly
+// digest: a due date is past once it is earlier than now (`dueDate < now`).
+// Date-only due dates are stored as midnight UTC, so they count as past from
+// the start of that UTC day; changing that here alone would make the queue
+// disagree with those screens.
 function isPast(date, now) {
   return Boolean(date) && new Date(date).getTime() < now.getTime();
 }
@@ -72,9 +87,6 @@ export function classifyTask(task, now = new Date()) {
   if (task.category === 'WAITING_CLIENT') {
     return { view: 'waiting_on_client', state: task.status, nextAction: 'Waiting on the client; follow up if it stalls' };
   }
-  if (!task.assigneeId) {
-    return { view: 'needs_action', state: task.status, nextAction: 'Assign an owner' };
-  }
   return {
     view: 'needs_action',
     state: task.status,
@@ -95,6 +107,7 @@ export function mapTaskRow(task, now = new Date()) {
     state,
     nextAction,
     dueAt: iso(task.dueDate),
+    dueKind: task.dueDate ? 'date' : null,
     ageDays: ageInDays(task.createdAt, now),
     view,
   };
@@ -115,6 +128,7 @@ export function mapApprovalRow(approval, now = new Date()) {
       ? 'Past its expiry: approve, reject, or ask for a new request'
       : `Approve or reject this ${String(approval.type || 'request').toLowerCase()}`,
     dueAt: iso(approval.expiresAt),
+    dueKind: approval.expiresAt ? 'timestamp' : null,
     ageDays: ageInDays(approval.createdAt, now),
     view: 'awaiting_approval',
   };
@@ -148,6 +162,7 @@ export function mapReviewRow(session, owners, now = new Date()) {
     state,
     nextAction,
     dueAt: null,
+    dueKind: null,
     ageDays: ageInDays(session.updatedAt ?? session.createdAt, now),
     view,
   };
@@ -178,6 +193,7 @@ export function mapProposalRow(proposal, now = new Date()) {
     state: proposal.status,
     nextAction,
     dueAt: iso(proposal.validUntil),
+    dueKind: proposal.validUntil ? 'timestamp' : null,
     ageDays: ageInDays(proposal.sentAt ?? proposal.createdAt, now),
     view,
   };
@@ -196,6 +212,7 @@ export function mapContractRow(contract, now = new Date()) {
     state: contract.status,
     nextAction: failed ? 'Email delivery failed: check the address and resend' : 'Waiting on the client signature',
     dueAt: null,
+    dueKind: null,
     ageDays: ageInDays(contract.createdAt, now),
     view: failed ? 'needs_action' : 'waiting_on_client',
   };
@@ -226,6 +243,7 @@ export function mapInvoiceRow(invoice, now = new Date()) {
     state,
     nextAction,
     dueAt: iso(invoice.dueDate),
+    dueKind: invoice.dueDate ? 'date' : null,
     ageDays: ageInDays(invoice.sentAt ?? invoice.issueDate ?? invoice.createdAt, now),
     view,
   };
@@ -250,13 +268,15 @@ export function countByView(rows) {
 /**
  * Each source reads through the request-scoped Prisma client (tenant filter
  * injected by src/utils/prisma-tenant-proxy.js) and is bounded by `take`.
- * `adminOnly` sources are skipped entirely for other roles, so neither their
- * rows nor their counts reach the response.
+ * `roles` lists who may read a source; for anyone else it is skipped
+ * entirely, so neither its rows nor its counts reach the response. Reviews
+ * follow the review routes (REVIEW_STAFF_ROLES); approvals and finance are
+ * admin-only.
  */
 export const WORK_QUEUE_SOURCES = Object.freeze([
   {
     key: 'tasks',
-    adminOnly: false,
+    roles: WORK_QUEUE_STAFF_ROLES,
     async load(prisma, { filters, user, now }) {
       const where = {
         deletedAt: null,
@@ -272,7 +292,9 @@ export const WORK_QUEUE_SOURCES = Object.freeze([
           { dueDate: { lt: now } },
         ],
         ...(filters.projectId ? { projectId: filters.projectId } : {}),
-        ...(filters.owner === 'me' ? { assigneeId: user.id } : {}),
+        // Like GET /api/tasks: non-admins see only tasks assigned to them,
+        // whatever the owner filter says.
+        ...(filters.owner === 'me' || !seesAllTasks(user.role) ? { assigneeId: user.id } : {}),
       };
       const tasks = await prisma.task.findMany({
         where,
@@ -283,36 +305,40 @@ export const WORK_QUEUE_SOURCES = Object.freeze([
           project: projectSelect,
         },
         orderBy: [{ dueDate: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
-        take: WORK_QUEUE_SOURCE_LIMIT,
+        take: WORK_QUEUE_SOURCE_LIMIT + 1,
       });
       return tasks.map((task) => mapTaskRow(task, now));
     },
   },
   {
     key: 'approvals',
-    adminOnly: true,
+    roles: WORK_QUEUE_ADMIN_ROLES,
     async load(prisma, { filters, now }) {
-      const projectFilter = {};
-      if (filters.projectId) projectFilter.id = filters.projectId;
-      if (filters.clientId) projectFilter.clientId = filters.clientId;
       const approvals = await prisma.approval.findMany({
         where: {
           status: 'PENDING',
-          ...(Object.keys(projectFilter).length ? { project: projectFilter } : {}),
+          // Approvals on a trashed project are not actionable.
+          project: {
+            is: {
+              deletedAt: null,
+              ...(filters.projectId ? { id: filters.projectId } : {}),
+              ...(filters.clientId ? { clientId: filters.clientId } : {}),
+            },
+          },
         },
         select: {
           id: true, type: true, status: true, title: true, clientName: true, expiresAt: true, createdAt: true,
           project: projectSelect,
         },
         orderBy: { createdAt: 'asc' },
-        take: WORK_QUEUE_SOURCE_LIMIT,
+        take: WORK_QUEUE_SOURCE_LIMIT + 1,
       });
       return approvals.map((approval) => mapApprovalRow(approval, now));
     },
   },
   {
     key: 'reviews',
-    adminOnly: false,
+    roles: REVIEW_STAFF_ROLES,
     async load(prisma, { filters, user, now }) {
       const sessions = await prisma.reviewSession.findMany({
         where: {
@@ -321,6 +347,7 @@ export const WORK_QUEUE_SOURCES = Object.freeze([
           nextSession: { is: null },
           project: {
             deletedAt: null,
+            status: { notIn: ['CANCELLED'] },
             ...(filters.clientId ? { clientId: filters.clientId } : {}),
           },
           ...(filters.projectId ? { projectId: filters.projectId } : {}),
@@ -332,7 +359,7 @@ export const WORK_QUEUE_SOURCES = Object.freeze([
           project: projectSelect,
         },
         orderBy: { updatedAt: 'asc' },
-        take: WORK_QUEUE_SOURCE_LIMIT,
+        take: WORK_QUEUE_SOURCE_LIMIT + 1,
       });
       const ownerIds = [...new Set(sessions.map((session) => session.createdById).filter(Boolean))];
       const owners = ownerIds.length
@@ -344,7 +371,7 @@ export const WORK_QUEUE_SOURCES = Object.freeze([
   },
   {
     key: 'proposals',
-    adminOnly: true,
+    roles: WORK_QUEUE_ADMIN_ROLES,
     async load(prisma, { filters, user, now }) {
       const proposals = await prisma.proposal.findMany({
         where: {
@@ -362,14 +389,14 @@ export const WORK_QUEUE_SOURCES = Object.freeze([
           createdBy: userSelect,
         },
         orderBy: [{ validUntil: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
-        take: WORK_QUEUE_SOURCE_LIMIT,
+        take: WORK_QUEUE_SOURCE_LIMIT + 1,
       });
       return proposals.map((proposal) => mapProposalRow(proposal, now));
     },
   },
   {
     key: 'contracts',
-    adminOnly: true,
+    roles: WORK_QUEUE_ADMIN_ROLES,
     async load(prisma, { filters, user, now }) {
       const contracts = await prisma.contract.findMany({
         where: {
@@ -386,14 +413,14 @@ export const WORK_QUEUE_SOURCES = Object.freeze([
           createdBy: userSelect,
         },
         orderBy: { createdAt: 'asc' },
-        take: WORK_QUEUE_SOURCE_LIMIT,
+        take: WORK_QUEUE_SOURCE_LIMIT + 1,
       });
       return contracts.map((contract) => mapContractRow(contract, now));
     },
   },
   {
     key: 'invoices',
-    adminOnly: true,
+    roles: WORK_QUEUE_ADMIN_ROLES,
     async load(prisma, { filters, user, now }) {
       const invoices = await prisma.invoice.findMany({
         where: {
@@ -410,7 +437,7 @@ export const WORK_QUEUE_SOURCES = Object.freeze([
           createdBy: userSelect,
         },
         orderBy: [{ dueDate: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
-        take: WORK_QUEUE_SOURCE_LIMIT,
+        take: WORK_QUEUE_SOURCE_LIMIT + 1,
       });
       // Invoice.projectId has no relation in the schema; resolve names here.
       const projectIds = [...new Set(invoices.map((invoice) => invoice.projectId).filter(Boolean))];
@@ -425,8 +452,7 @@ export const WORK_QUEUE_SOURCES = Object.freeze([
 
 /** Source keys a role may read. */
 export function sourcesForRole(role) {
-  const admin = WORK_QUEUE_ADMIN_ROLES.includes(role);
-  return WORK_QUEUE_SOURCES.filter((source) => admin || !source.adminOnly);
+  return WORK_QUEUE_SOURCES.filter((source) => source.roles.includes(role));
 }
 
 /**
@@ -445,8 +471,10 @@ export async function buildWorkQueue(prisma, { user, filters = {}, now = new Dat
   settled.forEach((result, index) => {
     const { key } = active[index];
     if (result.status === 'fulfilled') {
-      rows.push(...result.value);
-      if (result.value.length >= WORK_QUEUE_SOURCE_LIMIT) truncatedSources.push(key);
+      // Sources read LIMIT + 1 rows: only a source with more than LIMIT rows
+      // is truncated.
+      rows.push(...result.value.slice(0, WORK_QUEUE_SOURCE_LIMIT));
+      if (result.value.length > WORK_QUEUE_SOURCE_LIMIT) truncatedSources.push(key);
     } else {
       failedSources.push(key);
       logger.warn({ source: key, errorName: result.reason?.name }, 'Work queue source failed');

@@ -36,6 +36,7 @@ import { recordRequestAuditEvent } from '../services/audit-event.service.js';
 import { scanReviewMedia } from '../services/media-scan.service.js';
 import {
   ANNOTATIONS_PER_SESSION_MAX,
+  REVIEW_STAFF_ROLES,
   ReviewSessionClosedError,
   lockOpenSession,
   annotationLimitFailure,
@@ -74,7 +75,7 @@ export const WEB_CAPTURE_DISABLED = Object.freeze({
   code: 'WEB_REVIEW_CAPTURE_DISABLED',
 });
 
-const STAFF_ROLES = new Set(['ADMIN', 'TEAM']);
+const STAFF_ROLES = new Set(REVIEW_STAFF_ROLES);
 
 /** Media review is a staff workspace: bots and other principals are refused. */
 async function requireReviewStaff(request, reply) {

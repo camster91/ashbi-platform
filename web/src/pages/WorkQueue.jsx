@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ChevronRight } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
-import { formatDate } from '../lib/format';
+import { formatDate, formatDateTime } from '../lib/format';
 import { cn } from '../lib/utils';
 import QueryErrorState from '../components/QueryErrorState';
 import PartialSectionNotice from '../components/PartialSectionNotice';
@@ -23,6 +23,9 @@ export const QUEUE_VIEWS = [
 
 // Matches WORK_QUEUE_SOURCE_LIMIT in src/services/work-queue.service.js.
 const QUEUE_SOURCE_LIMIT = 100;
+
+// The clients route caps a page at 200 (src/routes/client.routes.js).
+const CLIENT_OPTIONS_LIMIT = 200;
 
 const TYPE_LABELS = {
   task: 'Task',
@@ -59,6 +62,12 @@ function describeAge(days) {
   return days === 1 ? '1 day' : `${days} days`;
 }
 
+// Task and invoice due dates are calendar dates stored as midnight UTC;
+// approval expiry and proposal validity are moments in time.
+function formatDue(row) {
+  return row.dueKind === 'date' ? formatDate(row.dueAt, { dateOnly: true }) : formatDateTime(row.dueAt);
+}
+
 function QueueRow({ row }) {
   const context = [row.client?.name, row.project?.name].filter(Boolean).join(' · ');
   const age = describeAge(row.ageDays);
@@ -79,7 +88,7 @@ function QueueRow({ row }) {
             {context && <span>{context}</span>}
             <span>Owner: {row.owner?.name || 'Unassigned'}</span>
             <span>State: {row.state}</span>
-            {row.dueAt && <span>Due {formatDate(row.dueAt, { dateOnly: true })}</span>}
+            {row.dueAt && <span>Due {formatDue(row)}</span>}
             {age && <span>Age {age}</span>}
           </p>
         </div>
@@ -97,10 +106,12 @@ export default function WorkQueue() {
 
   const requestedView = searchParams.get('view');
   const activeView = QUEUE_VIEWS.some((view) => view.key === requestedView) ? requestedView : QUEUE_VIEWS[0].key;
-  const defaultOwner = user?.role === 'ADMIN' ? 'everyone' : 'me';
-  const owner = searchParams.get('owner') === 'me' || searchParams.get('owner') === 'everyone'
-    ? searchParams.get('owner')
-    : defaultOwner;
+  // Only admins can widen the queue to other people's tasks (the API, like
+  // GET /api/tasks, always limits other roles to their own tasks), so the
+  // Owner filter is shown to admins only.
+  const isAdmin = user?.role === 'ADMIN';
+  const requestedOwner = searchParams.get('owner');
+  const owner = isAdmin && requestedOwner === 'me' ? 'me' : 'everyone';
   const clientId = searchParams.get('clientId') || '';
 
   const updateParams = (changes) => {
@@ -117,11 +128,14 @@ export default function WorkQueue() {
     queryFn: () => api.getWorkQueue({ owner, clientId: clientId || undefined }),
   });
 
-  const { data: clients = [] } = useQuery({
-    queryKey: ['clients'],
-    queryFn: () => api.getClients().then((r) => r?.clients ?? []),
+  const { data: clients = [], isSuccess: clientsLoaded } = useQuery({
+    queryKey: ['work-queue-client-options', CLIENT_OPTIONS_LIMIT],
+    queryFn: () => api.getClients({ limit: CLIENT_OPTIONS_LIMIT }).then((r) => r?.clients ?? []),
   });
   const clientOptions = Array.isArray(clients) ? clients : [];
+  // A deep link can name a client beyond the loaded options (or not yet
+  // loaded): keep it selectable instead of silently showing "All clients".
+  const selectedClientMissing = Boolean(clientId) && !clientOptions.some((client) => client.id === clientId);
 
   const counts = data?.counts || {};
   const rows = (data?.rows || []).filter((row) => row.view === activeView);
@@ -152,20 +166,27 @@ export default function WorkQueue() {
           <p className="mt-1 text-sm text-muted-foreground">
             What needs attention across client delivery. Open a row to act on it in its own record.
           </p>
+          {!isAdmin && (
+            <p className="mt-1 text-xs text-muted-foreground" data-testid="queue-scope-note">
+              Shows the tasks assigned to you and the reviews you can open.
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap gap-3">
-          <div className="flex flex-col gap-1">
-            <label htmlFor={ownerId} className="text-xs font-medium text-muted-foreground">Owner</label>
-            <select
-              id={ownerId}
-              value={owner}
-              onChange={(event) => updateParams({ owner: event.target.value })}
-              className="min-h-11 rounded-lg border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <option value="me">Me</option>
-              <option value="everyone">Everyone</option>
-            </select>
-          </div>
+          {isAdmin && (
+            <div className="flex flex-col gap-1">
+              <label htmlFor={ownerId} className="text-xs font-medium text-muted-foreground">Owner</label>
+              <select
+                id={ownerId}
+                value={owner}
+                onChange={(event) => updateParams({ owner: event.target.value === 'me' ? 'me' : '' })}
+                className="min-h-11 rounded-lg border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="everyone">Everyone</option>
+                <option value="me">Me</option>
+              </select>
+            </div>
+          )}
           <div className="flex flex-col gap-1">
             <label htmlFor={clientSelectId} className="text-xs font-medium text-muted-foreground">Client</label>
             <select
@@ -175,6 +196,9 @@ export default function WorkQueue() {
               className="min-h-11 max-w-[16rem] rounded-lg border border-border bg-card px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <option value="">All clients</option>
+              {selectedClientMissing && (
+                <option value={clientId}>{clientsLoaded ? 'Selected client' : 'Loading client…'}</option>
+              )}
               {clientOptions.map((client) => (
                 <option key={client.id} value={client.id}>{client.name}</option>
               ))}
@@ -241,7 +265,7 @@ export default function WorkQueue() {
               <EmptyState
                 icon="success"
                 title={`${activeMeta.label}: all clear`}
-                description={owner === 'me'
+                description={isAdmin && owner === 'me'
                   ? `${activeMeta.empty} Switch Owner to Everyone to see the whole team's queue.`
                   : activeMeta.empty}
               />
