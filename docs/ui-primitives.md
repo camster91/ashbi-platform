@@ -61,10 +61,42 @@ Shared accessibility conventions:
 
 - Interactive targets are at least 44px tall (`min-h-11`, or `h-12`/`h-14`).
 - Animations carry `motion-reduce:animate-none` / `motion-reduce:transition-none`.
+  The per-primitive behaviour is in [Motion](#motion).
 - Decorative icons get `aria-hidden="true"`.
 - Pending states become "Slow" after `SLOW_THRESHOLD_MS` (8000 ms, from
   `web/src/hooks/useSlowState.js`). They explain the delay inside a polite live
   region; see `docs/workflow-state-matrix.md`.
+
+<a id="motion"></a>**Motion**
+
+Two layers honour `prefers-reduced-motion: reduce`. Per-component
+`motion-reduce:` classes stop a primitive's own animation. A global rule in
+`web/src/index.css` backs them up: it disables every animation, cuts
+transitions to 0.01 ms, shows `animate-fade-in` / `animate-slide-up` /
+`animate-scale-in` and `stagger-children` content in its final state, and
+removes hover transforms (`hover-lift`, `hover:-translate-*`, `hover:scale-*`,
+`group-hover:scale-*`). What each primitive does:
+
+| Primitive | Default motion | Under reduced motion |
+|---|---|---|
+| `Button` | Colour transition (200 ms). The `loading` spinner spins. | `motion-reduce:transition-none`; the spinner has `motion-reduce:animate-none` and stays visible, static. |
+| `Input` | None (focus ring appears without a transition). | Unchanged. |
+| `Card` | `hover-lift` lift and shadow, `transition-all` 300 ms, when interactive. | The global rule removes the lift; the shadow change is instant. |
+| `CardHeader` … `CardFooter` | None. | Unchanged. |
+| `StatCard` | `hover:-translate-y-1` lift, `transition-all` 200 ms. | The global rule removes the lift; changes are instant. |
+| `Modal` | None in practice: the backdrop carries `transition-opacity`, but no opacity changes, so the backdrop and dialog appear immediately. | Unchanged (`motion-reduce:transition-none` is already set). |
+| `ModalFooter`, `ConfirmDialog` | None of their own (ConfirmDialog inherits `Modal`). | As `Modal`. |
+| `Badge` | None. | Unchanged. |
+| `Alert` | Fades in (`animate-fade-in`); colour transition on the dismiss button. | `motion-reduce:animate-none`; shown fully, no fade. |
+| `EmptyState` and its presets | None. | Unchanged. |
+| `LoadingState` | Spinner spins. | `motion-reduce:animate-none`; a static spinner and the text label stay. |
+| `SlowNotice`, `SlowMessage`, `SlowLoadingStatus` | Fade in when the slow threshold passes. | `motion-reduce:animate-none`; shown fully. The live-region announcement is unchanged. |
+| `Skeleton` family | Pulse (`animate-pulse`). | `motion-reduce:animate-none`; static placeholder blocks. |
+| `TablePageSkeleton`, `KanbanPageSkeleton`, `ListPageSkeleton`, `AnimatedList` | Fade in; `AnimatedList` staggers its children. | `motion-reduce:animate-none`; the global rule shows staggered children at once. |
+
+No primitive conveys state only through motion: a spinner always has a text
+label or an `aria-busy` container, and a fade never hides content once it
+has ended.
 
 ---
 
@@ -248,7 +280,9 @@ Accessibility:
 - StatCard is not interactive: it has no role or focus handling.
 - The icon and trend glyph are not marked `aria-hidden`. Read order is label,
   value, then trend.
-- The hover lift (`hover:-translate-y-1`) has no `motion-reduce` guard.
+- The hover lift (`hover:-translate-y-1`) has no per-component `motion-reduce`
+  class; the global reduced-motion rule in `web/src/index.css` removes it (see
+  [Motion](#motion)).
 
 Tokens: `card`, `border`, `muted`, `primary`, `success`, `warning`, `destructive`.
 
