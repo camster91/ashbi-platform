@@ -2,16 +2,15 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  ArrowLeft, Send, DollarSign, Printer, FileText, CheckCircle,
-  AlertTriangle, Edit2, Save, Plus, Clock, CreditCard,
-  Trash2, ExternalLink, RefreshCw, Receipt,
+  ArrowLeft, Send, DollarSign, Printer, FileText, CheckCircle, AlertTriangle,
+  Edit2, Save, CreditCard, Trash2, ExternalLink, RefreshCw,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import useAutosave from '../hooks/useAutosave';
 import DraftRecoveryNotice from '../components/DraftRecoveryNotice';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
-import { Button, Card, LoadingState } from '../components/ui';
+import { Button, Card, LoadingState, StatusBadge } from '../components/ui';
 import Modal, { ModalFooter } from '../components/Modal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import QueryErrorState from '../components/QueryErrorState';
@@ -38,14 +37,6 @@ const PAYMENT_METHOD_LABELS = {
 export function paymentMethodLabel(method) {
   return PAYMENT_METHOD_LABELS[method] || method;
 }
-
-const STATUS_CONFIG = {
-  DRAFT:   { label: 'Draft',   color: 'bg-muted text-muted-foreground' },
-  SENT:    { label: 'Sent',    color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
-  PAID:    { label: 'Paid',    color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
-  OVERDUE: { label: 'Overdue', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
-  VOID:    { label: 'Void',    color: 'bg-muted text-muted-foreground' },
-};
 
 function fmt(n, currency) {
   return formatInvoiceMoney(n, currency);
@@ -252,7 +243,6 @@ export default function InvoiceDetail() {
   }
 
   const displayStatus = invoice.isOverdue ? 'OVERDUE' : invoice.status;
-  const statusCfg = STATUS_CONFIG[displayStatus] || STATUS_CONFIG.DRAFT;
   const isDraft = invoice.status === 'DRAFT';
   const isSent = invoice.status === 'SENT' || invoice.isOverdue;
   const isPaid = invoice.status === 'PAID';
@@ -286,11 +276,9 @@ export default function InvoiceDetail() {
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-xl sm:text-2xl font-bold font-mono">{invoice.invoiceNumber}</h1>
-              <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${statusCfg.color}`}>
-                {statusCfg.label}
-              </span>
+              <StatusBadge domain="invoice" status={displayStatus} className="px-2.5 py-1 font-semibold" />
               {invoice.isRecurring && (
-                <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+                <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-primary/10 text-primary">
                   <RefreshCw className="w-3 h-3 inline mr-1" />
                   {invoice.recurringInterval}
                 </span>
@@ -335,7 +323,7 @@ export default function InvoiceDetail() {
           </a>
           {invoice.stripePaymentLink ? (
             <div className="flex items-center gap-1">
-              <span className="inline-flex items-center gap-1 text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-2 py-1 rounded-full">
+              <span className="inline-flex items-center gap-1 text-xs font-medium bg-success/10 text-success px-2 py-1 rounded-full">
                 <CheckCircle className="w-3 h-3" /> Payment Link Active
               </span>
               <button
@@ -413,11 +401,11 @@ export default function InvoiceDetail() {
 
       {/* Alert: Overdue */}
       {invoice.isOverdue && (
-        <div className="flex items-center gap-3 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-          <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
+        <div className="flex items-center gap-3 p-4 bg-destructive/5 border border-destructive/30 rounded-lg">
+          <AlertTriangle className="w-5 h-5 text-destructive flex-shrink-0" />
           <div>
-            <p className="font-medium text-red-700 dark:text-red-400">Invoice Overdue</p>
-            <p className="text-sm text-red-600 dark:text-red-500">
+            <p className="font-medium text-destructive">Invoice Overdue</p>
+            <p className="text-sm text-destructive">
               Was due {formatDate(invoice.dueDate)} · {getDaysOverdue(invoice.dueDate)} days overdue
             </p>
           </div>
@@ -642,7 +630,7 @@ export default function InvoiceDetail() {
             {/* Total preview */}
             <div className="rounded-lg bg-muted/50 p-3 text-sm space-y-1">
               <div className="flex justify-between text-muted-foreground"><span>Subtotal</span><span>{fmt(editSubtotal, editForm.currency)}</span></div>
-              {editDiscount > 0 && <div className="flex justify-between text-green-600"><span>Discount</span><span>-{fmt(editDiscount, editForm.currency)}</span></div>}
+              {editDiscount > 0 && <div className="flex justify-between text-success"><span>Discount</span><span>-{fmt(editDiscount, editForm.currency)}</span></div>}
               <div className="flex justify-between text-muted-foreground"><span>{editForm.taxType} ({editForm.taxRate}%)</span><span>{fmt(editTax, editForm.currency)}</span></div>
               <div className="flex justify-between font-semibold border-t border-border pt-1 mt-1"><span>Total</span><span>{fmt(editTotal, editForm.currency)}</span></div>
             </div>
@@ -675,7 +663,7 @@ export default function InvoiceDetail() {
                     <p className="font-mono font-bold text-xl">{invoice.invoiceNumber}</p>
                     <p className="text-sm text-muted-foreground mt-1">Issued: {formatDate(invoice.issueDate || invoice.createdAt)}</p>
                     {invoice.dueDate && (
-                      <p className={`text-sm mt-0.5 ${invoice.isOverdue ? 'text-red-500 font-medium' : 'text-muted-foreground'}`}>
+                      <p className={`text-sm mt-0.5 ${invoice.isOverdue ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
                         Due: {formatDate(invoice.dueDate)}
                       </p>
                     )}
@@ -736,7 +724,7 @@ export default function InvoiceDetail() {
                       <span>Subtotal</span><span>{fmt(invoice.subtotal, invoice.currency)}</span>
                     </div>
                     {invoice.discountAmount > 0 && (
-                      <div className="flex justify-between text-green-600">
+                      <div className="flex justify-between text-success">
                         <span>Discount</span><span>-{fmt(invoice.discountAmount, invoice.currency)}</span>
                       </div>
                     )}
@@ -747,7 +735,7 @@ export default function InvoiceDetail() {
                       <span>Total</span><span>{fmt(invoice.total, invoice.currency)}</span>
                     </div>
                     {isPaid && (
-                      <div className="flex justify-between text-green-600 text-sm">
+                      <div className="flex justify-between text-success text-sm">
                         <span className="flex items-center gap-1"><CheckCircle className="w-3.5 h-3.5" />Paid</span>
                         <span>{formatDate(invoice.paidAt)}</span>
                       </div>
@@ -777,10 +765,10 @@ export default function InvoiceDetail() {
 
               {/* Payment Method (if paid) */}
               {isPaid && (
-                <Card className="p-4 border-green-200 dark:border-green-800">
+                <Card className="p-4 border-success/30">
                   <div className="flex items-center gap-2 mb-2">
-                    <CheckCircle className="w-4 h-4 text-green-500" />
-                    <p className="text-sm font-semibold text-green-700 dark:text-green-400">Payment Received</p>
+                    <CheckCircle className="w-4 h-4 text-success" />
+                    <p className="text-sm font-semibold text-success">Payment Received</p>
                   </div>
                   <p className="text-xs text-muted-foreground">{formatDate(invoice.paidAt)}</p>
                   {invoice.paymentMethod && (
@@ -813,7 +801,7 @@ export default function InvoiceDetail() {
                             {p.transactionId && <p className="text-xs text-muted-foreground font-mono">{p.transactionId}</p>}
                             {p.notes && <p className="text-xs text-muted-foreground">{p.notes}</p>}
                           </div>
-                          <CheckCircle className="w-4 h-4 text-green-500" />
+                          <CheckCircle className="w-4 h-4 text-success" />
                         </div>
                       ))}
                     </div>
@@ -904,7 +892,7 @@ export default function InvoiceDetail() {
             />
           </div>
           {markPaidMutation.error && (
-            <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
+            <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
               {markPaidMutation.error.message || 'Payment could not be recorded. Your entries are still available; review them and try again.'}
             </p>
           )}

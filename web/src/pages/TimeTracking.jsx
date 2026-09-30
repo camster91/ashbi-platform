@@ -161,7 +161,7 @@ export default function TimeTracking() {
         </Card>
         <Card className="p-4">
           <p className="text-xs text-muted-foreground uppercase tracking-wide">Billable</p>
-          <p className="text-2xl font-bold mt-1 text-green-600">{billableHours}h</p>
+          <p className="text-2xl font-bold mt-1 text-success">{billableHours}h</p>
         </Card>
         <Card className="p-4">
           <p className="text-xs text-muted-foreground uppercase tracking-wide">Non-Billable</p>
@@ -175,8 +175,8 @@ export default function TimeTracking() {
       <Card className="p-6">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-4">
-            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${timerRunning ? 'bg-red-100 dark:bg-red-900/30' : 'bg-muted'}`}>
-              <Timer className={`w-6 h-6 ${timerRunning ? 'text-red-500' : 'text-muted-foreground'}`} />
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${timerRunning ? 'bg-destructive/10' : 'bg-muted'}`}>
+              <Timer className={`w-6 h-6 ${timerRunning ? 'text-destructive' : 'text-muted-foreground'}`} />
             </div>
             <div>
               <p className={`text-3xl font-mono font-bold ${timerRunning ? 'text-foreground' : 'text-muted-foreground'}`}>
@@ -316,7 +316,7 @@ export default function TimeTracking() {
                   <td className="px-5 py-3">
                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full font-medium ${
                       entry.billable
-                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                        ? 'bg-success/10 text-success'
                         : 'bg-muted text-muted-foreground'
                     }`}>
                       {entry.billable ? <><DollarSign className="w-2.5 h-2.5" /> Billable</> : 'Non-Billable'}
@@ -331,7 +331,7 @@ export default function TimeTracking() {
                     <button
                       onClick={() => { deleteMutation.reset(); setEntryToDelete(entry); }}
                       aria-label={`Delete time entry ${entry.description || entry.id}`}
-                      className="p-1 text-muted-foreground hover:text-red-500 rounded transition-colors"
+                      className="p-1 text-muted-foreground hover:text-destructive rounded transition-colors"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>

@@ -78,7 +78,7 @@ const Badge = forwardRef(({
     <span
       ref={ref}
       className={cn(
-        'inline-flex items-center gap-1.5 font-medium rounded-full',
+        'status-indicator inline-flex items-center gap-1.5 font-medium rounded-full',
         sizes[size] || sizes.sm,
         (colors[color] || colors.default)[variant] || colors.default.default,
         variant === 'outline' && 'border-2',

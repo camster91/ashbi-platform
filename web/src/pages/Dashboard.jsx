@@ -156,8 +156,8 @@ export default function Dashboard() {
         {isAdmin && (
           <StatCard
             icon={TrendingUp}
-            iconColor="text-emerald-600"
-            iconBg="bg-emerald-100 dark:bg-emerald-900/30"
+            iconColor="text-success"
+            iconBg="bg-success/10"
             label="MRR"
             value={formatMoney(stats?.mrr || 0, 'USD', { compact: true })}
             subtitle={
@@ -175,14 +175,14 @@ export default function Dashboard() {
         {isAdmin && (
           <StatCard
             icon={DollarSign}
-            iconColor={stats?.overdueCount > 0 ? 'text-red-600' : 'text-green-600'}
-            iconBg={stats?.overdueCount > 0 ? 'bg-red-100 dark:bg-red-900/30' : 'bg-green-100 dark:bg-green-900/30'}
+            iconColor={stats?.overdueCount > 0 ? 'text-destructive' : 'text-success'}
+            iconBg={stats?.overdueCount > 0 ? 'bg-destructive/10' : 'bg-success/10'}
             label="Outstanding (sent)"
             value={formatMoney(stats?.totalOutstanding || 0, undefined, { compact: true })}
             subtitle={
               <span className="flex flex-col gap-0.5 text-xs">
                 {stats?.overdueCount > 0 && (
-                  <span className="text-red-700 dark:text-red-400 flex items-center gap-1">
+                  <span className="text-destructive flex items-center gap-1">
                     <AlertTriangle className="w-3 h-3" aria-hidden="true" />
                     {stats.overdueCount} overdue ({formatMoney(stats.overdueAmount || 0, undefined, { compact: true })})
                   </span>
@@ -203,8 +203,8 @@ export default function Dashboard() {
         {/* Active Projects */}
         <StatCard
           icon={FolderOpen}
-          iconColor="text-blue-600"
-          iconBg="bg-blue-100 dark:bg-blue-900/30"
+          iconColor="text-info"
+          iconBg="bg-info/10"
           label="Active Projects"
           value={stats?.activeProjects || 0}
           onClick={() => navigate('/projects')}
@@ -213,8 +213,8 @@ export default function Dashboard() {
         {/* Pending Approvals */}
         <StatCard
           icon={ShieldAlert}
-          iconColor={stats?.pendingApprovals > 0 ? 'text-red-600' : 'text-muted-foreground'}
-          iconBg={stats?.pendingApprovals > 0 ? 'bg-red-100 dark:bg-red-900/30' : 'bg-muted'}
+          iconColor={stats?.pendingApprovals > 0 ? 'text-destructive' : 'text-muted-foreground'}
+          iconBg={stats?.pendingApprovals > 0 ? 'bg-destructive/10' : 'bg-muted'}
           label="Pending Approvals"
           value={stats?.pendingApprovals || 0}
           badge={stats?.pendingApprovals > 0 ? stats.pendingApprovals : null}
@@ -226,16 +226,16 @@ export default function Dashboard() {
           <>
             <StatCard
               icon={CheckSquare}
-              iconColor="text-orange-600"
-              iconBg="bg-orange-100 dark:bg-orange-900/30"
+              iconColor="text-warning"
+              iconBg="bg-warning/10"
               label="My Tasks"
               value={myTasks ? myTasks.length : '—'}
               onClick={() => navigate('/inbox')}
             />
             <StatCard
               icon={Bell}
-              iconColor="text-purple-600"
-              iconBg="bg-purple-100 dark:bg-purple-900/30"
+              iconColor="text-primary"
+              iconBg="bg-primary/10"
               label="Notifications"
               value={allNotifications.length}
               badge={allNotifications.length > 0 ? allNotifications.length : null}
@@ -329,7 +329,7 @@ export default function Dashboard() {
               <Bell className="w-4 h-4 text-primary" />
               <h2 className="font-semibold text-foreground">Notifications</h2>
               {allNotifications.length > 0 && (
-                <span className="bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                <span className="bg-destructive text-destructive-foreground text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
                   {allNotifications.length}
                 </span>
               )}
@@ -349,7 +349,7 @@ export default function Dashboard() {
                       </p>
                     </div>
                     {!notif.read && (
-                      <CircleDot className="w-3 h-3 text-blue-500 flex-shrink-0 mt-1" />
+                      <CircleDot className="w-3 h-3 text-info flex-shrink-0 mt-1" />
                     )}
                   </div>
                 </li>
@@ -368,10 +368,10 @@ export default function Dashboard() {
         <Card>
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Users className="w-4 h-4 text-green-600" />
+              <Users className="w-4 h-4 text-success" />
               <h2 className="font-semibold text-foreground">Upwork Messages</h2>
               {(stats?.upworkMessages || []).filter(m => m.lastMessageDays !== null && m.lastMessageDays >= 3).length > 0 && (
-                <span className="bg-amber-500 text-white text-xs font-bold rounded-full px-2 py-0.5">
+                <span className="bg-warning text-warning-foreground text-xs font-bold rounded-full px-2 py-0.5">
                   {(stats?.upworkMessages || []).filter(m => m.lastMessageDays !== null && m.lastMessageDays >= 3).length} pending
                 </span>
               )}
@@ -394,7 +394,7 @@ export default function Dashboard() {
                   <div className="flex items-start gap-3">
                     <div className={cn(
                       'w-2 h-2 rounded-full mt-2 flex-shrink-0',
-                      needsResponse ? 'bg-red-500 animate-pulse motion-reduce:animate-none' : 'bg-green-400'
+                      needsResponse ? 'bg-destructive animate-pulse motion-reduce:animate-none' : 'bg-success'
                     )} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground">{msg.clientName}</p>
@@ -405,7 +405,7 @@ export default function Dashboard() {
                         {daysSince !== null && (
                           <span className={cn(
                             'text-xs font-medium',
-                            needsResponse ? 'text-red-700 dark:text-red-400' : 'text-muted-foreground'
+                            needsResponse ? 'text-destructive' : 'text-muted-foreground'
                           )}>
                             {daysSince === 0 ? 'Today' : daysSince === 1 ? 'Yesterday' : `${daysSince} days ago`}
                           </span>
@@ -442,7 +442,7 @@ export default function Dashboard() {
         <Card>
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-red-500" />
+              <AlertTriangle className="w-4 h-4 text-destructive" />
               <h2 className="font-semibold text-foreground">Blocked &amp; At-Risk</h2>
             </div>
             <Link to="/projects" className="text-xs text-primary hover:underline flex items-center gap-1">
@@ -461,12 +461,12 @@ export default function Dashboard() {
                       <div className="flex items-center gap-2 mt-1">
                         <span className={cn(
                           'text-xs px-1.5 py-0.5 rounded font-medium',
-                          project.health === 'AT_RISK' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                          project.health === 'AT_RISK' ? 'bg-destructive/10 text-destructive' : 'bg-warning/10 text-warning'
                         )}>
                           {project.health?.replace('_', ' ')}
                         </span>
                         {project.blockedTasks?.length > 0 && (
-                          <span className="text-xs text-red-700 dark:text-red-400 flex items-center gap-1">
+                          <span className="text-xs text-destructive flex items-center gap-1">
                             <Bug className="w-3 h-3" />
                             {project.blockedTasks.length} blocked
                           </span>
@@ -479,7 +479,7 @@ export default function Dashboard() {
                     <div className="text-right ml-3">
                       <span className={cn(
                         'text-lg font-bold',
-                        project.healthScore >= 80 ? 'text-green-800 dark:text-green-400' : project.healthScore >= 60 ? 'text-amber-800 dark:text-amber-400' : 'text-red-700 dark:text-red-400'
+                        project.healthScore >= 80 ? 'text-success' : project.healthScore >= 60 ? 'text-warning' : 'text-destructive'
                       )}>{project.healthScore}</span>
                       <p className="text-[10px] text-muted-foreground">health</p>
                     </div>
@@ -489,7 +489,7 @@ export default function Dashboard() {
             </ul>
           ) : (
             <div className="p-8 text-center text-muted-foreground text-sm">
-              <CheckSquare className="w-8 h-8 mx-auto mb-2 text-green-500 opacity-50" />
+              <CheckSquare className="w-8 h-8 mx-auto mb-2 text-success opacity-50" />
               All projects on track
             </div>
           )}
@@ -499,10 +499,10 @@ export default function Dashboard() {
         <Card>
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Mail className="w-4 h-4 text-blue-500" />
+              <Mail className="w-4 h-4 text-info" />
               <h2 className="font-semibold text-foreground">Inbox Triage</h2>
               {(stats?.inboxTriage?.untriagedCount || 0) > 0 && (
-                <span className="bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                <span className="bg-destructive text-destructive-foreground text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
                   {stats.inboxTriage.untriagedCount}
                 </span>
               )}
@@ -518,7 +518,7 @@ export default function Dashboard() {
                   <div className="flex items-start gap-3">
                     <div className={cn(
                       'w-2 h-2 rounded-full mt-1.5 flex-shrink-0',
-                      thread.priority === 'HIGH' || thread.priority === 'CRITICAL' ? 'bg-red-500' : 'bg-blue-400'
+                      thread.priority === 'HIGH' || thread.priority === 'CRITICAL' ? 'bg-destructive' : 'bg-info'
                     )} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground truncate">{thread.subject}</p>
@@ -535,7 +535,7 @@ export default function Dashboard() {
             </ul>
           ) : (
             <div className="p-8 text-center text-muted-foreground text-sm">
-              <Mail className="w-8 h-8 mx-auto mb-2 text-blue-400 opacity-50" />
+              <Mail className="w-8 h-8 mx-auto mb-2 text-info opacity-50" />
               Inbox is clear — all triaged
             </div>
           )}
@@ -549,9 +549,9 @@ export default function Dashboard() {
           <Card>
             <div className="px-4 py-3 border-b border-border flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-red-500" />
+                <Clock className="w-4 h-4 text-destructive" />
                 <h2 className="font-semibold text-foreground">Overdue Tasks</h2>
-                <span className="bg-red-100 text-red-700 text-xs font-bold rounded-full px-2 dark:bg-red-900/30 dark:text-red-400">
+                <span className="bg-destructive/10 text-destructive text-xs font-bold rounded-full px-2">
                   {stats.overdueTasks.length}
                 </span>
               </div>
@@ -571,14 +571,14 @@ export default function Dashboard() {
                         )}
                         <span className={cn(
                           'text-xs px-1.5 py-0.5 rounded font-medium',
-                          task.priority === 'HIGH' || task.priority === 'CRITICAL' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                          task.priority === 'HIGH' || task.priority === 'CRITICAL' ? 'bg-destructive/10 text-destructive' : 'bg-info/10 text-info'
                         )}>{task.priority}</span>
                       </div>
                       {task.assignee && (
                         <p className="text-xs text-muted-foreground mt-0.5">{task.assignee}</p>
                       )}
                     </div>
-                    <span className="text-xs text-red-700 dark:text-red-400 font-medium ml-2">
+                    <span className="text-xs text-destructive font-medium ml-2">
                       {formatDate(task.dueDate)}
                     </span>
                   </div>
@@ -623,7 +623,7 @@ export default function Dashboard() {
         <Card>
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <CheckSquare className="w-4 h-4 text-orange-500" />
+              <CheckSquare className="w-4 h-4 text-warning" />
               <h2 className="font-semibold text-foreground">My Tasks</h2>
             </div>
             <Link to="/inbox" className="text-xs text-primary hover:underline flex items-center gap-1">
@@ -646,7 +646,7 @@ export default function Dashboard() {
                   {task.dueDate && (
                     <span className={cn(
                       'text-xs ml-2 flex items-center gap-1',
-                      new Date(task.dueDate) < new Date() ? 'text-red-700 dark:text-red-400' : 'text-muted-foreground'
+                      new Date(task.dueDate) < new Date() ? 'text-destructive' : 'text-muted-foreground'
                     )}>
                       <Clock className="w-3 h-3" />
                       {formatDate(task.dueDate)}
@@ -677,7 +677,7 @@ function StatCard({ icon: Icon, iconColor, iconBg, label, value, subtitle, badge
       onClick={onClick}
     >
       {badge && (
-        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-lg border-2 border-background animate-pulse motion-reduce:animate-none">
+        <span className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-lg border-2 border-background animate-pulse motion-reduce:animate-none">
           {badge}
         </span>
       )}
@@ -698,16 +698,16 @@ function StatCard({ icon: Icon, iconColor, iconBg, label, value, subtitle, badge
 /* ─── Client Health Card ─── */
 function ClientHealthCard({ client, navigate }) {
   const healthColors = {
-    ON_TRACK: 'border-l-emerald-500',
-    NEEDS_ATTENTION: 'border-l-amber-500',
-    AT_RISK: 'border-l-red-500',
+    ON_TRACK: 'border-l-success',
+    NEEDS_ATTENTION: 'border-l-warning',
+    AT_RISK: 'border-l-destructive',
   };
 
   const retainerBadge = {
-    ACTIVE: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
-    AT_RISK: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+    ACTIVE: 'bg-success/10 text-success',
+    AT_RISK: 'bg-warning/10 text-warning',
     PAUSED: 'bg-muted text-muted-foreground',
-    CANCELLED: 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400',
+    CANCELLED: 'bg-destructive/10 text-destructive',
   };
 
   return (
@@ -757,11 +757,11 @@ function ClientHealthCard({ client, navigate }) {
 /* ─── Notification Icon ─── */
 function NotificationIcon({ type }) {
   const config = {
-    APPROVAL_NEEDED: { icon: ShieldAlert, color: 'text-amber-600', bg: 'bg-amber-100 dark:bg-amber-900/30' },
-    ALERT: { icon: AlertTriangle, color: 'text-red-600', bg: 'bg-red-100 dark:bg-red-900/30' },
-    TASK_OVERDUE: { icon: Clock, color: 'text-red-600', bg: 'bg-red-100 dark:bg-red-900/30' },
-    THREAD_ASSIGNED: { icon: Eye, color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-900/30' },
-    PAYMENT_RECEIVED: { icon: DollarSign, color: 'text-emerald-600', bg: 'bg-emerald-100 dark:bg-emerald-900/30' },
+    APPROVAL_NEEDED: { icon: ShieldAlert, color: 'text-warning', bg: 'bg-warning/10' },
+    ALERT: { icon: AlertTriangle, color: 'text-destructive', bg: 'bg-destructive/10' },
+    TASK_OVERDUE: { icon: Clock, color: 'text-destructive', bg: 'bg-destructive/10' },
+    THREAD_ASSIGNED: { icon: Eye, color: 'text-info', bg: 'bg-info/10' },
+    PAYMENT_RECEIVED: { icon: DollarSign, color: 'text-success', bg: 'bg-success/10' },
   };
 
   const { icon: Icon, color, bg } = config[type] || {

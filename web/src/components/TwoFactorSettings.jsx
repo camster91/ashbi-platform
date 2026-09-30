@@ -36,7 +36,7 @@ function RecoveryCodes({ codes, onDone }) {
 
   return (
     <div className="space-y-4">
-      <div role="status" className="rounded-lg border border-green-600/30 bg-green-600/10 p-3 text-sm text-foreground">
+      <div role="status" className="rounded-lg border border-success/30 bg-success/10 p-3 text-sm text-foreground">
         <p className="font-medium flex items-center gap-1"><CheckCircle className="w-4 h-4" aria-hidden="true" /> Two-factor authentication is on.</p>
         <p className="mt-1">Save these recovery codes somewhere safe. Each code signs you in once if you lose your authenticator. They will not be shown again. Other sessions were signed out.</p>
       </div>
@@ -47,7 +47,7 @@ function RecoveryCodes({ codes, onDone }) {
         <Button type="button" variant="outline" onClick={copy} leftIcon={<Copy className="w-4 h-4" />}>Copy codes</Button>
         <Button type="button" variant="outline" onClick={download} leftIcon={<Download className="w-4 h-4" />}>Download codes</Button>
         <Button type="button" onClick={onDone}>I have saved my codes</Button>
-        {copied && <span role="status" className="text-sm text-green-600">Copied</span>}
+        {copied && <span role="status" className="text-sm text-success">Copied</span>}
       </div>
     </div>
   );
@@ -259,7 +259,7 @@ export default function TwoFactorSettings() {
   return (
     <div className="space-y-3">
       <p className="text-sm flex items-center gap-1">
-        <ShieldCheck className="w-4 h-4 text-green-600" aria-hidden="true" />
+        <ShieldCheck className="w-4 h-4 text-success" aria-hidden="true" />
         <span className="font-medium">Two-factor authentication:</span> On
         {status.enabledAt && <span className="text-muted-foreground"> since {new Date(status.enabledAt).toLocaleDateString()}</span>}
       </p>

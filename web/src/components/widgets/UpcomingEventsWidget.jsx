@@ -1,6 +1,7 @@
 import { CalendarDays, MapPin, Video, Clock } from 'lucide-react';
 import { Card } from '../ui';
 import { formatRelativeTime, cn } from '../../lib/utils';
+import { DEFAULT_EVENT_COLOR } from '../../lib/data-colors';
 
 export default function UpcomingEventsWidget({ events = [] }) {
   if (!events?.length) return null;
@@ -8,7 +9,7 @@ export default function UpcomingEventsWidget({ events = [] }) {
   return (
     <Card>
       <div className="px-4 py-3 border-b border-border flex items-center gap-2">
-        <CalendarDays className="w-4 h-4 text-purple-500" />
+        <CalendarDays className="w-4 h-4 text-primary" />
         <h2 className="font-semibold text-foreground">Upcoming Events</h2>
       </div>
       {/* Up to six events can overflow this scroll box, and the items hold no
@@ -26,7 +27,7 @@ export default function UpcomingEventsWidget({ events = [] }) {
               <div className="flex items-start gap-3">
                 <div
                   className="w-10 h-10 rounded-lg flex flex-col items-center justify-center flex-shrink-0 text-xs font-bold border-2 text-foreground"
-                  style={{ borderColor: event.color || '#3B82F6' }}
+                  style={{ borderColor: event.color || DEFAULT_EVENT_COLOR }}
                 >
                   <span className="text-[10px] uppercase leading-none">{start.toLocaleDateString('en-CA', { month: 'short' })}</span>
                   <span className="text-sm leading-none">{start.getDate()}</span>
@@ -35,14 +36,14 @@ export default function UpcomingEventsWidget({ events = [] }) {
                   <p className="text-sm font-medium text-foreground truncate">{event.title}</p>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className={cn('text-xs px-1.5 py-0.5 rounded font-medium',
-                      event.type === 'DEADLINE' ? 'bg-red-100 text-red-700' :
-                      event.type === 'MEETING' ? 'bg-blue-100 text-blue-700' :
-                      event.type === 'MILESTONE' ? 'bg-purple-100 text-purple-700' :
+                      event.type === 'DEADLINE' ? 'bg-destructive/10 text-destructive' :
+                      event.type === 'MEETING' ? 'bg-info/10 text-info' :
+                      event.type === 'MILESTONE' ? 'bg-primary/10 text-primary' :
                       'bg-muted text-muted-foreground'
                     )}>
                       {event.type}
                     </span>
-                    {isToday && <span className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">Today</span>}
+                    {isToday && <span className="text-xs text-success font-medium">Today</span>}
                   </div>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
                     <span className="text-xs text-muted-foreground flex items-center gap-1">

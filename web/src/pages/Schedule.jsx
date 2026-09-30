@@ -32,10 +32,10 @@ const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const SLOT_HEIGHT = 64; // px per hour slot
 
 const EVENT_TYPES = [
-  { value: 'MEETING', label: 'Meeting', color: 'bg-indigo-500', border: 'border-indigo-400', text: 'text-indigo-300', bg: 'bg-indigo-500/20' },
-  { value: 'CALL', label: 'Call', color: 'bg-emerald-500', border: 'border-emerald-400', text: 'text-emerald-300', bg: 'bg-emerald-500/20' },
-  { value: 'DEADLINE', label: 'Deadline', color: 'bg-red-500', border: 'border-red-400', text: 'text-red-300', bg: 'bg-red-500/20' },
-  { value: 'REMINDER', label: 'Reminder', color: 'bg-amber-500', border: 'border-amber-400', text: 'text-amber-300', bg: 'bg-amber-500/20' },
+  { value: 'MEETING', label: 'Meeting', color: 'bg-primary', fg: 'text-primary-foreground', border: 'border-primary', text: 'text-primary', bg: 'bg-primary/10' },
+  { value: 'CALL', label: 'Call', color: 'bg-success', fg: 'text-success-foreground', border: 'border-success', text: 'text-success', bg: 'bg-success/10' },
+  { value: 'DEADLINE', label: 'Deadline', color: 'bg-destructive', fg: 'text-destructive-foreground', border: 'border-destructive', text: 'text-destructive', bg: 'bg-destructive/10' },
+  { value: 'REMINDER', label: 'Reminder', color: 'bg-warning', fg: 'text-warning-foreground', border: 'border-warning', text: 'text-warning', bg: 'bg-warning/10' },
 ];
 
 const TYPE_MAP = Object.fromEntries(EVENT_TYPES.map(t => [t.value, t]));
@@ -252,7 +252,7 @@ function EventModal({
                 className={cn(
                   'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all',
                   form.type === t.value
-                    ? `${t.color} text-white ring-2 ring-offset-2 ring-offset-card ring-white/30`
+                    ? `${t.color} ${t.fg} ring-2 ring-offset-2 ring-offset-card ring-white/30`
                     : 'bg-muted text-muted-foreground hover:bg-muted/80'
                 )}
               >
@@ -379,7 +379,7 @@ function EventModal({
                 type="button"
                 onClick={requestDelete}
                 disabled={deleteMutation.isPending}
-                className="inline-flex min-h-11 items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex min-h-11 items-center gap-1.5 px-3 py-2 text-sm font-medium text-destructive hover:text-destructive/80 hover:bg-destructive/10 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Trash2 className="w-4 h-4" />
                 {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
@@ -405,7 +405,7 @@ function EventModal({
         </div>
 
         {mutation.error && (
-          <div className="flex items-center gap-2 text-sm text-red-400 bg-red-500/10 px-3 py-2 rounded-lg">
+          <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-lg">
             <AlertCircle className="w-4 h-4 shrink-0" />
             {mutation.error.message || 'Failed to save event'}
           </div>
@@ -586,7 +586,7 @@ function EventDetailModal({ event, isOpen, onClose, onEdit }) {
           <button
             onClick={requestDelete}
             disabled={deleteMutation.isPending}
-            className="inline-flex min-h-11 items-center gap-1.5 px-3 py-2 text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex min-h-11 items-center gap-1.5 px-3 py-2 text-sm font-medium text-destructive hover:text-destructive/80 hover:bg-destructive/10 rounded-lg transition-colors disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Trash2 className="w-4 h-4" />
             {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
@@ -977,10 +977,10 @@ export default function Schedule() {
                         const top = ((hour - 8) * 60 + min) / 60 * SLOT_HEIGHT;
                         return (
                           <div
-                            className="absolute left-0 right-0 h-0.5 bg-[#e6f354] z-20 pointer-events-none"
+                            className="absolute left-0 right-0 h-0.5 bg-brand-lime z-20 pointer-events-none"
                             style={{ top }}
                           >
-                            <div className="absolute -left-1 -top-1 w-2.5 h-2.5 rounded-full bg-[#e6f354]" />
+                            <div className="absolute -left-1 -top-1 w-2.5 h-2.5 rounded-full bg-brand-lime" />
                           </div>
                         );
                       }
@@ -1025,7 +1025,7 @@ export default function Schedule() {
                               {event.title}
                             </p>
                             {height > 36 && (
-                              <p className={cn('text-[10px] leading-tight truncate', style.text, 'opacity-75')}>
+                              <p className={cn('text-[10px] leading-tight truncate', style.text)}>
                                 {fmtTime(event.startTime)}
                               </p>
                             )}

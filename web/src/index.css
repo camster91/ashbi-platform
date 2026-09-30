@@ -86,9 +86,12 @@
     --radius: 0.625rem;
 
     /* Status Colors */
-    --success: 142 72% 28%;
+    /* Status tokens are used as text (often on their own /10 or /20 tint)
+       and as solid fills behind their -foreground, so each clears 4.5:1 on
+       card, background and muted, with or without a /10 tint. */
+    --success: 142 72% 25%;
     --success-foreground: 0 0% 100%;
-    --warning: 32 95% 32%;
+    --warning: 32 95% 29%;
     --warning-foreground: 0 0% 100%;
     --info: 199 85% 30%;
     --info-foreground: 0 0% 100%;
@@ -139,12 +142,14 @@
     --destructive: 0 84% 68%;
     --destructive-foreground: 250 39% 10%;
 
-    /* Status colours */
-    --success: 142 70% 30%;
-    --success-foreground: 0 0% 100%;
+    /* Status colours — light hues with a dark foreground, like destructive,
+       so text-success / text-info read on the dark surfaces (and their /10
+       and /20 tints) at 4.5:1 or more, and still work as solid fills. */
+    --success: 142 60% 55%;
+    --success-foreground: 250 39% 10%;
     --warning: 38 92% 58%;
     --warning-foreground: 250 39% 10%;
-    --info: 199 80% 42%;
+    --info: 199 85% 62%;
     --info-foreground: 250 39% 10%;
 
     /* Borders & Inputs */
@@ -179,25 +184,6 @@
   /* Brand headline style */
   .font-display {
     font-family: 'Instrument Serif', serif;
-  }
-
-  /* Accent text */
-  .text-brand-lime {
-    color: #e6f354;
-  }
-  .text-brand-sage {
-    color: #d0dd9a;
-  }
-  .text-brand-indigo {
-    color: #2e2958;
-  }
-
-  /* Gradient backgrounds */
-  .bg-gradient-brand {
-    background: linear-gradient(135deg, #2e2958 0%, #4a4294 100%);
-  }
-  .bg-gradient-accent {
-    background: linear-gradient(135deg, #e6f354 0%, #d0dd9a 100%);
   }
 }
 
@@ -234,21 +220,11 @@
 
   /* Glassmorphism */
   .glass-card {
-    @apply bg-white/70 dark:bg-[#2e2958]/70 backdrop-blur-md border border-white/20 dark:border-white/5 shadow-xl;
+    @apply bg-card/70 dark:bg-brand-indigo/70 backdrop-blur-md border border-white/20 dark:border-white/5 shadow-xl;
   }
 
   .glass-header {
     @apply bg-background/80 backdrop-blur-lg border-b border-border/50 sticky top-0 z-40;
-  }
-
-  /* Text Masking */
-  .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-br from-primary to-indigo-400;
-  }
-
-  /* Refined Focus */
-  .focus-ring-premium {
-    @apply focus:outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all duration-200;
   }
 
   /* Skeleton shimmer */
@@ -256,11 +232,6 @@
     background: linear-gradient(90deg, hsl(var(--muted)) 25%, hsl(var(--border)) 50%, hsl(var(--muted)) 75%);
     background-size: 200% 100%;
     animation: shimmer 1.5s infinite;
-  }
-
-  /* Focus ring brand color */
-  .focus-ring-brand {
-    @apply focus:ring-2 focus:ring-[#e6f354] focus:ring-offset-2 focus:ring-offset-background;
   }
 }
 
@@ -344,6 +315,63 @@
 
   .skeleton-shimmer {
     background-position: 0 0;
+  }
+}
+
+/*
+ * Forced colours (Windows High Contrast / contrast themes, #317).
+ * The browser replaces author colours with the user's system palette and
+ * drops box-shadows and most background fills. That removes Tailwind focus
+ * rings (box-shadows), button fills and tinted badge backgrounds, so this
+ * block restores each cue with CSS system colours. Documented in
+ * docs/ui-primitives.md (Forced colours); checked by
+ * web/src/tests/forced-colors.test.js.
+ */
+@media (forced-colors: active) {
+  /* 1. Focus: a real outline in the system highlight colour, always. */
+  :where(a, button, input, select, textarea, summary, [tabindex], [contenteditable]):focus-visible {
+    outline: 3px solid Highlight !important;
+    outline-offset: 2px !important;
+  }
+
+  /* 2. Buttons and tabs: fills are dropped, so draw a boundary. */
+  :where(button, [role='button'], [role='tab'], [role='menuitem']) {
+    border: 1px solid ButtonText;
+  }
+  :where(button, [role='button'], [role='tab'], [role='menuitem']):is(:disabled, [aria-disabled='true']) {
+    border-color: GrayText;
+    color: GrayText;
+  }
+
+  /* 3. Selected / pressed / current states are otherwise colour-only. */
+  [role='tab'][aria-selected='true'],
+  [aria-pressed='true'],
+  [aria-current='page'],
+  [aria-current='step'] {
+    border-color: Highlight;
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+
+  /* 4. Badges and status pills: keep their shape; the text states the status. */
+  .status-indicator {
+    border: 1px solid CanvasText;
+  }
+
+  /* 5. Invalid fields keep a distinct boundary. */
+  [aria-invalid='true'] {
+    border-color: Mark;
+    outline: 1px solid Mark;
+  }
+
+  /* 6. Spinners are coloured borders; keep the moving segment visible. */
+  .animate-spin {
+    border-top-color: Highlight;
+  }
+
+  /* 7. Skeleton placeholders read as plain boxes instead of disappearing. */
+  .skeleton-shimmer {
+    outline: 1px solid GrayText;
   }
 }
 

@@ -31,7 +31,7 @@ describe('global search result contract', () => {
 
   it('renders an accessible error without a contradictory empty state', () => {
     const source = readFileSync(path.join(process.cwd(), 'src/pages/GlobalSearch.jsx'), 'utf8');
-    expect(source).toContain('text-red-700 dark:text-red-300');
+    expect(source).toContain('role="alert" className="p-4 bg-destructive/5 border border-destructive/30 rounded-lg text-destructive text-sm"');
     expect(source).toContain('{!error && (loading ? (');
     expect(source).toContain('flex flex-wrap gap-x-4 gap-y-1');
     expect(source).toContain('min-w-0 break-words');

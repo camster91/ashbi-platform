@@ -82,20 +82,20 @@ describe('Frontend Utils', () => {
   });
 
   describe('Color Helpers', () => {
-    it('getPriorityColor returns correct classes', () => {
-      expect(getPriorityColor('CRITICAL')).toContain('text-red-700');
-      expect(getPriorityColor('LOW')).toContain('text-gray-700');
-      expect(getPriorityColor('UNKNOWN')).toContain('text-gray-700');
+    it('getPriorityColor returns token classes from the shared status map', () => {
+      expect(getPriorityColor('CRITICAL')).toContain('text-destructive');
+      expect(getPriorityColor('LOW')).toContain('text-muted-foreground');
+      expect(getPriorityColor('UNKNOWN')).toContain('text-muted-foreground');
     });
 
-    it('getHealthColor returns correct classes', () => {
-      expect(getHealthColor('ON_TRACK')).toContain('text-green-800');
-      expect(getHealthColor('AT_RISK')).toContain('text-red-700');
+    it('getHealthColor returns token classes', () => {
+      expect(getHealthColor('ON_TRACK')).toContain('text-success');
+      expect(getHealthColor('AT_RISK')).toContain('text-destructive');
     });
 
-    it('getProjectStatusColor returns correct classes', () => {
-      expect(getProjectStatusColor('LAUNCHED')).toContain('text-green-800');
-      expect(getProjectStatusColor('CANCELLED')).toContain('text-red-700');
+    it('getProjectStatusColor returns token classes', () => {
+      expect(getProjectStatusColor('LAUNCHED')).toContain('text-success');
+      expect(getProjectStatusColor('CANCELLED')).toContain('text-destructive');
     });
   });
 

@@ -274,7 +274,7 @@ export default function Project() {
             onClick={copyPortalLink}
             className="min-h-11 inline-flex items-center px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-secondary gap-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            {shareCopied ? <Check className="w-4 h-4 text-green-500" aria-hidden="true" /> : <Share2 className="w-4 h-4" aria-hidden="true" />}
+            {shareCopied ? <Check className="w-4 h-4 text-success" aria-hidden="true" /> : <Share2 className="w-4 h-4" aria-hidden="true" />}
             {shareCopied ? 'Copied!' : 'Share'}
           </button>
           <button
@@ -303,7 +303,7 @@ export default function Project() {
 
       {/* AI Summary */}
       {project.aiSummary && (
-        <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/50 rounded-lg p-4">
+        <div className="bg-info/5 border border-info/30 rounded-lg p-4">
           <h3 className="font-medium flex items-center gap-2 mb-2">
             <Sparkles className="w-4 h-4 text-accent" />
             AI Summary
@@ -379,13 +379,13 @@ export default function Project() {
           {project.risks?.length > 0 && (
             <div className="bg-card rounded-lg border border-border">
               <div className="px-4 py-3 border-b">
-                <h3 className="font-semibold text-red-700 dark:text-red-400">Risks</h3>
+                <h3 className="font-semibold text-destructive">Risks</h3>
               </div>
               <ul className="divide-y">
                 {project.risks.map((risk, i) => (
                   <li key={i} className="px-4 py-3">
                     <div className="flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4 text-red-500" />
+                      <AlertTriangle className="w-4 h-4 text-destructive" />
                       <span className="text-sm font-medium">{risk.risk}</span>
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">{risk.mitigation}</p>
@@ -508,7 +508,7 @@ export default function Project() {
                     <div className="border border-border rounded-lg px-3 py-2 text-sm bg-muted whitespace-pre-wrap">{draftResult.body}</div>
                   </div>
                   <div className="text-xs text-muted-foreground">Tone: {draftResult.tone}</div>
-                  <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded">
+                  <p className="text-xs text-warning bg-warning/5 p-2 rounded">
                     Cameron must review and approve before sending to the client.
                   </p>
                   <div className="flex flex-col sm:flex-row gap-2">
@@ -674,9 +674,9 @@ function RevisionRounds({ revisions, isAdmin, onCreateRound, onApprove, isCreati
               <li key={rev.id} className="px-4 py-3 flex items-center gap-3">
                 <div className={cn(
                   'w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold',
-                  rev.status === 'APPROVED' ? 'bg-green-100 text-green-700' :
-                  rev.status === 'IN_REVIEW' ? 'bg-amber-100 text-amber-700' :
-                  'bg-blue-100 text-blue-700'
+                  rev.status === 'APPROVED' ? 'bg-success/10 text-success' :
+                  rev.status === 'IN_REVIEW' ? 'bg-warning/10 text-warning' :
+                  'bg-info/10 text-info'
                 )}>
                   {rev.roundNumber}
                 </div>
@@ -685,9 +685,9 @@ function RevisionRounds({ revisions, isAdmin, onCreateRound, onApprove, isCreati
                     <span className="text-sm font-medium">Round {rev.roundNumber}</span>
                     <span className={cn(
                       'text-xs px-1.5 py-0.5 rounded',
-                      rev.status === 'APPROVED' ? 'bg-green-100 text-green-700' :
-                      rev.status === 'IN_REVIEW' ? 'bg-amber-100 text-amber-700' :
-                      'bg-blue-100 text-blue-700'
+                      rev.status === 'APPROVED' ? 'bg-success/10 text-success' :
+                      rev.status === 'IN_REVIEW' ? 'bg-warning/10 text-warning' :
+                      'bg-info/10 text-info'
                     )}>
                       {rev.status}
                     </span>
@@ -700,7 +700,7 @@ function RevisionRounds({ revisions, isAdmin, onCreateRound, onApprove, isCreati
                     type="button"
                     aria-label={`Approve revision ${rev.roundNumber}`}
                     onClick={() => onApprove(rev.id)}
-                    className="min-h-11 inline-flex items-center px-2 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 flex items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="min-h-11 inline-flex items-center px-2 py-1 text-xs bg-success/10 text-success rounded hover:bg-success/20 flex items-center gap-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <Check className="w-3 h-3" /> Approve
                   </button>
@@ -722,10 +722,10 @@ const NOTE_TYPES = [
 ];
 
 const NOTE_TYPE_COLORS = {
-  NOTE: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  MEETING_NOTES: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-  WIKI: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-  DOC: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+  NOTE: 'bg-info/10 text-info',
+  MEETING_NOTES: 'bg-warning/10 text-warning',
+  WIKI: 'bg-primary/10 text-primary',
+  DOC: 'bg-success/10 text-success',
 };
 
 function ProjectNotes({ projectId }) {
@@ -1027,10 +1027,10 @@ function ProjectNotes({ projectId }) {
 function TaskCategory({ title, icon: Icon, tasks = [], color, collapsed = false }) {
   const [isCollapsed, setIsCollapsed] = useState(collapsed);
   const colors = {
-    red: 'text-red-600 bg-red-50',
-    orange: 'text-orange-600 bg-orange-50',
-    blue: 'text-blue-600 bg-blue-50',
-    green: 'text-green-600 bg-green-50',
+    red: 'text-destructive bg-destructive/5',
+    orange: 'text-warning bg-warning/5',
+    blue: 'text-info bg-info/5',
+    green: 'text-success bg-success/5',
     gray: 'text-muted-foreground bg-muted',
   };
 
@@ -1112,8 +1112,8 @@ function ProjectBudget({ projectId, budget, hourlyBudget }) {
   if (!data) return null;
 
   const pct = data.percentUsed ?? 0;
-  const pctColor = pct >= 100 ? 'text-red-700 bg-red-50 dark:bg-red-900/20 dark:text-red-400' : pct >= 90 ? 'text-orange-800 bg-orange-50 dark:bg-orange-900/20 dark:text-orange-400' : pct >= 70 ? 'text-yellow-800 bg-yellow-50 dark:bg-yellow-900/20 dark:text-yellow-400' : 'text-green-800 bg-green-50 dark:bg-green-900/20 dark:text-green-400';
-  const barColor = pct >= 100 ? 'bg-red-500' : pct >= 90 ? 'bg-orange-500' : pct >= 70 ? 'bg-yellow-500' : 'bg-green-500';
+  const pctColor = pct >= 100 ? 'text-destructive bg-destructive/5' : pct >= 90 ? 'text-warning bg-warning/5' : pct >= 70 ? 'text-warning bg-warning/5' : 'text-success bg-success/5';
+  const barColor = pct >= 100 ? 'bg-destructive' : pct >= 90 ? 'bg-warning' : pct >= 70 ? 'bg-warning' : 'bg-success';
 
   return (
     <div className="bg-card rounded-xl border border-border">
