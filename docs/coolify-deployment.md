@@ -103,7 +103,14 @@ release gates ([release-gates.md](release-gates.md)). The safe setup is:
 
 1. Branch protection on `main` requires the three release-gate checks, so
    nothing reaches `main` without them.
-2. Coolify deploys on push to `main` (its GitHub App or the deploy webhook).
+2. After adoption, the disabled-by-default **Checked Coolify release** workflow
+   listens to successful **Required release gates** runs for same-repository
+   pushes to the current default branch. It skips superseded revisions, pins
+   the verified full SHA in Coolify, waits for the matching deployment and
+   checks public strict readiness plus the serving revision.
+3. Keep Coolify's direct Git auto-deploy disabled. Direct push deployment would
+   bypass post-merge CI. Follow [checked-coolify-release.md](checked-coolify-release.md)
+   before setting `COOLIFY_RELEASE_ENABLED=true`.
 
 The direct-VPS script also enforces a pre-migration backup and a rollback
 floor; Coolify does not. Before switching production:

@@ -58,6 +58,8 @@ jobs:
         run: npm run check:secrets
       - name: Release gate contract
         run: npm run check:release-gates
+      - name: Coolify release safety checks
+        run: node --test src/tests/unit/coolify-release.test.mjs src/tests/unit/coolify-workflow-gates.test.mjs
       - name: Install locked dependencies
         run: |
           npm ci --no-audit --no-fund

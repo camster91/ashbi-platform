@@ -2,6 +2,26 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+export function validateCoolifyReleaseWorkflow(source) {
+  const required = [
+    'workflow_run:', 'workflows: [Required release gates]', 'types: [completed]', 'branches: [main]',
+    "vars.COOLIFY_RELEASE_ENABLED == 'true'", "github.event.workflow_run.conclusion == 'success'",
+    "github.event.workflow_run.event == 'push'",
+    'github.event.workflow_run.head_repository.full_name == github.repository',
+    'github.event.workflow_run.head_branch == github.event.repository.default_branch',
+    'group: ashbi-production-release', 'cancel-in-progress: false', 'environment: production',
+    'ref.data.object.sha === run.head_sha', 'ref: ${{ github.event.workflow_run.head_sha }}',
+    'persist-credentials: false', 'node --test src/tests/unit/coolify-release.test.mjs',
+    'RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}', 'node scripts/deploy/coolify-release.mjs',
+  ];
+  const failures = required.filter(value => !source.includes(value)).map(value => `checked-coolify-deploy.yml lacks ${value}`);
+  if (/^\s+(push|pull_request|workflow_dispatch|schedule|repository_dispatch):/m.test(source)
+    || /appleboy\/ssh-action|curl.*\/api\/|continue-on-error:\s*true/.test(source)) {
+    failures.push('checked-coolify-deploy.yml has a trigger or deployment path outside checked CI');
+  }
+  return failures;
+}
+
 export function validateReleaseGates(root = process.cwd()) {
   const workflowsDir = path.join(root, '.github', 'workflows');
   const read = (name) => fs.readFileSync(path.join(workflowsDir, name), 'utf8');
@@ -109,6 +129,10 @@ export function validateReleaseGates(root = process.cwd()) {
   }
 
   for (const [name, source] of allWorkflows) {
+    if (name === 'checked-coolify-deploy.yml') {
+      failures.push(...validateCoolifyReleaseWorkflow(source));
+      continue;
+    }
     if (/appleboy\/ssh-action|COOLIFY_TOKEN|applications\/.*\/start|deploy-vps\.yml/.test(source)) {
       failures.push(`${name} can mutate production outside the direct VPS controller`);
     }
