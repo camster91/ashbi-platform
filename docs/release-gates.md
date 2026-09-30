@@ -24,7 +24,9 @@ The canonical gate owns these blocking checks:
 - package-boundary validation;
 - backend type check and backend/frontend lint;
 - backend unit and integration tests against PostgreSQL with pgvector (the
-  committed migration chain is applied with `prisma migrate deploy`);
+  committed migration chain is applied with `prisma migrate deploy`) and Redis
+  (the realtime adapter/emitter tests; the gate sets `REQUIRE_REDIS_TESTS=1`, so
+  a missing Redis fails the run instead of skipping those tests);
 - frontend unit tests;
 - the production build, frontend performance budgets and Lighthouse budgets;
 - desktop, mobile, and accessibility browser smoke, public-route splitting and
@@ -55,3 +57,39 @@ Other workflows in `.github/workflows/` (`enterprise-compliance.yml`,
 The `production` and `staging` GitHub environments, if used, must restrict
 deployment to `main`. These settings live outside Git and must be verified in
 GitHub.
+
+## Ownership and recovery
+
+The repository owner (camster91) owns the required checks: the workflows,
+their runners and minutes, and the branch-protection settings. Changes to
+`.github/workflows/release-gates.yml`, `required-release-gates.yml` or
+`scripts/check-release-gates.mjs` need the same review as application code;
+the contract test above fails closed if a required command, service or job is
+removed.
+
+When the required checks do not run or do not report on a pull request:
+
+1. Check GitHub Actions status and the repository's Actions settings
+   (Settings → Actions → General): Actions enabled, workflow permissions,
+   billing/minute limits. `Required release gates` must be enabled; it is the
+   only workflow the contract needs (the reusable `release-gates.yml` runs as
+   part of it even though it is not triggered on its own).
+2. Re-run the workflow for the pull request's head commit from the Actions tab
+   (or `workflow_dispatch` on the branch). Never mark a check as passed by
+   hand, rename a job to satisfy protection, or merge with the checks
+   bypassed.
+3. If a required job fails for infrastructure reasons (runner loss, checkout
+   or install failure before any test ran), re-run that job once; a second
+   failure is treated as real and investigated from its logs and uploaded
+   artifacts (`lighthouse-reports`, `required-browser-gate-failure-evidence`,
+   `required-full-stack-gate-output`).
+4. If the checks cannot run for a sustained period, releases stop: the
+   deployment runbook requires the release gates to pass for the exact commit
+   being shipped, and a local run does not replace them.
+
+To prove the protection blocks a failing change, an administrator opens a
+throwaway pull request that breaks one gate (for example a failing unit test),
+confirms that GitHub reports the required check as failed and refuses to
+merge, then closes the pull request without merging. Record the date and the
+pull request link in the release evidence. This check needs repository-admin
+access and cannot be automated from a pull request.

@@ -83,9 +83,37 @@ is refused) only for the ones marked *blocking*.
 | Direct and group messages (`dms.json`, `mpims.json`) | `unsupported.conversations` | no |
 | Canvases and other unknown files or directories | `unsupported.files`, `unsupported.directories` | no |
 | Reply whose thread root is not in the export (imported at top level) | `warnings` (`THREAD_PARENT_MISSING`) | no |
-| Message the live Slack integration already delivered | `totals.alreadyPresent`, `warnings` | no |
 | Reactions by unmapped users or with emoji names over the chat limit | `reactionsDropped` | no |
 | A channel id listed twice (first entry kept) | `warnings` (`DUPLICATE_CHANNEL`) | no |
+| `--channel` names a channel that is not in the export or not in the mapping (`CHANNEL_NOT_SELECTABLE`) | `errors` | yes |
+| A day file that is not a JSON array of messages (`INVALID_DAY_FILE`) | `warnings` | no: the file is skipped |
+| A message without a valid Slack `ts` (`INVALID_TS`; also counted as `invalid_ts` in `skippedSubtypes`) | `warnings` | no: the message is skipped |
+| The same `ts` twice in one channel's day files (`DUPLICATE_TS`; the first is kept) | `warnings` | no |
+| Message with no text and no file reference (`EMPTY_MESSAGE`) | `totals.skipped`, `warnings` | no |
+| Message the live Slack integration already delivered to the target project (`ALREADY_PRESENT`) | `totals.alreadyPresent`, `warnings` | no |
+
+### Command failures
+
+These stop the command before or during a run (exit status `1`, message on
+stderr). They are thrown errors; the code in parentheses is the error's
+`code`, and the report is not written.
+
+| Failure | Code |
+| --- | --- |
+| `--input-dir` does not exist | `MISSING_INPUT` |
+| `--input-dir` is a `.zip` file | `ZIP_NOT_SUPPORTED` |
+| `--input-dir` is not a directory | `NOT_A_DIRECTORY` |
+| `users.json` or `channels.json` is missing | `MISSING_FILE` |
+| An export path leaves the export root, or a JSON file is a link or directory | `UNSAFE_PATH` |
+| A JSON file is over 64 MiB | `FILE_TOO_LARGE` |
+| A JSON file does not parse | `INVALID_JSON` |
+| The mapping file is not an object of channel to project id | `INVALID_MAPPING` |
+| No organization id reached the service | `MISSING_ORGANIZATION` |
+| A live run found blocking findings; everything was rolled back and the errors are printed | `IMPORT_BLOCKED` |
+| `--rollback` without an organization or run id reaching the service | `MISSING_ARGUMENT` |
+| `--rollback` names a run that is not in this organization | `RUN_NOT_FOUND` |
+| `--rollback` names a run that was already rolled back | `ALREADY_ROLLED_BACK` |
+| A message outside the run replies to one of its messages | `ROLLBACK_BLOCKED` |
 
 ## Export steps
 
