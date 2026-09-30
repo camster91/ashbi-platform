@@ -215,9 +215,11 @@ rolled back, and nothing is kept, when:
 
 A refused or failed live run writes **no** report file. The report is
 written only after the transaction commits; its path was checked before the
-run started, so a committed import is not left without its report. (If
-another process creates the file in the meantime, the report is printed to
-stdout instead and the command exits `1`.)
+run started. A report that cannot be written after the commit does **not**
+roll the import back: the command exits `1` with the import committed. If
+another process created the file in the meantime, the report is printed to
+stdout instead; if the write itself fails (for example a full disk), rerun the
+dry run and the checks in step 4 to verify what was committed.
 
 ### 4. Verify
 
