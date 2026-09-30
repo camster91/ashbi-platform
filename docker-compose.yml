@@ -22,6 +22,10 @@ services:
     environment:
       - DATABASE_URL=postgresql://ashbi:${DB_PASSWORD}@postgres:5432/ashbi?schema=public
       - REDIS_URL=redis://redis:6379
+    # Uploaded files and runtime config must survive container replacement.
+    volumes:
+      - uploads:/app/uploads
+      - appconfig:/app/config
     networks:
       - ashbi-network
 
@@ -44,6 +48,9 @@ services:
     environment:
       - DATABASE_URL=postgresql://ashbi:${DB_PASSWORD}@postgres:5432/ashbi?schema=public
       - REDIS_URL=redis://redis:6379
+    volumes:
+      - uploads:/app/uploads
+      - appconfig:/app/config
     healthcheck:
       test: ["CMD", "npm", "run", "health:worker"]
       interval: 15s
@@ -116,6 +123,8 @@ services:
 volumes:
   pgdata:
   redisdata:
+  uploads:
+  appconfig:
 
 networks:
   ashbi-network:
