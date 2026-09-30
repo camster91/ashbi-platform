@@ -18,8 +18,9 @@ The per-system playbooks are authoritative for inputs, flags and findings:
 Every importer is one-way and never writes back to the source system. When
 given a report path, every importer writes its report with owner-only
 permissions and refuses to overwrite an existing path. Always pass a report
-path (`--summary-file` is optional for every importer, and without it no
-report file is written), and do not assume a report exists after a failed
+path (`--summary-file` is optional for every live importer, and without it no
+report file is written; the ClickUp dry-run planner requires it and exits `2`
+without it), and do not assume a report exists after a failed
 live run: every live importer (Notion, Slack, Loom, MarkUp.io and Bonsai)
 writes its report only after its database work has committed, so a failed
 write leaves the import committed without a report file. Slack, Loom and
