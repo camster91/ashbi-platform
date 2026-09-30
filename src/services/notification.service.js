@@ -47,6 +47,32 @@ export async function createNotification({ userId, type, title, message, data, s
 }
 
 /**
+ * Deliver a persisted notification row to the user's sockets. `io` is either
+ * the API's Socket.IO server or the worker's Redis emitter
+ * (src/realtime/emitter.js); both expose `to(room).emit(...)`, and with the
+ * Redis adapter either one reaches the user's sockets on every API instance.
+ * Emits `notification:new` (shown as a toast) and the legacy `notification`
+ * event used for cache invalidation (no title, so the web app never shows a
+ * second toast for it).
+ *
+ * @param {{ to: (room: string) => { emit: Function } }} io
+ * @param {string} userId
+ * @param {{ id: string, type: string, title?: string, message?: string, data?: any, createdAt?: Date | string }} notification
+ */
+export function emitNotification(io, userId, notification) {
+  const room = `user:${userId}`;
+  io.to(room).emit('notification:new', {
+    id: notification.id,
+    type: notification.type,
+    title: notification.title,
+    message: notification.message,
+    data: notification.data,
+    createdAt: notification.createdAt,
+  });
+  io.to(room).emit('notification', { id: notification.id, type: notification.type, data: notification.data });
+}
+
+/**
  * The application's single notification path (H4). Routes call
  * `fastify.notify(userId, { type, title, message, data })`, which persists
  * exactly one human-readable row and emits it in realtime; they must not
@@ -58,19 +84,7 @@ export async function createNotification({ userId, type, title, message, data, s
  * @param {{ error: Function }} [log]
  */
 export function createNotifier(io, log = console) {
-  const emit = (userId, notification) => {
-    io.to(`user:${userId}`).emit('notification:new', {
-      id: notification.id,
-      type: notification.type,
-      title: notification.title,
-      message: notification.message,
-      data: notification.data,
-      createdAt: notification.createdAt,
-    });
-    // Legacy event used for cache invalidation (no title, so the web app
-    // never shows a second toast for it).
-    io.to(`user:${userId}`).emit('notification', { id: notification.id, type: notification.type, data: notification.data });
-  };
+  const emit = (userId, notification) => emitNotification(io, userId, notification);
   const notify = async (userId, { type, title, message, data } = /** @type {any} */ ({})) => {
     try {
       const notification = await prisma.notification.create({

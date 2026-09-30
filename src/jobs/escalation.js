@@ -9,7 +9,11 @@
 // clock `hoursSinceActivity` is measured on; sending a response also resets the
 // level explicitly (src/routes/response.routes.js). A claim and its
 // notifications commit in one transaction, so a failed fan-out never leaves a
-// level claimed without its alert.
+// level claimed without its alert. The rows are emitted live (Redis emitter,
+// src/realtime/emitter.js) only after that transaction commits.
+
+import { emitNotification } from '../services/notification.service.js';
+import { getRealtimeEmitter } from '../realtime/emitter.js';
 
 export const ESCALATION_LEVELS = Object.freeze({ NONE: 0, SLA_WARNING: 1, ESCALATION: 2 });
 
@@ -58,6 +62,7 @@ export async function checkThreadEscalation(threadId, {
   slaDefaults,
   existingThread = null,
   now = new Date(),
+  emitter = getRealtimeEmitter(),
 }) {
   const thread = existingThread || await prisma.thread.findUnique({ where: { id: threadId } });
 
@@ -127,10 +132,17 @@ export async function checkThreadEscalation(threadId, {
       }
     }
 
-    // One round-trip for the whole fan-out.
-    if (pending.length > 0) await tx.notification.createMany({ data: pending });
-    return pending;
+    // One round-trip for the whole fan-out; the returned rows carry the ids
+    // and timestamps the realtime payload needs.
+    if (pending.length === 0) return [];
+    return tx.notification.createManyAndReturn({ data: pending });
   });
+
+  // Committed: deliver each row live. Never inside the transaction, so a
+  // rolled-back claim is never announced.
+  for (const notification of notifications) {
+    emitNotification(emitter, notification.userId, notification);
+  }
 
   return {
     escalated: notifications.length > 0,
@@ -140,7 +152,7 @@ export async function checkThreadEscalation(threadId, {
 }
 
 /** Sweep one tenant's overdue threads; a failing thread does not stop the sweep. */
-export async function checkAllEscalations({ prisma, slaDefaults, now = new Date(), logger }) {
+export async function checkAllEscalations({ prisma, slaDefaults, now = new Date(), logger, emitter = undefined }) {
   const threads = await prisma.thread.findMany({
     where: { status: 'AWAITING_RESPONSE', slaBreached: false },
   });
@@ -149,7 +161,7 @@ export async function checkAllEscalations({ prisma, slaDefaults, now = new Date(
   let failed = 0;
   for (const thread of threads) {
     try {
-      const result = await checkThreadEscalation(thread.id, { prisma, slaDefaults, existingThread: thread, now });
+      const result = await checkThreadEscalation(thread.id, { prisma, slaDefaults, existingThread: thread, now, emitter });
       if (result.escalated) escalated++;
     } catch (error) {
       failed++;

@@ -162,6 +162,49 @@ Redis-less development setup use the in-memory store. A Redis outage skips the
 limiter rather than failing requests. The SPA treats a 429 from
 `/api/auth/me` as "retry later" (keeps the session and shows a notice).
 
+## Realtime across replicas (Socket.IO)
+
+When `REDIS_URL` is set (always, in staging and production), every API
+replica attaches the Socket.IO Redis adapter (`@socket.io/redis-adapter`,
+`src/realtime/adapter.js`) on two dedicated reconnecting connections, so:
+
+- a room emit (`user:<id>`, `project:<id>`, ...) reaches that room's sockets on
+  every replica, whichever replica or process produced it;
+- `io.in(room).fetchSockets()` (call signalling) returns sockets connected to
+  other replicas, and `disconnectSockets()` drops them cluster-wide;
+- the worker delivers the notifications it writes (notification queue jobs,
+  SLA escalations, automations such as overdue invoices) live through the
+  Redis emitter (`@socket.io/redis-emitter`, `src/realtime/emitter.js`), with
+  the same `notification:new` / `notification` events as `fastify.notify`.
+  Escalation rows are emitted only after their transaction commits.
+
+There is no separate toggle. Without `REDIS_URL` (a Redis-less development
+setup) and in tests, the API keeps the in-memory adapter (one instance) and
+the emitter is a no-op; the web app's 30-second notification poll still shows
+worker notifications. The web app connects over WebSocket first
+(`transports: ['websocket', 'polling']`); a client that falls back to HTTP
+long-polling needs sticky sessions at the proxy when more than one API
+replica serves traffic, because the adapter shares rooms, not a polling
+session's handshake.
+
+A Redis outage delays realtime delivery (commands queue until Redis is back;
+the rows are already persisted and the poll still shows them), and a
+`fetchSockets()` that gets no reply from a replica in time drops that call
+signal. Adding or removing API replicas needs no realtime configuration.
+
+Realtime channels are namespaced per deployment, because Redis Pub/Sub
+ignores the logical database number: staging on `redis://host/1` and
+production on `redis://host/0` would otherwise receive each other's
+broadcasts. The adapter and the worker's emitter both use the key
+`ashbi-realtime:<NODE_ENV>:db<N>` (N from the `REDIS_URL` path, default 0),
+so staging and production are separated even on the same Redis database.
+Two deployments with the same `NODE_ENV` on one Redis server must set a
+distinct `REALTIME_CHANNEL_KEY` (1-64 of `A-Z a-z 0-9 . _ : -`), which
+replaces the default as `ashbi-realtime:<value>`; the API and the worker of
+one deployment must use the same value. Changing the key during a rolling
+deploy splits realtime between old and new replicas until the rollout
+finishes (rows are persisted; the poll still shows them).
+
 ## Client IP behind a proxy (`TRUST_PROXY`)
 
 Production is reached through Traefik (`docker-compose.prod.yml`), so every

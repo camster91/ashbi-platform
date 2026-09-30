@@ -16,6 +16,9 @@ import { fileURLToPath } from 'url';
 import env from './config/env.js';
 import prisma from './config/db.js';
 import { pubSubRedisSource } from './jobs/queue.js';
+import { attachRedisAdapter } from './realtime/adapter.js';
+import { closeRealtimeEmitter } from './realtime/emitter.js';
+import { realtimeRedisSource } from './realtime/redis.js';
 import { apiRateLimitKey, createApiRateLimitMax, createRateLimitRedis, isNonApiRequest } from './config/rateLimit.js';
 import { trustHops } from './config/trust-proxy.js';
 import { clearStaleSessionCookie, resolveRequestSession } from './auth/request-session.js';
@@ -334,9 +337,20 @@ if (serveBuiltSpa) {
 
 // Socket.IO
 const io = new SocketIO(fastify.server, { cors: { origin: env.isDev ? 'http://localhost:*' : env.corsOrigins, credentials: true } });
-// Starting a support view drops the admin's sockets on every API instance
-// (Redis pub/sub; there is no shared Socket.IO adapter). The sweep is the
-// fallback if a revocation message is lost.
+// With REDIS_URL set (and outside tests) every API instance shares the Redis
+// adapter (src/realtime/adapter.js): a room emit reaches that room's sockets
+// on every replica, fetchSockets() sees remote sockets, and packets the worker
+// publishes through its Redis emitter (src/realtime/emitter.js) are delivered
+// here. Without Redis the default in-memory adapter serves one instance.
+// The adapter needs its own reconnecting pub/sub connections.
+const realtimeAdapter = attachRedisAdapter(io, realtimeRedisSource());
+// Starting a support view drops the admin's sockets on every API instance.
+// With the Redis adapter, disconnectSockets() already broadcasts to every
+// replica, but it is fire-and-forget; the revoker's own Redis pub/sub is kept
+// because revoke() resolves only once Redis accepted the publish, and the
+// view must not be reported as started before that. It also still covers
+// replicas when the adapter is off. The sweep is the fallback if a
+// revocation message is lost.
 // Pub/sub needs its own reconnecting connections (the producer connection
 // fails fast and would drop the SUBSCRIBE issued before Redis is ready).
 const viewSocketRevoker = createViewSocketRevoker({ io, redis: pubSubRedisSource(), logger: fastify.log });
@@ -346,6 +360,9 @@ fastify.addHook('onClose', async () => {
   stopViewSocketSweep();
   await viewSocketRevoker.close();
   await new Promise((resolve) => io.close(resolve));
+  // After io.close(): closing the server closes the adapter's subscriptions.
+  await realtimeAdapter.close();
+  await closeRealtimeEmitter();
 });
 // Handshake: sessions only (src/auth/socket-auth.js). Realtime is paused
 // during a support view (#416): a handshake carrying the view cookie is
