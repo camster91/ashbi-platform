@@ -417,6 +417,11 @@ model Thread {
   clientId        String?
   projectId       String?
   assignedToId    String?
+  // Inbound email idempotency (INTEGRATIONS.md, inbound email): the delivery that
+  // created this thread, and the last pipeline step it completed, so a
+  // retried delivery resumes instead of creating a second thread.
+  inboundDeliveryKey   String? @unique
+  inboundPipelineStage String? // CREATED, ANALYZED, ASSIGNED, REPLANNED, COMPLETED
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -571,6 +576,8 @@ model UnmatchedEmail {
   suggestedProjects String? // JSON: AI suggestions
   status            String       @default("PENDING") // PENDING, RESOLVED, IGNORED
   resolvedAt        DateTime?
+  // The inbound delivery that created this row (INTEGRATIONS.md).
+  inboundDeliveryKey String?     @unique
   createdAt         DateTime     @default(now())
 
   @@index([createdAt])

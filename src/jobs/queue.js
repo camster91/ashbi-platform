@@ -5,6 +5,7 @@ import IORedis from 'ioredis';
 import { redisConnectionArgs, resolveRedisUrl } from '../config/redis.js';
 import { withCurrentTenantJobData } from './tenant-iteration.js';
 import { QUEUES } from './queue-names.js';
+import { normalizeInboundDeliveryKey } from '../services/inbound-delivery-key.js';
 export { QUEUES } from './queue-names.js';
 
 export { redisConnectionArgs, resolveRedisUrl };
@@ -172,13 +173,18 @@ export async function queueEmailForProcessing(emailData) {
  * process died before recording the receipt) does not create a second job
  * while the first is retained.
  *
- * The pipeline is not idempotent (it creates the thread or unmatched email
- * before its AI steps), so the job runs once: automatic retries could
- * duplicate threads. A failed delivery is kept in the queue's failed set for
- * 30 days and can be replayed deliberately once the cause is fixed.
+ * The same key travels in the job data as `inboundDeliveryKey`. The pipeline
+ * is idempotent per delivery key: the thread or unmatched email it creates
+ * first stores the key (unique index), and a later attempt resumes that
+ * record, skipping the steps already committed. A failed attempt is therefore
+ * retried automatically (3 attempts, exponential backoff from 5 s) without
+ * duplicating threads, messages or unmatched emails. A delivery that fails
+ * every attempt is kept in the queue's failed set for 30 days and can be
+ * replayed deliberately (also idempotently) once the cause is fixed.
  */
 export const INBOUND_EMAIL_JOB_OPTIONS = Object.freeze({
-  attempts: 1,
+  attempts: 3,
+  backoff: { type: 'exponential', delay: 5_000 },
   removeOnComplete: { age: 24 * 60 * 60 },
   removeOnFail: { age: 30 * 24 * 60 * 60 },
 });
@@ -186,15 +192,33 @@ export const INBOUND_EMAIL_JOB_OPTIONS = Object.freeze({
 /**
  * Job data travels as JSON, so Date fields arrive as ISO strings. Restore
  * them before the pipeline writes them to DateTime columns.
+ *
+ * `jobId` is the fallback delivery key for a job queued before the key was
+ * part of the job data (its id is the same signature-derived key).
+ * Auto-generated numeric ids are never used: they are not stable per delivery.
  */
-export function hydrateEmailJobData(data = {}) {
+export function hydrateEmailJobData(data = {}, { jobId } = {}) {
   const receivedAt = data.receivedAt ? new Date(data.receivedAt) : undefined;
-  return { ...data, receivedAt: receivedAt && !Number.isNaN(receivedAt.getTime()) ? receivedAt : undefined };
+  const fallbackKey = typeof jobId === 'string' && !/^\d+$/.test(jobId) ? jobId : null;
+  const inboundDeliveryKey = normalizeInboundDeliveryKey(data.inboundDeliveryKey)
+    ?? normalizeInboundDeliveryKey(fallbackKey)
+    ?? undefined;
+  return {
+    ...data,
+    receivedAt: receivedAt && !Number.isNaN(receivedAt.getTime()) ? receivedAt : undefined,
+    inboundDeliveryKey,
+  };
 }
 
 export async function queueInboundEmailDelivery(emailData, { organizationId, jobId }) {
   if (!organizationId) throw new Error('Tenancy Error: an organization is required to enqueue an inbound email');
-  const job = await emailQueue.add('process-email', { ...emailData, organizationId }, { ...INBOUND_EMAIL_JOB_OPTIONS, jobId });
+  const inboundDeliveryKey = normalizeInboundDeliveryKey(jobId);
+  if (!inboundDeliveryKey) throw new Error('An inbound email delivery needs a stable jobId (its delivery key)');
+  const job = await emailQueue.add(
+    'process-email',
+    { ...emailData, organizationId, inboundDeliveryKey },
+    { ...INBOUND_EMAIL_JOB_OPTIONS, jobId },
+  );
   return job.id;
 }
 

@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import Mailgun from 'mailgun.js';
 import FormData from 'form-data';
 import { processEmailPipeline } from '../services/pipeline.service.js';
+import { mailgunInboundDeliveryKey } from '../services/inbound-delivery-key.js';
 import { safeEqual } from '../utils/crypto.js';
 import env from '../config/env.js';
 import {validateBody, mailgunSendSchema} from '../validators/schemas.js';
@@ -136,7 +137,10 @@ export default async function mailgunRoutes(fastify) {
         subject,
         text: bodyPlain,
         html: bodyHtml,
-        messageId
+        messageId,
+        // Stable per delivery (Message-Id, or a hash of the delivery), so a
+        // redelivery resumes the first attempt's thread instead of adding one.
+        inboundDeliveryKey: mailgunInboundDeliveryKey(body),
       }), backgroundPrisma);
     } catch (err) {
       fastify.log.error(err, 'Mailgun webhook processing error');
