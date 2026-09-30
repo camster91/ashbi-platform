@@ -42,7 +42,7 @@ this order:
 | Registrar | Domain | Route modules (prefix) |
 | --- | --- | --- |
 | `identity/register-routes.js` | identity and access | auth, settings, API keys, credentials, team, audit events |
-| `client-delivery/register-work-management-routes.js` | client delivery | clients, projects, tasks |
+| `client-delivery/register-work-management-routes.js` | client delivery | clients, projects, tasks, work queue |
 | `client-communications/register-inbox-routes.js` | client communications | inbox, email triage |
 | `platform/register-routes.js` | platform | dashboard, notifications, realtime, push, trash, drafts, search |
 | `ai/register-routes.js` | automation and AI | AI, AI bridge, semantic search, automations, AI context, AI team, bot, approvals |

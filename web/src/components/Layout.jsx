@@ -38,6 +38,7 @@ import {
   CreditCard,
   BookOpen,
   ClipboardList,
+  ListTodo,
   Target,
   Send,
   Share2,
@@ -186,6 +187,7 @@ export default function Layout({ children }) {
   // Core nav — always visible, no section header
   const coreNav = [
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, exact: true },
+    { name: 'Daily Queue', href: '/queue', icon: ListTodo },
     { name: 'Inbox', href: '/inbox', icon: Inbox, badge: stats?.needsResponse },
     { name: 'Chat', href: '/chat', icon: MessageSquare },
     { name: 'Projects', href: '/projects', icon: FolderOpen, id: 'projects-link' },
@@ -662,6 +664,7 @@ export default function Layout({ children }) {
                       </div>
                       <div className="py-2">
                         {[
+                          { label: 'Daily Queue', icon: ListTodo, href: '/queue' },
                           { label: 'New Project', icon: Plus, href: '/projects?create=true' },
                           { label: 'New Invoice', icon: Receipt, href: '/invoices?create=true' },
                           { label: 'New Client', icon: Users, href: '/clients?create=true' },
