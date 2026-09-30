@@ -348,7 +348,10 @@ record.
 
 Each report file is created with the `wx` flag and mode `0600`. An existing
 path is never overwritten: it is refused (exit `2`) before the run starts,
-so nothing is imported without a report.
+so no import begins against a path that is already taken. This is not a
+guarantee that every committed import has a report: a report write that fails
+after the commit leaves the import committed (see step 3), so after any
+failed live command, check the database before assuming nothing changed.
 
 ## Known limits
 

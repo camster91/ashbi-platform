@@ -158,7 +158,10 @@ For each importer, per run:
 5. Verify (next section) and sign the live-run report.
 
 A live run that finds a blocking finding rolls back completely and writes no
-report file. Fix the finding and start again at the dry run.
+report file. Fix the finding and start again at the dry run. A missing report
+does not by itself prove a rollback: Bonsai writes its report after the
+commit, so a failed report write leaves that import committed. After any
+failed Bonsai live command, verify the database before rerunning.
 
 ## Verification
 
