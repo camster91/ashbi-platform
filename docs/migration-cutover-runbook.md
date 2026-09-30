@@ -15,9 +15,13 @@ The per-system playbooks are authoritative for inputs, flags and findings:
 | Loom | [loom-migration.md](loom-migration.md) | `scripts/import-loom.mjs` | `--apply` | yes, `--rollback <runId>` | `import_runs` (`LOOM_MANIFEST`), `loom_import_records` |
 | MarkUp.io | [markup-migration.md](markup-migration.md) | `scripts/import-markup.mjs` | `--apply` | yes, `--rollback <runId>` | `import_runs` (`MARKUP_CSV`), `markup_import_records` |
 
-Every importer is one-way and never writes back to the source system. Every
-importer writes its report with owner-only permissions and refuses to
-overwrite an existing report path. Keep every report as evidence.
+Every importer is one-way and never writes back to the source system. When
+given a report path, every importer writes its report with owner-only
+permissions and refuses to overwrite an existing path. Always pass a report
+path (Bonsai's `--summary-file` is optional, and without it no report is
+written), and do not assume a report exists after a failed live run: Bonsai
+writes its report after the commit, so a failed write leaves the import
+committed without one. Keep every report as evidence.
 
 Use the [reconciliation sign-off template](examples/import-reconciliation-template.md)
 for each dry run and each live run.
