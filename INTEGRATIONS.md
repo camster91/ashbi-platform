@@ -117,8 +117,22 @@ at 8687cf9; senders using the old body-only signature are refused with 401):
   over the exact body bytes sent (not a re-serialised JSON object).
 
 A request is accepted only within 5 minutes of its timestamp and each signature
-only once (`409` for a replay). A `500` releases the signature, so a retry of
-the same delivery is accepted.
+only once (`409` for a replay). An accepted delivery is queued for the worker
+(`202`); if it cannot be queued the response is `503` and nothing is recorded,
+so a retry of the same delivery is accepted.
+
+Processing is idempotent per delivery. Each delivery has a stable key: the
+signature-derived job id (`email-webhook-<signature>`) for this webhook, and
+the `Message-Id` (else a SHA-256 of the whole delivery) for the Mailgun inbound
+route. The pipeline stores the key on the thread or unmatched email it creates
+first (`inboundDeliveryKey`, unique), and a thread records the last step it
+committed (`inboundPipelineStage`). Running the same delivery again resumes
+that record: no second thread, message or unmatched email, and no repeated
+assignment notification, AI tasks or draft response. The email job is
+therefore retried automatically (`INBOUND_EMAIL_JOB_OPTIONS` in
+`src/jobs/queue.js`: 3 attempts, exponential backoff from 5 seconds); a
+delivery that fails every attempt stays in the failed set for 30 days for a
+deliberate replay. A stalled job (worker lost) is not re-run automatically.
 
 ### Discord Webhook URLs
 Store Discord webhook URLs only in the deployment secret store and expose them
