@@ -11,6 +11,7 @@ import { clearReauthCookieOptions, REAUTH_COOKIE, recentAuthProblem, sendReauthR
 import { dummyPasswordCheck, hashPassword, upgradeLegacyHash, verifyPassword, warmDummyPasswordHash } from '../auth/password.js';
 import { accountThrottle } from '../auth/credential-throttle.js';
 import { isMfaEnrollmentRequired } from '../auth/mfa-enforcement.js';
+import { resolveRequestSession } from '../auth/request-session.js';
 import { AccountWithoutOrganizationError } from '../auth/providers/local.provider.js';
 import {
   IMPERSONATION_COOKIE,
@@ -272,6 +273,17 @@ export default async function authRoutes(fastify) {
   // Register (admin only, or first user with ADMIN_INVITE_TOKEN)
   fastify.post('/register', {
     ...authRateLimit,
+    // /api/auth is exempt from the global session hook, so identify the
+    // caller here, before the organization MFA requirement preHandler runs:
+    // an admin who must still enroll is refused like on any other route,
+    // whatever spelling of the Authorization scheme @fastify/jwt accepts.
+    // Never refuses by itself: without a current session the request is
+    // anonymous, and the handler decides (first-admin bootstrap with the
+    // invite token, otherwise 401).
+    onRequest: [async function registerSessionGuard(request) {
+      if (request.impersonation) return;
+      await resolveRequestSession(request, fastify.prisma);
+    }],
     preHandler: [validateBody(registerSchema)],
   }, async (request, reply) => {
     const { email, password, name, role = 'TEAM', adminInviteToken, organizationName } = request.body;

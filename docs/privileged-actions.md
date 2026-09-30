@@ -404,14 +404,39 @@ one of them):
 
 Everything else is refused, including `PUT /api/auth/me`, changing the
 password, step-up (`/api/auth/reauth`), starting a support view, creating
-users through `POST /api/auth/register` (whose handler verifies the session
-itself; the guard verifies the session token too), and every staff and admin
-API. Public capability links (portal, proposal, estimate and share links) and
-the client portal are not staff routes: they stay usable even when the same
-browser holds a restricted staff session, because the guard only reads a raw
-session cookie on `/api/auth` routes and otherwise uses the identity a route
-guard authenticated.
-Realtime (Socket.IO) handshakes are refused as well. The web app routes the
+users through `POST /api/auth/register`, and every staff and admin API.
+`POST /api/auth/register` identifies its caller in its own `onRequest` guard
+(`/api/auth` is outside the global session hook), so the requirement sees the
+admin however the request carries the session: the cookie, or an
+`Authorization` header with any case of the `Bearer` scheme, exactly as
+`@fastify/jwt` accepts it. The guard's own token fallback on other `/api/auth`
+routes parses the header the same way.
+
+Public routes are not staff routes and are **never** restricted, even when
+the same browser holds a restricted staff session (the global session hook
+still reads that cookie on them): every route that declares
+`config: { public: true }` without `actsForStaff`. Those are the capability links (portal, proposal,
+estimate, invoice, contract, form and media-review share links, including the
+older `/api/estimates/view/:viewToken`, `/api/contracts/sign/:signToken`,
+`/api/invoices/client/:viewToken` and `/api/proposals/client/:viewToken`
+paths), the public intake forms (booking, client acquisition), signed
+webhooks, the client-portal magic-link exchange and the health probes. The
+access matrix test (`src/tests/unit/api-access-matrix.test.js`) requires the
+flag on every route of its public allowlist in those categories and on no
+other route. OAuth callbacks (Slack, Google Calendar) are public too (no route
+guard; the signed state authenticates them) but declare `actsForStaff`: they
+complete a connection for the staff member who started it, so they stay
+restricted. The client portal accepts only client sessions.
+
+Realtime (Socket.IO) is refused as well: at the handshake, again when the
+connection is admitted, and on every `join-project` (which answers
+`{ joined: false, code: "MFA_ENROLLMENT_REQUIRED" }` and disconnects the
+socket). Sockets already open when the requirement starts to apply are
+disconnected at once, on every API instance (through the same Redis-backed
+revoker as support views), when an admin turns the requirement on (the
+organization's staff without two-factor), resets a member's two-factor (that
+member; their sessions are revoked too), or a member turns their own
+two-factor off under the requirement (that member). The web app routes the
 person to `/security/two-factor-setup`, which explains the requirement, runs
 the normal enrollment and offers sign-out; any `403 MFA_ENROLLMENT_REQUIRED`
 answer mid-session (for example when an admin turns the requirement on while
@@ -520,6 +545,23 @@ To cancel an unused grant: `node scripts/break-glass.mjs revoke --grant <id>
   no WebAuthn/passkey factor yet).
 - The requirement check is one extra database lookup per signed-in API
   request.
+- Enrollment needs only the account password (the session and the password
+  prove the person; there is no second factor yet to prove). Someone who
+  holds only a staff member's password can therefore sign in and enroll
+  **their own** authenticator before the real member does, and from then on
+  pass the requirement as that member. Mitigation: before turning the
+  requirement on, an admin checks `staffWithoutMfa` (Settings → Organization
+  security, or `GET /api/settings/mfa-requirement`) and asks those members to
+  enroll first, or resets the passwords of accounts that are not in active
+  use. Enrollment writes the `auth.mfa_enabled` audit event, and an admin can reset
+  a member's two-factor (`POST /api/auth/mfa/admin/users/:userId/reset`) if
+  the member did not enroll it themselves.
+- Disconnecting open sockets when the requirement starts to apply is best
+  effort across instances: if the Redis publish fails, the change still
+  applies to every HTTP request at once, the sockets on the instance that
+  served the change are dropped, and a socket elsewhere is refused on its
+  next `join-project` or reconnection. There is no periodic sweep for this
+  case (support views have one).
 
 - Two-factor re-authentication shares the sign-in attempt budget. Someone
   holding only a stolen session cookie can therefore use bad codes to lock the

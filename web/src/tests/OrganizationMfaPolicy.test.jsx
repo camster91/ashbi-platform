@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -6,14 +6,14 @@ vi.mock('../lib/api', () => ({
   api: {
     getMfaRequirement: vi.fn(),
     setMfaRequirement: vi.fn(),
+    getMfaStatus: vi.fn(),
   },
 }));
 
 const { api } = await import('../lib/api');
 const { default: OrganizationMfaPolicy } = await import('../components/OrganizationMfaPolicy');
 
-function renderPolicy() {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+function renderPolicy(queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })) {
   return render(
     <QueryClientProvider client={queryClient}>
       <OrganizationMfaPolicy />
@@ -66,6 +66,28 @@ describe('Settings → Organization security: MFA requirement toggle', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(api.setMfaRequirement).not.toHaveBeenCalled();
     expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('refreshes the "set up your own first" hint once the admin enrolls', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    // TwoFactorSettings (above this section) owns the admin's own status.
+    queryClient.setQueryData(['mfa-status'], { enabled: false });
+    api.getMfaRequirement
+      .mockResolvedValueOnce({ required: false, staffWithoutMfa: 2, actorMfaEnabled: false })
+      .mockResolvedValue({ required: false, staffWithoutMfa: 1, actorMfaEnabled: true });
+    renderPolicy(queryClient);
+
+    expect(await screen.findByText(/set up two-factor authentication for your own account first/i)).toBeInTheDocument();
+    expect(api.getMfaRequirement).toHaveBeenCalledTimes(1);
+
+    // The admin finishes enrolling: their own status turns on.
+    act(() => { queryClient.setQueryData(['mfa-status'], { enabled: true }); });
+
+    await waitFor(() => expect(screen.queryByText(/set up two-factor authentication for your own account first/i)).not.toBeInTheDocument());
+    expect(api.getMfaRequirement).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('status')).toHaveTextContent(/1 active staff member has not set up/i);
+    // It only observes that status; it never fetches it.
+    expect(api.getMfaStatus).not.toHaveBeenCalled();
   });
 
   it('explains that the admin must enroll first when the server refuses', async () => {

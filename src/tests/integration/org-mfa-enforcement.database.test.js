@@ -7,7 +7,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { once } from 'node:events';
 import bcrypt from 'bcrypt';
+import { io as connectClient } from 'socket.io-client';
 
 const databaseUrl = process.env.TENANT_INTEGRATION_DATABASE_URL;
 const sameDatabase = databaseUrl && process.env.DATABASE_URL === databaseUrl;
@@ -17,6 +19,15 @@ process.env.CREDENTIALS_KEY = process.env.CREDENTIALS_KEY || 'integration-test-c
 
 const PASSWORD = 'Org-Mfa-Integration-1';
 const CODE = 'MFA_ENROLLMENT_REQUIRED';
+
+/** Resolve with true when `emitter` emits `event` within `ms`, else false. */
+function emitsWithin(emitter, event, ms = 3_000) {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => { emitter.off(event, onEvent); resolve(false); }, ms);
+    function onEvent() { clearTimeout(timer); resolve(true); }
+    emitter.once(event, onEvent);
+  });
+}
 
 test('an organization can require two-factor authentication for all staff', {
   skip: !sameDatabase && 'TENANT_INTEGRATION_DATABASE_URL (equal to DATABASE_URL) is not configured',
@@ -37,6 +48,21 @@ test('an organization can require two-factor authentication for all staff', {
   const app = await buildApp({ initializeRuntime: false, jwtSecret: JWT_SECRET });
   const passwordHash = await bcrypt.hash(PASSWORD, 4);
   const enrolledSecret = generateTotpSecret();
+  const recoveredSecret = generateTotpSecret();
+  // Real Socket.IO clients against the real server (F3: sockets opened
+  // before the requirement applied must not keep working).
+  await app.listen({ port: 0, host: '127.0.0.1' });
+  const baseUrl = `http://127.0.0.1:${app.server.address().port}`;
+  const sockets = [];
+  const connectSocket = async (jar) => {
+    const cookie = Object.entries(jar).map(([name, value]) => `${name}=${value}`).join('; ');
+    const client = connectClient(baseUrl, { transports: ['websocket'], extraHeaders: { cookie }, reconnection: false });
+    sockets.push(client);
+    const [outcome] = await Promise.race([once(client, 'connect').then(() => ['connect']), once(client, 'connect_error')]);
+    assert.equal(outcome, 'connect', `socket connects: ${outcome?.message ?? ''}`);
+    return client;
+  };
+  const joinProject = (client, projectId) => new Promise((resolve) => client.emit('join-project', projectId, resolve));
 
   const inject = (method, url, cookies, payload) => app.inject({ method, url, cookies, payload });
   const cookieFrom = (response, name) => response.cookies.find((cookie) => cookie.name === name)?.value;
@@ -59,7 +85,7 @@ test('an organization can require two-factor authentication for all staff', {
       mfaEnabled: true, mfaSecret: encryptMfaSecret(enrolledSecret), mfaEnabledAt: new Date(),
     });
     const recovered = await mk(orgA, 'recovered', 'ADMIN', {
-      mfaEnabled: true, mfaSecret: encryptMfaSecret(generateTotpSecret()), mfaEnabledAt: new Date(),
+      mfaEnabled: true, mfaSecret: encryptMfaSecret(recoveredSecret), mfaEnabledAt: new Date(),
     });
     const staffB = await mk(orgB, 'staff-b', 'STAFF');
     await prisma.client.create({ data: { organizationId: orgA, name: 'Tenant A Client' } });
@@ -96,8 +122,23 @@ test('an organization can require two-factor authentication for all staff', {
     assert.equal(before.statusCode, 200, before.body);
     assert.deepEqual(before.json(), { required: false, staffWithoutMfa: 3, actorMfaEnabled: true });
 
+    // Realtime opened before the requirement: an unenrolled member's socket,
+    // an enrolled member's and the enabling admin's.
+    const staffSocketBefore = await connectSocket(sessionOf(staff));
+    const enrolledSocket = await connectSocket(sessionOf(enrolled));
+    const adminSocket = await connectSocket({ token: adminCookies.token });
+    const staffDropped = emitsWithin(staffSocketBefore, 'disconnect');
+    const enrolledDroppedEarly = emitsWithin(enrolledSocket, 'disconnect', 1_000);
+    const adminDropped = emitsWithin(adminSocket, 'disconnect', 1_000);
+
     const enabled = await inject('PUT', '/api/settings/mfa-requirement', adminCookies, { required: true });
     assert.equal(enabled.statusCode, 200, enabled.body);
+    // Turning it on ends the unenrolled member's open realtime connection,
+    // and only theirs.
+    assert.equal(await staffDropped, true, 'the unenrolled member\'s socket is disconnected');
+    assert.equal(await enrolledDroppedEarly, false, 'an enrolled member keeps realtime');
+    assert.equal(await adminDropped, false, 'the enabling admin keeps realtime');
+    assert.equal(enrolledSocket.connected, true);
     assert.equal(enabled.json().required, true);
     assert.equal(enabled.json().changed, true);
     assert.equal((await prisma.organization.findUnique({ where: { id: orgA } })).mfaRequired, true);
@@ -147,6 +188,53 @@ test('an organization can require two-factor authentication for all staff', {
       assert.equal(response.json().code, CODE, `${method} ${url}`);
     }
 
+    // F1: the scheme of the Authorization header is case-insensitive in
+    // @fastify/jwt, so the requirement must see the admin behind any case.
+    // No cookie: the header alone identifies the caller.
+    for (const scheme of ['bearer', 'BEARER', 'BeArEr']) {
+      const email = `bearer-${scheme}-${suffix}@example.com`.toLowerCase();
+      const register = await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        headers: { authorization: `${scheme} ${otherAdmin.token}` },
+        payload: { email, password: PASSWORD, name: 'Bearer Case', role: 'TEAM' },
+      });
+      assert.equal(register.statusCode, 403, `register with ${scheme}: ${register.body}`);
+      assert.equal(register.json().code, CODE, `register with ${scheme}`);
+      assert.equal(await prisma.user.count({ where: { email } }), 0, `no user created with ${scheme}`);
+      const normal = await app.inject({ method: 'GET', url: '/api/team', headers: { authorization: `${scheme} ${otherAdmin.token}` } });
+      assert.equal(normal.statusCode, 403, `GET /api/team with ${scheme}: ${normal.body}`);
+      assert.equal(normal.json().code, CODE, `GET /api/team with ${scheme}`);
+    }
+
+    // F2: public links opened in a browser holding a restricted staff
+    // session are never refused for the staff member's missing enrollment
+    // (unknown tokens answer 404 from the handlers themselves).
+    const unknownToken = `no-such-token-${suffix}`;
+    for (const [method, url, payload] of [
+      ['GET', `/api/estimates/view/${unknownToken}`],
+      ['POST', `/api/estimates/view/${unknownToken}/approve`, {}],
+      ['GET', `/api/contracts/sign/${unknownToken}`],
+      ['GET', `/api/invoices/client/${unknownToken}`],
+      ['GET', `/api/proposals/client/${unknownToken}`],
+      ['GET', `/api/portal/${unknownToken}`],
+      ['GET', `/api/portal/review/${unknownToken}`],
+      ['POST', '/api/client-portal/request-access', { email: `nobody-${suffix}@example.com` }],
+      ['GET', '/api/webhooks/email/status'],
+      ['GET', '/api/live'],
+    ]) {
+      for (const cookies of [staffCookies, otherAdmin]) {
+        const response = await inject(method, url, cookies, payload);
+        assert.notEqual(response.json()?.code, CODE, `${method} ${url}: ${response.body}`);
+        assert.notEqual(response.statusCode, 403, `${method} ${url}: ${response.body}`);
+        assert.notEqual(response.statusCode, 500, `${method} ${url}: ${response.body}`);
+      }
+    }
+    // An OAuth callback completes a staff connection: still restricted.
+    const oauth = await inject('GET', '/api/slack/oauth/callback?code=c&state=s', staffCookies);
+    assert.equal(oauth.statusCode, 403, oauth.body);
+    assert.equal(oauth.json().code, CODE);
+
     // Signing in still works and says so; the new session is restricted too.
     const login = await inject('POST', '/api/auth/login', {}, { email: team.email, password: PASSWORD });
     assert.equal(login.statusCode, 200, login.body);
@@ -180,6 +268,28 @@ test('an organization can require two-factor authentication for all staff', {
     assert.equal((await inject('GET', '/api/clients', staffAfter)).statusCode, 200);
     assert.equal((await inject('GET', '/api/auth/me', staffAfter)).json().mfaEnrollmentRequired, false);
     assert.equal(await handshake(staffAfter), undefined);
+
+    // F3: turning one's own two-factor off under the requirement ends one's
+    // open realtime at once, and reconnecting is refused.
+    const staffSocketAfter = await connectSocket(staffAfter);
+    const selfDisableDrop = emitsWithin(staffSocketAfter, 'disconnect');
+    const selfDisable = await inject('POST', '/api/auth/mfa/disable', staffAfter, {
+      password: PASSWORD, code: totp(enroll.json().secret, { timeMs: Date.now() + 30_000 }),
+    });
+    assert.equal(selfDisable.statusCode, 200, selfDisable.body);
+    assert.equal(selfDisable.json().mfaEnrollmentRequired, true);
+    assert.equal(await selfDisableDrop, true, 'the socket is disconnected after turning two-factor off');
+    assert.match((await handshake({ token: cookieFrom(selfDisable, 'token') }))?.message || '', /Two-factor/);
+
+    // F3: an admin resetting a member's two-factor ends that member's open
+    // realtime too (the enrolled member's socket, connected before the
+    // requirement was turned on).
+    const resetDrop = emitsWithin(enrolledSocket, 'disconnect');
+    const reset = await inject('POST', `/api/auth/mfa/admin/users/${enrolled.id}/reset`, sessionOf(recovered), {
+      password: PASSWORD, code: totp(recoveredSecret),
+    });
+    assert.equal(reset.statusCode, 200, reset.body);
+    assert.equal(await resetDrop, true, 'the reset member\'s socket is disconnected');
 
     // --- Break-glass cannot become a bypass. ---------------------------------
     // Redemption turns the recovered admin's two-factor off; in an
@@ -219,7 +329,21 @@ test('an organization can require two-factor authentication for all staff', {
     assert.equal(events.length, 2);
     assert.equal(events[1].metadata.fromRequired, true);
     assert.equal(events[1].metadata.toRequired, false);
+
+    // F3: join-project re-checks the requirement, so a socket that missed
+    // the disconnect (the requirement switched on by any other path, a lost
+    // revocation) is refused and dropped on its next join.
+    const teamSocket = await connectSocket(teamCookies);
+    const firstJoin = await joinProject(teamSocket, `no-such-project-${suffix}`);
+    assert.deepEqual(firstJoin, { joined: false }, 'an ordinary refusal while not required');
+    await prisma.organization.update({ where: { id: orgA }, data: { mfaRequired: true } });
+    const joinDrop = emitsWithin(teamSocket, 'disconnect');
+    const refusedJoin = await joinProject(teamSocket, `no-such-project-${suffix}`);
+    assert.deepEqual(refusedJoin, { joined: false, code: CODE });
+    assert.equal(await joinDrop, true, 'the socket is disconnected on join-project');
+    await prisma.organization.update({ where: { id: orgA }, data: { mfaRequired: false } });
   } finally {
+    for (const client of sockets) client.disconnect();
     await app.close();
     await prisma.notification.deleteMany({ where: { user: { organizationId: { in: [orgA, orgB] } } } });
     await prisma.impersonationSession.deleteMany({ where: { organizationId: { in: [orgA, orgB] } } });

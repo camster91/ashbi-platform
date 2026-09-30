@@ -65,9 +65,15 @@ function Enrollment({ onEnabled }) {
     onSuccess: (data) => { setEnrollment(data); setPassword(''); setCode(''); setError(''); },
     onError: (err) => setError(err.message || 'Two-factor setup could not start. Try again.'),
   });
+  const queryClient = useQueryClient();
   const confirm = useMutation({
     mutationFn: (value) => api.confirmMfaEnrollment(value),
-    onSuccess: (data) => onEnabled(data.recoveryCodes),
+    onSuccess: (data) => {
+      onEnabled(data.recoveryCodes);
+      // Two-factor is on now: refresh what depends on it (the organization
+      // requirement section reacts to this status).
+      queryClient.invalidateQueries({ queryKey: ['mfa-status'] });
+    },
     onError: (err) => { setError(err.message || 'That code did not match.'); setCode(''); },
   });
 

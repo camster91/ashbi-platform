@@ -15,6 +15,7 @@ vi.mock('../lib/api', () => ({
     startMfaEnrollment: vi.fn(),
     confirmMfaEnrollment: vi.fn(),
     disableMfa: vi.fn(),
+    stopImpersonation: vi.fn(),
   },
   setUnauthorizedCallback: vi.fn(),
   setApiErrorCallback: vi.fn(),
@@ -82,6 +83,28 @@ describe('two-factor setup redirect', () => {
     api.me.mockResolvedValue({ ...STAFF, mfaEnrollmentRequired: false });
     renderApp(MFA_ENROLLMENT_PATH);
     expect(await screen.findByRole('heading', { name: 'Settings page' })).toBeInTheDocument();
+  });
+
+  it('offers to stop a support view instead of enrolling while one is open', async () => {
+    // The requirement is the viewing admin's; the view blocks two-factor
+    // changes, so the page offers the banner's Stop action and comes back here.
+    api.me.mockResolvedValue({
+      ...STAFF,
+      mfaEnrollmentRequired: true,
+      impersonation: { subject: { id: 'u1', name: 'Staff' }, expiresAt: new Date(Date.now() + 600_000).toISOString() },
+    });
+    api.stopImpersonation.mockResolvedValue({ stopped: 1 });
+    renderApp('/dashboard');
+
+    expect(await screen.findByRole('heading', { name: /set up two-factor authentication/i })).toBeInTheDocument();
+    expect(screen.getByText(/you are viewing as staff/i)).toBeInTheDocument();
+    expect(screen.queryByRole('form', { name: /set up two-factor authentication/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /stop viewing as staff/i }));
+    await waitFor(() => expect(api.stopImpersonation).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(reloadTo).toHaveBeenCalledWith(MFA_ENROLLMENT_PATH));
+    expect(api.startMfaEnrollment).not.toHaveBeenCalled();
   });
 
   it('continues into the app once enrollment is complete, without signing in again', async () => {

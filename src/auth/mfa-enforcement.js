@@ -7,10 +7,16 @@
 // who has enrolled completes the second factor as always). Instead, a global
 // preHandler (registered in src/index.js) checks the database on every /api
 // request made with a staff identity and, while the requirement applies,
-// refuses everything except the routes in MFA_ENROLLMENT_ALLOWED_ROUTES with
+// refuses everything except the routes in MFA_ENROLLMENT_ALLOWED_ROUTES and
+// the public routes (`config: { public: true }`: capability links, intake,
+// signed webhooks, magic links, probes; see isPublicRoute) with
 //
 //   403 { code: "MFA_ENROLLMENT_REQUIRED" }
 //
+// Realtime: the Socket.IO handshake and every join-project re-check the
+// requirement, and turning it on (or an admin reset / a person turning their
+// own two-factor off) disconnects the affected people's open sockets
+// (disconnectUserSockets).
 // Because the check reads the database on each request (not a claim in the
 // session token), it takes effect on existing sessions the moment an
 // administrator turns the requirement on, is lifted the moment the person
@@ -96,6 +102,25 @@ export const MFA_POLICY_USER_SELECT = Object.freeze({
 });
 
 /**
+ * Whether the matched route is declared public (`config: { public: true }`,
+ * the repository's marker for a route without an auth guard) and does not
+ * act for a staff member (`config.actsForStaff`, set on the OAuth callbacks,
+ * which complete the connection the signed-in staff member started). What
+ * remains are the capability links (portal, proposal, estimate, invoice,
+ * contract, form and review share links), public intake forms, signed
+ * webhooks, the magic-link exchange and health probes: none acts with a
+ * staff member's authority, so the requirement does not apply even when the
+ * global session hook found a staff cookie in the same browser. The access
+ * matrix test (src/tests/unit/api-access-matrix.test.js) keeps the flags in
+ * step with its reviewed list of public routes.
+ * @param {any} request
+ */
+export function isPublicRoute(request) {
+  const config = request.routeOptions?.config;
+  return config?.public === true && config.actsForStaff !== true;
+}
+
+/**
  * Read the requirement for a user id (one primary-key lookup with the
  * organization joined). Resolves to false for an unknown user.
  * @param {any} prisma raw client (not tenant-scoped)
@@ -114,10 +139,18 @@ export function sendMfaEnrollmentRequired(reply) {
   });
 }
 
-function bearerToken(request) {
+/**
+ * The token @fastify/jwt would read from the Authorization header, parsed the
+ * same way (node_modules/@fastify/jwt/index.js, lookupToken): a
+ * case-insensitive `Bearer` scheme followed by whitespace, then exactly one
+ * space-separated token. Anything the plugin would refuse yields null.
+ * @param {any} request
+ */
+export function bearerToken(request) {
   const header = request.headers?.authorization;
-  if (typeof header !== 'string' || !header.startsWith('Bearer ')) return null;
-  return header.slice(7).trim() || null;
+  if (typeof header !== 'string' || !/^Bearer\s/i.test(header)) return null;
+  const parts = header.split(' ');
+  return parts.length === 2 && parts[1] ? parts[1] : null;
 }
 
 /**
@@ -167,6 +200,7 @@ export function createMfaEnforcementHook({ prisma, verifySessionToken, logger = 
     const routeUrl = request.routeOptions?.url;
     if (!routeUrl) return undefined;
     if (isMfaEnrollmentAllowedRoute(request.method, routeUrl) && routeUrl === path) return undefined;
+    if (isPublicRoute(request)) return undefined;
 
     const principalId = requestPrincipalId(request, verifySessionToken);
     if (!principalId) return undefined;
@@ -182,4 +216,23 @@ export function createMfaEnforcementHook({ prisma, verifySessionToken, logger = 
     if (required) return sendMfaEnrollmentRequired(reply);
     return undefined;
   };
+}
+
+/**
+ * Drop the realtime sockets of people the requirement now applies to, on
+ * every API instance (through the support-view revoker's Redis channel when
+ * it has one). Used when an administrator turns the requirement on, resets a
+ * member's two-factor, or a person turns their own off: the handshake and
+ * join-project checks refuse any reconnection until they enroll. Never
+ * throws; a failed publish is logged and the local disconnect has happened.
+ * @param {{ revoke: (userId: string) => Promise<void> } | null | undefined} revoker
+ * @param {Iterable<string>} userIds
+ * @param {any} [logger]
+ */
+export async function disconnectUserSockets(revoker, userIds, logger = defaultLogger) {
+  const ids = [...new Set([...userIds].filter((id) => typeof id === 'string' && id))];
+  const results = await Promise.allSettled(ids.map((id) => revoker.revoke(id)));
+  const failed = results.filter((result) => result.status === 'rejected').length;
+  if (failed > 0) logger.warn({ failed, total: ids.length }, 'Could not publish every realtime disconnect for the MFA requirement');
+  return { disconnected: ids.length, failed };
 }

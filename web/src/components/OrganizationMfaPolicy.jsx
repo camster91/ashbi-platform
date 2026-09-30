@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { LoadingState } from './ui';
@@ -11,6 +11,9 @@ import ConfirmDialog from './ConfirmDialog';
 // admin has two-factor authentication on their own account.
 
 const QUERY_KEY = ['mfa-requirement'];
+// The signed-in person's own two-factor status, fetched by TwoFactorSettings
+// (Settings → Security, above this section).
+const OWN_MFA_QUERY_KEY = ['mfa-status'];
 
 function staffSummary(count) {
   if (!count) return 'Every active staff member has two-factor authentication on.';
@@ -35,6 +38,20 @@ export default function OrganizationMfaPolicy() {
     mutationFn: (required) => api.setMfaRequirement(required),
     onSuccess: (policy) => queryClient.setQueryData(QUERY_KEY, policy),
   });
+  // Observe (never fetch) the admin's own two-factor status. When it changes,
+  // for example once they finish enrolling above, refetch the policy so the
+  // "set up your own first" hint and the count of staff without two-factor
+  // are current.
+  const { data: ownMfa } = useQuery({ queryKey: OWN_MFA_QUERY_KEY, queryFn: () => api.getMfaStatus(), enabled: false });
+  const ownEnabled = ownMfa?.enabled;
+  const previousOwnEnabled = useRef(ownEnabled);
+  useEffect(() => {
+    const previous = previousOwnEnabled.current;
+    previousOwnEnabled.current = ownEnabled;
+    if (typeof previous === 'boolean' && typeof ownEnabled === 'boolean' && previous !== ownEnabled) {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEY });
+    }
+  }, [ownEnabled, queryClient]);
 
   if (isLoading) return <LoadingState label="Loading organization security…" compact className="justify-start" size="sm" />;
   if (error) return <QueryErrorState error={error} message="Failed to load the two-factor requirement" onRetry={refetch} isRetrying={isFetching} />;

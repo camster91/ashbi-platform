@@ -282,8 +282,11 @@ export default async function mfaRoutes(fastify) {
     await recordMfaEvent(request.prisma, request, user, 'disabled', { method: factor.method });
     // Allowed even when the organization requires two-factor (it is how a
     // person replaces their authenticator), but this session is then limited
-    // to enrollment until they set it up again.
-    return { enabled: false, mfaEnrollmentRequired: await isMfaEnrollmentRequired(request.prisma, user.id) };
+    // to enrollment until they set it up again, and their open realtime
+    // connections end (reconnecting is refused until they enroll).
+    const mfaEnrollmentRequired = await isMfaEnrollmentRequired(request.prisma, user.id);
+    if (mfaEnrollmentRequired) await fastify.disconnectUserSockets?.([user.id]);
+    return { enabled: false, mfaEnrollmentRequired };
   });
 
   // Step-up re-authentication (#416). Proves the signed-in user is present
@@ -453,6 +456,10 @@ export default async function mfaRoutes(fastify) {
       },
     });
     await recordMfaEvent(request.prisma, request, target, 'admin_reset', { actorUserId: admin.id, wasEnabled });
+    // Every session of the target was revoked above; end their open realtime
+    // connections too (under an organization MFA requirement, reconnecting is
+    // refused until they enroll again).
+    await fastify.disconnectUserSockets?.([target.id]);
     return { reset: true, userId: target.id };
   });
 }

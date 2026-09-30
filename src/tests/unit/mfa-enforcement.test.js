@@ -10,9 +10,12 @@ import fastifyJwt from '@fastify/jwt';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'unit-test-secret-at-least-32-characters';
 
 const {
+  bearerToken,
   createMfaEnforcementHook,
+  disconnectUserSockets,
   isMfaEnrollmentAllowedRoute,
   isMfaEnrollmentRequired,
+  isPublicRoute,
   MFA_ENROLLMENT_ALLOWED_ROUTES,
   MFA_ENROLLMENT_REQUIRED_CODE,
   mustEnrollMfa,
@@ -101,6 +104,46 @@ describe('isMfaEnrollmentRequired', () => {
   });
 });
 
+describe('bearerToken', () => {
+  // @fastify/jwt accepts /^Bearer\s/i and then exactly one space-separated
+  // token; the guard must read the same token the plugin will accept.
+  it('reads the scheme case-insensitively, like @fastify/jwt', () => {
+    for (const scheme of ['Bearer', 'bearer', 'BEARER', 'BeArEr']) {
+      assert.equal(bearerToken({ headers: { authorization: `${scheme} abc.def.ghi` } }), 'abc.def.ghi', scheme);
+    }
+  });
+
+  it('yields nothing where the plugin would read no token from the header', () => {
+    for (const header of [undefined, '', 'Basic abc', 'Bearer', 'Bearer ', 'Bearer a b', 'Bearerabc', 'Bearer\tabc', 'Token abc']) {
+      assert.equal(bearerToken({ headers: { authorization: header } }), null, JSON.stringify(header));
+    }
+    assert.equal(bearerToken({}), null);
+  });
+});
+
+describe('isPublicRoute', () => {
+  it('is true only for routes that declare config.public', () => {
+    assert.equal(isPublicRoute({ routeOptions: { config: { public: true } } }), true);
+    // OAuth callbacks: no route guard, but they act for the staff member.
+    assert.equal(isPublicRoute({ routeOptions: { config: { public: true, actsForStaff: true } } }), false);
+    assert.equal(isPublicRoute({ routeOptions: { config: { public: 'yes' } } }), false);
+    assert.equal(isPublicRoute({ routeOptions: { config: {} } }), false);
+    assert.equal(isPublicRoute({}), false);
+  });
+});
+
+describe('disconnectUserSockets', () => {
+  it('revokes each person once and reports failed publishes without throwing', async () => {
+    const revoked = [];
+    const warnings = [];
+    const revoker = { revoke: async (id) => { revoked.push(id); if (id === 'b') throw new Error('redis down'); } };
+    const result = await disconnectUserSockets(revoker, ['a', 'b', 'a', '', null], { warn: (...args) => warnings.push(args) });
+    assert.deepEqual(revoked, ['a', 'b']);
+    assert.deepEqual(result, { disconnected: 2, failed: 1 });
+    assert.equal(warnings.length, 1);
+  });
+});
+
 describe('requestPrincipalId', () => {
   const verify = () => { throw new Error('should not verify'); };
   it('prefers the support-view actor, then the guarded user', () => {
@@ -113,6 +156,11 @@ describe('requestPrincipalId', () => {
     const authRoute = { url: '/api/auth/register' };
     assert.equal(requestPrincipalId({ routeOptions: authRoute, cookies: { token: 't' }, headers: {} }, () => session), 'staff-2');
     assert.equal(requestPrincipalId({ routeOptions: authRoute, headers: { authorization: 'Bearer t' } }, () => session), 'staff-2');
+    // Any case of the scheme @fastify/jwt accepts (F1: a lowercase scheme
+    // used to hide the principal while the handler still accepted it).
+    for (const scheme of ['bearer', 'BEARER', 'bEaReR']) {
+      assert.equal(requestPrincipalId({ routeOptions: authRoute, headers: { authorization: `${scheme} t` } }, () => session), 'staff-2', scheme);
+    }
     // Not a session (a magic link or any other token type), or unverifiable.
     assert.equal(requestPrincipalId({ routeOptions: authRoute, cookies: { token: 't' }, headers: {} }, () => ({ typ: 'client_magic_link', id: 'x' })), null);
     assert.equal(requestPrincipalId({ routeOptions: authRoute, cookies: { token: 't' }, headers: {} }, () => { throw new Error('bad'); }), null);
@@ -162,6 +210,22 @@ async function buildApp(t, prisma, { lookupFails = false } = {}) {
   // Verifies the session inside the handler, like POST /api/auth/register.
   app.post('/api/auth/register', ok);
   app.get('/api/clients', { onRequest: [authenticate] }, ok);
+  // Guarded like fastify.authenticate: the session is read by @fastify/jwt.
+  app.get('/api/jwt-guarded', {
+    onRequest: [async (request, reply) => {
+      try { await request.jwtVerify(); } catch { return reply.status(401).send({ error: 'Unauthorized' }); }
+      return undefined;
+    }],
+  }, ok);
+  // Stand-in for the global session hook in src/index.js, which sets
+  // request.user from a staff cookie on every /api route it covers, public
+  // capability links included.
+  const sessionFromCookieHook = async (request) => {
+    const id = request.headers['x-user'];
+    if (id) request.user = { id };
+  };
+  app.get('/api/links/:token', { config: { public: true }, onRequest: [sessionFromCookieHook] }, ok);
+  app.get('/api/not-marked/:token', { onRequest: [sessionFromCookieHook] }, ok);
   app.get('/api/public/thing', ok);
   app.get('/not-api', { onRequest: [authenticate] }, ok);
   t.after(() => app.close());
@@ -245,6 +309,41 @@ describe('the enforcement hook', () => {
     assert.equal((await app.inject({ method: 'POST', url: '/api/auth/register', payload: {} })).statusCode, 200);
     assert.equal((await app.inject({ method: 'GET', url: '/api/public/thing' })).statusCode, 200);
     assert.equal((await app.inject({ method: 'GET', url: '/not-api', headers: { 'x-user': 'admin-1' } })).statusCode, 200);
+  });
+
+  it('sees the admin behind a lowercase or mixed-case bearer scheme on handler-verified routes', async (t) => {
+    const prisma = fakePrisma([user({ id: 'admin-1', role: 'ADMIN' })]);
+    const app = await buildApp(t, prisma);
+    const token = signUserSession(app.jwt, { ...user({ id: 'admin-1', role: 'ADMIN' }) });
+    for (const scheme of ['Bearer', 'bearer', 'BEARER', 'BeArEr']) {
+      const response = await app.inject({ method: 'POST', url: '/api/auth/register', headers: { authorization: `${scheme} ${token}` }, payload: {} });
+      assert.equal(response.statusCode, 403, `${scheme}: ${response.body}`);
+      assert.equal(response.json().code, MFA_ENROLLMENT_REQUIRED_CODE, scheme);
+    }
+  });
+
+  it('restricts a jwt-guarded route whatever the case of the bearer scheme', async (t) => {
+    const prisma = fakePrisma([user({ id: 'admin-1', role: 'ADMIN' })]);
+    const app = await buildApp(t, prisma);
+    const token = signUserSession(app.jwt, { ...user({ id: 'admin-1', role: 'ADMIN' }) });
+    for (const scheme of ['Bearer', 'bearer', 'BeArEr']) {
+      const response = await app.inject({ method: 'GET', url: '/api/jwt-guarded', headers: { authorization: `${scheme} ${token}` } });
+      assert.equal(response.statusCode, 403, `${scheme}: ${response.body}`);
+      assert.equal(response.json().code, MFA_ENROLLMENT_REQUIRED_CODE, scheme);
+    }
+  });
+
+  it('never restricts a config.public route, even when a staff cookie identified the browser', async (t) => {
+    const prisma = fakePrisma([user({ id: 'staff-1' })]);
+    const app = await buildApp(t, prisma);
+    const headers = { 'x-user': 'staff-1' };
+    const publicLink = await app.inject({ method: 'GET', url: '/api/links/abc', headers });
+    assert.equal(publicLink.statusCode, 200, publicLink.body);
+    // The same identity on a route that does not declare itself public is
+    // restricted.
+    const unmarked = await app.inject({ method: 'GET', url: '/api/not-marked/abc', headers });
+    assert.equal(unmarked.statusCode, 403);
+    assert.equal(unmarked.json().code, MFA_ENROLLMENT_REQUIRED_CODE);
   });
 
   it('never blocks a public link opened in a browser that holds a restricted staff session', async (t) => {

@@ -228,7 +228,7 @@ export default async function clientPortalRoutes(fastify) {
   // POST /api/client-portal/request-access
   // Sends a magic link email — link points to /verify-token which sets a secure cookie
   fastify.post('/request-access', {
-    config: { rateLimit: { max: 10, timeWindow: '15 minutes' } },
+    config: { public: true, rateLimit: { max: 10, timeWindow: '15 minutes' } },
     preHandler: [validateBody(requestAccessSchema), requestAccessAccountThrottle.guard],
     onSend: requestAccessAccountThrottle.onSend,
   }, async (request, reply) => {
@@ -281,7 +281,7 @@ export default async function clientPortalRoutes(fastify) {
   // Exchanges a magic-link token for an httpOnly secure cookie
   // This avoids JWT tokens appearing in browser history / Referer headers
   fastify.post('/verify-token', {
-    config: { rateLimit: { max: 20, timeWindow: '15 minutes' } },
+    config: { public: true, rateLimit: { max: 20, timeWindow: '15 minutes' } },
     preHandler: validateBody(clientPortalTokenRedeemSchema),
   }, async (request, reply) => {
     const { token } = request.body || {};

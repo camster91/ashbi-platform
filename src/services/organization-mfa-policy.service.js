@@ -17,15 +17,29 @@ export class MfaPolicyError extends Error {
 }
 
 /** Active staff members of the organization who have not enrolled. */
+function staffWithoutMfaWhere(organizationId) {
+  return {
+    organizationId,
+    isActive: true,
+    role: { notIn: [...MFA_INELIGIBLE_ROLES] },
+    OR: [{ mfaEnabled: false }, { mfaSecret: null }],
+  };
+}
+
 async function countStaffWithoutMfa(prisma, organizationId) {
-  return prisma.user.count({
-    where: {
-      organizationId,
-      isActive: true,
-      role: { notIn: [...MFA_INELIGIBLE_ROLES] },
-      OR: [{ mfaEnabled: false }, { mfaSecret: null }],
-    },
-  });
+  return prisma.user.count({ where: staffWithoutMfaWhere(organizationId) });
+}
+
+/**
+ * Ids of the staff members the requirement restricts once it is on (to drop
+ * their open realtime connections).
+ * @param {any} prisma
+ * @param {string} organizationId
+ * @returns {Promise<string[]>}
+ */
+export async function listStaffIdsWithoutMfa(prisma, organizationId) {
+  const rows = await prisma.user.findMany({ where: staffWithoutMfaWhere(organizationId), select: { id: true } });
+  return rows.map((row) => row.id);
 }
 
 async function loadActor(prisma, userId) {

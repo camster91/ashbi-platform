@@ -1,9 +1,10 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { ShieldAlert } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 import TwoFactorSettings from '../components/TwoFactorSettings';
 import { Button } from '../components/ui';
+import { MFA_ENROLLMENT_PATH } from '../lib/mfa-enrollment';
 
 /**
  * Organization MFA requirement (docs/privileged-actions.md, "Organization MFA
@@ -12,10 +13,23 @@ import { Button } from '../components/ui';
  * else meanwhile (403 MFA_ENROLLMENT_REQUIRED). Enrolling lifts the
  * restriction for this same session, so the app continues without signing in
  * again.
+ *
+ * During a support view the requirement is the viewing admin's, and the view
+ * blocks two-factor changes, so the page offers to stop viewing (the same
+ * action as the support-view banner) and comes back here as the admin.
  */
 export default function MfaEnrollmentRequired() {
-  const { user, logout, completeMfaEnrollment } = useAuth();
+  const { user, logout, completeMfaEnrollment, stopImpersonation } = useAuth();
   const headingRef = useRef(null);
+  const [stopping, setStopping] = useState(false);
+  const view = user?.impersonation;
+  const viewedName = view?.subject?.name || 'this person';
+
+  const stopViewing = async () => {
+    if (stopping) return;
+    setStopping(true);
+    await stopImpersonation({ to: MFA_ENROLLMENT_PATH });
+  };
 
   // Move focus to the explanation: the person was sent here, often from
   // another screen, and should hear why.
@@ -39,14 +53,28 @@ export default function MfaEnrollmentRequired() {
             <ShieldAlert className="h-6 w-6 text-primary" aria-hidden="true" />
             Set up two-factor authentication
           </h1>
-          <p className="text-sm text-muted-foreground">
-            Your organization requires two-factor authentication for every staff account.
-            {user?.email ? ` Set it up for ${user.email} to continue.` : ' Set it up to continue.'}
-            {' '}Until then, the rest of Ashbi Hub is unavailable to this account.
-          </p>
+          {view ? (
+            <p className="text-sm text-muted-foreground">
+              Your organization requires two-factor authentication for every staff account, including yours.
+              You are viewing as {viewedName}, and two-factor settings cannot be changed during a support view.
+              Stop viewing to set up two-factor authentication for your own account.
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Your organization requires two-factor authentication for every staff account.
+              {user?.email ? ` Set it up for ${user.email} to continue.` : ' Set it up to continue.'}
+              {' '}Until then, the rest of Ashbi Hub is unavailable to this account.
+            </p>
+          )}
         </div>
 
-        <TwoFactorSettings onEnrolled={() => completeMfaEnrollment()} />
+        {view ? (
+          <Button type="button" onClick={stopViewing} disabled={stopping} aria-label={`Stop viewing as ${viewedName}`}>
+            {stopping ? 'Stopping…' : 'Stop viewing'}
+          </Button>
+        ) : (
+          <TwoFactorSettings onEnrolled={() => completeMfaEnrollment()} />
+        )}
 
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4">
           <p className="text-xs text-muted-foreground">Lost access to your authenticator later? Ask an administrator to reset it.</p>

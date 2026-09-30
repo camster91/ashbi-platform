@@ -18,6 +18,7 @@ import { requireRecentAuth } from '../auth/reauth.js';
 import { getPlatformAiStatus, setPlatformAiDisabled } from '../ai/governance.js';
 import {
   getOrganizationMfaPolicy,
+  listStaffIdsWithoutMfa,
   MfaPolicyError,
   setOrganizationMfaRequirement,
 } from '../services/organization-mfa-policy.service.js';
@@ -311,11 +312,17 @@ export default async function settingsRoutes(fastify) {
     preHandler: [requireRecentAuth, validateBody(mfaRequirementSchema)],
   }, async (request, reply) => {
     try {
-      return await setOrganizationMfaRequirement(request.prisma, request, {
+      const result = await setOrganizationMfaRequirement(request.prisma, request, {
         organizationId: request.user.organizationId,
         actorUserId: request.user.id,
         required: request.body.required,
       });
+      // Realtime opened before the requirement applied is ended now; the
+      // handshake and join-project checks refuse it until each person enrolls.
+      if (result.changed && result.required && fastify.disconnectUserSockets) {
+        await fastify.disconnectUserSockets(await listStaffIdsWithoutMfa(request.prisma, request.user.organizationId));
+      }
+      return result;
     } catch (err) {
       if (err instanceof MfaPolicyError) return reply.status(err.status).send({ error: err.message, code: err.code });
       throw err;

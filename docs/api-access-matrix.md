@@ -19,7 +19,11 @@ Across every guard, the global `preHandler` from `src/auth/mfa-enforcement.js`
 refuses a staff identity whose organization requires two-factor
 authentication and who has not enrolled (`403 MFA_ENROLLMENT_REQUIRED`),
 except on `MFA_ENROLLMENT_ALLOWED_ROUTES` (enrollment, `/api/auth/me`,
-sign-out, credential exchange, probes). See docs/privileged-actions.md.
+sign-out, credential exchange, probes) and on routes declaring
+`config: { public: true }` without `actsForStaff`: the public capability-link,
+intake, webhook, magic-link and health routes below, which act with no
+staff authority (OAuth callbacks declare `actsForStaff` and stay restricted).
+See docs/privileged-actions.md.
 
 The Tenancy column shows whether `tenancyMiddleware` scopes the route's
 Prisma client to the caller's organization (`scoped`) or hands it the raw
