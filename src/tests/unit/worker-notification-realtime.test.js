@@ -113,3 +113,11 @@ test('an automation notification with no admin or a failed write emits nothing',
   await assert.rejects(createAdminNotification('X', 'X', 'X', null, 'org-1', { db: fakeNotificationDb({ fail: true }), emitter }), /insert failed/);
   assert.deepEqual(emitter.emits, []);
 });
+
+test('worker shutdown closes the realtime emitter after the workers drain', async () => {
+  const { readFileSync } = await import('node:fs');
+  const source = readFileSync(new URL('../../jobs/worker.js', import.meta.url), 'utf8');
+  const workers = source.indexOf("['workers',");
+  const realtime = source.indexOf("['realtime', () => closeRealtimeEmitter()]");
+  assert.ok(workers > 0 && realtime > workers, 'realtime step after workers');
+});

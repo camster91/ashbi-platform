@@ -29,6 +29,7 @@ import {
 import { resolveEmbeddingOrganizationId } from './embedding-ownership.js';
 import { checkAllEscalations, checkThreadEscalation, runForEachOrganization } from './escalation.js';
 import { processNotificationJob } from './notification-job.js';
+import { closeRealtimeEmitter } from '../realtime/emitter.js';
 import { dispatchDomainEvents } from '../services/domain-event-dispatcher.service.js';
 import { initSentry, Sentry } from '../observability/sentry.js';
 import { sendOperationalAlert } from '../observability/alerts.js';
@@ -346,6 +347,8 @@ const shutdown = createShutdown({
       await Promise.all(activeWorkers.map((worker) => worker.close()));
     }],
     ['queues', () => closeQueueInfrastructure()],
+    // After the workers drain, so their last emits are published first.
+    ['realtime', () => closeRealtimeEmitter()],
     ['database', () => prisma.$disconnect()],
   ],
   flush: env.sentryDsn ? () => Sentry.flush(2_000) : undefined,
