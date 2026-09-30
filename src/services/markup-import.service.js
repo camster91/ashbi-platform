@@ -28,6 +28,7 @@ import {
   annotationPositionData,
   annotationPositionError,
   mediaKindFor,
+  GUEST_NAME_MAX,
   sanitizeGuestName,
   sanitizePlainText,
 } from './media-review.service.js';
@@ -160,6 +161,9 @@ export function parseMarkupCommentRow(row) {
   if (status !== 'open' && status !== 'resolved') problems.push('status must be open or resolved');
   const createdAt = parseIsoTimestamp(row.created_at);
   if (!createdAt) problems.push('created_at must be an ISO 8601 timestamp with an offset');
+  // The display name is part of the content hash, so it is checked, never cut.
+  const rawAuthorName = sanitizePlainText(row.author_name).replace(/\s+/g, ' ').trim();
+  if (rawAuthorName.length > GUEST_NAME_MAX) problems.push(`author_name is longer than ${GUEST_NAME_MAX} characters`);
   if (problems.length) return { error: { code: 'INVALID_ROW', row: row.__line, error: problems.join('; ') } };
 
   const rawEmail = String(row.author_email ?? '').trim();
@@ -683,8 +687,11 @@ export async function rollbackMarkupImportRun(db, { organizationId, runId }) {
     // Hold the sessions (and their files) until the deletes: every comment,
     // decision, share link or version written to them takes a conflicting
     // lock, so nothing can be added between these checks and the cascade.
-    await lockRowsForUpdate(transaction, 'review_sessions', sessionIds);
+    // Attachments first: a new review version's insert takes its foreign-key
+    // locks on the attachment before the previous session, so the same order
+    // here cannot deadlock against it.
     await lockRowsForUpdate(transaction, 'attachments', attachmentIds);
+    await lockRowsForUpdate(transaction, 'review_sessions', sessionIds);
 
     const blockers = [];
     const foreignInSessions = (await findInChunks(sessionIds, (ids) => transaction.reviewAnnotation.findMany({

@@ -50,7 +50,7 @@ names (download the originals you uploaded to MarkUp.io). An example ships at
 | `page` | 1-based page number for a PDF; blank for an image |
 | `x_percent`, `y_percent` | Pin position from the top-left corner, 0 to 100; both blank for an unpinned comment |
 | `author_email` | The commenter's email (may be blank) |
-| `author_name` | The commenter's display name |
+| `author_name` | The commenter's display name, at most 120 characters (longer is an invalid row) |
 | `comment` | Plain text, 1 to 5,000 characters; line breaks allowed in a quoted field |
 | `status` | `open` or `resolved` (applies to thread roots) |
 | `created_at` | ISO 8601 with an explicit offset, e.g. `2025-06-01T10:00:00+02:00` |

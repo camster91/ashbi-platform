@@ -154,6 +154,16 @@ test('parseLoomManifestRow reports every problem of an invalid row as one blocki
   assert.equal(item.title, 'Demo');
   assert.equal(item.ownerEmail, null, 'a malformed owner email is treated as unknown, not fatal');
   assert.equal(item.description, null);
+  // Title and description feed the content hash, so overlong values are
+  // invalid rows, never truncated.
+  const valid = {
+    __line: 3, loom_url: 'https://www.loom.com/share/0123456789abcdef0123456789abcdef', title: 't'.repeat(200),
+    created_at: '2025-01-01T00:00:00Z', owner_email: '', file_name: 'a.mp4', project_id: 'p1', description: 'd'.repeat(5000),
+  };
+  assert.equal(parseLoomManifestRow(valid).item.title, 't'.repeat(200));
+  assert.equal(parseLoomManifestRow(valid).item.description, 'd'.repeat(5000));
+  assert.match(parseLoomManifestRow({ ...valid, title: `${'t'.repeat(200)}!` }).error.error, /title is longer than 200 characters/);
+  assert.match(parseLoomManifestRow({ ...valid, description: `${'d'.repeat(5000)}!` }).error.error, /description is longer than 5000 characters/);
 });
 
 test('readLoomImport inspects the fixture: supported, unsupported and mismatched files', async () => {
@@ -273,6 +283,18 @@ test('parseMarkupCommentRow validates status, page, text and ids', () => {
   // markup_project is part of the session identity, so it is never truncated.
   assert.equal(parseMarkupCommentRow({ ...row, markup_project: 'p'.repeat(200) }).comment.markupProject, 'p'.repeat(200));
   assert.match(invalid({ markup_project: `${'p'.repeat(200)}A` }).error, /markup_project is longer than 200/);
+  // author_name is part of the content hash too: checked, never cut.
+  assert.equal(parseMarkupCommentRow({ ...row, author_name: 'a'.repeat(120) }).comment.authorName, 'a'.repeat(120));
+  assert.match(invalid({ author_name: 'a'.repeat(121) }).error, /author_name is longer than 120 characters/);
+});
+
+test('the MarkUp rollback locks attachments before review sessions (the insert order of a new version)', () => {
+  const source = fs.readFileSync(new URL('../../services/markup-import.service.js', import.meta.url), 'utf8');
+  const rollback = source.slice(source.indexOf('export async function rollbackMarkupImportRun'));
+  const attachments = rollback.indexOf("lockRowsForUpdate(transaction, 'attachments'");
+  const sessions = rollback.indexOf("lockRowsForUpdate(transaction, 'review_sessions'");
+  assert.ok(attachments > 0 && sessions > 0 && attachments < sessions, 'attachment locks come first');
+  assert.ok(rollback.indexOf('lockImportRun(transaction, runId)') < attachments, 'the run lock comes before both');
 });
 
 test('MarkUp source keys are unambiguous for names containing separators', () => {

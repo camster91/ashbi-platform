@@ -44,12 +44,12 @@ names. An example ships at
 | Column | Required | Format |
 | --- | --- | --- |
 | `loom_url` | yes | `https://www.loom.com/share/<id>` (or `loom.com`, or `/embed/<id>`); a title slug before a 32-hex id and any `?query` or `#fragment` are accepted and dropped |
-| `title` | yes | Plain text, at most 200 characters (control and bidi characters are stripped) |
+| `title` | yes | Plain text, at most 200 characters (control and bidi characters are stripped; longer is an invalid row, never truncated) |
 | `created_at` | yes | ISO 8601 with an explicit offset, e.g. `2025-03-04T10:15:00-05:00` or `…Z` |
 | `owner_email` | yes (may be blank) | The recording owner's email address |
 | `file_name` | yes | A file directly inside the input directory (no folders, no `..`) |
 | `project_id` | yes | An Ashbi project id of this organization |
-| `description` | optional column | Plain text, at most 5,000 characters |
+| `description` | optional column | Plain text, at most 5,000 characters (longer is an invalid row) |
 
 The CSV is RFC 4180: comma separated, UTF-8 (a BOM is accepted), fields with
 commas, quotes or line breaks in double quotes, `""` for a quote. The header

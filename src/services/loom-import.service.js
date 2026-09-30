@@ -103,8 +103,13 @@ export function parseLoomManifestRow(row) {
   const problems = [];
   const parsedUrl = parseLoomUrl(row.loom_url);
   if (!parsedUrl) problems.push('loom_url must be a https://www.loom.com/share/<id> link');
-  const title = sanitizeDisplayText(row.title, TITLE_MAX);
+  // Never truncate: title and description are part of the content hash, so a
+  // cut-off value would hide a later change (and lose source text).
+  const title = sanitizeDisplayText(row.title, Infinity);
   if (!title) problems.push('title is required');
+  else if ([...title].length > TITLE_MAX) problems.push(`title is longer than ${TITLE_MAX} characters`);
+  const description = sanitizeDisplayText(String(row.description ?? ''), Infinity);
+  if (description && [...description].length > DESCRIPTION_MAX) problems.push(`description is longer than ${DESCRIPTION_MAX} characters`);
   const createdAt = parseIsoTimestamp(row.created_at);
   if (!createdAt) problems.push('created_at must be an ISO 8601 timestamp with an offset, e.g. 2025-03-04T10:15:00-05:00');
   const projectId = String(row.project_id ?? '').trim();
@@ -115,7 +120,6 @@ export function parseLoomManifestRow(row) {
     return { error: { code: 'UNSAFE_PATH', row: row.__line, error: 'file_name must name a file directly inside the input directory' } };
   }
   if (problems.length) return { error: { code: 'INVALID_ROW', row: row.__line, error: problems.join('; ') } };
-  const description = sanitizeDisplayText(String(row.description ?? ''), DESCRIPTION_MAX);
   return {
     item: {
       row: row.__line,
