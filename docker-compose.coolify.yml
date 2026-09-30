@@ -30,25 +30,25 @@ services:
       - path: .env
         required: false
     environment:
-      - SERVICE_FQDN_APP_3002
-      - NODE_ENV=production
-      - PORT=3002
+      SERVICE_FQDN_APP_3002: null
+      NODE_ENV: 'production'
+      PORT: '3002'
       # The proxy reaches this container over the stack network, so the
       # loopback-only health detail shortcut is off.
-      - HEALTH_DETAILS_LOOPBACK=false
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-ashbi}:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/${POSTGRES_DB:-ashbi}?schema=public
-      - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=${JWT_SECRET:?}
-      - CREDENTIALS_KEY=${CREDENTIALS_KEY:?}
-      - ADMIN_INVITE_TOKEN=${ADMIN_INVITE_TOKEN:?}
-      - WEBHOOK_SECRET=${WEBHOOK_SECRET:?}
-      - APP_URL=${APP_URL:?}
+      HEALTH_DETAILS_LOOPBACK: 'false'
+      DATABASE_URL: 'postgresql://${POSTGRES_USER:-ashbi}:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/${POSTGRES_DB:-ashbi}?schema=public'
+      REDIS_URL: 'redis://redis:6379'
+      JWT_SECRET: '${JWT_SECRET:?}'
+      CREDENTIALS_KEY: '${CREDENTIALS_KEY:?}'
+      ADMIN_INVITE_TOKEN: '${ADMIN_INVITE_TOKEN:?}'
+      WEBHOOK_SECRET: '${WEBHOOK_SECRET:?}'
+      APP_URL: '${APP_URL:?}'
       # Links in emails, invites, portal and OAuth callbacks. Unset, the app
       # falls back to the production host, so these are required.
-      - HUB_URL=${HUB_URL:?}
-      - PORTAL_BASE_URL=${PORTAL_BASE_URL:?}
-      - CORS_ORIGIN=${CORS_ORIGIN:?}
-      - TRUST_PROXY=${TRUST_PROXY:-1}
+      HUB_URL: '${HUB_URL:?}'
+      PORTAL_BASE_URL: '${PORTAL_BASE_URL:?}'
+      CORS_ORIGIN: '${CORS_ORIGIN:?}'
+      TRUST_PROXY: '${TRUST_PROXY:-1}'
     volumes:
       - uploads:/app/uploads
       - appconfig:/app/config
@@ -80,15 +80,15 @@ services:
       - path: .env
         required: false
     environment:
-      - NODE_ENV=production
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-ashbi}:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/${POSTGRES_DB:-ashbi}?schema=public
-      - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=${JWT_SECRET:?}
-      - CREDENTIALS_KEY=${CREDENTIALS_KEY:?}
-      - WEBHOOK_SECRET=${WEBHOOK_SECRET:?}
-      - APP_URL=${APP_URL:?}
-      - HUB_URL=${HUB_URL:?}
-      - PORTAL_BASE_URL=${PORTAL_BASE_URL:?}
+      NODE_ENV: 'production'
+      DATABASE_URL: 'postgresql://${POSTGRES_USER:-ashbi}:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/${POSTGRES_DB:-ashbi}?schema=public'
+      REDIS_URL: 'redis://redis:6379'
+      JWT_SECRET: '${JWT_SECRET:?}'
+      CREDENTIALS_KEY: '${CREDENTIALS_KEY:?}'
+      WEBHOOK_SECRET: '${WEBHOOK_SECRET:?}'
+      APP_URL: '${APP_URL:?}'
+      HUB_URL: '${HUB_URL:?}'
+      PORTAL_BASE_URL: '${PORTAL_BASE_URL:?}'
     volumes:
       - uploads:/app/uploads
       - appconfig:/app/config
@@ -119,7 +119,7 @@ services:
     restart: "no"
     command: ["npx", "prisma", "migrate", "deploy"]
     environment:
-      - DATABASE_URL=postgresql://${POSTGRES_USER:-ashbi}:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/${POSTGRES_DB:-ashbi}?schema=public
+      DATABASE_URL: 'postgresql://${POSTGRES_USER:-ashbi}:${SERVICE_PASSWORD_POSTGRES}@postgres:5432/${POSTGRES_DB:-ashbi}?schema=public'
     depends_on:
       postgres:
         condition: service_healthy
@@ -129,9 +129,9 @@ services:
     image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
-      - POSTGRES_DB=${POSTGRES_DB:-ashbi}
-      - POSTGRES_USER=${POSTGRES_USER:-ashbi}
-      - POSTGRES_PASSWORD=${SERVICE_PASSWORD_POSTGRES}
+      POSTGRES_DB: '${POSTGRES_DB:-ashbi}'
+      POSTGRES_USER: '${POSTGRES_USER:-ashbi}'
+      POSTGRES_PASSWORD: '${SERVICE_PASSWORD_POSTGRES}'
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
