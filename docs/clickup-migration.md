@@ -28,15 +28,12 @@ Code: `scripts/import-clickup-tasks.js` (CLI) and
 
 ## Input preparation
 
-Export the tasks from ClickUp as CSV and save it as UTF-8. Before the run:
+Export the tasks from ClickUp as CSV and save it as UTF-8. A UTF-8
+byte-order mark (BOM, as written by "UTF-8 with BOM") is accepted: the CLI
+removes it from the first header name. Before the run:
 
-1. **Remove the byte-order mark (BOM).** The CSV is parsed by `csv-parser`
-   with its default options, which keep a BOM in the first header name. A
-   BOM-prefixed `Task ID` header is not recognised, so **every** row is
-   reported as `MISSING_ID`. Re-save the file as "UTF-8" (not "UTF-8 with
-   BOM"). An alternative is to make an id column that is not the first column.
-2. Check that the header is on the first line and that each row has one task.
-3. Keep the original export, with its checksum, alongside the migration
+1. Check that the header is on the first line and that each row has one task.
+2. Keep the original export, with its checksum, alongside the migration
    evidence.
 
 The planner reads these columns. For each field, the lower-case name is
@@ -46,8 +43,8 @@ tried first and the ClickUp display name second:
 | --- | --- | --- | --- |
 | Source id | `id`, then `Task ID` | yes | Trimmed text; must be unique in the file |
 | Title | `name`, then `Task Name` | yes | Trimmed text |
-| Status | `status`, then `Status` | no | See the status table; anything else becomes `PENDING` |
-| Priority | `priority`, then `Priority` | no | See the priority table; anything else becomes `NORMAL` |
+| Status | `status`, then `Status` | no | See the status table; anything else becomes `PENDING` (a non-blank unknown value is reported as `STATUS_FALLBACK`) |
+| Priority | `priority`, then `Priority` | no | See the priority table; anything else becomes `NORMAL` (a non-blank unknown value is reported as `PRIORITY_FALLBACK`) |
 | Description | `description`, then `Description` | no | Trimmed text; blank becomes `null` |
 | Parent | `parent`, then `Parent Task ID` | no | Source id of the parent task; blank becomes `null` |
 
@@ -63,7 +60,8 @@ Status (case-insensitive, trimmed):
 | `in progress`, `doing` | `IN_PROGRESS` |
 | `blocked` | `BLOCKED` |
 | `to do`, `todo`, `open` | `PENDING` |
-| anything else, including blank and custom statuses | `PENDING` (no finding is reported) |
+| blank | `PENDING` (no finding) |
+| anything else, including custom statuses | `PENDING`, with a `STATUS_FALLBACK` warning |
 
 Priority (case-insensitive, trimmed):
 
@@ -73,11 +71,14 @@ Priority (case-insensitive, trimmed):
 | `high` | `HIGH` |
 | `normal` | `NORMAL` |
 | `low` | `LOW` |
-| anything else, including blank | `NORMAL` (no finding is reported) |
+| blank | `NORMAL` (no finding) |
+| anything else | `NORMAL`, with a `PRIORITY_FALLBACK` warning |
 
-Custom statuses and unknown priorities are mapped **silently**. Before
-sign-off, list the distinct `Status` and `Priority` values in the export and
-confirm that the fallback is acceptable for each.
+Custom statuses and unknown priorities are planned with the fallback value
+and reported in `warnings` (one entry per row and field, with the original
+value). Warnings do not make the report incomplete. Before sign-off, record a
+disposition for each distinct fallback value: accept it, or change the value
+in ClickUp or in a copy of the CSV and rerun.
 
 ## CLI
 
@@ -99,13 +100,14 @@ Exit status:
 
 | Status | Meaning |
 | --- | --- |
-| `0` | Report written, and `summary.complete` is `true` (no findings) |
-| `1` | Report written with findings (`summary.complete` is `false`); **or** the report file could not be written ("Report could not be written: …", for example because the path already exists); **or** the CSV could not be parsed ("ClickUp CSV could not be read: …") |
+| `0` | Report written, and `summary.complete` is `true` (no errors; warnings may be present) |
+| `1` | Report written with errors (`summary.complete` is `false`); **or** the report file could not be written ("Report could not be written: …", for example because the path already exists); **or** the CSV could not be opened or parsed ("ClickUp CSV could not be read: …") |
 | `2` | Usage error, or `--confirm` given |
 
-A missing or unreadable `--input` file is not handled by the CLI. Node stops
-with an unhandled `ENOENT` stream error (exit `1`), and no report is written.
-Check the path before you run the command.
+A missing or unreadable `--input` file stops the run with "ClickUp CSV could
+not be read: …" and exit `1`. As with the other importers, a run that cannot
+read its input writes **no** report: there is nothing to reconcile. Fix the
+path and rerun.
 
 ## Flow
 
@@ -120,6 +122,7 @@ The report is also printed to stdout.
 ### 2. Review
 
 - `summary.complete` must be `true` and `errors` must be empty.
+- Every entry in `warnings` has a recorded disposition.
 - `input.rows` must equal the row count of the export as ClickUp shows it
   (without the header).
 - `summary.planned` counts **every parsed row**, including rows that also
@@ -169,42 +172,51 @@ The file is JSON with these fields:
 | `input.rows` | Rows parsed (excluding the header) |
 | `summary.planned` | Number of entries in `tasks` (one per row, including rows with findings) |
 | `summary.errors` | Number of entries in `errors` |
-| `summary.complete` | `true` only when `errors` is empty |
+| `summary.warnings` | Number of entries in `warnings` |
+| `summary.complete` | `true` only when `errors` is empty (warnings do not count) |
 | `tasks[]` | `{ sourceId, title, description, status, priority, parentSourceId }` per row, in file order |
-| `errors[]` | Findings; see the exception taxonomy |
+| `errors[]` | Blocking findings; see the exception taxonomy |
+| `warnings[]` | Non-blocking findings (fallback mappings); see the exception taxonomy |
 
 The report has no unchanged, skipped or conflict counts, because nothing is
 compared with the database.
 
 ## Exception taxonomy
 
-Every finding is in `errors`, and every finding makes the report incomplete
-(`summary.complete = false`, exit `1`). The planner has no warnings and no
-unsupported list.
+Blocking findings are in `errors`, and each one makes the report incomplete
+(`summary.complete = false`, exit `1`). Warnings are in `warnings`: the task
+is still planned (with the fallback value), the report stays complete, and
+each warning needs a recorded disposition. The planner has no unsupported
+list.
 
 | Code | Report entry | Meaning | Category |
 | --- | --- | --- | --- |
-| `MISSING_ID` | `{ row, code }` | The row has no source id (`id` / `Task ID` blank, or not recognised, for example because of a BOM) | blocking |
-| `MISSING_TITLE` | `{ row, code }` | The row has an id but no title (`name` / `Task Name`) | blocking |
-| `DUPLICATE_ID` | `{ row, code }` | The id was already used by an earlier row. The later row is still listed in `tasks` | blocking |
-| `PARENT_UNRESOLVED` | `{ sourceId, code }` | The row names a parent id that no row in the file has | blocking |
+| `MISSING_ID` | `{ row, code }` in `errors` | The row has no source id (`id` / `Task ID` blank or absent) | blocking |
+| `MISSING_TITLE` | `{ row, code }` in `errors` | The row has an id but no title (`name` / `Task Name`) | blocking |
+| `DUPLICATE_ID` | `{ row, code }` in `errors` | The id was already used by an earlier row. The later row is still listed in `tasks` | blocking |
+| `PARENT_UNRESOLVED` | `{ sourceId, code }` in `errors` | The row names a parent id that no row in the file has | blocking |
+| `PARENT_SELF` | `{ sourceId, code }` in `errors` | The task names itself as its parent | blocking |
+| `PARENT_CYCLE` | `{ sourceIds, code }` in `errors` | The tasks in `sourceIds` form a parent cycle: each names the next as its parent, and the last names the first. Reported once per cycle, starting from the task that comes first in the file | blocking |
+| `STATUS_FALLBACK` | `{ row, sourceId, code, value, mappedTo }` in `warnings` | A non-blank status that is not in the status table (for example a custom ClickUp status); planned as `mappedTo` (`PENDING`) | warning |
+| `PRIORITY_FALLBACK` | `{ row, sourceId, code, value, mappedTo }` in `warnings` | A non-blank priority that is not in the priority table; planned as `mappedTo` (`NORMAL`) | warning |
 
 `row` is the spreadsheet line number (the first data row is `2`). A row gets
 at most one of `MISSING_ID`, `MISSING_TITLE` and `DUPLICATE_ID`, in that
 order of precedence, so fixing one can reveal the next.
-`PARENT_UNRESOLVED` is checked after all rows are read, so a parent may come
-after its child in the file.
+`PARENT_UNRESOLVED`, `PARENT_SELF` and `PARENT_CYCLE` are checked after all
+rows are read, so a parent may come after its child in the file. For a
+duplicated id, the parent of its first row is used for the cycle check. Tasks
+that only hang below a cycle (their parent chain reaches it) are not reported
+separately; fixing the cycle resolves them.
 
 These cases are **not** detected:
 
-- a task that is its own parent, or a longer parent cycle;
-- an unknown status or priority (mapped silently; see above);
 - extra columns (ignored without a finding).
 
 ## Idempotency and reruns
 
-- The planner is deterministic. The same CSV always gives the same `tasks` and
-  `errors`; only `generatedAt` changes.
+- The planner is deterministic. The same CSV always gives the same `tasks`,
+  `errors` and `warnings`; only `generatedAt` changes.
 - The report file is created with the `wx` flag and mode `0600` (owner-only).
   An existing path is never overwritten: the run fails with exit `1` and
   writes nothing. Every rerun needs a new report path. Keep all reports as
@@ -224,10 +236,8 @@ These cases are **not** detected:
   watchers, due and start dates, time estimates, time tracked, tags, custom
   fields, checklists, comments, attachments, dependencies and list or folder
   placement.
-- Custom statuses and unknown priorities fall back silently to `PENDING` and
-  `NORMAL`.
-- Parent cycles and self-parents are not detected.
-- A BOM on the header makes every row `MISSING_ID`.
-- A missing `--input` file crashes the CLI with a stack trace instead of a
-  clean error; no report is written.
+- Custom statuses and unknown priorities fall back to `PENDING` and `NORMAL`;
+  they are reported as `STATUS_FALLBACK` / `PRIORITY_FALLBACK` warnings, not
+  mapped to a custom Ashbi value.
+- A run that cannot read its `--input` file writes no report.
 - The whole file is read into memory. There is no row limit in the code.

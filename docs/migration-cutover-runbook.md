@@ -61,7 +61,7 @@ Complete every item before the freeze starts.
       user's name must match the owner name (see the Bonsai playbook's
       *Owner matching*).
 - [ ] **Source exports collected and checksummed**: the Bonsai CSV directory
-      (six files), the ClickUp CSV (saved without a BOM), the extracted
+      (six files), the ClickUp CSV, the extracted
       Notion Markdown export, the extracted Slack export and mapping file,
       and the Loom and MarkUp.io directories with their CSVs.
 - [ ] **Dry-run reports reviewed and signed off**, one per importer and per
@@ -71,9 +71,10 @@ Complete every item before the freeze starts.
 - [ ] **Exceptions triaged.** Every `blocking` finding (see the taxonomy
       below) is resolved at the source, and the dry run is repeated with a
       new report path. Every `warning` and `unsupported` finding has a
-      written disposition: accepted, fixed or deferred. Bonsai has no codes,
-      so its `stats.errors` list must be empty. Its `complete` flag does not
-      prove that.
+      written disposition: accepted, fixed or deferred. Bonsai's blocking
+      findings are free-text messages in `stats.errors`, which must be
+      empty (its `complete` flag is `false` otherwise); its coded warnings
+      are in `stats.warnings`.
 - [ ] **Run sizes checked.** Slack under about 100,000 messages per run (use
       `--channel`); Loom a few hundred recordings per manifest; MarkUp.io a
       few thousand comments per CSV. The Bonsai live run must finish within
@@ -321,6 +322,7 @@ four classes:
 | | `UNKNOWN_PROJECT` | Slack, Loom, MarkUp.io | blocking |
 | | `CHANNEL_NOT_SELECTABLE` | Slack | blocking |
 | | `PARENT_UNRESOLVED` | Notion, ClickUp | blocking |
+| | `PARENT_SELF`, `PARENT_CYCLE` | ClickUp | blocking |
 | | `PARENT_MISSING` | MarkUp.io | warning (imported top-level) |
 | | `THREAD_PARENT_MISSING` | Slack | warning (imported top-level) |
 | Source changed since import | `SOURCE_CHANGED` | Slack, Notion, Loom, MarkUp.io | blocking |
@@ -330,6 +332,7 @@ four classes:
 | | `LIVE_MAPPING_CONFLICT` | Slack | blocking |
 | | `TOO_MANY_COMMENTS` | MarkUp.io | blocking |
 | | `MEDIA_SCAN_PENDING` | MarkUp.io | blocking (live run; retry) |
+| | `CLIENT_DOMAIN_TAKEN` | Bonsai | warning (client imported without that domain) |
 | Already in Ashbi / changed in Ashbi | `ALREADY_PRESENT`, `ALREADY_PRESENT_OTHER_PROJECT` | Slack | warning |
 | | `DELETED_IN_HUB` | Slack, Loom, MarkUp.io | warning (stays deleted) |
 | | `QUARANTINED_IN_HUB` | Loom | warning |
@@ -342,9 +345,11 @@ four classes:
 | | `MEDIA_BLOCKED` | MarkUp.io | unsupported (live run) |
 | | `unsupported.*` (no code) | Slack | unsupported (files, DMs, canvases) |
 | | `input.unsupportedFiles` (no code) | Notion | blocking (non-Markdown files block a live run) |
+| | `EXPENSE_NO_CLIENT` | Bonsai | unsupported (not imported: an expense can belong to an organization only through its client) |
+| Value mapped to a default | `STATUS_FALLBACK`, `PRIORITY_FALLBACK` | ClickUp | warning (planned as `PENDING` / `NORMAL`) |
 | No code (free text) | `stats.errors[]` | Bonsai | blocking |
 | | missing CSV file (`inputInventory`) | Bonsai | blocking (live run) |
-| | silently mapped status or priority | ClickUp | not reported: check by hand |
+| | `stats.timeEntries.duplicates` (no code) | Bonsai | warning (repeated row in one export imported once) |
 
 ### Command failures (fatal)
 
@@ -361,8 +366,9 @@ four classes:
 | `FILE_CLEANUP_INCOMPLETE` | Loom, MarkUp.io | Rollback committed but some stored files remain; rerun the rollback |
 
 Notion, ClickUp and Bonsai have no coded command failures. They stop with a
-plain error message (for example "Organization not found", or "Live import
-cannot complete with unresolved reconciliation findings").
+plain error message (for example "Organization not found", "ClickUp CSV
+could not be read: …", "Refusing import: summary file already exists: …",
+or "Live import cannot complete with unresolved reconciliation findings").
 
 ## Communication
 

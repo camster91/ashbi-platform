@@ -10,8 +10,9 @@ or missing input file remains.
 It does **not** follow the full contract of the [Slack](slack-export-migration.md),
 [Loom](loom-migration.md) and [MarkUp.io](markup-migration.md) importers. It
 has no per-run ledger, no `import_runs` row, no audit event, no stable
-source-key reconciliation table, **no rollback by run id**, and no exception
-codes (findings are free-text messages). Rerunning it **updates** existing
+source-key reconciliation table, **no rollback by run id**, and no codes for
+its blocking findings (they are free-text messages; only its two warnings
+carry codes). Rerunning it **updates** existing
 clients and projects instead of reporting them as conflicts. These gaps are
 listed under *Known limits*, and the rollback section gives the manual path.
 For the cross-system order and sign-off, see the
@@ -24,13 +25,14 @@ with status `2` without touching the database. Do not use it.
 ## Prerequisites
 
 - An Ashbi organization and its id.
-- At least one user in that organization. The importer attributes every
-  imported invoice (`createdById`), and every time entry whose owner it cannot
-  match, to the **first ADMIN user it finds** in the organization. If the
-  organization has no ADMIN, it uses the first user it finds. No ordering is
-  applied, so with several admins the choice is arbitrary; see *Known limits*.
-  If the organization has no user, the run stops ("No users found in DB.") with
-  exit `1`.
+- At least one active user in that organization. The importer attributes
+  every imported invoice (`createdById`), and every time entry whose owner it
+  cannot match, to the importer's **fallback admin**: the **oldest active
+  ADMIN** of the organization (earliest `createdAt`, then lowest `id`). If
+  the organization has no active ADMIN, it uses the oldest active user of any
+  role, by the same order. Inactive users are never chosen. If the
+  organization has no active user, the run stops ("No users found in DB.")
+  with exit `1`.
 - Ashbi users for the people who logged time in Bonsai; see *Owner matching*.
 - The application's environment (at least `DATABASE_URL`) and the committed
   migrations applied.
@@ -78,7 +80,7 @@ compared case-insensitively.
 
 | Bonsai | Ashbi |
 | --- | --- |
-| `Client` (or an invoice/project client name) | `Client.name`; `contactPerson` = `Contact Name`; `phone`; `domain` = `Website` (dropped on create if another client of this organization has it); address fields from `addresses.csv` matched by client name, `country` defaulting to `US` |
+| `Client` (or an invoice/project client name) | `Client.name`; `contactPerson` = `Contact Name`; `phone`; `domain` = `Website`, unless another client in **any** organization, or an earlier client of the same export, already has it: then the domain is not written (a new client gets none, a matched client keeps its current one) and a `CLIENT_DOMAIN_TAKEN` warning is reported; address fields from `addresses.csv` matched by client name, `country` defaulting to `US` |
 | paid invoices per client | `totalRevenueUsd` / `totalRevenueCad` (sum of `paid_amount` of `paid` invoices, by currency; anything but `CAD` counts as USD) and `tier`: `T1` at 5,000 or more, `T2` at 2,000 or more, else `T3`, using USD + CAD × 0.74 |
 | `Contact Email` (or the invoice `client_email`) | one primary `Contact` per client and email |
 | project `status` | `active` → `DESIGN_DEV`, `completed` → `LAUNCHED`, `archived` → `ON_HOLD`, anything else → `STARTING_UP` |
@@ -93,8 +95,8 @@ compared case-insensitively.
 | `payment_method` | `credit_card` → `STRIPE`, `ach`/`bank_transfer` → `BANK`, any other value → `OTHER`, blank → none |
 | `contractor_project_name` | `Invoice.title`, and the project link when a project with that client and title was matched or created earlier in the same run |
 | each new invoice with a total above 0 | one `InvoiceLineItem` (quantity 1, unit price = subtotal) |
-| time entry | `TimeEntry` with `source = BONSAI_IMPORT`, `duration` in minutes, `billable` when `billing_status` is `billed`, `hourlyRate` = `rate`, `description` = `notes` (else "`<project> work`") |
-| expense | `Expense` with `category` from `tags` (advertising → `MARKETING`, professional services/subcontractors → `SUBCONTRACTOR`, software/subscriptions/work devices → `SOFTWARE`, meals, entertainment and travel → `TRAVEL`, electronics/furniture → `SUPPLIES`, else `OTHER`), `billable` when `billable` is `true`, client and project linked when they resolve |
+| time entry | `TimeEntry` with `source = BONSAI_IMPORT`, `duration` in minutes, `billable` when `billing_status` is `billed`, `hourlyRate` = `rate`, `description` = `notes` (else "`<project> work`"). A row repeating an earlier row of the same export (same project, user, date and duration) is imported once and counted in `stats.timeEntries.duplicates` |
+| expense | `Expense` with `category` from `tags` (advertising → `MARKETING`, professional services/subcontractors → `SUBCONTRACTOR`, software/subscriptions/work devices → `SOFTWARE`, meals, entertainment and travel → `TRAVEL`, electronics/furniture → `SUPPLIES`, else `OTHER`), `billable` when `billable` is `true`. The `client` must resolve to a client of this import: that client is the expense's only link to the organization (`Expense` has no `organizationId`). The project is linked when it resolves for that client. An expense whose client is blank or does not resolve is **not imported**; it is counted in `stats.expenses.skipped` and reported as `EXPENSE_NO_CLIENT` |
 
 ### Deliberately skipped
 
@@ -115,19 +117,27 @@ message to `stats.errors`:
 
 ### Owner matching (time entries)
 
-The `owner_name` is matched against users **of this organization** in this
-order:
+The `owner_name` (trimmed, case-insensitive) is matched against users **of
+this organization** in this order. "First" always means the oldest by
+`createdAt`, then the lowest `id`, so the result is repeatable:
 
 1. a name containing `cameron` → the first user whose name contains "Cameron"
    or whose email contains "cameron";
 2. a name containing `bianca` → the same rule for "Bianca";
-3. otherwise, the first user whose name contains the **first word** of
-   `owner_name`, case-insensitively.
+3. otherwise (or when rule 1 or 2 finds nobody), the first user whose name
+   contains the **first word** of `owner_name`, case-insensitively.
 
-If no user matches, the entry is attributed to the importer's admin user and
-`stats.owners.mappedToImporter` is increased once per distinct owner name. The
-importer never creates users. See *Known limits* for the risks of this
-matching.
+Rules 1 and 2 are hard-coded for the Ashbi team's own Bonsai account and do
+not apply to other exports' owner names. The rules match on any user of the
+organization, including inactive ones and non-staff roles. A **blank**
+`owner_name` matches nobody.
+
+If no user matches (including a blank owner), the entry is attributed to the
+importer's fallback admin (see *Prerequisites*) and
+`stats.owners.mappedToImporter` is increased once per distinct owner name
+(all blank owners together count once). Each is listed on stdout as
+`[owner mapped to importer]` (a blank one as `(blank owner)`). The importer
+never creates users. See *Known limits* for the risks of this matching.
 
 ## CLI
 
@@ -142,11 +152,15 @@ node scripts/import-bonsai-full.js --confirm --organization-id <id> --csv-dir <b
 | `--confirm` | one of `--dry-run` / `--confirm` | Live import in one transaction |
 | `--organization-id <id>` | yes (or `IMPORT_ORGANIZATION_ID`) | The target organization. The run fails with "Organization not found" if it does not exist |
 | `--csv-dir <dir>` | no | Directory with the six CSV files. Default: `BONSAI_CSV_DIR`, otherwise `data/bonsai-export` in the repository |
-| `--summary-file <new-report.json>` | strongly recommended | Where to write the reconciliation JSON. Without it, **no** machine-readable report is produced (stdout gets only a human summary) |
+| `--summary-file <new-report.json>` | strongly recommended | Where to write the reconciliation JSON. The path must not exist yet, and its directory must exist and be writable; both are checked **before** the run starts. Without it, **no** machine-readable report is produced (stdout gets only a human summary) |
 
 With neither `--dry-run` nor `--confirm`, the command refuses ("Refusing live
 import without --confirm") and exits `2`. Without an organization id it
-refuses and exits `2`. Any failure exits `1` ("Import failed: …").
+refuses and exits `2`. If the `--summary-file` path already exists, or its
+directory is missing or not writable, it refuses ("Refusing import: summary
+file already exists: …" or "… directory is missing or not writable: …") and
+exits `2` before it reads the CSV files or touches the database. Any other
+failure exits `1` ("Import failed: …").
 
 A flag's value is simply the next argument. Do not leave a value out: for
 example, `--summary-file --confirm` would treat `--confirm` as the file name.
@@ -167,9 +181,10 @@ file.
 
 - `inputInventory`: all six files `present: true`, with row counts that match
   the Bonsai exports.
-- **`stats.errors` must be empty.** In a dry run, `complete` checks **only**
-  the input inventory, not `stats.errors`, so a dry run can report
-  `complete: true` while errors remain. A live run with any error is refused.
+- **`complete` must be `true`**: every input file is present and
+  `stats.errors` is empty. A live run with any error is refused.
+- `stats.warnings`: every entry has a recorded disposition (see the exception
+  taxonomy). Warnings do not block a live run.
 - Created, existing and skipped counts per entity; see *Reconciliation
   report*. Compare each `created + existing + skipped` total with the source
   row counts. Clients are merged from three files, so their total differs
@@ -198,14 +213,18 @@ rolled back, and nothing is kept, when:
 - any query fails, or the transaction runs longer than 5 minutes.
 
 A refused or failed live run writes **no** report file. The report is
-written only after the transaction commits.
+written only after the transaction commits; its path was checked before the
+run started, so a committed import is not left without its report. (If
+another process creates the file in the meantime, the report is printed to
+stdout instead and the command exits `1`.)
 
 ### 4. Verify
 
 1. Rerun the same dry run with a new report path. Every entity should now be
    in `existing`, with `created` at `0`. Expenses are the exception: an
    already imported expense is counted in `expenses.skipped` (there is no
-   `existing` counter for expenses).
+   `existing` counter for expenses). `timeEntries.duplicates` and the
+   warnings are the same as in the first run.
 2. Run the database checks in the
    [cutover runbook](migration-cutover-runbook.md#verification), for example
    the time entries with `source = 'BONSAI_IMPORT'` and the invoices with a
@@ -231,8 +250,9 @@ live import can be undone only by hand.
   are not in the pre-import workspace export (clients, contacts, projects),
   time entries with `source = 'BONSAI_IMPORT'`, and invoices with a
   `bonsaiInvoiceId` that were created in the import window, together with
-  their line items. Expenses carry no import marker: find them by client,
-  project and creation time. Restore changed client and project fields from
+  their line items. Expenses carry no import marker: find them by client
+  (every imported expense has a client of this organization), project and
+  creation time. Restore changed client and project fields from
   the workspace export by hand. Record every manual step in the cutover
   evidence.
 
@@ -252,17 +272,18 @@ The `--summary-file` JSON has these fields:
 | `stats.projects` | `created`, `existing` (matched and **updated**), `skipped` |
 | `stats.invoices` | `created`, `existing` (matched by number, left unchanged), `skipped` |
 | `stats.lineItems` | `created` |
-| `stats.timeEntries` | `created`, `existing`, `skipped` |
-| `stats.expenses` | `created`, `skipped` (includes expenses that already exist) |
-| `stats.owners.mappedToImporter` | Distinct time-entry owner names attributed to the importer's admin |
-| `stats.errors[]` | Free-text findings; see the exception taxonomy |
-| `complete` | `true` when every input file is present. In a dry run it **ignores** `stats.errors` |
+| `stats.timeEntries` | `created`, `existing`, `skipped`, `duplicates` (rows repeating an earlier row of the same export; counted the same in a dry run and a live run) |
+| `stats.expenses` | `created`, `skipped` (includes expenses that already exist and `EXPENSE_NO_CLIENT` rows) |
+| `stats.owners.mappedToImporter` | Distinct time-entry owner names (blank counted once) attributed to the importer's fallback admin |
+| `stats.warnings[]` | Coded, non-blocking findings; see the exception taxonomy |
+| `stats.errors[]` | Free-text blocking findings; see the exception taxonomy |
+| `complete` | `true` when every input file is present **and** `stats.errors` is empty, in a dry run and a live run alike |
 
 ## Exception taxonomy
 
-The Bonsai importer emits **no exception codes**. Each finding is a text
-message in `stats.errors`. Any message there blocks a live run. The messages
-are:
+Blocking findings have **no codes**: each is a text message in
+`stats.errors`, and any message there makes the report incomplete and blocks
+a live run. The messages are:
 
 | Message pattern | Meaning | Category |
 | --- | --- | --- |
@@ -275,29 +296,40 @@ are:
 | `TimeEntry "<project>" <date>: <error>` | Creating the time entry failed | blocking |
 | `Expense "<description>": <error>` | Creating the expense failed | blocking |
 
-These are not in `stats.errors`:
+Coded findings are in `stats.warnings`. They do not block a live run, and
+they are reported identically by the dry run and the live run, so each needs
+a disposition before `--confirm`:
+
+| Code | Report entry | Meaning | Category |
+| --- | --- | --- | --- |
+| `CLIENT_DOMAIN_TAKEN` | `{ code, client, domain }` | The client's `Website` is already the `domain` of another client, in this or **another** organization, or of an earlier client of the same export (`Client.domain` is unique across all organizations). The client is imported without it: a new client gets no domain, a matched client keeps its current one. Nothing about the other client or its organization is read or reported | warning |
+| `EXPENSE_NO_CLIENT` | `{ code, description, date, amount, currency, client }` | The expense's `client` is blank or did not resolve to a client of this import. `Expense` has no `organizationId`, so without a client it would belong to no organization; it is **not imported** and counted in `stats.expenses.skipped`. `client` is the name from the CSV, or `null` when blank. To import it, give it a client in a copy of `expenses.csv` or enter it by hand | unsupported |
+
+These are not in `stats.errors` or `stats.warnings`:
 
 | Finding | Where | Category |
 | --- | --- | --- |
-| Missing CSV file | `inputInventory[].present = false`, `complete = false` | blocking (live) |
-| Time-entry owner with no matching user | `stats.owners.mappedToImporter`, stdout `[owner mapped to importer]` | warning |
+| Missing CSV file | `inputInventory[].present = false`, `complete = false` | blocking |
+| Time-entry owner with no matching user, or a blank owner | `stats.owners.mappedToImporter`, stdout `[owner mapped to importer]` | warning |
+| Time entry repeating an earlier row of the same export | `stats.timeEntries.duplicates` | warning (imported once) |
 | Deliberately skipped rows (see *Deliberately skipped*) | the entity's `skipped` counter | warning |
 | Bonsai data with no Ashbi field (for example client `Tags`, invoice line detail, attachments) | nowhere | unsupported |
 
-In a dry run, some failures cannot happen because no write is attempted. For
-example, a `domain` unique conflict on a client appears only in a live run;
-see *Known limits*.
+The dry run runs the same checks as the live run, including the `domain`
+check, so a clean dry run predicts the live run's findings. It cannot
+predict failures of the writes themselves (for example a database error or
+the 5-minute timeout).
 
 ## Idempotency and reruns
 
 | Entity | Matched on (within the organization) | On a rerun |
 | --- | --- | --- |
-| Client | a contact with the same email, else the same name (case-insensitive) | **updated** with the CSV values (name, contact person, phone, domain, tier, revenue, address) |
+| Client | a contact with the same email, else the same name (case-insensitive) | **updated** with the CSV values (name, contact person, phone, domain unless `CLIENT_DOMAIN_TAKEN`, tier, revenue, address) |
 | Contact | email + client | left as is |
 | Project | `bonsaiProjectId`, else the same name (case-insensitive) + client | **updated** (name, status, budget, dates, `completedAt`, `bonsaiProjectId`) |
 | Invoice | `invoiceNumber` | left as is: status, payment and amount changes in Bonsai are **not** applied |
-| Time entry | project + user + date + duration | left as is |
-| Expense | description + date + amount (+ client when it resolves) | left as is |
+| Time entry | project + user + date + duration (also against earlier rows of the same export) | left as is |
+| Expense | description + date + amount + client (the client is always of this organization) | left as is |
 
 A rerun of the same export does not duplicate records, but it **does**
 overwrite Hub edits to matched clients and projects. There is no
@@ -305,42 +337,39 @@ changed-source detection, and no record of which export row produced which
 record.
 
 Each report file is created with the `wx` flag and mode `0600`. An existing
-path is never overwritten. Because the report is written **after** the live
-transaction commits, an existing path makes a successful live import exit
-`1` with no report. Always check that the path is new before `--confirm`.
+path is never overwritten: it is refused (exit `2`) before the run starts,
+so nothing is imported without a report.
 
 ## Known limits
 
 - **No rollback by run id, no `import_runs` row, no ledger and no audit
   event.** See *Rollback* for the manual path.
-- **No exception codes.** Findings are free-text messages.
-- A dry run's `complete` ignores `stats.errors`. Always check that
-  `stats.errors` is empty.
+- **No codes for blocking findings.** They are free-text messages in
+  `stats.errors`; only the two warnings (`CLIENT_DOMAIN_TAKEN`,
+  `EXPENSE_NO_CLIENT`) are coded.
 - Reruns overwrite matched clients and projects. Invoice changes after the
   first import are not applied.
 - The live run is one transaction with a 5-minute timeout and sequential
-  queries. A large export can exceed it, and then nothing is imported.
+  queries. A large export can exceed it, and then nothing is imported. A
+  write that fails inside the live transaction aborts it: the run stops with
+  "Import failed: …" (often a follow-on "current transaction is aborted"
+  error) instead of listing the message in `stats.errors`.
 - The run does not use the tenant job context (`runTenantJob`). It scopes its
-  queries with explicit `organizationId` filters instead, with two gaps:
-  - **Expense duplicate check.** `Expense` has no `organizationId`. When an
-    expense has no resolvable client, the check matches description, date and
-    amount across **all** organizations. An identical expense in another
-    organization then causes the row to be skipped silently.
-  - **Unlinked expenses.** Expenses with neither a client nor a project are
-    stored with no organization link at all.
-- `Client.domain` is unique across all organizations, but the conflict check
-  runs only on create and only within this organization. A domain used by
-  another organization, or a changed `Website` on a matched client, fails
-  only in the live run. The dry run cannot predict it.
+  queries with explicit `organizationId` filters instead. `Expense` has no
+  `organizationId` column, so an expense can belong to an organization only
+  through its client: **expenses without a resolvable client (typically
+  overhead such as software subscriptions) are not imported** and are
+  reported as `EXPENSE_NO_CLIENT`. Importing them would need a schema change.
+- The domain check reads every organization's clients to find out whether a
+  domain is taken. It reads only whether a holder exists, and the report
+  says only that the domain is taken.
 - Owner matching uses fixed name rules (`cameron`, `bianca`) and a
-  first-word "contains" match, so an owner can be attributed to the wrong
-  user. A blank `owner_name` matches an arbitrary user of the organization
-  and is not counted in `mappedToImporter`.
-- The fallback admin user (invoice creator, unmatched owners) is the first
-  ADMIN found, with no ordering.
-- Two identical time entries (same project, user, date and duration) in one
-  export are both counted as `created` in a dry run, but only the first is
-  created in a live run.
+  first-word "contains" match over all users of the organization (any role,
+  active or not), so an owner can be attributed to the wrong user. Check the
+  attribution of a sample of time entries per owner.
+- Two identical expenses (same description, date, amount and client) in one
+  export are both counted as `created` in a dry run, but the live run creates
+  the first and counts the second as `skipped`.
 - The skip list of internal and test client names is hard-coded.
 - Bonsai proposals, contracts, payments (beyond `paid_date` and method),
   invoice line detail, tasks, files and client portal data are not imported.
