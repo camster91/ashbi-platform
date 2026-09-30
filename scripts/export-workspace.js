@@ -1,9 +1,20 @@
 #!/usr/bin/env node
 
 /**
- * Produce a portable, tenant-scoped workspace export for migration/recovery.
- * It deliberately excludes credentials, sessions, raw email, and payment data.
- * Usage: node scripts/export-workspace.js --organization-id <id> --output <new-file.json> --confirm
+ * Operator-only, tenant-scoped workspace export (docs/workspace-export.md).
+ * Runs with database credentials, never from a user session.
+ *
+ * Offboarding export (directory, including uploaded files):
+ *   node scripts/export-workspace.js --organization-id <id> --output-dir <new-or-empty-dir> \
+ *     [--include-files | --no-files] [--uploads-dir <dir>] [--page-size <n>]
+ *
+ * Legacy migration snapshot (single v2 JSON file with clients, contacts,
+ * projects, tasks, notes and milestones; verified by verify-workspace-export.js):
+ *   node scripts/export-workspace.js --organization-id <id> --output <new-file.json> --confirm
+ *
+ * Neither mode exports credentials, sessions or other secrets; see
+ * EXCLUDED_MODELS and EXCLUDED_FIELD_REASONS in
+ * src/services/workspace-export.service.js.
  */
 import prismaPkg from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
@@ -11,20 +22,30 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { buildWorkspaceExportManifest } from '../src/services/workspace-export-integrity.service.js';
+import { exportWorkspace, parseExportArgs } from '../src/services/workspace-export.service.js';
 
 const { PrismaClient } = prismaPkg;
-const option = (name) => { const index = process.argv.indexOf(name); return index >= 0 ? process.argv[index + 1] : null; };
-const organizationId = option('--organization-id') || process.env.EXPORT_ORGANIZATION_ID;
-const output = option('--output');
-if (!organizationId || !output || !process.argv.includes('--confirm')) {
-  console.error('Usage: node scripts/export-workspace.js --organization-id <id> --output <new-file.json> --confirm');
+const USAGE = [
+  'Usage: node scripts/export-workspace.js --organization-id <id> --output-dir <new-dir> [--include-files|--no-files] [--uploads-dir <dir>] [--page-size <n>]',
+  '   or: node scripts/export-workspace.js --organization-id <id> --output <new-file.json> --confirm   (legacy v2 snapshot)',
+].join('\n');
+
+const options = parseExportArgs(process.argv.slice(2), process.env);
+if ('error' in options) {
+  console.error(`${options.error}\n${USAGE}`);
+  process.exit(2);
+}
+if (!process.env.DATABASE_URL) {
+  console.error('DATABASE_URL is not set');
   process.exit(2);
 }
 
-const target = path.resolve(output);
+// A raw client: the application's soft-delete wrapper caps findMany at 100
+// rows, so every query here states its own organization and deletedAt filter.
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) });
 
-async function main() {
+async function legacyExport(organizationId, output) {
+  const target = path.resolve(output);
   try { await fs.access(target); throw new Error(`Refusing to overwrite existing file: ${target}`); } catch (error) { if (error.code !== 'ENOENT') throw error; }
   const organization = await prisma.organization.findUnique({ where: { id: organizationId }, select: { id: true, name: true, slug: true } });
   if (!organization) throw new Error(`Organization not found: ${organizationId}`);
@@ -52,6 +73,33 @@ async function main() {
   await fs.writeFile(target, serialized, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
   await fs.chmod(target, 0o600);
   console.log(JSON.stringify({ output: target, bytes: Buffer.byteLength(serialized), sha256: crypto.createHash('sha256').update(serialized).digest('hex'), manifest: payload.manifest }, null, 2));
+}
+
+async function directoryExport() {
+  const result = await exportWorkspace({
+    prisma,
+    organizationId: options.organizationId,
+    outputDir: options.outputDir,
+    includeFiles: options.includeFiles,
+    uploadsDir: options.uploadsDir ?? undefined,
+    pageSize: options.pageSize,
+  });
+  const { manifest } = result;
+  console.log(JSON.stringify({
+    outputDir: result.outputDir,
+    organizationId: manifest.organizationId,
+    manifestSha256: result.manifestSha256,
+    totals: manifest.totals,
+    exceptions: manifest.exceptions.map(({ code, source, recordId }) => ({ code, source, recordId })),
+  }, null, 2));
+  if (manifest.exceptions.length > 0) {
+    console.error(`Export completed with ${manifest.exceptions.length} exception(s); review manifest.json "exceptions" before handing it over.`);
+  }
+}
+
+async function main() {
+  if (options.mode === 'legacy') await legacyExport(options.organizationId, options.output);
+  else await directoryExport();
 }
 
 main().catch((error) => { console.error(`Export failed: ${error.message}`); process.exitCode = 1; }).finally(() => prisma.$disconnect());
