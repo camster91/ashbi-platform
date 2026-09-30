@@ -13,6 +13,7 @@ import {
   buildExclusions,
   checksumLine,
   exportFilePath,
+  exportWorkspace,
   omitArgs,
   pageWhere,
   paginateEntity,
@@ -89,6 +90,14 @@ test('resolveStoredUploadPath keeps files inside the upload root', () => {
   assert.equal(resolveStoredUploadPath('/uploads/../etc/passwd', root).code, 'FILE_PATH_INVALID');
   assert.equal(resolveStoredUploadPath('/uploads/', root).code, 'FILE_PATH_INVALID');
   assert.equal(resolveStoredUploadPath('/uploads/quarantine/x.png', root).code, 'FILE_QUARANTINED');
+  // Normalized before the quarantine check.
+  assert.equal(resolveStoredUploadPath('/uploads/./quarantine/bad.exe', root).code, 'FILE_QUARANTINED');
+  // Only flat names, or brand logos one level down, are accepted.
+  assert.deepEqual(resolveStoredUploadPath('/uploads/brand/logo-1.png', root), { absolutePath: path.join(root, 'brand', 'logo-1.png') });
+  assert.equal(resolveStoredUploadPath('/uploads/sub/x.png', root).code, 'FILE_PATH_INVALID');
+  assert.equal(resolveStoredUploadPath('/uploads/brand/deeper/x.png', root).code, 'FILE_PATH_INVALID');
+  assert.equal(resolveStoredUploadPath('/uploads/.hidden', root).code, 'FILE_PATH_INVALID');
+  assert.equal(resolveStoredUploadPath('/uploads/a\\b.png', root).code, 'FILE_PATH_INVALID');
   assert.equal(resolveStoredUploadPath('https://cdn.example.com/a.png', root).code, 'FILE_NOT_LOCAL');
   assert.equal(resolveStoredUploadPath(null, root).code, 'FILE_PATH_MISSING');
 });
@@ -165,5 +174,149 @@ test('verifyWorkspaceExportDirectory reports a missing manifest', async () => {
     assert.deepEqual((await verifyWorkspaceExportDirectory(root)).findings, [{ code: 'EXPORT_FORMAT_INVALID' }]);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Whole-export behaviour with an in-memory Prisma client
+// ---------------------------------------------------------------------------
+
+const RECEIPT = 'receipt-0b0e6a4e-7f3a-4c52-9d5e-1a2b3c4d5e6f.png';
+
+function fakePrisma(rowsByModel) {
+  const delegate = (model) => ({
+    findMany: async (args) => {
+      if (args.where?.AND) return []; // one page only
+      return (rowsByModel[model] ?? []).slice(0, args.take);
+    },
+  });
+  return new Proxy({
+    organization: { ...delegate('Organization'), findUnique: async () => ({ id: 'org1', name: 'Org', slug: 'org' }) },
+  }, {
+    get(target, key) {
+      if (key in target) return target[key];
+      if (typeof key !== 'string') return undefined;
+      return delegate(key.charAt(0).toUpperCase() + key.slice(1));
+    },
+  });
+}
+
+async function withExport(setup, rowsByModel, check) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ashbi-export-files-'));
+  const uploads = path.join(root, 'uploads');
+  const outside = path.join(root, 'outside');
+  fs.mkdirSync(uploads);
+  fs.mkdirSync(outside);
+  try {
+    setup({ uploads, outside });
+    const outputDir = path.join(root, 'export');
+    const result = await exportWorkspace({ prisma: fakePrisma(rowsByModel), organizationId: 'org1', outputDir, uploadsDir: uploads, snapshot: false, now: () => new Date('2026-01-01T00:00:00Z') });
+    await check({ result, outputDir, uploads, outside });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
+const codes = (result) => result.manifest.exceptions.map((exception) => `${exception.recordId}:${exception.code}`).sort();
+
+test('exportWorkspace copies safe files and records unsafe ones as exceptions without aborting', async () => {
+  await withExport(({ uploads, outside }) => {
+    fs.writeFileSync(path.join(uploads, 'ok.png'), 'ok');
+    fs.writeFileSync(path.join(uploads, RECEIPT), 'receipt');
+    fs.mkdirSync(path.join(uploads, 'quarantine'));
+    fs.writeFileSync(path.join(uploads, 'quarantine', 'bad.exe'), 'bad');
+    fs.writeFileSync(path.join(outside, 'secret.txt'), 'other tenant');
+    fs.symlinkSync(path.join(outside, 'secret.txt'), path.join(uploads, 'link.png'));
+    // A symlinked directory where brand logos live.
+    fs.symlinkSync(outside, path.join(uploads, 'brand'));
+  }, {
+    Attachment: [
+      { id: 'a1', path: '/uploads/ok.png', originalName: 'ok.png', size: 2 },
+      { id: 'a2', path: '/uploads/./quarantine/bad.exe', originalName: 'bad.exe' },
+      { id: 'a3', path: '/uploads/link.png', originalName: 'link.png' },
+      { id: 'a4', path: '/uploads/missing.png', originalName: 'missing.png' },
+    ],
+    Expense: [
+      { id: 'e1', receiptUrl: `/uploads/${RECEIPT}` },
+      // Free text that names another file: never copied.
+      { id: 'e2', receiptUrl: '/uploads/ok.png' },
+    ],
+    BrandSettings: [{ id: 'b1', logoUrl: '/uploads/brand/secret.txt' }],
+  }, async ({ result, outputDir }) => {
+    assert.deepEqual(result.manifest.files.map((file) => file.recordId).sort(), ['a1', 'e1']);
+    assert.deepEqual(codes(result), ['a2:FILE_QUARANTINED', 'a3:FILE_NOT_REGULAR', 'a4:FILE_MISSING', 'b1:FILE_NOT_REGULAR', 'e2:FILE_NOT_RECEIPT']);
+    const copied = fs.readdirSync(path.join(outputDir, 'files'), { recursive: true }).map(String);
+    assert.ok(!copied.some((name) => name.includes('secret')), 'nothing outside the upload root is copied');
+    assert.equal(fs.statSync(outputDir).mode & 0o777, 0o700);
+    assert.equal(fs.statSync(path.join(outputDir, 'manifest.json')).mode & 0o777, 0o600);
+    assert.equal((await verifyWorkspaceExportDirectory(outputDir, { expectedManifestSha256: result.manifestSha256 })).valid, true);
+  });
+});
+
+test('exportWorkspace records an unreadable upload as FILE_UNREADABLE and finishes', {
+  skip: typeof process.getuid === 'function' && process.getuid() === 0 && 'root can read a mode-000 file',
+}, async () => {
+  await withExport(({ uploads }) => {
+    fs.writeFileSync(path.join(uploads, 'locked.png'), 'x');
+    fs.chmodSync(path.join(uploads, 'locked.png'), 0o000);
+  }, {
+    Attachment: [{ id: 'a1', path: '/uploads/locked.png', originalName: 'locked.png' }],
+  }, async ({ result, outputDir }) => {
+    assert.deepEqual(codes(result), ['a1:FILE_UNREADABLE']);
+    assert.deepEqual(result.manifest.files, []);
+    assert.ok(!fs.existsSync(path.join(outputDir, 'files', 'attachments', 'a1')) || fs.readdirSync(path.join(outputDir, 'files', 'attachments', 'a1')).length === 0, 'no partial copy is left');
+    assert.equal((await verifyWorkspaceExportDirectory(outputDir)).valid, true);
+  });
+});
+
+test('verifyWorkspaceExportDirectory detects tampering with any file, including the manifest and checksum list', async () => {
+  const tamper = [
+    ['a deleted checksum list', (dir) => fs.rmSync(path.join(dir, 'SHA256SUMS')), 'CHECKSUM_LIST_MISSING'],
+    ['a rewritten README', (dir) => fs.appendFileSync(path.join(dir, 'README.md'), 'x'), 'CHECKSUM_LIST_MISMATCH'],
+    ['a deleted README', (dir) => fs.rmSync(path.join(dir, 'README.md')), 'FILE_MISSING'],
+    ['edited manifest exceptions', (dir) => {
+      const file = path.join(dir, 'manifest.json');
+      const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
+      manifest.exceptions = [];
+      fs.writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);
+    }, 'CHECKSUM_LIST_MISMATCH'],
+    ['inconsistent manifest totals', (dir) => {
+      const file = path.join(dir, 'manifest.json');
+      const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
+      manifest.totals.rows = 999;
+      fs.writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);
+    }, 'MANIFEST_TOTALS_MISMATCH'],
+    ['a manifest path outside the export', (dir) => {
+      const file = path.join(dir, 'manifest.json');
+      const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
+      manifest.files[0].exportPath = '../outside/secret.txt';
+      fs.writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);
+    }, 'MANIFEST_PATH_INVALID'],
+    ['a tampered copied file', (dir) => {
+      const [attachment] = fs.readdirSync(path.join(dir, 'files', 'attachments'));
+      const folder = path.join(dir, 'files', 'attachments', attachment);
+      fs.appendFileSync(path.join(folder, fs.readdirSync(folder)[0]), 'x');
+    }, 'FILE_CHECKSUM_MISMATCH'],
+    ['an extra file', (dir) => fs.writeFileSync(path.join(dir, 'data', 'extra.jsonl'), '{}\n'), 'UNEXPECTED_FILE'],
+  ];
+  for (const [label, change, expectedCode] of tamper) {
+    await withExport(({ uploads }) => {
+      fs.writeFileSync(path.join(uploads, 'ok.png'), 'ok');
+    }, {
+      Attachment: [
+        { id: 'a1', path: '/uploads/ok.png', originalName: 'ok.png', size: 2 },
+        { id: 'a2', path: '/uploads/missing.png', originalName: 'missing.png' },
+      ],
+    }, async ({ result, outputDir }) => {
+      assert.equal((await verifyWorkspaceExportDirectory(outputDir)).valid, true, 'the untouched export verifies');
+      change(outputDir);
+      const verdict = await verifyWorkspaceExportDirectory(outputDir);
+      assert.equal(verdict.valid, false, `${label} was not detected`);
+      assert.ok(verdict.findings.some((finding) => finding.code === expectedCode), `${label}: expected ${expectedCode}, got ${JSON.stringify(verdict.findings)}`);
+      if (label === 'edited manifest exceptions') {
+        const pinned = await verifyWorkspaceExportDirectory(outputDir, { expectedManifestSha256: result.manifestSha256 });
+        assert.ok(pinned.findings.some((finding) => finding.code === 'MANIFEST_CHECKSUM_MISMATCH'));
+      }
+    });
   }
 });

@@ -36,6 +36,12 @@ export const DEFAULT_PAGE_SIZE = 500;
 const MAX_PAGE_SIZE = 5000;
 const DIR_MODE = 0o700;
 const FILE_MODE = 0o600;
+const SAFE_UPLOAD_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$/;
+const ALLOWED_UPLOAD_SUBDIRS = new Set(['brand']);
+// `/upload-receipt` names receipts `receipt-<uuid>.<ext>`. Only those are
+// copied: `Expense.receiptUrl` is free text, so another value could name a
+// file that belongs to a different organization.
+const RECEIPT_FILE_NAME = /^receipt-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.[A-Za-z0-9]{1,10}$/i;
 
 // ---------------------------------------------------------------------------
 // Scoping helpers. `org` is the organization id being exported.
@@ -296,13 +302,23 @@ export function parseExportArgs(argv, env = {}) {
 export function resolveStoredUploadPath(storedPath, uploadsDir) {
   if (typeof storedPath !== 'string' || storedPath.length === 0) return { code: 'FILE_PATH_MISSING', detail: 'The record has no stored file path' };
   if (!storedPath.startsWith('/uploads/')) return { code: 'FILE_NOT_LOCAL', detail: 'The file is not stored in local uploads (for example a remote URL); it was not copied' };
-  const relative = storedPath.slice('/uploads/'.length);
-  if (relative.startsWith('quarantine/')) return { code: 'FILE_QUARANTINED', detail: 'The file failed the upload policy and is quarantined; it was not copied' };
+  const invalid = { code: 'FILE_PATH_INVALID', detail: 'The stored path is not a file name the application writes; it was not copied' };
+  const raw = storedPath.slice('/uploads/'.length);
+  if (!raw || raw.includes('\0') || raw.includes('\\')) return invalid;
+  // Decide on the normalized path, so `./quarantine/x` is still quarantined.
+  const relative = path.posix.normalize(raw);
+  if (relative === 'quarantine' || relative.startsWith('quarantine/')) return { code: 'FILE_QUARANTINED', detail: 'The file failed the upload policy and is quarantined; it was not copied' };
+  // The application writes flat names (`<uuid>.<ext>`), plus brand logos
+  // under `brand/`. Anything nested deeper, hidden or relative is refused, so
+  // a symlinked sub-directory can never be traversed.
+  const segments = relative.split('/');
+  const nameOk = (segment) => SAFE_UPLOAD_SEGMENT.test(segment);
+  const allowed = (segments.length === 1 && nameOk(segments[0]))
+    || (segments.length === 2 && ALLOWED_UPLOAD_SUBDIRS.has(segments[0]) && nameOk(segments[1]));
+  if (!allowed) return invalid;
   const root = path.resolve(uploadsDir);
   const absolutePath = path.resolve(root, relative);
-  if (!relative || relative.includes('\0') || !absolutePath.startsWith(`${root}${path.sep}`)) {
-    return { code: 'FILE_PATH_INVALID', detail: 'The stored path escapes the upload directory; it was not copied' };
-  }
+  if (!absolutePath.startsWith(`${root}${path.sep}`)) return invalid;
   return { absolutePath };
 }
 
@@ -398,7 +414,19 @@ export async function prepareOutputDir(outputDir) {
     if (entries.length > 0) throw new Error(`Refusing to write into non-empty directory: ${target}`);
     await fsp.chmod(target, DIR_MODE);
   } else {
-    await fsp.mkdir(target, { recursive: true, mode: DIR_MODE });
+    await fsp.mkdir(path.dirname(target), { recursive: true });
+    try {
+      // Not recursive: if anything appeared at this path since the check
+      // above, refuse instead of writing into it.
+      await fsp.mkdir(target, { mode: DIR_MODE });
+    } catch (error) {
+      if (/** @type {any} */ (error).code === 'EEXIST') throw new Error(`Refusing to write: ${target} was created by something else during preparation`);
+      throw error;
+    }
+  }
+  const created = await fsp.lstat(target);
+  if (!created.isDirectory() || (typeof process.getuid === 'function' && created.uid !== process.getuid())) {
+    throw new Error(`Refusing to write: ${target} is not a directory owned by this user`);
   }
   return target;
 }
@@ -410,10 +438,16 @@ class JsonlWriter {
     this.hash = crypto.createHash('sha256');
     this.rows = 0;
     this.bytes = 0;
+    /** @type {Error | null} */
+    this.error = null;
+    // A write error (a full disk, for example) must fail the export through
+    // the caller, never as an unhandled 'error' event that kills the process.
+    this.stream.on('error', (error) => { this.error = error; });
   }
 
   /** @param {object} row */
   async write(row) {
+    if (this.error) throw this.error;
     const line = serializeRow(row);
     const buffer = Buffer.from(line, 'utf8');
     this.hash.update(buffer);
@@ -423,8 +457,10 @@ class JsonlWriter {
   }
 
   async close() {
+    if (this.error) throw this.error;
     this.stream.end();
     await once(this.stream, 'finish');
+    if (this.error) throw this.error;
     return { rows: this.rows, bytes: this.bytes, sha256: this.hash.digest('hex') };
   }
 }
@@ -456,16 +492,41 @@ async function copyStoredFile({ outputDir, uploadsDir, source, recordId, storedP
     if (/** @type {any} */ (error).code === 'ENOENT') return { exception: { ...base, code: 'FILE_MISSING', detail: 'The stored file does not exist in the upload directory' } };
     return { exception: { ...base, code: 'FILE_UNREADABLE', detail: String(/** @type {any} */ (error).code || 'read error') } };
   }
-  if (!stat.isFile()) return { exception: { ...base, code: 'FILE_NOT_REGULAR', detail: 'The stored path is not a regular file (for example a symbolic link); it was not copied' } };
+  const notRegular = { exception: { ...base, code: 'FILE_NOT_REGULAR', detail: 'The stored path is not a regular file (for example a symbolic link); it was not copied' } };
+  if (!stat.isFile()) return notRegular;
+  const unreadable = (error) => ({ exception: { ...base, code: 'FILE_UNREADABLE', detail: String(/** @type {any} */ (error)?.code || 'read error') } });
 
-  const exportPath = exportFilePath(source === 'attachment' ? 'attachments' : 'expense-receipts', recordId, name);
+  // The real path must still be inside the real upload root: no symlinked
+  // directory on the way.
+  try {
+    const [realFile, realRoot] = await Promise.all([fsp.realpath(resolved.absolutePath), fsp.realpath(uploadsDir)]);
+    if (!realFile.startsWith(`${realRoot}${path.sep}`)) return notRegular;
+  } catch (error) {
+    return unreadable(error);
+  }
+
+  const exportPath = exportFilePath(source === 'attachment' ? 'attachments' : source === 'brand_logo' ? 'brand' : 'expense-receipts', recordId, name);
   const destination = path.join(outputDir, exportPath);
   await fsp.mkdir(path.dirname(destination), { recursive: true, mode: DIR_MODE });
   const sourceHash = crypto.createHash('sha256');
   let sourceBytes = 0;
-  const reader = fs.createReadStream(resolved.absolutePath);
-  reader.on('data', (chunk) => { sourceHash.update(chunk); sourceBytes += chunk.length; });
-  await pipeline(reader, fs.createWriteStream(destination, { flags: 'wx', mode: FILE_MODE }));
+  /** @type {import('node:fs/promises').FileHandle | undefined} */
+  let handle;
+  try {
+    // O_NOFOLLOW plus fstat on the open descriptor: the file that is copied is
+    // the regular file that was checked, even if the path changes meanwhile.
+    handle = await fsp.open(resolved.absolutePath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
+    if (!(await handle.stat()).isFile()) { await handle.close(); return notRegular; }
+    const reader = handle.createReadStream();
+    handle = undefined; // the stream owns and closes the descriptor now
+    reader.on('data', (chunk) => { sourceHash.update(chunk); sourceBytes += chunk.length; });
+    await pipeline(reader, fs.createWriteStream(destination, { flags: 'wx', mode: FILE_MODE }));
+  } catch (error) {
+    await handle?.close().catch(() => {});
+    await fsp.rm(destination, { force: true });
+    if (/** @type {any} */ (error)?.code === 'ELOOP') return notRegular;
+    return unreadable(error);
+  }
   const sha256 = sourceHash.digest('hex');
   const copied = await sha256File(destination);
   if (copied.sha256 !== sha256 || copied.bytes !== sourceBytes) {
@@ -590,7 +651,13 @@ export async function exportWorkspace({ prisma, organizationId, outputDir, inclu
           if (entity.name === 'attachments') {
             record(await copyStoredFile({ outputDir: target, uploadsDir: uploadRoot, source: 'attachment', recordId: row.id, storedPath: row.path, name: row.originalName || row.filename, expectedSize: row.size, mimeType: row.mimeType }));
           } else if (entity.name === 'expenses' && typeof row.receiptUrl === 'string' && row.receiptUrl.startsWith('/uploads/')) {
-            record(await copyStoredFile({ outputDir: target, uploadsDir: uploadRoot, source: 'expense_receipt', recordId: row.id, storedPath: row.receiptUrl, name: path.posix.basename(row.receiptUrl) }));
+            if (RECEIPT_FILE_NAME.test(row.receiptUrl.slice('/uploads/'.length))) {
+              record(await copyStoredFile({ outputDir: target, uploadsDir: uploadRoot, source: 'expense_receipt', recordId: row.id, storedPath: row.receiptUrl, name: path.posix.basename(row.receiptUrl) }));
+            } else {
+              record({ exception: { source: 'expense_receipt', recordId: row.id, storedPath: row.receiptUrl, code: 'FILE_NOT_RECEIPT', detail: 'The receipt path is not a receipt name the application writes; it was not copied' } });
+            }
+          } else if (entity.name === 'brand_settings' && typeof row.logoUrl === 'string' && row.logoUrl.startsWith('/uploads/')) {
+            record(await copyStoredFile({ outputDir: target, uploadsDir: uploadRoot, source: 'brand_logo', recordId: row.id, storedPath: row.logoUrl, name: path.posix.basename(row.logoUrl) }));
           }
         }
       } finally {
@@ -668,25 +735,58 @@ async function countLines(filePath) {
 }
 
 /**
- * Verify a directory export without a database: every data file and copied
- * file matches the manifest (row count, size, SHA-256), and nothing
- * unexpected is present.
+ * Verify a directory export without a database. `SHA256SUMS` must list every
+ * file present (and nothing else) with a matching hash, which covers
+ * `manifest.json` and `README.md`; every data file and copied file must also
+ * match the manifest (row count, size, SHA-256), the manifest totals must
+ * match its lists, and no manifest path may leave the export. Pass the
+ * manifest SHA-256 printed by the export to also detect a rewritten
+ * manifest together with its checksum list.
  * @param {string} inputDir
+ * @param {{ expectedManifestSha256?: string | null }} [options]
  */
-export async function verifyWorkspaceExportDirectory(inputDir) {
+export async function verifyWorkspaceExportDirectory(inputDir, { expectedManifestSha256 = null } = {}) {
   const root = path.resolve(inputDir);
   const findings = [];
+  const inside = (relative) => {
+    if (typeof relative !== 'string' || !relative || relative.includes('\0') || path.isAbsolute(relative)) return false;
+    const resolved = path.resolve(root, relative);
+    return resolved.startsWith(`${root}${path.sep}`);
+  };
+
+  let manifestText;
   let manifest;
   try {
-    manifest = JSON.parse(await fsp.readFile(path.join(root, 'manifest.json'), 'utf8'));
+    manifestText = await fsp.readFile(path.join(root, 'manifest.json'), 'utf8');
+    manifest = JSON.parse(manifestText);
   } catch {
     return { valid: false, findings: [{ code: 'MANIFEST_MISSING' }] };
   }
   if (manifest?.format !== EXPORT_FORMAT || manifest?.formatVersion !== EXPORT_FORMAT_VERSION || !Array.isArray(manifest.entities) || !Array.isArray(manifest.files)) {
     return { valid: false, findings: [{ code: 'EXPORT_FORMAT_INVALID' }] };
   }
+  const manifestSha256 = crypto.createHash('sha256').update(manifestText).digest('hex');
+  if (expectedManifestSha256 && expectedManifestSha256.toLowerCase() !== manifestSha256) {
+    findings.push({ code: 'MANIFEST_CHECKSUM_MISMATCH', expected: expectedManifestSha256, actual: manifestSha256 });
+  }
+
+  // SHA256SUMS: the complete list of files, each with its hash.
+  /** @type {Map<string, string>} */
+  const sums = new Map();
+  try {
+    for (const line of (await fsp.readFile(path.join(root, 'SHA256SUMS'), 'utf8')).split('\n')) {
+      if (!line) continue;
+      const match = /^([0-9a-f]{64}) {2}(.+)$/.exec(line);
+      if (!match || !inside(match[2]) || sums.has(match[2])) { findings.push({ code: 'CHECKSUM_LIST_INVALID', line }); continue; }
+      sums.set(match[2], match[1]);
+    }
+  } catch {
+    findings.push({ code: 'CHECKSUM_LIST_MISSING', file: 'SHA256SUMS' });
+  }
+
   const expected = new Set(['manifest.json', 'README.md', 'SHA256SUMS']);
   for (const entity of manifest.entities) {
+    if (!inside(entity?.file)) { findings.push({ code: 'MANIFEST_PATH_INVALID', file: entity?.file ?? null }); continue; }
     expected.add(entity.file);
     const filePath = path.join(root, entity.file);
     try {
@@ -700,6 +800,7 @@ export async function verifyWorkspaceExportDirectory(inputDir) {
     }
   }
   for (const file of manifest.files) {
+    if (!inside(file?.exportPath)) { findings.push({ code: 'MANIFEST_PATH_INVALID', file: file?.exportPath ?? null }); continue; }
     expected.add(file.exportPath);
     try {
       const { sha256, bytes } = await sha256File(path.join(root, file.exportPath));
@@ -709,8 +810,36 @@ export async function verifyWorkspaceExportDirectory(inputDir) {
       findings.push({ code: 'FILE_MISSING', file: file.exportPath });
     }
   }
-  for (const present of await listFiles(root)) {
-    if (!expected.has(present)) findings.push({ code: 'UNEXPECTED_FILE', file: present });
+
+  const totals = manifest.totals ?? {};
+  const actualTotals = {
+    entities: manifest.entities.length,
+    rows: manifest.entities.reduce((sum, entity) => sum + (Number(entity?.rows) || 0), 0),
+    files: manifest.files.length,
+    fileBytes: manifest.files.reduce((sum, file) => sum + (Number(file?.size) || 0), 0),
+    exceptions: Array.isArray(manifest.exceptions) ? manifest.exceptions.length : 0,
+  };
+  for (const [key, value] of Object.entries(actualTotals)) {
+    if (totals[key] !== value) findings.push({ code: 'MANIFEST_TOTALS_MISMATCH', field: key, expected: totals[key] ?? null, actual: value });
   }
-  return { valid: findings.length === 0, findings, totals: manifest.totals, exceptions: manifest.exceptions?.length ?? 0 };
+
+  const present = new Set(await listFiles(root));
+  for (const file of present) {
+    if (!expected.has(file)) findings.push({ code: 'UNEXPECTED_FILE', file });
+  }
+  for (const file of ['README.md', 'SHA256SUMS']) {
+    if (!present.has(file)) findings.push({ code: 'FILE_MISSING', file });
+  }
+  // Every file except SHA256SUMS itself must be listed, with a matching hash.
+  for (const file of present) {
+    if (file === 'SHA256SUMS') continue;
+    const listed = sums.get(file);
+    if (!listed) { findings.push({ code: 'CHECKSUM_NOT_LISTED', file }); continue; }
+    const { sha256 } = await sha256File(path.join(root, file));
+    if (sha256 !== listed) findings.push({ code: 'CHECKSUM_LIST_MISMATCH', file });
+  }
+  for (const file of sums.keys()) {
+    if (!present.has(file)) findings.push({ code: 'CHECKSUM_LISTED_FILE_MISSING', file });
+  }
+  return { valid: findings.length === 0, findings, manifestSha256, totals: manifest.totals, exceptions: actualTotals.exceptions };
 }

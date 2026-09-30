@@ -71,6 +71,7 @@ rehearsals; use the directory export for offboarding.
   data/<entity>.jsonl   one JSON object per line, one file per record type
   files/attachments/<attachmentId>/<original file name>
   files/expense-receipts/<expenseId>/<file name>
+  files/brand/<brandSettingsId>/<file name>
 ```
 
 Every record keeps its database `id`, so relations between files are preserved
@@ -128,6 +129,14 @@ reason. In summary:
   internal idempotency keys.
 - **Trash:** soft-deleted records, and the children of trashed clients and
   projects. Restore anything the customer wants before exporting.
+  Attachments are the exception: every attachment of the organization is
+  exported with its file, including those of trashed projects, tasks and
+  notes and chat uploads not yet sent (`CHAT_PENDING`), because they are the
+  customer's files. `data/attachments.jsonl` names each owner
+  (`entityType`, `entityId`).
+- **Records with no organization link:** intake forms without a client,
+  assets without a client and approvals without a project cannot be
+  attributed to the organization safely, so they are not exported.
 - **WordPress bridge tables** (`wp_*`): the feature was removed on 2026-09-24
   and the tables are retained unread pending the retention decision (#310).
 - **Other organizations and global tables:** never read.
@@ -138,10 +147,15 @@ customer's proof of what was signed, not a credential.
 
 ### File handling
 
-For each attachment of the organization (and each expense receipt stored under
-`/uploads/`), the stored path is resolved inside the upload directory, the file
-is streamed into `files/…` while hashing it, and the copy is re-read and
-hashed again; the SHA-256 and size go into `manifest.json` `files` and
+For each attachment of the organization, each expense receipt and the brand
+logo, the stored path is resolved inside the upload directory. Only the names
+the application writes are accepted: a flat `/uploads/<name>`, or
+`/uploads/brand/<name>` for logos, and an expense receipt only when it is
+named `receipt-<uuid>.<ext>` (`Expense.receiptUrl` is free text, so another
+value could name a file that is not this organization's). The file is opened
+without following symbolic links, its real path must stay inside the upload
+directory, it is streamed into `files/…` while hashing it, and the copy is
+re-read and hashed again; the SHA-256 and size go into `manifest.json` `files` and
 `SHA256SUMS`. A file that cannot be exported is recorded in `exceptions`
 instead of failing the run silently:
 
@@ -150,9 +164,10 @@ instead of failing the run silently:
 | `FILE_MISSING` | The record points to a file that is not in the upload directory |
 | `FILE_QUARANTINED` | The file failed the upload policy (`/uploads/quarantine/`); not copied. Review it before releasing it by hand |
 | `FILE_NOT_LOCAL` | The stored path is not a local upload (for example a remote URL) |
-| `FILE_PATH_INVALID` / `FILE_PATH_MISSING` | The stored path escapes the upload directory or is empty |
-| `FILE_NOT_REGULAR` | The path is not a regular file (for example a symbolic link) |
-| `FILE_UNREADABLE` | The file could not be read (permissions) |
+| `FILE_PATH_INVALID` / `FILE_PATH_MISSING` | The stored path is empty, escapes the upload directory, or is not a name the application writes (nested, hidden or relative) |
+| `FILE_NOT_RECEIPT` | An expense's receipt path is not a receipt name the application writes; not copied |
+| `FILE_NOT_REGULAR` | The path is not a regular file, or reaches outside the upload directory through a symbolic link |
+| `FILE_UNREADABLE` | The file could not be opened or read (for example permissions); any partial copy is removed and the export continues |
 | `FILE_SIZE_MISMATCH` | Copied, but its size differs from the size recorded at upload |
 | `FILE_COPY_MISMATCH` | The copy did not match the source hash; removed from the export |
 
@@ -170,13 +185,22 @@ explicitly.
 Before delivery, on the operator host:
 
 ```bash
-node scripts/verify-workspace-export.js --input-dir /secure/exports/<dir>
+node scripts/verify-workspace-export.js --input-dir /secure/exports/<dir> \
+  --manifest-sha256 <manifest SHA-256 printed by the export>
 (cd /secure/exports/<dir> && sha256sum -c SHA256SUMS)
 ```
 
-The verifier needs no database. It re-hashes every data file and copied file,
-checks row counts, sizes and SHA-256 against `manifest.json`, and reports any
-unexpected file. Exit code `0` means valid. Also spot-check a few records
+The verifier needs no database. It checks that:
+- `SHA256SUMS` lists every other file exactly once, and each hash matches.
+  This covers `manifest.json` and `README.md`.
+- Every data file and copied file matches `manifest.json`: row counts,
+  sizes and SHA-256.
+- The manifest totals match its own lists, and no manifest path leaves the
+  export directory.
+- No unexpected file is present.
+
+With `--manifest-sha256` it also detects a manifest rewritten together with its
+checksum list. Exit code `0` means valid. Also spot-check a few records
 against the application (for example the number of clients and the latest
 invoice).
 
