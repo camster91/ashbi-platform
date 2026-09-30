@@ -86,9 +86,12 @@
     --radius: 0.625rem;
 
     /* Status Colors */
-    --success: 142 72% 28%;
+    /* Status tokens are used as text (often on their own /10 or /20 tint)
+       and as solid fills behind their -foreground, so each clears 4.5:1 on
+       card, background and muted, with or without a /10 tint. */
+    --success: 142 72% 25%;
     --success-foreground: 0 0% 100%;
-    --warning: 32 95% 32%;
+    --warning: 32 95% 29%;
     --warning-foreground: 0 0% 100%;
     --info: 199 85% 30%;
     --info-foreground: 0 0% 100%;
@@ -139,12 +142,14 @@
     --destructive: 0 84% 68%;
     --destructive-foreground: 250 39% 10%;
 
-    /* Status colours */
-    --success: 142 70% 30%;
-    --success-foreground: 0 0% 100%;
+    /* Status colours — light hues with a dark foreground, like destructive,
+       so text-success / text-info read on the dark surfaces (and their /10
+       and /20 tints) at 4.5:1 or more, and still work as solid fills. */
+    --success: 142 60% 55%;
+    --success-foreground: 250 39% 10%;
     --warning: 38 92% 58%;
     --warning-foreground: 250 39% 10%;
-    --info: 199 80% 42%;
+    --info: 199 85% 62%;
     --info-foreground: 250 39% 10%;
 
     /* Borders & Inputs */

@@ -405,7 +405,7 @@ export default function Clients() {
                   <>
                     <tr key={client.id} className={cn(
                       'hover:bg-muted/30 transition-colors',
-                      isAtRisk && 'bg-destructive/30'
+                      isAtRisk && 'bg-destructive/[0.02]'
                     )}>
                       <td className="px-4 py-3">
                         <button

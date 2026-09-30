@@ -580,8 +580,8 @@ export function ApiKeysSection() {
 
 export function IntegrationsSection() {
   const providers = [
-    { type: 'QUICKBOOKS', name: 'QuickBooks Online', color: 'bg-success' },
-    { type: 'XERO', name: 'Xero', color: 'bg-info' },
+    { type: 'QUICKBOOKS', name: 'QuickBooks Online', color: 'bg-success text-success-foreground' },
+    { type: 'XERO', name: 'Xero', color: 'bg-info text-info-foreground' },
   ];
 
   return (
@@ -591,7 +591,7 @@ export function IntegrationsSection() {
           return (
             <div key={provider.type} className="flex flex-col gap-3 p-4 bg-muted/50 rounded-lg sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-lg ${provider.color} flex items-center justify-center text-white font-bold text-sm`}>
+                <div className={`w-10 h-10 rounded-lg ${provider.color} flex items-center justify-center font-bold text-sm`}>
                   {provider.type === 'QUICKBOOKS' ? 'QB' : 'Xe'}
                 </div>
                 <div>

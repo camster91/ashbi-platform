@@ -32,10 +32,10 @@ const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const SLOT_HEIGHT = 64; // px per hour slot
 
 const EVENT_TYPES = [
-  { value: 'MEETING', label: 'Meeting', color: 'bg-primary', border: 'border-primary', text: 'text-primary', bg: 'bg-primary/20' },
-  { value: 'CALL', label: 'Call', color: 'bg-success', border: 'border-success', text: 'text-success', bg: 'bg-success/20' },
-  { value: 'DEADLINE', label: 'Deadline', color: 'bg-destructive', border: 'border-destructive', text: 'text-destructive', bg: 'bg-destructive/20' },
-  { value: 'REMINDER', label: 'Reminder', color: 'bg-warning', border: 'border-warning', text: 'text-warning', bg: 'bg-warning/20' },
+  { value: 'MEETING', label: 'Meeting', color: 'bg-primary', fg: 'text-primary-foreground', border: 'border-primary', text: 'text-primary', bg: 'bg-primary/20' },
+  { value: 'CALL', label: 'Call', color: 'bg-success', fg: 'text-success-foreground', border: 'border-success', text: 'text-success', bg: 'bg-success/20' },
+  { value: 'DEADLINE', label: 'Deadline', color: 'bg-destructive', fg: 'text-destructive-foreground', border: 'border-destructive', text: 'text-destructive', bg: 'bg-destructive/20' },
+  { value: 'REMINDER', label: 'Reminder', color: 'bg-warning', fg: 'text-warning-foreground', border: 'border-warning', text: 'text-warning', bg: 'bg-warning/20' },
 ];
 
 const TYPE_MAP = Object.fromEntries(EVENT_TYPES.map(t => [t.value, t]));
@@ -252,7 +252,7 @@ function EventModal({
                 className={cn(
                   'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all',
                   form.type === t.value
-                    ? `${t.color} text-white ring-2 ring-offset-2 ring-offset-card ring-white/30`
+                    ? `${t.color} ${t.fg} ring-2 ring-offset-2 ring-offset-card ring-white/30`
                     : 'bg-muted text-muted-foreground hover:bg-muted/80'
                 )}
               >

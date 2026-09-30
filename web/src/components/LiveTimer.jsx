@@ -154,7 +154,10 @@ export default function LiveTimer({ socket }) {
   const isLoading = startMutation.isPending || stopMutation.isPending;
 
   return (
-    <div className="flex items-center gap-1.5">
+    // Opaque card backing: the top bar is translucent (bg-card/80 +
+    // backdrop-blur), and the status tints below are translucent too, so
+    // without it the text contrast depends on whatever scrolls underneath.
+    <div className="flex items-center gap-1.5 rounded-lg bg-card">
       {/* Timer display */}
       {timerState.isRunning && (
         <span className={cn(

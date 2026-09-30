@@ -307,7 +307,7 @@ function NoteEditor({ note, onSave, onDelete, onPin, onClose, isLoading, isDelet
                   <button
                     type="button"
                     onClick={() => removeTag(tag)}
-                    className="hover:text-info"
+                    className="hover:text-foreground"
                   >
                     &times;
                   </button>

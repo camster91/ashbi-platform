@@ -361,7 +361,7 @@ export default function Thread() {
                 const upworkUrl = extracted.upworkUrl;
 
                 return (
-                  <div key={message.id} className={cn('p-5', message.direction === 'OUTBOUND' && 'bg-primary/[0.02]', isUpwork && 'border-l-4 border-l-success bg-success/30')}>
+                  <div key={message.id} className={cn('p-5', message.direction === 'OUTBOUND' && 'bg-primary/[0.02]', isUpwork && 'border-l-4 border-l-success bg-success/[0.02]')}>
                     <div className="flex items-center gap-3 mb-3">
                       <div className={cn(
                         'w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold',

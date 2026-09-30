@@ -275,7 +275,7 @@ export default function PortalContract() {
                   className={cn(
                     'min-h-11 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                     signatureMode === 'draw'
-                      ? 'bg-primary text-primary-foreground border-border'
+                      ? 'bg-primary text-primary-foreground border-primary'
                       : 'bg-card text-muted-foreground border-border/40 hover:bg-muted/50'
                   )}
                 >
@@ -289,7 +289,7 @@ export default function PortalContract() {
                   className={cn(
                     'min-h-11 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                     signatureMode === 'type'
-                      ? 'bg-primary text-primary-foreground border-border'
+                      ? 'bg-primary text-primary-foreground border-primary'
                       : 'bg-card text-muted-foreground border-border/40 hover:bg-muted/50'
                   )}
                 >
@@ -321,7 +321,7 @@ export default function PortalContract() {
               onClick={handleSign}
               disabled={signMutation.isPending}
               aria-busy={signMutation.isPending}
-              className="min-h-11 w-full px-6 py-3 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:bg-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="min-h-11 w-full px-6 py-3 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               {signMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
               <FileSignature className="w-4 h-4" />
