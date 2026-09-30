@@ -10,6 +10,8 @@ import prismaPkg from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { purgeFixtureAuditEvents } from '../helpers/audit-cleanup.js';
 import { importScopeLockKey } from '../../services/operator-import-common.js';
+import { readMarkupImport, runMarkupImport } from '../../services/markup-import.service.js';
+import { setMediaScanner } from '../../services/media-scan.service.js';
 
 // Runs the real MarkUp.io comments importer CLI against a real PostgreSQL
 // database (built with `prisma migrate deploy`) to prove the reconciliation
@@ -451,6 +453,66 @@ test('MarkUp.io import plans, creates reviews, reruns idempotently, reports conf
     await raw.client.deleteMany({ where: { id: { in: [ids.clientA, ids.clientB] } } });
     await purgeFixtureAuditEvents(raw, { ids: [ids.orgA, ids.orgB] });
     await raw.organization.deleteMany({ where: { id: { in: [ids.orgA, ids.orgB] } } });
+    await raw.$disconnect();
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+});
+
+test('a MarkUp review whose file the media scanner blocks is reported, and its comments leave every total', {
+  skip: !databaseUrl && 'TENANT_INTEGRATION_DATABASE_URL is not configured',
+  timeout: 120_000,
+}, async () => {
+  const { PrismaClient } = prismaPkg;
+  const raw = new PrismaClient({ adapter: new PrismaPg({ connectionString: databaseUrl }) });
+  const suffix = randomUUID();
+  const ids = { org: `markup-scan-org-${suffix}`, client: `markup-scan-client-${suffix}`, project: `markup-scan-project-${suffix}`, operator: `markup-scan-op-${suffix}` };
+  const operatorEmail = `ops+scan-${suffix}@example.test`;
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ashbi-markup-scan-'));
+  const inputDir = path.join(workDir, 'input');
+  fs.cpSync(path.join(fixtures, 'markup-import-basic'), inputDir, { recursive: true });
+  const csv = path.join(inputDir, 'markup-comments.csv');
+  fs.writeFileSync(csv, fs.readFileSync(csv, 'utf8').replaceAll('{{ALICE_EMAIL}}', `alice+scan-${suffix}@example.test`));
+  // In-process, uploads land in the repository's uploads directory (UPLOAD_DIR
+  // is fixed at load time); this test removes exactly the files it stored.
+  const uploadsDir = path.join(repoRoot, 'uploads');
+  const listUploads = () => new Set(fs.existsSync(uploadsDir) ? fs.readdirSync(uploadsDir) : []);
+  const uploadsBefore = listUploads();
+  try {
+    await raw.organization.create({ data: { id: ids.org, name: 'MarkUp scan tenant', slug: `markup-scan-${suffix}` } });
+    await raw.client.create({ data: { id: ids.client, organizationId: ids.org, name: 'Client' } });
+    await raw.project.create({ data: { id: ids.project, organizationId: ids.org, clientId: ids.client, name: 'Scan project' } });
+    await raw.user.create({ data: { id: ids.operator, organizationId: ids.org, email: operatorEmail, password: 'test', name: 'Operator', role: 'ADMIN' } });
+    const importData = await readMarkupImport(inputDir);
+    const options = { organizationId: ids.org, projectId: ids.project, operatorEmail };
+    // What importing only the unblocked review (brief.pdf) would count.
+    const briefOnly = await runMarkupImport(raw, { ...options, importData: { ...importData, sessions: importData.sessions.filter((session) => session.fileName === 'brief.pdf') } });
+
+    setMediaScanner({ scan: async ({ mimeType }) => ({ verdict: mimeType === 'image/png' ? 'blocked' : 'clean' }) });
+    const applied = await runMarkupImport(raw, { ...options, importData, apply: true });
+    assert.equal(applied.complete, true);
+    assert.deepEqual(applied.unsupported.filter((item) => item.code === 'MEDIA_BLOCKED').map((item) => item.fileName), ['homepage.png']);
+    assert.equal(applied.totals.sessionsCreated, 1);
+    assert.equal(applied.totals.commentsCreated, briefOnly.totals.commentsPlanned);
+    for (const key of ['replies', 'pins', 'resolved']) {
+      assert.equal(applied.totals[key], briefOnly.totals[key], `${key} counts only imported comments`);
+    }
+    assert.equal(await raw.reviewAnnotation.count({ where: { session: { projectId: ids.project } } }), briefOnly.totals.commentsPlanned);
+    const stored = [...listUploads()].filter((name) => !uploadsBefore.has(name) && name !== 'quarantine');
+    assert.equal(stored.length, 1, 'the blocked file is removed; only the imported review keeps its file');
+    assert.match(stored[0], /\.pdf$/);
+  } finally {
+    setMediaScanner(null);
+    for (const name of listUploads()) if (!uploadsBefore.has(name) && name !== 'quarantine') fs.rmSync(path.join(uploadsDir, name), { force: true });
+    if (!uploadsBefore.size && fs.existsSync(uploadsDir) && !fs.readdirSync(uploadsDir).length) fs.rmdirSync(uploadsDir);
+    await raw.reviewSession.deleteMany({ where: { projectId: ids.project } });
+    await raw.markupImportRecord.deleteMany({ where: { organizationId: ids.org } });
+    await raw.importRun.deleteMany({ where: { organizationId: ids.org } });
+    await raw.attachment.deleteMany({ where: { organizationId: ids.org } });
+    await raw.user.deleteMany({ where: { id: ids.operator } });
+    await raw.project.deleteMany({ where: { id: ids.project } });
+    await raw.client.deleteMany({ where: { id: ids.client } });
+    await purgeFixtureAuditEvents(raw, { ids: [ids.org] });
+    await raw.organization.deleteMany({ where: { id: ids.org } });
     await raw.$disconnect();
     fs.rmSync(workDir, { recursive: true, force: true });
   }

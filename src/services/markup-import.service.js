@@ -417,6 +417,8 @@ async function planAndWrite(db, context) {
 
     // Comments: annotation ids by comment id (this CSV and prior runs).
     const annotationIdByComment = new Map();
+    // This session's share of the derived totals, undone if its file is blocked.
+    const derived = { replies: 0, pins: 0, resolved: 0 };
     const annotationRows = [];
     const recordRows = [];
     let closedWarned = false;
@@ -497,6 +499,9 @@ async function planAndWrite(db, context) {
       if (!isReply) annotationIdByComment.set(comment.commentId, id);
       else annotationIdByComment.set(comment.commentId, parentId);
       const resolved = !isReply && comment.status === 'resolved';
+      derived.replies += isReply ? 1 : 0;
+      derived.pins += pinned ? 1 : 0;
+      derived.resolved += resolved ? 1 : 0;
       report.totals.replies += isReply ? 1 : 0;
       report.totals.pins += pinned ? 1 : 0;
       report.totals.resolved += resolved ? 1 : 0;
@@ -564,9 +569,12 @@ async function planAndWrite(db, context) {
       }
       if (scan.verdict === 'blocked') {
         // Undo this session's file and counts: it is reported, not imported.
-        written.pop();
+        // The path leaves `written` only once it is gone, so a failed unlink
+        // is still retried by the rollback cleanup.
         await unlinkStoredUpload(stored.path);
+        written.splice(written.indexOf(stored.path), 1);
         summary.outcome = 'skipped';
+        for (const key of Object.keys(derived)) report.totals[key] -= derived[key];
         report.totals.commentsCreated -= summary.created;
         summary.skipped += summary.created;
         report.totals.skipped += summary.created;
