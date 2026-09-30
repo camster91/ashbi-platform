@@ -140,8 +140,8 @@ test('project collaboration routes are owned by an ordered domain registrar', as
 test('client work-management routes are owned by an ordered domain registrar', async () => {
   const factory = fs.readFileSync(new URL('../../index.js', import.meta.url), 'utf8');
   const registrar = fs.readFileSync(new URL('../../domains/client-delivery/register-work-management-routes.js', import.meta.url), 'utf8');
-  const routeNames = ['client', 'project', 'task'];
-  const expectedPrefixes = ['/api/clients', '/api/projects', '/api/tasks'];
+  const routeNames = ['client', 'project', 'task', 'work-queue'];
+  const expectedPrefixes = ['/api/clients', '/api/projects', '/api/tasks', '/api/work-queue'];
 
   assert.match(factory, /registerWorkManagementRoutes\(fastify\)/);
   for (const route of routeNames) {
@@ -373,8 +373,8 @@ test('every domain-registered route module has exactly one owner', () => {
   // connection (#413), the AI tool approval queue (#413 slice 2) and the
   // media review staff and share-link APIs (#417), the domain event
   // outbox admin API (#412), and support impersonation / break-glass
-  // recovery (#416).
-  assert.equal(owners.size, 75);
+  // recovery (#416), and the daily operator queue (#461).
+  assert.equal(owners.size, 76);
 });
 
 test('route modules stay encapsulated so cross-domain registration order cannot leak hooks', () => {

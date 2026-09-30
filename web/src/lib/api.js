@@ -401,6 +401,13 @@ export const api = {
   getDashboardStats: () =>
     request('/dashboard/stats'),
 
+  // Daily operator queue (#461): { rows, counts, partial, failedSources, ... }
+  getWorkQueue: (params = {}) => {
+    const entries = Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== '');
+    const query = new URLSearchParams(entries).toString();
+    return request(`/work-queue${query ? `?${query}` : ''}`);
+  },
+
   // AI
   draftResponse: (threadId) =>
     request('/ai/draft-response', { method: 'POST', body: { threadId } }),
