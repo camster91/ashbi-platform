@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import test from 'node:test';
 
 import {
+  calculateHealthScore,
   HEALTH_HISTORY_LIMIT,
   nextHealthHistory,
   normalizeHealthHistory,
@@ -11,6 +12,17 @@ import {
 
 const NOW = new Date('2026-09-27T12:00:00.000Z');
 const hoursAgo = (hours) => new Date(NOW.getTime() - hours * 3_600_000);
+
+test('health scoring uses the review clock at stale and waiting thresholds', () => {
+  const scoreAt = (hours, status = 'OPEN') => calculateHealthScore({}, [
+    { priority: 'NORMAL', status, lastActivityAt: hoursAgo(hours) },
+  ], { now: NOW });
+  assert.equal(scoreAt(71), 100);
+  assert.equal(scoreAt(72), 90);
+  assert.equal(scoreAt(119, 'AWAITING_RESPONSE'), 90);
+  assert.equal(scoreAt(120, 'AWAITING_RESPONSE'), 85);
+  assert.equal(scoreAt(120, 'RESOLVED'), 100);
+});
 
 function fakePrisma(projects) {
   const updates = [];
