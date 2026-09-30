@@ -190,9 +190,20 @@ session's handshake.
 A Redis outage delays realtime delivery (commands queue until Redis is back;
 the rows are already persisted and the poll still shows them), and a
 `fetchSockets()` that gets no reply from a replica in time drops that call
-signal. Adding or removing API replicas needs no realtime configuration. The
-channels use the adapter's default `socket.io` key prefix, so do not point
-two unrelated deployments at the same Redis database.
+signal. Adding or removing API replicas needs no realtime configuration.
+
+Realtime channels are namespaced per deployment, because Redis Pub/Sub
+ignores the logical database number: staging on `redis://host/1` and
+production on `redis://host/0` would otherwise receive each other's
+broadcasts. The adapter and the worker's emitter both use the key
+`ashbi-realtime:<NODE_ENV>:db<N>` (N from the `REDIS_URL` path, default 0),
+so staging and production are separated even on the same Redis database.
+Two deployments with the same `NODE_ENV` on one Redis server must set a
+distinct `REALTIME_CHANNEL_KEY` (1-64 of `A-Z a-z 0-9 . _ : -`), which
+replaces the default as `ashbi-realtime:<value>`; the API and the worker of
+one deployment must use the same value. Changing the key during a rolling
+deploy splits realtime between old and new replicas until the rollout
+finishes (rows are persisted; the poll still shows them).
 
 ## Client IP behind a proxy (`TRUST_PROXY`)
 

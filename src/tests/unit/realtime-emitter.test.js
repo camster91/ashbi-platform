@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { closeRealtimeEmitter, createRealtimeEmitter, getRealtimeEmitter } from '../../realtime/emitter.js';
-import { realtimeRedisSource } from '../../realtime/redis.js';
+import { realtimeChannelKey, realtimeRedisSource } from '../../realtime/redis.js';
 
 test('in test mode there is no realtime Redis source and the shared emitter is a no-op', async () => {
   assert.equal(process.env.NODE_ENV, 'test');
@@ -24,6 +24,7 @@ test('realtimeRedisSource is keyed on REDIS_URL and never connects in tests', ()
   assert.ok(source);
   assert.deepEqual(opened, [], 'connections open lazily');
   assert.deepEqual(source.duplicate(), { url: 'redis://cache:6379' });
+  assert.equal(source.key, 'ashbi-realtime:production:db0');
   source.duplicate();
   assert.equal(opened.length, 2, 'each duplicate() is a dedicated connection');
 });
@@ -66,4 +67,29 @@ test('the real Redis emitter publishes a room-scoped packet and swallows publish
   assert.deepEqual(published.map((p) => p.channel), ['socket.io#/#user:u1#', 'socket.io#/#user:u1#']);
   assert.ok(Buffer.isBuffer(published[0].message));
   assert.equal(warnings.length, 1, 'a failed publish is logged, not an unhandled rejection');
+});
+
+test('the realtime channel key separates deployments that share a Redis server', () => {
+  // Redis Pub/Sub ignores the logical database, so the key must carry it.
+  assert.equal(realtimeChannelKey({ NODE_ENV: 'production' }, 'redis://cache:6379'), 'ashbi-realtime:production:db0');
+  assert.equal(realtimeChannelKey({ NODE_ENV: 'production' }, 'redis://cache:6379/0'), 'ashbi-realtime:production:db0');
+  assert.equal(realtimeChannelKey({ NODE_ENV: 'staging' }, 'redis://:pw@cache:6379/1'), 'ashbi-realtime:staging:db1');
+  assert.notEqual(
+    realtimeChannelKey({ NODE_ENV: 'staging' }, 'redis://cache:6379/0'),
+    realtimeChannelKey({ NODE_ENV: 'production' }, 'redis://cache:6379/0'),
+  );
+  assert.equal(realtimeChannelKey({ NODE_ENV: 'production', REALTIME_CHANNEL_KEY: ' tenant-a ' }, 'redis://cache:6379/3'), 'ashbi-realtime:tenant-a');
+  assert.throws(() => realtimeChannelKey({ REALTIME_CHANNEL_KEY: 'bad key*' }, 'redis://cache:6379'), /REALTIME_CHANNEL_KEY/);
+  assert.throws(() => realtimeChannelKey({ REALTIME_CHANNEL_KEY: 'x'.repeat(65) }, 'redis://cache:6379'), /REALTIME_CHANNEL_KEY/);
+});
+
+test('the shared emitter and createRealtimeEmitter pass the channel key to the Redis emitter', async () => {
+  const seen = [];
+  const emitter = createRealtimeEmitter({
+    redis: { publish: async () => 1, quit: async () => {} },
+    key: 'ashbi-realtime:staging:db1',
+    createEmitter: (_client, opts) => { seen.push(opts); return { to: () => ({ emit: () => true }) }; },
+  });
+  assert.deepEqual(seen, [{ key: 'ashbi-realtime:staging:db1' }]);
+  await emitter.close();
 });

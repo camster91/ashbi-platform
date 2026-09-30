@@ -13,8 +13,8 @@ import { createAdapter } from '@socket.io/redis-adapter';
  * The adapter needs two dedicated connections: a publisher and a subscriber.
  *
  * @param {{ adapter: (factory: any) => any }} io
- * @param {{ duplicate: () => any } | null} redisSource e.g. realtimeRedisSource()
- * @param {{ adapterFactory?: (pub: any, sub: any) => any }} [options]
+ * @param {{ duplicate: () => any, key?: string } | null} redisSource e.g. realtimeRedisSource()
+ * @param {{ adapterFactory?: (pub: any, sub: any, opts: { key?: string }) => any }} [options]
  * @returns {{ enabled: boolean, close: () => Promise<void> }}
  */
 export function attachRedisAdapter(io, redisSource, { adapterFactory = createAdapter } = {}) {
@@ -23,7 +23,8 @@ export function attachRedisAdapter(io, redisSource, { adapterFactory = createAda
   }
   const pubClient = redisSource.duplicate();
   const subClient = redisSource.duplicate();
-  io.adapter(adapterFactory(pubClient, subClient));
+  // The worker's emitter publishes under the same key (src/realtime/emitter.js).
+  io.adapter(adapterFactory(pubClient, subClient, redisSource.key ? { key: redisSource.key } : {}));
   return {
     enabled: true,
     // Call after io.close(): closing the server closes the adapter, which

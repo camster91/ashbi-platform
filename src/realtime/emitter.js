@@ -21,14 +21,16 @@ const NOOP_OPERATOR = Object.freeze({ emit: () => false });
 /**
  * @param {{
  *   redis?: any,
- *   createEmitter?: (client: { publish: Function }) => RoomEmitter,
+ *   key?: string,
+ *   createEmitter?: (client: { publish: Function }, opts: { key?: string }) => RoomEmitter,
  *   logger?: { warn: Function },
  * }} [options]
  * @returns {RealtimeEmitter}
  */
 export function createRealtimeEmitter({
   redis = null,
-  createEmitter = (client) => new Emitter(/** @type {any} */ (client)),
+  key,
+  createEmitter = (client, opts) => new Emitter(/** @type {any} */ (client), opts),
   logger = defaultLogger,
 } = {}) {
   if (!redis) {
@@ -44,7 +46,8 @@ export function createRealtimeEmitter({
         .catch((err) => logger.warn({ err: { message: err?.message } }, 'Realtime publish failed'));
     },
   };
-  const emitter = createEmitter(client);
+  // Must match the API adapter's key (realtimeRedisSource().key).
+  const emitter = createEmitter(client, key ? { key } : {});
   return {
     enabled: true,
     to: (room) => emitter.to(room),
@@ -64,7 +67,7 @@ let shared = null;
 export function getRealtimeEmitter() {
   if (!shared) {
     const source = realtimeRedisSource();
-    shared = createRealtimeEmitter({ redis: source ? source.duplicate() : null });
+    shared = createRealtimeEmitter({ redis: source ? source.duplicate() : null, key: source?.key });
   }
   return shared;
 }

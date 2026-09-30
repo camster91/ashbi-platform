@@ -24,12 +24,44 @@ function createRealtimeConnection(rawUrl) {
   return redis;
 }
 
+const CHANNEL_KEY_PATTERN = /^[A-Za-z0-9._:-]{1,64}$/;
+
+/**
+ * Pub/Sub channel prefix shared by the adapter and the emitter. Redis Pub/Sub
+ * ignores the logical database, so two deployments on one Redis server (e.g.
+ * staging on /1 and production on /0) would otherwise receive each other's
+ * broadcasts. The default key carries NODE_ENV and the REDIS_URL db index;
+ * REALTIME_CHANNEL_KEY overrides it (two deployments with the same NODE_ENV
+ * on the same Redis database must each set a distinct value).
+ * @param {Record<string, string | undefined>} env
+ * @param {string} rawUrl
+ * @returns {string}
+ */
+export function realtimeChannelKey(env, rawUrl) {
+  const override = typeof env.REALTIME_CHANNEL_KEY === 'string' ? env.REALTIME_CHANNEL_KEY.trim() : '';
+  if (override) {
+    if (!CHANNEL_KEY_PATTERN.test(override)) {
+      throw new Error('REALTIME_CHANNEL_KEY must be 1-64 characters of letters, digits, ".", "_", ":" or "-"');
+    }
+    return `ashbi-realtime:${override}`;
+  }
+  let db = '0';
+  try {
+    const index = new URL(rawUrl).pathname.replace(/^\//, '');
+    if (/^\d+$/.test(index)) db = String(Number(index));
+  } catch {
+    // resolveRedisUrl already rejects an unparseable URL in deployed environments.
+  }
+  return `ashbi-realtime:${env.NODE_ENV || 'development'}:db${db}`;
+}
+
 /**
  * Source of realtime Redis connections: `duplicate()` opens a new reconnecting
- * connection (callers own and close it). Null in tests and when REDIS_URL is
- * unset outside deployed environments.
+ * connection (callers own and close it); `key` is the Pub/Sub channel prefix
+ * (see realtimeChannelKey). Null in tests and when REDIS_URL is unset outside
+ * deployed environments.
  * @param {{ env?: Record<string, string | undefined>, createConnection?: (url: string) => any }} [options]
- * @returns {{ duplicate: () => any } | null}
+ * @returns {{ duplicate: () => any, key: string } | null}
  */
 export function realtimeRedisSource({ env = process.env, createConnection = createRealtimeConnection } = {}) {
   if (env.NODE_ENV === 'test') return null;
@@ -39,5 +71,6 @@ export function realtimeRedisSource({ env = process.env, createConnection = crea
     resolveRedisUrl(rawUrl);
     return null;
   }
-  return { duplicate: () => createConnection(rawUrl) };
+  const key = realtimeChannelKey(env, rawUrl);
+  return { duplicate: () => createConnection(rawUrl), key };
 }
