@@ -93,19 +93,44 @@ function unmatchedResult(unmatched) {
 }
 
 /**
- * Create the record, or, when a concurrent run of the same delivery won the
- * race to the unique key, load the one it created.
+ * Create the delivery's first record (a thread or an unmatched email) at most
+ * once across BOTH tables. Two overlapping runs of one delivery can miss the
+ * initial lookup and then disagree on the AI match (one above the threshold,
+ * one below); the per-table unique indexes cannot see each other, so the
+ * create runs under a transaction-scoped advisory lock on the delivery key
+ * and re-checks both tables first. The unique index stays as the backstop.
+ *
+ * @param {string|null} inboundDeliveryKey
+ * @param {'thread'|'unmatched'} kind what this run would create
+ * @param {(tx: any) => Promise<any>} create
+ * @returns {Promise<{ kind: 'thread'|'unmatched', record: any }>}
  */
-async function createOnce(create, findExisting, inboundDeliveryKey) {
+async function createForDelivery(inboundDeliveryKey, kind, create) {
+  if (!inboundDeliveryKey) return { kind, record: await create(prisma) };
   try {
-    return await create();
+    return await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`inbound-email:${inboundDeliveryKey}`}, 0))`;
+      const thread = await tx.thread.findFirst({ where: { inboundDeliveryKey }, include: threadInclude() });
+      if (thread) return { kind: 'thread', record: thread };
+      const unmatched = await tx.unmatchedEmail.findFirst({ where: { inboundDeliveryKey } });
+      if (unmatched) return { kind: 'unmatched', record: unmatched };
+      return { kind, record: await create(tx) };
+    });
   } catch (error) {
-    if (!inboundDeliveryKey || !isUniqueViolation(error)) throw error;
-    const existing = await findExisting(inboundDeliveryKey);
-    // Not visible in this tenant: never resume another organization's record.
-    if (!existing) throw error;
-    return existing;
+    if (!isUniqueViolation(error)) throw error;
+    // A row with this key exists but is not visible in this tenant (or the
+    // lock was bypassed): resume a visible one, never another organization's.
+    const thread = await findThreadByDeliveryKey(inboundDeliveryKey);
+    if (thread) return { kind: 'thread', record: thread };
+    const unmatched = await findUnmatchedByDeliveryKey(inboundDeliveryKey);
+    if (unmatched) return { kind: 'unmatched', record: unmatched };
+    throw error;
   }
+}
+
+/** Continue from whichever record the delivery ended up with. */
+function resultFor({ kind, record }) {
+  return kind === 'thread' ? continueThreadPipeline(record) : unmatchedResult(record);
 }
 
 /**
@@ -143,7 +168,7 @@ export async function processEmailPipeline(emailData) {
     // High confidence: create the thread automatically. Medium confidence:
     // create it too, but flag it for triage.
     const needsTriage = !(confidence >= env.autoMatchThreshold);
-    const thread = await createOnce(() => prisma.thread.create({
+    return resultFor(await createForDelivery(inboundDeliveryKey, 'thread', (tx) => tx.thread.create({
       data: {
         subject: emailData.subject,
         status: 'AWAITING_RESPONSE',
@@ -170,12 +195,11 @@ export async function processEmailPipeline(emailData) {
         }
       },
       include: threadInclude()
-    }), findThreadByDeliveryKey, inboundDeliveryKey);
-    return continueThreadPipeline(thread);
+    })));
   }
 
   // Low confidence - add to unmatched queue
-  const unmatched = await createOnce(() => prisma.unmatchedEmail.create({
+  return resultFor(await createForDelivery(inboundDeliveryKey, 'unmatched', (tx) => tx.unmatchedEmail.create({
     data: {
       senderEmail: emailData.senderEmail,
       senderName: emailData.senderName,
@@ -191,8 +215,7 @@ export async function processEmailPipeline(emailData) {
         matchResult.matchedProject ? [matchResult.matchedProject] : []
       )
     }
-  }), findUnmatchedByDeliveryKey, inboundDeliveryKey);
-  return unmatchedResult(unmatched);
+  })));
 }
 
 /**

@@ -37,6 +37,8 @@ test('a retried inbound email delivery never duplicates its thread, message, unm
   let match = 'high';
   let badAnalysisOnce = false;
   let parseBarrier = null;
+  // Per-call match outcomes (consumed in order), falling back to `match`.
+  const matchQueue = [];
   const originalChatJSON = aiClient.chatJSON;
   aiClient.chatJSON = async ({ system, prompt }) => {
     if (/analyze client messages/.test(system)) {
@@ -62,10 +64,11 @@ test('a retried inbound email delivery never duplicates its thread, message, unm
     }
     calls.parse += 1;
     if (parseBarrier) await parseBarrier();
-    const confidence = match === 'high' ? 0.95 : 0.1;
+    const outcome = matchQueue.length ? matchQueue.shift() : match;
+    const confidence = outcome === 'high' ? 0.95 : 0.1;
     return {
       matchedClient: { id: ids.client, name: 'Mail client', confidence, matchReason: 'Known domain' },
-      matchedProject: match === 'high' ? { id: ids.project, name: 'Mail project' } : null,
+      matchedProject: outcome === 'high' ? { id: ids.project, name: 'Mail project' } : null,
       isSpamOrIrrelevant: { likely: false },
     };
   };
@@ -227,6 +230,30 @@ test('a retried inbound email delivery never duplicates its thread, message, unm
     assert.equal(writes.unmatched.length, 1);
     assert.equal(writes.unmatched[0].organizationId, ids.org);
     assert.equal(writes.threads.length, 0);
+
+    // 6. Two concurrent runs of one delivery that DISAGREE on the match (one
+    // above the threshold, one below): the per-table unique indexes cannot
+    // see each other, so without the delivery lock one run would create a
+    // thread and the other an unmatched email. Exactly one record exists
+    // across both tables, and both runs report it.
+    const keyF = `mailgun:<f-${suffix}@mail.example>`;
+    let arrivedF = 0;
+    let releaseF;
+    const bothArrivedF = new Promise((resolve) => { releaseF = resolve; });
+    parseBarrier = async () => {
+      arrivedF += 1;
+      if (arrivedF === 2) releaseF();
+      await bothArrivedF;
+    };
+    matchQueue.push('high', 'low');
+    resetCalls();
+    const [one, two] = await Promise.all([run(email(keyF, `F ${suffix}`)), run(email(keyF, `F ${suffix}`))]);
+    parseBarrier = null;
+    assert.equal(calls.parse, 2, 'both runs raced past the lookup and disagreed');
+    writes = await writesFor(keyF);
+    assert.equal(writes.threads.length + writes.unmatched.length, 1, 'one record across threads and unmatched emails');
+    assert.equal(one.matched, two.matched, 'both runs report the same outcome');
+    if (writes.threads.length) assert.equal(one.threadId, two.threadId);
   } finally {
     await raw.$executeRawUnsafe(`DROP TRIGGER IF EXISTS "${failTrigger}" ON "threads"`);
     await raw.$executeRawUnsafe(`DROP FUNCTION IF EXISTS "${failFunction}"()`);
