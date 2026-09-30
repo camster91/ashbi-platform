@@ -114,11 +114,13 @@ test('every importer script and import service is covered by a playbook', () => 
 test('the scan finds codes and flags where the importers are known to have them', () => {
   for (const [name, importer] of Object.entries(IMPORTERS)) {
     assert.ok(flagsOf(importer).size > 0, `${name}: no CLI flags found; is the scanner still matching the script?`);
-    if (name !== 'bonsai') assert.ok(codesOf(importer).size > 0, `${name}: no codes found; is the scanner still matching the service?`);
+    assert.ok(codesOf(importer).size > 0, `${name}: no codes found; is the scanner still matching the service?`);
   }
-  // The Bonsai importer reports free-text messages only; if it gains codes,
-  // they must be documented like the others (and this assertion updated).
-  assert.equal(codesOf(IMPORTERS.bonsai).size, 0);
+  // Bonsai's blocking findings are free-text messages in stats.errors; only
+  // its non-blocking warnings carry codes, and they are documented like the
+  // others.
+  assert.deepEqual([...codesOf(IMPORTERS.bonsai)].sort(), ['CLIENT_DOMAIN_TAKEN', 'EXPENSE_NO_CLIENT']);
+  assert.ok(codesOf(IMPORTERS.clickup).has('PARENT_CYCLE'));
   assert.ok(codesOf(IMPORTERS.slack).has('LIVE_MAPPING_CONFLICT'));
   assert.ok(codesOf(IMPORTERS.markup).has('INVALID_POSITION'));
   assert.ok(codesOf(IMPORTERS.clickup).has('PARENT_UNRESOLVED'));
