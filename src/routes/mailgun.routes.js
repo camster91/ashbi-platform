@@ -17,6 +17,34 @@ import {
   verifyMailgunSignature,
 } from '../services/mailgun-delivery.service.js';
 
+/**
+ * Map a Mailgun inbound route POST (multipart fields) to the pipeline's email
+ * shape, the same one `parseEmail` produces for the generic webhook
+ * (senderEmail, senderName, subject, bodyText, bodyHtml, receivedAt). The
+ * pipeline requires these names; Mailgun's own (`sender`, `body-plain`, ...)
+ * would leave them undefined and the thread or unmatched email could not be
+ * created.
+ * @param {Record<string, any>} body
+ */
+export function mailgunInboundEmailData(body = {}) {
+  const fromHeader = typeof body.from === 'string' ? body.from : '';
+  const named = /^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/.exec(fromHeader);
+  const senderEmail = String(body.sender || named?.[2] || fromHeader || '').trim() || 'unknown@unknown.com';
+  const senderName = named?.[1]?.trim() || null;
+  const seconds = Number(body.timestamp);
+  return {
+    senderEmail,
+    senderName,
+    recipient: body.recipient || null,
+    subject: body.subject || '(No Subject)',
+    bodyText: body['stripped-text'] || body['body-plain'] || '',
+    bodyHtml: body['body-html'] || null,
+    rawEmail: null,
+    messageId: body['Message-Id'] || null,
+    receivedAt: Number.isFinite(seconds) && seconds > 0 ? new Date(seconds * 1000) : new Date(),
+  };
+}
+
 export default async function mailgunRoutes(fastify) {
   // POST /mailgun/send — manually send an email (admin only)
   fastify.post('/send', {
@@ -123,21 +151,8 @@ export default async function mailgunRoutes(fastify) {
         }
       }
 
-      // Parse multipart form data fields
-      const sender = body.sender;
-      const recipient = body.recipient;
-      const subject = body.subject;
-      const bodyPlain = body['body-plain'];
-      const bodyHtml = body['body-html'];
-      const messageId = body['Message-Id'];
-
       await runTenantJob(fastify.prisma, env.botOrganizationId, () => processEmailPipeline({
-        from: sender,
-        to: recipient,
-        subject,
-        text: bodyPlain,
-        html: bodyHtml,
-        messageId,
+        ...mailgunInboundEmailData(body),
         // Stable per delivery (Message-Id, or a hash of the delivery), so a
         // redelivery resumes the first attempt's thread instead of adding one.
         inboundDeliveryKey: mailgunInboundDeliveryKey(body),
