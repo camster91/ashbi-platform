@@ -246,15 +246,22 @@ live import can be undone only by hand.
   isolated restore drill, not an in-place production restore. An in-place
   restore is therefore a decision for the operations owner
   ([backup-and-restore.md](backup-and-restore.md)).
-- **Targeted manual removal:** within the organization, remove records that
-  are not in the pre-import workspace export (clients, contacts, projects),
-  time entries with `source = 'BONSAI_IMPORT'`, and invoices with a
-  `bonsaiInvoiceId` that were created in the import window, together with
-  their line items. Expenses carry no import marker: find them by client
-  (every imported expense has a client of this organization), project and
-  creation time. Restore changed client and project fields from
-  the workspace export by hand. Record every manual step in the cutover
-  evidence.
+- **Targeted manual removal (partial undo only):** within the organization,
+  remove the records this run created: clients, contacts and projects that
+  are not in the pre-import workspace export, and time entries with
+  `source = 'BONSAI_IMPORT'` and invoices with a `bonsaiInvoiceId` whose
+  `createdAt` falls in **this run's import window** (from the start of the
+  live run to the report's `generatedAt`), together with the invoices' line
+  items. Every Bonsai run uses the same `BONSAI_IMPORT` marker, so never
+  delete by marker alone: entries from an earlier import would go too.
+  Expenses carry no import marker: find them by client (every imported
+  expense has a client of this organization), project and creation time in
+  the same window. This cannot reverse updates to records that already
+  existed: the importer overwrites fields such as client `tier`,
+  `totalRevenueUsd` and `totalRevenueCad` and project `bonsaiProjectId`, and
+  the pre-import workspace export does not contain all of them. Only the
+  database backup gives a complete rollback. Record every manual step in the
+  cutover evidence.
 
 ## Reconciliation report
 

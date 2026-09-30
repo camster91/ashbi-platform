@@ -229,9 +229,12 @@ SELECT count(*) FROM time_entries t JOIN projects p ON p.id = t."projectId"
 WHERE p."organizationId" = :org AND t.source = 'BONSAI_IMPORT';
 ```
 
-On a first import into an empty organization, these counts equal
-`stats.projects.created` (projects that have a Bonsai `project_id`),
-`stats.invoices.created` and `stats.timeEntries.created`. Rerun the dry run:
+On a first import into an empty organization, the invoice and time-entry
+counts equal `stats.invoices.created` and `stats.timeEntries.created`. The
+project count equals `stats.projects.created` minus the source project rows
+with a blank `project_id`: those projects are created with no
+`bonsaiProjectId`, so the query above does not see them (count them in
+`projects.csv`). Rerun the dry run:
 `created` must be `0` for every entity. Compare paid and outstanding totals
 per client with Bonsai.
 

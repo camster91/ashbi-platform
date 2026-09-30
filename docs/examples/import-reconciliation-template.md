@@ -50,8 +50,22 @@ Report fields per importer:
   `existing` / `skipped` for clients, contacts, projects, invoices,
   lineItems, timeEntries and expenses.
 
-Count reconciliation: source count = imported + unchanged or existing +
-skipped + items with findings. Explain every difference here:
+Count reconciliation: a source row is either rejected before planning
+(a row-level error such as an unreadable or invalid row, which has no outcome
+counter) or counted in exactly one outcome counter (created or planned,
+unchanged or existing, skipped, conflicts, deleted in the Hub, duplicates).
+So:
+
+source count = sum of the outcome counters + rows rejected before planning.
+
+Count each finding once. A finding about a row that already has an outcome
+(for example a conflict, a skipped row or a warning) is listed below but not
+added to the sum again. ClickUp is the exception to the first term:
+`summary.planned` counts every row, rows with findings included, so there
+`input.rows` = `summary.planned` and `summary.errors` adds nothing. A
+difference the importer's own counters do not explain is itself a finding.
+
+Explain every difference here:
 
 >
 
